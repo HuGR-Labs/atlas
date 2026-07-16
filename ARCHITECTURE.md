@@ -163,6 +163,27 @@ built in its own session, in parallel, tested standalone against the contract, a
 zero integration surprises. It is the single decision that makes the whole parallel-repo model work —
 and the single thing that must be gotten right before anything else.
 
+### 5.1 Seat roles — the GAN loop, enforced (decided)
+
+The 2026 SOTA harness pattern is GAN-style: separate the agent that GENERATES work from the skeptical
+agent that EVALUATES it. Orchestra's fleet already is this, so we make it a first-class, **enforced**
+property via `SeatManifest.role`:
+
+- **generator** (charlie, patty) — produces artifacts. A generator's WP is **not sealable** until an
+  **evaluator** has verified it. The owner's "cold-review every returning agent" law stops being a
+  habit and becomes a trap the orchestrator can't skip.
+- **evaluator** (lucy, billy, frankie) — judges adversarially. Never dispatched to WRITE product.
+- **explorer** (jimmy) — mines grounded facts / researches; feeds both, gates neither.
+
+The orchestrator (`packages/orchestrator`) owns this rule: `seal(generatorWP)` requires a matching
+evaluator ResultCard, or it refuses. This is the governance analog of the GAN feedback loop.
+
+### 5.2 All seats are TypeScript (decided)
+
+Every seat is a TS harness on the Agent SDK — one language, one contract, maximal contributability. A
+seat that needs another language's muscle (e.g. a Rust scanner) wraps it as an MCP **tool** that shells
+out to a subprocess; the seat itself stays TS. No polyglot toolchain in the mono.
+
 ## 6. What is REUSED from v1 (deliberate ports, not salvage)
 
 Only what v1 *proved* under adversarial review, ported into `kernel`/`governance`/`memory` and
@@ -190,6 +211,27 @@ green. Redesigned or dropped.
   guarantee is violated) — the one genuinely-strong thing v1's suite had, kept as the standard.
 - ADRs for every load-bearing decision (`docs/adr/`).
 - No file over the loc-cap; a module that grows splits. The zone does not come back.
+
+## 7.5 Tooling & scaffold (decided — path B, transparent-over-magic)
+
+The owner's top priority is a mono that is *very* modular and *easy to work on, contribute to, and
+document*. We compose that from explicit, legible tools rather than one batteries-included platform
+(Nx) — because the v1 trauma was "unnavigable + magic", and every piece here is readable and
+swappable:
+
+| concern | choice | why |
+|---|---|---|
+| install / linking | **pnpm workspaces** | the strict, fast 2026 default |
+| task graph + cache | **Turborepo** (Rust core) | simple, fast; "80% of the value, 20% of the complexity" |
+| **module boundaries** | **dependency-cruiser** (or eslint-plugin-boundaries) as a CI lint | the downward-only layers (§4) become rules that FAIL the build — "very modular" enforced, not hoped |
+| **new package/seat** | a light generator (`hygen`/`plop`, exposed as `orchestra new-seat <id>`) | creating a seat = one command against `_template` — the contribution barrier drops to near-zero |
+| **docs site** | **Starlight** (Astro) | per-package docs + guides, easy to write |
+| **API docs** | **TypeDoc** | generated from the typed contracts |
+| **navigability** | dependency-cruiser graph, auto-generated | the dependency map the v1 zone never had |
+
+Rule of thumb baked into the scaffold: **1 package = 1 domain**, a co-located `README.md` is mandatory,
+a per-file LOC cap trips CI, and an ADR records every load-bearing decision. Turborepo only knows tasks
+— so boundaries/generation/docs are the explicit tools above, each independently understandable.
 
 ## 8. Build order (post-approval — design-first, so this waits)
 

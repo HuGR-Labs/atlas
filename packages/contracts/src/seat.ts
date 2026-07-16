@@ -80,9 +80,22 @@ export interface ResultCard {
   readonly note: string; // ≤ returnShape.maxNoteChars — the compact human line
 }
 
+/**
+ * A seat's role in the GAN-style loop (the 2026 SOTA harness pattern: separate the agent that GENERATES
+ * work from the skeptical agent that EVALUATES it). Declaring the role on the manifest lets the lead
+ * enforce the loop STRUCTURALLY, not by discipline:
+ *   • 'generator' — produces artifacts (charlie/patty). Its seal is NOT final until an evaluator verifies.
+ *   • 'evaluator' — judges artifacts adversarially (lucy/billy/frankie). Never dispatched to WRITE product.
+ *   • 'explorer'  — mines grounded facts / researches (jimmy). Neither generates nor gates; feeds both.
+ * The orchestrator refuses to seal a generator's WP with no evaluator verification — the owner's
+ * "cold-review every returning agent" law becomes a trap, not a habit.
+ */
+export type SeatRole = 'generator' | 'evaluator' | 'explorer';
+
 /** What a seat's manifest declares — read by the lead to route work and by CI to verify conformance. */
 export interface SeatManifest {
   readonly id: string; // 'charlie' | 'lucy' | ...
+  readonly role: SeatRole; // GAN position — generator | evaluator | explorer (enforced by the lead)
   readonly kit: string; // the seat's craft-kit name (e.g. 'FORGE' for backend execution)
   readonly model: 'opus' | 'sonnet' | 'haiku' | string; // the seat's default SDK model tier
   readonly capabilities: readonly string[]; // what work this seat accepts (routing)
