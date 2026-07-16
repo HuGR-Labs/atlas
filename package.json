@@ -1,0 +1,17 @@
+{
+  "name": "orchestra",
+  "private": true,
+  "version": "0.0.0",
+  "description": "A governed engineering orchestrator — the lead holds judgment, seats are harnesses, guarantees are enforced in code.",
+  "workspaces": [
+    "packages/*",
+    "seats/*"
+  ],
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "test": "vitest run"
+  },
+  "engines": { "node": ">=20" }
+}

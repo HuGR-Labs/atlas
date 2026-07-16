@@ -1,0 +1,13 @@
+# CI from commit #1 — the same bar Orchestra enforces on seats, enforced on Orchestra.
+name: ci
+on: [push, pull_request]
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm ci
+      - run: npm run typecheck   # tsc --strict, downward-only layers
+      - run: npm test            # own-suite-green + totality fences + no-self-attest lints
