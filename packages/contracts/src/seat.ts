@@ -80,22 +80,13 @@ export interface ResultCard {
   readonly note: string; // ≤ returnShape.maxNoteChars — the compact human line
 }
 
-/**
- * A seat's role in the GAN-style loop (the 2026 SOTA harness pattern: separate the agent that GENERATES
- * work from the skeptical agent that EVALUATES it). Declaring the role on the manifest lets the lead
- * enforce the loop STRUCTURALLY, not by discipline:
- *   • 'generator' — produces artifacts (charlie/patty). Its seal is NOT final until an evaluator verifies.
- *   • 'evaluator' — judges artifacts adversarially (lucy/billy/frankie). Never dispatched to WRITE product.
- *   • 'explorer'  — mines grounded facts / researches (jimmy). Neither generates nor gates; feeds both.
- * The orchestrator refuses to seal a generator's WP with no evaluator verification — the owner's
- * "cold-review every returning agent" law becomes a trap, not a habit.
- */
-export type SeatRole = 'generator' | 'evaluator' | 'explorer';
-
-/** What a seat's manifest declares — read by the lead to route work and by CI to verify conformance. */
+/** What a seat's manifest declares — read by the lead to route work and by CI to verify conformance.
+ *  NOTE: a seat does NOT self-declare a GAN role. The roster is fixed and named — the orchestrator
+ *  KNOWS charlie/patty generate, lucy/billy/frankie evaluate, jimmy explores — so the generator↔
+ *  evaluator rule (a generator WP is unsealable without an evaluator ResultCard) is enforced from the
+ *  known roster (@orchestra/orchestrator), not a redundant self-reported field. */
 export interface SeatManifest {
-  readonly id: string; // 'charlie' | 'lucy' | ...
-  readonly role: SeatRole; // GAN position — generator | evaluator | explorer (enforced by the lead)
+  readonly id: string; // 'charlie' | 'lucy' | ... — the roster identity (the lead derives the rest)
   readonly kit: string; // the seat's craft-kit name (e.g. 'FORGE' for backend execution)
   readonly model: 'opus' | 'sonnet' | 'haiku' | string; // the seat's default SDK model tier
   readonly capabilities: readonly string[]; // what work this seat accepts (routing)

@@ -163,20 +163,21 @@ built in its own session, in parallel, tested standalone against the contract, a
 zero integration surprises. It is the single decision that makes the whole parallel-repo model work —
 and the single thing that must be gotten right before anything else.
 
-### 5.1 Seat roles — the GAN loop, enforced (decided)
+### 5.1 The GAN loop, enforced — from the KNOWN roster (not a self-declared field)
 
 The 2026 SOTA harness pattern is GAN-style: separate the agent that GENERATES work from the skeptical
-agent that EVALUATES it. Orchestra's fleet already is this, so we make it a first-class, **enforced**
-property via `SeatManifest.role`:
+agent that EVALUATES it. Orchestra's fleet already IS this — and the roster is **fixed and named**, so
+the orchestrator simply knows who is who (no redundant `role` field on the manifest):
 
-- **generator** (charlie, patty) — produces artifacts. A generator's WP is **not sealable** until an
-  **evaluator** has verified it. The owner's "cold-review every returning agent" law stops being a
-  habit and becomes a trap the orchestrator can't skip.
-- **evaluator** (lucy, billy, frankie) — judges adversarially. Never dispatched to WRITE product.
+- **generators** (charlie, patty) — produce artifacts. A generator's WP is **not sealable** until an
+  **evaluator** has verified it.
+- **evaluators** (lucy, billy, frankie) — judge adversarially. Never dispatched to WRITE product.
 - **explorer** (jimmy) — mines grounded facts / researches; feeds both, gates neither.
 
-The orchestrator (`packages/orchestrator`) owns this rule: `seal(generatorWP)` requires a matching
-evaluator ResultCard, or it refuses. This is the governance analog of the GAN feedback loop.
+The orchestrator (`packages/orchestrator`) owns this rule against the roster: `seal(generatorWP)`
+requires a matching evaluator ResultCard, or it refuses. The owner's "cold-review every returning
+agent" law becomes a trap the conductor can't skip — the governance analog of the GAN feedback loop.
+See [docs/TEAM.md](./docs/TEAM.md) for the full roster and the phase/persona separation.
 
 ### 5.2 All seats are TypeScript (decided)
 
