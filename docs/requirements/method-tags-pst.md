@@ -8,7 +8,9 @@
 > its one `formal` INV — **PERSIST-11** — is the *persistence-side consumer* of the KRN `FSPEC-merge` core, not a
 > second model. The three byte-identity/convergence INVs at the git seam (PERSIST-2/5/12) are `PBT` — the same
 > convergence property, not a new formal model. Everything else is `reference-model` per the ratified baseline —
-> a feature, not a compromise. All 15 PST invariants are `behavioural` (register), so none carries `n/a`.
+> a feature, not a compromise. All 16 PST invariants are `behavioural` (register), so none carries `n/a`.
+(**PERSIST-14** — the `atlas-diff` version-delta — is `PBT` for the same reason: a read-only fold-comparison
+whose load-bearing shape is partition-totality + determinism/order-independence over the existing `fold`.)
 
 ---
 
@@ -117,6 +119,13 @@ up-property: "trailer-canonical clone-presence: a datum required in any clone li
 down-model: "reference {trailer, note} placement model; assert clone-required data reads from the **trailer** after a bare clone with no note refspec; a rewrite carries the trailer onto the new SHA and orphans the note; a clone-required datum stored **only** in a note fails the placement check"
 anti-rot: `persist/ref/placement.ts` (the trailer-vs-note placement oracle) is the mock; a clone-required datum written only to a note fails the placement assertion in the shared unit test.
 
+### INV-PERSIST-14
+method-tag: PBT
+fspec: —
+up-property: "version-delta determinism + partition-totality + provenance-completeness: `diff(shaA,shaB)` partitions the facts into exactly {added, edited, superseded, decayed} (a total, disjoint partition), every entry carries its provenance, the diff is a **PURE READ (0 mutation)**, **byte-identical across runs**, and **well-defined regardless of fold/event order** — it is a read-only fold-comparison over two folded AtlasStates (grounds on KERNEL-5/PERSIST-2 fold + PERSIST-5 supersede/decay lifecycle), NOT a stored/materialized diff (decoupled-after PERSIST-2/5)"
+down-model: "reuse the FSPEC-merge `fold` reducer to produce the two AtlasStates `A = fold(shaA)`, `B = fold(shaB)`, then a reference `diff(A,B)` that set-partitions the fact-sets by the PERSIST-5 lifecycle into {added, edited, superseded, decayed} with provenance; PBT `diff(fold(shuffle(S1)),fold(shuffle(S2))) ≡ diff(fold(S1),fold(S2))` (order-independence) ∧ `diff(A,A) == ∅` ∧ `diff` mutates nothing ∧ every entry has provenance — reuses the KERNEL-11 convergence law, NOT a new model"
+anti-rot: `persist/ref/diff.ts` (the read-only fold-diff over the FSPEC-merge `fold` mock) is the mock; a diff that keys on fold/event order, mutates state, materializes a stored diff, or drops an entry's provenance diverges under the property and breaks the build. *(Tag is `PBT`, not `formal`: the shape is determinism/order-independence over the existing fold — the model already lives in `FSPEC-merge`; this INV PBT-checks that the read-only projection conforms, reusing `fold` as oracle exactly like PERSIST-2/5/12.)*
+
 ---
 
 ## Refuse-to-model
@@ -141,9 +150,9 @@ PERSIST-2/5/12 PBT the same convergence/monotonicity properties over the same re
 ## Completion report
 
 - tagged-register: `docs/requirements/method-tags-pst.md`
-- tag histogram: **formal 1** (PERSIST-11, consumer of `FSPEC-merge`) · **exhaustive 0** · **PBT 3** (PERSIST-2/5/12) · **reference-model 11** (PERSIST-1, 3, 4, 6, 7, 8, 9, 10, 10a, 10b, 13)
-- FSPEC authored by PST: **none** (PERSIST-11 consumes the existing `docs/spec/fspec-merge.md` core — no second model)
+- tag histogram: **formal 1** (PERSIST-11, consumer of `FSPEC-merge`) · **exhaustive 0** · **PBT 4** (PERSIST-2/5/12/14) · **reference-model 11** (PERSIST-1, 3, 4, 6, 7, 8, 9, 10, 10a, 10b, 13)
+- FSPEC authored by PST: **none** (PERSIST-11 consumes the existing `docs/spec/fspec-merge.md` core — no second model; PERSIST-14 reuses the `fold` oracle, no new model)
 - refusal count: **7**
-- every PERSIST-1..13 + 10a/10b tagged: **yes** (15/15; all behavioural, 0 `n/a`)
+- every PERSIST-1..14 + 10a/10b tagged: **yes** (16/16; all behavioural, 0 `n/a`)
 - KERNEL-12a self-install integration test: **recorded** as PERSIST-11's integration-test oracle (REQ-PERSIST-11-f)
 - → next_state **S3** (goldens).

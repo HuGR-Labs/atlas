@@ -259,3 +259,28 @@ normative-clause: "**reads MUST enforce a content-address integrity check that r
 source: INV-TOOLS-15 @ reference/atlas-tools.md#tools-15
 If a direct write skips the emit path, then the store shall either refuse it at write or reject it at read so it never surfaces as a served fact.
 normative-clause: "a direct write that skips the emit path either cannot land (append-only/permission) or is rejected at read (integrity check), never surfacing as a served fact"
+
+### REQ-TOOLS-16a — atlas-diff surfaces the version delta read-only
+source: INV-TOOLS-16 @ reference/atlas-tools.md#tools-16
+When `atlas-diff <shaA> <shaB>` is invoked, the tools layer shall surface the PERSIST-14 delta as a read-only projection.
+normative-clause: "`atlas-diff <shaA> <shaB>` surfaces the PERSIST-14 delta as a read-only projection"
+
+### REQ-TOOLS-16b — atlas-diff CLI and MCP parity
+source: INV-TOOLS-16 @ reference/atlas-tools.md#tools-16
+The `atlas-diff` tool shall be callable identically over the CLI and over MCP against one published schema.
+normative-clause: "CLI≡MCP … one published schema"
+
+### REQ-TOOLS-16c — atlas-diff CLI and MCP must not diverge
+source: INV-TOOLS-16 @ reference/atlas-tools.md#tools-16
+If `atlas-diff` is invoked over both the CLI and MCP, then the tools layer shall not diverge in behavior or contract between the two.
+normative-clause: "CLI≡MCP (0 divergence)"
+
+### REQ-TOOLS-16d — atlas-diff adds no write path
+source: INV-TOOLS-16 @ reference/atlas-tools.md#tools-16
+If `atlas-diff` is reached over any transport, then the tools layer shall keep it read/subscribe only and add no write path.
+normative-clause: "0 write path"
+
+### REQ-TOOLS-16e — atlas-diff is not a fifth write tool
+source: INV-TOOLS-16 @ reference/atlas-tools.md#tools-16
+If `atlas-diff` would grow the governance write surface, then the tools layer shall not admit it as a write tool, keeping the write surface exactly four.
+normative-clause: "the governance WRITE surface stays exactly 4 tools (this is a read projection like `node` TOOLS-10 / `doctor` TOOLS-12, NOT a fifth write tool)"

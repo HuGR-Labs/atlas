@@ -87,6 +87,12 @@ MergeDriver = { name:'orchestra-atlas', merge(ours, theirs, base): EventLog }
   the fetch/push refspec (PERSIST-8), and not carried across a rewrite. This corrects the "present in any
   clone" wording of PERSIST-1/PERSIST-8 for **note-carried** data: only trailer-carried data is present by
   construction.
+- **PERSIST-14 Version-delta = read-only fold-diff.** `diff(shaA,shaB)` MUST partition the facts into
+  {**added**, **edited**, **superseded**, **decayed**}, each entry carrying its **provenance**. It MUST be
+  computed by comparing the two folded AtlasStates (grounds on the KERNEL-5 / PERSIST-2 fold + the PERSIST-5
+  archive/supersede/decay lifecycle) — a **PURE READ** (0 mutation), **byte-identical across runs**, and
+  **well-defined regardless of fold/event order** (PERSIST-2/12). It MUST be a read-only fold-diff computed
+  over the event log, **not** a stored/materialized diff (ADR-P14).
 
 ## Surface / API
 

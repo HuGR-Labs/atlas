@@ -1,9 +1,13 @@
 # Work Packages — CAMPAIGN-7 (state S4)
 
-> The governed tool surface & tri-transport. Epics EPIC-26-a / -b / -c, all single-module (**TOOLS**).
-> Each epic is single-module ⇒ exactly one WP per epic and **no seam-freeze** (no cross-module obligation
-> inside any of the three epics). TLS authors no FSPEC; it consumes KERNEL's store/`FSPEC-merge` frozen
-> upstream — recorded as a consumed contract in `interface_contract`, never smeared into a WP it does not own.
+> The governed tool surface & tri-transport. Epics EPIC-26-a / -b / -c, all single-module (**TOOLS**); plus
+> **EPIC-32** (`atlas-diff` version-delta projection), a two-module vertical **PERSIST → TOOLS**.
+> EPIC-26-a/-b/-c are single-module ⇒ one WP per epic and **no seam-freeze**. EPIC-32 spans two modules ⇒ one WP
+> per module (WP-7.32.PERSIST / WP-7.32.TOOLS) with a **single seam-freeze**: the version-delta contract is
+> owned by the upstream **PERSIST** slice (it computes the read-only fold-diff) and consumed by the **TOOLS**
+> slice (it surfaces `atlas-diff`) — never smeared into both. TLS authors no FSPEC; it consumes KERNEL's
+> store/`FSPEC-merge` frozen upstream — recorded as a consumed contract in `interface_contract`, never smeared
+> into a WP it does not own.
 >
 > Driftless law: every substantive field below is a `ptr+digest` (the `# ptr+digest` marker; digest is
 > tooling-filled at freeze). `intent` is the one prose carve-out (non-authoritative, executor-invisible).
@@ -262,15 +266,164 @@ rationale:                               # ptr
   - source: ../invariant-register.md#INV-TOOLS-11a
 ---
 
+## EPIC-32 — atlas-diff (version-delta projection)
+
+### WP-7.32.PERSIST — PERSIST slice of EPIC-32
+epic: EPIC-32
+id: WP-7.32.PERSIST
+content_hash: <filled-at-freeze>
+title: version-delta = deterministic read-only fold-diff (added/edited/superseded/decayed + provenance)
+intent: >
+  Compute diff(shaA,shaB) as a PURE READ over the two folded AtlasStates: partition the changed facts into
+  added/edited/superseded/decayed, each carrying its provenance, byte-identical across runs and independent of
+  fold/event order, materializing no stored diff. Owns the version-delta contract the TOOLS slice surfaces.
+  Human handle only — non-authoritative.
+source_reqs:                             # ptr+digest
+  - source: ../req-pst.md#REQ-PERSIST-14-a  # ptr+digest
+  - source: ../req-pst.md#REQ-PERSIST-14-b  # ptr+digest
+  - source: ../req-pst.md#REQ-PERSIST-14-c  # ptr+digest
+  - source: ../req-pst.md#REQ-PERSIST-14-d  # ptr+digest
+  - source: ../req-pst.md#REQ-PERSIST-14-e  # ptr+digest
+  - source: ../req-pst.md#REQ-PERSIST-14-f  # ptr+digest
+seam-freezes: [ "version-delta contract owned-by PERSIST, consumed-by TOOLS" ]
+anchor: # value
+  target: the PERSIST version-delta — the read-only fold-diff `persist/ref/diff.ts` layered over the
+    FSPEC-merge `fold` (`kernel/ref/fold.ts`), partitioning `fold(shaA)` vs `fold(shaB)` by the PERSIST-5
+    supersede/decay lifecycle. Insertion site = the `diff(shaA,shaB)` read entry point (no write path).
+interface_contract:                      # ptr+digest
+  - source: ../../reference/atlas-persist.md#persist-14  # ptr+digest
+  - source: ../method-tags-pst.md#INV-PERSIST-14  # ptr+digest
+  - source: ../../spec/fspec-merge.md#down  # ptr+digest   (the `fold` reducer consumed as oracle, frozen upstream)
+exclusions: # value
+  - The `atlas-diff` CLI/MCP surface (surfacing the delta, CLI≡MCP, no write path, surface stays 4) is the
+    TOOLS slice WP-7.32.TOOLS — NOT authored here; this WP owns the delta computation only.
+  - No new merge/fold model — the fold is consumed frozen from CAMPAIGN-1 (`FSPEC-merge`); a materialized/stored
+    diff is explicitly out of scope (ADR-P14: read-only fold-diff over the log).
+inputs:                                  # ptr+digest
+  - source: ../goldens-pst.md#req-persist-14--version-delta--read-only-fold-diff-pbt--reuses-fspec-merge-fold  # ptr+digest
+  - source: persist/ref/diff.ts  # ptr+digest
+  - source: kernel/ref/fold.ts  # ptr+digest
+action: # value (zero-decision recipe)
+  Implement `diff(shaA,shaB) = partition(fold(shaA), fold(shaB))` so each acceptance SCN passes as a PBT/
+  conformance run against `persist/ref/diff.ts` (reusing the `fold` oracle); mutate nothing, materialize no
+  stored diff, carry provenance on every entry; run the goldens harness.
+action_surface: # value
+  [ Read, Edit, Write (PERSIST package only), run goldens/conformance harness, run PBT for 14-a/14-b/14-e/14-f ]
+guardrails: # value
+  - edit only within the PERSIST package + its tests; never edit ../reference/*, ../req-pst.md, ../goldens-pst.md
+  - the diff must mutate no state (mutations == 0) and materialize no stored diff (fold-comparison only)
+  - no network; deterministic (byte-identical across runs; order-independent over the fold)
+repair_budget: # value
+  N: 3 ; early-stop on { repeated-identical-failure, no-change-diff, semantic-duplicate-edit }
+acceptance:                              # ptr+digest = frozen goldens
+  - source: ../goldens-pst.md#SCN-PERSIST-14a-1  # ptr+digest
+  - source: ../goldens-pst.md#SCN-PERSIST-14b-1  # ptr+digest
+  - source: ../goldens-pst.md#SCN-PERSIST-14c-1  # ptr+digest
+  - source: ../goldens-pst.md#SCN-PERSIST-14d-1  # ptr+digest
+  - source: ../goldens-pst.md#SCN-PERSIST-14e-1  # ptr+digest
+  - source: ../goldens-pst.md#SCN-PERSIST-14f-1  # ptr+digest
+deps: [ ]   parallel_group: —
+exit_predicate: # value
+  all 6 acceptance SCNs green ∧ PBT (partition-totality · determinism · order-independence) holds ∧
+  mutations == 0 ∧ no materialized diff ∧ every delta entry carries provenance ∧ all pointer digests resolve
+context_refs:                            # closed list
+  - source: ../../reference/atlas-persist.md#persist-14
+  - source: ../method-tags-pst.md
+  - source: ../goldens-pst.md
+owner: charlie (FORGE)                                                            # value
+outputs:                                             # exec — empty at S4-freeze
+provenance:                                          # exec — empty at S4-freeze
+trace_ref:                                           # exec — empty at S4-freeze
+rationale:                               # ptr
+  - source: ../invariant-register.md#INV-PERSIST-14
+---
+
+### WP-7.32.TOOLS — TOOLS slice of EPIC-32
+epic: EPIC-32
+id: WP-7.32.TOOLS
+content_hash: <filled-at-freeze>
+title: atlas-diff read-only version projection (CLI≡MCP · no write path · surface stays four)
+intent: >
+  Surface the PERSIST-14 version-delta through `atlas-diff <shaA> <shaB>` as a read-only projection —
+  byte-identical over CLI and MCP against one schema, opening no write path, and NOT a fifth governance write
+  tool (a read projection like node TOOLS-10 / doctor TOOLS-12). Consumes the delta contract frozen upstream by
+  WP-7.32.PERSIST. Human handle only.
+source_reqs:                             # ptr+digest
+  - source: ../req-tls.md#REQ-TOOLS-16a  # ptr+digest
+  - source: ../req-tls.md#REQ-TOOLS-16b  # ptr+digest
+  - source: ../req-tls.md#REQ-TOOLS-16c  # ptr+digest
+  - source: ../req-tls.md#REQ-TOOLS-16d  # ptr+digest
+  - source: ../req-tls.md#REQ-TOOLS-16e  # ptr+digest
+seam-freezes: [ "version-delta contract consumed-from PERSIST (WP-7.32.PERSIST, frozen upstream)" ]
+anchor: # value
+  target: the `atlas-diff` read-only projection `tools/ref/diff.ts` over the CLI + MCP adapters bound to the one
+    handler `tools/ref/handler.ts`. Insertion site = the two transport bindings for `atlas-diff` reading the
+    PERSIST-14 delta; no write path, not on the governance write surface.
+interface_contract:                      # ptr+digest
+  - source: ../../reference/atlas-tools.md#tools-16  # ptr+digest
+  - source: ../req-pst.md#REQ-PERSIST-14-a  # ptr+digest   (the consumed version-delta contract, frozen upstream)
+  - source: tools/ref/handler.ts  # ptr+digest
+exclusions: # value
+  - The delta computation (fold-diff / partition / provenance) is owned by WP-7.32.PERSIST — consumed here,
+    never re-authored.
+  - The no-write-path arm (16d) + the not-a-fifth-write-tool arm (16e) are POSITIVE reference-model properties
+    of the read handle — NOT a formal model; formal verification is out of scope.
+  - The write-door + store (EPIC-26-a), CLI/MCP parity + doctor (EPIC-26-b), tri-transport + ladder (EPIC-26-c)
+    — out of scope here.
+inputs:                                  # ptr+digest
+  - source: ../goldens-tls.md#req-tools-16--atlas-diff-read-only-version-projection-reference-model--climcp-delegated-to-tools-3  # ptr+digest
+  - source: tools/ref/diff.ts  # ptr+digest
+  - source: tools/ref/handler.ts  # ptr+digest
+action: # value
+  Bind `atlas-diff` over the CLI + MCP adapters to the one handler so each acceptance SCN passes: it faithfully
+  renders the consumed PERSIST-14 delta, returns byte-identical over CLI and MCP, exposes no store-mutating
+  method, and does not grow the governance write surface; run the goldens harness.
+action_surface: # value
+  [ Read, Edit, Write (TOOLS package only), run goldens/conformance harness ]
+guardrails: # value
+  - edit only within the TOOLS package + its tests; never re-author the delta (consumed from PERSIST)
+  - add NO write path over any transport (read/subscribe only; writes funnel through atlas-emit)
+  - the governance write surface stays == 4 (atlas-diff is a read projection, not a fifth write tool)
+repair_budget: # value
+  N: 3 ; early-stop on { repeated-identical-failure, no-change-diff, semantic-duplicate-edit }
+acceptance:                              # ptr+digest = frozen goldens
+  - source: ../goldens-tls.md#SCN-TOOLS-16a-1  # ptr+digest
+  - source: ../goldens-tls.md#SCN-TOOLS-16b-1  # ptr+digest
+  - source: ../goldens-tls.md#SCN-TOOLS-16c-1  # ptr+digest
+  - source: ../goldens-tls.md#SCN-TOOLS-16d-1  # ptr+digest
+  - source: ../goldens-tls.md#SCN-TOOLS-16e-1  # ptr+digest
+deps: [ WP-7.32.PERSIST ]   parallel_group: —
+exit_predicate: # value
+  all 5 acceptance SCNs green ∧ cli(shaA,shaB) ≡ mcp(shaA,shaB) ∧ 0 write path on the diff surface ∧
+  governance write surface count == 4 ∧ all pointer digests resolve (no STALE)
+context_refs:                            # closed list
+  - source: ../../reference/atlas-tools.md#tools-16
+  - source: ../req-pst.md#REQ-PERSIST-14-a
+  - source: ../goldens-tls.md
+owner: charlie (FORGE)                                                            # value
+outputs:                                             # exec — empty at S4-freeze
+provenance:                                          # exec — empty at S4-freeze
+trace_ref:                                           # exec — empty at S4-freeze
+rationale:                               # ptr
+  - source: ../invariant-register.md#INV-TOOLS-16
+---
+
 ## S4 partition ledger (self-check)
 
-- **REQ→WP partition:** 27/27 CAMPAIGN-7 REQs owned by exactly one WP — orphans = 0, doubles = 0.
+- **REQ→WP partition:** 38/38 CAMPAIGN-7 REQs owned by exactly one WP — orphans = 0, doubles = 0.
   - WP-7.26-a.TOOLS (9): 1a, 1b, 1c, 1d, 2a, 2b, 15a, 15b, 15c
   - WP-7.26-b.TOOLS (6): 3a, 3b, 4, 12a, 12b, 12c
   - WP-7.26-c.TOOLS (12): 10a, 10b, 10c, 10d, 11-a, 11-b, 11-c, 11-d, 11a-a, 11a-b, 11a-c, 11a-d
-- **Epic coverage:** each of EPIC-26-a / -b / -c fully covered by its single TOOLS WP.
-- **Seam-freezes:** none — all three epics are single-module (TOOLS); the KERNEL store / one-handler contract is
-  a *consumed-from-upstream* pointer (frozen), not a same-epic cross-module obligation.
+  - WP-7.32.PERSIST (6): PERSIST-14-a, 14-b, 14-c, 14-d, 14-e, 14-f
+  - WP-7.32.TOOLS (5): TOOLS-16a, 16b, 16c, 16d, 16e
+- **Epic coverage:** each of EPIC-26-a / -b / -c fully covered by its single TOOLS WP; EPIC-32 fully covered by
+  its two module WPs (WP-7.32.PERSIST owns the 6 PERSIST-14 REQs, WP-7.32.TOOLS owns the 5 TOOLS-16 REQs).
+- **Seam-freezes:** EPIC-26-a/-b/-c — none (all single-module TOOLS; the KERNEL store / one-handler contract is a
+  *consumed-from-upstream* pointer). EPIC-32 — **one**: the `atlas-diff` version-delta contract is owned by the
+  upstream **PERSIST** slice (it computes the read-only fold-diff) and consumed by the downstream **TOOLS** slice
+  (it surfaces `atlas-diff`) — a single upstream owner, never smeared across both WPs.
 - **Acceptance:** each WP's acceptance = its REQs' frozen SCN goldens by reference (ptr+digest), no prose copy.
 - **No new decisions:** every field transcribes frozen upstream; the security-exploitability of the write-door
-  is explicitly excluded (billy / FR-12), matching the goldens-tls.md standing note.
+  is explicitly excluded (billy / FR-12), matching the goldens-tls.md standing note; EPIC-32 adds no decision —
+  the delta contract (ADR-P14 read-only fold-diff, not a stored diff) and the read-projection surface (surface
+  stays 4) are fixed upstream in PERSIST-14 / TOOLS-16.

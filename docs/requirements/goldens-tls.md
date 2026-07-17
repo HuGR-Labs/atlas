@@ -630,12 +630,77 @@ gen: conformance   # functional refusal only; adversarial exploit of this door =
 
 ---
 
+## REQ-TOOLS-16 — atlas-diff read-only version projection (reference-model · CLI≡MCP delegated to TOOLS-3)
+
+> **A read-only projection of the PERSIST-14 delta, NOT a fifth write tool.** `atlas-diff <shaA> <shaB>` surfaces
+> the frozen PERSIST-14 delta (`persist/ref/diff.ts`) — it opens **no** write path (like node TOOLS-10 / doctor
+> TOOLS-12). Its CLI≡MCP determinism arm is **delegated** to the TOOLS-3 cross-transport PBT over the one handler
+> (`tools/ref/handler.ts`); this block conformance-tests the projection surface (faithful delta, no write path,
+> write-surface stays 4).
+>
+> Diff fixture (the PERSIST-14 delta over two shas of the finance atlas):
+> `Δ = diff(shaA, shaB) = { added:[claim:acme-ceo], edited:[claim:acme-arr-2024], superseded:[pred:auth-token-ttl], decayed:[claim:acme-hq-2019] }`,
+> each entry carrying its `prov` (the WP/commit that produced it). Governance write surface (TOOLS-1) = exactly
+> `{atlas-init, atlas-query, atlas-emit, atlas-reconcile}` — `atlas-diff` is a **read** projection, not on it.
+
+### REQ-TOOLS-16a — atlas-diff surfaces the version delta read-only   (happy)
+
+### SCN-TOOLS-16a-1 — atlas-diff renders the four-class delta as a read-only projection   (happy)
+source: REQ-TOOLS-16a
+Given `atlas-diff shaA shaB` over the reference diff projection `tools/ref/diff.ts` reading the PERSIST-14 delta `Δ`
+When the command runs
+Then it surfaces `Δ` — `added:[acme-ceo]`, `edited:[acme-arr-2024]`, `superseded:[auth-token-ttl]`, `decayed:[acme-hq-2019]`, each with its `prov` — as a read-only projection (nothing is written)
+teeth: breaks-on "`atlas-diff` drops the `decayed` partition from what it renders — a steward auditing the two versions never sees `acme-hq-2019` fell out (the projection is not faithful to the PERSIST-14 delta)"
+gen: conformance   # differential vs `tools/ref/diff.ts` (faithful render of the PERSIST-14 delta)
+
+### REQ-TOOLS-16b — atlas-diff CLI and MCP parity   (happy)
+
+### SCN-TOOLS-16b-1 — atlas-diff returns byte-identical results over CLI and MCP   (happy)
+source: REQ-TOOLS-16b
+Given `atlas-diff shaA shaB` invoked over both the `cli` and `mcp` adapters against the one handler `tools/ref/handler.ts`
+When `cli(shaA,shaB)` and `mcp(shaA,shaB)` are computed
+Then `cli(shaA,shaB) ≡ mcp(shaA,shaB)` — byte-identical delta, one schema-checked handler behind both transports (the cross-transport equivalence is the TOOLS-3 law, reused here)
+teeth: breaks-on "the MCP adapter wraps the delta in a transport envelope `{mcp:{…}}` — `mcp(shaA,shaB) ≠ cli(shaA,shaB)` byte-wise"
+gen: conformance   # projection parity; the ∀-input equivalence is delegated to the TOOLS-3 PBT over the shared handler
+
+### REQ-TOOLS-16c — atlas-diff CLI and MCP must not diverge   (guard)
+
+### SCN-TOOLS-16c-1 — a bad-sha input rejects identically on both transports   (guard)
+source: REQ-TOOLS-16c
+Given a malformed input `shaB = 42` (a number where a sha string is required) presented over both the `cli` and `mcp` adapter
+When `cli(shaA,42)` and `mcp(shaA,42)` are computed
+Then both return the **same** structured rejection — the two transports do not diverge in behavior or contract on the identical input
+teeth: breaks-on "the MCP adapter coerces `42→\"42\"` and resolves an empty diff while the CLI rejects — divergent verdicts for the same input"
+gen: conformance   # divergence is the negated parity property (shared handler; TOOLS-3 PBT covers ∀-input)
+
+### REQ-TOOLS-16d — atlas-diff adds no write path   (guard)
+
+### SCN-TOOLS-16d-1 — a write attempted through the diff projection is refused   (guard)
+source: REQ-TOOLS-16d
+Given the `atlas-diff` projection handle reached over each transport (MCP / poke / CLI)
+When the handle is inspected and a store-mutating call is attempted through it
+Then it exposes **no** store-mutating method and the write attempt is refused — atlas-diff is read/subscribe only, writes still funnel through `atlas-emit` (positive property: a read projection opens NO write door)
+teeth: breaks-on "the `atlas-diff` handle grows a `.write()`/`.apply()` method that lands a fact from one version into the other — a write path opens via the diff projection, bypassing `atlas-emit`"
+gen: conformance   # reference-model property of the read handle (no store-mutating method); NOT a formal model
+
+### REQ-TOOLS-16e — atlas-diff is not a fifth write tool   (guard)
+
+### SCN-TOOLS-16e-1 — atlas-diff does not grow the governance write surface   (guard)
+source: REQ-TOOLS-16e
+Given the governance surface with `atlas-diff` available as a read projection
+When the governance **write** surface is enumerated and the `atlas-diff` handle inspected
+Then the write surface stays exactly `4` — `{atlas-init, atlas-query, atlas-emit, atlas-reconcile}` — and `atlas-diff` carries no write authority (a read projection like node TOOLS-10 / doctor TOOLS-12, consistent with TOOLS-1/15)
+teeth: breaks-on "`atlas-diff` is registered on the governance write surface as a fifth write tool — write-surface count `== 5` and a write via `atlas-diff` lands"
+gen: conformance   # write-surface count == 4 (atlas-diff is a read projection, not a write door)
+
+---
+
 ## Coverage ledger (S3 completeness facet)
 
-- **REQ coverage:** 52/52 REQ have ≥1 SCN (TOOLS-1a..1d, 2a/2b, 3a/3b, 4, 5a..5e, 6a..6c, 7a..7d, 8a..8d, 9a/9b, 10a..10d, 11-a..11-d, 11a-a..11a-d, 12a..12c, 13a..13d, 14a..14c, 15a..15c).
-- **Guard coverage:** 19/19 unwanted/If-then/MUST-NOT REQ have a guard SCN — 1c, 2b, 3b, 5c, 5d, 6c, 7b, 8b, 9b, 10b, 10c, 11-a, 11a-b, 11a-c, 12b, 13c, 14c, 15b, 15c.
-- **Teeth (Gate 3):** 52/52 SCN name the exact mutant of their REQ they flip to BROKEN on; none vacuous. The PBT tri/dual-transport witnesses are interesting (a real re-serializing transport, a real contract fork, a real coercion-vs-reject divergence — no antecedent-failure passes); the reference-model conformance witnesses each drive a genuine divergence against the named `tools/ref/*.ts` mock.
-- **gen histogram:** PBT 6 (3a, 3b, 10a, 10b, 10c, 10d) · conformance 46 (all others) · residue 0 (every TLS INV has a pure oracle — no hand-written tail).
-- **Positive read-only-projection goldens (write-attempt refused, NOT a formal model):** 1d, 10c, 12a.
+- **REQ coverage:** 57/57 REQ have ≥1 SCN (TOOLS-1a..1d, 2a/2b, 3a/3b, 4, 5a..5e, 6a..6c, 7a..7d, 8a..8d, 9a/9b, 10a..10d, 11-a..11-d, 11a-a..11a-d, 12a..12c, 13a..13d, 14a..14c, 15a..15c, **16a..16e**).
+- **Guard coverage:** 22/22 unwanted/If-then/MUST-NOT REQ have a guard SCN — 1c, 2b, 3b, 5c, 5d, 6c, 7b, 8b, 9b, 10b, 10c, 11-a, 11a-b, 11a-c, 12b, 13c, 14c, 15b, 15c, **16c, 16d, 16e**.
+- **Teeth (Gate 3):** 57/57 SCN name the exact mutant of their REQ they flip to BROKEN on; none vacuous. The PBT tri/dual-transport witnesses are interesting (a real re-serializing transport, a real contract fork, a real coercion-vs-reject divergence — no antecedent-failure passes); the reference-model conformance witnesses each drive a genuine divergence against the named `tools/ref/*.ts` mock. The **TOOLS-16** witnesses drive a dropped-partition render (16a), a write-method grown on the diff handle (16d), and a fifth-write-tool registration (16e) — genuine mutants, no vacuous pass.
+- **gen histogram:** PBT 6 (3a, 3b, 10a, 10b, 10c, 10d) · conformance 51 (all others, incl. 16a–16e) · residue 0 (every TLS INV has a pure oracle — no hand-written tail).
+- **Positive read-only-projection goldens (write-attempt refused, NOT a formal model):** 1d, 10c, 12a, **16d, 16e** (atlas-diff opens no write door / is not a fifth write tool).
 - **Deferred to billy / FR-12 (functional refusal authored here; exploit NOT authored):** 1c, 15b, 15c.
 - **ID-scheme note honored:** TOOLS-11 family SCNs use `SCN-TOOLS-11-<c>-<k>` (hyphenated) vs the TOOLS-11a family `SCN-TOOLS-11a-<c>-<k>` — no prefix collision.

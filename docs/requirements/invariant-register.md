@@ -7,9 +7,10 @@
 > a gate failure is a `[NEEDS RECONCILIATION]` routed to design, never invented. Carries each invariant's **FR**
 > (from [D0](../design/product-definition.md)) and **independence** value (from [D2](../design/structure.md)).
 >
-> **Status:** ✅ **all 9 blocks ratified — 132/132 RATIFIED** (KRN pilot → 8-block fan-out → owner extended D0
-> with FR-11/12/13 → all 20 former reconciliations re-homed). 7 territory owners assigned; the 2 consolidated
-> freeze cold-reviews (lucy rigor + frankie DAG) integrated. **Ready to freeze = S0.** Total: 132 / 9 blocks.
+> **Status:** ✅ **all 9 blocks ratified — 134/134 RATIFIED** (KRN pilot → 8-block fan-out → owner extended D0
+> with FR-11/12/13 → all 20 former reconciliations re-homed; +2 governed additions PERSIST-14 / TOOLS-16 for the
+> `atlas-diff` version-delta projection). 7 territory owners assigned; the 2 consolidated
+> freeze cold-reviews (lucy rigor + frankie DAG) integrated. **Ready to freeze = S0.** Total: 134 / 9 blocks.
 
 ## The 5 gates (each row must pass all five, or carry a `[NEEDS RECONCILIATION]`)
 
@@ -189,7 +190,7 @@ anchor: `reference/atlas-memory.md#mem-N`. *(Memory was out of D0's original Kno
 
 **MEM: 13/13 RATIFIED** (the 11 formerly-unhomed rows re-homed after the D0 extension — MEM-1/3/4/5/6/8/11/12/13→FR-11, MEM-9→FR-12, MEM-10→FR-8; row cells updated).
 
-## Block PST — persist (15) · M-Kernel/Persistence (DP-7) · **FR-8** · consumes seams #2/#3; PERSIST-11 in formal `FSPEC-merge` core · standard
+## Block PST — persist (16) · M-Kernel/Persistence (DP-7) · **FR-8** · consumes seams #2/#3; PERSIST-11 in formal `FSPEC-merge` core · standard
 
 anchor: `reference/atlas-persist.md#persist-N`.
 
@@ -210,10 +211,11 @@ anchor: `reference/atlas-persist.md#persist-N`.
 | PERSIST-11 branch-merge = event-set union | FR-8 | **COUPLED-with KERNEL-9/10/11** (formal core) | driver unions by content-hash+re-folds; 0 lost; self-installs; absent ⇒ union floor | behavioural | ADR-P11 self-install+safe-degrade | **RATIFIED** |
 | PERSIST-12 rebase/cherry-pick safe | FR-8 | decoupled-after KERNEL-9 | reorder ⇒ AtlasState byte-identical | behavioural | — | **RATIFIED** |
 | PERSIST-13 trailers canonical, notes overlay | FR-8 | on-diag (corrects P-1/8) | bare clone reads trailer; rebase orphans note, trailer survives | behavioural | ADR-P13 | **RATIFIED** |
+| PERSIST-14 version-delta read-only fold-diff | FR-8 | decoupled-after PERSIST-2/5 (read-only projection over the fold + supersede/decay lifecycle) | diff(shaA,shaB) partitions facts into {added,edited,superseded,decayed}, each carrying provenance; PURE READ (0 mutation); byte-identical across runs; identical regardless of fold/event order (PERSIST-2/12) | behavioural | ADR-P14 read-only fold-diff (rejected: a stored/materialized diff → a second source of truth that drifts from the fold) | **RATIFIED** |
 
-**PST: 15/15 RATIFIED** (PERSIST-10a re-homed to FR-12 safety after the D0 extension).
+**PST: 16/16 RATIFIED** (PERSIST-10a re-homed to FR-12 safety after the D0 extension; PERSIST-14 added as the read-only version-delta projection — grounds on the KERNEL-5/PERSIST-2 fold + PERSIST-5 archive/supersede/decay lifecycle, a pure read that materializes nothing).
 
-## Block TLS — tools/delivery (16) · M-Tools (delivery; no DP → grounds via seams) · write-door = seam #4 · standard
+## Block TLS — tools/delivery (17) · M-Tools (delivery; no DP → grounds via seams) · write-door = seam #4 · standard
 
 anchor: `reference/atlas-tools.md#tools-N`. *(pure-reach/robustness invariants ground to the D1 Usability risk — gate-1 allows FR **or need**.)*
 
@@ -235,8 +237,9 @@ anchor: `reference/atlas-tools.md#tools-N`. *(pure-reach/robustness invariants g
 | TOOLS-13 mechanical drift auto-re-grounds | FR-6 | COUPLED-with TOOLS-8 | --accept-reground ⇒ regroundedCount==|mechanical|, 0 human/block | behavioural | via ADR-T8 | **RATIFIED** |
 | TOOLS-14 pre-phase discovery hook | FR-4 | decoupled-after M-Retrieval | every phase boundary ⇒ fresh pack pushed, 0 seat-side pull | behavioural | via ADR-T11 | **RATIFIED** |
 | TOOLS-15 single-write-door structural | FR-10 | COUPLED-with TOOLS-1 (seam #4) | direct write ⇒ can't land or fails integrity; only emit'd rows resolve | behavioural | via ADR-T1 | **RATIFIED** |
+| TOOLS-16 atlas-diff read-only version projection | FR-10 | decoupled-after TOOLS-1 (read-only projection; consumes PERSIST-14 delta) | atlas-diff surfaces the PERSIST-14 delta read-only; CLI=MCP 0 divergence; 0 write path; governance write surface stays exactly 4 (not a 5th write tool, like node TOOLS-10 / doctor TOOLS-12) | behavioural | via ADR-T1 (read projection; surface stays 4) | **RATIFIED** |
 
-**TLS: 16/16 RATIFIED** (TOOLS-2/3/4/11/11a re-homed to FR-13 delivery-ergonomics after the D0 extension).
+**TLS: 17/17 RATIFIED** (TOOLS-2/3/4/11/11a re-homed to FR-13 delivery-ergonomics after the D0 extension; TOOLS-16 added as the `atlas-diff` read-only version projection — a read projection consistent with TOOLS-1/15, NOT a fifth write tool).
 
 ## Block GEN — genesis (16) · M-Lifecycle (DP-8) · **FR-9 COUPLED-with FR-7** (11 FR-9, 5 FR-2) · standard
 
@@ -267,8 +270,10 @@ anchor: `reference/atlas-genesis.md#gen-N`.
 
 ## Freeze summary — the S0 disposition
 
-**Tally (post-resolution): 132/132 RATIFIED** — owner chose to extend D0 with FR-11/12/13, so the 20 former
-`[NEEDS RECONCILIATION]` rows are now FR-homed and RATIFIED (re-homing map below). Every invariant is grounded,
+**Tally (post-resolution): 134/134 RATIFIED** — owner chose to extend D0 with FR-11/12/13, so the 20 former
+`[NEEDS RECONCILIATION]` rows are now FR-homed and RATIFIED (re-homing map below); +2 governed post-freeze
+additions (PERSIST-14 read-only fold-diff → FR-8, TOOLS-16 `atlas-diff` read projection → FR-10) for the
+`atlas-diff` version-delta projection (both grounded, testable, decoupled, ADR-backed — the 5-gate bar holds). Every invariant is grounded,
 testable (a real number from its acceptance), independence-read from D2, tradeoff-resolved, `behavioural`.
 Remaining before the Register physically freezes: assign the 6 `owner: TBD` headers (registry A) + the
 consolidated cold-review. Method-overhead held (cheap-by-default; ADRs only on real design choices).
@@ -279,8 +284,8 @@ D0 gained **FR-11 (Memory / per-seat experience)**, **FR-12 (safety / no-secret-
 ergonomics / delivery)**; D2 gained **DP-12/13/14** (on-diagonal) + the **DP-1→FR-9** governance edge. The 20
 rows re-home as:
 - **MEM-1/3/4/5/6/8/11/12/13 → FR-11** · **MEM-9 → FR-12** (secret-scrub) · **MEM-10 → FR-8** (versioned/re-spawn) — MEM now **13/13 RATIFIED**.
-- **PERSIST-10a → FR-12** (cred defense-in-depth) — PST now **15/15 RATIFIED**.
-- **TOOLS-2/3/4/11/11a → FR-13** (delivery ergonomics; the D1 Usability risk is now an FR) — TLS now **16/16 RATIFIED**.
+- **PERSIST-10a → FR-12** (cred defense-in-depth) — PST now **16/16 RATIFIED** (incl. PERSIST-14 atlas-diff).
+- **TOOLS-2/3/4/11/11a → FR-13** (delivery ergonomics; the D1 Usability risk is now an FR) — TLS now **17/17 RATIFIED** (incl. TOOLS-16 atlas-diff).
 - **INDEX-14/15 → FR-9 via the new DP-1→FR-9 edge** (the index *generates* the territory overlay → less human maintenance); **INDEX-16 → FR-9 via DP-11** (it *enforces* the coverage gate = governance) — IDX now **16/16 RATIFIED**. Territory-ownership boundary resolved in D2 seam #5 (index generates default, steward overrides, tier human-ratified).
 
 ### The reconciliation registry (grouped)

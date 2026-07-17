@@ -111,6 +111,12 @@ DoctorOut    = { archive?, whyBroken?, hotSet?: { size, budget, over: boolean },
   `atlas-emit`'s grounding is enforced by the **storage layer**, not by tool convention: a direct write that
   skips the emit path either cannot land (append-only/permission) or is rejected at read (integrity check),
   never surfacing as a served fact.
+- **TOOLS-16 `atlas-diff` read-only version projection.** `atlas-diff <shaA> <shaB>` MUST surface the
+  PERSIST-14 version-delta ({added, edited, superseded, decayed}, each with provenance) as a **read-only
+  projection** — CLI≡MCP (0 divergence, one published schema) and **0 write path** (read/subscribe only;
+  writes still funnel through `atlas-emit`). It is a read projection like the per-node `node` handler
+  (TOOLS-10) and `atlas doctor` (TOOLS-12), **NOT** a fifth write tool: the governance **write** surface stays
+  exactly four (TOOLS-1/15) and `atlas-diff` carries no write authority.
 
 ## Surface / API
 

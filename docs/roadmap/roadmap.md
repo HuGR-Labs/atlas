@@ -328,6 +328,12 @@ vertical: GEN (loops opt-in or default-shallow · budget-gated · carry a fixpoi
 reqs: [ REQ-GEN-14a, REQ-GEN-14b, REQ-GEN-14c, REQ-GEN-14d, REQ-GEN-14e, REQ-GEN-14f, REQ-GEN-14g, REQ-GEN-14h ]
 campaign: CAMPAIGN-8
 
+### EPIC-32 — atlas-diff (version-delta projection)
+goal-trace: "a steward can see exactly what changed between two atlas versions → the delta is a deterministic read-only fold-comparison partitioned by lifecycle, each fact carrying its provenance → the version-delta projection"
+vertical: PERSIST (version-delta = deterministic read-only fold-diff · partitions facts into added/edited/superseded/decayed each with provenance · 0 mutation · byte-identical across runs · well-defined regardless of fold/event order) → TOOLS (atlas-diff surfaces the delta as a read-only projection · CLI=MCP · adds no write path · governance write surface stays exactly four) — demoable: `atlas-diff shaA shaB` lists added/edited/superseded/decayed facts with provenance, read-only, identical over CLI and MCP
+reqs: [ REQ-PERSIST-14-a, REQ-PERSIST-14-b, REQ-PERSIST-14-c, REQ-PERSIST-14-d, REQ-PERSIST-14-e, REQ-PERSIST-14-f, REQ-TOOLS-16a, REQ-TOOLS-16b, REQ-TOOLS-16c, REQ-TOOLS-16d, REQ-TOOLS-16e ]
+campaign: CAMPAIGN-7
+
 ### CAMPAIGN-1 — the CAS + merge + persistence floor
 epics: [ EPIC-1-a, EPIC-1-b, EPIC-2-a, EPIC-2-b, EPIC-3-a, EPIC-3-b ]
 prerequisites: [ ]
@@ -359,8 +365,8 @@ prerequisites: [ CAMPAIGN-2, CAMPAIGN-5 ]
 horizon: Later
 
 ### CAMPAIGN-7 — the governed tool surface & tri-transport
-epics: [ EPIC-26-a, EPIC-26-b, EPIC-26-c ]
-prerequisites: [ CAMPAIGN-5, CAMPAIGN-6 ]
+epics: [ EPIC-26-a, EPIC-26-b, EPIC-26-c, EPIC-32 ]
+prerequisites: [ CAMPAIGN-3, CAMPAIGN-5, CAMPAIGN-6 ]
 horizon: Later
 
 ### CAMPAIGN-8 — genesis seeding (the one-time seeder)
@@ -369,8 +375,8 @@ prerequisites: [ CAMPAIGN-2, CAMPAIGN-4, CAMPAIGN-5 ]
 horizon: Later
 
 ## Coverage
-partition: 49 leaf epics over the 468 frozen REQs — 468 distinct placements, 468 sum-of-placements ⇒ orphans = 0, doubles = 0, invented = 0 (mechanically verified). Per-module tallies (each fully assigned): KERNEL 30, PERSIST 48, INDEX 57, GROUND 35, KNOW 61, RETR 64, MEM 46, TOOLS 52, GEN 75 = 468.
-split-lineage (SPIDR pattern · lossless union == parent): EPIC-1 = 1-a ∪ 1-b (Path, 14); EPIC-2 = 2-a ∪ 2-b (Path, 17); EPIC-3 = 3-a ∪ 3-b (Path, 19); EPIC-4 = 4-a ∪ 4-b (Path, 13); EPIC-5 = 5-a ∪ 5-b (Path, 23); EPIC-7 = 7-a ∪ 7-b (Data, 17); EPIC-8 = 8-a ∪ 8-b (Path, 24); EPIC-9 = 9-a ∪ 9-b (Rules, 14); EPIC-10 = 10-a ∪ 10-b (Path, 23); EPIC-11 = 11-a ∪ 11-b (Rules, 19); EPIC-12 = 12-a ∪ 12-b (Path, 17); EPIC-13 = 13-a ∪ 13-b (Data/Rules, 19); EPIC-24 = 24-a ∪ 24-b (Data, 17); EPIC-25 = 25-a ∪ 25-b (Rules, 15); EPIC-26 = 26-a ∪ 26-b ∪ 26-c (Interface, 27); EPIC-28 = 28-a ∪ 28-b ∪ 28-c (Rules, 35). Every child is itself vertical and the union re-forms the parent with no leak (parent umbrellas are not re-listed as blocks; their req-sets appear only through the leaf children, so the emitted set is a strict partition).
-campaign DAG (edges child→prereq, acyclic): CAMPAIGN-3→1; CAMPAIGN-4→1, 4→2; CAMPAIGN-5→4; CAMPAIGN-6→2, 6→5; CAMPAIGN-7→5, 7→6; CAMPAIGN-8→2, 8→4, 8→5. Roots = CAMPAIGN-1, CAMPAIGN-2. Topological order = {1,2} → {3,4} → {5} → {6,8} → {7}; no cycle.
+partition: 50 leaf epics over the 479 frozen REQs — 479 distinct placements, 479 sum-of-placements ⇒ orphans = 0, doubles = 0, invented = 0 (mechanically verified). Per-module tallies (each fully assigned): KERNEL 30, PERSIST 54, INDEX 57, GROUND 35, KNOW 61, RETR 64, MEM 46, TOOLS 57, GEN 75 = 479. (EPIC-32 adds the 11 `atlas-diff` REQs: PERSIST 48→54 [+REQ-PERSIST-14-a..f], TOOLS 52→57 [+REQ-TOOLS-16a..e].)
+split-lineage (SPIDR pattern · lossless union == parent): EPIC-1 = 1-a ∪ 1-b (Path, 14); EPIC-2 = 2-a ∪ 2-b (Path, 17); EPIC-3 = 3-a ∪ 3-b (Path, 19); EPIC-4 = 4-a ∪ 4-b (Path, 13); EPIC-5 = 5-a ∪ 5-b (Path, 23); EPIC-7 = 7-a ∪ 7-b (Data, 17); EPIC-8 = 8-a ∪ 8-b (Path, 24); EPIC-9 = 9-a ∪ 9-b (Rules, 14); EPIC-10 = 10-a ∪ 10-b (Path, 23); EPIC-11 = 11-a ∪ 11-b (Rules, 19); EPIC-12 = 12-a ∪ 12-b (Path, 17); EPIC-13 = 13-a ∪ 13-b (Data/Rules, 19); EPIC-24 = 24-a ∪ 24-b (Data, 17); EPIC-25 = 25-a ∪ 25-b (Rules, 15); EPIC-26 = 26-a ∪ 26-b ∪ 26-c (Interface, 27); EPIC-28 = 28-a ∪ 28-b ∪ 28-c (Rules, 35). Every child is itself vertical and the union re-forms the parent with no leak (parent umbrellas are not re-listed as blocks; their req-sets appear only through the leaf children, so the emitted set is a strict partition). EPIC-32 is a right-sized two-module vertical (PERSIST→TOOLS, 11 REQs), un-split — one WP per module (WP-7.32.PERSIST / WP-7.32.TOOLS), like EPIC-14/15/16/17.
+campaign DAG (edges child→prereq, acyclic): CAMPAIGN-3→1; CAMPAIGN-4→1, 4→2; CAMPAIGN-5→4; CAMPAIGN-6→2, 6→5; CAMPAIGN-7→3, 7→5, 7→6; CAMPAIGN-8→2, 8→4, 8→5. Roots = CAMPAIGN-1, CAMPAIGN-2. Topological order = {1,2} → {3,4} → {5} → {6,8} → {7}; no cycle (the new C7→3 edge points back into the already-earlier {3,4} layer — C7 stays in the last layer, still acyclic since C3 has no path to C7).
 horizon histogram: Now = 2 (CAMPAIGN-1, CAMPAIGN-2) · Next = 3 (CAMPAIGN-3, CAMPAIGN-4, CAMPAIGN-5) · Later = 3 (CAMPAIGN-6, CAMPAIGN-7, CAMPAIGN-8) — assigned by dependency-readiness depth, not dates.
 [NEEDS RECONCILIATION]: none — every REQ joined a vertical capability; no REQ forced a horizontal/module-only epic.

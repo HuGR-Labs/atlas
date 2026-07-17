@@ -239,3 +239,33 @@ normative-clause: "present only once the adapter configures the fetch/push refsp
 source: INV-PERSIST-13 @ reference/atlas-persist.md#persist-13
 If a rebase, squash, or cherry-pick rewrites a commit, then the persistence layer shall not carry its note-carried data across the rewrite.
 normative-clause: "rebase/squash/cherry-pick **orphan** them (a note keys on the commit SHA)"
+
+### REQ-PERSIST-14-a — version-delta partitioned by lifecycle
+source: INV-PERSIST-14 @ reference/atlas-persist.md#persist-14
+When `atlas-diff` compares the atlas across two versions `shaA` and `shaB`, the persistence layer shall partition the facts into added, edited, superseded, and decayed.
+normative-clause: "`diff(shaA,shaB)` partitions facts into {added, edited, superseded, decayed}"
+
+### REQ-PERSIST-14-b — delta is a fold-comparison, not a stored diff
+source: INV-PERSIST-14 @ reference/atlas-persist.md#persist-14
+When `diff(shaA,shaB)` runs, the persistence layer shall compute the delta by comparing the two folded AtlasStates.
+normative-clause: "computed by comparing the two folded AtlasStates ... a read-only fold-diff computed over the event log, not a stored/materialized diff"
+
+### REQ-PERSIST-14-c — every delta entry carries its provenance
+source: INV-PERSIST-14 @ reference/atlas-persist.md#persist-14
+If a delta entry lacks its provenance, then the persistence layer shall not include it in the delta.
+normative-clause: "each entry carrying its provenance"
+
+### REQ-PERSIST-14-d — diff is a pure read, zero mutation
+source: INV-PERSIST-14 @ reference/atlas-persist.md#persist-14
+If `diff(shaA,shaB)` is invoked, then the persistence layer shall not mutate any Atlas state.
+normative-clause: "PURE READ (0 mutation)"
+
+### REQ-PERSIST-14-e — diff is byte-identical across runs
+source: INV-PERSIST-14 @ reference/atlas-persist.md#persist-14
+If `diff(shaA,shaB)` is computed more than once on the same two shas, then the persistence layer shall not produce a differing delta.
+normative-clause: "byte-identical across runs"
+
+### REQ-PERSIST-14-f — diff is well-defined regardless of fold/event order
+source: INV-PERSIST-14 @ reference/atlas-persist.md#persist-14
+If the two AtlasStates were folded in different event or fold orders, then the persistence layer shall not produce a differing delta.
+normative-clause: "well-defined regardless of fold/event order (PERSIST-2/12)"

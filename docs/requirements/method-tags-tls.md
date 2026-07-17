@@ -10,7 +10,9 @@
 > cluster in the Atlas is `FSPEC-merge`, owned by Block KRN, and TLS only *consumes* it). By the ratified S0
 > hint (**standard**) the baseline is **reference-model**; the two invariants whose load-bearing property is
 > **cross-transport determinism** (an input→two/three-transport equivalence, quantified over inputs) earn **PBT**
-> by shape. All 16 TLS invariants are `behavioural` (register), so none carries `n/a`.
+> by shape. All 17 TLS invariants are `behavioural` (register), so none carries `n/a`. (**TOOLS-16** — the
+`atlas-diff` read-only version projection — is `reference-model`: a read projection opening no write path
+(like doctor TOOLS-12), its CLI≡MCP determinism arm delegated to the TOOLS-3 PBT.)
 
 ---
 
@@ -126,6 +128,13 @@ up-property: "structural single-write-door: the store medium is append-only / pe
 down-model: "the reference store (`tools/ref/store.ts`) is append-only + content-addressed; `read(id)` recomputes the content address and rejects a row whose bytes were not produced by `emit`'s grounded path; a test writes a row directly (bypassing emit) and asserts it is refused at write or rejected at read, and never served"
 anti-rot: `tools/ref/store.ts` (append-only + read-time integrity check, shared with TOOLS-1) is the mock reused by the store integrity tests; a code store that serves a directly-injected row diverges from it and breaks the build. *(The *exploitability* of this door — an adversary probing the append-only/permission model — is FR-12/billy's security review, not a reference-model property; see Refuse-to-model.)*
 
+### INV-TOOLS-16
+method-tag: reference-model
+fspec: —
+up-property: "read-only version-diff projection: `atlas-diff <shaA> <shaB>` surfaces the PERSIST-14 delta (added/edited/superseded/decayed, each with provenance) as a **read-only projection** — 0 write path (read/subscribe only; writes still funnel through `atlas-emit`), **CLI≡MCP** parity against one schema (0 divergence), and the governance **write** surface stays exactly **4** tools (atlas-diff is a read projection like node TOOLS-10 / doctor TOOLS-12, **NOT** a fifth write tool, consistent with TOOLS-1/15)"
+down-model: "the reference `atlasDiff(shaA,shaB)` reads the PERSIST-14 delta (from `persist/ref/diff.ts`) and renders it; a unit test asserts the diff handle carries **no** store-mutating method (0 write path), that the governance write-surface count stays `== 4`, and that the delta is surfaced faithfully; the CLI≡MCP determinism arm is **delegated** to the TOOLS-3 cross-transport PBT over the one handler `tools/ref/handler.ts` (every surface is the one handler)"
+anti-rot: `tools/ref/diff.ts` (the read-only diff projection over `persist/ref/diff.ts`, reused as the mock) is the mock; a code path that grows a write method on the diff surface, registers it as a fifth write tool, or forks CLI/MCP behaviour diverges from it and breaks the build. *(Tag is `reference-model` — a read-only projection opening **NO** write path is a reference-model property, **not** a `formal` one (no combinatorial interleaving); the cross-transport determinism arm reuses TOOLS-3's PBT, exactly the TOOLS-11 delegation pattern.)*
+
 ---
 
 ## Refuse-to-model
@@ -170,11 +179,11 @@ reducer only transitively (via the fold it reads), not as a TLS-authored model.
 ## Completion report
 
 - tagged-register: `docs/requirements/method-tags-tls.md`
-- tag histogram: **formal 0** · **exhaustive 0** · **PBT 2** (TOOLS-3, TOOLS-10) · **reference-model 14**
-  (TOOLS-1/2/4/5/6/7/8/9/11/11a/12/13/14/15)
+- tag histogram: **formal 0** · **exhaustive 0** · **PBT 2** (TOOLS-3, TOOLS-10) · **reference-model 15**
+  (TOOLS-1/2/4/5/6/7/8/9/11/11a/12/13/14/15/16)
 - FSPEC: **none** (formal cluster = KRN `FSPEC-merge`; TLS consumes, does not author)
 - refusal count: **9**
-- every TOOLS-1..15 + 11a tagged: **yes** (16/16; all behavioural, 0 `n/a`)
+- every TOOLS-1..16 + 11a tagged: **yes** (17/17; all behavioural, 0 `n/a`)
 - shape-no-fit flag: **none** (every INV matched a tool-per-shape row: cross-transport determinism → PBT;
   read-only projection / write-door integrity / totality → reference-model)
 - → next_state **S3** (goldens).

@@ -573,11 +573,94 @@ gen: conformance   # `persist/ref/placement.ts` note-orphan assertion
 
 ---
 
+## REQ-PERSIST-14 — version-delta = read-only fold-diff (PBT · reuses `FSPEC-merge` `fold`)
+
+> **Consumer of the `FSPEC-merge` `fold`, NOT a second model.** `diff(shaA,shaB) = partition(fold(shaA), fold(shaB))`.
+> The delta is a **read-only fold-comparison** over the two folded AtlasStates (grounds on KERNEL-5/PERSIST-2 fold +
+> PERSIST-5 archive/supersede/decay lifecycle) — it materializes nothing (ADR-P14: not a stored diff). The order-
+> independence witness reuses the PERSIST-2/12 convergence law: shuffling either side's fold order cannot move the delta.
+>
+> Concrete two-version fixture (facts folded at each sha; `prov` = the WP/commit that produced the change):
+>
+> | fact (nodeKey) | at shaA | at shaB | delta class | prov |
+> |---|---|---|---|---|
+> | `claim:acme-arr-2024` | "$4.2M" (grounded) | "$4.5M" (re-grounded) | **edited** | `WP-a2@sha` |
+> | `claim:acme-ceo` | — (absent) | "Jane Roe" (grounded) | **added** | `WP-a4@sha` |
+> | `claim:acme-vp` | — (absent) | "Bob Lee" (grounded) | **added** | `WP-a5@sha` |
+> | `pred:auth-token-ttl` | v1 (advisory) | superseded by v2 | **superseded** | `WP-a7@sha` |
+> | `claim:acme-hq-2019` | present (frecency≈0) | archived (out of active set) | **decayed** | `WP-a9@sha` |
+> | `claim:acme-hq` | "NYC" | "NYC" (unchanged) | *(no partition)* | — |
+>
+> ⇒ `diff(shaA,shaB) = { added:[acme-ceo, acme-vp], edited:[acme-arr-2024], superseded:[auth-token-ttl], decayed:[acme-hq-2019] }`,
+> `acme-hq` in no partition (unchanged). Each entry carries its `prov`.
+
+### REQ-PERSIST-14-a — version-delta partitioned by lifecycle   (happy)
+
+### SCN-PERSIST-14a-1 — diff partitions the changed facts into the four lifecycle classes   (happy)
+source: REQ-PERSIST-14-a
+Given the two folded versions `A = fold(shaA)`, `B = fold(shaB)` of the fixture above
+When `diff(shaA,shaB)` is computed
+Then the delta partitions the changed facts into exactly `added:[acme-ceo, acme-vp]`, `edited:[acme-arr-2024]`, `superseded:[auth-token-ttl]`, `decayed:[acme-hq-2019]` — a total, disjoint partition; the unchanged `acme-hq` is in **0** partitions
+teeth: breaks-on "the diff collapses `superseded` into `edited` (or omits the `decayed` class) — `auth-token-ttl` is misfiled as an edit and `acme-hq-2019` is dropped, so the partition is neither total nor disjoint"
+gen: PBT   # partition-totality/disjointness over the set-diff of the two `fold` outputs (oracle = FSPEC-merge `fold`, `kernel/ref/fold.ts`)
+
+### REQ-PERSIST-14-b — delta is a fold-comparison, not a stored diff   (happy)
+
+### SCN-PERSIST-14b-1 — the delta is recomputed from the two folds, never read from a materialized diff   (happy)
+source: REQ-PERSIST-14-b
+Given no stored/materialized diff object exists anywhere in the store, only the event log at `shaA` and `shaB`
+When `diff(shaA,shaB)` is computed purely as `partition(fold(shaA), fold(shaB))`
+Then the delta is produced by comparing the two folded AtlasStates on the fly — there is no second, stored source of truth to drift from the fold (ADR-P14)
+teeth: breaks-on "the diff reads a persisted `delta` blob instead of re-folding — a stale materialized diff (that the log has since moved past) is served, diverging from `partition(fold(shaA),fold(shaB))`"
+gen: PBT   # `diff(shaA,shaB) ≡ partition(fold(shaA),fold(shaB))` — the read-only fold-diff, no stored diff
+
+### REQ-PERSIST-14-c — every delta entry carries its provenance   (guard)
+
+### SCN-PERSIST-14c-1 — a provenance-less entry never surfaces in the delta   (guard)
+source: REQ-PERSIST-14-c
+Given the fixture where every changed fact has a recoverable `prov` (the WP/commit that produced it)
+When `diff(shaA,shaB)` builds each partition entry
+Then every entry carries its `prov` (`entriesMissingProvenance == 0`) — a fact with no recoverable provenance is not surfaced as a bare, provenance-less entry
+teeth: breaks-on "the diff emits `edited:[acme-arr-2024]` with an empty `prov` — a provenance-less entry surfaces (the auditor cannot trace the change to its WP/commit)"
+gen: conformance   # differential vs `persist/ref/diff.ts` (each partition entry carries `prov`)
+
+### REQ-PERSIST-14-d — diff is a pure read, zero mutation   (guard)
+
+### SCN-PERSIST-14d-1 — computing the diff mutates no Atlas state   (guard)
+source: REQ-PERSIST-14-d
+Given the store at `{shaA, shaB}` serialized to bytes `Σ` before the diff
+When `diff(shaA,shaB)` is invoked and `Σ'` is re-serialized after
+Then `Σ' ≡ Σ` byte-identical — the diff is a PURE READ, it writes/archives/decays nothing (`mutations == 0`)
+teeth: breaks-on "the diff writes a `lastDiffedAt` marker (or archives the decayed fact as a side-effect) — the store bytes change after a read-only projection (`Σ' ≠ Σ`)"
+gen: conformance   # `persist/ref/diff.ts` store-unchanged assertion (structural no-mutation)
+
+### REQ-PERSIST-14-e — diff is byte-identical across runs   (guard)
+
+### SCN-PERSIST-14e-1 — the same two shas diff to the same bytes twice   (guard)
+source: REQ-PERSIST-14-e
+Given the same two shas `(shaA, shaB)`
+When `diff(shaA,shaB)` is serialized on two independent runs
+Then the two deltas are byte-identical (`serialize(diff₁) ≡ serialize(diff₂)`) — within each partition the entries are emitted in canonical `nodeKey` order (`acme-ceo` before `acme-vp`), so determinism holds across runs
+teeth: breaks-on "the diff orders the 2-element `added:[acme-ceo, acme-vp]` partition by wall-clock discovery time instead of `nodeKey` — the two runs emit the two `added` entries in different orders and diverge byte-wise"
+gen: PBT   # `serialize(diff(shaA,shaB))` invariant across runs (determinism)
+
+### REQ-PERSIST-14-f — diff is well-defined regardless of fold/event order   (guard)
+
+### SCN-PERSIST-14f-1 — shuffling either side's fold order leaves the delta byte-identical   (guard)
+source: REQ-PERSIST-14-f
+Given the event sets `S1` (at shaA) and `S2` (at shaB), each foldable in any arrival order (KERNEL-11 / PERSIST-2/12)
+When the delta is computed as `partition(fold(shuffle(S1)), fold(shuffle(S2)))` and compared to `partition(fold(S1), fold(S2))`
+Then the two deltas serialize byte-identically — the diff is well-defined regardless of fold/event order (a rebase across the range leaves the diff stable)
+teeth: breaks-on "the diff keys on the arrival/commit order of the events (e.g. positional `seq`) — shuffling `S2`'s order flips `acme-arr-2024` between `edited` and `unchanged`, so the reordered delta diverges"
+gen: PBT   # `partition(fold(shuffle(S1)),fold(shuffle(S2))) ≡ partition(fold(S1),fold(S2))` — the KERNEL-11 convergence law at the diff seam
+
+---
+
 ## Coverage ledger (S3 completeness facet)
 
-- **REQ coverage:** 46/48 REQ have ≥1 SCN. The **2** un-authored (**REQ-PERSIST-10a-c** server-side pre-receive hook, **REQ-PERSIST-10a-d** ≥2 detection engines) are **domain-delegated to billy / FR-12** (credential-scanner architecture; method-tags-pst.md §refuse-to-model + dispatch directive) — covered by delegation, not omitted. Every non-delegated behavioural REQ is covered.
-- **Guard coverage:** 17/17 unwanted / If-then / While REQ have a guard SCN — 1-b, 2-c, 4-c, 5-a, 7-b, 8-c, 9-b, 10-d, 10a-a, 10a-b, 10a-e, 10b-a, 11-a, 11-c, 11-g, 13-c, 13-d.
-- **Teeth (Gate 3):** 46/46 authored SCN name the exact mutant of their REQ they flip to BROKEN on; none vacuous. The formal-cluster (PERSIST-11) witnesses are **interesting**: a real cross-branch `seq=5` collision (11-c), a real both-branches nodeKey collision (11-d), and the **reversible colliding ours/theirs pair** for direction-independence (11-e) — no antecedent-failure passes.
+- **REQ coverage:** 52/54 REQ have ≥1 SCN. The **2** un-authored (**REQ-PERSIST-10a-c** server-side pre-receive hook, **REQ-PERSIST-10a-d** ≥2 detection engines) are **domain-delegated to billy / FR-12** (credential-scanner architecture; method-tags-pst.md §refuse-to-model + dispatch directive) — covered by delegation, not omitted. Every non-delegated behavioural REQ is covered. (**+6** from PERSIST-14: 14-a..14-f all covered.)
+- **Guard coverage:** 21/21 unwanted / If-then / While REQ have a guard SCN — 1-b, 2-c, 4-c, 5-a, 7-b, 8-c, 9-b, 10-d, 10a-a, 10a-b, 10a-e, 10b-a, 11-a, 11-c, 11-g, 13-c, 13-d, **14-c, 14-d, 14-e, 14-f**.
+- **Teeth (Gate 3):** 52/52 authored SCN name the exact mutant of their REQ they flip to BROKEN on; none vacuous. The formal-cluster (PERSIST-11) witnesses are **interesting**: a real cross-branch `seq=5` collision (11-c), a real both-branches nodeKey collision (11-d), and the **reversible colliding ours/theirs pair** for direction-independence (11-e) — no antecedent-failure passes. The **PERSIST-14** witnesses are equally interesting: a real four-class partition (14-a), a real stored-diff-vs-refold divergence (14-b), and the **order-shuffle** for fold-independence (14-f) — the shuffled delta genuinely diverges on an order-keyed mutant.
 - **PERSIST-11-e witness reverses the colliding pair:** yes — e1 (`1c9f2a`, ours) ↔ e2 (`7e40bb`, theirs) on the same nodeKey at colliding `seq=5`; a last-writer-wins mutant heads e2 in `(ours,theirs)` but e1 in `(theirs,ours)`, so the two directions diverge byte-wise → the golden flips to BROKEN. Teeth are real (mirrors the KRN SCN-KERNEL-11-1 teeth-fix).
-- **gen histogram:** PBT **13** (2-a/2-b/2-c · 5-a/5-b/5-c/5-d · 11-b/11-c/11-d/11-e · 12-a/12-b) · conformance **32** (1-a/1-b/3-a/3-b/4-a/4-b/4-c/6/7-a/7-b/8-a/8-b/8-c/9-a/9-b/10-a/10-b/10-c/10-d/10a-a/10a-b/10a-e/10b-a/10b-b/10b-c/10b-d/11-a/11-g/13-a/13-b/13-c/13-d) · residue **1** (11-f).
+- **gen histogram:** PBT **17** (2-a/2-b/2-c · 5-a/5-b/5-c/5-d · 11-b/11-c/11-d/11-e · 12-a/12-b · 14-a/14-b/14-e/14-f) · conformance **34** (1-a/1-b/3-a/3-b/4-a/4-b/4-c/6/7-a/7-b/8-a/8-b/8-c/9-a/9-b/10-a/10-b/10-c/10-d/10a-a/10a-b/10a-e/10b-a/10b-b/10b-c/10b-d/11-a/11-g/13-a/13-b/13-c/13-d/14-c/14-d) · residue **1** (11-f).
 - **Toothless dropped:** 0.

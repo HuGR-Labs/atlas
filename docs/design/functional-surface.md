@@ -170,6 +170,7 @@ fuller treatment; the rest MSS + key extensions. *(The 4 grounding errors from v
 
 ### UC-G27 — Steward diffs the atlas across two versions *(NEW — audit/onboard)*
 **MSS:** 1) `atlas-diff <shaA> <shaB>`. 2) tree-diff over shards → added/edited/superseded/decayed facts with provenance. **Ext:** 1a. across a rebase → fold is set-based, diff is stable.
+*Realized by:* **PERSIST-14** (read-only fold-diff — the version-delta) / **TOOLS-16** (`atlas-diff` read-only projection, not a fifth write tool) → **EPIC-32** → **WP-7.32.PERSIST** (owns the delta) + **WP-7.32.TOOLS** (surfaces it).
 
 ### UC-G29 — Genesis deepens a scope via the 3 governed loops *(NEW)*
 **MSS:** REVIEW/ENRICH/EXPAND, each opt-in, budget-gated, diminishing-returns/fixpoint stop; reuses propose→verify+relate; never changes default cost (`GEN-14`). **Ext:** budget hit → stop; loop-until-dry/fixpoint reached → stop.
