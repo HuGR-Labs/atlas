@@ -1,0 +1,310 @@
+# Requirements — Block KNW (knowledge) · S1 lift-and-tag
+
+### REQ-KNOW-1 — truth is never self-declared
+source: INV-KNOW-1 @ reference/atlas-knowledge.md#know-1
+If a fact declares its own truth, then the knowledge module shall not honor that self-declaration.
+normative-clause: "A fact never self-declares true."
+
+### REQ-KNOW-2 — ungrounded facts fail closed
+source: INV-KNOW-2 @ reference/atlas-knowledge.md#know-2
+If a fact is ungrounded, then the knowledge module shall not admit it into the store.
+normative-clause: "Ungrounded facts don't enter."
+
+### REQ-KNOW-3a — drift oracle is the subtreeHash
+source: INV-KNOW-3 @ reference/atlas-knowledge.md#know-3
+The knowledge module shall use the BLAKE3 subtreeHash as the drift oracle.
+normative-clause: "The drift oracle MUST be the BLAKE3 `subtreeHash`"
+
+### REQ-KNOW-3b — cosmetic edits stay FRESH
+source: INV-KNOW-3 @ reference/atlas-knowledge.md#know-3
+When a cited unit is reformatted, renamed, or has an import added above it, the knowledge module shall keep the fact FRESH.
+normative-clause: "a reformat/rename/import-above MUST stay `FRESH`"
+
+### REQ-KNOW-3c — real change drifts
+source: INV-KNOW-3 @ reference/atlas-knowledge.md#know-3
+When a real change is made to the cited unit, the knowledge module shall mark the fact DRIFTED.
+normative-clause: "a real change to the cited unit MUST `DRIFT`"
+
+### REQ-KNOW-4a — every write is an upsert
+source: INV-KNOW-4 @ reference/atlas-knowledge.md#know-4
+The knowledge module shall perform every fact write as an upsert.
+normative-clause: "A write MUST be an upsert"
+
+### REQ-KNOW-4b — identical fact is idempotent
+source: INV-KNOW-4 @ reference/atlas-knowledge.md#know-4
+When an identical fact is written again, the knowledge module shall treat the write as idempotent.
+normative-clause: "identical fact idempotent"
+
+### REQ-KNOW-4c — advisory claims set-union
+source: INV-KNOW-4 @ reference/atlas-knowledge.md#know-4
+When a new claim is written for an existing advisory subject, the knowledge module shall set-union the claim into the node.
+normative-clause: "an advisory subject's claims **set-union**"
+
+### REQ-KNOW-4d — changed advisory edited in place
+source: INV-KNOW-4 @ reference/atlas-knowledge.md#know-4
+When an advisory fact changes, the knowledge module shall edit it in place.
+normative-clause: "A *changed* **advisory** fact is **edited in place**"
+
+### REQ-KNOW-4e — changed predicate supersedes
+source: INV-KNOW-4 @ reference/atlas-knowledge.md#know-4
+When a predicate fact changes with the same check and new evidence, the knowledge module shall supersede the prior node.
+normative-clause: "A *changed* **predicate** (same `check`, new evidence) **supersedes**"
+
+### REQ-KNOW-4f — different check is a new node
+source: INV-KNOW-4 @ reference/atlas-knowledge.md#know-4
+When a fact carries a different check, the knowledge module shall create a new node.
+normative-clause: "a *different* `check` is a new node (identity includes its `check` — KNOW-15)"
+
+### REQ-KNOW-4g — one current node per subject
+source: INV-KNOW-4 @ reference/atlas-knowledge.md#know-4
+When a territory is queried, the knowledge module shall return one current node per (anchor, slot[, check]).
+normative-clause: "A territory query MUST return one current node per `(anchor, slot[, check])`"
+
+### REQ-KNOW-5a — split the drifted subset
+source: INV-KNOW-5 @ reference/atlas-knowledge.md#know-5
+When a merge reconciles, the knowledge module shall split the DRIFTED subset into mechanical and semantic drift.
+normative-clause: "At reconcile the `DRIFTED` subset MUST be split"
+
+### REQ-KNOW-5b — mechanical drift auto-re-grounds
+source: INV-KNOW-5 @ reference/atlas-knowledge.md#know-5
+When a drifted fact's claim still re-derives at the new @sha, the knowledge module shall auto-re-ground it with no human and no block.
+normative-clause: "**mechanical** (the anchor moved but the claim still re-derives at the new `@sha`) is **auto-re-grounded, no human, no block**"
+
+### REQ-KNOW-5c — semantic drift blocks
+source: INV-KNOW-5 @ reference/atlas-knowledge.md#know-5
+If a drifted fact's claim no longer re-derives, then the knowledge module shall flip it to BROKEN and block the merge with exit 2.
+normative-clause: "**semantic** (the claim no longer re-derives) flips `BROKEN` and blocks (exit 2)"
+
+### REQ-KNOW-5d — re-author count equals semantic count
+source: INV-KNOW-5 @ reference/atlas-knowledge.md#know-5
+When a merge is reconciled, the knowledge module shall make the human re-author count equal the semantic-drift count.
+normative-clause: "Human re-author count MUST equal `|semantic|`, never `|DRIFTED|`, never `N`"
+
+### REQ-KNOW-6a — init carries zero invariants
+source: INV-KNOW-6 @ reference/atlas-knowledge.md#know-6
+When knowledge is initialized, the knowledge module shall produce output carrying zero invariants.
+normative-clause: "`atlas-init` output MUST carry zero invariants"
+
+### REQ-KNOW-6b — territories ship T2/advisory default
+source: INV-KNOW-6 @ reference/atlas-knowledge.md#know-6
+The knowledge module shall ship every territory with the T2/advisory default by construction.
+normative-clause: "every territory ships the `T2/advisory` default by construction"
+
+### REQ-KNOW-7a — no T0 auto-promotion
+source: INV-KNOW-7 @ reference/atlas-knowledge.md#know-7
+If a T0 tier would be assigned automatically, then the knowledge module shall not auto-promote it.
+normative-clause: "A `T0` tier MUST NOT be auto-promoted"
+
+### REQ-KNOW-7b — heuristics only flag
+source: INV-KNOW-7 @ reference/atlas-knowledge.md#know-7
+The knowledge module shall let heuristics only flag a candidate for human ratification.
+normative-clause: "heuristics MAY only *flag* a candidate for human ratification"
+
+### REQ-KNOW-8a — explorer writes only candidates
+source: INV-KNOW-8 @ reference/atlas-knowledge.md#know-8
+If the explorer writes a fact, then the knowledge module shall record it only as a staged candidate.
+normative-clause: "The explorer MAY write only **candidates** (staging)"
+
+### REQ-KNOW-8b — ratification is the ratifier's
+source: INV-KNOW-8 @ reference/atlas-knowledge.md#know-8
+The knowledge module shall route ratification to the reconcile/lead with reviewer veto.
+normative-clause: "ratification is the reconcile/lead's, with reviewer veto"
+
+### REQ-KNOW-8c — T0 requires billy
+source: INV-KNOW-8 @ reference/atlas-knowledge.md#know-8
+If a candidate is T0, then the knowledge module shall require billy for its ratification.
+normative-clause: "billy required for `T0`"
+
+### REQ-KNOW-9a — both families day-one
+source: INV-KNOW-9 @ reference/atlas-knowledge.md#know-9
+The knowledge module shall make both node families available on day-one.
+normative-clause: "Both node families MUST be available day-one (owner decision)"
+
+### REQ-KNOW-9b — advisory standalone without evaluator
+source: INV-KNOW-9 @ reference/atlas-knowledge.md#know-9
+While no evaluator is wired, the knowledge module shall remain fully operable on the advisory family alone.
+normative-clause: "the store MUST still operate on advisory alone when no evaluator is wired"
+
+### REQ-KNOW-10a — no free prose
+source: INV-KNOW-10 @ reference/atlas-knowledge.md#know-10
+If a write would introduce free prose, then the knowledge module shall not persist it.
+normative-clause: "No free prose, ever."
+
+### REQ-KNOW-10b — template-violation rejected
+source: INV-KNOW-10 @ reference/atlas-knowledge.md#know-10
+If a fact is missing a required template field or is over its cap, then the knowledge module shall reject it.
+normative-clause: "A fact missing a required template field, or over its cap, is rejected"
+
+### REQ-KNOW-11a — every fact carries owner and scope
+source: INV-KNOW-11 @ reference/atlas-knowledge.md#know-11
+The knowledge module shall make every fact carry an owner and a scope.
+normative-clause: "Every fact MUST carry an `owner` + `scope`"
+
+### REQ-KNOW-11b — read is universal
+source: INV-KNOW-11 @ reference/atlas-knowledge.md#know-11
+The knowledge module shall allow any agent or human to read any fact.
+normative-clause: "read is universal (any agent/human)"
+
+### REQ-KNOW-11c — out-of-scope write rejected
+source: INV-KNOW-11 @ reference/atlas-knowledge.md#know-11
+If a write falls outside the owner's scope, then the knowledge module shall reject it.
+normative-clause: "write is the owner's (the class member for that territory)"
+
+### REQ-KNOW-12a — no fact-history is lost
+source: INV-KNOW-12 @ reference/atlas-knowledge.md#know-12
+If a fact is superseded or edited, then the knowledge module shall keep its prior version recoverable.
+normative-clause: "No fact-history is lost."
+
+### REQ-KNOW-12b — prior versions in CAS, deduped
+source: INV-KNOW-12 @ reference/atlas-knowledge.md#know-12
+The knowledge module shall persist prior versions as their own content-addressed CAS objects, deduped and never byte-copied.
+normative-clause: "Prior versions persist as their own **content-addressed CAS objects** (deduped, never byte-copied)"
+
+### REQ-KNOW-12c — advisory edit keeps no lineage pointer
+source: INV-KNOW-12 @ reference/atlas-knowledge.md#know-12
+When an advisory fact is edited in place, the knowledge module shall keep no lineage pointer and rely on git as the archive.
+normative-clause: "**Advisory** edit-in-place keeps **no** lineage pointer — git is the archive"
+
+### REQ-KNOW-12d — predicate supersede adds only a pointer
+source: INV-KNOW-12 @ reference/atlas-knowledge.md#know-12
+When a predicate fact is superseded, the knowledge module shall add only a supersededBy pointer into CAS.
+normative-clause: "a **predicate** SUPERSEDE adds only a `supersededBy` **pointer** into CAS — a link, not a redundant copy"
+
+### REQ-KNOW-12e — working store stays lean
+source: INV-KNOW-12 @ reference/atlas-knowledge.md#know-12
+The knowledge module shall keep the working store lean.
+normative-clause: "The working store stays lean (edit-in-place / decay drops from the hot set)"
+
+### REQ-KNOW-13a — production only at the three moments
+source: INV-KNOW-13 @ reference/atlas-knowledge.md#know-13
+If fact production is attempted outside the three moments as a repo-wide sweep, then the knowledge module shall not produce facts.
+normative-clause: "Facts MUST be produced only at the three moments (init skeleton → enrich-by-blast-radius → wave-close write), never a repo-wide sweep"
+
+### REQ-KNOW-13b — sealing wave fed-or-why-not
+source: INV-KNOW-13 @ reference/atlas-knowledge.md#know-13
+If a sealing wave neither fed the Atlas nor emitted a grounded why-not, then the knowledge module shall record a violation.
+normative-clause: "A sealing wave MUST have fed the Atlas or emitted a grounded why-not"
+
+### REQ-KNOW-14a — every claim carries provenance
+source: INV-KNOW-14 @ reference/atlas-knowledge.md#know-14
+The knowledge module shall make every claim carry a provenance receipt.
+normative-clause: "Every claim has a receipt."
+
+### REQ-KNOW-14b — untrusted source marked advisory
+source: INV-KNOW-14 @ reference/atlas-knowledge.md#know-14
+If a claim's source is untrusted, then the knowledge module shall mark the claim advisory.
+normative-clause: "untrusted source ⇒ advisory, excluded from the gate"
+
+### REQ-KNOW-14c — untrusted claim excluded from the gate
+source: INV-KNOW-14 @ reference/atlas-knowledge.md#know-14
+If a claim's source is untrusted, then the knowledge module shall exclude the claim from the gate.
+normative-clause: "untrusted source ⇒ advisory, excluded from the gate"
+
+### REQ-KNOW-15a — write-decision is a pure function of three hashes
+source: INV-KNOW-15 @ reference/atlas-knowledge.md#know-15
+The knowledge module shall decide DEDUP, UPDATE, CREATE, or SUPERSEDE as a pure function of three hashes.
+normative-clause: "Whether a candidate **DEDUPs / UPDATEs / CREATEs / SUPERSEDEs** MUST be a pure function of three hashes"
+
+### REQ-KNOW-15b — advisory nodeKey formula
+source: INV-KNOW-15 @ reference/atlas-knowledge.md#know-15
+For an advisory fact, the knowledge module shall compute the nodeKey as hash(primaryAnchorId ‖ predicateSlot).
+normative-clause: "`hash(primaryAnchorId ‖ predicateSlot)` for advisory"
+
+### REQ-KNOW-15c — predicate nodeKey includes the check
+source: INV-KNOW-15 @ reference/atlas-knowledge.md#know-15
+For a predicate fact, the knowledge module shall compute the nodeKey as hash(primaryAnchorId ‖ predicateSlot ‖ normalize(check)) so that a distinct check is a distinct node.
+normative-clause: "`hash(primaryAnchorId ‖ predicateSlot ‖ normalize(check))` for predicate (so a distinct `check` is a distinct node, never a sibling-supersede)"
+
+### REQ-KNOW-15d — primaryAnchorId computed mechanically
+source: INV-KNOW-15 @ reference/atlas-knowledge.md#know-15
+The knowledge module shall compute primaryAnchorId mechanically as the tightest structural unit containing every symbol the claim references.
+normative-clause: "`primaryAnchorId` MUST be **computed mechanically** as the tightest structural unit containing every symbol the claim references"
+
+### REQ-KNOW-15e — no LLM-chosen anchor
+source: INV-KNOW-15 @ reference/atlas-knowledge.md#know-15
+If an anchor would be chosen by an LLM, then the knowledge module shall not use it as the primaryAnchorId.
+normative-clause: "**never an LLM-chosen anchor**"
+
+### REQ-KNOW-15f — move-aware re-anchoring
+source: INV-KNOW-15 @ reference/atlas-knowledge.md#know-15
+When the anchored unit is renamed or moved, the knowledge module shall re-anchor to the same node without a spurious CREATE.
+normative-clause: "It is move-aware (rename/move never orphans into a spurious CREATE)"
+
+### REQ-KNOW-15g — secondary citations feed drift only
+source: INV-KNOW-15 @ reference/atlas-knowledge.md#know-15
+The knowledge module shall let secondary citations feed drift only, never identity.
+normative-clause: "secondary citations feed drift only, never identity"
+
+### REQ-KNOW-15h — near-duplicate probe before CREATE
+source: INV-KNOW-15 @ reference/atlas-knowledge.md#know-15
+Before any CREATE, the knowledge module shall run a deterministic near-duplicate probe that forces MERGE on a claimNorm collision.
+normative-clause: "Before any CREATE, `atlas-emit` MUST run a deterministic **near-duplicate probe** (see *The write decision*) that forces MERGE on a `claimNorm` collision"
+
+### REQ-KNOW-15i — slot from closed vocabulary
+source: INV-KNOW-15 @ reference/atlas-knowledge.md#know-15
+If a fact's predicateSlot is outside the closed vocabulary, then the knowledge module shall reject it.
+normative-clause: "`predicateSlot` MUST come from the closed vocabulary"
+
+### REQ-KNOW-15j — no LLM in the write-decision
+source: INV-KNOW-15 @ reference/atlas-knowledge.md#know-15
+If any step of the write-decision would consult an LLM, then the knowledge module shall not perform it.
+normative-clause: "No step may consult an LLM."
+
+### REQ-KNOW-16a — check is a deterministic index-query
+source: INV-KNOW-16 @ reference/atlas-knowledge.md#know-16
+The knowledge module shall evaluate a PredicateNode.check as a deterministic query over the Atlas index or a pinned declarative assertion to HOLDS, BROKEN, or NA.
+normative-clause: "A `PredicateNode.check` MUST be a **deterministic query over the Atlas index** (structural / dependency axes) or a pinned declarative assertion, evaluated mechanically to `HOLDS/BROKEN/NA`"
+
+### REQ-KNOW-16b — no code execution or sandbox
+source: INV-KNOW-16 @ reference/atlas-knowledge.md#know-16
+If a check would require arbitrary code execution or a sandbox, then the knowledge module shall not evaluate it.
+normative-clause: "**no arbitrary code execution, no sandbox**"
+
+### REQ-KNOW-16c — runtime check stays advisory
+source: INV-KNOW-16 @ reference/atlas-knowledge.md#know-16
+If a check needs runtime or behavioral execution, then the knowledge module shall keep the fact advisory.
+normative-clause: "A check needing runtime/behavioral execution is **out of scope for v0** and MUST stay `advisory`"
+
+### REQ-KNOW-16d — evaluator is pure
+source: INV-KNOW-16 @ reference/atlas-knowledge.md#know-16
+The knowledge module shall keep the evaluator pure, yielding the same verdict for the same index state with no clock or IO.
+normative-clause: "The evaluator MUST be pure (same index state ⇒ same verdict, no clock/IO)"
+
+### REQ-KNOW-16e — verdict feeds reconcile
+source: INV-KNOW-16 @ reference/atlas-knowledge.md#know-16
+The knowledge module shall feed the check verdict to atlas-reconcile.
+normative-clause: "its verdict feeds `atlas-reconcile`"
+
+### REQ-KNOW-17a — served fact accrues a hit
+source: INV-KNOW-17 @ reference/atlas-knowledge.md#know-17
+When a served fact governs a decision, the knowledge module shall accrue a logged hit for it.
+normative-clause: "A served fact MUST accrue **`hits`** — a logged event each time it governs a decision"
+
+### REQ-KNOW-17b — door-2 threshold calibrates on hits
+source: INV-KNOW-17 @ reference/atlas-knowledge.md#know-17
+The knowledge module shall calibrate the Door-2 admission threshold against observed downstream hits, never the proposer's self-assessment.
+normative-clause: "Door-2 (non-obvious ∧ actionable) MUST calibrate its admission threshold against **observed downstream hits**, never the proposer's self-assessment"
+
+### REQ-KNOW-17c — unconsulted fact decays out
+source: INV-KNOW-17 @ reference/atlas-knowledge.md#know-17
+When no wave ever consults a served fact, the knowledge module shall decay it out of the served/pack set, archived to CAS and never deleted.
+normative-clause: "A served fact that **no wave ever consults** MUST **decay** out of the served/pack set (archived to CAS, never deleted — KNOW-12)"
+
+### REQ-KNOW-17d — decayed fact may re-enter on a hit
+source: INV-KNOW-17 @ reference/atlas-knowledge.md#know-17
+When a decayed fact receives a later hit, the knowledge module shall permit it to re-enter the served set.
+normative-clause: "MAY re-enter on a later hit"
+
+### REQ-KNOW-18a — confidence fast-path auto-accept
+source: INV-KNOW-18 @ reference/atlas-knowledge.md#know-18
+When a candidate is grounded, low-risk, and T2 advisory, the knowledge module shall permit auto-accept with no human.
+normative-clause: "A candidate that is **grounded ∧ low-risk ∧ `T2` advisory** MAY **auto-accept** (fast-path, no human)"
+
+### REQ-KNOW-18b — risky candidates route to full ratification
+source: INV-KNOW-18 @ reference/atlas-knowledge.md#know-18
+If a candidate is T0, contested, or predicate, then the knowledge module shall route it to full human ratification.
+normative-clause: "`T0`, **contested** (reviewer veto / conflicting node), and **all predicate** candidates MUST route to full human ratification"
+
+## [NEEDS RECONCILIATION]
+- INV-KNOW-15: the clause asserts move-awareness ("rename/move never orphans into a spurious CREATE") and a near-duplicate probe that "forces MERGE on a `claimNorm` collision," but the register flags "⚠ move-aware needs similarity matcher" — the precision boundary (what counts as the same node vs a spurious CREATE, and the near-dup similarity threshold) is not pinned in the clause; route to DEFINE.
+- INV-KNOW-10: the Invariants-section clause states only "No free prose, ever." and delegates the concrete reject-triggers to spec A-13 ("→ see spec **A-13**"); the missing-field / over-cap guard (REQ-KNOW-10b) was necessarily lifted verbatim from the same reference's Acceptance check #9 rather than a KNOW-10 Invariants clause — confirm Acceptance #9 is the authoritative guard source or lift the triggers into the invariant clause.
