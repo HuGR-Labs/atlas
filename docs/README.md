@@ -1,10 +1,11 @@
-# Orchestra — Docs
+# Atlas — Docs
 
 The map. Docs follow **[CONVENTIONS.md](./CONVENTIONS.md)** — Diátaxis × docs-as-code (co-located) ×
 grounded (the docs dogfood the Atlas: reference is pinned to `source@sha` and drift-checked).
 
 ## Start here
-- **[../ARCHITECTURE.md](../ARCHITECTURE.md)** — the whole Orchestra design. The **Atlas is layer 0**.
+- **[../README.md](../README.md)** — what the Atlas is + the build order.
+- **[method/README.md](./method/README.md)** — the decomposition method that produced this spec.
 - **[CONVENTIONS.md](./CONVENTIONS.md)** — how we document (this contract).
 
 ## The Atlas (layer 0) — knowledge + memory, one substrate
@@ -39,4 +40,4 @@ grounded (the docs dogfood the Atlas: reference is pinned to `source@sha` and dr
 
 ## Chewed visuals (HTML artifacts)
 `atlas.html` (the consolidated one-pager) · piece explainers: `atlas-concept` · `atlas-classes` ·
-`atlas-folders` · `atlas-sizes` · `project-memory` · `project-memory-example` · `proposal`.
+`atlas-folders` · `atlas-sizes` · `project-memory` · `project-memory-example`.

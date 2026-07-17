@@ -66,11 +66,11 @@ Status         = 'HOLDS' | 'BROKEN' | 'NA' | 'advisory'
 > CREATE a duplicate fact. Flagged here because grounding supplies the equality primitive KNOW-15 must
 > not overtrust.
 
-> **Hash-consistency note (sanity-fix #8).** Grounding hashes with **BLAKE3**; the orchestration
-> relay-token (`design/orchestration.md`) hashes the brief with **SHA-256** (`relayToken =
-> sha256(canonical(brief))`). These are **separate contracts, not a bug** — but both SHOULD route
-> through the `@orchestra/kernel` encoder seam so the project has one swappable hash authority. Aligning
-> them is a consistency recommendation, not a required change to either contract.
+> **Hash-consistency note (sanity-fix #8).** Grounding hashes with **BLAKE3**; a downstream consumer's
+> relay-token (e.g. the Orchestra orchestrator) may hash a brief with **SHA-256** (`relayToken =
+> sha256(canonical(brief))`). These are **separate contracts, not a bug** — but a consumer SHOULD route
+> its hashing through the Atlas kernel encoder seam so the system has one swappable hash authority.
+> Aligning them is a consistency recommendation, not a required change to either contract.
 
 ## Invariants
 

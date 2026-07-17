@@ -3,7 +3,7 @@
 // coupling, defeats review, and is the #1 correlate of drift. The bar Orchestra enforces on seats is
 // enforced on Orchestra itself (same doctrine as ci.yml). Fails the build with the offending list.
 //
-// Scope: tracked TypeScript under packages/** and seats/** (product code). Docs (docs/**, *.md) and
+// Scope: tracked TypeScript under packages/** (product code). Docs (docs/**, *.md) and
 // generated output (dist/, *.d.ts) are exempt — long specs are legitimate; long modules are not.
 // CAP is intentionally a single tunable constant.
 
@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 
 const CAP = 400; // max lines per source file. One-line change to retune the whole fleet bar.
 
-const tracked = execSync('git ls-files packages seats', { encoding: 'utf8' })
+const tracked = execSync('git ls-files packages', { encoding: 'utf8' })
   .split('\n')
   .filter((p) => /\.ts$/.test(p) && !/\.d\.ts$/.test(p));
 

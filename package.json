@@ -1,11 +1,10 @@
 {
-  "name": "orchestra",
+  "name": "atlas",
   "private": true,
   "version": "0.0.0",
-  "description": "A governed engineering orchestrator — the lead holds judgment, seats are harnesses, guarantees are enforced in code.",
+  "description": "Layer 0 — a shared, grounded, git-native knowledge layer for a codebase (no embeddings, no RAG).",
   "workspaces": [
-    "packages/*",
-    "seats/*"
+    "packages/*"
   ],
   "type": "module",
   "scripts": {

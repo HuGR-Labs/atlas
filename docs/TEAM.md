@@ -49,7 +49,7 @@ lead — kit **`PODIUM`** (the podium the conductor works from; ratified 2026-07
 per-member Memory like any seat (task/pr/project + the **logbook**). It decomposes the ratified design
 into disjoint, contract-bound WPs, dispatches them to seats with a chewed brief, enforces the
 return-firewall + the GAN rule, and integrates. **This is the part
-we design first.** See [docs/design/orchestration.md](./design/orchestration.md).
+we design first** — the conductor's design lives in the **Orchestra** consumer repo (`docs/design/orchestration.md` there).
 
 ### Downstream — the existing seat roster (EXECUTE / VERIFY / SUPPORT)
 

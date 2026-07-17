@@ -4,7 +4,7 @@
 > the functional job + the agent-retargeted job map + the measurable **desired-outcome statements** (= the **FRs**
 > the design must satisfy). These are the spine everything downstream hangs off (`FR → DP → invariant → REQ →
 > golden → WP`). Success is **instrumented, not surveyed** — the "customer" is an AI coding agent, which emits
-> ground truth. Grounds to the Atlas mission in `../../ARCHITECTURE.md` + `atlas.md`.
+> ground truth. Grounds to the Atlas mission in [`design/atlas.md`](atlas.md) + [`spec/atlas.md`](../spec/atlas.md).
 
 ## The customer & the functional job
 
