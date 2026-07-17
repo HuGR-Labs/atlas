@@ -42,11 +42,13 @@ on Orchestra itself.
 > separate spec persona)? Proposed: **one** Definer owns working-backwards→product→spec as a single
 > discipline; split later only if it gets heavy. Names/kits above are placeholders — rename freely.
 
-### The Conductor — ORCHESTRATE (phase 3)
+### The Conductor — ORCHESTRATE (phase 3) · kit `PODIUM`
 
 Not a "seat"; it is the orchestration layer itself (`packages/orchestrator`), driven in a session by a
-lead. It decomposes the ratified design into disjoint, contract-bound WPs, dispatches them to seats
-with a chewed brief, enforces the return-firewall + the GAN rule, and integrates. **This is the part
+lead — kit **`PODIUM`** (the podium the conductor works from; ratified 2026-07-16). It has its own
+per-member Memory like any seat (task/pr/project + the **logbook**). It decomposes the ratified design
+into disjoint, contract-bound WPs, dispatches them to seats with a chewed brief, enforces the
+return-firewall + the GAN rule, and integrates. **This is the part
 we design first.** See [docs/design/orchestration.md](./design/orchestration.md).
 
 ### Downstream — the existing seat roster (EXECUTE / VERIFY / SUPPORT)

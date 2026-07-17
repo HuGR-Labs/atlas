@@ -54,6 +54,11 @@ Grounded in 2026 multi-agent research, not vibes:
    totality, fences, no-self-attest, CI from commit #1) bind Orchestra's own repo. Dogfood or it's a lie.
 6. **Enforcement in code, folded from evidence.** Guarantees are producers+consumers+fences over a live
    event log — the one genuinely-real thing v1 had. Kept, but architected.
+7. **The Atlas self-hosts (§8).** Orchestra is its own first project: as we build the atlas and the fleet,
+   we populate Orchestra's *own* `packages/atlas-*` with grounded knowledge + memory about Orchestra itself
+   — the docs are docs-as-code, grounded and drift-checked, so this repo's reference docs *are* the first
+   knowledge. If Orchestra can't build Orchestra with its own atlas, it isn't real. Honest bootstrap:
+   `atlas-kernel` + `atlas-grounding` by hand first; the atlas tooling takes over hosting once it exists.
 
 ## 3. The monorepo, and how seats live in it
 
@@ -68,10 +73,17 @@ Orchestra/                     # the mono (this repo)
   .github/workflows/ci.yml              # CI from commit #1
   docs/{adr,contracts}/                 # decision records + human-readable seams
   packages/                             # the ORCHESTRA CORE (built here)
-    kernel/          # pure, zero-dep, deterministic primitives (§6 ports)
+    kernel/          # pure, zero-dep, deterministic primitives + encoder seam (§6 ports)
     contracts/       # THE seat-harness contract + governance seams (frozen)
     governance/      # guarantees · ledger · policy/guard · ed25519 approval
-    memory/          # MemoryFact model + grounded store
+    atlas-kernel/    # LAYER 0: CAS · BLAKE3 encoder seam · append-only event log (the storage substrate)
+    atlas-grounding/ #          StructRef/subtreeHash · truth-gate · 2-door admission
+    atlas-index/     #          hashed structural tree · drift oracle · no-RAG
+    atlas-knowledge/ #          GroundedFact · tiers · upsert/supersede
+    atlas-memory/    #          task/pr/project/logbook + the injected header (subsumes v1's memory store)
+    atlas-retrieval/ #          packs · poke · tool projection · caps
+    atlas-persist/   #          git-native · commits+PRs · archive · re-spawn
+    atlas-tools/     #          init/query/emit/reconcile (CLI+MCP)
     orchestrator/    # the LEAD: plan → dispatch → integrate (the supervisor)
     cli/             # the `orchestra` root CLI
     testkit/         # shared actuation-probe / fence helpers
@@ -89,19 +101,23 @@ repo depends on the published `@orchestra/contracts`, nothing else from the mono
 ## 4. The layers (downward-only dependency)
 
 ```
-  seats/*          →  a harness; depends ONLY on @orchestra/contracts (+ its own kit)
+  seats/*          →  a harness; depends ONLY on @orchestra/contracts (+ its own kit); READS the atlas
   ────────────────────────────────────────────────────────────────────
   cli              →  orchestrator + governance + contracts
-  orchestrator     →  governance + memory + contracts + kernel
+  orchestrator     →  governance + atlas-* + contracts + kernel
   governance       →  kernel + contracts
-  memory           →  kernel + contracts
+  atlas-*          →  kernel          ← LAYER 0: the atlas-* crate family (atlas-kernel = CAS + event log;
+                                        grounding → index → knowledge/memory → retrieval → persist/tools)
   contracts        →  kernel
   kernel           →  (nothing — pure, zero runtime deps)
 ```
 
 - **kernel** — the incorruptible base: content-addressing (`canonical`, `id`), the event model
-  (`Event{seq,at,actor,body,prev,hash}`), injected-clock determinism, glob, result/verdict types. Pure,
-  total, zero-dep. No I/O. This is the one thing v1 got right; it is ported almost verbatim (§6).
+  (`Event{id,seq,at,actor,kind,payload,nodeKey?}`), injected-clock determinism, glob, result/verdict types. Pure,
+  total, zero-dep. No I/O. This is the one thing v1 got right; it is ported almost verbatim (§6). *(The
+  Atlas's own **CAS + append-only event log** are NOT here — they live in `atlas-kernel` (layer 0), keyed
+  through this package's encoder seam. This resolves the kernel-vs-atlas-kernel ambiguity: the generic
+  encoder/primitive seam is `kernel`; the Atlas storage substrate is `atlas-kernel`.)*
 - **contracts** — every frozen seam as typed interfaces: the **SeatHarness contract**, the **WorkBrief**
   (the dispatch packet), the **ResultCard** (the return-firewall), the guarantee IDs, the policy shape.
   Contracts have no logic — they are the shared vocabulary that lets core and seats compile apart.
@@ -109,7 +125,16 @@ repo depends on the published `@orchestra/contracts`, nothing else from the mono
   `ledger` (fold state from the live event log), `policy`+`guard` (the hardened command classifier +
   phase gate — ported from v1's A-INTEG work), `approval` (ed25519 DSSE owner-sign). All pure verdicts
   over evidence; the I/O keystone (event append) is the single impure edge.
-- **memory** — the MemoryFact model (grounded facts, fail-closed, per-seat routing) + the store.
+- **atlas-\*** — **LAYER 0**, the ground-truth substrate every phase reads before it acts, built as a
+  **family of `packages/atlas-*` crates** (not one package): `atlas-kernel` (the CAS + BLAKE3 encoder seam
+  + append-only event log — the storage substrate) → `atlas-grounding` (StructRef/subtreeHash truth-gate) →
+  `atlas-index` (hashed structural tree, drift oracle, no-RAG) → `atlas-knowledge` (GroundedFact, tiers,
+  upsert/supersede) + `atlas-memory` (per-member task/pr/project/logbook) → `atlas-retrieval` (packs, poke,
+  tool projection) → `atlas-persist` (git-native, archive, re-spawn) + `atlas-tools` (init/query/emit/
+  reconcile). **Knowledge** (shared, grounded to the code) + **Memory** (per-member) live on one
+  BLAKE3-hashed structural index — **no embeddings, no RAG**. Grounding re-checks against `source@sha`;
+  born-from-work; git-native, nothing-dies. Subsumes v1's `MemoryFact` store. Designed in
+  `docs/{design,explanation,reference}/`, contract in [docs/CONVENTIONS.md](./docs/CONVENTIONS.md).
 - **orchestrator** — the LEAD: decompose (slice disjoint, freeze contracts), dispatch (arm the relay,
   chew the packet, enforce the return-firewall), integrate (DAG-ordered merge, seal, absorb). This is
   where the techlead doctrine lives as code.
@@ -187,22 +212,23 @@ out to a subprocess; the seat itself stays TS. No polyglot toolchain in the mono
 
 ## 6. What is REUSED from v1 (deliberate ports, not salvage)
 
-Only what v1 *proved* under adversarial review, ported into `kernel`/`governance`/`memory` and
+Only what v1 *proved* under adversarial review, ported into `kernel`/`governance`/`atlas-*` and
 re-fenced in Orchestra's own suite:
 
 | v1 artifact | → Orchestra home | why it earned the port |
 |---|---|---|
 | `canonical.ts` content-addressing | kernel | injective, the base of every hash/id |
-| event model `Event{seq,at,actor,body,prev,hash}` | kernel | the one real thing: live-folded ledger |
+| event model `Event{id,seq,at,actor,kind,payload,nodeKey?}` | kernel | the one real thing: live-folded ledger |
 | `classify.ts` + guard phase-gate (A-INTEG-01/04 hardened) | governance | billy-reviewed, bypass-closed |
 | ed25519 DSSE approval (`pae`, sign/verify) | governance | real crypto, owner-sign gate |
-| MemoryFact contract (M1–M4, fail-closed grounding) | memory | structured, no-prose, per-seat |
+| MemoryFact contract (M1–M4, fail-closed grounding) | atlas-memory | structured, no-prose, per-seat |
 | relay content-addressed arm↔release binding (R6) | governance | token = sha256(canonical(brief)) |
 | the guarantee/probe fold model | governance | producer+consumer+fence, folded from evidence |
+| the **atlas** concept (grounding truth-gate, born-from-work, tiers, zero-lock-in export) | **the atlas-\* family (layer 0)** | v1's strongest idea — rebuilt: **structural/BLAKE3 anchor** (not line/SHA), actually *fed* via `ResultCard.absorb`, no-RAG hashed index |
 
-**Explicitly NOT ported:** the flat module sprawl, the advisory/orphaned organs (atlas trust-gate,
-context-monitor-as-afterthought), the hollow `.md` seats, and anything that existed only to make a test
-green. Redesigned or dropped.
+**Explicitly NOT ported:** the flat module sprawl, the context-monitor-as-afterthought, the hollow `.md`
+seats, and anything that existed only to make a test green. Redesigned or dropped. *(v1's atlas is NOT in
+this list — it was v1's strongest idea, rebuilt as layer 0; see the row above.)*
 
 ## 7. The quality bar, on Orchestra itself (day 1, not day 90)
 
@@ -237,11 +263,15 @@ a per-file LOC cap trips CI, and an ADR records every load-bearing decision. Tur
 ## 8. Build order (post-approval — design-first, so this waits)
 
 1. **kernel + contracts** — the frozen base + the seat seam. Publish `@orchestra/contracts`.
-2. **governance + memory** — the enforcement spine, re-fenced.
-3. **`seats/_template`** — the reference harness, built with total craft, as the bar every real seat is
+2. **the atlas-\* family (LAYER 0)** — `atlas-kernel` (CAS/BLAKE3/event-log) → `atlas-grounding` →
+   `atlas-index`, then the knowledge + memory kinds (`atlas-knowledge` + `atlas-memory`), `atlas-retrieval`,
+   `atlas-persist`, `atlas-tools`. Everything above reads it, so it comes before governance/orchestrator.
+   *(Self-hosting starts here — §2.7: Orchestra populates its OWN atlas as each crate lands.)*
+3. **governance** — the enforcement spine, re-fenced.
+4. **`seats/_template`** — the reference harness, built with total craft, as the bar every real seat is
    held to.
-4. **orchestrator + cli** — the lead, driving the template seat end-to-end (the first live governed run).
-5. **The seats** — each in its own repo/session, against the frozen contract, vendored in as it lands.
+5. **orchestrator + cli** — the lead, driving the template seat end-to-end (the first live governed run).
+6. **The seats** — each in its own repo/session, against the frozen contract, vendored in as it lands.
 
 Steps 1–4 are Orchestra-core (this repo). Step 5 is the fleet, built where the owner opens a session per
 seat. Nothing starts until this architecture is ratified.
