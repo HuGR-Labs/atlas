@@ -1,0 +1,321 @@
+# The Atlas — Invariant Register (S0: the design freeze)
+
+> The **Ratify** phase of the [product-design rubric](../method/product-design.md) = decomposition state
+> **S0**. Each Atlas invariant is run through the [`ratification-gate`](../../.claude/skills/ratification-gate/SKILL.md)
+> 5-gate bar and emitted as a Register row; the frozen set **is** S0, the input the decomposition (S1–S4)
+> consumes. **Brownfield** — recover + ratify the existing invariants (`reference/atlas-*.md`), don't expand;
+> a gate failure is a `[NEEDS RECONCILIATION]` routed to design, never invented. Carries each invariant's **FR**
+> (from [D0](../design/product-definition.md)) and **independence** value (from [D2](../design/structure.md)).
+>
+> **Status:** ✅ **all 9 blocks ratified — 132/132 RATIFIED** (KRN pilot → 8-block fan-out → owner extended D0
+> with FR-11/12/13 → all 20 former reconciliations re-homed). 7 territory owners assigned; the 2 consolidated
+> freeze cold-reviews (lucy rigor + frankie DAG) integrated. **Ready to freeze = S0.** Total: 132 / 9 blocks.
+
+## The 5 gates (each row must pass all five, or carry a `[NEEDS RECONCILIATION]`)
+
+1. **Grounded** — a real source (spec/reference/code), not an assertion.
+2. **Testable** — a measurable acceptance scenario with a **number/threshold** (binary invariants: the
+   pass/fail criterion *is* the number — `byte-identical` / `0 dropped` / `100% agree` / `never throws`).
+3. **Independent** — its coupling value from the D2 matrix (`on-diagonal | decoupled-after X | COUPLED-with Y`).
+4. **Justified** — an ADR with the rejected alternative, for the **non-obvious** ones (obvious invariants
+   need no ADR — that would be ceremony).
+5. **Tradeoff-resolved** — no unresolved tension left on the page.
+
+## Row schema
+
+`| INV | FR | independence | tier/tag | testable scenario + number | tradeoff (gate 5) | flag | ADR | verdict |`
+- **FR** is **read from D2's DP→FR matrix** for the invariant's module — *not* an attached related-sounding FR
+  (the pilot-review lesson: kernel = DP-7 → FR-8; do not decorate with other modules' FRs).
+- **flag** ∈ { `behavioural` · `exempt: <reason>` } — the reconciler scans this column; the freeze predicate
+  requires every invariant dispositioned.
+- **tradeoff** = the sacrificed attribute on a tradeoff point (`—` when the invariant is pure correctness with
+  no sacrifice); gate 5 is satisfied per-row here, not in prose.
+- **anchor** is mechanical, stated once per block: `reference/atlas-<block>.md#<inv-slug>` (INV-N → `#<file>-N`).
+- **method-tag** is a *design hint* at S0 (core=formal / elevated=PBT-exhaustive / standard=reference-model);
+  S2 owns the final tag.
+- verdict ∈ { **RATIFIED** · `[NEEDS RECONCILIATION: …]` }.
+
+---
+
+## Block KRN — kernel (12) · module M-Kernel · **FR-8** (DP-7, on-diagonal) · core cluster = KERNEL-9/10/11 (formal `FSPEC-merge`)
+
+anchor: `reference/atlas-kernel.md#kernel-N`.
+
+| INV | FR | independence | tier/tag | testable scenario + number | tradeoff | flag | ADR | verdict |
+|---|---|---|---|---|---|---|---|---|
+| **KERNEL-1** content-addressed identity | FR-8 | on-diagonal (M-Kernel; CAS seam #2) | core / reference-model | two independent encoders `put` the same object → **byte-identical Hash**; float/non-NFC/key-order preimage **fails the CI corpus** (0 divergences) | canonical strictness sacrifices encoder-convenience | behavioural | ADR-K1 canonical-strictness (rejected: permit floats/loose escape → forks the fold) | **RATIFIED** |
+| **KERNEL-2** encoder seam | FR-8 | on-diagonal (seam #2) | reference-model | swap the encoder → **only digest bytes change**, 100% of non-digest contract tests pass; default BLAKE3 | — | behavioural | ADR-K2 swappable-hash (rejected: hardcode BLAKE3 → no algorithm migration) | **RATIFIED** |
+| **KERNEL-3** CAS is the one store | FR-8 | on-diagonal | reference-model | grep the store layer → **every** object kind resolves through the one CAS; **0** second stores | — | behavioural | — (obvious) | **RATIFIED** |
+| **KERNEL-4** append-only log | FR-8 | on-diagonal | reference-model | mutate/delete a logged event → **rejected**; log length **monotonically grows** | — | behavioural | — (obvious) | **RATIFIED** |
+| **KERNEL-5** state is a fold | FR-8 | on-diagonal | reference-model | `fold(export→import→log)` rebuilds a **byte-identical** Atlas (A-11 round-trip) | — | behavioural | — (obvious — the FR-8 headline) | **RATIFIED** |
+| **KERNEL-6** portable / no lock-in | FR-8 | on-diagonal | reference-model | `export → import` → **byte-identical** CAS (A-8); 0 host/external refs | — | behavioural | — (obvious) | **RATIFIED** |
+| **KERNEL-7** total, never throws | FR-8 | on-diagonal | reference-model | malformed input to **every** entry point → structured empty/rejection; **0** exceptions | — | behavioural | — (obvious) | **RATIFIED** |
+| **KERNEL-8** identity excludes side-indexes | FR-8 | on-diagonal | reference-model | recompute grounding/status/freshness → **Hash unchanged** (0 perturbation) — a stable key means drift never re-keys the fold | — | behavioural | ADR-K8 identity∌mutable-state (rejected: fold status into key → drift re-keys every fact) | **RATIFIED** |
+| **KERNEL-9** event identity = content, not position | FR-8 | **COUPLED-with KERNEL-10/11** (co-locate: the formal merge core) | **core / `FSPEC-merge` (formal)** | append a byte-identical event twice → **no-op**; `merge` dedups by id; reassign `seq` alone → keyset+fold **unchanged** | — | behavioural | ADR-K9 content-keyed-set (rejected: seq/position identity → breaks under branch/merge/rebase) | **RATIFIED** |
+| **KERNEL-10** deterministic fold-merge on nodeKey | FR-8 | **COUPLED-with KERNEL-9/11** (co-locate) | **core / `FSPEC-merge` (formal)** | 2 seats emit on one nodeKey (advisory *or* predicate) → **one** OR-Set node, union of both, **0 dropped**, identical under either order; forced head = `contentHash` tie-break (never seq/clock/LLM) | OR-Set is grow-only: sacrifices store-compactness for zero-loss (growth bounded by decay, DP-9) | behavioural | **ADR-K10 OR-Set-union over seq-LWW** (rejected: last-writer-wins by seq → the U2 resurrection bug; a clock; an LLM tie-break) | **RATIFIED** *(closes the U2/KERNEL-10 freeze-gate card)* |
+| **KERNEL-11** convergent (commutative) fold | FR-8 | **COUPLED-with KERNEL-9/10** (co-locate) | **core / `FSPEC-merge` (formal)** | fold a shuffled / re-batched / branch-unioned permutation of the **same** event set → **byte-identical** AtlasState (0 order-dependence) | — | behavioural | justified via ADR-K10 (commutativity is the union's property) | **RATIFIED** |
+| **KERNEL-12** safe-degrade log representation | FR-8 | decoupled-after KERNEL-9 (consumes the content-keyed-set contract) | reference-model | un-configured clone merges the log via git text-merge → **lossless union** of both branches' JSONL events (re-fold dedups by id), **0** corrupted/lost; bootstrap **self-installs** the driver | JSONL line-form sacrifices compactness for merge-safety | behavioural | ADR-K12 JSONL-line-union floor (rejected: binary/blob log → default merge corrupts the set) | **RATIFIED** |
+
+**KRN block verdict: 12/12 RATIFIED.** All grounded (spec §3.2 / A-8/A-11/A-12), testable (each a binary
+number from the real acceptance), **every FR read as FR-8 from D2's DP-7 mapping** (no decorative FRs),
+independence from D2 (on-diagonal M-Kernel; 9/10/11 the co-located formal merge core; K12 decoupled-after K9),
+all 12 flagged `behavioural`, tradeoffs recorded per-row.
+
+**Freeze-gate cards touched by KRN:**
+- ✅ **U2 / KERNEL-10** — CLOSED. The invariant now resolves by OR-Set union + `contentHash` tie-break; the
+  seq-LWW branch that caused the U2 resurrection bug is removed (ADR-K10 records the rejected alternative).
+- ✅ **spec↔ref contradiction (KRN)** — none found; KERNEL-9/10/11 cohere with `spec §3.2` + the event-log fold.
+- ✅ **owner** — `atlas-kernel.md` now `owner: charlie (FORGE)` (assigned at freeze; the KRN formal-merge core
+  is architecture-reviewed by bobby). Closed.
+- ✅ **behavioural flag** — all 12 KRN invariants are behavioural (each has a testable acceptance); tagged.
+
+---
+
+## Block GRD — grounding (13) · M-Grounding · **FR-4⇄FR-5 COUPLED** (co-locate; consumes IDX subtreeHash seam #1) · elevated / PBT
+
+anchor: `reference/atlas-grounding.md#ground-N`.
+
+| INV | FR | independence | tag | testable + number | tradeoff | flag | ADR | verdict |
+|---|---|---|---|---|---|---|---|---|
+| GROUND-1 structural anchor | FR-5 | COUPLED (consumes IDX seam #1) | PBT | `displayLines`-only change ⇒ 0 drift; line-range anchor ⇒ rejected; real change ⇒ DRIFTED | line-nav demoted to hint | behavioural | ADR-G1 subtreeHash-oracle | **RATIFIED** |
+| GROUND-2 real grounding | FR-5 | COUPLED | PBT | empty grounding ⇒ not-grounded ∧ DRIFTED; ungrounded never FRESH (0) | — | behavioural | — | **RATIFIED** |
+| GROUND-3 fail-closed resolution | FR-4 | COUPLED | PBT | gone citation ⇒ dropped + DRIFTED, 0 throws | recall↔safety | behavioural | — | **RATIFIED** |
+| GROUND-4 truth-gate | FR-4 | COUPLED | PBT | HOLDS only if grounded∧FRESH else NA (spec A-1) | — | behavioural | — | **RATIFIED** |
+| GROUND-5 semantic drift only | FR-5 | COUPLED | PBT (P=edit class) | irrelevant edit ⇒ FRESH (0 false drift); real change ⇒ DRIFTED | false-alarm bounded not eliminated | behavioural | — | **RATIFIED** |
+| GROUND-6 fail-closed write | FR-5 | COUPLED | PBT | ungrounded emit ⇒ nothing persisted (spec A-2) | — | behavioural | — | **RATIFIED** |
+| GROUND-7 two-door admission | FR-5 | COUPLED | PBT | obvious ⇒ rejected; ungrounded ⇒ rejected; admit iff both | recall (obvious rejected) | behavioural | ADR-G7 two-door | **RATIFIED** |
+| GROUND-8 provenance | FR-5 | COUPLED | PBT (P=untrusted) | untrusted source ⇒ advisory, absent from gate (spec A-9) | — | behavioural | — | **RATIFIED** |
+| GROUND-9 templated write | FR-5 | COUPLED | PBT | missing field/over cap ⇒ rejected; 0 free-prose (spec A-13) | prose↔machine-check | behavioural | — | **RATIFIED** |
+| GROUND-10 hash via seam | FR-5 | decoupled-after KERNEL-2 | PBT | only hash call routes through the seam; 0 inlined | — | behavioural | ADR-G10 hash-via-seam | **RATIFIED** |
+| GROUND-11 forward-closure **interface** fold | FR-4 | COUPLED (consumes INDEX-12) | PBT (P=iface≠body) | callee signature change ⇒ caller DRIFTED; body-preserving refactor ⇒ caller FRESH | precision↔over-approx | behavioural | ADR-G11 interface-fold | **RATIFIED** |
+| GROUND-12 repo-global = block hash | FR-5 | COUPLED | PBT (P=parseable artifact) | rule→CONVENTIONS.md section subtreeHash; edit section drifts, unrelated edit 0 drift | file-byte fragility escaped | behavioural | ADR-G12 block-hash | **RATIFIED** |
+| GROUND-13 advisory drift = STALE | FR-4 | COUPLED (DP-4↔DP-5) | PBT (P=advisory) | advisory drift ⇒ STALE non-blocking; predicate ⇒ KNOW-5 split | merge-enforcement↔zero-toil | behavioural | ADR-G13 advisory→STALE | **RATIFIED** |
+
+**GRD: 13/13 RATIFIED.**
+
+## Block KNW — knowledge (18) · M-Lifecycle (owns DP-6/8/9/11; consumes DP-4/5/10) · **FR-4/5/6/7/9/10** · elevated · write-decision core = KNOW-4/10/15 (`PBT-exhaustive`)
+
+anchor: `reference/atlas-knowledge.md#know-N`.
+
+| INV | FR | independence | tag | testable + number | tradeoff | flag | ADR | verdict |
+|---|---|---|---|---|---|---|---|---|
+| KNOW-1 truth-gate | FR-10 | on-diag (DP-10; consumes GRD) | ref-model | self-asserted HOLDS ⇒ rejected; status side-index only | self-verify↔purity | behavioural | — | **RATIFIED** |
+| KNOW-2 fail-closed write | FR-5 | decoupled-after GRD | ref-model | no-citation emit ⇒ emitted:false, 0 persisted | — | behavioural | — | **RATIFIED** |
+| KNOW-3 structural anchor | FR-4 | decoupled-after GRD+IDX | ref-model | reformat/rename/import-above ⇒ FRESH; real change ⇒ DRIFTED (100%) | — | behavioural | ADR-KN3 | **RATIFIED** |
+| KNOW-4 upsert; git is history | FR-7 | COUPLED-with FR-9 (DP-6) | **PBT-exhaustive** | changed advisory ⇒ edit-in-place; 1 current node/(anchor,slot), 0 dup | in-store lineage↔lean store | behavioural | ADR-KN4 edit-over-append | **RATIFIED** |
+| KNOW-5 drift split mech/sem | FR-6 | decoupled-after GRD | ref-model | k drift, s no re-derive ⇒ k−s auto-reground exit0; s semantic exit2; reauthor==s | — | behavioural | ADR-KN5 | **RATIFIED** |
+| KNOW-6 empty & honest | FR-9 | COUPLED-with FR-7 (DP-8) | ref-model | init ⇒ 0 invariants; 100% T2/advisory | — | behavioural | — | **RATIFIED** |
+| KNOW-7 T0 human-only | FR-9 | COUPLED-with FR-7 (DP-11; consumes STW tier) | ref-model | T0-keyword ⇒ t0Candidate ∧ tier==T2 (0 auto-promote) | — | behavioural | ADR-KN7 | **RATIFIED** |
+| KNOW-8 propose ≠ ratify | FR-9 | COUPLED-with FR-7 (DP-11) | ref-model | 0 explorer writes reach store except via ratifier | autonomy↔gated quality | behavioural | ADR-KN8 | **RATIFIED** |
+| KNOW-9 both families day-one | FR-5 | decoupled-after GRD (DP-5) | ref-model | no evaluator ⇒ store fully operable on advisory (100%) | — | behavioural | ADR-KN9 | **RATIFIED** *(weak homing — confirm/exempt)* |
+| KNOW-10 templated write | FR-7 | COUPLED-with FR-9 (DP-6) | **PBT-exhaustive** | missing field/over cap/out-of-vocab slot ⇒ rejected; 0 free-prose | free-text↔decidable nodeKey | behavioural | ADR-KN10 closed-slot-vocab | **RATIFIED** |
+| KNOW-11 owner + scope | FR-10 | on-diag (DP-10) | ref-model | out-of-scope write ⇒ rejected; any-scope read ⇒ 100% | — | behavioural | — | **RATIFIED** |
+| KNOW-12 nothing dies (git+CAS) | FR-7 | COUPLED-with FR-9 (Kernel CAS) | ref-model | supersede ⇒ archived+re-spawnable; 0 delete paths; 0 redundant copy | — | behavioural | ADR-KN12 | **RATIFIED** |
+| KNOW-13 born from work | FR-9 | COUPLED-with FR-7 (DP-8) | ref-model | seal w/o absorb+why-not ⇒ violation; facts only for touched territories | — | behavioural | ADR-KN13 | **RATIFIED** |
+| KNOW-14 provenance | FR-5 | decoupled-after GRD | ref-model | every claim has Provenance; untrusted ⇒ 0 toward gate | — | behavioural | — | **RATIFIED** |
+| KNOW-15 deterministic write-decision | FR-6 | decoupled-after IDX+GRD | **PBT-exhaustive** (consumes the FSPEC-merge core; not itself the formal model — footprint stays 1) | anchor computed (not LLM); dup⇒DEDUP; restate⇒UPDATE; move⇒re-anchor same node; 2 checks⇒2 nodes; 0 LLM | LLM-flex↔stable nodeKey | behavioural | ADR-KN15 computed-anchor | **RATIFIED** *(⚠ move-aware needs similarity matcher — see reconciliation)* |
+| KNOW-16 predicate check = pure query | FR-5 | decoupled-after GRD (DP-5) | ref-model | check ⇒ HOLDS/BROKEN/NA from index alone; 0 code-exec/IO/clock | runtime checks out-of-scope | behavioural | ADR-KN16 | **RATIFIED** |
+| KNOW-17 usefulness a-posteriori | FR-7 | COUPLED-with FR-9 (DP-9 — **spans two substrates**) | ref-model | governing fact ⇒ logged hit; 0 hits/window ⇒ archived; door-2 = f(hits) | loose-but-thin, prune by use | behavioural | ADR-KN17 | **RATIFIED** |
+| KNOW-18 confidence fast-path | FR-9 | COUPLED-with FR-7 (DP-11) | ref-model | grounded low-risk T2 ⇒ auto-accept 0-human; T0/contested/predicate ⇒ 100% full ratify | review only on risk | behavioural | ADR-KN18 | **RATIFIED** |
+
+**KNW: 18/18 RATIFIED.**
+
+## Block RET — retrieval (13) · M-Retrieval (DP-2+DP-3) · **FR-2⇄FR-3 COUPLED** (consumes IDX relate + MEM packs) · elevated / PBT
+
+anchor: `reference/atlas-retrieval.md#retr-N`.
+
+| INV | FR | independence | tag | testable + number | tradeoff | flag | ADR | verdict |
+|---|---|---|---|---|---|---|---|---|
+| RETR-1 no embeddings/no RAG | FR-2 (+FR-1 bet) | COUPLED (consumes INDEX-8) | PBT | 0 embedding/RAG calls; two identical queries ⇒ byte-identical (A-14) | no fuzzy recall↔determinism | behavioural | ADR-R1 no-embeddings | **RATIFIED** |
+| RETR-2 pack bound, cap-wins, tier-then-use | FR-2 + FR-3 | COUPLED internal | PBT | pack ≤ ~2K; all T0, then T1 by (hits,ppr,nodeKey); 0 silent drops | budget↔completeness; precision↔recall | behavioural | ADR-R2 cap-wins+PPR | **RATIFIED** |
+| RETR-3 stale ⇒ re-ground | **FR-4** (cross-cluster) | decoupled-after M-Grounding (seam #1) | PBT | stale iff any backing drifted; stale pack refused (0 trusted) | — | behavioural | — | **RATIFIED** |
+| RETR-4 poke debounced, once/scope | FR-1 | decoupled-after TOOLS-11 | PBT | settle N=2; ≤1 poke/scope/session; ≤~150 tok; Grep/Glob/Bash-arg ⇒ no poke | proactivity↔noise | behavioural | ADR-R4 debounced-poke | **RATIFIED** |
+| RETR-5 location-scoped tool projection | FR-2 (+FR-3) | COUPLED (index resolve seam) | PBT | only current-scope nodes as tools; retract on exit (0 accum) (A-15) | discoverability↔focus | behavioural | — | **RATIFIED** |
+| RETR-6 injection ceiling + drop order | FR-3 (+FR-2) | COUPLED (consumes RETR-8) | PBT | ≤ ~5K; drop by hitRate least-used; 2 pins never drop; >20%-dropped = mis-cap | budget↔completeness | behavioural | ADR-R6 hitRate-drop | **RATIFIED** |
+| RETR-7 per-type caps | FR-3 | COUPLED | PBT | Awareness ~400/Orient ~250/proj ~500/own ~1.5K/pack ~2K/related ~300/poke ~150 | budget per kind | behavioural | — | **RATIFIED** |
+| RETR-8 ledger-calibrated | FR-2 | COUPLED (feeds RETR-6) | PBT | caps from ledger hits; per-kind hitRate drives drop | adaptivity↔stability | behavioural | ADR-R8 ledger-caps | **RATIFIED** |
+| RETR-9 empty & total | FR-2 (robustness) | on-diag (decoupled-after KERNEL-7) | PBT | malformed scope ⇒ empty pack/tools/no poke; 0 throws | — | behavioural | — | **RATIFIED** *(FR by analogy)* |
+| RETR-10 deterministic relate, no model-walk | FR-2 | COUPLED (index 3-axis seam) | PBT | relate byte-identical; 0 LLM; coChanged opt-in+labeled | determinism↔recall | behavioural | ADR-R10 index-closure | **RATIFIED** |
+| RETR-11 bounded blast radius | FR-2 (+FR-1) | COUPLED (consumes GEN-11 PPR) | PBT | maxHops=2, K=8, truncated+total meta; hub outranks near leaf | precision↔recall | behavioural | ADR-R11 PPR-bounded | **RATIFIED** |
+| RETR-12 curated own-pack, zero-assembly | FR-2 + FR-3 | COUPLED internal | PBT | own ≤ ~1.5K, index-reads only, 0 LLM; seat never chooses scope | budget↔completeness | behavioural | ADR-R12 mechanical-own | **RATIFIED** |
+| RETR-13 MISS-oracle off-atlas coverage | FR-2 | COUPLED (ledger sibling) | PBT | off-atlas rate ⇒ calibration prompt; no history ⇒ 0 | precision↔recall | behavioural | ADR-R13 MISS-oracle | **RATIFIED** |
+
+**RET: 13/13 RATIFIED.**
+
+## Block IDX — index (16) · M-Index (DP-1) · **FR-1 + FR-2** · seam #1 producer · standard
+
+anchor: `reference/atlas-index.md#index-N`.
+
+| INV | FR | independence | tag | testable + number | tradeoff | flag | ADR | verdict |
+|---|---|---|---|---|---|---|---|---|
+| INDEX-1 one index, N axes, two jobs | FR-1 | on-diag (seam #1) | ref-model | one index does drift+discovery; 0 separate passes | — | behavioural | ADR-I1 | **RATIFIED** |
+| INDEX-2 Merkle rollup | FR-1 | on-diag | ref-model | edit ⇒ re-hash leaf→root only; 0 sibling re-hashes | — | behavioural | — | **RATIFIED** |
+| INDEX-3 deterministic mechanical build | FR-1 | on-diag | ref-model | rebuild twice ⇒ identical; 0 LLM (SCIP-primary) | $0 build↔unresolvable edges | behavioural | ADR-I3 SCIP-primary | **RATIFIED** |
+| INDEX-4 path resolution & roll-up | FR-2 | on-diag (→M-Retrieval) | ref-model | resolve(path) ⇒ covering node + rolls up hierarchy | — | behavioural | — | **RATIFIED** |
+| INDEX-5 index is drift oracle | FR-2 | on-diag (drift-leg seam #1) | ref-model | anchor≠current ⇒ excluded/flagged at query; 0 sweeps | — | behavioural | — | **RATIFIED** |
+| INDEX-6 three retrieval modes only | FR-2 | on-diag | ref-model | scope/dependency/trigger; no 4th, no free-text | closed surface↔similarity | behavioural | via ADR-I7 | **RATIFIED** |
+| INDEX-7 no embeddings/no RAG | FR-2 | on-diag | ref-model | 0 embedding/vector/ANN (A-14) | no fuzzy↔determinism | behavioural | ADR-I7 | **RATIFIED** |
+| INDEX-8 deterministic results | FR-2 | on-diag | PBT | two identical queries ⇒ byte-identical | — | behavioural | — | **RATIFIED** |
+| INDEX-9 total | FR-1 | on-diag | ref-model | malformed path/tag/axis ⇒ empty; 0 throws | — | behavioural | — | **RATIFIED** |
+| INDEX-10 multi-axis | FR-1 | on-diag | ref-model | ≥3 axes each own rollup; object stored once | — | behavioural | — | **RATIFIED** |
+| INDEX-11 universal content-addressing | FR-1 | on-diag (Kernel seam #2) | ref-model | doc ⇒ BLAKE3 CAS object, drift-checked; every kind keyed | — | behavioural | — | **RATIFIED** |
+| INDEX-12 dual rollup, bounded re-check | FR-1 | on-diag (drift-leg seam #1) | PBT | hub edit ⇒ eager rehash maxHops=2, deeper state-suspect+lazy | bounded cap↔deep freshness | behavioural | ADR-I12 bounded-fold | **RATIFIED** |
+| INDEX-13 unresolved edges explicit | FR-2 | on-diag | ref-model | unresolvable/cross-lang edge ⇒ explicit unresolved; reverse closure labeled under-approx + coChanged | honest under-approx | behavioural | ADR-I13 | **RATIFIED** |
+| INDEX-14 territory schema & overlap | FR-9 | axis; no DP-1→FR-9 cell; seam #5 | PBT | overlap ⇒ single owner+tier by longest-match; T0-adjacent default-deny; rebuild identical | availability↔governance | behavioural | ADR-I14 | **RATIFIED** |
+| INDEX-15 generated ownership | FR-9 | index generates vs seam #5 steward-input (spec↔ref boundary) | ref-model | empty manifest ⇒ owner from graph+blame; override wins; tier never generated | automation↔human-ground-truth | behavioural | ADR-I15 | **RATIFIED** |
+| INDEX-16 standing coverage gate | FR-9 | index enforces; FR-9→DP-11 not DP-1 | ref-model | T0 unresolved/total >15% ⇒ build fails; ratio published | velocity↔enforced coverage | behavioural | ADR-I16 | **RATIFIED** |
+
+**IDX: 16/16 RATIFIED** (INDEX-14/15/16 re-homed to FR-9 via the new DP-1→FR-9 governance edge).
+
+## Block MEM — memory (13) · M-Memory (inherited-scope; DP-9 arm + DP-10 partition) · standard
+
+anchor: `reference/atlas-memory.md#mem-N`. *(Memory was out of D0's original Knowledge-centric FR scope; the S0 extension added **FR-11 (per-seat experience, DP-12)** — MEM-1/3/4/5/6/8/11/12/13→FR-11, MEM-2→FR-10, MEM-7→FR-7, MEM-9→FR-12, MEM-10→FR-8.)*
+
+| INV | FR | independence | testable + number | flag | ADR | verdict |
+|---|---|---|---|---|---|---|
+| MEM-1 injection-scoped | FR-11 | on-diag (DP-10 inject arm) | A injects only A's Memory (0 cross-seat); repo reader still reads all bytes = scoping, not gating | behavioural | ADR-M1 scoping-not-encryption | **RATIFIED** |
+| MEM-2 distinct kinds (M≠K) | **FR-10** | on-diag (DP-10 partition) | craft-lesson never lands as Knowledge; 0 conflations | behavioural | ADR-M2 one-Atlas-two-kinds | **RATIFIED** |
+| MEM-3 injected-is-capped | FR-11 | on-diag | project ≤ ~500 (orch ~800); over ⇒ rejected, 0 overflow | behavioural | — | **RATIFIED** |
+| MEM-4 consultable-not-injected | FR-11 | on-diag (MEM-13 carve-out) | task/pr/logbook 0 auto-inject; only via recall; exception MEM-13 | behavioural | — | **RATIFIED** |
+| MEM-5 templated | FR-11 | on-diag (mirrors A-13) | missing field/over cap ⇒ rejected; 0 free-prose | behavioural | — | **RATIFIED** |
+| MEM-6 orientation derived & shared | FR-11 | on-diag (Kernel fold seam #3) | milestone ⇒ Orientation new state 0 manual; byte-identical; ≤ ~250 | behavioural | ADR-M6 derived-Orientation | **RATIFIED** |
+| MEM-7 decay = frecency | **FR-7 (+FR-9)** | **COUPLED-with KNOW-17** (DP-9 residual) | injected = top-12 by frecency; ~0 ⇒ evict-to-archive; 0 deleted | behavioural | ADR-M7 frecency | **RATIFIED** |
+| MEM-8 logbook discipline | FR-11 | on-diag (orch-only) | exactly 1 entry/PR; consultable never injected; 0 rewritten | behavioural | — | **RATIFIED** |
+| MEM-9 portable + scrubbed | FR-12 (+FR-8 portable) | on-diag (CAS seam #2 + scrub) | export=import identical; secret write ⇒ blocked; 0 secrets land | behavioural | ADR-M9 fail-closed-scrub | **RATIFIED** |
+| MEM-10 versioned & nothing dies | FR-8 | decoupled-after Kernel (A-16/17/18) | all memory versioned+travels; re-spawnable; 0 dies | behavioural | — | **RATIFIED** |
+| MEM-11 awareness derived rollup | FR-11 | on-diag (Index root-rollup seam #1) | every facet ⇒ node@sha (0 hand-written); absent ⇒ UN-SEEDED; ≤ ~400 | behavioural | ADR-M11 derived-rollup | **RATIFIED** |
+| MEM-12 memoized assembly | FR-11 | decoupled-after MEM-11 | unchanged rId‖rState ⇒ 0 re-rolls; Orientation folds only new events | behavioural | ADR-M12 facet-memoization | **RATIFIED** |
+| MEM-13 recall at re-spawn | FR-11 (+FR-8 re-spawn) | on-diag (feeds MEM-4 exception) | re-spawn ⇒ own fold pushed at spawn, 0 manual recall | behavioural | ADR-M13 push-at-spawn | **RATIFIED** |
+
+**MEM: 13/13 RATIFIED** (the 11 formerly-unhomed rows re-homed after the D0 extension — MEM-1/3/4/5/6/8/11/12/13→FR-11, MEM-9→FR-12, MEM-10→FR-8; row cells updated).
+
+## Block PST — persist (15) · M-Kernel/Persistence (DP-7) · **FR-8** · consumes seams #2/#3; PERSIST-11 in formal `FSPEC-merge` core · standard
+
+anchor: `reference/atlas-persist.md#persist-N`.
+
+| INV | FR | independence | testable + number | flag | ADR | verdict |
+|---|---|---|---|---|---|---|
+| PERSIST-1 git-native source of truth | FR-8 | on-diag (fold seam #3) | clone reconstructs state; PR regenerable, 0 PR-only | behavioural | ADR-P1 | **RATIFIED** |
+| PERSIST-2 state is a fold | FR-8 | decoupled-after KERNEL-11 | replay ⇒ byte-identical, order-independent | behavioural | — | **RATIFIED** |
+| PERSIST-3 provenance in git | FR-8 | on-diag | WP/Model/Gates/Verdict/Transcript-SHA readable from trailer+notes | behavioural | — | **RATIFIED** |
+| PERSIST-4 index-as-attachment | FR-8 | decoupled-after KERNEL-1 (seam #2) | attachment = CAS pointers; 0 large bodies inlined | behavioural | ADR-P4 | **RATIFIED** |
+| PERSIST-5 archive, not delete | FR-8 | on-diag (consumes DP-9) | supersede/decay/close ⇒ archived+re-spawnable; 0 delete paths | behavioural | ADR-P5 | **RATIFIED** |
+| PERSIST-6 per-agent metering | FR-8 | on-diag | metering carries every field; 0 missing | behavioural | — | **RATIFIED** |
+| PERSIST-7 re-invokable anywhere | FR-8 | COUPLED-with PERSIST-10b | clean clone re-spawns idempotently; no non-git state | behavioural | via ADR-P10b | **RATIFIED** |
+| PERSIST-8 host adapter, forge-agnostic | FR-8 | on-diag (**host-adapter = S4-flagged axis**) | push carries notes; readPR reconstructs; bare clone 0 host data | behavioural | ADR-P8 | **RATIFIED** |
+| PERSIST-9 portable export | FR-8 | on-diag | export=import byte-identical (A-8) | behavioural | — | **RATIFIED** |
+| PERSIST-10 full transcript = CAS large object | FR-8 | on-diag (CAS large-obj seam) | full+lossless (0 truncation), fetch-on-demand; only SHA in git | behavioural | ADR-P10 CAS-large-object | **RATIFIED** |
+| PERSIST-10a cred defense-in-depth | **FR-12** (billy domain) | on-diag | secret never reaches object; ≥2-engine scan client+server | behavioural | ADR-P10a redact-at-source | **RATIFIED** |
+| PERSIST-10b re-invoke = redispatch+replay | FR-8 | COUPLED-with PERSIST-7 | idempotent redispatch + replay; 0 deterministic-resume claims | behavioural | ADR-P10b | **RATIFIED** |
+| PERSIST-11 branch-merge = event-set union | FR-8 | **COUPLED-with KERNEL-9/10/11** (formal core) | driver unions by content-hash+re-folds; 0 lost; self-installs; absent ⇒ union floor | behavioural | ADR-P11 self-install+safe-degrade | **RATIFIED** |
+| PERSIST-12 rebase/cherry-pick safe | FR-8 | decoupled-after KERNEL-9 | reorder ⇒ AtlasState byte-identical | behavioural | — | **RATIFIED** |
+| PERSIST-13 trailers canonical, notes overlay | FR-8 | on-diag (corrects P-1/8) | bare clone reads trailer; rebase orphans note, trailer survives | behavioural | ADR-P13 | **RATIFIED** |
+
+**PST: 15/15 RATIFIED** (PERSIST-10a re-homed to FR-12 safety after the D0 extension).
+
+## Block TLS — tools/delivery (16) · M-Tools (delivery; no DP → grounds via seams) · write-door = seam #4 · standard
+
+anchor: `reference/atlas-tools.md#tools-N`. *(pure-reach/robustness invariants ground to the D1 Usability risk — gate-1 allows FR **or need**.)*
+
+| INV | FR/need | independence | testable + number | flag | ADR | verdict |
+|---|---|---|---|---|---|---|
+| TOOLS-1 four tools, single write-door | FR-10 | COUPLED-with TOOLS-15 (seam #4) | exactly 4 gov tools; 0 fifth write; CLI=MCP | behavioural | ADR-T1 structural-door | **RATIFIED** |
+| TOOLS-2 pure + total | FR-13 | on-diag | malformed arg ⇒ 0 throws | behavioural | — | **RATIFIED** |
+| TOOLS-3 CLI+MCP parity | FR-13 | on-diag | one schema, 0 divergence | behavioural | ADR-T3 | **RATIFIED** |
+| TOOLS-4 guidance shipped | FR-13 | on-diag | 100% results carry next+invariant | behavioural | — | **RATIFIED** |
+| TOOLS-5 init auto-promotes nothing | FR-9 | on-diag (projects DP-8/11) | init ⇒ 0 invariants, all T2; T0-keyword ⇒ candidate not promote | behavioural | — | **RATIFIED** |
+| TOOLS-6 query bounded pack | FR-3 | decoupled-after M-Retrieval | pack tier≥T1 ≤ ~2K; stale ⇒ re-ground | behavioural | — | **RATIFIED** |
+| TOOLS-7 emit fails closed | FR-5 | on-diag (seam #4; consumes GRD) | no citation ⇒ 0 persisted; changed ⇒ supersede 0 dup | behavioural | — | **RATIFIED** |
+| TOOLS-8 reconcile blocks SEMANTIC only | FR-6 | decoupled-after GRD (KNOW-5) | semantic ⇒ exit2, reauthor==|semantic|; mechanical ⇒ exit0 | behavioural | ADR-T8 | **RATIFIED** |
+| TOOLS-9 absorb-driven write | FR-9 | on-diag (seam #4) | seal w/o absorb+why-not ⇒ violation, 0 silent | behavioural | — | **RATIFIED** |
+| TOOLS-10 node tri-transport, one contract | FR-3 | on-diag (read-only projection) | node byte-identical over MCP/poke/CLI; 0 write path | behavioural | ADR-T10 | **RATIFIED** |
+| TOOLS-11 subagent reach ladder | FR-13 | decoupled-after TOOLS-10 | Read-only seat gets pack (push) + query; 0 forced-to-CLI | behavioural | ADR-T11 | **RATIFIED** |
+| TOOLS-11a native pull SDK-pinned, honest ladder | FR-13 | COUPLED-with TOOLS-11 | SDK resolves native; .claude/agents ⇒ unavailable, 0 silent fall-through | behavioural | ADR-T11a | **RATIFIED** |
+| TOOLS-12 doctor read-only advisory | FR-10 | decoupled-after TOOLS-1 | why-broken/hot-set/reground plan; persists 0; surface stays 4 | behavioural | via ADR-T1 | **RATIFIED** |
+| TOOLS-13 mechanical drift auto-re-grounds | FR-6 | COUPLED-with TOOLS-8 | --accept-reground ⇒ regroundedCount==|mechanical|, 0 human/block | behavioural | via ADR-T8 | **RATIFIED** |
+| TOOLS-14 pre-phase discovery hook | FR-4 | decoupled-after M-Retrieval | every phase boundary ⇒ fresh pack pushed, 0 seat-side pull | behavioural | via ADR-T11 | **RATIFIED** |
+| TOOLS-15 single-write-door structural | FR-10 | COUPLED-with TOOLS-1 (seam #4) | direct write ⇒ can't land or fails integrity; only emit'd rows resolve | behavioural | via ADR-T1 | **RATIFIED** |
+
+**TLS: 16/16 RATIFIED** (TOOLS-2/3/4/11/11a re-homed to FR-13 delivery-ergonomics after the D0 extension).
+
+## Block GEN — genesis (16) · M-Lifecycle (DP-8) · **FR-9 COUPLED-with FR-7** (11 FR-9, 5 FR-2) · standard
+
+anchor: `reference/atlas-genesis.md#gen-N`.
+
+| INV | FR | independence | testable + number | flag | ADR | verdict |
+|---|---|---|---|---|---|---|
+| GEN-1 deterministic skeleton | FR-9 | decoupled-after init | scan+mine twice ⇒ byte-identical; $0 LLM in S0/S1 | behavioural | — | **RATIFIED** |
+| GEN-2 rationed intelligence | FR-9 | on-diag (extract leg) | 1 call/site, budget min(frontier,200); halt trailing-20 admit <20% | behavioural | via ADR-G13 | **RATIFIED** |
+| GEN-3 cost tracks importance | FR-9 | on-diag | +10k un-churned lines ⇒ Δ=0 calls | behavioural | via ADR-G13 | **RATIFIED** |
+| GEN-4 grounded from birth | FR-9 | decoupled-after KNOW-2 | non-re-deriving seed ⇒ rejected; 0 ungrounded admitted | behavioural | — | **RATIFIED** |
+| GEN-5 propose; human ratifies | FR-9 | decoupled-after KNOW-7/8 (DP-11) | T0-site ⇒ candidate; interview cap 20 Q; never 1-by-1 | behavioural | — | **RATIFIED** |
+| GEN-6 history is seed not truth | FR-2 | on-diag (S1 mining) | high-churn no-invariant file ⇒ 0 facts | behavioural | — | **RATIFIED** |
+| GEN-7 one-time then hand off | FR-9 | decoupled-after KNOW-13/15 | re-run upserts (0 dup), re-indexes only changed | behavioural | — | **RATIFIED** |
+| GEN-8 total & resumable | FR-9 | on-diag | killed ⇒ resumes; malformed ⇒ partial+resumeToken, 0 throws | behavioural | — | **RATIFIED** |
+| GEN-9 seeds self-model | FR-9 | decoupled-after MEM-11 (→M-Memory) | brownfield ⇒ DEFINE stub; source-less facet ⇒ UN-SEEDED 0 fabricated | behavioural | — | **RATIFIED** |
+| GEN-10 explicit-structural only | FR-2 | on-diag (A-14) | 0 embedding/vector/ANN; tree-sitter/SCIP/PPR/CodeQL only | behavioural | ADR-G10 | **RATIFIED** |
+| GEN-11 reproducible ranking | FR-2 | on-diag | mine twice ⇒ byte-identical PPR across machines; 0 randomness | behavioural | — | **RATIFIED** |
+| GEN-12 proposer-in-harness | FR-9 | decoupled-after KNOW-16 | predicate admitted iff check compiles+HOLDS (K≤1) ∧ flips BROKEN on mutant | behavioural | ADR-G12 | **RATIFIED** |
+| GEN-13 cost discipline | FR-9 | on-diag | base = exactly 1 call/site; escalate only tier≥T1 | behavioural | ADR-G13 cheap-by-default | **RATIFIED** |
+| GEN-14 deepening loops governed | FR-9 | on-diag (depth dial) | loops off ⇒ Δ=0; each terminates at fixpoint/<ε | behavioural | via ADR-G13 | **RATIFIED** |
+| GEN-15 history-thin fallback | FR-2 | on-diag (type-surface) | squashed repo ⇒ rank by structural+type centrality, non-degenerate | behavioural | — | **RATIFIED** |
+| GEN-16 usefulness a-posteriori | FR-2 | decoupled-after KNOW-17 (DP-9) | unconsulted seed decays out; admission by observed hits | behavioural | via KNOW-17 | **RATIFIED** |
+
+**GEN: 16/16 RATIFIED.**
+
+---
+
+## Freeze summary — the S0 disposition
+
+**Tally (post-resolution): 132/132 RATIFIED** — owner chose to extend D0 with FR-11/12/13, so the 20 former
+`[NEEDS RECONCILIATION]` rows are now FR-homed and RATIFIED (re-homing map below). Every invariant is grounded,
+testable (a real number from its acceptance), independence-read from D2, tradeoff-resolved, `behavioural`.
+Remaining before the Register physically freezes: assign the 6 `owner: TBD` headers (registry A) + the
+consolidated cold-review. Method-overhead held (cheap-by-default; ADRs only on real design choices).
+
+### Re-homing map (owner decision B — extend D0, applied 2026-07-17)
+
+D0 gained **FR-11 (Memory / per-seat experience)**, **FR-12 (safety / no-secret-leak)**, **FR-13 (agent-
+ergonomics / delivery)**; D2 gained **DP-12/13/14** (on-diagonal) + the **DP-1→FR-9** governance edge. The 20
+rows re-home as:
+- **MEM-1/3/4/5/6/8/11/12/13 → FR-11** · **MEM-9 → FR-12** (secret-scrub) · **MEM-10 → FR-8** (versioned/re-spawn) — MEM now **13/13 RATIFIED**.
+- **PERSIST-10a → FR-12** (cred defense-in-depth) — PST now **15/15 RATIFIED**.
+- **TOOLS-2/3/4/11/11a → FR-13** (delivery ergonomics; the D1 Usability risk is now an FR) — TLS now **16/16 RATIFIED**.
+- **INDEX-14/15 → FR-9 via the new DP-1→FR-9 edge** (the index *generates* the territory overlay → less human maintenance); **INDEX-16 → FR-9 via DP-11** (it *enforces* the coverage gate = governance) — IDX now **16/16 RATIFIED**. Territory-ownership boundary resolved in D2 seam #5 (index generates default, steward overrides, tier human-ratified).
+
+### The reconciliation registry (grouped)
+
+**A. `owner: TBD` doc-metadata — ✅ DONE (7 blocks, owner scheme = by seat/kit).** All seven `owner: TBD`
+headers assigned (the freeze-review caught that it was **7, not 6** — atlas-tools was unlisted): KRN·GRD·RET·
+PST·IDX·TLS → **charlie (FORGE)** (backend subsystems); GEN → **jimmy (COMPASS)** (mining/genesis domain).
+(MEM=`orchestrator`, KNW=`reconcile/lead` were already assigned.) Cross-cutting: the FR-12 safety concern is
+**billy (FORTRESS)**'s domain; the KRN formal-merge core is architecture-reviewed by **bobby**; T0 ratification
+stays human (owner). Zero `owner: TBD` remain — the freeze predicate holds.
+
+**B. FR-scope gap — ✅ RESOLVED (owner chose to extend D0, 2026-07-17).** D0's original 10 FRs were
+Knowledge-centric; the owner added **FR-11 (Memory), FR-12 (safety), FR-13 (delivery)** so every invariant homes
+to an FR (complete FR-driven traceability, not ground-to-need). See the re-homing map above. The soft
+cost-discipline flag (4 GEN rows) stays under FR-9's $0-seed reading — confirmed acceptable, not re-homed.
+
+**C. D2 refinements the ratification surfaced — ✅ DONE (applied to `structure.md`).**
+- **INDEX-14/15/16 governance** — added the **DP-1→FR-9 edge** (index generates the territory overlay → reduces human maintenance); the three rows now RATIFIED under FR-9.
+- **Territory-ownership boundary** — resolved in D2 seam #5: **index generates the default owner, steward overrides, tier always human-ratified**.
+- **DP-10 grounding cite** — corrected to **MEM-2** (the no-conflation metric; MEM-1 is injection-scoping).
+
+**D. S2 carry-forwards (not freeze-blocking; noted for the decomposition).**
+- Pin the cap **measure** (cl100k_base tokenizer vs UTF-8 bytes) or the byte-identity gates (INDEX-8/RETR-1)
+  are unfalsifiable.
+- **KNOW-15 move-awareness** needs a GumTree/RefactoringMiner-grade **similarity matcher** (subtreeHash equality
+  catches move/rename, not move+edit) — a sub-spec before KNOW-15 counts as delivered.
+- KNOW-4/12 advisory git-only lineage under a **CAS-only-no-git export** (FR-8 boundary) — confirm.
+- MEM ref↔spec numbering drift (ref MEM-1..13 clean; spec tail scrambled) — reconcile numbering.
+
+### To freeze S0
+
+1. ✅ **B decided** — owner extended D0 with FR-11/12/13; all 132 rows re-homed + RATIFIED.
+2. ✅ **C done** — DP-1→FR-9 edge, territory boundary, DP-10→MEM-2 applied to D2.
+3. **A pending** — assign the 6 `owner: TBD` territory owners (KRN·GRD·RET·PST·IDX·GEN) — needs the owner's input.
+4. **Consolidated cold-review** (decorrelated + DAG) of the full 132-row Register + the D0/D2 ripple + the
+   freeze predicate — is every re-homing faithful (esp. MEM→FR-11, the FR-12 safety pair, TOOLS→FR-13,
+   INDEX→FR-9), the extended matrix still Theorem-1-clean, no new contradiction from the D0/D2 edits?
+5. Then the Register **freezes = S0**, and **S1 (requirements)** begins — pilot block KRN, per the surface-map order.
