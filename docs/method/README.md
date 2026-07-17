@@ -29,7 +29,7 @@ and care, **one at a time — never batched.**
 ## Applied to: the Decomposition method
 
 State machine (spec: [`../DECOMPOSITION-PROTOCOL.md`](../DECOMPOSITION-PROTOCOL.md)):
-`S0 → S1 → S2 → S3 → S4`, with a **two-half gate between each**: the **reconciler** (mechanical coverage —
+`S0 → S1 → S2 → S3 → C → S4` (then the per-WP execution machine BIND→SEAL), with a **two-half gate between each**: the **reconciler** (mechanical coverage —
 proves the artifact *well-formed*) and the **cold-review** (judgment — proves it *right*). Both halves are
 now specified: `reconciler` skill + `cold-review` skill (`prompts/review.md`, one dispatch, the producing
 state's contract loaded as the reference). Per state, three artifacts:
@@ -40,7 +40,8 @@ state's contract loaded as the reference). Per state, three artifacts:
 | **S1** Requirements | §S1 contract ✅ | `prompts/S1.md` ✅ | `ears` · `atom-gate` · `completeness` |
 | **S2** Formal Spec | §S2 contract ✅ | `prompts/S2.md` ✅ | `formal-decision` |
 | **S3** Goldens | §S3 contract ✅ | `prompts/S3.md` ✅ | `goldens` · `completeness` |
-| **S4** Work Packages | §S4 contract ✅ | `prompts/S4.md` ✅ | `techlead` · `reconciler` |
+| **C** Roadmap (warp: epics + campaigns) | §C contract ✅ | `prompts/C.md` ✅ | `completeness` · `reconciler` (story-map · impact-map · carpaccio · SPIDR/INVEST · Now/Next/Later) |
+| **S4** Work Packages (weft: module within epic) | §S4 contract ✅ | `prompts/S4.md` ✅ + `wp-template.md` | `techlead` · `reconciler` |
 
 ## Inventory — technique protocols → skills
 

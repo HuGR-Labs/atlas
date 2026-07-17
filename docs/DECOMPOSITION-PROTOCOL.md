@@ -1,6 +1,6 @@
 # The Decomposition Method — a governed state machine (frozen design → Work Packages)
 
-> **status:** v3 — full S0–S4 contracts authored + cold-reviewed (skeleton ratified) · **owner:** orchestrator ·
+> **status:** v4 — full S0→S3 + C + S4 contracts authored + cold-reviewed (skeleton ratified); portfolio layer (C) + WP-card template added · **owner:** orchestrator ·
 > **governs:** the path from the ratified Atlas design (132 invariants) to executable Work Packages.
 >
 > Contract, sibling of [`CONVENTIONS.md`](./CONVENTIONS.md) and [`method/README.md`](./method/README.md).
@@ -34,16 +34,21 @@ a **GATE** (mechanical) + a **COLD-REVIEW** (judgment). Passing it **freezes** s
 becomes an **axiom** of state N+1. The machine's execution is itself gated on **S0-green** (below).
 
 ```
-                guard          guard         guard         guard
-[S0] ─────────▶ [S1] ────────▶ [S2] ───────▶ [S3] ───────▶ [S4]
- Invariant       Requirements   Formal Spec   Goldens        Work Packages
- Register        (EARS lift)    (surgical)    (generated)    (module-slices)
-   ▲   ▲             │             │             │             │
-   └───┴─────────────┴─────────────┴─────────────┴─────────────┘
+            guard      guard      guard      guard      guard      guard
+[S0] ─────▶ [S1] ────▶ [S2] ────▶ [S3] ────▶ [C] ─────▶ [S4] ────▶ [EXECUTION]
+ Invariant   Reqs       Formal     Goldens    Roadmap    Work Pkgs   per-WP machine
+ Register    (EARS)     Spec       (gen)      (warp:     (weft:      (BIND→…→SEAL)
+                                              epics +    module      — a separate
+                                              campaigns) within epic) governed loop
+   ▲   ▲       │          │          │          │          │
+   └───┴───────┴──────────┴──────────┴──────────┴──────────┘
      [NEEDS RECONCILIATION] — ANY state that meets a design gap/contradiction raises a
      DESIGN DEFECT and routes it back to the ratification owner (the DEFINE seat, TEAM.md).
      Never invented, never asked of the end-user.
 ```
+The **spec** pipeline (S0→S3) runs once over the design; the **portfolio** pipeline (C→S4) cuts the roadmap +
+buildable leaves once; the **execution** machine (BIND→SEAL) runs once **per WP** (its own governed loop, spec'd
+separately). C (state "Roadmap") is the *warp* (capability, cross-module); S4 is the *weft* (module, within epic).
 
 | state | is | consumes | produces | key instrument |
 |---|---|---|---|---|
@@ -51,7 +56,8 @@ becomes an **axiom** of state N+1. The machine's execution is itself gated on **
 | **S1** Requirements | **lift-and-tag** (not fresh authoring) | S0 | one Singular `REQ` per behavioural *clause* | `ears`, `atom-gate` |
 | **S2** Formal Spec | surgical formalization | S1 | an `FSPEC` for the one cluster that earns it; a **method-tag** ∈ {formal, exhaustive, PBT, reference-model} for every **behavioural** INV (exempt → `n/a`) | the decision rule (below) |
 | **S3** Goldens | **lift-and-tag** + generate | S1,S2 | `SCN` per happy-path + per unwanted-behaviour guard, co-located with its REQ | generate-from-model · PBT · contract-as-test |
-| **S4** Work Packages | slicing | S1–S3 | `WP` = one module-slice + its cross-module seam-obligations + acceptance set | `techlead` (contract-freeze) |
+| **C** Roadmap | grouping + ordering (the *warp*) | S1,S3 + functional-surface | vertical `EPIC`s (right-sized) grouped into dependency-ordered `CAMPAIGN`s (Now/Next/Later) | story-map · impact-map · carpaccio · SPIDR/INVEST · Now/Next/Later |
+| **S4** Work Packages | slicing (the *weft*, within each epic) | C, S1–S3 | `WP` = one module-slice of one epic + its seam-obligations + acceptance; the driftless WP-card | `techlead` (contract-freeze) · `wp-template.md` |
 
 **S1 and S3 are lift-and-tag, not authoring.** The frozen design already carries, per invariant, a normative
 `MUST`/`SHALL` clause (⇒ the requirement) and an Acceptance section (⇒ the goldens; e.g. `spec/atlas.md` §8's
@@ -237,33 +243,67 @@ The machine cannot fire until S0 is frozen. S0 **is** the Phase-1 design freeze.
 - **DoD** — GATE green ∧ COLD-REVIEW APPROVE → freeze.
 - **template** — the co-located `### SCN-<MODULE>-<n>[c]-<k>` Given-When-Then block under its `REQ`.
 
-## S4 — Work Packages (worked; protocol: `techlead`)
+## C — Roadmap
 
-- **axioms** — S1/S2/S3 frozen: requirements + method-tags + goldens complete and consistent.
-- **rules** — apply the tech-lead slicing doctrine (encoded in these rules; origin = the global `techlead`
-  skill, not an Orchestra-local one): slice the **weft** by
-  **module** (the 9 ID families are disjoint); a `WP` owns one module + the cross-module **seam-obligations**
-  it carries, each closed by a **seam-freeze** — the slice owning the **upstream** contract (the producing
-  module, or the one that holds the `FSPEC`) freezes the seam, the other consumes it; ties broken by
-  lexicographic module id. The `WP` names the `REQ`s it closes; its **acceptance = those REQs' frozen
-  goldens**; no `WP` invents behaviour.
-- **invariants** (per-item) — every `WP` names ≥1 `REQ`; each `WP` is scoped to exactly one module; every seam it owns is a frozen contract.
+> The portfolio layer; the *warp* axis. After S3, one state, two passes over one artifact (`roadmap.md`): **cut** the frozen requirements+goldens into
+> **vertical epics** (capabilities across modules), **right-size** them, and group into **dependency-ordered
+> campaigns** (milestones). This is the **warp** (capability), orthogonal to S4's **weft** (module). Grounding:
+> Story Mapping (Patton — backbone × release-slice) · Impact Mapping (Adzic — Why→How→What goal-trace, Who elided
+> for an infra product) · vertical-slicing/carpaccio (Cockburn/Kniberg — the anti-slab predicate) · SPIDR (Cohn)
+> gated by INVEST (Wake) for right-sizing · Now/Next/Later (Bastow — horizon ordering, not dates). SAFe portfolio
+> ceremony deliberately cut. (C1-cut and C2-split were collapsed into this one state — anti-ceremony: they wrote
+> the same artifact; keep them split only if a freeze-point between cut and size is ever needed.)
+
+- **axioms** — S1/S2/S3 frozen; the functional-surface L1 backbone available as the epic candidates.
+- **rules** — derive **epics** as vertical capabilities on the backbone, each with a goal-trace, owning a disjoint
+  REQ+golden set; **right-size** any oversized epic by the smallest **SPIDR** pattern into the fewest INVEST-valid
+  still-vertical children (cite the pattern; `union(children).reqs == parent.reqs`; atomic epics untouched); group
+  epics into **campaigns** (release slices); order campaigns by **explicit dependency edges → a DAG → Now/Next/Later**.
+- **invariants** (per-item, mechanical / GATE-checkable) — every epic has the `goal-trace` field, touches **≥1
+  module** (a count), and every split **cites a SPIDR pattern** (a field).
+- **completeness criteria** (set-level) — the epic set **partitions** the frozen REQ set (total, disjoint: 0
+  orphan, 0 double); every split is **lossless** (union == parent); the campaign graph is a **DAG** (no cycles).
+- **quality standard** (judgment / cold-review) — every epic is genuinely **vertical** (a capability, not a
+  module-slab — carpaccio) and **INVEST**-right-sized; epics are outcome-driven; campaigns are demoable increments
+  ordered dependency-defensibly (a prerequisite never ships after its dependent).
+- **DoD** — reconciler partition + lossless-union + acyclicity check ∧ COLD-REVIEW APPROVE → the roadmap freezes.
+- **template** — `EPIC-<n>[-<k>] | goal-trace | vertical-path | reqs[] | campaign | split{SPIDR}?` ·
+  `CAMPAIGN-<m> | epics[] | prerequisites[] | horizon{Now|Next|Later}`.
+- **epic demoability** — an epic's vertical demo is **compositionally** gated: all its WPs' goldens green
+  (including the seam goldens the owning WP carries) ⇒ the epic behaviour holds. No separate epic-level golden.
+
+## S4 — Work Packages
+
+> The *weft* axis; within each epic; protocol: `techlead`.
+
+- **axioms** — S1/S2/S3 frozen **and** the roadmap (state C) frozen: each epic is a right-sized vertical capability.
+- **rules** — apply the tech-lead slicing doctrine (origin = the global `techlead` skill, not an Orchestra-local
+  one): **within each epic**, slice the **weft** by **module** (the 9 ID families are disjoint) — one `WP` per
+  (epic × module it touches). A `WP` owns one module's slice of one epic + the cross-module **seam-obligations**
+  it carries, each closed by a **seam-freeze** — the slice owning the **upstream** contract (the producing module,
+  or the one holding the `FSPEC`) freezes the seam, the other consumes it; ties broken by lexicographic module id.
+  The `WP` names the `REQ`s it closes; its **acceptance = those REQs' frozen goldens**; no `WP` invents behaviour.
+  Every `WP` conforms to the driftless **WP-card template** (`method/wp-template.md`).
+- **invariants** (per-item) — every `WP` names ≥1 `REQ`, is scoped to exactly one module **within one epic**, and
+  every seam it owns is a frozen contract; the card is driftless (pointer+digest, per the template).
 - **completeness criteria** (set-level) — every `REQ` is owned by **exactly one** `WP`; every cross-module
-  obligation has a seam-freeze (no smearing).
+  obligation has a seam-freeze (no smearing); every epic is fully covered by its WPs.
 - **quality standard** — each slice is independently buildable + testable; execution is transcription, not judgment.
-- **DoD** — GATE green ∧ COLD-REVIEW APPROVE → freeze.
-- **template** — the `WP` card: `WP-<n> | module | REQ-ids[] | seam-freezes[] | acceptance = goldens[]`.
+- **DoD** — GATE (reconciler) green ∧ COLD-REVIEW APPROVE → freeze.
+- **template** — the `WP` card (driftless), per `method/wp-template.md`. Id = `campaign.epic.wp` (hierarchical).
 
 ## ID scheme (pinned, consistent with the `ears` skill)
 
 `INV-<MODULE>-<n>` (MODULE ∈ full family token: KERNEL, GROUND, INDEX, KNOW, MEM, RETR, PERSIST, TOOLS, GEN)
 → `REQ-<MODULE>-<n>[-a/-b]` (shares module+number; suffix per clause) → `SCN-<MODULE>-<n>[c]-<k>` (keys off
 the REQ) → `FSPEC-<cluster>` (per cluster, keyed by cluster name e.g. `FSPEC-merge`, **not** by module — a
-cluster may span modules) → `WP-<n>`. The link tag is always `source:`.
+cluster may span modules). The portfolio axis: `CAMPAIGN-<m>` ⊃ `EPIC-<n>[-<k>]` ⊃ `WP`, where a WP's id is
+`<campaign>.<epic>.<module>` — the module token is the 3rd coordinate and (one WP per epic×module) uniquely names
+the WP (e.g. `1.3.KERNEL`). Every REQ traces `→ EPIC → WP`; the link tag is always `source:`.
 
 ## Not yet written
 
-All five state contracts (**S0–S4**) are specified above; the weft seam-freeze rule is settled in S4; and the
+All six state contracts (**S0 · S1 · S2 · S3 · C · S4**) are specified above; the warp/weft split is settled (C = capability, S4 = module); and the
 **per-state dispatch prompts** are authored at [`method/prompts/S0..S4.md`](./method/prompts/) to the
 [`dispatch-prompt`](.claude/skills/dispatch-prompt/SKILL.md) template. Remaining: the `reconciler`'s checks as
 **executable predicates** — specified by the [`reconciler`](.claude/skills/reconciler/SKILL.md) skill; the code
