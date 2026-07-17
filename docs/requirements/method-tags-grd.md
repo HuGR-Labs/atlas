@@ -1,0 +1,139 @@
+# Method-tags — Block GRD (grounding) · S2 formal-decision
+
+> **state:** S2 · **protocol:** [`formal-decision`](../../.claude/skills/formal-decision/SKILL.md) ·
+> **axiom:** S1 frozen (`req-grd.md`; every behavioural INV has ≥1 REQ, atom-gate passed) ·
+> **owner:** charlie (FORGE).
+>
+> One tag per **behavioural** INV by the 3-conjunct rule. **No `formal` tag lives here** — the one formal
+> cluster in the whole Atlas is `FSPEC-merge` (Block KRN); every GRD invariant fails conjunct #2 (no
+> combinatorial concurrency/crash state that human review + example tests cannot cover — grounding is a set of
+> **pure, total** functions: `ground / driftDetect / isGrounded / gateHolds / admit` are contract-bound to have
+> no clock, no IO, no global state, no throw). All 13 GRD invariants are `behavioural` (register), so none
+> carries `n/a`. The baseline is `reference-model`, with **two** `PBT` tags for the two genuine
+> property/ordering shapes (GROUND-4 truth-gate, GROUND-11 interface-fold).
+>
+> **Contingent-P decision (recorded): REFUSED.** GROUND-4's baseline is `PBT` with a *contingent* escalation to
+> the **P** language iff S2 proves the truth-gate genuinely async/interacting. It is **not**: `gateHolds` is
+> contract-bound pure + total (Surface/API: "no clock, no IO, no global state, no throw-for-logic"; it only ever
+> downgrades `HOLDS→NA`). No async, no interleaving ⇒ **no `FSPEC`, no P** — a reference automaton + PBT is the
+> right-sized tool. Recording the refusal is part of the method.
+
+---
+
+### INV-GROUND-1
+method-tag: reference-model
+fspec: —
+up-property: "structural-anchor oracle: a grounding entry's drift oracle is its `subtreeHash` alone; `displayLines` never participates in drift (a `displayLines`-only change ⇒ 0 drift); a line-range-only anchor is rejected as invalid"
+down-model: "the reference anchor resolver `resolveAnchor(entry)=entry.anchor.subtreeHash` ignores `displayLines`; a `StructRef` lacking a `subtreeHash` (line-range only) is rejected; the mock asserts drift keys off `subtreeHash` and is invariant to `displayLines` edits"
+anti-rot: `grounding/ref/anchor.ts` (the reference `StructRef`/`subtreeHash` resolver) is imported as the mock in the drift unit tests; any code path that reads `displayLines` or a line-range as the oracle diverges from it and breaks the build.
+
+### INV-GROUND-2
+method-tag: reference-model
+fspec: —
+up-property: "real-grounding predicate: `isGrounded(g)` is true iff `g` has ≥1 entry AND every entry carries a non-empty `subtreeHash`; an ungrounded grounding is never FRESH (0)"
+down-model: "`isGrounded(g)=g.entries.length≥1 && g.entries.every(e=>e.anchor.subtreeHash!=='')`; the reference `driftDetect` returns `DRIFTED` (never `FRESH`) whenever `isGrounded` is false; the mock asserts empty/partial groundings fail the predicate and never surface FRESH"
+anti-rot: `grounding/ref/ground.ts` (the reference `isGrounded`) is the mock; an emptiness-tolerant or FRESH-on-ungrounded code path fails the shared predicate test.
+
+### INV-GROUND-3
+method-tag: reference-model
+fspec: —
+up-property: "fail-closed resolution (robustness/totality): an unresolvable citation (unit gone, path absent) is dropped by `ground()` and treated as `DRIFTED` by `driftDetect()`, and resolution never throws (0 exceptions)"
+down-model: "the reference `ground` is total by construction — an unresolvable entry is filtered out (never throws), and `driftDetect` maps the resulting empty/partial set to `DRIFTED`; the golden generator is PBT-fuzz over arbitrary/absent citations asserting drop + DRIFTED + no-throw"
+anti-rot: `grounding/ref/ground.ts` (total, drop-on-unresolvable) is the mock; PBT fuzzes it and the code side-by-side so a throwing or FRESH-on-gone path fails the shared property. *(Tag stays `reference-model`: its generator is PBT-fuzz but the shape is robustness/totality — the total reference IS the oracle, not a standalone ordering law, so it does not earn a standalone `PBT` tag; the KERNEL-7 pattern.)*
+
+### INV-GROUND-4
+method-tag: PBT
+fspec: —
+up-property: "truth-gate monotone downgrade: `gateHolds` serves `HOLDS` iff (grounded ∧ FRESH), else `NA`; it passes every non-`HOLDS` verdict through unchanged and only ever downgrades `HOLDS→NA` (never upgrades), and is idempotent — re-gating a gated verdict is a no-op"
+down-model: "a reference gate automaton `gateHolds(status,grounding,src): Status` over (Status × grounded × Freshness); PBT the laws — (a) HOLDS-iff-grounded∧FRESH, (b) downgrade-only monotonicity `gateHolds ≤ input` on the HOLDS→NA order, (c) idempotence `gateHolds∘gateHolds ≡ gateHolds`, (d) non-HOLDS pass-through; escalate to **P only if genuinely async** — it is not (pure+total), so P is refused"
+anti-rot: `grounding/ref/gate.ts` (the reference gate automaton) is the mock reused in the admission unit tests; an upgrading, non-idempotent, or FRESH-blind gate path diverges from it under the PBT laws and breaks the build. *(NB: the `HOLDS→NA` **downgrade threshold when not grounded∧FRESH** is normative in spec A-1, flagged `[NEEDS RECONCILIATION]` in `req-grd.md`; the reference automaton already encodes the downgrade — the pending A-1 lift only adds its verifiable REQ, it does not change this tag.)*
+
+### INV-GROUND-5
+method-tag: reference-model
+fspec: —
+up-property: "semantic-drift-only classification: a semantically-irrelevant edit (reformat, import added above, unrelated rename) ⇒ still `FRESH` (0 false drift); a real change to the cited unit ⇒ `DRIFTED`"
+down-model: "the reference normalizer `normalize(subtree)` (whitespace / comments-if-configured / De-Bruijn / param-name / lifetime noise erased) drives `driftDetect` — FRESH iff `normalize` is byte-invariant across the edit; the golden generator is PBT-fuzz over an irrelevant-edit class (asserts FRESH) vs a real-change class (asserts DRIFTED) against the reference oracle"
+anti-rot: `grounding/ref/anchor.ts` (shares the K1 normalizer/oracle) is the mock; a normalization that leaks formatting/rename noise drifts a still-true fact and fails the invariance test. *(Tag stays `reference-model`: PBT-fuzz generator, but the shape is conformance-to-the-reference-drift-oracle (robustness of classification), not a standalone ordering law — the reference normalizer is the thing under test; KERNEL-7 pattern.)*
+
+### INV-GROUND-6
+method-tag: reference-model
+fspec: —
+up-property: "fail-closed write: an ungrounded fact does not enter at `emit` — nothing is persisted (spec A-2)"
+down-model: "the reference admission decision `admit(fact)=false` whenever `isGrounded(fact.grounding)` is false; the mock asserts an ungrounded node yields `emitted:false` and 0 bytes persisted"
+anti-rot: `grounding/ref/admit.ts` (the reference truth-door) is the mock; a code path that admits an ungrounded fact fails the shared test. *(Seam note: the actual persistence sink is `emit` in atlas-tools — **TOOLS-7** owns the write-side; GROUND-6 models only the fail-closed **decision**; the persistence-side enforcement is delegated to TOOLS-7 as an integration test, mirroring KERNEL-12→PERSIST-11.)*
+
+### INV-GROUND-7
+method-tag: reference-model
+fspec: —
+up-property: "two-door admission: `admit(fact)` is true iff it passes BOTH the truth door (grounding re-checks FRESH, GROUND-4) AND the usefulness door (actionable ∧ non-obvious); a true-but-obvious fact is rejected; failing either door blocks admission"
+down-model: "`admit(fact)=truthDoor(fact) && usefulDoor(fact)` where `truthDoor=gateHolds(...)===HOLDS`; the mock asserts the conjunction — ungrounded ⇒ blocked at the truth door, obvious ⇒ blocked at the usefulness door, both-pass ⇒ admitted"
+anti-rot: `grounding/ref/admit.ts` (the reference two-door) is the mock reused in the admission tests; an OR-gate or single-door code path diverges and breaks the build. *(Refusal note: the **non-obvious** predicate of the usefulness door has no finite/mechanical oracle — see Refuse-to-model; only the door **wiring** (conjunction) and the truth door are modeled, the non-obviousness verdict is refused, not tagged.)*
+
+### INV-GROUND-8
+method-tag: reference-model
+fspec: —
+up-property: "provenance filter: an `untrusted`-source claim is advisory and excluded from `gateHolds`'s inputs (spec A-9) — it can never contribute a `HOLDS`"
+down-model: "the reference gate filters `candidates.filter(c=>c.source!=='untrusted')` before gating; the mock asserts an untrusted-source claim is absent from the gate's input set and lands advisory"
+anti-rot: `grounding/ref/gate.ts` (shares the GROUND-4 gate) is the mock; a code path that lets an untrusted source reach `gateHolds` fails the exclusion test.
+
+### INV-GROUND-9
+method-tag: reference-model
+fspec: —
+up-property: "templated write (robustness): a fact missing a required template field, or over cap, is rejected at `emit`; no free-prose fact persists (0)"
+down-model: "the reference `validateTemplate(fact)` requires the fixed field set and enforces the cap — reject on missing/over-cap/free-prose; the golden generator is PBT-fuzz over malformed/oversized/free-prose facts asserting rejection + 0 persisted"
+anti-rot: `grounding/ref/admit.ts` (the reference template validator) is the mock; a free-prose-tolerant or cap-blind code path fails the shared reject test. *(Tag stays `reference-model`: PBT-fuzz generator, robustness/validation shape, not ordering. NB: the missing-field / over-cap **reject guard** is normative in spec A-13, flagged `[NEEDS RECONCILIATION]` in `req-grd.md`; the reference validator already encodes it — the A-13 lift adds the guard REQ, not a tag change.)*
+
+### INV-GROUND-10
+method-tag: reference-model
+fspec: —
+up-property: "hash via the seam: `subtreeHash` is computed through the `@orchestra/kernel` encoder seam (KERNEL-2), never a locally-inlined hash call — so the digest stays swappable (0 inlined hash calls)"
+down-model: "the reference anchor builder is parametrized by the kernel `Encoder` seam; a unit test swaps blake3↔a stub digest and asserts every `subtreeHash` follows the seam (no divergent value ⇒ some path inlined its own hash); supplemented by the static grep of Acceptance §8 (the only hash call routes through the seam)"
+anti-rot: `grounding/ref/anchor.ts` (seam-parametrized) is the mock; a locally-inlined `blake3(...)` call does not follow the swapped seam and breaks the substitution test. *(Shape note: this is the KERNEL-2 seam-substitution pattern (reference-model), plus a static-lint arm — see the shape-fit note in the report; it fits, it is not forced.)*
+
+### INV-GROUND-11
+method-tag: PBT
+fspec: —
+up-property: "interface-fold drift monotonicity: a fact's freshness folds BOTH (a) its own grounding-set `subtreeHash` AND (b) its forward-closure's **interface/signature-level `rState`** (INDEX-12), NOT the callee's full-body `subtreeHash`; a callee **signature/contract** change DRIFTS every caller, a pure-body refactor (signature unchanged) drifts none, an empty forward-closure is unaffected; the verdict never asserts the claim is true"
+down-model: "a reference closure-fold `freshness(fact)=FRESH iff ownSubtreeHash unchanged ∧ ∀ callee∈closure: interfaceRState(callee) unchanged`, consuming an interface-`rState` seam (INDEX-12 stub); PBT the laws — (a) determinism, (b) interface-change ⇒ DRIFTED (no false-negative), (c) body-only change ⇒ FRESH (no over-approximation), (d) empty-closure invariance, (e) freshness is a structural predicate, never a truth claim"
+anti-rot: `grounding/ref/drift.ts` (the reference interface-fold) is the mock reused in the freshness unit tests; a code fold that folds the callee's **full body** over-drifts on body-preserving edits (fails law (c)), and one that ignores the closure under-drifts on a signature change (fails law (b)) — either diverges and breaks the build.
+
+### INV-GROUND-12
+method-tag: reference-model
+fspec: —
+up-property: "repo-global block-anchor: a genuinely repo-wide rule is groundable to the `repo`/`project` level anchored to a **policy artifact's heading/section-block `subtreeHash`** (not the whole-file byte-hash for a parseable artifact); editing that section drifts it while an unrelated edit elsewhere in the file does NOT; a rule with no artifact anchor is rejected fail-closed (anchorless)"
+down-model: "the reference anchor resolver, given a parseable policy artifact, keys on the section-block `subtreeHash` (block-level CAS node), reserving the whole-file byte-hash for non-parseable files; the mock asserts (i) block-scoped drift (edit-section ⇒ DRIFTED, unrelated-edit ⇒ FRESH), (ii) `isGrounded==true` for the block anchor, (iii) an anchorless rule is rejected"
+anti-rot: `grounding/ref/anchor.ts` (block-vs-file granularity resolver) is the mock; a code path that anchors a parseable artifact on its file byte-hash re-imports byte-fragility (an unrelated edit drifts every rule) and fails the block-scope test.
+
+### INV-GROUND-13
+method-tag: reference-model
+fspec: —
+up-property: "advisory drift is non-blocking: an **advisory** fact (no `check`) whose grounding drifts resolves to `STALE` — served-with-flag, never silently re-grounded, never forced into either arm of the KNOW-5 split, and it never blocks a merge; a **predicate** fact's drift instead takes the KNOW-5 mechanical/semantic split"
+down-model: "the reference drift-router `route(fact)`: `fact.kind==='advisory' ⇒ STALE (non-blocking)`; `fact.kind==='predicate' ⇒ delegate(KNOW-5 split)`; the mock asserts an advisory drift ⇒ `STALE` (not `DRIFTED`), never re-grounded, `blocksMerge==false`, and is never routed into an arm"
+anti-rot: `grounding/ref/drift.ts` (the reference router) is the mock; a code path that re-grounds an advisory or blocks a merge on `STALE` diverges and breaks the build. *(Seam note: the **predicate** arm is owned by atlas-knowledge **KNOW-5** — GROUND-13 models only the advisory→`STALE` arm it owns; the predicate split is delegated to a KNOW-5 integration test, mirroring KERNEL-12→PERSIST-11.)*
+
+---
+
+## Refuse-to-model
+
+- **the truth of a claim**: grounding proves the cited unit's normalized structure is **unchanged** (FRESH), NOT that the claim is still true — `FRESH ≠ true`, `DRIFTED ≠ false` (module scope §"structure, not truth"). The false-alarm (behaviour-preserving refactor flips a still-true fact) and false-negative (callee body change leaves a caller-anchored fact FRESH) gaps are **bounded** (GROUND-11 closes the false-negative on the interface axis; KNOW-5 bounds the false-alarm), never **eliminated**. There is no truth oracle to model; the gate is modeled to *narrow* false HOLDs, not to certify truth.
+- **the usefulness / non-obvious door (GROUND-7)**: "actionable AND non-obvious" is a human/judgment predicate with no finite or mechanical oracle. Only the door **wiring** (the conjunction) and the **truth** door are modeled; the non-obviousness verdict is refused — no correctness oracle, covered by review, not a tag.
+- **the code itself**: conformance-tested (sampled) against the reference model — "success = we could not find a bug"; a verified design is not a verified impl. Confidence is bought with scale + coverage, not a proof claim.
+- **concurrent git-merge + crashing executions simultaneously**: merge concurrency and process-crash / durability are checked *separately*, never in one model (ShardStore rule).
+- **BLAKE3 / digest cryptographic collision-resistance**: the hash is a trusted primitive, assumed — not modeled. `subtreeHash` byte-agreement is a conformance corpus (shared with KERNEL-1/2), not a formal model.
+- **real-time / wall-clock**: no clock enters the gate by construction (Surface/API: all five functions pure + total, no clock) — nothing to model. This is precisely **why GROUND-4 stays `PBT` and P is refused**: no async, no interleaving.
+- **move-aware anchoring (KNOW-15)**: `subtreeHash` is a BLAKE3 **equality** oracle — it catches a pure move but NOT a rename co-occurring with a body edit. A GumTree/RefactoringMiner-grade similarity matcher is **not delivered** and is explicitly NOT modeled here (its own downstream sub-spec); grounding supplies only the equality primitive KNOW-15 must not overtrust.
+
+## FSPEC
+
+**None.** Block GRD owns no `FSPEC` — the only formal cluster in the Atlas is `FSPEC-merge` (Block KRN, KERNEL-9/10/11 + PERSIST-11). The GROUND-4 contingent-P escalation was evaluated and **refused** (the gate is not genuinely async — see the header). Every `reference-model`/`PBT` tag above names its build-language anti-rot mock under `grounding/ref/*.ts`, reused as the unit-test mock so the build breaks on spec drift.
+
+## Completion report
+
+- tagged-register: `docs/requirements/method-tags-grd.md`
+- tag histogram: **formal 0** · **exhaustive 0** · **PBT 2** (GROUND-4 truth-gate, GROUND-11 interface-fold) · **reference-model 11** (GROUND-1/2/3/5/6/7/8/9/10/12/13)
+- FSPEC-merge: n/a for GRD (no formal cluster here; the Atlas's one FSPEC lives in Block KRN)
+- refusal count: **7**
+- every GROUND-1..13 tagged: **yes** (13/13; all behavioural, 0 `n/a`)
+- contingent-P decision: **REFUSED** (gate is pure + total, not async) — recorded, no P/FSPEC
+- shape-no-fit flags: **none forced**; two partial-fit notes recorded — GROUND-7 (non-obvious usefulness door has no mechanical oracle → refused, not tagged) and GROUND-10 (KERNEL-2 seam-substitution reference-model + a static-lint arm) — both fit an existing row honestly.
+- → next_state **S3** (goldens).
