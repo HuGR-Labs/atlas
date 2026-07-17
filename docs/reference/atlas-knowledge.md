@@ -1,0 +1,230 @@
+# atlas-knowledge — Reference
+
+> owner: reconcile/lead (write = ratify) · propose = jimmy (explorer) · grounding: claims cite [spec/atlas.md](../spec/atlas.md) §§1–8; drift-checked in CI (rosie) · status: draft
+
+## Purpose
+
+The **Knowledge** kind of the Atlas: the shared, grounded, project-level truth about the codebase. One of
+the Atlas's two content kinds (the other is per-member [Memory](./atlas-memory.md)); both live in one
+substrate — same content-addressed hashed index, same grounding, same templated write, same export — and
+are never conflated. This reference specifies the Knowledge shapes, invariants, tool surface, and fences.
+The Memory kind is specified separately in [atlas-memory.md](./atlas-memory.md).
+
+## Data model
+
+Identity is **content-addressed** (a node id is the BLAKE3 hash of its canonical form; two independent
+encoders MUST agree byte-for-byte). Grounding and status are **out of identity** — recomputed side-indexes.
+
+```
+GroundedFact  = AdvisoryNode | PredicateNode
+
+AdvisoryNode  = { kind:'advisory',  id, tier, claimNorm, grounding, freshness,
+                  claims: ClaimEntry[], authoring:'ADVISORY'|'SUPERSEDED' }
+PredicateNode = { kind:'predicate', id, tier, check, grounding, status, freshness,
+                  claims: ClaimEntry[], authoring:'PREDICATED'|'SUPERSEDED' }
+
+ClaimEntry    = { claimNorm, claimText, provenance }
+Provenance    = { source, trusted: boolean, sha? }     // untrusted → advisory, excluded from the gate
+Status        = 'HOLDS' | 'BROKEN' | 'NA' | 'advisory' // recomputed side-index, never in identity
+Freshness     = 'FRESH' | 'DRIFTED'
+Tier          = 'T0' | 'T1' | 'T2'                     // must-be-right / load-bearing / default
+Candidate     = a proposed, un-ratified fact in staging (from the explorer)
+```
+
+**Node families (both ship day-one — owner decision).** `advisory` is the flat, honest default (a grounded
+claim, no verdict). `predicate` adds a checkable `check` + mechanical `HOLDS/BROKEN/NA`. Both are available
+from day-one; the store still operates on advisory alone when no evaluator is wired (KNOW-9).
+
+**Grounding** anchors a fact to a structural unit by the BLAKE3 hash of its normalized subtree — never to
+line numbers. Full shape and the drift-oracle rules are in [spec §3.1](../spec/atlas.md) (the grounding
+reference). A `Grounding` is real iff it has ≥1 entry, each with a non-empty `subtreeHash`.
+
+**Structure.** `Territory = { path, owner, tier, files[], regions?, blastRadius }`; `Pack` is a territory's
+`≤~2K`-token retrieval unit of its `tier≥T1` invariants (see [spec §3.3–3.4](../spec/atlas.md)).
+
+## Invariants
+
+Each is falsifiable and maps to a spec axiom. `MUST` / `MUST NOT` are normative.
+
+| # | Invariant | Rule | Spec |
+|---|---|---|---|
+| **KNOW-1** Truth-gate | A fact never self-declares true. | → see spec **A-1**; enforced in atlas-knowledge (the served-`HOLDS` gate; the structural mechanism is KNOW-3). | A-1 |
+| **KNOW-2** Fail-closed write | Ungrounded facts don't enter. | → see spec **A-2**; enforced by `atlas-emit` (atlas-tools TOOLS-7). | A-2 |
+| **KNOW-3** Structural anchor | Grounding is a hash, not a line-range. | The drift oracle MUST be the BLAKE3 `subtreeHash`; a reformat/rename/import-above MUST stay `FRESH`; a real change to the cited unit MUST `DRIFT`. | A-1, §3.1 |
+| **KNOW-4** Upsert; git is the history | Current, not a landfill — no redundant in-store copy. | A write MUST be an upsert: identical fact idempotent; an advisory subject's claims **set-union**. A *changed* **advisory** fact is **edited in place** — the Atlas is git-native, so its prior version is preserved by the repo's own history (rewind a PR ⇒ the Atlas rewinds). A *changed* **predicate** (same `check`, new evidence) **supersedes**; a *different* `check` is a new node (identity includes its `check` — KNOW-15). A territory query MUST return one current node per `(anchor, slot[, check])`. | A-12 |
+| **KNOW-5** Drift splits mechanical vs semantic | Only *semantic* rot blocks; a moved anchor doesn't. | At reconcile the `DRIFTED` subset MUST be split: **mechanical** (the anchor moved but the claim still re-derives at the new `@sha`) is **auto-re-grounded, no human, no block**; **semantic** (the claim no longer re-derives) flips `BROKEN` and blocks (exit 2). Human re-author count MUST equal `|semantic|`, never `|DRIFTED|`, never `N`. (Tool surface: `atlas-reconcile` TOOLS-8/13.) | A-3, A-4 |
+| **KNOW-6** Empty & honest | Knowledge starts un-authored. | `atlas-init` output MUST carry zero invariants; every territory ships the `T2/advisory` default by construction. | A-5 |
+| **KNOW-7** T0 human-only | Criticality isn't auto-assigned. | A `T0` tier MUST NOT be auto-promoted; heuristics MAY only *flag* a candidate for human ratification. | A-6 |
+| **KNOW-8** Propose ≠ ratify | Miner ≠ acceptor. | The explorer MAY write only **candidates** (staging); ratification is the reconcile/lead's, with reviewer veto and billy required for `T0`. A **grounded, low-risk, `T2` advisory** candidate MAY be ratified by the deterministic **fast-path** (KNOW-18) with no human; `T0` / contested / **all predicate** candidates MUST get full human ratification. | A-7 |
+| **KNOW-9** Both families day-one | Advisory + predicate from the start. | Both node families MUST be available day-one (owner decision); the store MUST still operate on advisory alone when no evaluator is wired — but the predicate family is **not** deferred. | §3.2 |
+| **KNOW-10** Templated write | No free prose, ever. | → see spec **A-13**; enforced in atlas-knowledge (per-kind template + the closed `predicateSlot` vocabulary below; KNOW-15). | A-13 |
+| **KNOW-11** Owner + scope | Read universal, write owned. | Every fact MUST carry an `owner` + `scope`; read is universal (any agent/human), write is the owner's (the class member for that territory). | §ownership |
+| **KNOW-12** Nothing dies — git + CAS, no redundant copy | History is git-provided and CAS-retained, never a duplicated archive. | No fact-history is lost. Prior versions persist as their own **content-addressed CAS objects** (deduped, never byte-copied) plus the repo's git history (rewind a commit/PR ⇒ the Atlas rewinds). **Advisory** edit-in-place keeps **no** lineage pointer — git is the archive; a **predicate** SUPERSEDE adds only a `supersededBy` **pointer** into CAS — a link, not a redundant copy. The working store stays lean (edit-in-place / decay drops from the hot set). | A-16 |
+| **KNOW-13** Born from work | Coverage tracks the work. | Facts MUST be produced only at the three moments (init skeleton → enrich-by-blast-radius → wave-close write), never a repo-wide sweep. A sealing wave MUST have fed the Atlas or emitted a grounded why-not. | A-10, §8 |
+| **KNOW-14** Provenance | Every claim has a receipt. | → see spec **A-9**; enforced in atlas-knowledge (untrusted source ⇒ advisory, excluded from the gate). | A-9 |
+| **KNOW-15** Deterministic write-decision | Create-vs-update is computed, never judged. | Whether a candidate **DEDUPs / UPDATEs / CREATEs / SUPERSEDEs** MUST be a pure function of three hashes (see *The write decision*): the candidate's **content hash**; the **`nodeKey`** — `hash(primaryAnchorId ‖ predicateSlot)` for advisory, `hash(primaryAnchorId ‖ predicateSlot ‖ normalize(check))` for predicate (so a distinct `check` is a distinct node, never a sibling-supersede); and the anchor's **`subtreeHash`**. `primaryAnchorId` MUST be **computed mechanically** as the tightest structural unit containing every symbol the claim references — **never an LLM-chosen anchor** (an LLM-picked anchor is the one landfill leak: anchor-granularity drift + slot-overlap fork `nodeKey` across runs for the same real fact). It is move-aware (rename/move never orphans into a spurious CREATE); secondary citations feed drift only, never identity. Before any CREATE, `atlas-emit` MUST run a deterministic **near-duplicate probe** (see *The write decision*) that forces MERGE on a `claimNorm` collision. `predicateSlot` MUST come from the closed vocabulary. No step may consult an LLM. | A-12 |
+| **KNOW-16** Predicate check = deterministic index-query | "HOLDS/BROKEN" needs a real, pure machine — not code. | A `PredicateNode.check` MUST be a **deterministic query over the Atlas index** (structural / dependency axes) or a pinned declarative assertion, evaluated mechanically to `HOLDS/BROKEN/NA` — **no arbitrary code execution, no sandbox**. A check needing runtime/behavioral execution is **out of scope for v0** and MUST stay `advisory`. The evaluator MUST be pure (same index state ⇒ same verdict, no clock/IO) and its verdict feeds `atlas-reconcile`. | §3.2 |
+| **KNOW-17** Usefulness is a-posteriori | Kept because *consumed*, not because *proposed*. | A served fact MUST accrue **`hits`** — a logged event each time it governs a decision (a seat or cold-reviewer cites its node-id as "fact applied" in the event log). Door-2 (non-obvious ∧ actionable) MUST calibrate its admission threshold against **observed downstream hits**, never the proposer's self-assessment. A served fact that **no wave ever consults** MUST **decay** out of the served/pack set (archived to CAS, never deleted — KNOW-12) and MAY re-enter on a later hit. Genesis starts loose-but-thin; born-from-work (KNOW-13) prunes by real usage. | A-10, A-16 |
+| **KNOW-18** Confidence fast-path | Human review is spent on risk, not rubber-stamp. | A candidate that is **grounded ∧ low-risk ∧ `T2` advisory** MAY **auto-accept** (fast-path, no human), backstopped by the KNOW-17 hits-decay — anything the fast-path over-admits decays out. `T0`, **contested** (reviewer veto / conflicting node), and **all predicate** candidates MUST route to full human ratification (KNOW-8; billy for `T0`). | A-6, A-7 |
+
+## Surface / API
+
+The four Knowledge tools — each **pure + total** (malformed input fails closed to an honest empty verdict),
+CLI + MCP parity, published input schema.
+
+| Tool | Does | Contract |
+|---|---|---|
+| `atlas-init <tree>` | `$0`-LLM structural move-in | returns the territory skeleton + blast radius + `T0`-candidate flags; auto-promotes nothing (KNOW-6, KNOW-7). |
+| `atlas-query <path>` | a territory's pack | resolves any scope (file/folder/module/crate) to the covering territory/-ies; returns a `≤~2K` pack of `tier≥T1` invariants; `stale:true` ⇒ re-ground before trusting. |
+| `atlas-emit <node>` | fail-closed grounded write | re-derives the citation `@sha`; ungrounded ⇒ rejected, not persisted (KNOW-2); a changed fact supersedes (KNOW-4). |
+| `atlas-reconcile` | merge-time drift → BROKEN | flips the `DRIFTED` subset `BROKEN`; exits 2 to block the merge on any flip (KNOW-5). |
+
+At wave-close the write path is driven by `ResultCard.absorb` (the explorer proposes candidates; reconcile
+ratifies — grounded low-risk `T2` advisory via the KNOW-18 fast-path, everything risky by human), not a
+separate authoring ritual (KNOW-8, KNOW-13).
+
+## Lifecycle
+
+A node moves through deterministic transitions; every invalid `(event, state)` pair MUST return a
+structured rejection, never throw.
+
+```
+author → drift_detect → reconcile ( unchanged | changed→BROKEN | advisory ) → supersede | trivial_reject
+```
+
+- **drift_detect** / the merge re-check MUST be deterministic — a pure re-hash at the grounding
+  `subtreeHash` ([atlas-grounding](./atlas-grounding.md)); no clock, no IO.
+- **supersede** (predicate only) MUST keep the old node addressable via a `supersededBy` **pointer** — the
+  old bytes already persist as a CAS object, so the pointer is a link, not a copy. Advisory changes edit in
+  place and rely on git for prior versions. History is never destroyed (KNOW-12).
+- **trivial_reject** drops a non-substantive change without minting a node.
+- Both node families are available day-one (KNOW-9): an **advisory** node (edited in place, claims union) or
+  a checkable **`predicate`** node (a changed `check` is a new node; the *same* check re-evidenced supersedes).
+
+## The write decision (create vs update) — infallible by construction
+
+The decision "new node or update an existing one?" MUST be **computed, never judged** (KNOW-15). It rests
+on **three orthogonal hashes** — conflating them is the classic way an Atlas rots into a landfill:
+
+```
+1. contentHash  = Encoder.hash(canonical(candidate))                 // WHAT it says   — dedup leg
+2. nodeKey      = identity of the (anchor, slot[, check]) — see below // WHICH node     — create/update leg
+3. subtreeHash  = hash of the anchored AST subtree                   // WHERE, current — drift leg (orthogonal)
+
+primaryAnchor  = COMPUTED (not proposed) from the symbols the claim references: the smallest AST subtree
+                 that contains every referenced symbol. NOT an LLM-chosen anchor. ONLY the primaryAnchor enters
+                 identity — secondary citations live in `grounding.entries` and feed DRIFT only, never the
+                 nodeKey (so citing {A,B} vs {A,C} does not fork identity, and moving a secondary anchor
+                 never re-mints). It is the index's MOVE-AWARE id (name-stripped subtree match ⇒ a rename
+                 is a MOVE, not delete+create).
+predicateSlot  = the fact's typed topic, from the CLOSED slot vocabulary (table below) — enumerable, so
+                 "same topic" is decidable.
+
+nodeKey(advisory)  = hash(primaryAnchorId ‖ predicateSlot)                    // one node per (anchor, slot); claims set-union
+nodeKey(predicate) = hash(primaryAnchorId ‖ predicateSlot ‖ normalize(check)) // the CHECK is part of identity (reconciles KNOW-4)
+```
+
+The LLM proposes only the **claim body** (+ `slot`, + `check?`); the **anchor is computed** from the
+symbols the claim references, not proposed (KNOW-15). Before a CREATE, a deterministic **near-duplicate
+probe** runs: the candidate's anchor subtree is matched at **adjacent granularity** (parent/child unit) and
+its `claimNorm` compared against every existing `(primaryAnchor, *)` node across **sibling slots**; a
+similarity hit forces the router to **MERGE/UPDATE**, or the proposer must justify the CREATE — a claim that
+collides with an existing `claimNorm` is, by construction, **not novel** (door-2). The routing is then a
+pure lookup:
+
+| Look up | Result | Decision |
+|---|---|---|
+| `contentHash` already in CAS | identical bytes | **DEDUP** — no-op (bump `hits`/freshness only) |
+| `nodeKey` **miss** | no node at this `(anchor, slot[, check])` | **CREATE** |
+| `nodeKey` **hit**, family = `advisory`, new claim | same `(anchor, slot)` | **UPDATE** — claim **set-union** in place (git keeps prior — KNOW-4/12) |
+| `nodeKey` **hit**, family = `predicate`, same `check`, grounding/claim moved | the *same* check, re-evidenced | **SUPERSEDE** — mint new, `supersededBy` pointer, old kept in CAS |
+| a **different** predicate `check` on the same `(anchor, slot)` | different `nodeKey` ⇒ **miss** | **CREATE** — coexists; a sibling check is **never** retired |
+| any of the above, but fails the 2-door bar | ungrounded **or** obvious/useless | **REJECT** (KNOW-2) |
+
+- **The sibling-retire bug this fixes:** because `normalize(check)` is *in* the predicate key, two distinct
+  checks on one `(anchor, slot)` are two nodes (both CREATE) — a new check can no longer SUPERSEDE a
+  still-valid sibling. SUPERSEDE fires *only* for the same check re-evidenced.
+- **Why BLAKE3 is load-bearing here:** leg 1 (dedup) is content-addressing for free (KERNEL-1); leg 3's
+  `subtreeHash` is a BLAKE3 subtree root, and its **name-insensitive** form is what lets `primaryAnchorId`
+  survive a rename — an edit that only moves/renames the unit re-anchors the *same* node, never orphans it.
+- **Why the slot is a closed vocabulary:** `nodeKey` only collides — forcing UPDATE/union instead of a
+  parallel node — if "same topic" is *decidable*. A free-text slot never collides ⇒ the store proliferates.
+  The enumerated table (below) + the typed template (KNOW-10) make the slot decidable.
+- Legs are orthogonal: leg 3 (drift) decides `FRESH/DRIFTED`, **not** create/update — a drifted fact is
+  re-checked (KNOW-5), not re-created.
+- **The 2-door bar (now partly mechanical).** Door-1 = grounded (KNOW-2). Door-2 = non-obvious ∧
+  actionable, and the LLM no longer self-certifies it: **obviousness** is decided by the near-dup probe (a
+  `claimNorm` collision against an existing `(anchor,*)` node ⇒ MERGE, not a new node), and **usefulness is
+  judged a-posteriori by `hits`** (KNOW-17) — a served fact no wave consults decays out; the threshold
+  calibrates on observed hits, never the proposer's score.
+
+### The closed `predicateSlot` vocabulary (normative)
+
+A fact's slot MUST be exactly one of these; the list is **closed** — adding a slot is a spec revision that
+bumps the contract version `cv`. Each slot binds to exactly one write template (KNOW-10).
+
+| slot | the claim is about | example |
+|---|---|---|
+| `invariant` | a property that must always hold | "the queue head is never re-ordered" |
+| `contract` | the interface / signature agreement | "`put` returns the same `Hash` for equal bytes" |
+| `precondition` | what must hold on entry | "caller holds the write lock" |
+| `postcondition` | what is guaranteed on exit | "the log grew by exactly one event" |
+| `sideeffect` | observable effects (IO / mutation) | "writes `.atlas/log.jsonl`" |
+| `ownership` | owner / lifetime / concurrency ownership | "only `atlas-kernel` may mint a `Hash`" |
+| `perf-bound` | complexity / latency / allocation bound | "O(log n) rehash on edit" |
+| `security-property` | authz / crypto / taint property | "no untrusted claim reaches the gate" |
+| `gotcha` | a non-obvious pitfall / footgun | "`seq` is a hint, not identity" |
+| `rationale` | why it is built this way (the WHY) | "structural anchor because line-ranges are fragile" |
+| `dependency` | a required relationship / ordering | "grounding must resolve before reconcile" |
+| `definition` | a term / ontology definition (feeds Awareness `ontology`) | "a *territory* is owner + tier" |
+
+## Acceptance
+
+One falsifiable check per invariant; each MUST fail if its invariant is violated.
+
+1. **Structural drift, not line drift.** A change to the cited unit ⇒ `DRIFTED`; a reformat / import-above
+   / unrelated rename ⇒ still `FRESH`. *(KNOW-1, KNOW-3)*
+2. **Ungrounded reject.** `atlas-emit` of a node with no resolvable citation ⇒ `emitted:false`, nothing
+   persisted. *(KNOW-2)*
+3. **Edit-over-append.** Emitting a *changed* fact about a known subject ⇒ the old node is superseded (not
+   duplicated); a territory query returns one current node per subject, not a history dump. *(KNOW-4)*
+4. **Drift split: only semantic blocks.** A merge that drifts `k` facts, of which `s` no longer re-derive:
+   the `k-s` **mechanical** ones auto-re-ground (no human, exit 0 for that subset); the `s` **semantic** ones
+   flip `BROKEN`, exit 2, and human `reauthorCount == s` (never `k`, never `N`). *(KNOW-5)*
+5. **Empty move-in.** `atlas-init` on any tree ⇒ zero invariants; all territories `T2/advisory`. *(KNOW-6)*
+6. **No T0 auto-promote.** A territory matching a T0 keyword ⇒ `t0Candidate:true` **and** `tier=='T2'`.
+   *(KNOW-7)*
+7. **Propose ≠ ratify.** No explorer write reaches the committed store except through a reconcile-side
+   ratifier — human for `T0`/contested/predicate, the deterministic fast-path for grounded low-risk `T2`
+   advisory; the explorer never self-commits. *(KNOW-8, KNOW-18)*
+8. **Advisory standalone.** With no evaluator wired, the store is fully operable on advisory nodes alone;
+   the predicate family is present day-one but not required to emit/query/reconcile. *(KNOW-9)*
+9. **Templated write.** A fact missing a required template field, or over its cap, is rejected; no
+   free-prose fact is ever persisted. *(KNOW-10)*
+10. **Owner-scoped write.** A write outside the owner's scope is rejected; a read of any scope succeeds for
+    any caller. *(KNOW-11)*
+11. **Nothing deleted.** Supersede a fact ⇒ it is present in the archive and re-spawnable; no code path
+    deletes a Knowledge entry. *(KNOW-12)*
+12. **Fed-or-why-not.** A sealing wave with no `absorb` and no grounded why-not ⇒ the probe records a
+    violation; facts appear only for territories the work touched. *(KNOW-13)*
+13. **Provenance.** Every persisted claim carries a `Provenance`; an `untrusted`-sourced claim is advisory
+    and never counts toward the gate. *(KNOW-14)*
+14. **Write-decision is mechanical & move-safe.** The **anchor is computed from the referenced symbols**, not
+    LLM-chosen — the same real fact yields the same `nodeKey` across runs. Re-emitting a byte-identical fact
+    ⇒ DEDUP (no new node); a restated advisory claim in the same `(anchor, slot)` ⇒ UPDATE/union, never a
+    parallel node; a **near-synonymous** claim at adjacent granularity ⇒ the near-dup probe forces MERGE, not
+    a parallel node; **renaming/moving the anchored unit ⇒ the fact re-anchors to the same node** (no spurious
+    CREATE); citing a second anchor ⇒ same `nodeKey`; the whole routing runs with no LLM call. *(KNOW-15)*
+15. **No sibling-retire; slot is closed.** Two **distinct** predicate `check`s on the same `(anchor, slot)`
+    ⇒ two coexisting nodes (neither supersedes the other); the *same* check re-evidenced ⇒ SUPERSEDE. A fact
+    whose `slot` is outside the closed vocabulary is rejected. *(KNOW-15)*
+16. **Predicate check is a pure index-query.** A `check` evaluates to `HOLDS/BROKEN/NA` deterministically
+    from index state alone (no code exec, no clock/IO); a check needing runtime execution is refused and the
+    fact stays advisory. *(KNOW-16)*
+17. **Usefulness is measured, not asserted.** A served fact that governs a decision gets a logged `hit` citing
+    its node-id; a served fact with **zero hits across the decay window** ⇒ archived out of the served/pack
+    set (present in CAS, re-spawnable on a later hit); the door-2 threshold is a function of observed hits,
+    not the proposer's score. *(KNOW-17)*
+18. **Fast-path bounds human review.** A grounded low-risk `T2` advisory candidate ⇒ auto-accepted with no
+    human ratification; a `T0` / contested / predicate candidate ⇒ full ratification; anything the fast-path
+    over-admits later decays via zero hits (KNOW-17). *(KNOW-18)*
