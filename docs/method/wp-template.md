@@ -59,6 +59,57 @@ execution time (starts empty at S4-freeze).
 | `trace_ref` | pointer to the append-only typed **evidence graph** of the run | exec ptr | LA · HA |
 | `rationale` | the Explanation slot — *why* this WP/invariant exists (Diátaxis Explanation) | ptr → INV rationale | HA |
 
+## Canonical rendering (the one concrete syntax — no per-card dialect)
+
+The field-set above fixes *what* a card holds; this fixes *how* it is written, so every card parses under one
+grammar and every `source:` pointer resolves. A card that diverges in syntax is `STALE` by construction (the
+resolver keys on an exact pointer form). Rules:
+
+- **One field per line, at column 0**, in the field-set table order. No markdown-bullet (`- **field:**`) dialect.
+- **Pointer fields** (`source_reqs`, `interface_contract`, `inputs`, `acceptance`, `context_refs`, `rationale`)
+  render as a `field:` header line followed by one `  - source: <path>#<ANCHOR>` per referenced fact.
+- **Path root is repo-relative-from-the-card**: WP cards live in `docs/requirements/work-packages/`, so a REQ
+  is `../req-<mod>.md#REQ-<MODULE>-<n>` and a golden is `../goldens-<mod>.md#SCN-<MODULE>-<n>-<k>`.
+- **Anchors are byte-verbatim the upstream id** — UPPERCASE `REQ-`/`SCN-` exactly as the `### REQ-…` header
+  reads. Never lowercase, never drop a segment (`REQ-PERSIST-1-a`, not `req-persist-1a`).
+- **`# ptr+digest`** marks each pointer line (digest tooling-filled at freeze); `content_hash: <filled-at-freeze>`;
+  `exec` fields render `# exec — empty at S4-freeze`.
+
+```
+### WP-<campaign>.<epic>.<module> — <module> slice of EPIC-<n>
+epic: EPIC-<n>
+id: WP-<campaign>.<epic>.<module>
+content_hash: <filled-at-freeze>
+title: <one line>
+intent: >
+  <prose handle — non-authoritative, not reasoned against>
+source_reqs:                                        # ptr+digest
+  - source: ../req-<mod>.md#REQ-<MODULE>-<n>         # ptr+digest
+seam-freezes: [ "<seam> owned-by <MOD>, consumed-by <MOD>" ]   # or [ ] for a single-module epic
+anchor: <file path · exact target site>
+interface_contract:                                 # ptr+digest
+  - source: ../method-tags-<mod>.md#<TAG>           # ptr+digest   (or reference/atlas-<mod>.md#<sec>)
+exclusions: <out-of-scope boundary>
+inputs:                                             # ptr+digest
+  - source: <path>#<anchor>                         # ptr+digest
+action: <zero-decision recipe>
+action_surface: [ read(...), edit(<module>/**), run(test:<module>) ]
+guardrails: <path restriction · edit-lint · forbidden zones>
+repair_budget: N=3 · early-stop: { repeated-identical-failure, no-change-diff, semantic-dup-edit }
+acceptance:                                         # ptr+digest = frozen goldens
+  - source: ../goldens-<mod>.md#SCN-<MODULE>-<n>-<k>  # ptr+digest
+deps: [ <WP id | prereq> ]   parallel_group: [P]
+exit_predicate: all acceptance SCNs green ∧ module gates pass ∧ all pointer digests resolve (no STALE)
+context_refs:                                       # closed list
+  - source: ../req-<mod>.md
+owner: <territory> · builder_id: <dispatch>
+outputs:                                            # exec — empty at S4-freeze
+provenance:                                         # exec — empty at S4-freeze
+trace_ref:                                          # exec — empty at S4-freeze
+rationale:                                          # ptr
+  - source: ../invariant-register.md#INV-<MODULE>-<n>
+```
+
 ## Two renders, one object (Diátaxis: keep the modes distinct)
 
 - **Executor render (How-to + Reference only).** The executor sees `action` + the *resolved* pointers
@@ -80,6 +131,8 @@ execution time (starts empty at S4-freeze).
 
 ## Self-check (a WP card is well-formed iff)
 
+- [ ] rendered in the **canonical syntax** (column-0 fields, `- source: ../<file>#<UPPERCASE-ANCHOR>`), so
+      every pointer resolves and no per-card dialect drifts?
 - [ ] every substantive fact is a `ptr+digest`, not a prose copy (driftless law holds)?
 - [ ] `id` is `campaign.epic.wp` and unique; `content_hash` present?
 - [ ] `acceptance[]` = its `source_reqs`' frozen goldens (verbatim by reference), and `exit_predicate` is
