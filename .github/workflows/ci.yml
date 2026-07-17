@@ -9,5 +9,6 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
       - run: npm ci
+      - run: npm run godfile-guard  # ≤400-LOC ceiling per source file (no godfiles)
       - run: npm run typecheck   # tsc --strict, downward-only layers
       - run: npm test            # own-suite-green + totality fences + no-self-attest lints
