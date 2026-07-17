@@ -60,7 +60,7 @@ Then the head is H2 (the tip of the partial order)
 source: REQ-KERNEL-10b
 Given a nodeKey with two concurrent heads H1, H2 unordered by supersedes
 When the kernel merges them
-Then the head is the one with the lexicographically smaller contentHash
+Then the head is the one with the lexicographically larger contentHash (max = the pinned-canonical direction; FSPEC-merge §UP KERNEL-10)
 ```
 
 ## Coverage rule (what the set must contain)

@@ -79,6 +79,13 @@ events assert the *same* claim / re-run the *same* `check`, so freshness is iden
   Formally: `mergeNode(x,y)=mergeNode(y,x)` and `mergeNode` is grow-only (`x ⊑ mergeNode(x,y)`); `head(node)` =
   `max-by-contentHash` among the FRESH, non-superseded entries — `contentHash` is the **sole tie-break** (never
   `seq`/clock/LLM), so `head` is invariant under reseq/reclock.
+  **Direction is pinned-canonical (`max`).** The frozen KERNEL-10 clause fixes the tie-break to `contentHash`
+  *alone* but is silent on **min vs max**; the direction is immaterial to correctness (any fixed total order on
+  `contentHash` is a pure content function) — **but it MUST be pinned**, because KERNEL-11 requires a
+  byte-identical `AtlasState` across independent implementations, and a min-head impl would diverge from a
+  max-head impl on the surfaced head. This spec pins **`max`** as the canonical direction; every golden and
+  implementation follows it. *(Open reconciliation: the KERNEL-10 reference clause should absorb this
+  `max` direction so the choice is grounded upstream, not only in the FSPEC — routed to DEFINE.)*
 - **KERNEL-11 — convergent fold / strong eventual consistency (liveness→safety).** Two replicas whose
   delivered event-sets are equal have byte-identical `AtlasState`: any permutation, re-batching, or
   branch-union of the **same set** folds to a byte-identical `AtlasState` (0 order-dependence).
