@@ -22,12 +22,12 @@
 2. **False-green is the enemy, not red.** A WP that reports green is not trusted on that report (the failure
    the whole method exists to refuse — AP-5). GATE re-derives doneness with **diff-scoped mutation** (a
    surviving mutant on the changed lines = a test gap that lets a real bug through ⇒ reject) and the
-   **diff-scope hard-block** (no acceptance-artifact may be touched) and, since Wave P, the **frozen PBT
-   leg** (134 ∀-laws — the oracle-free check that disproves fixture-overfitting). Its two remaining richer
-   legs — held-out acceptance and differential-vs-oracle — stay **conditional**: differential is *subsumed*
-   by PBT (no executable reference exists, nor is one needed); held-out awaits ≥2 fixtures/REQ (Wave H). See
-   *Assurance levels* below; the method is **honest about which leg is load-bearing** and never runs an inert
-   leg as if it proved something — a WP is *verified against its frozen laws + witness, held-out-pending*.
+   **diff-scope hard-block** (no acceptance-artifact may be touched), the **frozen PBT leg** (Wave P — 134
+   ∀-laws, the oracle-free disproof of fixture-overfitting), and the **held-out leg** (Wave H — ~340
+   independent 2nd fixtures the builder never sees). Differential-vs-oracle is *subsumed* by PBT (no
+   executable reference exists, nor is one needed). See *Assurance levels* below; the method is **honest about
+   which leg is load-bearing** and never runs an inert leg as if it proved something — a WP now reaches
+   **FULL assurance** (∀-law + held-out + mutation), each leg's availability recorded in the seal.
 3. **The model proposes; the orchestrator disposes.** The builder emits ACI-form edits; a deterministic
    orchestrator applies the diff into an **ephemeral sandbox workspace** and runs the gates. The apply is
    gated, the model's write is not trusted directly. Governance value over the field's relaxed default (Q4).
@@ -99,21 +99,22 @@ exist** and stamps the WP's assurance **mode** into the seal provenance — the 
 | diff-scope hard-block + purity | the WP guardrails | **yes** — always |
 | **frozen PBT** | a runnable ∀-quantified `properties-*.md` artifact | **YES** (Wave P, commit `4612964`) — 134 `PROP-*` laws, one per behavioural INV, rendered from the frozen S2 method-tags; cold-reviewed faithful |
 | **differential-vs-oracle** | an **executable** reference (not a pure-type `ref/*.ts` interface) | **no, and not needed** — `ref/*.ts` are zero-runtime interfaces; **PBT subsumes it** (asserting the frozen law on the impl is the oracle-free equivalent) |
-| **held-out acceptance** | **≥2 independent fixtures per behavioural REQ** (so one can be held out and still test the *same* behaviour) | **no** — S3 froze **one witness per REQ**; the ~350 conformance second-fixtures are **Wave H** (a governed S3 goldens re-freeze, wave-plan R6) |
+| **held-out acceptance** | **≥2 independent fixtures per behavioural REQ** (so one can be held out and still test the *same* behaviour) | **YES** (Wave H, commit `fdf105c`) — ~340 independent held-out `-2` fixtures, one per behavioural conformance REQ; cold-reviewed genuinely independent (not clones). Exempt: PBT-subsumed · exhaustive-complete · residue/DEFINE-pending · billy/FR-12-delegated |
 
-- **PBT assurance (today, after Wave P):** mutation (diff-scoped) + **frozen PBT (134 ∀-laws)** + diff-scope
-  hard-block + purity + the single frozen witness per REQ. Honest claim: *the diff satisfies each behavioural
-  invariant's frozen ∀-law over generated inputs, mutation-checked on the changed lines* — this **does**
-  disprove the hard-coded-fixture overfit (a `if input==N1 return …` impl fails the ∀-law on the next
-  generated input), which the lone witness could not. Strong, but not yet the full held-out cross-check.
-- **FULL assurance (target):** the above **+ held-out acceptance**, once ≥2 independent fixtures per
-  behavioural REQ exist (**Wave H**). That is a governed S3 goldens re-freeze (wave-plan R6), not something
-  BIND/GREEN may invent.
+- **FULL assurance (today, after Waves P + H):** mutation (diff-scoped) + **frozen PBT (134 ∀-laws)** +
+  **held-out acceptance (~340 independent 2nd fixtures)** + diff-scope hard-block + purity + the visible
+  witness. Honest claim: *the diff satisfies each behavioural invariant's frozen ∀-law over generated inputs,
+  passes a held-out fixture it never saw, and survives diff-scoped mutation* — this disproves the
+  hard-coded-fixture overfit two independent ways (the ∀-law fails on the next generated input; the held-out
+  fixture fails on different data). This is the full false-green catch the method was designed for.
+- **FLOOR / PBT (historical tiers, still recorded per-WP):** a WP whose REQ is residue/DEFINE-pending or
+  delegated (billy/FR-12) has held-out UNAVAILABLE and seals at **PBT** (or FLOOR) — recorded honestly in the
+  provenance, never reported as FULL when a leg was absent.
 
-**Acceptance prerequisites (a fail-closed reconciliation, not a silent gap).** The PBT prerequisite is now
-met (Wave P: `properties-*.md`). The remaining FULL prerequisite is ≥2 independent fixtures per behavioural
-REQ (Wave H). Until Wave H lands, GATE records **held-out** as UNAVAILABLE with the reduction surfaced in the
-seal — it never reports an absent leg as passed, never weakens the gate, never fabricates a held-out split.
+**Acceptance prerequisites — both MET.** Wave P (`properties-*.md`, 134 ∀-laws) + Wave H (~340 held-out
+fixtures) close the FULL-assurance prerequisites. A leg still legitimately UNAVAILABLE for a given WP (an open
+θ/τ/κ/Θ threshold, a delegated scrub gate) is recorded UNAVAILABLE in that WP's seal — GATE never reports an
+absent leg as passed, never weakens the gate, never fabricates a fixture over an unbound symbol.
 
 ## Anti-spec-gaming doctrine (what holds regardless of assurance level — Q2)
 

@@ -15,8 +15,9 @@ optimized against the *visible* goldens; you disprove doneness with everything i
 each check **only at the WP's assurance mode** (never an inert leg as if it proved something): (1)
 **mutation scoped to the changed lines** — always; a surviving mutant is a test gap that lets a real bug
 through; (2) the frozen **PBT** ∀-properties (`properties-*.md`, available since Wave P) — the oracle-free
-disproof of fixture-overfitting; (3) **held-out** acceptance *if* BIND reserved a ≥2-fixture slice (else
-UNAVAILABLE — Wave H pending); (4) **differential**-vs-oracle is **subsumed by PBT** (the `ref/*.ts` are
+disproof of fixture-overfitting; (3) **held-out** acceptance (Wave H — the `-2` fixture BIND reserved, which
+the builder never saw; UNAVAILABLE only for a residue/DEFINE-pending or delegated REQ); (4)
+**differential**-vs-oracle is **subsumed by PBT** (the `ref/*.ts` are
 pure-type, so it stays UNAVAILABLE and unneeded). Then a **cold reviewer** (lucy) proves the diff satisfies
 the spec/invariants. Stakes: if you rubber-stamp, a plausible-but-wrong impl seals and rots the layer above it.
 
