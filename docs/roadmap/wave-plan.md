@@ -98,6 +98,26 @@ small "you-are-here + reachable map," never the facts themselves. **Execution no
 composer) gains an *availability-manifest* facet — pointers to reachable packs/memory/knowledge, ranked + capped,
 content-free — reshape the composer at BIND. Fits the Awareness lineage (lay-of-the-land) but scoped to the unit.
 
+### D2 — CLI-floor is UNIVERSAL across all three surfaces (OWNER DECISION 2026-07-18)
+
+Every callable — **knowledge**, **memory**, **and the governance/mcp tools** — MUST be reachable over the **CLI
+/ bash floor**, so a sub-agent or a model **with no MCP** (no tool grant, no in-process server) is never locked
+out. Reads (recall / query / node / diff / doctor) resolve over CLI directly; writes funnel through the single
+write-door (`atlas-emit`), which is itself a CLI tool (TOOLS-3) — so writes are CLI too, via the one door, never
+a second path.
+
+**Where it's already airtight:** knowledge nodes + the four governance tools — `TOOLS-3` (CLI≡MCP parity),
+`TOOLS-10` (one handler behind MCP / poke / CLI), `TOOLS-11` ("the CLI is the floor, not the fallback";
+a `Read`-only no-grant seat still reaches everything).
+
+**The gap to pin (owner's point):** the tri-transport / CLI-floor guarantee is pinned in the **TOOLS** module for
+knowledge nodes; the **memory** surface (`memory-recall`) describes the verb as *consultable* but does **not**
+restate the CLI-floor invariant on itself. Intent is "one handler, CLI floor for everything," but it is
+implied-not-pinned for memory. **Execution note:** WP-6.23.MEM (memory recall path) must hold `memory-recall`
+to the same `TOOLS-10/11` CLI-floor (one handler, byte-identical over MCP / poke / CLI, `Read`-only-seat
+reachable) — pin it explicitly at BIND, and thread the memory-recall handler through the tri-transport handler
+(WP-7.26-c) so there is genuinely **one** transport contract across knowledge ∧ memory ∧ tools, not two.
+
 ## Per-WP execution machine (deferred — Phase 3, off critical path)
 
 Each WP runs BIND→RED→GREEN→REFACTOR*→GATE→SEAL (RED = confirm the frozen golden fails, not author it;
