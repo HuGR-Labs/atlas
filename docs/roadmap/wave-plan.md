@@ -69,6 +69,19 @@ on the facet-narrative + single-package guardrail, to be made mechanical at dige
 
 R1+R2 are trivial text fixes (do before wave). R3 is designed-in (each is a 1-line ref FLAG the WP resolves against the reference). R4 is the digest-freeze deliverable.
 
+## Execution risk flags (design-judgment — NOT spec-conformance)
+
+These are risks the gates do **not** catch: the gates verify "we built what we specced," not "we specced the
+right thing." Flagged here so they get de-risked during execution, not discovered after.
+
+| # | flag | risk | mitigation at execution |
+|---|---|---|---|
+| **X1** | **Poke / dynamic node-tools** (WP-6.21.RETR, RETR-4/5; tri-transport WP-7.26-c) | The live, mid-turn "expose a scope's node-tools on entry, retract on leave" flavor leans on harness features many runtimes lack: **mid-turn scope-change detection** + **dynamic tool (de)registration** (most tool-calling APIs freeze the tool list per turn). The *idea* (Atlas proactively surfaces the right grounded knowledge as you navigate) is sound; only this *delivery mechanism* is at risk. | **Prove the mechanism on our real harness BEFORE relying on it.** Make the **push path the spine**: the same value is delivered by injecting the pack (as a file/message) at dispatch + phase transitions (`TOOLS-14`), which works everywhere. The spec already hedges ("native only on the SDK in-process path; unavailable elsewhere", TOOLS-11a) — honor that: dynamic node-tools = a progressive enhancement over the always-on push, never the only path. If it doesn't land clean, degrade to push with zero loss of essential function. |
+| **X2** | **Three-slab turn-header** (Awareness / Orientation / Rules — WP-6.22, 6.24-a/b, 6.25) | Possible over-factoring: three separate injected slabs earn their keep only if their **cadences genuinely differ** (Awareness memoized/near-static · Orientation folds per-milestone · Rules ranked by frecency). If in practice they move together, it's taxonomy-for-its-own-sake. | Watch during execution: if the three cadences don't diverge on real usage, collapse to one header slab. Not fatal either way — it's an internal composition, not a public contract. |
+| **X3** | **Memory value, not structure** (MEM distillation — WP-6.23/6.25; cross-ref the Maestro M1–M4 lesson) | The schema (task/pr = one `MemoryFact` shape, different scopes) is lean and fine. The hard part no spec can guarantee: **is the distilled craft-lesson worth injecting, or is it garbage?** A known-hard problem (already hit in Maestro: "extract a real craft-lesson, not a copy of the reflection"). | Judge memory quality by *observed cited-hit rate* (the ledger, `KNOW-17/RETR-8`), not by whether the write succeeded. A lesson nobody cites decays out by frecency — the design self-corrects, but only if we measure hits honestly. |
+
+**Standing directive for the execution waves:** treat `own_<unit>` **push-as-file as the always-works spine**; treat X1's dynamic node-tools as the luxury to validate-then-trust. None of X1–X3 blocks Wave A (kernel/persist/index) — they surface at Campaigns 6–7 (retrieval/memory/tools).
+
 ## Per-WP execution machine (deferred — Phase 3, off critical path)
 
 Each WP runs BIND→RED→GREEN→REFACTOR*→GATE→SEAL (RED = confirm the frozen golden fails, not author it;
