@@ -9,6 +9,7 @@
     { "path": "packages/knowledge" },
     { "path": "packages/retrieval" },
     { "path": "packages/memory" },
-    { "path": "packages/tools" }
+    { "path": "packages/tools" },
+    { "path": "packages/genesis" }
   ]
 }
