@@ -158,7 +158,7 @@ acceptance:                              # ptr+digest = frozen goldens
   - source: ../goldens-tls.md#SCN-TOOLS-12a-1  # ptr+digest
   - source: ../goldens-tls.md#SCN-TOOLS-12b-1  # ptr+digest
   - source: ../goldens-tls.md#SCN-TOOLS-12c-1  # ptr+digest
-deps: [ WP-7.26-a.TOOLS ]   parallel_group: [P] with WP-7.26-c.TOOLS
+deps: [ WP-7.26-a.TOOLS ]   parallel_group: — (SEQUENTIAL before WP-7.26-c.TOOLS: shared src/handler.ts per wave-plan §Conflict-map)
 exit_predicate: # value
   all 6 acceptance SCNs green ∧ PBT equivalence (cli≡mcp incl. malformed) holds ∧ emptyGuidance == 0 ∧
   directStoreMutations == 0 ∧ surface stays == 4
@@ -248,7 +248,7 @@ acceptance:                              # ptr+digest = frozen goldens
   - source: ../goldens-tls.md#SCN-TOOLS-11a-b-1  # ptr+digest
   - source: ../goldens-tls.md#SCN-TOOLS-11a-c-1  # ptr+digest
   - source: ../goldens-tls.md#SCN-TOOLS-11a-d-1  # ptr+digest
-deps: [ WP-7.26-a.TOOLS ]   parallel_group: [P] with WP-7.26-b.TOOLS
+deps: [ WP-7.26-a.TOOLS, WP-7.26-b.TOOLS ]   parallel_group: — (SEQUENTIAL after WP-7.26-b.TOOLS: shared src/handler.ts per wave-plan §Conflict-map)
 exit_predicate: # value
   all 12 acceptance SCNs green ∧ PBT tri-equivalence (mcp≡poke≡cli) holds ∧ no write path added on any
   transport ∧ ladder native-first order preserved ∧ startedTier reported honestly per harness

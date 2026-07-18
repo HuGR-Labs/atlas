@@ -47,8 +47,10 @@ becomes an **axiom** of state N+1. The machine's execution is itself gated on **
      Never invented, never asked of the end-user.
 ```
 The **spec** pipeline (S0→S3) runs once over the design; the **portfolio** pipeline (C→S4) cuts the roadmap +
-buildable leaves once; the **execution** machine (BIND→SEAL) runs once **per WP** (its own governed loop, spec'd
-separately). C (state "Roadmap") is the *warp* (capability, cross-module); S4 is the *weft* (module, within epic).
+buildable leaves once; the **execution** machine (BIND→SEAL) runs once **per WP** — its own governed loop,
+spec'd in the sibling [`EXECUTION-PROTOCOL.md`](./EXECUTION-PROTOCOL.md) (six states, SOTA-grounded, one
+prompt each under `method/prompts/exec/`). C (state "Roadmap") is the *warp* (capability, cross-module); S4 is
+the *weft* (module, within epic).
 
 | state | is | consumes | produces | key instrument |
 |---|---|---|---|---|

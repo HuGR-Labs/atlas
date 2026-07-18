@@ -42,6 +42,7 @@ state's contract loaded as the reference). Per state, three artifacts:
 | **S3** Goldens | §S3 contract ✅ | `prompts/S3.md` ✅ | `goldens` · `completeness` |
 | **C** Roadmap (warp: epics + campaigns) | §C contract ✅ | `prompts/C.md` ✅ | `completeness` · `reconciler` (story-map · impact-map · carpaccio · SPIDR/INVEST · Now/Next/Later) |
 | **S4** Work Packages (weft: module within epic) | §S4 contract ✅ | `prompts/S4.md` ✅ + `wp-template.md` | `techlead` · `reconciler` |
+| **EXECUTION** per-WP loop BIND→RED→GREEN→REFACTOR*→GATE→SEAL | [`EXECUTION-PROTOCOL.md`](../EXECUTION-PROTOCOL.md) ✅ (SOTA-grounded) | `prompts/exec/{BIND,RED,GREEN,REFACTOR,GATE,SEAL}.md` ✅ | `reconciler` · `cold-review` (lucy GATE · frankie wave-close) |
 
 ## Inventory — technique protocols → skills
 
