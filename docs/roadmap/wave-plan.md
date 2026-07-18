@@ -82,6 +82,22 @@ right thing." Flagged here so they get de-risked during execution, not discovere
 
 **Standing directive for the execution waves:** treat `own_<unit>` **push-as-file as the always-works spine**; treat X1's dynamic node-tools as the luxury to validate-then-trust. None of X1–X3 blocks Wave A (kernel/persist/index) — they surface at Campaigns 6–7 (retrieval/memory/tools).
 
+### D1 — the own-pack carries an availability manifest (OWNER DECISION 2026-07-18)
+
+`own_<unit>` injects not only the curated brief but the **cognizance of the on-demand surface** — a lightweight
+**availability manifest** so the agent's *pull* is informed, not blind (you can't pull what you don't know exists).
+The manifest lists, as **pointers + one-line labels + how-to-pull** (name/digest — **never the content**):
+- **adjacent packs** (`own_<neighbour>`, the governing territory's pack),
+- the **deeper drill-down** available here (finer / refresh / complement),
+- the relevant **memory scopes** (this seat's pr-memory, this territory's logbook),
+- **where the rich knowledge lives** (which territory is well-covered, which seat holds relevant experience).
+
+**Guardrail (or it becomes a second swarm):** the manifest is a **bounded index** — pointers only, capped, and
+relevance/frecency-ranked; it counts against the pack budget and drops by hit-rate like everything else. It is a
+small "you-are-here + reachable map," never the facts themselves. **Execution note:** WP-6.20.RETR (OwnPack
+composer) gains an *availability-manifest* facet — pointers to reachable packs/memory/knowledge, ranked + capped,
+content-free — reshape the composer at BIND. Fits the Awareness lineage (lay-of-the-land) but scoped to the unit.
+
 ## Per-WP execution machine (deferred — Phase 3, off critical path)
 
 Each WP runs BIND→RED→GREEN→REFACTOR*→GATE→SEAL (RED = confirm the frozen golden fails, not author it;
