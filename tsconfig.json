@@ -5,6 +5,7 @@
     { "path": "packages/kernel" },
     { "path": "packages/persist" },
     { "path": "packages/index" },
-    { "path": "packages/grounding" }
+    { "path": "packages/grounding" },
+    { "path": "packages/knowledge" }
   ]
 }
