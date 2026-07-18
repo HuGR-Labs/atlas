@@ -3,5 +3,17 @@
 // The implementation surface WPs fill in at execution. For the skeleton, the only runtime export is
 // the branded-value mint boundary (src/brand.ts) — the sanctioned cast sites for Hash/SubtreeHash/
 // NodeKey. Everything else lives frozen in ref/*.ts until a WP implements it.
+//
+// The barrel re-exports the package's FULL public type surface so consumers can import from the bare
+// package root (`import type { Event } from '@atlas/kernel'`). ref/*.ts is type-only, hence
+// `export type *`; the brand line below is the sole runtime (value) export.
+
+export type * from '../ref/types.js';
+export type * from '../ref/encoder.js';
+export type * from '../ref/canonical.js';
+export type * from '../ref/store.js';
+export type * from '../ref/log.js';
+export type * from '../ref/fold.js';
+export type * from '../ref/portable.js';
 
 export { asHash, asSubtreeHash, asNodeKey } from './brand.js';

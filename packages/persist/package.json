@@ -1,5 +1,5 @@
 {
-  "name": "@atlas/kernel",
+  "name": "@atlas/persist",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -12,7 +12,8 @@
     }
   },
   "dependencies": {
-    "@atlas/contracts": "*"
+    "@atlas/contracts": "*",
+    "@atlas/kernel": "*"
   },
   "scripts": {
     "build": "tsc -b",

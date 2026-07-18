@@ -1,0 +1,39 @@
+// @atlas/index — ref/depgraph.ts  (FROZEN INTERFACE — pure types, zero runtime logic)
+//
+// The `dependency` axis — blast radius, a DAG (INDEX-13). Honest under-approximation: every import/call
+// the SCIP indexer cannot statically resolve, AND every cross-language boundary (FFI, codegen, a TS
+// frontend calling a Rust binary), is recorded as an explicit `unresolved`/`dynamic` edge — never
+// silently omitted, never a fabricated target. A reverse closure over such a node is reportable
+// `under-approximate` and, when so flagged, UNIONS the node's `coChanged` git-history band, labeled
+// correlational — never a static edge. (atlas-index:103-125, 185-191; method-tags-idx:104-109)
+
+import type { Hash } from '@atlas/contracts';
+
+/** An edge's resolution class. `unresolved`/`dynamic` are declared, never guessed (INDEX-13).
+ *  (atlas-index:185-188; method-tags-idx:108) */
+export type EdgeKind = 'resolved' | 'unresolved' | 'dynamic';
+
+/**
+ * The result of a reverse (transpose) closure = blast radius. Transcribed from the reference model
+ * (method-tags-idx:108): `reverseClosure(node) = { closure, underApprox, coChanged }`.
+ *   - `closure`    — the reachable reverse-closure node set (referenced by hash).
+ *   - `underApprox` — `true` iff any `unresolved`/`dynamic` edge is in scope (honest incompleteness).
+ *   - `coChanged`  — the correlational `coChanged` git-history band, unioned in ONLY when `underApprox`
+ *     (labeled correlational, never a static edge). Empty otherwise.
+ */
+export interface ReverseClosure {
+  readonly closure: readonly Hash[];
+  readonly underApprox: boolean;
+  readonly coChanged: readonly Hash[];
+}
+
+export interface DepgraphApi {
+  /** Reverse / transpose closure (blast radius) over the `depends-on` DAG; reports `underApprox` and
+   *  unions the correlational `coChanged` band when an `unresolved` edge is in scope (INDEX-13).
+   *  (method-tags-idx:108)
+   *
+   *  [SIG-TBD — arg underspecified] The reference names `reverseClosure(node)` with no concrete type
+   *  for `node`. Transcribed as the node's CAS `Hash` (a structural unit keyed by hash, atlas-index:105)
+   *  rather than invented — flagged for the WP to confirm (`Hash` vs `IndexNode`). */
+  reverseClosure(node: Hash): ReverseClosure;
+}
