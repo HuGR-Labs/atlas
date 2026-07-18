@@ -6,6 +6,7 @@
     { "path": "packages/persist" },
     { "path": "packages/index" },
     { "path": "packages/grounding" },
-    { "path": "packages/knowledge" }
+    { "path": "packages/knowledge" },
+    { "path": "packages/retrieval" }
   ]
 }
