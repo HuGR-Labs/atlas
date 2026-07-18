@@ -5,8 +5,8 @@ version: 1.0.0
 protocol_ref: ../../../EXECUTION-PROTOCOL.md#the-states  # @sha pinned at method-freeze
 artifact_template: ../wp-template.md#exec  # the exec fields SEAL fills (outputs/provenance/trace_ref)
 skills: [reconciler]
-inputs: [gate_record, wp_card, baseline_sha]
-next_state: "merged (DAG order per roadmap/wave-plan.md) — then the next WP's BIND"
+inputs: [gate_record, bind_record, wp_card, baseline_sha]
+next_state: "merged (wave-plan order per roadmap/wave-plan.md) — then the next WP's BIND"
 ---
 
 ## Role & Placement
@@ -19,9 +19,10 @@ green through, and a seal that fabricates provenance breaks the audit chain fran
 
 ## Inputs
 <inputs>
-  gate_record:  {{GATE_RECORD}}    <!-- GATE verdict PASS (held-out + differential + PBT + 0-survivor + APPROVE) -->
+  gate_record:  {{GATE_RECORD}}    <!-- GATE verdict PASS: 0-survivor mutation + APPROVE + every AVAILABLE leg green (held-out/differential/PBT pass|UNAVAILABLE per assurance mode) -->
+  bind_record:  {{BIND_RECORD}}    <!-- threaded by the orchestrator context-store: carries assurance mode + the `merge_after` conflict-map constraint -->
   wp_card:      {{WP_CARD}}         <!-- the card whose exec fields you fill -->
-  baseline_sha: {{BASELINE_SHA}}    <!-- the parent the diff applies onto (DAG order) -->
+  baseline_sha: {{BASELINE_SHA}}    <!-- the parent the diff applies onto (wave-plan order) -->
 </inputs>
 
 ## Pre-conditions
