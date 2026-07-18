@@ -44,6 +44,25 @@
 Governance surface (TOOLS-1) = exactly `{atlas-init, atlas-query, atlas-emit, atlas-reconcile}`. Pull ladder
 (TOOLS-11) = `SDK-MCP → registered-MCP+grant → poke-as-file → relay → CLI`.
 
+### Held-out fixture universe (Wave H · `held_out: true` second leg — INDEPENDENT data, SAME behaviour)
+
+Each `gen: conformance` SCN carries a second, independent fixture the builder never sees; overfit ⇒ the held-out
+leg fails. These use **different concrete data hitting the same branch** — grounded siblings of the base universe,
+no new behaviour, TOOLS-1 preserved (no fifth governance/write tool in any fixture):
+
+| id | kind | concrete value |
+|---|---|---|
+| N3 | Knowledge node | nodeKey `claim:acme-ceo`, claim "ACME CEO = Jane Roe", grounded at `reference/people.md@f7e8d9` |
+| N3′ | ungrounded node | same nodeKey, claim "ACME CEO = John Doe" — **not** present at `reference/people.md@f7e8d9` |
+| dm₂ | **mechanical** DriftItem | anchor moved `reference/people.md#ceo` `@f7e8d9 → @g8h9i0`; still re-derives |
+| dm₃ | **mechanical** DriftItem | anchor moved `reference/kernel.md#inv` `@c1d2e3 → @f4g5h6`; still re-derives |
+| ds₂, ds₃ | **semantic** DriftItems | claim text changed; do **not** re-derive at source |
+| D₂ / D₂′ / D₃ | drift sets | `{dm₂,ds₂}` · `{dm₂,dm₃}` (`|semantic|=0`) · `{dm,ds,ds₃}` (`|semantic|=2`) |
+| T′ | move-in tree | territories `{docs/, infra/, api/}`; **no** T0 keyword (empty flags) |
+| S_ro2 | seat | grants `{Read, Grep}` — still **no** tool grant |
+| H_agents2 | harness | second `.claude/agents`-style harness, `canPropagateMcp:false` |
+| Δ₂ | PERSIST-14 delta | `diff(shaB,shaC) = { added:[acme-hq-2025], edited:[acme-ceo], superseded:[auth-mfa], decayed:[acme-office] }`, each with `prov` |
+
 ---
 
 ## REQ-TOOLS-1 — single write-door governance surface
@@ -58,6 +77,15 @@ Then it is exactly `{atlas-init, atlas-query, atlas-emit, atlas-reconcile}` — 
 teeth: breaks-on "a fifth governance tool `atlas-delete` is registered on the surface — surface count `== 5`"
 gen: conformance   # differential vs `tools/ref/store.ts` 4-tool surface
 
+### SCN-TOOLS-1a-2 — the surface still counts four with all read projections wired   (happy · held-out)
+source: REQ-TOOLS-1a
+held_out: true
+Given the tools layer wired against `tools/ref/store.ts` with the read projections (node-tools, `atlas doctor`, `atlas-diff`) ALSO present alongside the governance surface
+When the *governance* surface set is enumerated (read projections excluded by construction)
+Then it is still exactly `{atlas-init, atlas-query, atlas-emit, atlas-reconcile}` — surface count `== 4`; the co-present read projections do not swell the governance surface
+teeth: breaks-on "a fifth governance tool `atlas-purge` is registered on the surface — surface count `== 5`"
+gen: conformance   # held-out · different setup (read projections co-present), same 4-tool surface behaviour vs `tools/ref/store.ts`
+
 ### REQ-TOOLS-1b — atlas-emit is the only write path   (happy)
 
 ### SCN-TOOLS-1b-1 — exactly one write entry across the whole layer   (happy)
@@ -67,6 +95,15 @@ When every store-mutating entry point is enumerated
 Then exactly one exists and it is `atlas-emit` — `writePaths == 1`
 teeth: breaks-on "`atlas-reconcile` grows its own direct store-mutate call — `writePaths == 2`"
 gen: conformance   # `tools/ref/store.ts` asserts `writePaths==1`
+
+### SCN-TOOLS-1b-2 — still one write entry after wave-close and auto-re-ground are wired   (happy · held-out)
+source: REQ-TOOLS-1b
+held_out: true
+Given the tools layer with the wave-close absorb path (TOOLS-9) and `--accept-reground` (TOOLS-13) both wired — each routing its write through `atlas-emit`
+When every store-mutating entry point is enumerated across the fully-wired layer
+Then exactly one exists and it is `atlas-emit` — `writePaths == 1`; the absorb and re-ground paths reuse it, they do not add a second entry
+teeth: breaks-on "`atlas-init` grows its own direct store-mutate call to persist move-in — `writePaths == 2`"
+gen: conformance   # held-out · different consumers wired (TOOLS-9/13), same `writePaths==1` behaviour vs `tools/ref/store.ts`
 
 ### REQ-TOOLS-1c — reject back-channel writes   (guard)
 
@@ -78,6 +115,15 @@ Then it is refused — no row not produced by the `atlas-emit` grounded path ent
 teeth: breaks-on "the back-channel write lands — a row not produced by `atlas-emit` is persisted and served"
 gen: conformance   # functional refusal only; adversarial *exploitability* of this door = billy / FR-12, not authored here
 
+### SCN-TOOLS-1c-2 — a back-channel write of a different ungrounded row cannot land   (guard · held-out)
+source: REQ-TOOLS-1c
+held_out: true
+Given a distinct back-channel call `store.write(row_for_N1′)` (the ungrounded "$9.9M" row) that bypasses `atlas-emit`
+When the store processes it
+Then it is refused — no row not produced by the `atlas-emit` grounded path enters the store (`ungroundedRows == 0`)
+teeth: breaks-on "the back-channel `N1′` write lands — an ungrounded row is persisted and served without passing `atlas-emit`"
+gen: conformance   # held-out · different row (N1′) via the back-channel, same functional refusal; exploitability still billy / FR-12
+
 ### REQ-TOOLS-1d — read projections carry no write authority   (happy)
 
 ### SCN-TOOLS-1d-1 — a write via a read projection is refused   (happy)
@@ -87,6 +133,15 @@ When the projection handle is inspected and a write is attempted through it
 Then the handle exposes **no** store-mutating method and the write attempt is refused — the projection is not a fifth write path (positive property: a projection opens NO write door)
 teeth: breaks-on "the read-projection handle grows a `.write()`/`.set()` method — a write via the projection lands, opening a fifth write path"
 gen: conformance   # reference-model property of the read handle (no store-mutating method); NOT a formal model
+
+### SCN-TOOLS-1d-2 — a different node projection also exposes no write method   (happy · held-out)
+source: REQ-TOOLS-1d
+held_out: true
+Given the per-node read projection `own_auth` (a RETR-5 / TOOLS-10 node-tool) resolving a node in the `auth/` territory
+When the projection handle is inspected and a write is attempted through it
+Then the handle exposes **no** store-mutating method and the write attempt is refused — this projection, like `own_finance`, is not a fifth write path
+teeth: breaks-on "the `own_auth` read-projection handle grows a `.put()` method — a write via the projection lands, opening a fifth write path"
+gen: conformance   # held-out · different node projection (`own_auth`), same no-write-authority property of the read handle
 
 ---
 
@@ -102,6 +157,15 @@ Then both runs return the byte-identical `Verdict` and mutate nothing (store byt
 teeth: breaks-on "the tool reads wall-clock / a mutable cache and returns a different result on the second identical call (impure)"
 gen: conformance   # differential vs the total `tools/ref/tool.ts` wrapper
 
+### SCN-TOOLS-2a-2 — a second tool on different args is also pure and total   (happy · held-out)
+source: REQ-TOOLS-2a
+held_out: true
+Given `atlas-init(tree=T)` run twice on byte-identical args over the total reference wrapper `tools/ref/tool.ts`, side-by-side with the production tool
+When each invocation returns
+Then both runs return the byte-identical `InitOut` and mutate nothing (store byte-identical before/after) — pure ∧ total, and prod matches ref
+teeth: breaks-on "`atlas-init` reads a mutable move-in cache and returns a different skeleton on the second identical call (impure)"
+gen: conformance   # held-out · different tool + args (`atlas-init(T)`), same purity/totality behaviour vs `tools/ref/tool.ts`
+
 ### REQ-TOOLS-2b — malformed argument fails closed   (guard)
 
 ### SCN-TOOLS-2b-1 — a malformed arg yields a structured rejection, never a throw   (guard)
@@ -111,6 +175,15 @@ When the tool is invoked on it
 Then it returns a structured `Verdict{rejected:true, guidance}` — it does **not** throw (`exceptions == 0`)
 teeth: breaks-on "the malformed arg propagates an uncaught `TypeError` instead of a structured rejected verdict"
 gen: conformance   # PBT-fuzz differential vs `tools/ref/tool.ts` no-throw property (tag stays reference-model per §K7)
+
+### SCN-TOOLS-2b-2 — a differently-malformed arg on another tool also fails closed   (guard · held-out)
+source: REQ-TOOLS-2b
+held_out: true
+Given `atlas-emit` and a malformed argument (`node: "acme-arr"`, a bare string where a structured node object is required)
+When the tool is invoked on it
+Then it returns a structured `Verdict{rejected:true, guidance}` — it does **not** throw (`exceptions == 0`)
+teeth: breaks-on "the malformed string arg propagates an uncaught `TypeError` from a property access instead of a structured rejected verdict"
+gen: conformance   # held-out · different tool + malformed shape (string-for-object), same no-throw fail-closed property vs `tools/ref/tool.ts`
 
 ---
 
@@ -150,6 +223,15 @@ Then every result carries non-empty `Guidance{next, invariant}` — the ok path 
 teeth: breaks-on "the rejected path ships `guidance:{}` — a caller hitting the reject is left to guess the follow-up"
 gen: conformance   # the reference wrapper stamps guidance on every path; a code result with empty guidance diverges
 
+### SCN-TOOLS-4-2 — a different ok/reject pair also carries non-empty guidance   (happy · held-out)
+source: REQ-TOOLS-4
+held_out: true
+Given an `atlas-init(T)` that resolves (ok) and an `atlas-reconcile` over `D` that surfaces a semantic drift (the non-clean path), both via the reference Verdict constructor `tools/ref/tool.ts`
+When each result is inspected
+Then every result carries non-empty `Guidance{next, invariant}` — both the ok path and the drift-surfacing path name the follow-up and the governing invariant (`emptyGuidance == 0`)
+teeth: breaks-on "the drift-surfacing path ships `guidance:{}` — a caller told there is semantic drift is left to guess the follow-up"
+gen: conformance   # held-out · different ok/non-clean pair (init + reconcile), same guidance-totality property vs `tools/ref/tool.ts`
+
 ---
 
 ## REQ-TOOLS-5 — structural, no-promote move-in
@@ -164,6 +246,15 @@ Then it made `0` LLM calls and produced its output by structural walk alone — 
 teeth: breaks-on "`atlas-init` calls an LLM to classify a territory — move-in is no longer `$0`-LLM / structural"
 gen: conformance   # differential vs `tools/ref/init.ts` structural mover
 
+### SCN-TOOLS-5a-2 — atlas-init on a different tree also consults no LLM   (happy · held-out)
+source: REQ-TOOLS-5a
+held_out: true
+Given `atlas-init` run on a different tree `T′` (territories `{docs/, infra/, api/}`, no T0-keyword hit) over the reference `tools/ref/init.ts` (a pure structural walk)
+When move-in completes
+Then it made `0` LLM calls and produced its output by structural walk alone — `$0`-LLM
+teeth: breaks-on "`atlas-init` calls an LLM to summarise the `api/` territory — move-in is no longer `$0`-LLM / structural"
+gen: conformance   # held-out · different tree `T′`, same `$0`-LLM structural-walk behaviour vs `tools/ref/init.ts`
+
 ### REQ-TOOLS-5b — atlas-init returns skeleton, blast radius, flags   (happy)
 
 ### SCN-TOOLS-5b-1 — move-in returns all three fields   (happy)
@@ -173,6 +264,15 @@ When the `InitOut` is inspected
 Then it carries the territory skeleton `[finance/, auth/, kernel/]` **and** a blast radius **and** the T0-candidate flags `[auth/]` — all three present
 teeth: breaks-on "`InitOut` omits the `blastRadius` field — the caller cannot see move-in scope"
 gen: conformance
+
+### SCN-TOOLS-5b-2 — move-in on a T0-free tree still returns all three fields   (happy · held-out)
+source: REQ-TOOLS-5b
+held_out: true
+Given `atlas-init` run on tree `T′` (territories `{docs/, infra/, api/}`, no T0-keyword hit)
+When the `InitOut` is inspected
+Then it carries the territory skeleton `[docs/, infra/, api/]` **and** a blast radius **and** the T0-candidate flags `[]` (empty but present) — all three fields present
+teeth: breaks-on "`InitOut` omits the `skeleton` field when no T0 candidate is found — the caller cannot see the territory layout"
+gen: conformance   # held-out · different tree `T′` (empty flags), all three fields still present vs `tools/ref/init.ts`
 
 ### REQ-TOOLS-5c — never set a tier above T2   (guard)
 
@@ -184,6 +284,15 @@ Then `max(tier over all territories) == T2` — `auth/` is set to `T2`, never to
 teeth: breaks-on "`atlas-init` sets `auth/` directly to `T0` — a tier above `T2` is assigned during move-in"
 gen: conformance   # `tools/ref/init.ts` asserts `max(tier)==T2`
 
+### SCN-TOOLS-5c-2 — two T0-keyword hits still both cap at T2   (guard · held-out)
+source: REQ-TOOLS-5c
+held_out: true
+Given `atlas-init` on a tree where **both** `auth/` (matches `security-invariant`) and `kernel/` (matches a second T0 keyword) hit
+When tiers are assigned
+Then `max(tier over all territories) == T2` — both matches are set to `T2`, never to a tier above `T2` (`T1`/`T0`)
+teeth: breaks-on "`atlas-init` sets `kernel/` to `T1` on its keyword hit — a tier above `T2` is assigned during move-in"
+gen: conformance   # held-out · two T0-keyword hits, same `max(tier)==T2` cap vs `tools/ref/init.ts`
+
 ### REQ-TOOLS-5d — never auto-promote a T0   (guard)
 
 ### SCN-TOOLS-5d-1 — a T0 candidate is flagged, never promoted   (guard)
@@ -194,6 +303,15 @@ Then `auth/` remains at `tier==T2` with `t0Candidate:true` — `promotions == 0`
 teeth: breaks-on "`atlas-init` auto-promotes the `auth/` T0-candidate to `T0` — a promotion happens during move-in"
 gen: conformance
 
+### SCN-TOOLS-5d-2 — multiple T0 candidates are all flagged, none promoted   (guard · held-out)
+source: REQ-TOOLS-5d
+held_out: true
+Given both `auth/` and `kernel/` flagged `t0Candidate:true` during move-in
+When move-in completes
+Then each remains at `tier==T2` with `t0Candidate:true` — `promotions == 0`; every promotion decision is left to a human/governance step
+teeth: breaks-on "`atlas-init` auto-promotes the `kernel/` T0-candidate to `T0` — a promotion happens during move-in"
+gen: conformance   # held-out · multiple candidates, same `promotions==0` behaviour vs `tools/ref/init.ts`
+
 ### REQ-TOOLS-5e — heuristics only flag T0 candidates   (happy)
 
 ### SCN-TOOLS-5e-1 — the T0 heuristic writes a flag and nothing else   (happy)
@@ -203,6 +321,15 @@ When its effect on state is observed
 Then it produced exactly `t0Candidate:true` with `tier=='T2'` unchanged — the heuristic *only* flags, it sets no tier and writes no other state
 teeth: breaks-on "the heuristic that detects a T0 candidate also writes `tier=T0` — it does more than flag"
 gen: conformance
+
+### SCN-TOOLS-5e-2 — the heuristic on a different territory also only writes a flag   (happy · held-out)
+source: REQ-TOOLS-5e
+held_out: true
+Given the T0-keyword heuristic firing on `kernel/`
+When its effect on state is observed
+Then it produced exactly `t0Candidate:true` with `tier=='T2'` unchanged — the heuristic *only* flags, it sets no tier and writes no other state
+teeth: breaks-on "the heuristic that detects the `kernel/` T0 candidate also rewrites the `blastRadius` — it does more than flag"
+gen: conformance   # held-out · different territory (`kernel/`), same flag-only effect vs `tools/ref/init.ts`
 
 ---
 
@@ -218,6 +345,15 @@ Then it resolves through the index to the covering territory `finance/` (and any
 teeth: breaks-on "`atlas-query` ignores the index and returns a global pack — the file scope is not resolved to its covering territory"
 gen: conformance
 
+### SCN-TOOLS-6a-2 — a different file scope resolves to its own covering territory   (happy · held-out)
+source: REQ-TOOLS-6a
+held_out: true
+Given `atlas-query(scope="src/auth/token.rs")` over the reference `tools/ref/query.ts` with the index reference
+When the scope is resolved
+Then it resolves through the index to the covering territory `auth/` (and any co-covering territory) — not a global dump
+teeth: breaks-on "`atlas-query` returns the `finance/` pack for an `auth/` scope — the file scope is resolved to the wrong territory"
+gen: conformance   # held-out · different scope (`src/auth/token.rs`→`auth/`), same index-resolution behaviour vs `tools/ref/query.ts`
+
 ### REQ-TOOLS-6b — pack is bounded to tier≥T1   (happy)
 
 ### SCN-TOOLS-6b-1 — the pack contains only tier≥T1 nodes   (happy)
@@ -228,6 +364,15 @@ Then every node in the pack is `tier ≥ T1` (`0` nodes below T1) and the pack s
 teeth: breaks-on "the pack leaks a `T2`/below-`T1` node — the `tier ≥ T1` filter is violated"
 gen: conformance   # tier filter has a real oracle; the `~2K` count is an advisory size bound (size test, not correctness oracle)
 
+### SCN-TOOLS-6b-2 — the auth/ pack also contains only tier≥T1 nodes   (happy · held-out)
+source: REQ-TOOLS-6b
+held_out: true
+Given `atlas-query` returning a `Pack` for the `auth/` territory
+When the pack contents are inspected
+Then every node in the pack is `tier ≥ T1` (`0` nodes below T1) and the pack size is within the `≤ ~2K` advisory bound
+teeth: breaks-on "the `auth/` pack leaks a `T2` (below-`T1`) node — the `tier ≥ T1` filter is violated"
+gen: conformance   # held-out · different territory (`auth/`), same `tier ≥ T1` filter vs `tools/ref/query.ts`
+
 ### REQ-TOOLS-6c — stale pack must be re-grounded   (guard)
 
 ### SCN-TOOLS-6c-1 — a stale pack is surfaced, not trusted   (guard)
@@ -237,6 +382,15 @@ When the pack is delivered
 Then `stale:true` is surfaced on the pack and the contract requires re-grounding before the pack is trusted — a stale pack is never served as fresh truth
 teeth: breaks-on "the `stale:true` flag is dropped and the stale pack is served as fresh — trusted without re-grounding"
 gen: conformance
+
+### SCN-TOOLS-6c-2 — a different stale node is also surfaced, not trusted   (guard · held-out)
+source: REQ-TOOLS-6c
+held_out: true
+Given `atlas-query` returning node `claim:acme-ceo` with `stale:true` in the `finance/` pack
+When the pack is delivered
+Then `stale:true` is surfaced on the pack and the contract requires re-grounding before the pack is trusted — a stale pack is never served as fresh truth
+teeth: breaks-on "the `stale:true` flag on `claim:acme-ceo` is dropped and the stale pack is served as fresh — trusted without re-grounding"
+gen: conformance   # held-out · different stale node (`claim:acme-ceo`), same stale-surfacing behaviour vs `tools/ref/query.ts`
 
 ---
 
@@ -252,6 +406,15 @@ Then it re-derives the citation at `source@sha`, the derivation matches, and the
 teeth: breaks-on "`atlas-emit` skips re-derivation and trusts the caller's citation — a claim not present at `@a1b2c3` is emitted"
 gen: conformance   # differential vs `tools/ref/emit.ts` fail-closed writer
 
+### SCN-TOOLS-7a-2 — emit re-derives a different claim at its own pinned sha   (happy · held-out)
+source: REQ-TOOLS-7a
+held_out: true
+Given `atlas-emit(N3, source="reference/people.md@f7e8d9")` where N3 = node `claim:acme-ceo` "ACME CEO = Jane Roe" **is** present at `@f7e8d9`, over `tools/ref/emit.ts`
+When emit runs
+Then it re-derives the citation at `source@sha`, the derivation matches, and the node is emitted
+teeth: breaks-on "`atlas-emit` skips re-derivation for `N3` and trusts the caller's citation — a claim not present at `@f7e8d9` is emitted"
+gen: conformance   # held-out · different node + source (`claim:acme-ceo` @ people.md), same re-derive-at-sha behaviour vs `tools/ref/emit.ts`
+
 ### REQ-TOOLS-7b — reject a node that does not re-derive   (guard)
 
 ### SCN-TOOLS-7b-1 — a non-re-deriving node is rejected, nothing persisted   (guard)
@@ -261,6 +424,15 @@ When emit runs
 Then it returns `{emitted:false}` and persists nothing (`store` byte-identical before/after)
 teeth: breaks-on "the non-re-deriving node is persisted anyway (`emitted:true`) — an ungrounded fact lands"
 gen: conformance
+
+### SCN-TOOLS-7b-2 — a different non-re-deriving node is also rejected   (guard · held-out)
+source: REQ-TOOLS-7b
+held_out: true
+Given `atlas-emit(N3′, source="reference/people.md@f7e8d9")` where N3′ = `claim:acme-ceo` "ACME CEO = John Doe" is **not** present at `@f7e8d9`
+When emit runs
+Then it returns `{emitted:false}` and persists nothing (`store` byte-identical before/after)
+teeth: breaks-on "the non-re-deriving `N3′` node is persisted anyway (`emitted:true`) — an ungrounded fact lands"
+gen: conformance   # held-out · different ungrounded node (`claim:acme-ceo` = wrong CEO), same fail-closed rejection vs `tools/ref/emit.ts`
 
 ### REQ-TOOLS-7c — writes are templated   (happy)
 
@@ -272,6 +444,15 @@ Then it was produced through the fixed write template (structured fields), not a
 teeth: breaks-on "`atlas-emit` accepts a free-form ad-hoc row bypassing the template"
 gen: conformance
 
+### SCN-TOOLS-7c-2 — a different node's write also goes through the template   (happy · held-out)
+source: REQ-TOOLS-7c
+held_out: true
+Given `atlas-emit(N3, …)` producing a write
+When the emitted row is inspected
+Then it was produced through the fixed write template (structured fields), not a free-form ad-hoc row
+teeth: breaks-on "`atlas-emit` accepts a free-form ad-hoc row for `N3` bypassing the template"
+gen: conformance   # held-out · different node (`N3`), same templated-write behaviour vs `tools/ref/emit.ts`
+
 ### REQ-TOOLS-7d — writes are upserts, not blind inserts   (happy)
 
 ### SCN-TOOLS-7d-1 — a changed fact supersedes, it does not duplicate   (happy)
@@ -281,6 +462,15 @@ When the write completes
 Then the store holds exactly one live row for `claim:acme-arr-2024` (the change superseded the prior) — `duplicates == 0`
 teeth: breaks-on "`atlas-emit` blind-inserts — the changed fact creates a second row, `2` rows for one nodeKey"
 gen: conformance
+
+### SCN-TOOLS-7d-2 — a changed fact on a different nodeKey also supersedes   (happy · held-out)
+source: REQ-TOOLS-7d
+held_out: true
+Given the store already holds N3 (`claim:acme-ceo` = "Jane Roe"), then `atlas-emit` writes a changed fact "Jane R. Roe" for the same nodeKey
+When the write completes
+Then the store holds exactly one live row for `claim:acme-ceo` (the change superseded the prior) — `duplicates == 0`
+teeth: breaks-on "`atlas-emit` blind-inserts the changed `acme-ceo` fact — a second row is created, `2` rows for one nodeKey"
+gen: conformance   # held-out · different nodeKey (`claim:acme-ceo`), same upsert-supersede behaviour vs `tools/ref/emit.ts`
 
 ---
 
@@ -296,6 +486,15 @@ Then it returns a reviewable `DriftItem[] = [dm:mechanical, ds:semantic]` — ne
 teeth: breaks-on "`atlas-reconcile` returns one all-or-nothing `DRIFTED` verdict — the mechanical/semantic split is collapsed"
 gen: conformance   # differential vs `tools/ref/reconcile.ts`; the KNOW-5 classifier itself is GRD's, consumed here
 
+### SCN-TOOLS-8a-2 — a different drift set also splits into a reviewable DriftItem set   (happy · held-out)
+source: REQ-TOOLS-8a
+held_out: true
+Given `atlas-reconcile` at merge-time over a different drift set `D₂ = {dm₂, ds₂}` (dm₂ = anchor moved `reference/people.md#ceo @f7e8d9→@g8h9i0`, still re-derives; ds₂ = claim text changed, does **not** re-derive), using the KNOW-5 mechanical/semantic split (referenced, not redefined)
+When reconcile classifies
+Then it returns a reviewable `DriftItem[] = [dm₂:mechanical, ds₂:semantic]` — never a single all-or-nothing `DRIFTED` verdict
+teeth: breaks-on "`atlas-reconcile` returns one all-or-nothing `DRIFTED` verdict for `D₂` — the mechanical/semantic split is collapsed"
+gen: conformance   # held-out · different drift set `D₂`, same reviewable-split behaviour vs `tools/ref/reconcile.ts`
+
 ### REQ-TOOLS-8b — exit 2 only on semantic drift   (guard)
 
 ### SCN-TOOLS-8b-1 — a run with semantic drift exits 2, never silent-green   (guard)
@@ -305,6 +504,15 @@ When the run finishes
 Then it exits `2` — it never reports a silent green when a semantic drift is present
 teeth: breaks-on "a run with semantic drift exits `0` (silent green) — the semantic drift is masked"
 gen: conformance
+
+### SCN-TOOLS-8b-2 — a different semantic-carrying run also exits 2   (guard · held-out)
+source: REQ-TOOLS-8b
+held_out: true
+Given `atlas-reconcile` over `D₂ = {dm₂, ds₂}` with `|semantic| = 1`
+When the run finishes
+Then it exits `2` — it never reports a silent green when a semantic drift is present
+teeth: breaks-on "the run over `D₂` with semantic drift exits `0` (silent green) — the semantic drift is masked"
+gen: conformance   # held-out · different drift set `D₂`, same exit-2-on-semantic behaviour vs `tools/ref/reconcile.ts`
 
 ### REQ-TOOLS-8c — mechanical-only drift exits 0   (happy)
 
@@ -316,6 +524,15 @@ Then it exits `0` — no block on drift that needs no review
 teeth: breaks-on "a mechanical-only run exits `2` — a spurious merge block on drift that carries no semantic change"
 gen: conformance
 
+### SCN-TOOLS-8c-2 — a two-item mechanical-only run also exits 0   (happy · held-out)
+source: REQ-TOOLS-8c
+held_out: true
+Given `atlas-reconcile` over `D₂′ = {dm₂, dm₃}` with `|semantic| = 0` (both mechanical anchor-moves that still re-derive; dm₃ = `reference/kernel.md#inv @c1d2e3→@f4g5h6`)
+When the run finishes
+Then it exits `0` — no block on drift that needs no review
+teeth: breaks-on "the two-item mechanical-only run exits `2` — a spurious merge block on drift that carries no semantic change"
+gen: conformance   # held-out · different mechanical-only set `D₂′` (two items), same exit-0 behaviour vs `tools/ref/reconcile.ts`
+
 ### REQ-TOOLS-8d — re-author bounded to the semantic subset   (happy)
 
 ### SCN-TOOLS-8d-1 — reconcile re-authors exactly the semantic count   (happy)
@@ -325,6 +542,15 @@ When reconcile acts on the classified set
 Then it re-authors exactly `1` item (`== |semantic|`, the item `ds`) — never the whole store
 teeth: breaks-on "`atlas-reconcile` re-authors the whole store (all N rows) instead of just the `1` semantic item"
 gen: conformance
+
+### SCN-TOOLS-8d-2 — reconcile re-authors exactly two when the semantic count is two   (happy · held-out)
+source: REQ-TOOLS-8d
+held_out: true
+Given `atlas-reconcile` over `D₃ = {dm, ds, ds₃}` (`|semantic| = 2` — `ds` and `ds₃` both changed and do not re-derive)
+When reconcile acts on the classified set
+Then it re-authors exactly `2` items (`== |semantic|`, the items `{ds, ds₃}`) — never the whole store
+teeth: breaks-on "`atlas-reconcile` re-authors all `3` drift items (including the mechanical `dm`) instead of just the `2` semantic ones"
+gen: conformance   # held-out · different set `D₃` with `|semantic|=2`, same `reauthorCount==|semantic|` behaviour vs `tools/ref/reconcile.ts`
 
 ---
 
@@ -340,6 +566,15 @@ Then the write is produced from `ResultCard.absorb` routed through `atlas-emit` 
 teeth: breaks-on "wave-close runs a separate authoring ritual and ignores `ResultCard.absorb` — the absorb payload is dropped"
 gen: conformance
 
+### SCN-TOOLS-9a-2 — a different absorb payload also drives the wave-close write   (happy · held-out)
+source: REQ-TOOLS-9a
+held_out: true
+Given a wave closing with `ResultCard.absorb` carrying a different grounded fact (`claim:acme-ceo` = "Jane Roe" @ `reference/people.md@f7e8d9`), over the reference wave-close (which routes `absorb` through `emit`, `tools/ref/emit.ts`)
+When wave-close runs
+Then the write is produced from `ResultCard.absorb` routed through `atlas-emit` — not from a separate authoring ritual
+teeth: breaks-on "wave-close runs a separate authoring ritual and ignores this `ResultCard.absorb` — the `acme-ceo` absorb payload is dropped"
+gen: conformance   # held-out · different absorb payload (`claim:acme-ceo`), same absorb-driven-write behaviour vs `tools/ref/emit.ts`
+
 ### REQ-TOOLS-9b — sealing wave must feed or emit why-not   (guard)
 
 ### SCN-TOOLS-9b-1 — a seal with neither absorb nor why-not records a violation   (guard)
@@ -349,6 +584,15 @@ When the seal-probe runs
 Then it records exactly `1` violation — a seal that neither feeds the Atlas nor emits a grounded why-not is not silent
 teeth: breaks-on "the seal-probe passes a wave with neither `absorb` nor why-not — a silent seal, `0` violations recorded"
 gen: conformance   # seal-probe reference is the mock; a seal outside the absorb path / skipping why-not fails it
+
+### SCN-TOOLS-9b-2 — a different sealing wave with neither also records a violation   (guard · held-out)
+source: REQ-TOOLS-9b
+held_out: true
+Given a distinct sealing wave (a review wave) with `absorb == ∅` **and** no grounded why-not emitted
+When the seal-probe runs
+Then it records exactly `1` violation — a seal that neither feeds the Atlas nor emits a grounded why-not is not silent
+teeth: breaks-on "the seal-probe passes this review wave with neither `absorb` nor why-not — a silent seal, `0` violations recorded"
+gen: conformance   # held-out · different wave kind (review wave), same seal-probe violation behaviour vs the seal-probe reference
 
 ---
 
@@ -408,6 +652,15 @@ Then the seat is served by push (poke / pack) — it is **never** forced to the 
 teeth: breaks-on "`resolve` routes the Read-only seat to the CLI — the seat is forced to the CLI to reach the Atlas"
 gen: conformance   # differential vs `tools/ref/ladder.ts` direction-split resolver
 
+### SCN-TOOLS-11-a-2 — a second grantless seat is also served by push, not the CLI   (guard · held-out)
+source: REQ-TOOLS-11-a
+held_out: true
+Given a seat `S_ro2` (grants `{Read, Grep}`, still **no** tool grant) that needs to reach the Atlas, over the reference `tools/ref/ladder.ts`
+When `resolve(S_ro2, need)` runs
+Then the seat is served by push (poke / pack) — it is **never** forced to the CLI to reach the Atlas
+teeth: breaks-on "`resolve` routes `S_ro2` to the CLI — a grantless seat is forced to the CLI to reach the Atlas"
+gen: conformance   # held-out · different grantless seat (`S_ro2` = Read+Grep), same push-not-CLI behaviour vs `tools/ref/ladder.ts`
+
 ### REQ-TOOLS-11-b — push reaches a seat with no grant   (happy)
 
 ### SCN-TOOLS-11-b-1 — push lands on a Read-only seat with zero tool grant   (happy)
@@ -417,6 +670,15 @@ When push is delivered
 Then `S_ro` consumes it with **no** tool grant required (`grantsRequired == 0`) — push is the orchestrator's job
 teeth: breaks-on "push requires a tool grant — a seat with only `Read` cannot receive the poke"
 gen: conformance
+
+### SCN-TOOLS-11-b-2 — a RelationSet push also lands with zero grant   (happy · held-out)
+source: REQ-TOOLS-11-b
+held_out: true
+Given a `RelationSet` pushed to seat `S_ro2` (grant set = `{Read, Grep}`, no tool grant)
+When push is delivered
+Then `S_ro2` consumes it with **no** tool grant required (`grantsRequired == 0`) — push is the orchestrator's job
+teeth: breaks-on "the `RelationSet` push requires a tool grant — a seat with no tool grant cannot receive it"
+gen: conformance   # held-out · different push payload (RelationSet) + seat (`S_ro2`), same `grantsRequired==0` behaviour vs `tools/ref/ladder.ts`
 
 ### REQ-TOOLS-11-c — pull resolves down the native-first ladder   (happy)
 
@@ -428,6 +690,15 @@ Then it walks the fixed order `SDK-MCP → registered-MCP+grant → poke-as-file
 teeth: breaks-on "the ladder is reordered to try the CLI first (native-last) — pull resolves to CLI while `SDK-MCP` was available"
 gen: conformance
 
+### SCN-TOOLS-11-c-2 — the ladder returns tier-2 when tier-1 is the unavailable one   (happy · held-out)
+source: REQ-TOOLS-11-c
+held_out: true
+Given a seat issuing an ad-hoc pull on a harness where tier-1 `SDK-MCP` is unavailable but tier-2 `registered-MCP+grant` is available
+When the ladder resolves
+Then it walks the fixed order `SDK-MCP → registered-MCP+grant → poke-as-file → relay → CLI` and returns the first *available* tier (`registered-MCP+grant`) — native-first, order preserved
+teeth: breaks-on "the ladder skips the available tier-2 and drops straight to the CLI — the fixed native-first order is not honoured"
+gen: conformance   # held-out · different tier-availability (tier-1 down), same fixed native-first walk vs `tools/ref/ladder.ts`
+
 ### REQ-TOOLS-11-d — every tier is one handler, one contract   (happy)
 
 ### SCN-TOOLS-11-d-1 — a lower-tier result equals the native-tier result   (happy)
@@ -437,6 +708,15 @@ When each tier returns
 Then the two results are byte-identical — tiers differ only in transport, never in contract or result
 teeth: breaks-on "the `poke-as-file` tier is backed by a second handler that returns a different contract than the `SDK-MCP` tier"
 gen: conformance   # `tools/ref/ladder.ts` asserts resolved-tier result == native-tier result
+
+### SCN-TOOLS-11-d-2 — a different node at the relay tier equals the native-tier result   (happy · held-out)
+source: REQ-TOOLS-11-d
+held_out: true
+Given the same node `claim:acme-ceo` resolved once at the `relay` tier and once at the `SDK-MCP` tier, both backed by the one handler (TOOLS-10)
+When each tier returns
+Then the two results are byte-identical — tiers differ only in transport, never in contract or result
+teeth: breaks-on "the `relay` tier is backed by a second handler that returns a different contract than the `SDK-MCP` tier"
+gen: conformance   # held-out · different node + tier pair (relay vs SDK-MCP), same one-handler equality vs `tools/ref/ladder.ts`
 
 ---
 
@@ -452,6 +732,15 @@ Then it is spawned via the Agent SDK in-process path — `create_sdk_mcp_server`
 teeth: breaks-on "a seat is spawned via a registered external MCP server instead of the in-process SDK path — the tier-1 native spawn contract is broken"
 gen: conformance   # differential vs `tools/ref/ladder.ts` spawn path
 
+### SCN-TOOLS-11a-a-2 — a second governed seat is also spawned in-process   (happy · held-out)
+source: REQ-TOOLS-11a-a
+held_out: true
+Given Orchestra spawning a second governed seat (a distinct `allowed_tools` grant `{atlas-query}`) on harness `H_sdk`
+When the seat is created
+Then it is spawned via the Agent SDK in-process path — `create_sdk_mcp_server` in-process **plus** its per-seat `allowed_tools` grant (the native tier-1 spawn contract)
+teeth: breaks-on "this second seat is spawned via a registered external MCP server instead of the in-process SDK path — the tier-1 native spawn contract is broken"
+gen: conformance   # held-out · different seat + grant set, same in-process SDK spawn contract vs `tools/ref/ladder.ts`
+
 ### REQ-TOOLS-11a-b — down-rank pull 1 and 2 when MCP unavailable   (guard)
 
 ### SCN-TOOLS-11a-b-1 — an MCP-incapable harness down-ranks tiers 1 and 2   (guard)
@@ -461,6 +750,15 @@ When the ladder is built for this harness
 Then pull tier 1 (SDK-MCP) **and** tier 2 (registered-MCP+grant) are marked `unavailable`, and resolution goes straight to push / pull 3–4
 teeth: breaks-on "on `H_agents` the ladder still advertises tier-1 SDK-MCP as available — pull 1 is attempted and silently fails"
 gen: conformance
+
+### SCN-TOOLS-11a-b-2 — a different MCP-incapable harness also down-ranks tiers 1 and 2   (guard · held-out)
+source: REQ-TOOLS-11a-b
+held_out: true
+Given a different harness `H_agents2` (a second `.claude/agents`-style harness) with `canPropagateMcp:false`
+When the ladder is built for this harness
+Then pull tier 1 (SDK-MCP) **and** tier 2 (registered-MCP+grant) are marked `unavailable`, and resolution goes straight to push / pull 3–4
+teeth: breaks-on "on `H_agents2` the ladder still advertises tier-2 registered-MCP as available — pull 2 is attempted and silently fails"
+gen: conformance   # held-out · different MCP-incapable harness (`H_agents2`), same down-rank behaviour vs `tools/ref/ladder.ts`
 
 ### REQ-TOOLS-11a-c — never silently fall through a native tier   (guard)
 
@@ -472,6 +770,15 @@ Then the fall-through is **reported** (surfaced), never silent — the ladder do
 teeth: breaks-on "an advertised-native tier fails and the ladder silently falls through to the next tier with no report"
 gen: conformance
 
+### SCN-TOOLS-11a-c-2 — a failing tier-2 native is also reported, not skipped   (guard · held-out)
+source: REQ-TOOLS-11a-c
+held_out: true
+Given tier-2 `registered-MCP+grant`, advertised as native, which then fails to resolve (the grant is present but the server does not answer)
+When the ladder moves on
+Then the fall-through is **reported** (surfaced), never silent — the ladder does not quietly advance past a tier it advertised as native
+teeth: breaks-on "the advertised-native tier-2 fails and the ladder silently falls through to `poke-as-file` with no report"
+gen: conformance   # held-out · different advertised-native tier (tier-2), same report-not-skip behaviour vs `tools/ref/ladder.ts`
+
 ### REQ-TOOLS-11a-d — report the tier actually started on   (happy)
 
 ### SCN-TOOLS-11a-d-1 — the ladder reports its true starting tier   (happy)
@@ -481,6 +788,15 @@ When resolution returns
 Then it reports `startedTier == push` (the tier it actually started on for this harness) — not the native tier-1
 teeth: breaks-on "the ladder reports `startedTier == SDK-MCP` on `H_agents` while it actually started on push — a dishonest report"
 gen: conformance
+
+### SCN-TOOLS-11a-d-2 — on an MCP-capable harness the ladder reports the native start   (happy · held-out)
+source: REQ-TOOLS-11a-d
+held_out: true
+Given the ladder resolving on harness `H_sdk` (`canPropagateMcp:true`)
+When resolution returns
+Then it reports `startedTier == SDK-MCP` (the tier it actually started on for this harness) — an honest report of the native start
+teeth: breaks-on "the ladder reports `startedTier == push` on `H_sdk` while it actually started on SDK-MCP — a dishonest report"
+gen: conformance   # held-out · different harness (`H_sdk`), same honest-startedTier behaviour vs `tools/ref/ladder.ts`
 
 ---
 
@@ -496,6 +812,15 @@ Then the store is byte-identical before and after every sub-command — doctor i
 teeth: breaks-on "a doctor sub-command mutates the store directly — the store bytes change after a read-only diagnostic"
 gen: conformance   # differential vs `tools/ref/doctor.ts` no-write-authority projection
 
+### SCN-TOOLS-12a-2 — doctor over a drifted store also leaves it byte-identical   (happy · held-out)
+source: REQ-TOOLS-12a
+held_out: true
+Given `atlas doctor` sub-commands (`reground`, `why-broken`) run over the reference `tools/ref/doctor.ts` against a store holding the drift set `D = {dm, ds}`
+When each runs
+Then the store is byte-identical before and after every sub-command — doctor is read/advisory only (`directStoreMutations == 0`); positive property — a diagnostic view opens NO write door
+teeth: breaks-on "the `reground` sub-command persists its plan directly — the store bytes change after a read-only diagnostic"
+gen: conformance   # held-out · different sub-commands + drifted store, same no-mutation property vs `tools/ref/doctor.ts`
+
 ### REQ-TOOLS-12b — doctor never persists   (guard)
 
 ### SCN-TOOLS-12b-1 — a doctor-proposed write funnels through atlas-emit   (guard)
@@ -506,6 +831,15 @@ Then doctor persists nothing itself — it returns a `RegroundPlan` that only mu
 teeth: breaks-on "doctor persists its proposed write directly instead of funneling the plan through `atlas-emit`"
 gen: conformance
 
+### SCN-TOOLS-12b-2 — a plan for a different item also funnels through atlas-emit   (guard · held-out)
+source: REQ-TOOLS-12b
+held_out: true
+Given `atlas doctor reground` proposing a write for `dm₂` (a different mechanical anchor-move, `@f7e8d9→@g8h9i0`)
+When the proposal is produced
+Then doctor persists nothing itself — it returns a `RegroundPlan` that only mutates the store when run through `atlas-emit`
+teeth: breaks-on "doctor persists its proposed `dm₂` write directly instead of funneling the plan through `atlas-emit`"
+gen: conformance   # held-out · different proposed item (`dm₂`), same funnel-through-emit behaviour vs `tools/ref/doctor.ts`
+
 ### REQ-TOOLS-12c — doctor carries no write authority   (happy)
 
 ### SCN-TOOLS-12c-1 — doctor is a diagnostic view, not a fifth governance tool   (happy)
@@ -515,6 +849,15 @@ When the surface is enumerated and the doctor handle inspected
 Then the surface stays exactly `4` governance tools and the doctor handle exposes **no** store-mutating method — no write authority
 teeth: breaks-on "doctor is registered as a fifth governance tool with a write method — surface count `== 5` and a write via doctor lands"
 gen: conformance
+
+### SCN-TOOLS-12c-2 — doctor after a hot-set command is still not a fifth tool   (happy · held-out)
+source: REQ-TOOLS-12c
+held_out: true
+Given the governance surface with `atlas doctor` present, inspected after its `hot-set` sub-command has run
+When the surface is enumerated and the doctor handle inspected
+Then the surface stays exactly `4` governance tools and the doctor handle exposes **no** store-mutating method — no write authority
+teeth: breaks-on "doctor's `hot-set` path registers doctor as a fifth governance tool with a write method — surface count `== 5` and a write via doctor lands"
+gen: conformance   # held-out · different probe (post `hot-set`), same 4-surface + no-write-authority behaviour vs `tools/ref/doctor.ts`
 
 ---
 
@@ -530,6 +873,15 @@ Then it auto-re-grounds `dm` in **one pass** — the anchor is updated to `@d4e5
 teeth: breaks-on "auto-re-ground needs a second pass / a human confirmation — the mechanical drift is not resolved in one pass"
 gen: conformance
 
+### SCN-TOOLS-13a-2 — a different mechanical item also re-grounds in one pass   (happy · held-out)
+source: REQ-TOOLS-13a
+held_out: true
+Given `atlas-reconcile --accept-reground` over `D₂ = {dm₂, ds₂}` (dm₂ = anchor moved `@f7e8d9→@g8h9i0`, claim still re-derives), over `tools/ref/reconcile.ts` + `tools/ref/emit.ts`
+When the run executes
+Then it auto-re-grounds `dm₂` in **one pass** — the anchor is updated to `@g8h9i0` with no human and no merge block
+teeth: breaks-on "auto-re-ground of `dm₂` needs a second pass / a human confirmation — the mechanical drift is not resolved in one pass"
+gen: conformance   # held-out · different mechanical item (`dm₂`), same one-pass re-ground behaviour vs `tools/ref/reconcile.ts`
+
 ### REQ-TOOLS-13b — report regroundedCount   (happy)
 
 ### SCN-TOOLS-13b-1 — the run reports the count of items re-grounded   (happy)
@@ -539,6 +891,15 @@ When the run finishes
 Then it reports `regroundedCount == 1` (`== |mechanical|`)
 teeth: breaks-on "`regroundedCount` is reported as `0` while `1` mechanical item was re-grounded — the count under-reports"
 gen: conformance
+
+### SCN-TOOLS-13b-2 — the run reports a count of two when two mechanical items re-ground   (happy · held-out)
+source: REQ-TOOLS-13b
+held_out: true
+Given the `--accept-reground` run over `D₂′ = {dm₂, dm₃}` (`|mechanical| = 2`)
+When the run finishes
+Then it reports `regroundedCount == 2` (`== |mechanical|`)
+teeth: breaks-on "`regroundedCount` is reported as `1` while `2` mechanical items were re-grounded — the count under-reports"
+gen: conformance   # held-out · different mechanical count (2), same `regroundedCount==|mechanical|` behaviour vs `tools/ref/reconcile.ts`
 
 ### REQ-TOOLS-13c — never auto-touch semantic drift   (guard)
 
@@ -550,6 +911,15 @@ Then `ds` is left untouched — it still surfaces for review and the run still e
 teeth: breaks-on "`--accept-reground` auto-re-grounds the semantic item `ds` too — a semantic drift is silently rewritten and the run exits `0`"
 gen: conformance
 
+### SCN-TOOLS-13c-2 — two semantic items are both left for review and still exit 2   (guard · held-out)
+source: REQ-TOOLS-13c
+held_out: true
+Given the `--accept-reground` run over `D₃ = {dm, ds, ds₃}` (`ds`, `ds₃` semantic)
+When the run executes
+Then both `ds` and `ds₃` are left untouched — they still surface for review and the run still exits `2`; only the mechanical `dm` was auto-re-grounded
+teeth: breaks-on "`--accept-reground` auto-re-grounds `ds₃` too — a semantic drift is silently rewritten and the run exits `0`"
+gen: conformance   # held-out · different set `D₃` (two semantic), same leave-semantic + exit-2 behaviour vs `tools/ref/reconcile.ts`
+
 ### REQ-TOOLS-13d — re-ground write passes the fail-closed check   (happy)
 
 ### SCN-TOOLS-13d-1 — each auto-re-ground write clears the emit grounding bar   (happy)
@@ -559,6 +929,15 @@ When it is applied
 Then it passes through `atlas-emit`'s fail-closed grounding check (TOOLS-7) — it re-derives at `@d4e5f6` before it lands
 teeth: breaks-on "the auto-re-ground write bypasses `atlas-emit`'s fail-closed check — a re-ground anchor that does not re-derive is written"
 gen: conformance   # reuses `tools/ref/emit.ts` fail-closed mock (anti-rot)
+
+### SCN-TOOLS-13d-2 — a different auto-re-ground write also clears the emit bar   (happy · held-out)
+source: REQ-TOOLS-13d
+held_out: true
+Given the auto-re-ground write for `dm₂` (anchor now `@g8h9i0`)
+When it is applied
+Then it passes through `atlas-emit`'s fail-closed grounding check (TOOLS-7) — it re-derives at `@g8h9i0` before it lands
+teeth: breaks-on "the `dm₂` auto-re-ground write bypasses `atlas-emit`'s fail-closed check — a re-ground anchor that does not re-derive is written"
+gen: conformance   # held-out · different re-ground item (`dm₂`), same fail-closed-on-reground behaviour vs `tools/ref/emit.ts`
 
 ---
 
@@ -574,6 +953,15 @@ Then the orchestrator auto-injects a fresh `atlas-query` / `own_<unit>` pack int
 teeth: breaks-on "no pack is injected at the phase boundary — the seat carries a stale pack across the transition"
 gen: conformance   # differential vs `tools/ref/push.ts` pack injector
 
+### SCN-TOOLS-14a-2 — a different phase boundary also injects a fresh pack   (happy · held-out)
+source: REQ-TOOLS-14a
+held_out: true
+Given a seat crossing into the *seal* phase (a different boundary), over the reference phase-hook `tools/ref/push.ts`
+When the boundary fires
+Then the orchestrator auto-injects a fresh `atlas-query` / `own_<unit>` pack into the seat's context — the seat need not *decide* to re-ground
+teeth: breaks-on "no pack is injected at the seal-phase boundary — the seat carries a stale pack into the seal"
+gen: conformance   # held-out · different boundary (seal phase), same auto-inject behaviour vs `tools/ref/push.ts`
+
 ### REQ-TOOLS-14b — phase-pack push needs no grant   (happy)
 
 ### SCN-TOOLS-14b-1 — the boundary pack reaches a Read-only seat with no grant   (happy)
@@ -584,6 +972,15 @@ Then `S_ro` consumes the fresh pack with **no** tool grant (`grantsRequired == 0
 teeth: breaks-on "the phase-pack push requires a tool grant — a Read-only seat gets no fresh pack at the boundary"
 gen: conformance
 
+### SCN-TOOLS-14b-2 — the boundary pack reaches a second grantless seat too   (happy · held-out)
+source: REQ-TOOLS-14b
+held_out: true
+Given the phase-boundary pack pushed to seat `S_ro2` (grant set = `{Read, Grep}`, no tool grant)
+When push is delivered
+Then `S_ro2` consumes the fresh pack with **no** tool grant (`grantsRequired == 0`)
+teeth: breaks-on "the phase-pack push requires a tool grant — `S_ro2` gets no fresh pack at the boundary"
+gen: conformance   # held-out · different grantless seat (`S_ro2`), same `grantsRequired==0` behaviour vs `tools/ref/push.ts`
+
 ### REQ-TOOLS-14c — mid-task pull is not load-bearing   (happy)
 
 ### SCN-TOOLS-14c-1 — a boundary re-grounds by push even where pull is unavailable   (guard)
@@ -593,6 +990,15 @@ When the boundary fires
 Then the seat is re-grounded purely by push and `pull` is never invoked — mid-task PULL is an optimization only, never load-bearing
 teeth: breaks-on "re-grounding at the boundary depends on a mid-task pull — on a pull-unavailable harness the seat is left ungrounded"
 gen: conformance   # independent of TOOLS-11a: a pushed seat is correct even where native pull is unavailable
+
+### SCN-TOOLS-14c-2 — a boundary on a different pull-less harness also re-grounds by push   (guard · held-out)
+source: REQ-TOOLS-14c
+held_out: true
+Given a seat crossing a boundary on harness `H_agents2` (native pull `unavailable`)
+When the boundary fires
+Then the seat is re-grounded purely by push and `pull` is never invoked — mid-task PULL is an optimization only, never load-bearing
+teeth: breaks-on "re-grounding at the boundary depends on a mid-task pull — on `H_agents2` (pull-unavailable) the seat is left ungrounded"
+gen: conformance   # held-out · different pull-unavailable harness (`H_agents2`), same push-only re-ground behaviour vs `tools/ref/push.ts`
 
 ---
 
@@ -608,6 +1014,15 @@ Then no prior row's bytes changed — the medium is append-only / permissioned; 
 teeth: breaks-on "the store allows an in-place overwrite of an existing row — a served fact is mutated under the same address"
 gen: conformance
 
+### SCN-TOOLS-15a-2 — a different prior row's bytes also survive a new write   (happy · held-out)
+source: REQ-TOOLS-15a
+held_out: true
+Given the reference store `tools/ref/store.ts` holding `N3` (`claim:acme-ceo`), then a new grounded row for `claim:acme-hq` is emitted
+When the new write completes
+Then no prior row's bytes changed — the medium is append-only / permissioned; an in-place overwrite is refused
+teeth: breaks-on "the store overwrites the `N3` row in place while emitting `claim:acme-hq` — a served fact is mutated under the same address"
+gen: conformance   # held-out · different prior + new rows, same append-only behaviour vs `tools/ref/store.ts`
+
 ### REQ-TOOLS-15b — reads reject ungrounded rows   (guard)
 
 ### SCN-TOOLS-15b-1 — a read rejects an un-emitted row via the integrity check   (guard)
@@ -618,6 +1033,15 @@ Then the content-address integrity check rejects it — an ungrounded row is nev
 teeth: breaks-on "`read` serves the directly-injected ungrounded row — the content-address integrity check is skipped"
 gen: conformance   # functional refusal; *penetration* of the integrity check = billy / FR-12, not authored here
 
+### SCN-TOOLS-15b-2 — a tampered injected row is also rejected at read   (guard · held-out)
+source: REQ-TOOLS-15b
+held_out: true
+Given a tampered row injected directly into the store (a copy of `N1` with its claim bytes mutated to "$5.5M", not produced by `atlas-emit`'s grounded path)
+When `read(id)` recomputes the content address for that row
+Then the recomputed address no longer matches and the content-address integrity check rejects it — the ungrounded row is never returned (`ungroundedRowsServed == 0`)
+teeth: breaks-on "`read` serves the tampered row — the content-address integrity check is skipped"
+gen: conformance   # held-out · different injected row (tampered `N1`), same read-time integrity rejection; penetration still billy / FR-12
+
 ### REQ-TOOLS-15c — direct write never surfaces as a served fact   (guard)
 
 ### SCN-TOOLS-15c-1 — a direct write is refused at write or rejected at read   (guard)
@@ -627,6 +1051,15 @@ When it is attempted and then a read is issued for it
 Then it either cannot land (append-only / permission) **or** is rejected at read (integrity check) — it never surfaces as a served fact
 teeth: breaks-on "a direct write that skips `atlas-emit` is served as a fact — it neither fails at write nor is rejected at read"
 gen: conformance   # functional refusal only; adversarial exploit of this door = billy / FR-12, not authored here
+
+### SCN-TOOLS-15c-2 — a different direct write also never surfaces as a served fact   (guard · held-out)
+source: REQ-TOOLS-15c
+held_out: true
+Given a direct write for `claim:acme-ceo` that skips the `atlas-emit` path
+When it is attempted and then a read is issued for it
+Then it either cannot land (append-only / permission) **or** is rejected at read (integrity check) — it never surfaces as a served fact
+teeth: breaks-on "the direct `claim:acme-ceo` write that skips `atlas-emit` is served as a fact — it neither fails at write nor is rejected at read"
+gen: conformance   # held-out · different direct write (`claim:acme-ceo`), same never-served refusal; exploit still billy / FR-12
 
 ---
 
@@ -653,6 +1086,15 @@ Then it surfaces `Δ` — `added:[acme-ceo]`, `edited:[acme-arr-2024]`, `superse
 teeth: breaks-on "`atlas-diff` drops the `decayed` partition from what it renders — a steward auditing the two versions never sees `acme-hq-2019` fell out (the projection is not faithful to the PERSIST-14 delta)"
 gen: conformance   # differential vs `tools/ref/diff.ts` (faithful render of the PERSIST-14 delta)
 
+### SCN-TOOLS-16a-2 — atlas-diff renders a different version pair's delta read-only   (happy · held-out)
+source: REQ-TOOLS-16a
+held_out: true
+Given `atlas-diff shaB shaC` over the reference diff projection `tools/ref/diff.ts` reading a different PERSIST-14 delta `Δ₂ = { added:[claim:acme-hq-2025], edited:[claim:acme-ceo], superseded:[pred:auth-mfa], decayed:[claim:acme-office] }`, each entry carrying its `prov`
+When the command runs
+Then it surfaces `Δ₂` — each partition with its `prov` — as a read-only projection (nothing is written)
+teeth: breaks-on "`atlas-diff` drops the `superseded` partition from `Δ₂` — a steward never sees `pred:auth-mfa` was superseded (the projection is not faithful to the PERSIST-14 delta)"
+gen: conformance   # held-out · different version pair + delta `Δ₂`, same faithful-render behaviour vs `tools/ref/diff.ts`
+
 ### REQ-TOOLS-16b — atlas-diff CLI and MCP parity   (happy)
 
 ### SCN-TOOLS-16b-1 — atlas-diff returns byte-identical results over CLI and MCP   (happy)
@@ -662,6 +1104,15 @@ When `cli(shaA,shaB)` and `mcp(shaA,shaB)` are computed
 Then `cli(shaA,shaB) ≡ mcp(shaA,shaB)` — byte-identical delta, one schema-checked handler behind both transports (the cross-transport equivalence is the TOOLS-3 law, reused here)
 teeth: breaks-on "the MCP adapter wraps the delta in a transport envelope `{mcp:{…}}` — `mcp(shaA,shaB) ≠ cli(shaA,shaB)` byte-wise"
 gen: conformance   # projection parity; the ∀-input equivalence is delegated to the TOOLS-3 PBT over the shared handler
+
+### SCN-TOOLS-16b-2 — a different sha pair also returns byte-identical over CLI and MCP   (happy · held-out)
+source: REQ-TOOLS-16b
+held_out: true
+Given `atlas-diff shaB shaC` invoked over both the `cli` and `mcp` adapters against the one handler `tools/ref/handler.ts`
+When `cli(shaB,shaC)` and `mcp(shaB,shaC)` are computed
+Then `cli(shaB,shaC) ≡ mcp(shaB,shaC)` — byte-identical delta, one schema-checked handler behind both transports
+teeth: breaks-on "the MCP adapter wraps the `Δ₂` delta in a transport envelope `{mcp:{…}}` — `mcp(shaB,shaC) ≠ cli(shaB,shaC)` byte-wise"
+gen: conformance   # held-out · different sha pair (`shaB,shaC`), same CLI≡MCP projection parity vs the shared handler
 
 ### REQ-TOOLS-16c — atlas-diff CLI and MCP must not diverge   (guard)
 
@@ -673,6 +1124,15 @@ Then both return the **same** structured rejection — the two transports do not
 teeth: breaks-on "the MCP adapter coerces `42→\"42\"` and resolves an empty diff while the CLI rejects — divergent verdicts for the same input"
 gen: conformance   # divergence is the negated parity property (shared handler; TOOLS-3 PBT covers ∀-input)
 
+### SCN-TOOLS-16c-2 — a differently-malformed sha also rejects identically on both transports   (guard · held-out)
+source: REQ-TOOLS-16c
+held_out: true
+Given a malformed input `shaA = ["deadbeef"]` (an array where a sha string is required) presented over both the `cli` and `mcp` adapter
+When `cli(["deadbeef"],shaB)` and `mcp(["deadbeef"],shaB)` are computed
+Then both return the **same** structured rejection — the two transports do not diverge in behavior or contract on the identical input
+teeth: breaks-on "the MCP adapter coerces the `[\"deadbeef\"]` array to a string and resolves an empty diff while the CLI rejects — divergent verdicts for the same input"
+gen: conformance   # held-out · different malformed payload (array-for-sha), same identical-rejection parity vs the shared handler
+
 ### REQ-TOOLS-16d — atlas-diff adds no write path   (guard)
 
 ### SCN-TOOLS-16d-1 — a write attempted through the diff projection is refused   (guard)
@@ -682,6 +1142,15 @@ When the handle is inspected and a store-mutating call is attempted through it
 Then it exposes **no** store-mutating method and the write attempt is refused — atlas-diff is read/subscribe only, writes still funnel through `atlas-emit` (positive property: a read projection opens NO write door)
 teeth: breaks-on "the `atlas-diff` handle grows a `.write()`/`.apply()` method that lands a fact from one version into the other — a write path opens via the diff projection, bypassing `atlas-emit`"
 gen: conformance   # reference-model property of the read handle (no store-mutating method); NOT a formal model
+
+### SCN-TOOLS-16d-2 — an apply attempt on a different diff handle is also refused   (guard · held-out)
+source: REQ-TOOLS-16d
+held_out: true
+Given the `atlas-diff shaB shaC` projection handle reached over each transport (MCP / poke / CLI)
+When the handle is inspected and a store-mutating `apply-into-version` call is attempted through it
+Then it exposes **no** store-mutating method and the attempt is refused — atlas-diff is read/subscribe only, writes still funnel through `atlas-emit` (positive property: a read projection opens NO write door)
+teeth: breaks-on "the `atlas-diff shaB shaC` handle grows an `.applyInto()` method that lands a fact from one version into the other — a write path opens via the diff projection, bypassing `atlas-emit`"
+gen: conformance   # held-out · different sha-pair handle + attempted call, same no-write-authority property vs `tools/ref/diff.ts`
 
 ### REQ-TOOLS-16e — atlas-diff is not a fifth write tool   (guard)
 
@@ -693,6 +1162,15 @@ Then the write surface stays exactly `4` — `{atlas-init, atlas-query, atlas-em
 teeth: breaks-on "`atlas-diff` is registered on the governance write surface as a fifth write tool — write-surface count `== 5` and a write via `atlas-diff` lands"
 gen: conformance   # write-surface count == 4 (atlas-diff is a read projection, not a write door)
 
+### SCN-TOOLS-16e-2 — the write surface stays four with diff and doctor both present   (guard · held-out)
+source: REQ-TOOLS-16e
+held_out: true
+Given the governance surface with **both** `atlas-diff` and `atlas doctor` available as read projections
+When the governance **write** surface is enumerated and the `atlas-diff` handle inspected
+Then the write surface stays exactly `4` — `{atlas-init, atlas-query, atlas-emit, atlas-reconcile}` — and `atlas-diff` carries no write authority (a read projection like node TOOLS-10 / doctor TOOLS-12)
+teeth: breaks-on "`atlas-diff` is registered on the governance write surface as a fifth write tool — write-surface count `== 5` and a write via `atlas-diff` lands"
+gen: conformance   # held-out · both read projections co-present, same write-surface-count==4 behaviour vs `tools/ref/diff.ts`
+
 ---
 
 ## Coverage ledger (S3 completeness facet)
@@ -701,6 +1179,14 @@ gen: conformance   # write-surface count == 4 (atlas-diff is a read projection, 
 - **Guard coverage:** 22/22 unwanted/If-then/MUST-NOT REQ have a guard SCN — 1c, 2b, 3b, 5c, 5d, 6c, 7b, 8b, 9b, 10b, 10c, 11-a, 11a-b, 11a-c, 12b, 13c, 14c, 15b, 15c, **16c, 16d, 16e**.
 - **Teeth (Gate 3):** 57/57 SCN name the exact mutant of their REQ they flip to BROKEN on; none vacuous. The PBT tri/dual-transport witnesses are interesting (a real re-serializing transport, a real contract fork, a real coercion-vs-reject divergence — no antecedent-failure passes); the reference-model conformance witnesses each drive a genuine divergence against the named `tools/ref/*.ts` mock. The **TOOLS-16** witnesses drive a dropped-partition render (16a), a write-method grown on the diff handle (16d), and a fifth-write-tool registration (16e) — genuine mutants, no vacuous pass.
 - **gen histogram:** PBT 6 (3a, 3b, 10a, 10b, 10c, 10d) · conformance 51 (all others, incl. 16a–16e) · residue 0 (every TLS INV has a pure oracle — no hand-written tail).
+- **Held-out second leg (Wave H re-freeze):** every `gen: conformance` SCN now carries an independent `held_out: true`
+  fixture (`SCN-…-2`) — **51/51 conformance REQ covered**, the execution GATE's held-out leg is now AVAILABLE (FULL
+  assurance). Each held-out fixture is genuinely INDEPENDENT (different node/scope/tree/seat/harness/drift-set/sha-pair
+  per the *Held-out fixture universe*), hits the SAME behaviour/branch as its base fixture, and names its own
+  `teeth: breaks-on` mutant — no renamed clones. The **6 PBT** SCNs (3a/3b/10a–10d) are **exempt** (cross-transport
+  equivalence witnesses subsumed by `properties-tls.md`, not conformance). **residue** exempt (0 in TLS). Write-door
+  *exploitability* stays deferred to billy / FR-12 (1c/15b/15c author only the functional refusal — including their
+  held-out legs). TOOLS-1 preserved: no held-out fixture surfaces a fifth governance/write tool.
 - **Positive read-only-projection goldens (write-attempt refused, NOT a formal model):** 1d, 10c, 12a, **16d, 16e** (atlas-diff opens no write door / is not a fifth write tool).
 - **Deferred to billy / FR-12 (functional refusal authored here; exploit NOT authored):** 1c, 15b, 15c.
 - **ID-scheme note honored:** TOOLS-11 family SCNs use `SCN-TOOLS-11-<c>-<k>` (hyphenated) vs the TOOLS-11a family `SCN-TOOLS-11a-<c>-<k>` — no prefix collision.

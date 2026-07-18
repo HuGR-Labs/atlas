@@ -53,6 +53,41 @@ by scip-typescript). C's `coChanged` git-history band = {P, Q}.
 
 `core/cas/cas.ts` is matched by **both** globs → longest-path-match `core/cas/**` (dana, T1) wins.
 
+**Held-out fixture universe (Wave H · genuinely independent — different data, same behaviour):**
+Each `gen: conformance` REQ carries a second `held_out: true` fixture drawn from this universe, so the
+execution GATE can withhold it from the builder. Different tree / depgraph / territory / coverage set, same
+branch/behaviour as fixture-1 (a renamed clone would defeat the mechanism).
+
+**Held-out spatial tree** (`Axis = spatial`):
+
+| node | subtreeHash | children |
+|---|---|---|
+| repo:atlas | `sp-rp` | crate:net |
+| crate:net | `nt-cr` | module:http |
+| module:http | `nt-mod` | file:client.ts, file:server.ts |
+| file:client.ts | `nt-cl` | block c1(send), block c2(recv) |
+| block c1 (send) | `bk-aa` | — |
+| block c2 (recv) | `bk-bb` | — |
+| file:server.ts | `nt-sv` | block c3(listen) |
+| block c3 (listen) | `bk-cc` | — |
+
+Editing block c1 → c1'=`bk-aax`. `nt-cl = blake3(concat(sort(bk-aa, bk-bb)))`.
+
+**Held-out dependency DAG** (reverse-closure chain; edit at the sink P):
+`P ← Q(hop1) ← R(hop2) ← S(hop3) ← T(hop4)` — blast-radius(P) = {Q,R,S,T}. `maxHops=2`. R carries an
+`unresolved` edge `R ⇢ ?` (dynamic dispatch) and there is a cross-language edge `TS→Go binary` (cgo FFI,
+unseeable by scip-typescript). R's `coChanged` git-history band = {M, N}.
+
+**Held-out territory manifest** (`{name, owner, tier, globs}`, declaration order significant):
+
+| decl | name | owner | tier | globs |
+|---|---|---|---|---|
+| 0 | net | erin | T0 | `net/**` |
+| 1 | http | frank | T1 | `net/http/**` |
+
+`net/http/client.ts` is matched by **both** globs → longest-path-match `net/http/**` (frank, T1) wins.
+**Held-out coverage:** `territory:net` (T0) has 5 `unresolved` of 20 total edges → ratio `0.25 > 0.15`.
+
 ---
 
 ## REQ-INDEX-1 — one content-addressed index, N axes, two jobs
@@ -67,6 +102,15 @@ Then both are served by the same index object `I` — auxiliary-structure count 
 teeth: breaks-on "discovery is served by a second, separately-built discovery index — auxiliary-structure count == 1 and the two indexes can disagree"
 gen: conformance   # differential vs `index/ref/index.ts` (the single-index reference)
 
+### SCN-INDEX-1a-2 — [held-out] one index answers both drift and discovery on an independent tree   (happy)
+source: REQ-INDEX-1a
+held_out: true
+Given a single content-addressed index `J` over the CAS holding file:client.ts and fact `G` anchored at item:send
+When both `drift(anchor=item:send)` and `discover(byScope("net/http/client.ts"))` are routed
+Then both are served by the same index object `J` — auxiliary-structure count == 0 (no second discovery/staleness structure stood up)
+teeth: breaks-on "discovery of `net/http/client.ts` is served by a second, separately-built discovery index — auxiliary-structure count == 1 and the two indexes can disagree"
+gen: conformance   # held-out differential vs `index/ref/index.ts`; independent net/http fixture
+
 ### REQ-INDEX-1b — no separate discovery or sweep   (guard)
 
 ### SCN-INDEX-1b-1 — no separate discovery structure or staleness pass exists   (guard)
@@ -76,6 +120,15 @@ When the structure-count assertion runs (count of discovery/staleness auxiliary 
 Then the count is 0 — drift is decided at query time off `subtreeHash`, discovery off the same axes
 teeth: breaks-on "a background staleness-sweep structure is registered — the auxiliary-structure count is 1 (a second source of truth)"
 gen: conformance
+
+### SCN-INDEX-1b-2 — [held-out] no separate discovery structure or staleness pass on an independent ingest   (guard)
+source: REQ-INDEX-1b
+held_out: true
+Given the reference index after ingesting {file:server.ts, fact `G`, memory `K`}
+When the structure-count assertion runs (count of discovery/staleness auxiliary structures)
+Then the count is 0 — drift is decided at query time off `subtreeHash`, discovery off the same axes
+teeth: breaks-on "a background staleness-sweep structure is registered for the net axes — the auxiliary-structure count is 1 (a second source of truth)"
+gen: conformance   # held-out; independent net/http ingest
 
 ---
 
@@ -125,6 +178,15 @@ Then all three axes are produced with model-call-count == 0, purely from the tre
 teeth: breaks-on "the build calls an LLM to infer a dependency edge — model-call-count == 1 (the build is no longer $0-LLM / reconstructable)"
 gen: conformance   # differential vs `index/ref/build.ts` fed recorded SCIP fixtures
 
+### SCN-INDEX-3a-2 — [held-out] every axis derived mechanically via SCIP, 0 model calls   (happy)
+source: REQ-INDEX-3a
+held_out: true
+Given the file tree of crate:net + recorded `scip-typescript` fixture output for module:http
+When `build(tree, scipOutput)` derives the spatial, territory, and dependency axes
+Then all three axes are produced with model-call-count == 0, purely from the tree + the SCIP fixture
+teeth: breaks-on "the build calls an LLM to infer the `client.ts→server.ts` dependency edge — model-call-count == 1 (the build is no longer $0-LLM / reconstructable)"
+gen: conformance   # held-out differential vs `index/ref/build.ts`; recorded net SCIP fixtures
+
 ### REQ-INDEX-3b — build depends on no model   (guard)
 
 ### SCN-INDEX-3b-1 — the build path has zero model dependency   (guard)
@@ -134,6 +196,15 @@ When it is audited for model/inference imports on the build path
 Then 0 model dependencies are found — build is a pure function of `(tree, SCIP fixtures)`
 teeth: breaks-on "an embedding/LLM client is imported on the build path — the dependency-free assertion fails"
 gen: conformance
+
+### SCN-INDEX-3b-2 — [held-out] the build path has zero model dependency   (guard)
+source: REQ-INDEX-3b
+held_out: true
+Given the crate:net build module graph
+When it is audited for model/inference imports on the build path
+Then 0 model dependencies are found — build is a pure function of `(tree, SCIP fixtures)`
+teeth: breaks-on "an embedding/LLM client is imported on the net build path — the dependency-free assertion fails"
+gen: conformance   # held-out; independent net build graph
 
 ### REQ-INDEX-3c — no stack-graphs or LSIF backend   (guard)
 
@@ -145,6 +216,15 @@ Then it is a version-pinned SCIP binary — 0 `stack-graphs` (archived 2025-09) 
 teeth: breaks-on "the dep axis is wired to an LSIF backend — the SCIP-only assertion fails (a deprecated backend enters the build)"
 gen: conformance
 
+### SCN-INDEX-3c-2 — [held-out] backend is SCIP, never stack-graphs or LSIF   (guard)
+source: REQ-INDEX-3c
+held_out: true
+Given the dependency-axis backend configuration for crate:net (a `rust-analyzer --scip` leg alongside `scip-typescript`)
+When the backend identity is asserted
+Then it is a version-pinned SCIP binary — 0 `stack-graphs` (archived 2025-09) and 0 LSIF backends wired
+teeth: breaks-on "the net dep axis is wired to a `stack-graphs` backend — the SCIP-only assertion fails (a deprecated backend enters the build)"
+gen: conformance   # held-out; independent backend config
+
 ### REQ-INDEX-3d — graph reconstructable given indexer   (happy)
 
 ### SCN-INDEX-3d-1 — rebuilding twice with the same SCIP indexer yields identical graphs   (happy)
@@ -155,6 +235,15 @@ Then the two dependency graphs are byte-identical — reconstructable **given th
 teeth: breaks-on "the build folds in wall-clock / iteration-order state — the second rebuild's graph differs from the first (not reconstructable)"
 gen: conformance
 
+### SCN-INDEX-3d-2 — [held-out] rebuilding twice with the same SCIP indexer yields identical graphs   (happy)
+source: REQ-INDEX-3d
+held_out: true
+Given the same crate:net file tree + the same version-pinned SCIP indexer fixtures
+When `build` runs twice
+Then the two dependency graphs are byte-identical — reconstructable **given that indexer**
+teeth: breaks-on "the net build folds in wall-clock / iteration-order state — the second rebuild's graph differs from the first (not reconstructable)"
+gen: conformance   # held-out; independent net tree
+
 ### REQ-INDEX-3e — unresolvable edges declared, never guessed   (guard)
 
 ### SCN-INDEX-3e-1 — an unresolvable / cross-language edge is declared unresolved, not guessed   (guard)
@@ -164,6 +253,15 @@ When the dependency edge is built
 Then the edge is recorded `unresolved` with **no target invented**
 teeth: breaks-on "the builder guesses a plausible target for the cross-language edge — a fabricated `resolved` edge enters the graph"
 gen: conformance
+
+### SCN-INDEX-3e-2 — [held-out] an unresolvable / cross-language edge is declared unresolved, not guessed   (guard)
+source: REQ-INDEX-3e
+held_out: true
+Given a TS node calling a Go binary across a cgo FFI boundary (unseeable by `scip-typescript`)
+When the dependency edge is built
+Then the edge is recorded `unresolved` with **no target invented**
+teeth: breaks-on "the builder guesses a plausible target for the `TS→Go` edge — a fabricated `resolved` edge enters the graph"
+gen: conformance   # held-out; independent TS→Go boundary
 
 ---
 
@@ -179,6 +277,15 @@ Then it returns file:cas.ts as the covering node (not `undefined`, not the paren
 teeth: breaks-on "resolve returns the module:cas node instead of the covering file node — the covering-node contract is violated"
 gen: conformance   # differential vs `index/ref/resolve.ts`
 
+### SCN-INDEX-4a-2 — [held-out] resolving a path returns its covering node   (happy)
+source: REQ-INDEX-4a
+held_out: true
+Given the spatial axis and the path `"net/http/client.ts"`
+When `resolve('spatial', "net/http/client.ts")` runs
+Then it returns file:client.ts as the covering node (not `undefined`, not the parent module)
+teeth: breaks-on "resolve returns the module:http node instead of the covering file:client.ts node — the covering-node contract is violated"
+gen: conformance   # held-out differential vs `index/ref/resolve.ts`
+
 ### REQ-INDEX-4b — file query rolls up hierarchy   (happy)
 
 ### SCN-INDEX-4b-1 — a file query also surfaces its module + crate invariants   (happy)
@@ -188,6 +295,15 @@ When `byScope("core/cas/cas.ts")` is queried
 Then the result surfaces `{Ifile, Imod, Icrate}` — the union of ancestor-anchored invariants
 teeth: breaks-on "the resolver returns only the file-anchored `Ifile` — `Imod` and `Icrate` are dropped (no hierarchy roll-up)"
 gen: conformance
+
+### SCN-INDEX-4b-2 — [held-out] a file query also surfaces its module + crate invariants   (happy)
+source: REQ-INDEX-4b
+held_out: true
+Given file:client.ts with file-anchored invariant `Jfile`, module:http invariant `Jmod`, crate:net invariant `Jcrate`
+When `byScope("net/http/client.ts")` is queried
+Then the result surfaces `{Jfile, Jmod, Jcrate}` — the union of ancestor-anchored invariants
+teeth: breaks-on "the resolver returns only the file-anchored `Jfile` — `Jmod` and `Jcrate` are dropped (no hierarchy roll-up)"
+gen: conformance   # held-out; independent net hierarchy
 
 ---
 
@@ -203,6 +319,15 @@ Then `F` is returned visibly marked stale (anchor `bk-11` ≠ current `bk-11x`) 
 teeth: breaks-on "the query compares nothing and returns `F` as FRESH — a drifted fact is served silently"
 gen: conformance   # differential vs `index/ref/retrieval.ts`
 
+### SCN-INDEX-5a-2 — [held-out] an entry whose anchor hash ≠ current is visible at query time   (happy)
+source: REQ-INDEX-5a
+held_out: true
+Given fact `G` anchored at item:send with anchor hash `bk-aa`, after item:send is edited so current hash = `bk-aax`
+When `byScope` surfaces `G`
+Then `G` is returned visibly marked stale (anchor `bk-aa` ≠ current `bk-aax`) — decided inline at query time
+teeth: breaks-on "the query compares nothing and returns `G` as FRESH — a drifted fact is served silently"
+gen: conformance   # held-out differential vs `index/ref/retrieval.ts`
+
 ### REQ-INDEX-5b — stale entry excluded or flagged   (guard)
 
 ### SCN-INDEX-5b-1 — the stale entry is excluded or flagged, never served clean   (guard)
@@ -213,6 +338,15 @@ Then it is flagged stale (or excluded from the FRESH set) — never returned as 
 teeth: breaks-on "`F` is returned in the FRESH set with no flag — the stale-flag/exclude path is dropped"
 gen: conformance
 
+### SCN-INDEX-5b-2 — [held-out] the stale entry is excluded or flagged, never served clean   (guard)
+source: REQ-INDEX-5b
+held_out: true
+Given the same drifted fact `G` (anchor `bk-aa` ≠ current `bk-aax`)
+When it is retrieved
+Then it is flagged stale (or excluded from the FRESH set) — never returned as a clean current fact
+teeth: breaks-on "`G` is returned in the FRESH set with no flag — the stale-flag/exclude path is dropped"
+gen: conformance   # held-out; independent drifted fact
+
 ### REQ-INDEX-5c — no re-embedding, no separate sweep   (guard)
 
 ### SCN-INDEX-5c-1 — drift is detected with 0 re-embedding and 0 sweep   (guard)
@@ -222,6 +356,15 @@ When staleness is decided
 Then it is decided by a `subtreeHash` comparison at query time — re-embedding-count == 0 and sweep-count == 0
 teeth: breaks-on "drift requires a background sweep pass to mark entries — sweep-count == 1 (a separate staleness pass)"
 gen: conformance
+
+### SCN-INDEX-5c-2 — [held-out] drift is detected with 0 re-embedding and 0 sweep   (guard)
+source: REQ-INDEX-5c
+held_out: true
+Given the drift check over `G`
+When staleness is decided
+Then it is decided by a `subtreeHash` comparison at query time — re-embedding-count == 0 and sweep-count == 0
+teeth: breaks-on "drift over `G` requires a background sweep pass to mark entries — sweep-count == 1 (a separate staleness pass)"
+gen: conformance   # held-out; independent drift check
 
 ---
 
@@ -237,6 +380,15 @@ Then scope→spatial facts, dependency→blast-radius facts, trigger→tag-match
 teeth: breaks-on "a mode is missing — `byTrigger` is unimplemented and returns empty for a valid tag (fewer than the three mandated modes resolve)"
 gen: conformance   # differential vs the closed `index/ref/retrieval.ts` surface
 
+### SCN-INDEX-6a-2 — [held-out] relevance resolves by exactly scope, dependency, trigger   (happy)
+source: REQ-INDEX-6a
+held_out: true
+Given the retrieval surface `{byScope, byDependency, byTrigger}` over the net fixture
+When each mode is exercised (scope=`net/http/client.ts`, dependency=blast-radius(P), trigger=a tag on item:send)
+Then scope→spatial facts, dependency→blast-radius facts, trigger→tag-matched facts all resolve — exactly three modes present
+teeth: breaks-on "a mode is missing — `byTrigger` is unimplemented and returns empty for a valid tag on the net fixture (fewer than the three mandated modes resolve)"
+gen: conformance   # held-out differential vs the closed `index/ref/retrieval.ts` surface
+
 ### REQ-INDEX-6b — no fourth mode   (guard)
 
 ### SCN-INDEX-6b-1 — a fourth-mode request does not resolve   (guard)
@@ -246,6 +398,15 @@ When it is issued to the retrieval surface
 Then it does not resolve (returns empty / no such entry point) — the surface exposes no `search()`
 teeth: breaks-on "a similarity `search()` entry point is added and resolves the free-text request — a fourth retrieval mode exists"
 gen: conformance
+
+### SCN-INDEX-6b-2 — [held-out] a fourth-mode request does not resolve   (guard)
+source: REQ-INDEX-6b
+held_out: true
+Given a relevance request through a free-text / similarity mode token `"semantic:payments"`
+When it is issued to the retrieval surface
+Then it does not resolve (returns empty / no such entry point) — the surface exposes no `search()`
+teeth: breaks-on "a similarity `search()` entry point is added and resolves the `semantic:payments` request — a fourth retrieval mode exists"
+gen: conformance   # held-out; independent free-text token
 
 ---
 
@@ -260,6 +421,15 @@ When it is audited for embedding / vector / ANN dependencies
 Then 0 such dependencies are found — retrieval is pure lookup over the CAS/axes
 teeth: breaks-on "a vector-store client is imported on the retrieval path — the no-embeddings assertion fails (RAG enters the substrate)"
 gen: conformance
+
+### SCN-INDEX-7a-2 — [held-out] no embedding model / vector store / ANN backs the index   (guard)
+source: REQ-INDEX-7a
+held_out: true
+Given the retrieval-path module graph for the net fixture
+When it is audited for embedding / vector / ANN dependencies
+Then 0 such dependencies are found — retrieval is pure lookup over the CAS/axes
+teeth: breaks-on "a vector-store client is imported on the net retrieval path — the no-embeddings assertion fails (RAG enters the substrate)"
+gen: conformance   # held-out; independent retrieval graph
 
 ---
 
@@ -289,6 +459,15 @@ Then each returns an **empty** result (never a populated wrong answer)
 teeth: breaks-on "a malformed axis falls through to a default axis and returns non-empty results (a wrong hit instead of empty)"
 gen: conformance   # PBT-fuzz **differential** vs the total `index/ref/*.ts` (tag stays reference-model per §INV-INDEX-9)
 
+### SCN-INDEX-9a-2 — [held-out] malformed / missing path, tag, or axis yields an empty result   (happy)
+source: REQ-INDEX-9a
+held_out: true
+Given malformed inputs `{axis:"dep#ndency", path:"   ", tag:undefined}` fuzzed over every entry point (PBT-fuzz stream, distinct seed)
+When each entry point is invoked
+Then each returns an **empty** result (never a populated wrong answer)
+teeth: breaks-on "the malformed axis `dep#ndency` falls through to a default axis and returns non-empty results (a wrong hit instead of empty)"
+gen: conformance   # held-out PBT-fuzz differential vs the total `index/ref/*.ts`
+
 ### REQ-INDEX-9b — malformed input never throws   (guard)
 
 ### SCN-INDEX-9b-1 — malformed input yields a rejection/empty, never an exception   (guard)
@@ -298,6 +477,15 @@ When each is invoked
 Then 0 exceptions thrown — every path returns empty, and prod matches the total reference
 teeth: breaks-on "`resolve('bad-axis')` throws a `TypeError` instead of returning empty — a non-total path"
 gen: conformance
+
+### SCN-INDEX-9b-2 — [held-out] malformed input yields a rejection/empty, never an exception   (guard)
+source: REQ-INDEX-9b
+held_out: true
+Given the same PBT-fuzz stream of malformed inputs across all entry points (10k cases, corner-biased, distinct seed)
+When each is invoked
+Then 0 exceptions thrown — every path returns empty, and prod matches the total reference
+teeth: breaks-on "`resolve('dep#ndency')` throws a `RangeError` instead of returning empty — a non-total path"
+gen: conformance   # held-out; independent fuzz seed
 
 ---
 
@@ -313,6 +501,15 @@ Then it contains `{spatial, territory, dependency}` (axis-count ≥ 3), each own
 teeth: breaks-on "the territory axis shares the spatial rollup instead of owning one — a hierarchy without its own rollup (axis-count effectively < 3)"
 gen: conformance   # differential vs `index/ref/index.ts`
 
+### SCN-INDEX-10a-2 — [held-out] the index exposes ≥3 axes, each with its own rollup   (happy)
+source: REQ-INDEX-10a
+held_out: true
+Given the built index over crate:net
+When the axis set is enumerated
+Then it contains `{spatial, territory, dependency}` (axis-count ≥ 3), each owning its own rollup
+teeth: breaks-on "the territory axis shares the spatial rollup instead of owning one — a hierarchy without its own rollup (axis-count effectively < 3)"
+gen: conformance   # held-out differential vs `index/ref/index.ts`
+
 ### REQ-INDEX-10b — cross-index on all applicable axes   (happy)
 
 ### SCN-INDEX-10b-1 — one object is cross-indexed on all applicable axes   (happy)
@@ -323,6 +520,15 @@ Then it is reachable via spatial (its file), territory (its owner+tier), and dep
 teeth: breaks-on "the object is indexed only on spatial — a dependency query on item:put misses it (not cross-indexed)"
 gen: conformance
 
+### SCN-INDEX-10b-2 — [held-out] one object is cross-indexed on all applicable axes   (happy)
+source: REQ-INDEX-10b
+held_out: true
+Given item:send in file:client.ts, owned by territory `http` (frank/T1), with a `depends-on` edge
+When it is indexed
+Then it is reachable via spatial (its file), territory (its owner+tier), and dependency (its edges) — cross-indexed on all three
+teeth: breaks-on "item:send is indexed only on spatial — a dependency query on item:send misses it (not cross-indexed)"
+gen: conformance   # held-out; independent object
+
 ### REQ-INDEX-10c — object never duplicated   (guard)
 
 ### SCN-INDEX-10c-1 — the object is stored once, never duplicated across axes   (guard)
@@ -332,6 +538,15 @@ When `object-storage-count` for its hash is asserted
 Then `object-storage-count == 1` — the axes reference it by hash, no copy per axis
 teeth: breaks-on "each axis stores its own copy of the object — `object-storage-count == 3` (duplication across axes)"
 gen: conformance
+
+### SCN-INDEX-10c-2 — [held-out] the object is stored once, never duplicated across axes   (guard)
+source: REQ-INDEX-10c
+held_out: true
+Given item:send cross-indexed on spatial, territory, and dependency
+When `object-storage-count` for its hash is asserted
+Then `object-storage-count == 1` — the axes reference it by hash, no copy per axis
+teeth: breaks-on "each axis stores its own copy of item:send — `object-storage-count == 3` (duplication across axes)"
+gen: conformance   # held-out; independent object
 
 ---
 
@@ -347,6 +562,15 @@ Then each is keyed by `blake3(canonical(object))` into the one CAS and round-tri
 teeth: breaks-on "Doc objects bypass content-addressing and go to a side doc-store — `get(hash(doc))` misses (a kind is un-addressed)"
 gen: conformance   # `index/ref/cas.ts` (shares KERNEL `kernel/ref/store.ts`)
 
+### SCN-INDEX-11a-2 — [held-out] every object kind incl. a Doc is a BLAKE3-keyed CAS object   (happy)
+source: REQ-INDEX-11a
+held_out: true
+Given one each of `{CodeNode, GroundedFact, MemoryEntry, Provenance, Transcript, Doc}` drawn from the net fixture
+When each is `put()`
+Then each is keyed by `blake3(canonical(object))` into the one CAS and round-trips `get(hash)==object` — including the Doc
+teeth: breaks-on "the net Doc object bypasses content-addressing and goes to a side doc-store — `get(hash(doc))` misses (a kind is un-addressed)"
+gen: conformance   # held-out; `index/ref/cas.ts` (shares KERNEL `kernel/ref/store.ts`)
+
 ### REQ-INDEX-11b — every object grounded and drift-checked   (happy)
 
 ### SCN-INDEX-11b-1 — every object is grounded + drift-checked like any fact   (happy)
@@ -356,6 +580,15 @@ When item:put is edited to `bk-11x`
 Then the Doc is flagged stale exactly like a `GroundedFact` — it is drift-eligible / grounded
 teeth: breaks-on "Docs are exempt from drift-checking — editing the cited code leaves the Doc FRESH (a kind escapes grounding)"
 gen: conformance
+
+### SCN-INDEX-11b-2 — [held-out] every object is grounded + drift-checked like any fact   (happy)
+source: REQ-INDEX-11b
+held_out: true
+Given a Doc that cites code at item:send@`bk-aa`
+When item:send is edited to `bk-aax`
+Then the Doc is flagged stale exactly like a `GroundedFact` — it is drift-eligible / grounded
+teeth: breaks-on "the net Doc is exempt from drift-checking — editing item:send leaves the Doc FRESH (a kind escapes grounding)"
+gen: conformance   # held-out; independent cited code
 
 ---
 
@@ -485,6 +718,15 @@ Then both appear as explicit `unresolved`/`dynamic` edges in the graph (present,
 teeth: breaks-on "the dynamic-dispatch edge is dropped from the graph — a real coupling silently disappears"
 gen: conformance   # differential vs `index/ref/depgraph.ts`
 
+### SCN-INDEX-13a-2 — [held-out] every unresolvable call and cross-language boundary is an explicit unresolved/dynamic edge   (happy)
+source: REQ-INDEX-13a
+held_out: true
+Given a dynamic-dispatch call `R ⇢ ?` and a cross-language edge `TS→Go binary`
+When the `depends-on` graph is built
+Then both appear as explicit `unresolved`/`dynamic` edges in the graph (present, tagged)
+teeth: breaks-on "the `R ⇢ ?` dynamic-dispatch edge is dropped from the graph — a real coupling silently disappears"
+gen: conformance   # held-out differential vs `index/ref/depgraph.ts`
+
 ### REQ-INDEX-13b — never silently omit an edge   (guard)
 
 ### SCN-INDEX-13b-1 — an unresolvable edge is never silently omitted   (guard)
@@ -494,6 +736,15 @@ When the graph is built and edge-count is compared to the reference
 Then the reflection edge is present as `unresolved` — 0 silent omissions
 teeth: breaks-on "the unresolvable reflection edge is omitted rather than recorded — edge-count is short by one vs the reference (silent omission)"
 gen: conformance
+
+### SCN-INDEX-13b-2 — [held-out] an unresolvable edge is never silently omitted   (guard)
+source: REQ-INDEX-13b
+held_out: true
+Given a DI / runtime-wiring call the SCIP indexer cannot resolve
+When the graph is built and edge-count is compared to the reference
+Then the DI-wiring edge is present as `unresolved` — 0 silent omissions
+teeth: breaks-on "the unresolvable DI-wiring edge is omitted rather than recorded — edge-count is short by one vs the reference (silent omission)"
+gen: conformance   # held-out; independent DI-wiring call
 
 ### REQ-INDEX-13c — never fabricate a resolved target   (guard)
 
@@ -505,6 +756,15 @@ Then the edge's target is `unresolved`, never a guessed concrete node
 teeth: breaks-on "the builder fabricates a resolved target for the FFI edge — a phantom `resolved` edge to an invented node"
 gen: conformance
 
+### SCN-INDEX-13c-2 — [held-out] an unresolvable edge never gets a fabricated resolved target   (guard)
+source: REQ-INDEX-13c
+held_out: true
+Given the cross-language `TS→Go` edge
+When the graph is built
+Then the edge's target is `unresolved`, never a guessed concrete node
+teeth: breaks-on "the builder fabricates a resolved target for the `TS→Go` edge — a phantom `resolved` edge to an invented node"
+gen: conformance   # held-out; independent TS→Go edge
+
 ### REQ-INDEX-13d — closure reported under-approximate   (happy)
 
 ### SCN-INDEX-13d-1 — a reverse closure over a node with unresolved edges in scope reports under-approximate   (happy)
@@ -514,6 +774,15 @@ When `reverseClosure(A)` is computed
 Then it is reported `{underApprox: true}`
 teeth: breaks-on "the closure reports `underApprox:false` despite an unresolved edge in scope — presented as complete"
 gen: conformance
+
+### SCN-INDEX-13d-2 — [held-out] a reverse closure over a node with unresolved edges in scope reports under-approximate   (happy)
+source: REQ-INDEX-13d
+held_out: true
+Given the reverse closure of P that includes R, where R has an `unresolved` edge in scope
+When `reverseClosure(P)` is computed
+Then it is reported `{underApprox: true}`
+teeth: breaks-on "the closure reports `underApprox:false` despite R's unresolved edge in scope — presented as complete"
+gen: conformance   # held-out; independent reverse closure
 
 ### REQ-INDEX-13e — under-approximate closure unions coChanged   (happy)
 
@@ -525,6 +794,15 @@ Then it unions `{P, Q}` into the result, each labeled `correlational` (never a s
 teeth: breaks-on "the `coChanged` band is unioned but labeled as static resolved edges — correlational hits masquerade as static edges"
 gen: conformance
 
+### SCN-INDEX-13e-2 — [held-out] an under-approximate closure unions the coChanged band, labeled correlational   (happy)
+source: REQ-INDEX-13e
+held_out: true
+Given `reverseClosure(P)` flagged under-approximate, with R's `coChanged` git-history band = `{M, N}`
+When the closure is returned
+Then it unions `{M, N}` into the result, each labeled `correlational` (never a static edge)
+teeth: breaks-on "the `coChanged` band `{M, N}` is unioned but labeled as static resolved edges — correlational hits masquerade as static edges"
+gen: conformance   # held-out; independent coChanged band
+
 ### REQ-INDEX-13f — never presented as complete or static   (guard)
 
 ### SCN-INDEX-13f-1 — an under-approximate closure is never presented as complete or as static edges   (guard)
@@ -534,6 +812,15 @@ When the closure is presented
 Then it carries the `under-approximate` flag and the `correlational` labels — never presented as complete/static
 teeth: breaks-on "the flag and labels are stripped on presentation — the closure is shown as a complete static blast radius"
 gen: conformance
+
+### SCN-INDEX-13f-2 — [held-out] an under-approximate closure is never presented as complete or as static edges   (guard)
+source: REQ-INDEX-13f
+held_out: true
+Given the under-approximate `reverseClosure(P)` with its correlational `coChanged` band `{M, N}`
+When the closure is presented
+Then it carries the `under-approximate` flag and the `correlational` labels — never presented as complete/static
+teeth: breaks-on "the flag and labels are stripped on presentation — the P closure is shown as a complete static blast radius"
+gen: conformance   # held-out; independent closure presentation
 
 ---
 
@@ -619,6 +906,12 @@ Then `territory:cas` owner is generated = charlie, deterministically from graph+
 teeth: breaks-on "with generation enabled, `owner` is left null/unassigned despite blame evidence — the SHOULD-projected generation path is a no-op"
 gen: conformance   # differential vs `index/ref/ownership.ts`; feature-gated (optional)
 
+> **Held-out EXEMPT (Wave H):** SCN-INDEX-15a-1 gets **no** second held-out fixture — it is the block's one
+> **DEFINE-parametric** SCN (owner-generation is `SHOULD`, projected with a `shall`; the enable/mandate call is a
+> DEFINE-seat dependency, `req-idx.md` [NEEDS RECONCILIATION]). A held-out leg for an optional, un-ratified
+> feature-gate would assert a behaviour the frozen sources do not yet fix. Exempt + flagged; the **MUST** teeth
+> 15b–15e each carry an independent held-out fixture below.
+
 ### REQ-INDEX-15b — explicit override beats generated owner   (guard)
 
 ### SCN-INDEX-15b-1 — an explicit manifest override beats the generated owner   (guard)
@@ -628,6 +921,15 @@ When reconciliation applies the override-precedence layer
 Then the resolved owner is dana — the explicit override wins
 teeth: breaks-on "the generated owner beats the override — resolved owner is charlie despite the explicit `dana` override (precedence inverted)"
 gen: conformance
+
+### SCN-INDEX-15b-2 — [held-out] an explicit manifest override beats the generated owner   (guard)
+source: REQ-INDEX-15b
+held_out: true
+Given a generated owner for `territory:http` = frank, and an explicit manifest override `owner = grace`
+When reconciliation applies the override-precedence layer
+Then the resolved owner is grace — the explicit override wins
+teeth: breaks-on "the generated owner beats the override — resolved owner is frank despite the explicit `grace` override (precedence inverted)"
+gen: conformance   # held-out; independent territory + owners
 
 ### REQ-INDEX-15c — reconciliation deterministic and zero-LLM   (happy)
 
@@ -639,6 +941,15 @@ Then both runs produce byte-identical ownership and `model-call-count == 0`
 teeth: breaks-on "reconciliation consults a model to pick an owner — `model-call-count == 1` and reruns can differ (nondeterministic)"
 gen: conformance
 
+### SCN-INDEX-15c-2 — [held-out] ownership reconciliation is deterministic and zero-LLM   (happy)
+source: REQ-INDEX-15c
+held_out: true
+Given the same `(graph, blame, manifest)` inputs for the net fixture
+When `reconcile` runs twice
+Then both runs produce byte-identical ownership and `model-call-count == 0`
+teeth: breaks-on "reconciliation over the net fixture consults a model to pick an owner — `model-call-count == 1` and reruns can differ (nondeterministic)"
+gen: conformance   # held-out; independent inputs
+
 ### REQ-INDEX-15d — tier stays human-ratified   (guard)
 
 ### SCN-INDEX-15d-1 — tier stays human-ratified, never generated   (guard)
@@ -649,6 +960,15 @@ Then `tier` is passed through untouched = T0 — no mechanical tier is generated
 teeth: breaks-on "the reconciler generates a `tier` from blast-radius/criticality heuristics — `tier` is mechanically overwritten (human ratification bypassed)"
 gen: conformance
 
+### SCN-INDEX-15d-2 — [held-out] tier stays human-ratified, never generated   (guard)
+source: REQ-INDEX-15d
+held_out: true
+Given the reconciler over `(graph, blame, manifest)` where `tier T0` is human-ratified for `territory:net`
+When reconciliation runs
+Then `tier` is passed through untouched = T0 — no mechanical tier is generated
+teeth: breaks-on "the reconciler generates a `tier` for `territory:net` from blast-radius/criticality heuristics — `tier` is mechanically overwritten (human ratification bypassed)"
+gen: conformance   # held-out; independent territory
+
 ### REQ-INDEX-15e — manifest not sole ownership source   (guard)
 
 ### SCN-INDEX-15e-1 — the manifest is not the sole hand-authored ownership source   (guard)
@@ -658,6 +978,15 @@ When ownership is resolved for a territory not listed in the manifest
 Then an owner is still resolved from graph+blame — the manifest is an override layer, not the sole source
 teeth: breaks-on "an unlisted territory has no owner because the manifest is treated as the sole source — ownership collapses to hand-authored manifest only (CODEOWNERS-rot)"
 gen: conformance
+
+### SCN-INDEX-15e-2 — [held-out] the manifest is not the sole hand-authored ownership source   (guard)
+source: REQ-INDEX-15e
+held_out: true
+Given an empty/partial manifest with owner-generation available
+When ownership is resolved for `territory:http`, not listed in the manifest
+Then an owner is still resolved from graph+blame — the manifest is an override layer, not the sole source
+teeth: breaks-on "`territory:http` has no owner because the manifest is treated as the sole source — ownership collapses to hand-authored manifest only (CODEOWNERS-rot)"
+gen: conformance   # held-out; independent unlisted territory
 
 ---
 
@@ -673,6 +1002,15 @@ Then the rollup publishes `ratio(cas) = 3/20 = 0.15` as a readable per-territory
 teeth: breaks-on "the rollup omits the `ratio` field — unresolved coverage is not published (invisible health)"
 gen: conformance   # differential vs `index/ref/coverage.ts`
 
+### SCN-INDEX-16a-2 — [held-out] the unresolved-edge ratio is published per-territory on every rollup   (happy)
+source: REQ-INDEX-16a
+held_out: true
+Given `territory:net` with 5 unresolved of 20 total edges
+When the territory rollup is computed
+Then the rollup publishes `ratio(net) = 5/20 = 0.25` as a readable per-territory health metric
+teeth: breaks-on "the net rollup omits the `ratio` field — unresolved coverage is not published (invisible health)"
+gen: conformance   # held-out differential vs `index/ref/coverage.ts`
+
 ### REQ-INDEX-16b — enforce T0 ceiling as standing gate   (happy)
 
 ### SCN-INDEX-16b-1 — the T0 ceiling is enforced as a standing gate from day one   (happy)
@@ -683,6 +1021,15 @@ Then the gate is active from day one and evaluates the ceiling (not deferred to 
 teeth: breaks-on "the gate is scheduled for a later `functional`-axis milestone — no ceiling is enforced at build time on day one"
 gen: conformance
 
+### SCN-INDEX-16b-2 — [held-out] the T0 ceiling is enforced as a standing gate from day one   (happy)
+source: REQ-INDEX-16b
+held_out: true
+Given a T0 `territory:net` with ratio 0.25 (> 0.15) at first build
+When the standing coverage gate runs at build time
+Then the gate is active from day one and evaluates the ceiling (not deferred to the `functional` axis)
+teeth: breaks-on "the net gate is scheduled for a later `functional`-axis milestone — no ceiling is enforced at build time on day one"
+gen: conformance   # held-out; independent T0 territory
+
 ### REQ-INDEX-16c — crossing ceiling fails the gate   (guard)
 
 ### SCN-INDEX-16c-1 — a T0 territory crossing the ceiling fails the gate   (guard)
@@ -692,6 +1039,15 @@ When `gate(cas)` evaluates
 Then it **FAILs** the build (not merely schedules the `functional` axis)
 teeth: breaks-on "crossing the ceiling only logs a warning / schedules the `functional` axis and the build stays green — the T0 gate has no teeth"
 gen: conformance
+
+### SCN-INDEX-16c-2 — [held-out] a T0 territory crossing the ceiling fails the gate   (guard)
+source: REQ-INDEX-16c
+held_out: true
+Given T0 `territory:net` with `unresolved/total = 5/20 = 0.25 > 0.15`
+When `gate(net)` evaluates
+Then it **FAILs** the build (not merely schedules the `functional` axis)
+teeth: breaks-on "crossing the ceiling in `territory:net` only logs a warning / schedules the `functional` axis and the build stays green — the T0 gate has no teeth"
+gen: conformance   # held-out; independent T0 territory
 
 ---
 
@@ -708,3 +1064,10 @@ gen: conformance
   6a/6b/7a/9a/9b/10a/10b/10c/11a/11b/13a/13b/13c/13d/13e/13f/15a/15b/15c/15d/15e/16a/16b/16c) · residue 0.
 - **DEFINE-parametric SCN:** 1 (SCN-INDEX-15a-1 — optional-feature, gated on owner-generation being enabled;
   SHOULD-vs-MUST mandate is a DEFINE-seat dependency).
+- **Held-out fixtures (Wave H · execution-GATE held-out leg):** 35 added — one `held_out: true` second fixture
+  per `gen: conformance` SCN, drawn from the independent net/http fixture universe (different tree / depgraph /
+  territory / coverage set, SAME behaviour/branch as fixture-1, own `teeth`). **Held-out-covered: 35/36**
+  conformance SCNs; the 36th (SCN-INDEX-15a-1) is **exempt+flagged** (DEFINE-parametric optional feature-gate —
+  a held-out leg would assert un-ratified behaviour). PBT SCNs (21) are **out of scope** — subsumed by
+  `properties-idx.md`; residue 0. With the held-out leg present, the execution GATE's overfit-catch is AVAILABLE
+  (FULL assurance): a builder that hard-codes fixture-1's answer fails the withheld net/http fixture.

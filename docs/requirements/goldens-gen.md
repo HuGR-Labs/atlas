@@ -851,6 +851,652 @@ gen: conformance
 
 ---
 
+## Held-out second fixtures (Wave H · execution-GATE held-out leg → FULL assurance)
+
+> **state:** S3 re-freeze (Wave H) · **owner:** charlie (FORGE) · **grounds:** invents **no** behaviour —
+> each `-2` SCN witnesses the *same* INV branch + teeth as its `-1` sibling on a **genuinely independent**
+> fixture (different repo skeleton, mined candidate set, ranked frontier, budget, resume token). The GATE
+> holds this second fixture back from the builder; an implementation that memorised the acme-repo fixture-1
+> concrete values (a renamed clone) FAILS its held-out leg — every `-2` below carries DIFFERENT concrete data
+> hitting the SAME behaviour, with its own `teeth: breaks-on`. This turns each conformance REQ's held-out leg
+> AVAILABLE → **FULL assurance**.
+>
+> **Held-out fixture universe** (`beacon-repo@rev-1d0a`, an **independent** repo skeleton — mirrors
+> `genesis/ref` shapes, shares **no** symbol / hash / frontier with the acme universe of §top):
+>
+> | id | file::symbol | PPR rank | tier | subtreeHash | note |
+> |---|---|---|---|---|---|
+> | h1 | `billing/invoice.ts::finalize` | 0.88 | T0 | `st-e50` | top blast, ranked #1 |
+> | h2 | `billing/credit.ts::reverse`   | 0.63 | T1 | `st-f61` | ranked #2 (near-tie with h3) |
+> | h3 | `session/key.ts::renew`        | 0.61 | T1 | `st-g72` | ranked #3 (near-tie with h2) |
+> | h4 | `format/trim.ts::rtrim`        | 0.12 | T2 | `st-h83` | cold tail, ranked #4 |
+> | h5 | `text/wrap.ts::softwrap`       | 0.10 | T2 | `st-i94` | ranked #5 (near-tie with h4) |
+> | v2 | `third_party/chart.min.js`     | —    | —  | —        | vendored, 0 churn, **un-ranked** |
+>
+> Frontier = {h1,h2,h3,h4,h5} (size **5** of 1200 repo symbols) ⇒ `--budget = min(5, 200) = 5`. PPR damping
+> `0.85` pinned, seed pinned, ties broken by a stable total order. Skeleton hash of the held-out run = `sk-9b1c`.
+> **Scope:** the 72 `gen: conformance` SCNs each get a held-out `-2` **except the 5 GEN-16 SCNs** (exempt —
+> see §GEN-16 held-out note) ⇒ **67 held-out added**. The 3 `gen: PBT` SCNs (GEN-11a/b/c) are the
+> determinism-law witnesses — their permutation property already ranges over inputs, so no single held-out
+> fixture applies. Every `-2` restates only its `-1` sibling's behaviour on new data (grounded, no new INV).
+
+### SCN-GEN-1a-2 — S0+S1 are $0-LLM pure functions of beacon-repo@rev-1d0a   (held-out · happy)
+source: REQ-GEN-1a
+held_out: true   # GATE holds this back; an impl overfit to the acme S0/S1 call-graph fails here
+Given `beacon-repo@rev-1d0a`, the reference stages `genesis/ref/scan.ts` + `mine.ts`, and the beacon S0/S1 call-graph
+When `scan(repo,rev)` then `mine(scan)` run and the S0/S1 import graph is scanned for any LLM client symbol
+Then the skeleton `sk-9b1c` is produced spending **0 LLM calls** and **0** LLM symbols are reachable from the S0/S1 path — S0+S1 = pure `f(repo,rev)`
+teeth: breaks-on "the beacon mine stage calls an LLM to score `billing/invoice.ts::finalize` — an LLM client symbol enters the S0/S1 call graph and the $0-purity assertion fails"
+gen: conformance
+
+### SCN-GEN-1b-2 — same rev → byte-identical beacon skeleton   (held-out · happy)
+source: REQ-GEN-1b
+held_out: true   # different repo@rev, same byte-identity reproducibility property (HARD RULE 5)
+Given the skeleton `sk-9b1c` from a first run over `rev-1d0a`
+When genesis re-runs `scan∘mine` on the identical rev and the two skeletons are compared byte-for-byte
+Then the second skeleton is **byte-identical** to `sk-9b1c`
+teeth: breaks-on "scan orders beacon files by inode/readdir order (nondeterministic) — the re-run reorders nodes and diverges from `sk-9b1c`"
+gen: conformance
+
+### SCN-GEN-1c-2 — same rev → byte-identical beacon ranking   (held-out · happy)
+source: REQ-GEN-1c
+held_out: true   # different repo@rev, still asserts reproducible ranking (HARD RULE 5; determinism arm delegated to GEN-11)
+Given the ranking `[h1,h2,h3,h4,h5]` from a first run over `rev-1d0a`
+When genesis re-runs and the two rankings are compared byte-for-byte
+Then the ranking is byte-identical `[h1,h2,h3,h4,h5]`
+teeth: breaks-on "the ranker seeds PPR from an unpinned RNG — the re-run permutes the near-tie h2/h3 pair and the ranking diverges"
+gen: conformance
+
+### SCN-GEN-2a-2 — the un-ranked vendored `v2` receives 0 LLM calls   (held-out · guard)
+source: REQ-GEN-2a
+held_out: true
+Given the ranked frontier {h1,h2,h3,h4,h5} and the un-ranked vendored file `v2` (not in the frontier)
+When the spend scheduler runs to completion
+Then `v2` receives **0** LLM calls — every visited site ∈ the ranked set
+teeth: breaks-on "the scheduler falls back to a repo-wide walk after draining the 5-site frontier — `v2` gets an LLM call though it was never ranked"
+gen: conformance
+
+### SCN-GEN-2b-2 — calls issue in strictly descending PPR order over 5 sites   (held-out · happy)
+source: REQ-GEN-2b
+held_out: true
+Given the ranked frontier `[h1(0.88), h2(0.63), h3(0.61), h4(0.12), h5(0.10)]`
+When the scheduler issues its bounded calls and the call order is recorded
+Then the call sequence is exactly `[h1,h2,h3,h4,h5]` — strictly descending PPR, highest-first
+teeth: breaks-on "the scheduler pops the frontier FIFO by discovery order — h3 is called before h2 (not highest-first)"
+gen: conformance
+
+### SCN-GEN-2c-2 — exactly one bounded call for h1   (held-out · happy)
+source: REQ-GEN-2c
+held_out: true
+Given the scheduler visiting `h1`
+When `h1` is processed
+Then `h1` receives **exactly one** bounded (token-capped) LLM call and is never re-called — `call-count(h1) = 1`
+teeth: breaks-on "self-consistency samples `h1` five times — `call-count(h1) = 5` (more than one call per site)"
+gen: conformance
+
+### SCN-GEN-2d-2 — total spend capped at min(frontier_size, 200) on beacon   (held-out · happy)
+source: REQ-GEN-2d
+held_out: true
+Given a frontier of size 5 → `budget = min(5,200) = 5`, and a fixture frontier of size 750 → `budget = min(750,200) = 200`
+When the scheduler runs each to completion
+Then total LLM calls ≤ 5 in the first and ≤ 200 in the second — the hard ceiling holds in both
+teeth: breaks-on "budget is computed as `max(frontier,200)` — the 750-site frontier spends 750 calls, blowing the 200 ceiling"
+gen: conformance
+
+### SCN-GEN-2e-2 — halt when the trailing-20 admit-rate < 20% (2 of 20)   (held-out · happy)
+source: REQ-GEN-2e
+held_out: true
+Given a beacon run where the last 20 completed sites admitted only 2 candidates (admit-rate 10% `< 20%`)
+When the scheduler evaluates the trailing-20 admit-rate after site 20
+Then genesis **halts** — no further ranked site is called
+teeth: breaks-on "the halt boundary is written with `>=` (10% read as passing) — the run drives past the diminishing-returns floor and drains the whole budget"
+gen: conformance
+
+### SCN-GEN-2f-2 — no whole-repo LLM sweep on the 1200-symbol beacon repo   (held-out · guard)
+source: REQ-GEN-2f
+held_out: true
+Given the beacon repo with 5 ranked sites out of 1200 total symbols
+When the whole run completes and the visited-site set is compared to the total symbol set
+Then LLM was spent on ≤ 5 ranked sites — the 1195 un-ranked symbols got **0** calls (no repo-wide sweep)
+teeth: breaks-on "a final catch-all pass sweeps every symbol — LLM calls scale to 1200 (a repo-wide sweep)"
+gen: conformance
+
+### SCN-GEN-3a-2 — beacon call-count = f(frontier), invariant to line count   (held-out · happy)
+source: REQ-GEN-3a
+held_out: true
+Given two revs of beacon-repo with the **same** frontier {h1..h5} but rev-Q carrying 4× the total line count of rev-P (all in un-churned files)
+When genesis runs on each and the call-counts are compared
+Then `call-count(P) == call-count(Q) == 5` — cost is a function of the frontier, invariant to line count
+teeth: breaks-on "the accountant sizes spend by file/line totals — rev-Q (4× lines) spends 4× the calls"
+gen: conformance
+
+### SCN-GEN-3b-2 — +25k un-churned lines → Δspend = 0 on beacon   (held-out · guard)
+source: REQ-GEN-3b
+held_out: true
+Given a baseline run over `rev-1d0a` with `call-count = 5`, and a fixture rev that **adds 25,000 lines of never-committed-churn code** (a new vendored bundle, 0 SZZ, 0 hotspot)
+When genesis runs on the +25k-lines rev
+Then the call-count is still 5 — **Δspend = 0** (differential / metamorphic)
+teeth: breaks-on "the frontier is seeded from raw file size — the +25k-line bundle enters the frontier and adds LLM calls (Δ > 0)"
+gen: conformance
+
+### SCN-GEN-4a-2 — a beacon seed carries its re-deriving subtreeHash `st-e50`   (held-out · happy)
+source: REQ-GEN-4a
+held_out: true
+Given a seeded fact `G` citing `billing/invoice.ts::finalize@st-e50`
+When `atlas-emit` re-derives the citation at `source@sha`
+Then `G` is grounded and **carries the re-derived `subtreeHash` `st-e50`** in its stored record
+teeth: breaks-on "the emit-gate stores `G` with an **unpopulated/stale** subtreeHash (skips the recompute) — `G` is emitted carrying `∅`/`st-OLD` instead of `st-e50`, breaking its later drift-check"
+gen: conformance
+
+### SCN-GEN-4b-2 — a beacon seed clears both grounding and non-obvious doors   (held-out · happy)
+source: REQ-GEN-4b
+held_out: true
+Given a seed on `billing/credit.ts::reverse` that is grounded (`st-f61` re-derives) **and** non-obvious (it does not merely restate a type signature)
+When `atlas-emit` applies the 2-door bar
+Then the seed is emitted (`emitted:true`) — both doors pass
+teeth: breaks-on "the non-obviousness door is **inverted** (it rejects non-obvious seeds and admits obvious ones) — this valid non-obvious seed is wrongly `emitted:false`"
+gen: conformance
+
+### SCN-GEN-4c-2 — ungrounded / obvious beacon seed → emitted:false   (held-out · guard)
+source: REQ-GEN-4c
+held_out: true
+Given seed `U2` whose citation does **not** re-derive at `source@sha`, and seed `O2` that is obvious (restates that `rtrim(s)` strips trailing whitespace)
+When `atlas-emit` applies the 2-door bar to each
+Then both are rejected — `emitted:false`; neither reaches the fact set
+teeth: breaks-on "the gate downgrades a failed grounding door to a warning — the ungrounded seed `U2` is emitted anyway"
+gen: conformance
+
+### SCN-GEN-4d-2 — a beacon seed cannot self-declare true   (held-out · guard)
+source: REQ-GEN-4d
+held_out: true
+Given a candidate on `session/key.ts::renew` carrying `self_asserted:true` / `confidence:1.0` and **no** external grounding
+When the emit-gate evaluates it
+Then the self-declaration is ignored — admission depends only on the mechanical 2-door bar; the seed is rejected
+teeth: breaks-on "the gate reads the candidate's own `self_asserted` flag as sufficient — the ungrounded seed self-promotes to a fact"
+gen: conformance
+
+### SCN-GEN-5a-2 — beacon genesis output is candidate-only   (held-out · happy)
+source: REQ-GEN-5a
+held_out: true
+Given genesis completing a beacon run that produces 9 seeds
+When the written objects' status fields are inspected
+Then all 9 are written as `candidate` — **0** are written `ratified`
+teeth: breaks-on "genesis writes a high-confidence beacon seed directly as `ratified` — a non-candidate enters the store from genesis"
+gen: conformance
+
+### SCN-GEN-5b-2 — T0/contested beacon facts ratified via a batched, ranked interview   (held-out · happy)
+source: REQ-GEN-5b
+held_out: true
+Given 6 T0/contested candidates awaiting ratification
+When the ratification interview is assembled
+Then they are presented as **one batched, ranked** interview (batch size > 1, capped 20 Q/session) for human ratification
+teeth: breaks-on "the router ratifies each candidate the moment it is proposed with no human interview — the batched-interview edge is bypassed"
+gen: conformance
+
+### SCN-GEN-5c-2 — no auto-promote edge for the T0 candidate on `finalize`   (held-out · guard)
+source: REQ-GEN-5c
+held_out: true
+Given the T0 candidate on `billing/invoice.ts::finalize` in the ratify-router state machine
+When the router's edges are enumerated
+Then the **only** edge to `ratified` passes through `interview(batch)` — no `candidate→ratified` edge bypasses the human
+teeth: breaks-on "an `auto_promote(tier==T0)` edge is added — the finalize candidate reaches ratified with no interview"
+gen: conformance
+
+### SCN-GEN-5d-2 — the beacon interview is never one-question-at-a-time   (held-out · guard)
+source: REQ-GEN-5d
+held_out: true
+Given 6 contested beacon candidates
+When the interview is emitted
+Then the batch carries **>1** ranked question per session — never a single-question drip
+teeth: breaks-on "the interview emits one question, waits, then emits the next — batch size collapses to 1 (one-at-a-time)"
+gen: conformance
+
+### SCN-GEN-6a-2 — beacon mined signals feed only the rank field   (held-out · happy)
+source: REQ-GEN-6a
+held_out: true
+Given `billing/invoice.ts::finalize` with hotspot, SZZ, coupling, and ownership signals
+When the miner routes those signals
+Then they land only in the candidate's `rank` field — **never** in `Fact[]`
+teeth: breaks-on "the miner writes the finalize SZZ score directly into the fact set — a mined signal becomes a fact without grounding"
+gen: conformance
+
+### SCN-GEN-6b-2 — an ungrounded beacon signal is not served as a fact   (held-out · guard)
+source: REQ-GEN-6b
+held_out: true
+Given a high-hotspot `session/key.ts::renew` with a signal but **no** grounded + ratified invariant
+When the served fact set is queried
+Then the signal is **absent** from the fact set — it stays a rank heuristic until grounded ∧ ratified
+teeth: breaks-on "the served set includes ungrounded signals as facts — the un-ratified renew hotspot is served as truth"
+gen: conformance
+
+### SCN-GEN-6c-2 — high churn/SZZ on `billing/credit.ts` + no invariant → 0 facts   (held-out · guard)
+source: REQ-GEN-6c
+held_out: true
+Given `billing/credit.ts::reverse` with top-decile churn and high SZZ but **no** grounded invariant extracted
+When genesis processes it
+Then **0** facts are minted from it — churn/SZZ alone mints nothing
+teeth: breaks-on "the miner mints a 'this file is important' fact from the churn signal alone — 1 fact from 0 grounded invariants"
+gen: conformance
+
+### SCN-GEN-7a-2 — beacon genesis hands off, leaves no sweeper   (held-out · happy)
+source: REQ-GEN-7a
+held_out: true
+Given genesis completing its one-time seeding pass over beacon-repo
+When the run finishes
+Then control is handed to born-from-work (KNOW-13) — **no** standing genesis sweeper process remains
+teeth: breaks-on "genesis registers a daemon that keeps re-sweeping beacon-repo — control is never handed off"
+gen: conformance
+
+### SCN-GEN-7b-2 — genesis∘genesis produces 0 duplicate beacon facts   (held-out · happy)
+source: REQ-GEN-7b
+held_out: true
+Given a first run that grounded facts {G1,G2,G3,G4}
+When genesis is run a second time on `rev-1d0a`
+Then the second run **upserts by fact id** — 0 duplicate facts (`genesis∘genesis ≡ genesis` on the grounded set)
+teeth: breaks-on "the re-run inserts facts unconditionally — {G1,G2,G3,G4} are duplicated to 8 facts (upsert degrades to append)"
+gen: conformance
+
+### SCN-GEN-7c-2 — a beacon re-run re-indexes only changed files   (held-out · happy)
+source: REQ-GEN-7c
+held_out: true
+Given a first run over `rev-1d0a`, then `rev-1e2` that changes exactly 2 files
+When genesis re-runs on `rev-1e2`
+Then only those 2 changed files' nodes are re-indexed — the untouched files are not re-processed
+teeth: breaks-on "the re-run re-indexes the whole repo regardless of the diff — every file is re-processed (non-incremental)"
+gen: conformance
+
+### SCN-GEN-8a-2 — an interrupted beacon run resumes from the last completed site   (held-out · happy)
+source: REQ-GEN-8a
+held_out: true
+Given a run killed after completing h1,h2,h3 of `[h1,h2,h3,h4,h5]`, with a persisted `resumeToken` pointing at h3
+When genesis is restarted with the `resumeToken`
+Then it resumes at **h4** — h1,h2,h3 are not re-called (resume from the last completed ranked site)
+teeth: breaks-on "restart ignores the `resumeToken` and re-processes from h1 — h1,h2,h3 get a second LLM call (no resume)"
+gen: conformance
+
+### SCN-GEN-8b-2 — a truncated-packfile beacon clone yields an honest partial skeleton   (held-out · guard)
+source: REQ-GEN-8b
+held_out: true
+Given a malformed input — a beacon clone with a **truncated packfile** (most objects readable, one pack object corrupt)
+When genesis runs on it
+Then it returns an honest partial `GenesisReport` + a `resumeToken` — the reachable objects are skeletonized, the corrupt pack object reported missing
+teeth: breaks-on "the truncated pack produces a fabricated *full* skeleton (invented nodes for the unreadable pack object) instead of an honest partial"
+gen: conformance   # PBT-fuzz differential over malformed clones; tag stays reference-model (§GEN-8)
+
+### SCN-GEN-8c-2 — a distinct malformed-repo fuzz family never throws   (held-out · guard)
+source: REQ-GEN-8c
+held_out: true
+Given a **held-out** PBT-fuzz stream of malformed repos/revs (symlink cycles, zero-byte blobs, a gitlink to a missing submodule commit, CRLF-corrupt paths) — 20k corner-biased cases disjoint from the SCN-8c-1 family
+When each is fed to every genesis entry point side-by-side with the total reference pipeline
+Then every call returns a `Result` / partial report — **0** exceptions thrown; prod matches ref
+teeth: breaks-on "a symlink-cycle input propagates an uncaught stack-overflow instead of a structured partial report"
+gen: conformance   # PBT-fuzz differential vs the total reference `genesis/ref/*.ts`
+
+### SCN-GEN-9a-2 — beacon genesis seeds every Awareness facet's source   (held-out · happy)
+source: REQ-GEN-9a
+held_out: true
+Given a beacon repo with a ratified T0 manifest and `STYLE.md@sha` (the beacon conventions artifact)
+When genesis assembles Awareness
+Then it creates the sources each facet rolls up from — `constitution` from the T0 manifest, `taste` at `STYLE.md@sha`, the `mission` stub
+teeth: breaks-on "genesis leaves the `taste` facet with no source object though `STYLE.md` exists — a rollup source is missing"
+gen: conformance
+
+### SCN-GEN-9b-2 — a source-less beacon facet renders UN-SEEDED   (held-out · guard)
+source: REQ-GEN-9b
+held_out: true
+Given the `mission` facet for which no DEFINE artifact exists in beacon-repo (no source)
+When Awareness renders the facet
+Then it renders the `UN-SEEDED` sentinel — not a value
+teeth: breaks-on "the source-less `mission` facet renders as an empty-but-present value instead of `UN-SEEDED` (a hole masquerades as seeded)"
+gen: conformance
+
+### SCN-GEN-9c-2 — a source-less beacon facet is never fabricated   (held-out · guard)
+source: REQ-GEN-9c
+held_out: true
+Given the source-less `mission` facet in beacon-repo
+When Awareness assembles
+Then **no** fabricated `mission` value is invented (MEM-11) — it stays `UN-SEEDED`
+teeth: breaks-on "Awareness synthesizes a plausible `mission` string from `README.md` — a facet is fabricated with no source"
+gen: conformance
+
+### SCN-GEN-9d-2 — the beacon mission stub stays unratified   (held-out · guard)
+source: REQ-GEN-9d
+held_out: true
+Given the beacon `mission` stub and no ratified DEFINE artifact
+When Awareness is assembled and the stub's flag is read
+Then the stub carries `unratified:true` — it never presents as ratified
+teeth: breaks-on "the mission stub is emitted with `ratified:true` before any DEFINE artifact exists"
+gen: conformance
+
+### SCN-GEN-10a-2 — each beacon stage binds a named, deterministic mechanism   (held-out · happy)
+source: REQ-GEN-10a
+held_out: true
+Given the stage registry (scan→tree-sitter/SCIP/stack-graphs, rank→SZZ/hotspots/coupling/PPR, check→CodeQL/Semgrep) applied to beacon-repo
+When each stage's bound mechanism is enumerated
+Then every stage maps to a named deterministic mechanism from the admissible set — **none** unbound
+teeth: breaks-on "the check stage binds an unnamed 'AI linter' not in the registry — a stage runs an unregistered mechanism"
+gen: conformance
+
+### SCN-GEN-10b-2 — zero embedding/vector/ANN in the beacon index or rank path   (held-out · guard)
+source: REQ-GEN-10b
+held_out: true
+Given the beacon index / rank / check dependency graph
+When the import graph is scanned for embedding, vector-store, and ANN symbols
+Then **0** are reachable — retrieval and ranking are explicit graph/query mechanisms (A-14)
+teeth: breaks-on "the ranker imports a FAISS-style ANN index to pre-cluster sites — an ANN symbol enters the rank path (A-14 violated)"
+gen: conformance
+
+### SCN-GEN-12a-2 — in S2 the LLM only proposes a typed candidate for h1   (held-out · happy)
+source: REQ-GEN-12a
+held_out: true
+Given stage S2 processing site `h1`
+When the LLM is invoked
+Then its output is a **typed candidate proposal only** — it does not write to the fact set or cast the admission decision
+teeth: breaks-on "the LLM's output for `h1` is written straight into the fact set — the model acts as an oracle, not a proposer"
+gen: conformance
+
+### SCN-GEN-12b-2 — beacon admission is decided by the mechanical harness   (held-out · happy)
+source: REQ-GEN-12b
+held_out: true
+Given a typed candidate proposed by the LLM for `billing/credit.ts::reverse`
+When admission runs
+Then the admit/reject decision comes only from the mechanical harness (compile ∧ HOLDS ∧ mutant-flip) — the model casts no admission vote
+teeth: breaks-on "admission reads the model's `confidence` score as the deciding factor — admission is no longer mechanical"
+gen: conformance
+
+### SCN-GEN-12c-2 — a beacon check that won't compile or won't HOLDS is not admitted   (held-out · guard)
+source: REQ-GEN-12c
+held_out: true
+Given predicate candidate `P2` on `session/key.ts::renew` whose synthesized check either (i) fails to compile or (ii) compiles but returns **BROKEN** on the current code
+When the admit-harness evaluates `P2`
+Then `P2` is **not** admitted in either case — admission requires compile ∧ HOLDS-on-current-code
+teeth: breaks-on "the harness admits `P2` on 'compiles' alone without evaluating HOLDS — a check that is BROKEN on current code is admitted"
+gen: conformance
+
+### SCN-GEN-12d-2 — a failing beacon check is refined ≤K then dropped   (held-out · guard)
+source: REQ-GEN-12d
+held_out: true
+Given predicate candidate `P2` whose check returns BROKEN (a counterexample), with `K=1`
+When the harness processes `P2`
+Then it refines `P2` at most once; if still BROKEN it is **dropped** — `P2` is never forced into the fact set
+teeth: breaks-on "on a persistent BROKEN check the harness disables the check and admits `P2` anyway (forces the fact) instead of dropping it"
+gen: conformance
+
+### SCN-GEN-12e-2 — an obvious beacon advisory is not admitted   (held-out · guard)
+source: REQ-GEN-12e
+held_out: true
+Given advisory candidate `A2` on `format/trim.ts::rtrim` that is grounded but **obvious** (restates a public type signature)
+When the admit-harness applies the 2-door bar
+Then `A2` is **not** admitted — an advisory must pass grounding ∧ non-obviousness
+teeth: breaks-on "the harness admits an advisory on grounding alone — the obvious advisory `A2` passes with the non-obviousness door dropped"
+gen: conformance
+
+### SCN-GEN-12f-2 — beacon chain-of-thought is scratch, never a fact   (held-out · guard)
+source: REQ-GEN-12f
+held_out: true
+Given an LLM proposal for `h2` whose reasoning trace (chain-of-thought) is captured in the harness scratch buffer
+When the run's persisted fact set is inspected
+Then **no** chain-of-thought text is persisted — only the admitted typed candidate; the scratch is discarded
+teeth: breaks-on "the reasoning trace is stored as an advisory fact — chain-of-thought is persisted as truth"
+gen: conformance
+
+### SCN-GEN-12g-2 — abstention with a grounded why-not on h3 is valid   (held-out · happy)
+source: REQ-GEN-12g
+held_out: true
+Given site `h3` where the LLM finds no groundable invariant and returns an abstention with a grounded why-not
+When the harness records the outcome
+Then abstention is accepted as a **valid outcome** — 0 facts, a recorded grounded why-not, no retry-forcing
+teeth: breaks-on "abstention is treated as failure and `h3` is retried until it emits a fact — abstention is not a valid outcome"
+gen: conformance
+
+### SCN-GEN-12h-2 — the model is not pressured to emit on h5   (held-out · guard)
+source: REQ-GEN-12h
+held_out: true
+Given the proposal step for site `h5` (cold tail, likely nothing groundable to say)
+When the proposal step runs
+Then the model may return **0** candidates with no reward/penalty steering it toward emitting — no "you must produce a fact" pressure
+teeth: breaks-on "the harness re-prompts 'you must return at least one fact' until the model emits — the model is pressured to emit on `h5`"
+gen: conformance
+
+### SCN-GEN-12i-2 — an admitted beacon predicate is labelled a likely invariant   (held-out · happy)
+source: REQ-GEN-12i
+held_out: true
+Given an admitted predicate `P2` on `billing/invoice.ts::finalize` (compiled, HOLDS on current code, flips to BROKEN on a mutant of `st-e50`)
+When `P2`'s label is read
+Then it is labelled `machine-checked likely invariant` — never `proof` / `theorem` / ∀-input
+teeth: breaks-on "`P2` is labelled a `proven invariant` — a sampled-current-code check is misrepresented as a ∀-input proof"
+gen: conformance
+
+### SCN-GEN-12j-2 — a beacon check that survives every mutant is dropped as vacuous   (held-out · guard)   ★ held-out leg of the block's teeth axis
+source: REQ-GEN-12j
+held_out: true
+Given predicate candidate `V2` whose synthesized check returns **HOLDS** on the current code **and** also returns HOLDS on *every* mechanically-mutated counterfactual of the anchored subtree `st-e50` — i.e. it flips to BROKEN on **0** mutants (a tautology / matches nothing)
+When the admit-harness runs the mutation-flip gate — this held-out golden asserts the same **META-property** (mutation-of-the-mutation) on independent data: *a synthesized check with no teeth is REJECTED*
+Then `V2` is **dropped as vacuous** — admission requires HOLDS-on-current ∧ BROKEN-on-≥1-mutant, and `V2` fails the second conjunct
+teeth: breaks-on "the harness admits on HOLDS alone and **skips the mutant-flip conjunct** — the tautological check `V2` (survives every mutant of `st-e50`) is admitted, i.e. a toothless check enters the Atlas as a fact"
+gen: conformance   # held-out witness of the teeth-gate META-property on the independent beacon subtree st-e50
+
+### SCN-GEN-12k-2 — a type-expressible beacon slot prefers the type-checker / LSP   (held-out · happy)
+source: REQ-GEN-12k
+held_out: true
+Given a `contract` slot on `session/key.ts::renew` that is expressible in the language's type system
+When the check is selected
+Then it uses the language **type-checker / LSP diagnostics** (sound, `$0` — the compiler already ran) — not a synthesized CodeQL/Semgrep query
+teeth: breaks-on "the renew contract is checked by a synthesized Semgrep query instead of the sound compiler — an unsound approximate check replaces the `$0` sound one"
+gen: conformance
+
+### SCN-GEN-13a-2 — base tier runs a single grounded proposal on h3, extras off   (held-out · happy)
+source: REQ-GEN-13a
+held_out: true
+Given a base-tier site `h3` (not high-value ∧ uncertain)
+When it is processed
+Then exactly one LLM call fires and every extra mechanism (self-consistency, refuter, CEGIS>1, CodeQL) is **off**
+teeth: breaks-on "self-consistency is on by default at the base tier — `h3` costs 3 samples instead of 1"
+gen: conformance
+
+### SCN-GEN-13b-2 — a mechanism switches on only when high-value ∧ uncertain   (held-out · happy)
+source: REQ-GEN-13b
+held_out: true
+Given site `h1` (T0, high blast) flagged **uncertain**, `h2` (T1, high blast) flagged **certain**, and `h4` (low tier) flagged **certain**
+When the escalation predicate runs
+Then extra mechanisms switch on for `h1` only — `h2` (high-value **but certain**) and `h4` both stay at the single-proposal base
+teeth: breaks-on "escalation fires on high-value alone (drops the uncertainty conjunct) — `h2` (high-value ∧ certain) needlessly escalates instead of staying at base"
+gen: conformance
+
+### SCN-GEN-13c-2 — the beacon default is one sample, no self-consistency   (held-out · happy)
+source: REQ-GEN-13c
+held_out: true
+Given the default cost policy with no escalation
+When a beacon site is proposed
+Then exactly **one** sample is drawn — no self-consistency voting
+teeth: breaks-on "the default draws 5 samples and majority-votes — self-consistency is on by default"
+gen: conformance
+
+### SCN-GEN-13d-2 — a beacon candidate defaults to advisory unless checkable ∧ tier≥T1   (held-out · happy)
+source: REQ-GEN-13d
+held_out: true
+Given candidate `A2` on `text/wrap.ts::softwrap` (not mechanically checkable) and candidate `B2` on `billing/credit.ts::reverse` (checkable ∧ tier T1)
+When their kinds are assigned
+Then `A2` defaults to **advisory**; only `B2` (checkable ∧ tier≥T1) becomes a predicate
+teeth: breaks-on "the un-checkable `A2` is admitted as a predicate — the checkable∧T1 guard is dropped"
+gen: conformance
+
+### SCN-GEN-13e-2 — beacon CEGIS default refinement bound is K≤1   (held-out · happy)
+source: REQ-GEN-13e
+held_out: true
+Given the default CEGIS config
+When a beacon check needs refinement
+Then at most **1** refine round runs (`K≤1`) before drop
+teeth: breaks-on "the default CEGIS bound is `K=8` — refinement loops 8× per candidate by default (cost blow-up)"
+gen: conformance
+
+### SCN-GEN-13f-2 — the refuter runs only for the T0 beacon candidate   (held-out · guard)
+source: REQ-GEN-13f
+held_out: true
+Given the T1 candidate `h2` and the T0 candidate `h1`
+When the cost policy decides whether to run the refuter
+Then the refuter runs for `h1` (T0) **only** — the T1 candidate `h2` skips it
+teeth: breaks-on "the refuter runs for every tier — the T2 candidate `h4` invokes the small-model refuter (cost leak)"
+gen: conformance
+
+### SCN-GEN-13g-2 — Semgrep is attempted before CodeQL on beacon   (held-out · happy)
+source: REQ-GEN-13g
+held_out: true
+Given a beacon check expressible in either Semgrep or CodeQL
+When the analyzer is chosen
+Then **Semgrep** (cheaper) is attempted first; CodeQL only if Semgrep cannot express it
+teeth: breaks-on "CodeQL is invoked first by default — the expensive analyzer runs before the cheap one"
+gen: conformance
+
+### SCN-GEN-13h-2 — the beacon query DB is built once, never per-check   (held-out · guard)
+source: REQ-GEN-13h
+held_out: true
+Given 30 checks over the same beacon repo that require a CodeQL DB
+When the checks run
+Then the DB is built **once** and amortized across all 30 — never rebuilt per-check
+teeth: breaks-on "the DB is rebuilt for each check — 30 checks trigger 30 DB builds (per-check cost)"
+gen: conformance
+
+### SCN-GEN-13i-2 — beacon genesis requires no whole-repo pass   (held-out · guard)
+source: REQ-GEN-13i
+held_out: true
+Given a run scoped to the frontier {h1..h5} in a 1200-symbol repo
+When genesis executes
+Then it completes without a whole-repo pass — the 1195 non-frontier symbols are not analyzed
+teeth: breaks-on "a mandatory whole-repo CodeQL pass runs before extraction — genesis requires analyzing all 1200 symbols"
+gen: conformance
+
+### SCN-GEN-13j-2 — beacon genesis is scopable to a subtree   (held-out · happy)
+source: REQ-GEN-13j
+held_out: true
+Given `--scope billing/` limiting the run to the billing subtree
+When genesis runs
+Then only `billing/` sites (h1,h2) are processed; the cold tail (`session/`, `format/`, `text/`) is left to born-from-work
+teeth: breaks-on "the `--scope` flag is ignored — genesis processes the whole tree regardless (not scopable)"
+gen: conformance
+
+### SCN-GEN-13k-2 — the beacon GenesisReport carries per-stage cost   (held-out · happy)
+source: REQ-GEN-13k
+held_out: true
+Given a completed beacon run
+When the `GenesisReport` is inspected
+Then it carries a **per-stage** cost breakdown (scan / mine / rank / extract) under the ceiling
+teeth: breaks-on "the report carries only a single lump total — per-stage cost is not reported"
+gen: conformance
+
+### SCN-GEN-14a-2 — beacon REVIEW / ENRICH / EXPAND are opt-in or default-shallow   (held-out · happy)
+source: REQ-GEN-14a
+held_out: true
+Given the default config on beacon-repo
+When the loop settings are read
+Then each of REVIEW, ENRICH, EXPAND is off / default-shallow — none runs deep unless opted in
+teeth: breaks-on "REVIEW defaults to deep (8 rounds) — a deepening loop runs deep without being opted in"
+gen: conformance
+
+### SCN-GEN-14b-2 — each beacon deepening loop is budget-gated   (held-out · happy)
+source: REQ-GEN-14b
+held_out: true
+Given ENRICH opted in with a budget of 30 calls
+When ENRICH runs
+Then it halts at the 30-call budget — the loop is gated by the budget
+teeth: breaks-on "ENRICH ignores the budget and runs to natural completion — the budget gate is absent"
+gen: conformance
+
+### SCN-GEN-14c-2 — each beacon loop carries a diminishing-returns / fixpoint stop   (held-out · happy)
+source: REQ-GEN-14c
+held_out: true
+Given EXPAND running until a no-new-node round
+When a round produces 0 new nodes
+Then EXPAND stops (fixpoint reached) — or on marginal value `< ε`, or loop-until-dry on the 2-door bar
+teeth: breaks-on "EXPAND has no fixpoint predicate — it keeps looping after a no-new-node round"
+gen: conformance
+
+### SCN-GEN-14d-2 — no beacon deepening loop runs unbounded   (held-out · guard)
+source: REQ-GEN-14d
+held_out: true
+Given a pathological beacon input that never reaches a natural fixpoint
+When ENRICH runs on it
+Then ENRICH still **terminates** at its budget / round bound — no loop runs unbounded
+teeth: breaks-on "ENRICH lacks both a budget and a round cap — on the pathological input it loops forever (unbounded)"
+gen: conformance
+
+### SCN-GEN-14e-2 — with all beacon loops off, cost == the GEN-13 single pass   (held-out · happy)
+source: REQ-GEN-14e
+held_out: true
+Given beacon genesis run with REVIEW / ENRICH / EXPAND all off, vs the GEN-13 single cheap pass on `rev-1d0a`
+When the two costs are compared
+Then they are **equal** — Δ=0 (loops-off adds no cost over the single pass)
+teeth: breaks-on "an always-on REVIEW prologue runs even with loops off — loops-off costs more than the single pass (Δ > 0)"
+gen: conformance
+
+### SCN-GEN-14f-2 — each beacon loop reuses propose→verify / relate()   (held-out · happy)
+source: REQ-GEN-14f
+held_out: true
+Given the beacon loop-runner implementation
+When a loop's internals are inspected
+Then each loop is built from the existing propose→verify harness and `relate()` — no bespoke pipeline
+teeth: breaks-on "EXPAND ships its own parallel extraction pipeline — a loop does not reuse propose→verify"
+gen: conformance
+
+### SCN-GEN-14g-2 — the beacon deepening loops add no new subsystem   (held-out · guard)
+source: REQ-GEN-14g
+held_out: true
+Given the beacon module graph before and after enabling the loops
+When new top-level subsystems are counted
+Then **0** new subsystems are added — loops live inside existing machinery
+teeth: breaks-on "REVIEW introduces a standalone indexer subsystem — a new subsystem is added for a loop"
+gen: conformance
+
+### SCN-GEN-14h-2 — beacon loops do not duplicate born-from-work's lazy enrichment   (held-out · guard)
+source: REQ-GEN-14h
+held_out: true
+Given born-from-work already provides free lazy enrichment on consult
+When the beacon ENRICH loop's scope is checked
+Then it does **not** re-do born-from-work's lazy enrichment — no duplicated work
+teeth: breaks-on "ENRICH eagerly pre-enriches every fact that born-from-work would lazily enrich for free — duplicated enrichment"
+gen: conformance
+
+### SCN-GEN-15a-2 — degenerate beacon history trips the pre-check → structural fallback   (held-out · happy)
+source: REQ-GEN-15a
+held_out: true
+Given a beacon mirror imported as a **single squash commit** (blame concentrated in 1 commit, commit count below threshold)
+When the cheap pre-check runs before ranking
+Then it detects degenerate history and switches the PPR **personalization vector to structural signals** (type / API-surface density, no history seeding)
+teeth: breaks-on "the pre-check threshold is disabled — the squashed repo seeds PPR from the single squash commit and the personalization degenerates"
+gen: conformance
+
+### SCN-GEN-15b-2 — beacon history is a booster, never a dependency   (held-out · guard)
+source: REQ-GEN-15b
+held_out: true
+Given a beacon repo with zero usable history (empty log)
+When genesis ranks it
+Then it still produces a **non-degenerate structural ranking** — history boosts but is not required
+teeth: breaks-on "the ranker hard-requires history seeding — with an empty log it errors / returns no ranking (history is a dependency)"
+gen: conformance
+
+### SCN-GEN-15c-2 — beacon fallback degrades to structural centrality, not rank noise   (held-out · guard)
+source: REQ-GEN-15c
+held_out: true
+Given the degenerate-history fallback engaged on the squashed beacon repo
+When the fallback ranking is inspected
+Then it is **structural centrality** (PPR over the def→ref graph + type-surface density) — a non-uniform, non-random frontier
+teeth: breaks-on "the fallback returns a uniform / random ranking — degradation yields rank noise instead of structural centrality"
+gen: conformance
+
+### §GEN-16 held-out note — EXEMPT (a-posteriori usefulness, no write-time oracle)
+
+The 5 GEN-16 SCNs (16a..16e) are **exempt** from the held-out second-fixture leg — noted here, not skipped
+silently. GEN-16's invariant is *usefulness graded **a-posteriori***: there is **no write-time oracle** a
+builder could overfit to (usefulness is a *measured* outcome via `hits` / decay over serving waves — not a
+correctness oracle to model; method-tags-gen.md §Refuse-to-model, "usefulness a-priori"). The held-out
+mechanism guards against overfitting a synthesizable **write-time** check to fixture-1's concrete values;
+with no write-time oracle to overfit, a second genesis-time repo skeleton would witness nothing the `-1` SCN
+does not. The a-posteriori arms (`hits` accrual 16c, decay 16d, threshold calibration 16e) are exercised over
+serving **time** and are covered by the reused KNOW-17 hits/decay reference, not by a second write-time
+fixture. No new behaviour is asserted; flagged for the coverage ledger.
+
+---
+
 ## Coverage ledger (S3 completeness facet)
 
 - **REQ coverage:** 75/75 REQ have ≥1 SCN (GEN-1..16, all clauses).
@@ -867,3 +1513,14 @@ gen: conformance
   pure/total oracle or the PBT law — no oracle-less integration residue, unlike KRN's 12a).
 - **Likely-invariant honesty:** no golden claims a ∀-input proof; genesis proves machine-checked *likely*
   invariants (HOLD-on-current-code + survive-a-mutant), per method-tags-gen.md §Refuse-to-model.
+- **Held-out leg (Wave H · execution GATE → FULL assurance):** every `gen: conformance` REQ now carries a
+  **second, held-out** fixture (`held_out: true`) on the independent `beacon-repo@rev-1d0a` universe —
+  **67 held-out added**: the 72 conformance SCNs **minus the 5 GEN-16 SCNs** (exempt — a-posteriori usefulness
+  has no write-time oracle to overfit; see §GEN-16 held-out note). The 3 `gen: PBT` SCNs (11a/b/c) are the
+  determinism-law permutation witnesses — no single held-out fixture applies. Each `-2` is genuinely
+  INDEPENDENT (different repo skeleton / mined candidate set / ranked frontier of size 5 / budget 5 / resume
+  token) hitting the SAME INV branch with its **own** `teeth: breaks-on`; a renamed clone of fixture-1 fails
+  its held-out leg. Deterministic-ranking/skeleton REQs (1b/1c) use a different repo@rev yet still assert
+  byte-identical reproducibility (HARD RULE 5). Held-out coverage: **67/67 conformance-eligible REQ**, 5
+  exempt+noted (GEN-16), 3 out-of-scope PBT (GEN-11) ⇒ the held-out GATE leg is AVAILABLE for the whole
+  conformance set.

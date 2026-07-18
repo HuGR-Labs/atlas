@@ -52,6 +52,15 @@ Then `D` is fully reconstructed — the PR attachment was a projection, never co
 teeth: breaks-on "`D`'s value is reconstructable only from the PR attachment — the bare clone rebuilds Atlas without `D` (a datum's canonical home is the projection)"
 gen: conformance   # differential vs `persist/ref/source.ts` (the reference persistence-source model, reused as the mock)
 
+### SCN-PERSIST-1a-2 — a bare clone rebuilds a Knowledge fact from {store, trailer}   (happy · held-out)
+source: REQ-PERSIST-1-a
+held_out: true
+Given a Knowledge fact `K = (claim:acme-hq → "NYC")` committed with its home = the tracked store + a commit trailer (the PR surface holds only its projection)
+When `clone(source)` runs a bare clone (no host-side PR fetch) and rebuilds Atlas state from {store, trailer} alone
+Then `K` is fully reconstructed — the PR attachment was a projection, never consulted for `K`'s value
+teeth: breaks-on "`K`'s value is reconstructable only from the PR attachment — the bare clone rebuilds Atlas without `claim:acme-hq` (a fact's canonical home is the projection)"
+gen: conformance   # held-out; differential vs `persist/ref/source.ts` — independent datum (a Knowledge fact, not the generic datum `D`)
+
 ### REQ-PERSIST-1-b — PR attachment never sole home   (guard)
 
 ### SCN-PERSIST-1b-1 — a PR-attachment-only datum fails the sole-home check   (guard)
@@ -61,6 +70,15 @@ When the sole-home placement assertion runs (`∀ datum: home ⊋ {PR-attachment
 Then the write is rejected — no datum may have the PR attachment as its only home
 teeth: breaks-on "the placement check permits a PR-attachment-only home — `D` is written solely to the PR and a bare clone loses it"
 gen: conformance   # `persist/ref/source.ts` sole-home assertion
+
+### SCN-PERSIST-1b-2 — a PR-attachment-only Memory entry fails the sole-home check   (guard · held-out)
+source: REQ-PERSIST-1-b
+held_out: true
+Given a code path that writes Memory entry `M` (a seat-scoped memory line) **only** to the PR attachment (not to the store or a trailer)
+When the sole-home placement assertion runs (`∀ datum: home ⊋ {PR-attachment}`)
+Then the write is rejected — no datum, `M` included, may have the PR attachment as its only home
+teeth: breaks-on "the placement check permits a PR-attachment-only home for `M` — the Memory entry is written solely to the PR and a bare clone loses it"
+gen: conformance   # held-out; `persist/ref/source.ts` sole-home assertion — independent datum (a Memory entry, not `D`)
 
 ---
 
@@ -110,6 +128,15 @@ Then all five fields read back exactly (0 missing field)
 teeth: breaks-on "the `Transcript-SHA` field is dropped from the trailer serializer — `readCommit` yields four fields and provenance is un-replayable"
 gen: conformance   # differential vs `persist/ref/provenance.ts` (trailer+note (de)serializer, reused as the mock)
 
+### SCN-PERSIST-3a-2 — a second WP's trailer block round-trips all five provenance fields   (happy · held-out)
+source: REQ-PERSIST-3-a
+held_out: true
+Given WP `WP-9` committed with a provenance trailer block `{WP: WP-9, Model: sonnet-4-5, Gates: [fmt,test,linux-validation], Verdict: REWORK, Transcript-SHA: id-tr47}`
+When `readCommit(sha)` parses the trailer block
+Then all five fields read back exactly (0 missing field)
+teeth: breaks-on "the `Verdict` field is dropped from the trailer serializer — `readCommit` yields four fields for WP-9 and its REWORK verdict is un-replayable"
+gen: conformance   # held-out; differential vs `persist/ref/provenance.ts` — independent data (WP-9, different model/gates/verdict/sha) + a different dropped-field mutant
+
 ### REQ-PERSIST-3-b — provenance also recorded as a git note   (happy)
 
 ### SCN-PERSIST-3b-1 — the note carries the same fields and reads back total   (happy)
@@ -119,6 +146,15 @@ When `readCommit(sha)` reads the note, and is also called on a commit that has *
 Then the note yields the same five fields, and the note-absent read returns `null` (never throws) — a total read
 teeth: breaks-on "the note read throws on a commit with no note instead of returning `null` (total-read violated); or the note omits a field"
 gen: conformance   # `persist/ref/provenance.ts` total-read check, mirrors Maestro `readDossierNote`
+
+### SCN-PERSIST-3b-2 — WP-9's note carries the same fields and reads back total   (happy · held-out)
+source: REQ-PERSIST-3-b
+held_out: true
+Given the same `WP-9` provenance also recorded as a `refs/notes/orchestra` note carrying `{WP, Model, Gates, Verdict, Transcript-SHA}`
+When `readCommit(sha)` reads the note, and is also called on `WP-9`'s parent commit that has **no** note
+Then the note yields the same five fields, and the note-absent read returns `null` (never throws) — a total read
+teeth: breaks-on "the note read throws on `WP-9`'s parent commit (no note) instead of returning `null` (total-read violated); or the note omits `Gates`"
+gen: conformance   # held-out; `persist/ref/provenance.ts` total-read check — independent commit pair, different omitted field
 
 ---
 
@@ -134,6 +170,15 @@ Then what is attached is the hashed index `{hash: blake3hex(B)}` — a pointer, 
 teeth: breaks-on "`attach` inlines `B` into the commit/PR attachment — the attachment carries the body bytes, not a pointer"
 gen: conformance   # differential vs `persist/ref/attach.ts`
 
+### SCN-PERSIST-4a-2 — a second large body attaches as a `{hash}` pointer only   (happy · held-out)
+source: REQ-PERSIST-4-a
+held_out: true
+Given a different large content body `B2` (a rendered-report blob) to attach to a commit/PR
+When `attach(B2)` runs
+Then what is attached is the hashed index `{hash: blake3hex(B2)}` — a pointer, **not** `B2`'s bytes
+teeth: breaks-on "`attach` inlines `B2` into the commit/PR attachment — the attachment carries the body bytes, not a pointer"
+gen: conformance   # held-out; differential vs `persist/ref/attach.ts` — independent body `B2`
+
 ### REQ-PERSIST-4-b — content lives in the CAS   (happy)
 
 ### SCN-PERSIST-4b-1 — the body resolves from the CAS by its hash   (happy)
@@ -144,6 +189,15 @@ Then `B` resolves from the single CAS by its content hash — the content lives 
 teeth: breaks-on "the body is stored outside the CAS in a side-blob — `get(hash)` misses (content not content-addressed)"
 gen: conformance   # `persist/ref/attach.ts` `get()` resolves via the CAS
 
+### SCN-PERSIST-4b-2 — the second body resolves from the CAS by its hash   (happy · held-out)
+source: REQ-PERSIST-4-b
+held_out: true
+Given `B2` attached as the pointer `{hash}` from SCN-PERSIST-4a-2
+When `get(hash)` is called
+Then `B2` resolves from the single CAS by its content hash — the content lives in the CAS
+teeth: breaks-on "`B2` is stored outside the CAS in a side-blob — `get(hash)` misses (content not content-addressed)"
+gen: conformance   # held-out; `persist/ref/attach.ts` `get()` resolves via the CAS — independent body `B2`
+
 ### REQ-PERSIST-4-c — git object not canonical for large bodies   (guard)
 
 ### SCN-PERSIST-4c-1 — a large body is never inlined as a git object   (guard)
@@ -153,6 +207,15 @@ When the size-gate inspects every git object written for the attach
 Then no git object contains `B` inlined — the canonical container is the CAS, git holds only the pointer
 teeth: breaks-on "`B` is inlined into a git blob as its canonical container — the size-gate passes an oversized git object (git object is the canonical home of a large body)"
 gen: conformance   # `persist/ref/attach.ts` pointer-only size assertion
+
+### SCN-PERSIST-4c-2 — a second large body is never inlined as a git object   (guard · held-out)
+source: REQ-PERSIST-4-c
+held_out: true
+Given a different content body `B2` exceeding the pointer size threshold
+When the size-gate inspects every git object written for the attach
+Then no git object contains `B2` inlined — the canonical container is the CAS, git holds only the pointer
+teeth: breaks-on "`B2` is inlined into a git blob as its canonical container — the size-gate passes an oversized git object"
+gen: conformance   # held-out; `persist/ref/attach.ts` pointer-only size assertion — independent body `B2`
 
 ---
 
@@ -212,6 +275,15 @@ Then every required field is present and non-`undefined` — `model`, tokens `{i
 teeth: breaks-on "the `retries/reworks` field is omitted from the Metering constructor — a rework goes unmetered (the field reads back `undefined`)"
 gen: conformance   # differential vs `persist/ref/metering.ts` total-schema check
 
+### SCN-PERSIST-6-2 — a second recorded WP carries a complete Metering record   (happy · held-out)
+source: REQ-PERSIST-6
+held_out: true
+Given a second ephemeral agent's WP `WP-9` recorded, with `meter(WP-9)` building the Metering record and writing it to the event log + dossier
+When the record is read back
+Then every required field is present and non-`undefined` — `model`, tokens `{input, output, cache}`, tool-uses, wall-time, retries/reworks, gates, verdict, `transcriptSha`
+teeth: breaks-on "the `tokens.cache` field is omitted from the Metering constructor — WP-9's cache reads go unmetered (the field reads back `undefined`)"
+gen: conformance   # held-out; differential vs `persist/ref/metering.ts` total-schema check — independent WP, different omitted field
+
 ---
 
 ## REQ-PERSIST-7 — re-invokable anywhere with no non-git state
@@ -226,6 +298,15 @@ Then the **same brief maps to the same seat** and the WP is reproduced by faithf
 teeth: breaks-on "`redispatch` is non-idempotent — the same brief maps to a different seat on machine-2 (re-invocation diverges across clones)"
 gen: conformance   # differential vs `persist/ref/reinvoke.ts` (redispatch+replay, shared with PERSIST-10b)
 
+### SCN-PERSIST-7a-2 — a second WP re-spawns identically on a third clone   (happy · held-out)
+source: REQ-PERSIST-7-a
+held_out: true
+Given a different WP `WP-9` recorded on machine-1
+When the repo is bare-cloned to machine-3 and the agent is re-invoked — `redispatch(record) → seat` then `replay(checkpoint)`
+Then the **same brief maps to the same seat** and the WP is reproduced by faithful replay (idempotent redispatch + replay, not a fresh judgment)
+teeth: breaks-on "`redispatch` is non-idempotent — the same brief maps to a different seat on machine-3 (re-invocation diverges across clones)"
+gen: conformance   # held-out; differential vs `persist/ref/reinvoke.ts` — independent WP + clone target
+
 ### REQ-PERSIST-7-b — no non-git state required   (guard)
 
 ### SCN-PERSIST-7b-1 — re-invocation reads zero non-git state   (guard)
@@ -235,6 +316,15 @@ When the input-provenance check runs over `redispatch` + `replay`
 Then 0 non-git state is read — re-invocation succeeds from the git-tracked source alone
 teeth: breaks-on "`redispatch` reads a local non-git cache — re-invocation fails on a clean clone where that state is absent (non-git state was required)"
 gen: conformance   # `persist/ref/reinvoke.ts` input-provenance assertion
+
+### SCN-PERSIST-7b-2 — re-invocation reads zero non-git state with a host env absent   (guard · held-out)
+source: REQ-PERSIST-7-b
+held_out: true
+Given a clean bare clone with a different class of non-git state unavailable (a host environment variable + a remote key-value cache)
+When the input-provenance check runs over `redispatch` + `replay`
+Then 0 non-git state is read — re-invocation succeeds from the git-tracked source alone
+teeth: breaks-on "`redispatch` reads a host environment variable — re-invocation fails on a clean clone where that env is absent (non-git state was required)"
+gen: conformance   # held-out; `persist/ref/reinvoke.ts` input-provenance assertion — independent absent-state class
 
 ---
 
@@ -250,6 +340,15 @@ Then every forge interaction went through the adapter — `readPR` reconstructs 
 teeth: breaks-on "a caller reaches the forge API directly, bypassing the adapter — host coupling leaks outside the single adapter impl (no forge-agnosticism)"
 gen: conformance   # differential vs `persist/ref/host-adapter.ts` (fake-forge adapter)
 
+### SCN-PERSIST-8a-2 — a second host's forge is reached only through its adapter   (happy · held-out)
+source: REQ-PERSIST-8-a
+held_out: true
+Given a second fake forge (a different host shape) behind a `HostAdapter` exposing `attachToCommit` / `attachToPR` (+ reads), one implementation for that host
+When those operations are exercised and the module graph is audited for direct forge-API call sites outside the adapter
+Then every forge interaction went through the adapter — `readPR` reconstructs the projection; 0 direct forge calls
+teeth: breaks-on "a caller reaches the second host's forge API (its review-thread endpoint) directly, bypassing the adapter — host coupling leaks outside the single adapter impl"
+gen: conformance   # held-out; differential vs `persist/ref/host-adapter.ts` — independent host (the S4 host-adapter axis: one impl per host, each conformance-tested)
+
 ### REQ-PERSIST-8-b — configure notes push refspec   (happy)
 
 ### SCN-PERSIST-8b-1 — the adapter's push carries `refs/notes/*`   (happy)
@@ -260,6 +359,15 @@ Then it carries `refs/notes/*` (i.e. `refs/notes/orchestra`) — notes leave the
 teeth: breaks-on "the adapter omits the `refs/notes/*` refspec — provenance notes never leave the local repo (a clone sees no notes)"
 gen: conformance   # `persist/ref/host-adapter.ts` push-refspec assertion
 
+### SCN-PERSIST-8b-2 — the second host adapter's push carries `refs/notes/*`   (happy · held-out)
+source: REQ-PERSIST-8-b
+held_out: true
+Given the second host adapter's configured push refspec
+When `push` runs
+Then it carries `refs/notes/*` (i.e. `refs/notes/orchestra`) — notes leave the local repo
+teeth: breaks-on "the second host's adapter omits the `refs/notes/*` refspec — provenance notes never leave the local repo (a clone of that host sees no notes)"
+gen: conformance   # held-out; `persist/ref/host-adapter.ts` push-refspec assertion — independent host adapter
+
 ### REQ-PERSIST-8-c — host PR data is a projection   (guard)
 
 ### SCN-PERSIST-8c-1 — a bare clone fetches zero host-side PR data   (guard)
@@ -269,6 +377,15 @@ When a bare `git clone` is taken
 Then it yields **0** host-side PR data — the PR surface is a projection reconstructable from the git source
 teeth: breaks-on "the adapter stores PR-only data that a bare clone cannot reconstruct — the clone is missing a datum (host data treated as canonical)"
 gen: conformance   # `persist/ref/host-adapter.ts` bare-clone reconstruction test
+
+### SCN-PERSIST-8c-2 — a bare clone of the second host fetches zero host-side PR data   (guard · held-out)
+source: REQ-PERSIST-8-c
+held_out: true
+Given the second host's host-side PR data (comments, review threads, the PR attachment surface)
+When a bare `git clone` is taken
+Then it yields **0** host-side PR data — the PR surface is a projection reconstructable from the git source
+teeth: breaks-on "the second host's adapter stores PR-only data that a bare clone cannot reconstruct — the clone is missing a datum (host data treated as canonical)"
+gen: conformance   # held-out; `persist/ref/host-adapter.ts` bare-clone reconstruction test — independent host adapter
 
 ---
 
@@ -284,6 +401,15 @@ Then `deepEqual(store, import(export(store)))` holds — the open-JSON dump repl
 teeth: breaks-on "export omits the version map — `import(export(store))` loses `M` and ≠ `store`"
 gen: conformance   # shares the KERNEL-6 portable (de)serializer mock `kernel/ref/portable.ts`
 
+### SCN-PERSIST-9a-2 — export→import replays 1:1 for a store with an archived entry   (happy · held-out)
+source: REQ-PERSIST-9-a
+held_out: true
+Given a store holding `{N2, K2, a superseded pair (k, k'), an archived entry}` (a different content shape than `{N, K, M}`)
+When `import(export(store))` is computed
+Then `deepEqual(store, import(export(store)))` holds — the open-JSON dump replays 1:1 into a fresh store
+teeth: breaks-on "export omits the archive set — `import(export(store))` loses the archived entry and ≠ `store`"
+gen: conformance   # held-out; shares the KERNEL-6 portable (de)serializer mock `kernel/ref/portable.ts` — independent store contents, different omitted map
+
 ### REQ-PERSIST-9-b — no lock-in on top of git   (guard)
 
 ### SCN-PERSIST-9b-1 — the export dump carries zero lock-in encodings   (guard)
@@ -293,6 +419,15 @@ When it is scanned for proprietary / host-only / lock-in encodings
 Then the scan finds **0** — nothing is layered on top of git that a plain git store cannot replay
 teeth: breaks-on "export embeds a proprietary lock-in encoding — the dump no longer replays into a plain git store (lock-in layered on git)"
 gen: conformance   # `kernel/ref/portable.ts` lock-in grep
+
+### SCN-PERSIST-9b-2 — a second export dump carries zero lock-in encodings   (guard · held-out)
+source: REQ-PERSIST-9-b
+held_out: true
+Given the open-JSON export dump of the archive-bearing store above
+When it is scanned for proprietary / host-only / lock-in encodings
+Then the scan finds **0** — nothing is layered on top of git that a plain git store cannot replay
+teeth: breaks-on "export embeds a host-only ref encoding — the dump no longer replays into a plain git store (lock-in layered on git)"
+gen: conformance   # held-out; `kernel/ref/portable.ts` lock-in grep — independent dump, different lock-in mutant
 
 ---
 
@@ -308,6 +443,15 @@ Then `fetch(put(T)) ≡ T` byte-identical — never truncated, never lossily com
 teeth: breaks-on "`put` truncates `T` to an N-KB cap — `fetch` returns a prefix ≠ `T` (the record is abridged)"
 gen: conformance   # differential vs `persist/ref/transcript-store.ts` (content-addressed `put`/`fetch`)
 
+### SCN-PERSIST-10a-2 — a second transcript round-trips byte-for-byte   (happy · held-out)
+source: REQ-PERSIST-10-a
+held_out: true
+Given a different transcript body `T2` (the raw, unadulterated total context of another agent)
+When `put(T2) → hash` then `fetchTranscript(hash)`
+Then `fetch(put(T2)) ≡ T2` byte-identical — never truncated, never lossily compressed
+teeth: breaks-on "`put` lossily gzip-compresses `T2` and drops a trailing byte on re-inflate — `fetch` returns bytes ≠ `T2` (the record is corrupted)"
+gen: conformance   # held-out; differential vs `persist/ref/transcript-store.ts` — independent body `T2`, different loss mutant (compression vs truncation)
+
 ### REQ-PERSIST-10-b — transcript is a content-addressed large object   (happy)
 
 ### SCN-PERSIST-10-b-1 — the body is a fetch-on-demand large object   (happy)
@@ -317,6 +461,15 @@ When git is inspected and the body is fetched on demand
 Then git holds only `{sha, store}` and the full, lossless body resolves from the content-addressed large-object store on demand
 teeth: breaks-on "the transcript body is inlined into a git object — there is no fetch-on-demand pointer (git carries the full body, not a CAS large object)"
 gen: conformance   # `persist/ref/transcript-store.ts` placement assertion
+
+### SCN-PERSIST-10-b-2 — a second body is a fetch-on-demand large object   (happy · held-out)
+source: REQ-PERSIST-10-b
+held_out: true
+Given `T2` stored via the large-object store
+When git is inspected and the body is fetched on demand
+Then git holds only `{sha, store}` and the full, lossless `T2` resolves from the content-addressed large-object store on demand
+teeth: breaks-on "`T2`'s body is inlined into a git object — there is no fetch-on-demand pointer (git carries the full body, not a CAS large object)"
+gen: conformance   # held-out; `persist/ref/transcript-store.ts` placement assertion — independent body `T2`
 
 ### REQ-PERSIST-10-c — only a pointer in git   (happy)
 
@@ -328,6 +481,15 @@ Then git carries **only** the transcript's content-hash pointer — not the body
 teeth: breaks-on "git stores the raw body alongside the pointer — the pointer indirection is dropped (the body lives in git)"
 gen: conformance   # `persist/ref/transcript-store.ts` git-holds-only-pointer assertion
 
+### SCN-PERSIST-10-c-2 — git carries only the second transcript's content-hash pointer   (happy · held-out)
+source: REQ-PERSIST-10-c
+held_out: true
+Given `T2` stored as a large object
+When the git object is read
+Then git carries **only** `T2`'s content-hash pointer — not the body
+teeth: breaks-on "git stores `T2`'s raw body alongside the pointer — the pointer indirection is dropped (the body lives in git)"
+gen: conformance   # held-out; `persist/ref/transcript-store.ts` git-holds-only-pointer assertion — independent body `T2`
+
 ### REQ-PERSIST-10-d — future size mitigation stays lossless   (guard)
 
 ### SCN-PERSIST-10-d-1 — any size mitigation is lossless and reversible   (guard)
@@ -337,6 +499,15 @@ When `mitigate(T)` then `reverse(mitigate(T))` is computed
 Then `reverse(mitigate(T)) ≡ T` byte-identical — the mitigation is lossless and reversible
 teeth: breaks-on "the mitigation lossily compresses `T` — `reverse(mitigate(T)) ≠ T` (bytes are lost; mitigation is lossy)"
 gen: conformance   # `persist/ref/transcript-store.ts` reversibility round-trip
+
+### SCN-PERSIST-10-d-2 — a second size mitigation is lossless and reversible   (guard · held-out)
+source: REQ-PERSIST-10-d
+held_out: true
+Given a different future size-mitigation transform applied to transcript `T2`
+When `mitigate(T2)` then `reverse(mitigate(T2))` is computed
+Then `reverse(mitigate(T2)) ≡ T2` byte-identical — the mitigation is lossless and reversible
+teeth: breaks-on "the mitigation strips trailing whitespace from `T2` — `reverse(mitigate(T2)) ≠ T2` (bytes are lost; mitigation is lossy)"
+gen: conformance   # held-out; `persist/ref/transcript-store.ts` reversibility round-trip — independent body + mitigation, different loss mutant
 
 ---
 
@@ -360,6 +531,15 @@ Then the stored immutable object contains **0** occurrences of `ghp_A1B2C3D4E5F6
 teeth: breaks-on "`scrub` misses the credential's shape — `ghp_A1B2C3D4E5F6` reaches the content-addressed (immutable, git-propagated) object"
 gen: conformance   # differential vs `persist/ref/scrub.ts` (the redact-at-source oracle, reused in transcript-buffer unit tests)
 
+### SCN-PERSIST-10a-a-2 — a second seeded credential never reaches the content-addressed object   (guard · held-out)
+source: REQ-PERSIST-10a-a
+held_out: true
+Given a transcript buffer seeded with a different raw credential `ghp_9Q8W7E6R5T4Y` inside an `Authorization: token <secret>` header line
+When `scrub(buffer)` runs before store — `store(scrub(seeded))`
+Then the stored immutable object contains **0** occurrences of `ghp_9Q8W7E6R5T4Y`
+teeth: breaks-on "`scrub` misses this credential instance — `ghp_9Q8W7E6R5T4Y` reaches the content-addressed (immutable, git-propagated) object"
+gen: conformance   # held-out; differential vs `persist/ref/scrub.ts` — independent secret value + buffer context (defeats hard-coding the fixture-1 literal; same known-shape family, no new behaviour)
+
 ### REQ-PERSIST-10a-b — redact-at-source is the primary control   (guard)
 
 ### SCN-PERSIST-10a-b-1 — the buffer never admits the raw credential   (guard)
@@ -370,6 +550,15 @@ Then the buffer never admits the raw credential — it is redacted **before** en
 teeth: breaks-on "redaction runs only after the buffer is persisted — the raw credential entered the buffer first (redact-at-source bypassed; the primary control is a post-hoc scan)"
 gen: conformance   # `persist/ref/scrub.ts` at-source (pre-buffer) assertion
 
+### SCN-PERSIST-10a-b-2 — the buffer never admits the second raw credential   (guard · held-out)
+source: REQ-PERSIST-10a-b
+held_out: true
+Given the framework about to write the raw credential `ghp_9Q8W7E6R5T4Y` into the transcript buffer
+When the redact-at-source control runs at write time
+Then the buffer never admits the raw credential — it is redacted **before** entering, not after persistence
+teeth: breaks-on "redaction runs only after the buffer is persisted — `ghp_9Q8W7E6R5T4Y` entered the buffer first (redact-at-source bypassed; the primary control is a post-hoc scan)"
+gen: conformance   # held-out; `persist/ref/scrub.ts` at-source (pre-buffer) assertion — independent secret value
+
 ### REQ-PERSIST-10a-e — scrub does not abridge the record   (guard)
 
 ### SCN-PERSIST-10a-e-1 — non-secret bytes adjacent to a secret are preserved   (guard)
@@ -379,6 +568,15 @@ When `scrub` redacts the secret
 Then every non-secret byte is preserved — only the secret is redacted (0 over-redaction)
 teeth: breaks-on "`scrub` over-redacts — a non-secret byte adjacent to the secret (`line 42`) is dropped (the record is abridged beyond the secret)"
 gen: conformance   # `persist/ref/scrub.ts` preserve-non-secret assertion
+
+### SCN-PERSIST-10a-e-2 — non-secret bytes adjacent to a second secret are preserved   (guard · held-out)
+source: REQ-PERSIST-10a-e
+held_out: true
+Given a buffer with the secret `ghp_9Q8W7E6R5T4Y` surrounded by non-secret bytes `"... Authorization: Bearer <secret> issued at 09:14 UTC ..."`
+When `scrub` redacts the secret
+Then every non-secret byte is preserved — only the secret is redacted (0 over-redaction)
+teeth: breaks-on "`scrub` over-redacts — a non-secret byte adjacent to the secret (`09:14 UTC`) is dropped (the record is abridged beyond the secret)"
+gen: conformance   # held-out; `persist/ref/scrub.ts` preserve-non-secret assertion — independent secret value + surrounding context
 
 ---
 
@@ -394,6 +592,15 @@ Then it finds **0** — the non-deliverable "resume from exactly where it stoppe
 teeth: breaks-on "a `resume(agent)` API claims to continue from exactly where the agent stopped — the non-deliverable deterministic-resume claim is present on the surface"
 gen: conformance   # `persist/ref/reinvoke.ts` structural no-resume assertion
 
+### SCN-PERSIST-10b-a-2 — no differently-named deterministic-resume API exists on the surface   (guard · held-out)
+source: REQ-PERSIST-10b-a
+held_out: true
+Given the re-invoke API surface
+When a structural check scans for a differently-named/typed deterministic resume (`continueFrom` / `resumeAt`, a resume-from-checkpoint-step)
+Then it finds **0** — the non-deliverable "resume from exactly where it stopped" is neither offered nor claimed under any alias
+teeth: breaks-on "a `continueFrom(agent, step)` API claims to continue from an exact recorded step — the non-deliverable deterministic-resume claim is present under an alias"
+gen: conformance   # held-out; `persist/ref/reinvoke.ts` structural no-resume assertion — independent surface probe (aliased resume)
+
 ### REQ-PERSIST-10b-b — idempotent redispatch of the seat   (happy)
 
 ### SCN-PERSIST-10b-b-1 — the same brief maps to the same seat twice   (happy)
@@ -403,6 +610,15 @@ When `redispatch(B)` is run twice
 Then both invocations map to the **same** seat (idempotent redispatch, A-18)
 teeth: breaks-on "`redispatch(B)` yields a different seat on the second call — the same brief maps to two seats (non-idempotent)"
 gen: conformance   # differential vs `persist/ref/reinvoke.ts` (shared with PERSIST-7)
+
+### SCN-PERSIST-10b-b-2 — a second brief maps to the same seat twice   (happy · held-out)
+source: REQ-PERSIST-10b-b
+held_out: true
+Given a different seat brief `B2`
+When `redispatch(B2)` is run twice
+Then both invocations map to the **same** seat (idempotent redispatch, A-18)
+teeth: breaks-on "`redispatch(B2)` yields a different seat on the second call — the same brief maps to two seats (non-idempotent)"
+gen: conformance   # held-out; differential vs `persist/ref/reinvoke.ts` — independent brief `B2`
 
 ### REQ-PERSIST-10b-c — faithful replay of the transcript   (happy)
 
@@ -414,6 +630,15 @@ Then it re-feeds the recorded LLM outputs + tool I/O faithfully — the replay r
 teeth: breaks-on "`replay` re-invokes the live LLM instead of re-feeding the recorded outputs — the replay diverges from the recorded transcript (not faithful)"
 gen: conformance   # `persist/ref/reinvoke.ts` replay-fidelity assertion
 
+### SCN-PERSIST-10b-c-2 — replay of a second checkpoint re-feeds recorded I/O, not the live model   (happy · held-out)
+source: REQ-PERSIST-10b-c
+held_out: true
+Given a different recorded `Checkpoint{seatBrief, llmOutputs[], toolIO[]}` (another seat's recording)
+When `replay(checkpoint)` runs
+Then it re-feeds the recorded LLM outputs + tool I/O faithfully — the replay reproduces the record
+teeth: breaks-on "`replay` re-invokes the live LLM for this checkpoint instead of re-feeding the recorded outputs — the replay diverges from the recorded transcript (not faithful)"
+gen: conformance   # held-out; `persist/ref/reinvoke.ts` replay-fidelity assertion — independent checkpoint
+
 ### REQ-PERSIST-10b-d — re-invoke substrate is a Checkpoint   (happy)
 
 ### SCN-PERSIST-10b-d-1 — the substrate is a Checkpoint distinct from the raw transcript   (happy)
@@ -423,6 +648,15 @@ When its type is inspected
 Then it is a structured `Checkpoint{seatBrief, llmOutputs[], toolIO[]}` — **distinct** from the full raw transcript large object
 teeth: breaks-on "re-invoke reads the full raw transcript as its substrate — the `Checkpoint` is not distinct (replay is coupled to the raw transcript object)"
 gen: conformance   # `persist/ref/reinvoke.ts` structural Checkpoint-distinctness assertion
+
+### SCN-PERSIST-10b-d-2 — a second seat's substrate is a Checkpoint distinct from the raw transcript   (happy · held-out)
+source: REQ-PERSIST-10b-d
+held_out: true
+Given a second seat's re-invoke substrate
+When its type is inspected
+Then it is a structured `Checkpoint{seatBrief, llmOutputs[], toolIO[]}` — **distinct** from the full raw transcript large object
+teeth: breaks-on "re-invoke reads the full raw transcript as its substrate for this seat — the `Checkpoint` is not distinct (replay coupled to the raw transcript object)"
+gen: conformance   # held-out; `persist/ref/reinvoke.ts` structural Checkpoint-distinctness assertion — independent seat
 
 ---
 
@@ -442,6 +676,15 @@ When git merges the two branches
 Then the log is handled by the registered driver (set-union + re-fold), **not** line-merged as text — no line-splice occurs
 teeth: breaks-on "the log path has no merge driver and git line-merges it as text — a line from `ours` and a line from `theirs` splice into one corrupt event"
 gen: conformance   # driver-registration + no-line-splice assertion (reuses the KERNEL-12 JSONL floor)
+
+### SCN-PERSIST-11a-2 — a second branch pair's log path is not text/line-merged   (guard · held-out)
+source: REQ-PERSIST-11-a
+held_out: true
+Given branches `feat` and `main` that both modify the atlas-log path, with `.gitattributes: <atlas-log> merge=orchestra-atlas` registered
+When git merges the two branches
+Then the log is handled by the registered driver (set-union + re-fold), **not** line-merged as text — no line-splice occurs
+teeth: breaks-on "the log path has no merge driver and git line-merges it as text — a line from `feat` and a line from `main` splice into one corrupt event"
+gen: conformance   # held-out; driver-registration + no-line-splice assertion (KERNEL-12 JSONL floor) — independent branch pair
 
 ### REQ-PERSIST-11-b — driver unions by content-hash and re-folds   (happy)
 
@@ -503,6 +746,15 @@ Then no event is lost or corrupted — `lineMerge = dedup-by-id(lines(ours) ∪ 
 teeth: breaks-on "the log is stored as a single nested JSON array line — the 3-way text merge splices e1 and e3 into one corrupt line and `fold` fails to parse (an event is lost/corrupted)"
 gen: conformance   # `lineMerge` reuses the `FSPEC-merge` `RefLog.merge` reducer as its mock (anti-rot floor; = KERNEL-12b consumed)
 
+### SCN-PERSIST-11g-2 — a second bypassed 3-way text merge degrades to a lossless id-union   (guard · held-out)
+source: REQ-PERSIST-11-g
+held_out: true
+Given branch `ours` JSONL log `[line(e1), line(e3)]` and branch `theirs` `[line(e1), line(e2)]` (one content-keyed event per line, e1 shared), merged by git's **default 3-way text** merge on an un-configured clone (driver bypassed)
+When the merged file is re-folded — `fold(lineMerge(ours, theirs))`
+Then no event is lost or corrupted — `lineMerge = dedup-by-id(lines(ours) ∪ lines(theirs)) = {e1,e2,e3}`, the `claim:acme-arr-2024` node = union `{1c9f2a, 7e40bb}` with head = **max-by-contentHash = e2**, and `re-fold(lineMerge) ≡ fold(RefLog.merge)`
+teeth: breaks-on "the log is stored as a single nested JSON array line — the 3-way text merge splices e2 and e3 into one corrupt line and `fold` fails to parse (an event is lost/corrupted)"
+gen: conformance   # held-out; `lineMerge` reuses `FSPEC-merge` `RefLog.merge` (= KERNEL-12b) — independent line sets, max-by-contentHash head-rule (head = e2) preserved
+
 ---
 
 ## REQ-PERSIST-12 — reorder invariance on non-linear history (PBT · reuses `FSPEC-merge` `fold`)
@@ -541,6 +793,15 @@ Then `D` reads from the **commit trailer** (it travels inside the commit object)
 teeth: breaks-on "`D` is stored only in a git note — a bare clone with no note refspec has no `D` (a clone-required datum is missing)"
 gen: conformance   # differential vs `persist/ref/placement.ts` (trailer-vs-note placement oracle)
 
+### SCN-PERSIST-13a-2 — a second clone-required datum reads from the trailer after a bare clone   (happy · held-out)
+source: REQ-PERSIST-13-a
+held_out: true
+Given a different datum `D2` (a WP verdict that MUST be present in any clone)
+When `D2` is placed and a bare clone (no note refspec) reads it
+Then `D2` reads from the **commit trailer** (it travels inside the commit object) — present in the clone
+teeth: breaks-on "`D2` is stored only in a git note — a bare clone with no note refspec has no `D2` (a clone-required datum is missing)"
+gen: conformance   # held-out; differential vs `persist/ref/placement.ts` — independent datum `D2`
+
 ### REQ-PERSIST-13-b — trailer survives a history rewrite   (happy)
 
 ### SCN-PERSIST-13b-1 — the trailer travels onto the rewritten SHA   (happy)
@@ -550,6 +811,15 @@ When a history rewrite (rebase) produces a new commit `SHA2`
 Then `D`'s trailer travels inside the commit object onto `SHA2` — `D` survives the rewrite
 teeth: breaks-on "the rewrite drops the trailer — `D` is lost on the new `SHA2` (trailer did not survive the rewrite)"
 gen: conformance   # `persist/ref/placement.ts` rewrite-carry assertion
+
+### SCN-PERSIST-13b-2 — the trailer travels onto a squash-rewritten SHA   (happy · held-out)
+source: REQ-PERSIST-13-b
+held_out: true
+Given datum `D2` in a commit trailer on commit `SHA3`
+When a history rewrite (**squash**) produces a new commit `SHA4`
+Then `D2`'s trailer travels inside the commit object onto `SHA4` — `D2` survives the rewrite
+teeth: breaks-on "the squash drops the trailer — `D2` is lost on the new `SHA4` (trailer did not survive the rewrite)"
+gen: conformance   # held-out; `persist/ref/placement.ts` rewrite-carry assertion — independent datum + rewrite op (squash, not rebase)
 
 ### REQ-PERSIST-13-c — notes present only once refspec configured   (guard)
 
@@ -561,6 +831,15 @@ Then the note-carried data is absent — notes are a perimeter-conditional mutab
 teeth: breaks-on "the placement model marks note-carried data as clone-present without a configured refspec — a clone-required datum placed in a note passes the check, then is missing in a bare clone"
 gen: conformance   # `persist/ref/placement.ts` refspec-conditional presence assertion
 
+### SCN-PERSIST-13c-2 — a second note-carried datum is absent until the refspec is configured   (guard · held-out)
+source: REQ-PERSIST-13-c
+held_out: true
+Given a different note-carried datum and an adapter that has **not** configured the fetch/push refspec (PERSIST-8)
+When a clone reads
+Then the note-carried datum is absent — notes are a perimeter-conditional mutable overlay, so a **clone-required** datum must not depend on one
+teeth: breaks-on "the placement model marks this note-carried datum as clone-present without a configured refspec — a clone-required datum placed in a note passes the check, then is missing in a bare clone"
+gen: conformance   # held-out; `persist/ref/placement.ts` refspec-conditional presence assertion — independent datum
+
 ### REQ-PERSIST-13-d — a rewrite orphans note-carried data   (guard)
 
 ### SCN-PERSIST-13d-1 — a rewrite orphans the note (it keys on the old SHA)   (guard)
@@ -570,6 +849,15 @@ When a rebase / squash / cherry-pick rewrites `SHA1 → SHA2`
 Then the note is **orphaned** — it keys on `SHA1` and is not carried onto `SHA2` (which is exactly why clone-required data lives in a trailer, not a note)
 teeth: breaks-on "the placement model carries the note onto `SHA2` (falsely modelling notes as rewrite-durable) — masking that a note-only datum is actually orphaned by the rewrite"
 gen: conformance   # `persist/ref/placement.ts` note-orphan assertion
+
+### SCN-PERSIST-13d-2 — a cherry-pick rewrite orphans the note (it keys on the old SHA)   (guard · held-out)
+source: REQ-PERSIST-13-d
+held_out: true
+Given note-carried data keyed on commit `SHA3`
+When a **cherry-pick** rewrites `SHA3 → SHA4`
+Then the note is **orphaned** — it keys on `SHA3` and is not carried onto `SHA4` (which is exactly why clone-required data lives in a trailer, not a note)
+teeth: breaks-on "the placement model carries the note onto `SHA4` (falsely modelling notes as cherry-pick-durable) — masking that a note-only datum is actually orphaned by the rewrite"
+gen: conformance   # held-out; `persist/ref/placement.ts` note-orphan assertion — independent SHA pair + rewrite op (cherry-pick)
 
 ---
 
@@ -624,6 +912,15 @@ Then every entry carries its `prov` (`entriesMissingProvenance == 0`) — a fact
 teeth: breaks-on "the diff emits `edited:[acme-arr-2024]` with an empty `prov` — a provenance-less entry surfaces (the auditor cannot trace the change to its WP/commit)"
 gen: conformance   # differential vs `persist/ref/diff.ts` (each partition entry carries `prov`)
 
+### SCN-PERSIST-14c-2 — a second delta entry (an `added` fact) carries its provenance   (guard · held-out)
+source: REQ-PERSIST-14-c
+held_out: true
+Given the fixture where the added fact `claim:acme-ceo` has a recoverable `prov = WP-a4@sha` (the WP/commit that produced it)
+When `diff(shaA,shaB)` builds the `added` partition entry
+Then the entry carries its `prov` (`entriesMissingProvenance == 0`) — a fact with no recoverable provenance is not surfaced as a bare, provenance-less entry
+teeth: breaks-on "the diff emits `added:[acme-ceo]` with an empty `prov` — a provenance-less added entry surfaces (the auditor cannot trace the change to its WP/commit)"
+gen: conformance   # held-out; differential vs `persist/ref/diff.ts` — independent partition entry (an `added` fact, not the fixture-1 `edited` fact)
+
 ### REQ-PERSIST-14-d — diff is a pure read, zero mutation   (guard)
 
 ### SCN-PERSIST-14d-1 — computing the diff mutates no Atlas state   (guard)
@@ -633,6 +930,15 @@ When `diff(shaA,shaB)` is invoked and `Σ'` is re-serialized after
 Then `Σ' ≡ Σ` byte-identical — the diff is a PURE READ, it writes/archives/decays nothing (`mutations == 0`)
 teeth: breaks-on "the diff writes a `lastDiffedAt` marker (or archives the decayed fact as a side-effect) — the store bytes change after a read-only projection (`Σ' ≠ Σ`)"
 gen: conformance   # `persist/ref/diff.ts` store-unchanged assertion (structural no-mutation)
+
+### SCN-PERSIST-14d-2 — computing a second diff over an independent store mutates nothing   (guard · held-out)
+source: REQ-PERSIST-14-d
+held_out: true
+Given an independent two-version store holding only `{claim:acme-vp (added at shaB), claim:acme-hq (unchanged)}` serialized to bytes `Σ` before the diff
+When `diff(shaA,shaB)` is invoked and `Σ'` is re-serialized after
+Then `Σ' ≡ Σ` byte-identical — the diff is a PURE READ, it writes/archives/decays nothing (`mutations == 0`)
+teeth: breaks-on "the diff writes a `lastDiffedAt` marker into the store as a side-effect — the store bytes change after a read-only projection (`Σ' ≠ Σ`)"
+gen: conformance   # held-out; `persist/ref/diff.ts` store-unchanged assertion — independent (smaller) two-version store
 
 ### REQ-PERSIST-14-e — diff is byte-identical across runs   (guard)
 
@@ -664,3 +970,5 @@ gen: PBT   # `partition(fold(shuffle(S1)),fold(shuffle(S2))) ≡ partition(fold(
 - **PERSIST-11-e witness reverses the colliding pair:** yes — e1 (`1c9f2a`, ours) ↔ e2 (`7e40bb`, theirs) on the same nodeKey at colliding `seq=5`; a last-writer-wins mutant heads e2 in `(ours,theirs)` but e1 in `(theirs,ours)`, so the two directions diverge byte-wise → the golden flips to BROKEN. Teeth are real (mirrors the KRN SCN-KERNEL-11-1 teeth-fix).
 - **gen histogram:** PBT **17** (2-a/2-b/2-c · 5-a/5-b/5-c/5-d · 11-b/11-c/11-d/11-e · 12-a/12-b · 14-a/14-b/14-e/14-f) · conformance **34** (1-a/1-b/3-a/3-b/4-a/4-b/4-c/6/7-a/7-b/8-a/8-b/8-c/9-a/9-b/10-a/10-b/10-c/10-d/10a-a/10a-b/10a-e/10b-a/10b-b/10b-c/10b-d/11-a/11-g/13-a/13-b/13-c/13-d/14-c/14-d) · residue **1** (11-f).
 - **Toothless dropped:** 0.
+- **Held-out second fixtures (Wave H · S3 re-freeze):** each of the **34** `gen: conformance` SCNs now carries an independent `held_out: true` second fixture (`-2`), so the execution GATE's held-out leg is **AVAILABLE (FULL assurance)** — the builder never sees the `-2` data; an overfit to the `-1` fixture flips the held-out golden to BROKEN. Every `-2` uses genuinely different concrete data (a different datum / WP-9 / transcript `T2` / body `B2` / second-host adapter / credential value `ghp_9Q…` / SHA-pair / rewrite op / partition entry / store) hitting the **same** behaviour/branch, with its own `teeth: breaks-on` (often a different mutant than fixture-1: e.g. 3a-2 drops `Verdict` not `Transcript-SHA`, 6-2 drops `tokens.cache`, 10a-2 loses via compression not truncation). Merge fixtures **11-a / 11-g** preserve the **max-by-contentHash** head-rule (11g-2 heads e2 among the reversible colliding pair). **Held-out coverage: 34/34** conformance SCNs.
+- **Held-out SKIP (by design, exempt + noted):** the **17** `gen: PBT` SCNs (2-a/b/c · 5-a/b/c/d · 11-b/c/d/e · 12-a/b · 14-a/b/e/f) take **no** `-2` — a PBT's shuffle/permutation universe (`properties-pst.md`) already draws fresh independent data every run, subsuming a held-out leg; **1** `gen: residue` (11-f self-install) is exempt — no pure-function oracle (hand-written integration test); **REQ-PERSIST-10a-c / 10a-d** author no golden here — domain-delegated to **billy / FR-12** (credential-scanner architecture). No conformance SCN is left without a held-out leg.

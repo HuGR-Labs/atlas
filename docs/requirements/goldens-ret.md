@@ -673,3 +673,392 @@ gen: conformance
 
 ## [NEEDS RECONCILIATION]
 - INV-RETR-6: RETR-6/8 guarantee a **deterministic total order** over kinds but do NOT name the **secondary tie-key** when two kinds tie on `hitRate`. SCN-RETR-6b-2 is authored parametric on a symbolic `κ`; the concrete key (cold-start priority · `nodeKey/kind-name-asc` · other) is a design decision, not derivable — route to DEFINE. (RETR-6d scopes cold-start "only until the ledger has data", so it cannot silently double as the ledger-regime tie-key.)
+
+---
+
+# Wave H — held-out second fixtures + scenarios (execution GATE held-out leg) · S3 re-freeze
+
+> **state:** S3 re-freeze (Wave H) · **owner:** charlie (FORGE). For **every conformance / reference-model**
+> behavioural REQ (RETR-1 / 3 / 4 / 5 / 7 / 8 / 9 / 11 / 13-non-residue), this wave adds a **held-out `-2`
+> scenario** over a **genuinely INDEPENDENT** fixture — a NEW territory + index / injection budget / tool-call
+> sequence with **different nodes / tiers / ppr / hits / tokenEstimates** — that exercises the **SAME
+> behaviour/branch** as the visible `-1` scenario. The execution GATE **holds back** this `-2` leg from the
+> builder: an implementation that overfits the `-1` fixture (hard-codes its answer) **FAILS** the held-out leg,
+> because the `-2` fixture is a different data instance of the same frozen behaviour, never a renamed clone.
+> Same **pinned `cl100k_base`** cap-measure discipline as the base wave (every `~`-cap asserted as a concrete
+> `tokenEstimate` under the pinned tokenizer, never a vague threshold). Existing fixtures/scenarios are
+> preserved **byte-for-byte**; this section is purely **APPEND** (no S3-base line edited, so the base-wave
+> coverage ledger above stands as the base record; the Wave-H delta is ledgered at the foot of this section).
+>
+> **Held-out is a DATA instance of frozen behaviour, not new behaviour.** No new INV / clause / cap / rank /
+> constant is introduced here; each `-2` fixture re-realizes an S2 `up-property` / `down-model` already tagged
+> in `method-tags-ret.md` over independent data. No decision was reached for at S3.
+>
+> **Naming.** Held-out twins carry a prime: **Fixture A′** (twin of A), **Fixture C′** (twin of C). The
+> held-out injection budget is **Fixture B″** (double-prime) — **not** `B′`, because SCN-RETR-6b-2 already
+> burns "Fixture B′" for its residue `κ`-tie variant; B″ keeps that pre-existing text byte-identical.
+>
+> **Skipped (not held-out-covered, by design):**
+> - `gen: PBT` — **RETR-2 / 6 / 10 / 12** (30 SCN): their held-out assurance is the **PBT law-witness** in
+>   [`properties-ret.md`](properties-ret.md) (a property quantifies over an unbounded fixture space — a
+>   second fixture is subsumed, not additive), not a hand-authored `-2` fixture.
+> - `gen: residue` — **SCN-RETR-6b-2** (`κ`) and **SCN-RETR-13b-1** (`θ`): **DEFINE-parametric**, exempt +
+>   flagged (the golden binds the constant once DEFINE ratifies it; a held-out fixture cannot be authored
+>   over an unbound symbol without inventing the constant at S3).
+> - **delegated acceptance** — none in this block.
+
+## Held-out fixtures
+
+### Fixture A′ — a held-out territory + index (twin of Fixture A; reused by RETR-1′/5′/9′)
+
+Territory `crate:inventory` (scope `crates/inventory/`). `tokenEstimate` is the pinned `cl100k_base` count.
+
+| node | nodeKey | tier | ppr | hits | tokenEstimate |
+|---|---|---|---|---|---|
+| m1 | `inv:inventory-no-oversell`       | T0 | 0.85 | —  | 150 |
+| m2 | `inv:inventory-atomic-decrement`  | T0 | 0.70 | —  | 140 |
+| m3 | `inv:inventory-reserve`           | T1 | 0.88 | 55 | 300 |
+| m4 | `inv:inventory-restock`           | T1 | 0.60 | 55 | 300 |
+| m5 | `inv:inventory-audit`             | T1 | 0.55 | 12 | 300 |
+| m6 | `inv:inventory-backorder`         | T1 | 0.55 | 12 | 300 |
+| m7 | `inv:inventory-legacy`            | T1 | 0.40 | 3  | 300 |
+| m8 | `inv:inventory-report`            | T1 | 0.25 | 1  | 900 |
+
+- **T1 rank `(hits-desc, ppr-desc, nodeKey-asc)`** ⇒ `m3 (55,0.88) ≺ m4 (55,0.60) ≺ m5 (12,0.55,"audit") ≺
+  m6 (12,0.55,"backorder") ≺ m7 (3) ≺ m8 (1)`. (`audit` < `backorder` breaks the m5/m6 tie by nodeKey-asc —
+  a **different** letter pair than Fixture A's `audit`/`currency`.)
+- **Greedy fill under the pinned `~2K` cap:** T0 `m1+m2 = 290`; then T1 `m3→590, m4→890, m5→1190, m6→1490,
+  m7→1790`; `m8 (+900 → 2690 > 2000)` does **not** fit ⇒ truncation marker + `pull-reachable` tail = `{m8}`.
+  Emitted pack `tokenEstimate = 1790 ≤ 2000`.
+- **Covering sets** (for RETR-5′): scope `P = file:inventory/reserve` (`crates/inventory/src/reserve.rs`) is
+  covered by `{m1, m2, m3}` (crate roll-up + the reserve node); scope `Q = file:inventory/restock` is covered
+  by `{m1, m2, m4}`. Off-scope-for-`P` exemplar = `m4` (restock-only).
+
+### Fixture B″ — a held-out injection budget for one turn (twin of Fixture B; reused by RETR-7′/8′)
+
+Caps are the **same ratified pinned `cl100k_base` values** (frozen by RETR-7 — the caps are constants, not
+fixture data); only this turn's `tokenEstimate`s and observed `hitRate`s are the independent data.
+
+| kind | tokenEstimate | cap | hitRate | pinned? |
+|---|---|---|---|---|
+| `Awareness.constitution`   | 380  | ~400  | —    | **pin** |
+| `protocols.safetyCritical` | 460  | ~500  | —    | **pin** |
+| `Orientation`              | 240  | ~250  | 0.75 | no |
+| `projectMem` (project-Rules) | 480 | ~500 | 0.55 | no |
+| `own`                      | 1450 | ~1.5K | 0.45 | no |
+| `pack`                     | 1900 | ~2K   | 0.65 | no |
+| `related`                  | 280  | ~300  | 0.25 | no |
+| `protocols.advisory`       | 470  | ~500  | 0.35 | no |
+| `poke`                     | 140  | ~150  | 0.15 | no |
+
+Every `tokenEstimate ≤ its cap`. Sum = **5800 > ~5000 ceiling** (overflow 800). Droppable (non-pin) by
+`hitRate`-asc: `poke(0.15) ≺ related(0.25) ≺ advisory(0.35) ≺ own(0.45) ≺ projectMem(0.55) ≺ pack(0.65) ≺
+Orientation(0.75)` — a **different** hitRate assignment than Fixture B (here `Orientation` is the *most*-used,
+not `poke` the least by the same margin), so a fixture-1-tuned drop order diverges.
+
+### Fixture C′ — held-out tool-call sequences (twin of Fixture C; reused by RETR-4′)
+
+Scopes: `P = file:inventory/reserve` (`crates/inventory/src/reserve.rs`), `Q = file:inventory/restock`
+(`crates/inventory/src/restock.rs`), `R = file:inventory/audit` (`crates/inventory/src/audit.rs`). Debounce
+window `N = 2` consecutive tool calls; per-session `poked` set.
+
+## Held-out scenarios
+
+### SCN-RETR-1-2 — held-out: two identical inventory queries → byte-identical, zero embedding calls   (happy)
+source: REQ-RETR-1
+Given the axes-only reference resolver over **held-out Fixture A′** (`crate:inventory`), and query `q′ = resolve("crates/inventory/src/reserve.rs")` run twice
+When each run resolves relevance purely by scope (path roll-up) + dependency (`depends-on`) + trigger (tag), and the retrieval module graph is audited for embedding / vector / RAG imports
+Then both runs return the byte-identical territory set `{crate:inventory}` and the import audit finds **0** embedding/vector/RAG call sites
+teeth: breaks-on "an embedding-similarity path is added to relevance — the two identical inventory queries return different rankings (nondeterministic) and the import audit finds a vector-store call site"
+gen: conformance   # differential vs `retrieval/ref/resolve.ts` over held-out Fixture A′ + import grep-assertion
+
+### SCN-RETR-3a-2 — held-out: a `stale:true` inventory pack is not trusted as-is   (guard)
+source: REQ-RETR-3a
+Given a **held-out** `crate:inventory` pack backed by groundings `{h1, h2, h3}` with `h3` drifted (per the index drift-oracle), so its `stale` is `true`
+When a seat requests the pack for use
+Then the retrieval layer refuses to serve it as-is — the stale inventory pack is **not** trusted
+teeth: breaks-on "the stale flag is ignored on the read path — the `stale:true` inventory pack is served and trusted as-is"
+gen: conformance   # differential vs `retrieval/ref/stale.ts` over held-out {h1,h2,h3} backings (h3 drifted)
+
+### SCN-RETR-3b-2 — held-out: a `stale:true` inventory pack is re-grounded before use   (guard)
+source: REQ-RETR-3b
+Given the same held-out `stale:true` inventory pack (backings `{h1, h2, h3}`, `h3` drifted)
+When the retrieval layer prepares it for a seat
+Then it is routed through re-grounding **before** use, and only the re-grounded (`stale:false`) pack is served
+teeth: breaks-on "the re-ground step is skipped — the stale inventory pack is used directly without re-grounding"
+gen: conformance
+
+### SCN-RETR-3c-2 — held-out: `stale` equals exactly the OR over three backings, never a guess   (happy)
+source: REQ-RETR-3c
+Given a held-out inventory pack backed by groundings `{h1, h2, h3}`, with `h3` drifted in the index drift-oracle and `h1`, `h2` clean
+When `stale` is computed
+Then `stale = drifted(h1) OR drifted(h2) OR drifted(h3) = false OR false OR true = true` — the exact OR over **three** backings, never a heuristic
+teeth: breaks-on "`stale` is a heuristic guess (e.g., an age/TTL timer) — it reads `false` while `h3` is genuinely drifted, or `true` while all three backings are clean"
+gen: conformance   # reuses the index drift-oracle as the mock; held-out 3-backing OR (vs the 2-backing base)
+
+### SCN-RETR-4a-2 — held-out: the poke's event source is the tool-call hook   (happy)
+source: REQ-RETR-4a
+Given the harness tool-call hook (the push tier of TOOLS-11) observing `Read(crates/inventory/src/reserve.rs)` over Fixture C′
+When the poke pipeline runs
+Then scope `P = file:inventory/reserve` is **inferred from the tool-call path** (not from an explicit query) and drives the poke
+teeth: breaks-on "the poke is sourced from an explicit `atlas-query` call instead of the tool-call hook — inventory navigation that never issues a query never pokes"
+gen: conformance   # differential vs `retrieval/ref/poke.ts` over Fixture C′
+
+### SCN-RETR-4b-2 — held-out: a single-file Edit is a navigation signal   (happy)
+source: REQ-RETR-4b
+Given the tool call `Edit(crates/inventory/src/restock.rs)` on one file path
+When the classifier runs
+Then it is classified `navigate(file:inventory/restock)` — scope = that file's node (`Q`)
+teeth: breaks-on "a single-file `Edit` is not treated as navigation — the classifier returns `suppress` and no scope is ever resolved"
+gen: conformance
+
+### SCN-RETR-4c-2 — held-out: a multi-file Glob is suppressed   (guard)
+source: REQ-RETR-4c
+Given `Glob(pattern="**/*.rs", 40 matches across inventory+shipping)`
+When the classifier runs
+Then it returns `suppress` — a multi-file span has **no single scope**, so **no poke** fires
+teeth: breaks-on "the multi-file Glob infers a scope (e.g., the first match's file) and fires a poke"
+gen: conformance
+
+### SCN-RETR-4d-2 — held-out: a Bash path-shaped arg is not navigation   (guard)
+source: REQ-RETR-4d
+Given the tool call `Bash("cargo build -p inventory")` carrying the path-shaped arg `-p inventory`
+When the classifier runs
+Then it returns `suppress` — a command's path-shaped argument is not a location, so **no** scope is inferred
+teeth: breaks-on "the classifier parses `-p inventory` as a location and infers scope `crate:inventory` from a Bash command"
+gen: conformance
+
+### SCN-RETR-4e-2 — held-out: only a resolved single-file navigation drives a scope-change   (happy)
+source: REQ-RETR-4e
+Given a stream `[Glob(40 files), Bash("cargo test"), Read(crates/inventory/src/restock.rs)]`
+When the scope-change engine consumes the stream
+Then only the `Read` (single-file navigation) moves the current scope to `Q = file:inventory/restock`; the Glob and Bash move nothing
+teeth: breaks-on "a non-navigation call (the Glob) drives a scope-change — the current scope moves on a multi-file span"
+gen: conformance
+
+### SCN-RETR-4f-2 — held-out: crossing into a new scope fires an unasked poke   (happy)
+source: REQ-RETR-4f
+Given the current scope settled at `Q = file:inventory/restock` (not previously poked this session)
+When the navigator crosses into `Q`
+Then a poke fires **unasked**, injecting a compact notice (`≤ ~150` tok) + `Q`'s pack
+teeth: breaks-on "crossing into a new settled scope fires no poke — the pack is only delivered on an explicit request"
+gen: conformance
+
+### SCN-RETR-4g-2 — held-out: a poke fires only after the scope settles across N=2 calls   (happy)
+source: REQ-RETR-4g
+Given the sequence `[Read(P), Read(Q), Read(Q)]` — `Q` becomes current at call 2 and stays current at call 3
+When the debounce automaton (settle window `N = 2` consecutive tool calls) processes the stream
+Then `Q`'s poke fires only at call 3, once `Q` has settled as the current scope across 2 consecutive calls
+teeth: breaks-on "the settle window is mutated to `N = 1` — `Q`'s poke fires at call 2 on the first crossing (poke-storm on rapid hopping)"
+gen: conformance   # the debounce is over a COUNT of calls, not wall-clock — nothing real-time
+
+### SCN-RETR-4h-2 — held-out: a transient in-and-out crossing does not poke   (guard)
+source: REQ-RETR-4h
+Given the sequence `[Read(P), Read(Q), Read(P)]` — `Q` appears at call 2 then is gone at call 3 (never settles)
+When the debounce automaton processes the stream
+Then `Q` fires **no** poke — the crossing was transient (present for < `N = 2` consecutive calls)
+teeth: breaks-on "the transient single-call crossing into `Q` fires a poke at call 2 — hysteresis is absent"
+gen: conformance
+
+### SCN-RETR-4i-2 — held-out: an already-poked scope does not re-poke   (guard)
+source: REQ-RETR-4i
+Given a session where `Q`'s poke has already fired (so `Q ∈ poked`), then the stream `[Read(R), Read(Q), Read(Q)]` re-enters `Q`, and the seat then reasons over the already-injected pack (emitting no new path event)
+When the automaton reprocesses `Q` and the reasoning turn passes
+Then **no** second poke fires — a poke is at most once per scope per session, and reasoning over an injected pack emits no path event to re-trigger
+teeth: breaks-on "re-entering an already-poked scope re-pokes — `Q` is injected a second time in one session"
+gen: conformance
+
+### SCN-RETR-5a-2 — held-out: only the current scope's covering nodes are exposed   (happy)
+source: REQ-RETR-5a
+Given the navigator at scope `P = file:inventory/reserve`, covered by nodes `{m1, m2, m3}` (inventory crate roll-up) over Fixture A′
+When `projectTools(P)` runs
+Then the live MCP tool set is exactly `coveringNodes(P) = {m1, m2, m3}` — no node outside `P`'s covering set is exposed
+teeth: breaks-on "a node covering a *different* scope (e.g., `m4`, restock-only) is exposed while at `P` — off-scope nodes leak into the tool surface"
+gen: conformance   # differential vs `retrieval/ref/project.ts` over Fixture A′
+
+### SCN-RETR-5b-2 — held-out: leaving a scope retracts its node-tools   (happy)
+source: REQ-RETR-5b
+Given the tool set `{m1, m2, m3}` live for scope `P`, then the navigator moves to scope `Q = file:inventory/restock`
+When the scope-change is processed
+Then `P`'s node-tools retract and the live set becomes `coveringNodes(Q) = {m1, m2, m4}` — the tool surface follows the navigator, never accumulating
+teeth: breaks-on "on leaving `P` its tools are not retracted — the live set accumulates `coveringNodes(P) ∪ coveringNodes(Q) = {m1,m2,m3,m4}`"
+gen: conformance
+
+### SCN-RETR-5c-2 — held-out: the whole graph is never projected at once   (guard)
+source: REQ-RETR-5c
+Given the full Fixture A′ graph of 8 nodes and a navigator at scope `P` covered by 3
+When the tool surface is inspected at any step of an enter/exit sequence
+Then the live tool set is always the ≤3-node covering set, **never** the whole 8-node graph
+teeth: breaks-on "the projector exposes all 8 inventory nodes simultaneously — the whole graph is projected as tools at once"
+gen: conformance
+
+### SCN-RETR-7a-2 — held-out: each injection kind stays within its sweet-spot cap   (happy)
+source: REQ-RETR-7a
+Given the cap-table `{Awareness ~400, Orientation ~250, projectMem ~500, own ~1.5K, pack ~2K, related ~300, protocols ~500 shared, poke ~150}` and **held-out Fixture B″**'s per-kind `tokenEstimate`s
+When each kind's cap **value** is read from the shared cap-table under `cl100k_base` and its pinned `tokenEstimate` checked against it
+Then each kind's cap **== its ratified pinned value** — `own`'s cap **== 1500** (Fixture B″'s `own = 1450 ≤ 1500`), `pack` **== 2000** (`1900 ≤ 2000`), `poke` **== 150** (`140 ≤ 150`), `related` **== 300** (`280 ≤ 300`) — and each tokenEstimate is ≤ that cap
+teeth: breaks-on "the `own` cap drifts to `~1.6K` — `own`'s cap no longer **== 1500**, so the pinned-value assertion flips (a drift the `1450 ≤ cap` inequality alone would silently tolerate)"
+gen: conformance   # differential vs `retrieval/ref/caps.ts` over held-out Fixture B″
+
+### SCN-RETR-7b-2 — held-out: no single kind consumes the whole ceiling (orchestrator profile)   (guard)
+source: REQ-RETR-7b
+Given the **orchestrator** cap-table profile (`projectMem ~800`, not `~500`) and the `~5K` ceiling
+When each cap is compared to the ceiling
+Then the largest cap (`pack ~2K == 2000`) is strictly less than the `~5K == 5000` ceiling — and even the orchestrator-raised `projectMem (~800)` is far under; no single kind's cap equals or exceeds the whole ceiling
+teeth: breaks-on "the `pack` cap is raised to `~5K` (== the ceiling) — a single kind can consume the entire injection budget"
+gen: conformance   # held-out over the documented orchestrator cap-table variant (RETR-7a: projectMem orch ~800)
+
+### SCN-RETR-7c-2 — held-out: Awareness and Orientation are derived, never written   (guard)
+source: REQ-RETR-7c
+Given the injection kinds `Awareness`, `Orientation`, and the orchestrator's `projectMem` (`~800`) per-member entry
+When the write path is audited
+Then `Awareness` + `Orientation` are **derived** (0 write sites); only `projectMem` (the orchestrator's per-member entry) is written
+teeth: breaks-on "a code path writes `Orientation` to a member file — Orientation becomes a written entry instead of derived"
+gen: conformance
+
+### SCN-RETR-7d-2 — held-out: caps enforced under the pinned cap measure   (happy)
+source: REQ-RETR-7d
+Given the **held-out** Fixture A′ emitted pack (its `tokenEstimate` measured for cap enforcement)
+When enforcement computes the count
+Then it uses the pinned `cl100k_base` `Pack.tokenEstimate = 1790` — a deterministic, byte-identical count for equal input; the RETR-6 ceiling is enforced under the same measure
+teeth: breaks-on "enforcement is computed under an unpinned/different tokenizer (e.g., `p50k_base`) — the same inventory pack yields a different count across runs and the byte-identity gate (INDEX-8/RETR-1) breaks"
+gen: conformance
+
+### SCN-RETR-8a-2 — held-out: caps are a function of the ledger's observed hits   (happy)
+source: REQ-RETR-8a
+Given the reference cap-table reading the ledger over Fixture B″, then the ledgered `hits` for `pack` are mutated upward
+When the caps are recomputed
+Then `pack`'s cap **changes** in response — proving the cap is a function of observed `hits`, never a static constant divorced from usage
+teeth: breaks-on "the cap is a hardcoded constant — mutating the ledgered `hits` for `pack` leaves its cap unchanged (caps set by guesswork, not observed use)"
+gen: conformance   # differential vs `retrieval/ref/ledger.ts` feeding the cap-table; held-out mutates `pack` (vs base `own`)
+
+### SCN-RETR-8b-2 — held-out: per-kind hitRate drives the RETR-6 drop order   (happy)
+source: REQ-RETR-8b
+Given the drop-policy reading Fixture B″'s per-kind `hitRate`, then `Orientation`'s `hitRate` is mutated to `0.05` (below `poke`'s `0.15`)
+When the drop order is recomputed
+Then `Orientation` now drops before `poke` — the drop order is driven by observed `hitRate`, least-used first
+teeth: breaks-on "the drop order ignores `hitRate` and uses a static rank — mutating `Orientation`'s hitRate leaves the drop order unchanged (`poke` still drops before `Orientation`)"
+gen: conformance
+
+### SCN-RETR-9a-2 — held-out: a malformed scope yields empty pack / empty tools / no poke   (guard)
+source: REQ-RETR-9a
+Given a **held-out** malformed scope input `scope = "::inventory//..//"` (no covering territory) against the Fixture A′ surface
+When `pack` / `projectTools` / `poke` are each invoked on it
+Then `pack.invariants = []`, `projectTools = []`, and `poke = null` — empty structures, never a nearest-match fallback
+teeth: breaks-on "a malformed scope returns a nearest-match non-empty inventory pack (a partial guess) instead of an empty pack"
+gen: conformance   # PBT-fuzz differential vs the total reference surface `retrieval/ref/*.ts`
+
+### SCN-RETR-9b-2 — held-out: a malformed scope never throws   (guard)
+source: REQ-RETR-9b
+Given a **held-out** PBT-fuzz stream of arbitrary + malformed scopes (8k cases: control-char paths, deeply-nested `../` chains, symlink-loop paths, integer-overflow-length strings) run side-by-side against the total reference surface
+When each retrieval entry point is invoked on each fuzzed scope
+Then **0 exceptions** are thrown — every call returns an empty/`null` result, and prod matches ref
+teeth: breaks-on "a control-char / symlink-loop scope propagates an uncaught exception (a `RangeError`) instead of returning an empty result"
+gen: conformance   # PBT-fuzz differential over a held-out fuzz generator distinct from the base 10k-case stream
+
+### Held-out blast-radius fixture (for RETR-11′)
+
+Unit `w` with `M = 15` reverse-closure dependents. Rank exemplars: `e_hub` (T1, ppr 0.85, distance 2) and
+`e_leaf` (T1, ppr 0.30, distance 1); one node `e_far` at distance 3. Forward `dependencies` = 11. Bounds
+`maxHops = 2`, `K = 8` (frozen).
+
+### SCN-RETR-11a-2 — held-out: dependents are cut at maxHops = 2   (happy)
+source: REQ-RETR-11a
+Given the reverse closure of `w` including `e_far` at hop-distance 3
+When the bounder cuts the closure at `maxHops = 2`
+Then `e_far` (distance 3) is **excluded** — only nodes within 2 hops of `w` survive the cut
+teeth: breaks-on "the hop cut is mutated to `maxHops = 3` — `e_far` (distance 3) leaks into the dependents band"
+gen: conformance   # differential vs `retrieval/ref/bound.ts` over held-out unit `w`
+
+### SCN-RETR-11b-2 — held-out: dependents ranked by the deterministic total order   (happy)
+source: REQ-RETR-11b
+Given `e_hub` (ppr 0.85, distance 2) and `e_leaf` (ppr 0.30, distance 1), both T1
+When the bounder orders `dependents` by `(tier-desc, ppr-desc, distance-asc, nodeKey-asc)`
+Then `e_hub` ranks **before** `e_leaf` — the high-PPR hub 2 hops out outranks the low-PPR leaf 1 hop in (distance is demoted to a tiebreak)
+teeth: breaks-on "distance is promoted to the primary key — the closer `e_leaf` (1 hop) outranks the higher-PPR `e_hub` (2 hops)"
+gen: conformance
+
+### SCN-RETR-11c-2 — held-out: dependents capped at K = 8   (happy)
+source: REQ-RETR-11c
+Given the ranked reverse closure of `w` with `M = 15` dependents
+When the bounder caps the set
+Then it returns exactly `K = 8` one-line `RelatedFact`s — the top-8 by rank
+teeth: breaks-on "the cap is raised to `K = 12` — 12 dependents are returned, blowing the hard count"
+gen: conformance
+
+### SCN-RETR-11d-2 — held-out: closure > K → truncate after ranking, honest meta   (guard)
+source: REQ-RETR-11d
+Given the `M = 15` closure exceeding `K = 8`
+When the bounder truncates
+Then it truncates **after** ranking (the returned 8 are the top-8 by rank, a rank-prefix) and carries `dependents_meta = {truncated: true, total: 15, returned: 8}` — the honest pre-truncation count
+teeth: breaks-on "truncation happens **before** ranking (the first 8 by insertion order are kept) — or `total` is reported as `8` (== returned), hiding the 7 dropped dependents"
+gen: conformance
+
+### SCN-RETR-11e-2 — held-out: forward dependencies use the same rank and K = 8   (happy)
+source: REQ-RETR-11e
+Given unit `w` with 11 forward `dependencies`
+When the bounder returns the `dependencies` band
+Then it is ranked by the same `(tier-desc, ppr-desc, distance-asc, nodeKey-asc)` order and capped at the same `K = 8`, with honest meta (`{truncated: true, total: 11, returned: 8}`)
+teeth: breaks-on "forward `dependencies` are returned unbounded — all 11 are emitted with no `K = 8` cap (only `dependents` is bounded)"
+gen: conformance
+
+### Held-out off-atlas fixture (for RETR-13′)
+
+Territory `crate:shipping` served on **8** turns, of which **2** required a `Read`/`Grep` outside the surfaced
+scope-set ⇒ `offAtlasRate = 2/8 = 0.25`. A no-history territory `crate:warehouse` has `served = 0`.
+
+### SCN-RETR-13a-2 — held-out: the off-atlas rate is logged per territory   (happy)
+source: REQ-RETR-13a
+Given territory `crate:shipping` served on 8 turns, of which 2 required a `Read`/`Grep` **outside** the surfaced scope-set to finish
+When the coverage ledger computes the off-atlas rate
+Then it logs `crate:shipping → offAtlasRate = offAtlasReads/served = 2/8 = 0.25`
+teeth: breaks-on "out-of-scope reads are not counted — the off-atlas rate stays `0` despite the 2 misses (the silent under-coverage stays invisible)"
+gen: conformance   # differential vs `retrieval/ref/offatlas.ts` over held-out `crate:shipping`
+
+### SCN-RETR-13c-2 — held-out: the off-atlas ledger is deterministic   (happy)
+source: REQ-RETR-13c
+Given the same `crate:shipping` served-turn read multiset **accumulated in two different orders** (the reads replayed in a permuted sequence)
+When the per-territory off-atlas ledger is computed each time
+Then both serialize **byte-identically** (`offAtlasRate = 0.25` both times) — the rate is order-independent (a commutative, pinned reduction)
+teeth: breaks-on "the ledger accumulates in float/iteration order (order-dependent) — the two permuted accumulations produce different rate bytes, a bug identical-replay would miss"
+gen: conformance
+
+### SCN-RETR-13d-2 — held-out: a territory with no served history yields rate 0   (guard)
+source: REQ-RETR-13d
+Given territory `crate:warehouse` with `served = 0` (no served history)
+When its off-atlas rate is computed
+Then it yields `offAtlasRate = 0` — not `NaN`, not undefined
+teeth: breaks-on "the no-history case computes `0/0 = NaN` — a territory never served reports a garbage rate instead of `0`"
+gen: conformance
+
+### SCN-RETR-13e-2 — held-out: a territory with no served history never throws   (guard)
+source: REQ-RETR-13e
+Given the same `served = 0` territory `crate:warehouse`
+When `offAtlas()` is invoked on it
+Then it returns rate `0` and **does not throw** — the no-history path is total
+teeth: breaks-on "the no-history path throws a divide-by-zero exception instead of returning rate `0`"
+gen: conformance
+
+## Wave-H coverage delta (held-out leg)
+
+- **Conformance / reference-model REQ SCNs (base wave):** 33 (RETR-1 ×1, RETR-3 ×3, RETR-4 ×9, RETR-5 ×3,
+  RETR-7 ×4, RETR-8 ×2, RETR-9 ×2, RETR-11 ×5, RETR-13 ×4).
+- **Held-out `-2` scenarios added:** **33** — one per conformance SCN, **all** conformance/reference-model
+  REQs covered (RETR-1/3/4/5/7/8/9/11/13-non-residue), each with its **own** `teeth: breaks-on`, `gen:
+  conformance`, over a genuinely independent fixture.
+- **Held-out fixtures added:** `Fixture A′` (`crate:inventory` — 8 nodes, different tiers/ppr/hits/tok),
+  `Fixture B″` (held-out injection budget — different tokenEstimates/hitRates over the frozen caps),
+  `Fixture C′` (inventory tool-call scopes `P/Q/R`), the RETR-11′ blast-radius fixture (`w`, `M=15`/`11`),
+  the RETR-3′ stale-pack fixture (`{h1,h2,h3}`, `h3` drifted), the RETR-13′ off-atlas fixture
+  (`crate:shipping` 2/8=0.25 · `crate:warehouse` served 0).
+- **Skipped (noted inline above):** `gen: PBT` 30 (RETR-2/6/10/12 → held-out assurance = the PBT
+  law-witnesses in `properties-ret.md`) · `gen: residue` 2 (SCN-RETR-6b-2 `κ`, SCN-RETR-13b-1 `θ` —
+  DEFINE-parametric, exempt+flagged) · delegated acceptance 0.
+- **Independence spot-check (5):** SCN-RETR-1-2 (inventory vs billing territory) · SCN-RETR-4g-2 (scopes
+  `P/Q` vs `A/B`) · SCN-RETR-7a-2 (Fixture B″ tokenEstimates vs B) · SCN-RETR-11b-2 (unit `w`, ppr
+  0.85/0.30 vs `u`, 0.90/0.20) · SCN-RETR-13a-2 (`crate:shipping` 2/8 vs `crate:billing` 3/10) — each `-2`
+  exercises the SAME branch over a **different** fixture instance; a fixture-1-hardcoded impl fails the leg.
+- **teeth:** 33/33 `-2` SCN name the exact mutant they flip to BROKEN on, over the held-out data; none
+  vacuous; cap assertions keep the pinned `cl100k_base` `tokenEstimate` discipline.
+- **[NEEDS RECONCILIATION]:** none new. The two open DEFINE dependencies (`θ` off-atlas threshold, `κ`
+  hitRate-tie secondary key) are unchanged and remain held-out-**exempt** by the residue rule.
