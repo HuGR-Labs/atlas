@@ -47,7 +47,7 @@ Mechanically extracted (jimmy). Every co-writer pair is **intra-campaign**; clas
 | `index/ref/depgraph.ts` | 2.6, 2.8-b.INDEX | 2 | **SEQUENTIAL** | 2.6 (build) → 2.8-b (depends-on) |
 | `index/ref/fold.ts` | 2.7-a, 2.7-b | 2 | **SEQUENTIAL** | 2.7-a (rollup) → 2.7-b (drift) |
 | `knowledge/ref/router.ts` | 5.13-a, 5.13-b | 5 | **SEQUENTIAL** | 5.13-a → 5.13-b |
-| `tools/ref/tool.ts` | 7.26-a, 7.26-b | 7 | **SEQUENTIAL** (after rename, below) | 7.26-a → 7.26-b |
+| `tools/ref/handler.ts` (also oracle for 7.26-a/b via rename R1) | 7.26-a, 7.26-b, 7.26-c, 7.32 | 7 | **SEQUENTIAL** (one dispatcher) | 7.26-a → -b → -c → 7.32 |
 
 Read-only cross-package consumers (NOT co-writers, no conflict): `index/ref/depgraph.ts` ← WP-2.8-b.RETR
 (guardrail "MUST NOT edit index/**"); `kernel/ref/fold.ts` ← WP-7.32.PERSIST (reused fold oracle).
@@ -60,8 +60,8 @@ on the facet-narrative + single-package guardrail, to be made mechanical at dige
 
 | # | item | detail | close where |
 |---|---|---|---|
-| R1 | **Dangling ref pointers** | tools cards name `tools/ref/{store,tool,ladder}.ts`; scaffold has `{emit(+guard),node,transport}.ts`. Rename map: `store→emit`, `tool→node`, `ladder→transport`. Nothing missing — pure rename. | update 3 tools cards (7.26-a/b/c) |
-| R2 | **`@orchestra/*` residual** | 3 occ of `@orchestra/kernel` in 2 cards (WP-1.1-a.KERNEL ×2, WP-4.10-a.GROUND ×1). Scaffold is `@atlas/*`. (The `merge=orchestra-atlas` git driver name is unrelated — keep.) | s/@orchestra/@atlas/ in 2 cards |
+| R1 | **Dangling ref pointers** ✅ CLOSED | tools cards named `tools/ref/{store,tool,ladder}.ts`; scaffold has them under real facet names. Rename applied (read-of-cards): `store→guard` (writePaths/single-write-door; surface=Tool union in types.ts, append-only store=@atlas/persist), `tool→handler` (pure/total wrapper + Verdict guidance stamp), `ladder→transport`. Nothing missing — pure rename; input-list dups deduped. | DONE in wp-campaign-7.md |
+| R2 | **`@orchestra/*` residual** ✅ CLOSED | was 3 occ of `@orchestra/kernel` in 2 cards (WP-1.1-a.KERNEL ×2, WP-4.10-a.GROUND ×1) → `@atlas/kernel`. (The `merge=orchestra-atlas` git driver name is unrelated — kept.) | DONE in wp-campaign-{1,4}.md |
 | R3 | **Reference contradictions** (bobby tripwires — scaffold correctly refused to invent) | (a) Event shape: atlas-kernel vs fspec-merge (KERNEL-10, scaffold pinned fspec-merge, dropped kind/actor/at); (b) ClaimEntry = kernel Event vs atlas-knowledge `{claimNorm,claimText,provenance}`; (c) KNOW fields owner/scope/predicateSlot/supersededBy required-by-invariant, absent from record; (d) frecency vs hits (scaffold pinned MEM-7 frecency). | reconciled IN the owning WP (KRN/KNW/MEM data-model WPs) — flagged in ref, not a blocker |
 | R4 | **File-ownership for the 56 req-anchored WPs** | make each WP's owned `src/<facet>.ts` mechanical by binding source_reqs→facet at digest-freeze, so intra-package disjointness is proven not asserted | digest-freeze tooling |
 

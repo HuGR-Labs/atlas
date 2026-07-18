@@ -40,7 +40,8 @@ seam-freezes: [ ]
 anchor: # value
   target: the TOOLS governance layer — the four-tool surface {atlas-init, atlas-query, atlas-emit,
     atlas-reconcile} + the store medium; production tools differential-tested against the named reference
-    oracles tools/ref/store.ts (surface/writePaths/append-only) · tools/ref/tool.ts (pure/total wrapper) ·
+    oracles tools/ref/guard.ts (writePaths/single-write-door; surface = the four-tool Tool union in types.ts;
+    append-only store medium = @atlas/persist) · tools/ref/handler.ts (pure/total wrapper) ·
     tools/ref/emit.ts (fail-closed writer). Insertion site = the write-door + store-integrity entry points.
 interface_contract:                      # ptr+digest
   - source: ../../reference/atlas-tools.md#tools-1  # ptr+digest
@@ -55,8 +56,8 @@ exclusions: # value
   - CLI/MCP parity, doctor, transports (EPIC-26-b / -c) — out of scope here.
 inputs:                                  # ptr+digest
   - source: ../goldens-tls.md#concrete-fixture-universe  # ptr+digest
-  - source: tools/ref/store.ts  # ptr+digest
-  - source: tools/ref/tool.ts  # ptr+digest
+  - source: tools/ref/guard.ts  # ptr+digest
+  - source: tools/ref/handler.ts  # ptr+digest
   - source: tools/ref/emit.ts  # ptr+digest
 action: # value (zero-decision recipe)
   Implement the four-tool surface + store so each acceptance SCN passes as a differential/conformance run
@@ -119,8 +120,9 @@ source_reqs:                             # ptr+digest
   - source: ../req-tls.md#REQ-TOOLS-12c  # ptr+digest
 seam-freezes: [ ]
 anchor: # value
-  target: the CLI + MCP adapters over the one handler tools/ref/handler.ts, the Verdict constructor
-    tools/ref/tool.ts (guidance stamp), and the doctor projection tools/ref/doctor.ts. Insertion site = the
+  target: the CLI + MCP adapters over the one handler tools/ref/handler.ts (which carries the Verdict
+    guidance stamp, TOOLS-4; Verdict type in tools/ref/types.ts), and the doctor projection
+    tools/ref/doctor.ts. Insertion site = the
     two transport adapters + the doctor sub-command surface (archive / why-broken / hot-set / reground-plan).
 interface_contract:                      # ptr+digest
   - source: ../../reference/atlas-tools.md#tools-3  # ptr+digest
@@ -135,7 +137,6 @@ exclusions: # value
 inputs:                                  # ptr+digest
   - source: ../goldens-tls.md#concrete-fixture-universe  # ptr+digest
   - source: tools/ref/handler.ts  # ptr+digest
-  - source: tools/ref/tool.ts  # ptr+digest
   - source: tools/ref/doctor.ts  # ptr+digest
 action: # value
   Build the CLI+MCP adapters over the one handler and the doctor projection so each acceptance SCN passes:
@@ -205,7 +206,7 @@ source_reqs:                             # ptr+digest
 seam-freezes: [ ]
 anchor: # value
   target: the tri-transport node handler tools/ref/handler.ts (one handler behind MCP / poke / CLI) and the
-    direction-split spawn/pull resolver tools/ref/ladder.ts. Insertion site = the three transport bindings +
+    direction-split spawn/pull resolver tools/ref/transport.ts. Insertion site = the three transport bindings +
     the native-first ladder resolver (spawn, down-rank, report startedTier).
 interface_contract:                      # ptr+digest
   - source: ../../reference/atlas-tools.md#tools-10  # ptr+digest
@@ -219,7 +220,7 @@ exclusions: # value
 inputs:                                  # ptr+digest
   - source: ../goldens-tls.md#concrete-fixture-universe  # ptr+digest
   - source: tools/ref/handler.ts  # ptr+digest
-  - source: tools/ref/ladder.ts  # ptr+digest
+  - source: tools/ref/transport.ts  # ptr+digest
 action: # value
   Bind the one handler to the three transports and build the native-first ladder so each acceptance SCN
   passes: PBT witnesses (10a–10d) prove mcp(a)≡poke(a)≡cli(a) + contract identity + no-write-path + CLI

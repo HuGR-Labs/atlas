@@ -21,7 +21,7 @@ content_hash: <filled-at-freeze>
 title: Content-addressed object identity & canonical encoding (hashing seam)
 intent: >
   Give every Atlas object a computed identity — id = Encoder.hash(canonicalForm(object)) reached only
-  through the @orchestra/kernel encoder seam (default BLAKE3) — so identity is never asserted and a
+  through the @atlas/kernel encoder seam (default BLAKE3) — so identity is never asserted and a
   non-canonical / hand-rolled / side-index-tainted preimage fails closed. (Non-authoritative handle.)
 source_reqs:                             # ptr+digest
   - source: ../req-krn.md#REQ-KERNEL-1a  # ptr+digest
@@ -33,7 +33,7 @@ source_reqs:                             # ptr+digest
   - source: ../req-krn.md#REQ-KERNEL-8a  # ptr+digest
   - source: ../req-krn.md#REQ-KERNEL-8b  # ptr+digest
 seam-freezes: [ ]
-anchor: packages/kernel/src/ — the @orchestra/kernel encoder seam + canonicalForm(); id-computation entry points
+anchor: packages/kernel/src/ — the @atlas/kernel encoder seam + canonicalForm(); id-computation entry points
 interface_contract:                      # ptr+digest
   - source: ../req-krn.md#REQ-KERNEL-1a  # ptr+digest
   - source: ../req-krn.md#REQ-KERNEL-2a  # ptr+digest

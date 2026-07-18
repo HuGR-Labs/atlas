@@ -31,7 +31,7 @@ source_reqs:                             # ptr+digest
   - source: ../req-grd.md#REQ-GROUND-10a  # ptr+digest
   - source: ../req-grd.md#REQ-GROUND-10b  # ptr+digest
 seam-freezes: [ "grounding drift-oracle semantics owned-by GROUND, consumed-by INDEX", "grounding drift-oracle semantics owned-by GROUND, consumed-by KNOW", "subtreeHash CAS-object identity consumed-from INDEX (owned-by INDEX, WP-4.10-a.INDEX)" ]
-anchor: packages/grounding/src/ — `ground()`, `driftDetect()`, `subtreeHash` computation call-site (routes through the `@orchestra/kernel` encoder seam)
+anchor: packages/grounding/src/ — `ground()`, `driftDetect()`, `subtreeHash` computation call-site (routes through the `@atlas/kernel` encoder seam)
 interface_contract:                      # ptr+digest
   - source: ../../reference/atlas-grounding.md#ground-1  # ptr+digest
   - source: ../../reference/atlas-grounding.md#ground-2  # ptr+digest
