@@ -22,11 +22,12 @@
 2. **False-green is the enemy, not red.** A WP that reports green is not trusted on that report (the failure
    the whole method exists to refuse — AP-5). GATE re-derives doneness with **diff-scoped mutation** (a
    surviving mutant on the changed lines = a test gap that lets a real bug through ⇒ reject) and the
-   **diff-scope hard-block** (no acceptance-artifact may be touched). Its three richer legs — held-out
-   acceptance, differential-vs-oracle, and frozen PBT — are **conditional on acceptance artifacts the current
-   upstream does not yet produce** (see *Assurance levels* below); the method is **honest about which leg is
-   load-bearing today** and never runs an inert leg as if it proved something. This mirrors the WP template's
-   own concession: a WP is *verified against the frozen goldens, never proven right*.
+   **diff-scope hard-block** (no acceptance-artifact may be touched) and, since Wave P, the **frozen PBT
+   leg** (134 ∀-laws — the oracle-free check that disproves fixture-overfitting). Its two remaining richer
+   legs — held-out acceptance and differential-vs-oracle — stay **conditional**: differential is *subsumed*
+   by PBT (no executable reference exists, nor is one needed); held-out awaits ≥2 fixtures/REQ (Wave H). See
+   *Assurance levels* below; the method is **honest about which leg is load-bearing** and never runs an inert
+   leg as if it proved something — a WP is *verified against its frozen laws + witness, held-out-pending*.
 3. **The model proposes; the orchestrator disposes.** The builder emits ACI-form edits; a deterministic
    orchestrator applies the diff into an **ephemeral sandbox workspace** and runs the gates. The apply is
    gated, the model's write is not trusted directly. Governance value over the field's relaxed default (Q4).
@@ -96,23 +97,23 @@ exist** and stamps the WP's assurance **mode** into the seal provenance — the 
 |---|---|---|
 | diff-scoped mutation | the changed lines + a mutation runner | **yes** — always the floor |
 | diff-scope hard-block + purity | the WP guardrails | **yes** — always |
-| **held-out acceptance** | **≥2 independent fixtures per behavioural REQ** (so one can be held out and still test the *same* behaviour) | **no** — S3 froze **one witness per REQ**; holding one out hides the whole REQ, it does not catch overfitting |
-| **differential-vs-oracle** | an **executable** reference (not a pure-type `ref/*.ts` interface) | **no** — every `ref/*.ts` is a zero-runtime TS interface; there is no reference impl to compare against |
-| **frozen PBT** | a runnable ∀-quantified `properties-*.md` artifact | **no** — S3 froze concrete witness SCNs, not runnable properties |
+| **frozen PBT** | a runnable ∀-quantified `properties-*.md` artifact | **YES** (Wave P, commit `4612964`) — 134 `PROP-*` laws, one per behavioural INV, rendered from the frozen S2 method-tags; cold-reviewed faithful |
+| **differential-vs-oracle** | an **executable** reference (not a pure-type `ref/*.ts` interface) | **no, and not needed** — `ref/*.ts` are zero-runtime interfaces; **PBT subsumes it** (asserting the frozen law on the impl is the oracle-free equivalent) |
+| **held-out acceptance** | **≥2 independent fixtures per behavioural REQ** (so one can be held out and still test the *same* behaviour) | **no** — S3 froze **one witness per REQ**; the ~350 conformance second-fixtures are **Wave H** (a governed S3 goldens re-freeze, wave-plan R6) |
 
-- **FLOOR assurance (today):** mutation (diff-scoped) + diff-scope hard-block + purity + the single frozen
-  witness per REQ. Honest claim: *the diff satisfies the frozen witness of each REQ, mutation-checked on the
-  changed lines* — **verified, not proven**. A hard-coded-fixture impl is caught by mutation only if the
-  mutation touches the hard-coding; the single witness cannot disprove overfitting.
-- **FULL assurance (target):** all four legs, once the three prerequisite artifacts exist. Producing them is a
-  **declared upstream reconciliation** (see below), not something BIND/GREEN may invent.
+- **PBT assurance (today, after Wave P):** mutation (diff-scoped) + **frozen PBT (134 ∀-laws)** + diff-scope
+  hard-block + purity + the single frozen witness per REQ. Honest claim: *the diff satisfies each behavioural
+  invariant's frozen ∀-law over generated inputs, mutation-checked on the changed lines* — this **does**
+  disprove the hard-coded-fixture overfit (a `if input==N1 return …` impl fails the ∀-law on the next
+  generated input), which the lone witness could not. Strong, but not yet the full held-out cross-check.
+- **FULL assurance (target):** the above **+ held-out acceptance**, once ≥2 independent fixtures per
+  behavioural REQ exist (**Wave H**). That is a governed S3 goldens re-freeze (wave-plan R6), not something
+  BIND/GREEN may invent.
 
-**Acceptance prerequisites (a fail-closed reconciliation, not a silent gap).** To reach FULL assurance the
-method REQUIRES S3/scaffold to additionally freeze: (a) ≥2 independent fixtures per behavioural REQ; (b) an
-executable reference oracle **or** a frozen property set for differential/PBT. Until they exist, GATE records
-each missing leg as **UNAVAILABLE** with the assurance reduction surfaced in the seal — it never reports an
-absent leg as passed. This is logged as an open method-prerequisite, closed by strengthening S3, never by
-weakening the gate or by BIND fabricating a held-out split.
+**Acceptance prerequisites (a fail-closed reconciliation, not a silent gap).** The PBT prerequisite is now
+met (Wave P: `properties-*.md`). The remaining FULL prerequisite is ≥2 independent fixtures per behavioural
+REQ (Wave H). Until Wave H lands, GATE records **held-out** as UNAVAILABLE with the reduction surfaced in the
+seal — it never reports an absent leg as passed, never weakens the gate, never fabricates a held-out split.
 
 ## Anti-spec-gaming doctrine (what holds regardless of assurance level — Q2)
 
@@ -135,7 +136,7 @@ The WP-card's present-but-empty `exec` fields are filled **only at SEAL**, as th
 ```
 exec:
   outputs:    [ src/<facet>.ts@<contentHash>, ... ]        # the sealed diff, content-addressed
-  provenance: { attestation: in-toto/SLSA, gate_run: <hash>, assurance: FLOOR|FULL,
+  provenance: { attestation: in-toto/SLSA, gate_run: <hash>, assurance: FLOOR|PBT|FULL,
                 mutation: <survivors:0>, held_out: <pass|UNAVAILABLE>,
                 differential: <pass|UNAVAILABLE>, pbt: <pass|UNAVAILABLE> }
   trace_ref:  <event-log entry hash>                        # append-only, hash-chained

@@ -71,7 +71,7 @@ BIND — <WP-id> @ <baseline-sha>
 digests:     [ <ptr> → RESOLVED@<hash> | STALE ]     # all must be RESOLVED
 oracle:      packages/<pkg>/ref/<facet>.ts@<sha>  (typecheck: green; SIG-TBD/unknown: none)
 src_target:  packages/<pkg>/src/<facet>.ts          # the WRITE target (ref/ is the read-only oracle)
-assurance:   FLOOR | FULL
+assurance:   FLOOR | PBT | FULL
 acceptance:  visible=[ SCN-… ]   held_out=[ SCN-… | UNAVAILABLE ]
 pbt:         [ PROP-… | UNAVAILABLE ]   differential: available | UNAVAILABLE(oracle is pure-type)
 merge_after: <predecessor WP-id from wave-plan conflict-map | none>
@@ -97,6 +97,6 @@ NEEDS RECONCILIATION to the DEFINE owner. Do not invent the missing artifact, do
 split, do not proceed on a simulated resolve without flagging it.
 
 ## Completion Report
-Emit: WP-id · digests-resolved (n/n) · oracle@sha (SIG-TBD: none) · assurance FLOOR|FULL · visible/held_out
+Emit: WP-id · digests-resolved (n/n) · oracle@sha (SIG-TBD: none) · assurance FLOOR|PBT|FULL · visible/held_out
 split · `merge_after` · enrichment path → **cold-review of the bind-record → RED**.
 If any digest STALE, oracle carries a `SIG-TBD`, or acceptance empty, **STOP** (do not enter RED).

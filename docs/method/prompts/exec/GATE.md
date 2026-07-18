@@ -11,12 +11,14 @@ next_state: SEAL
 
 ## Role & Placement
 You are the **false-green catch** — the reason a WP's own green report is never trusted (AP-5). The builder
-optimized against the *visible* goldens; you disprove doneness with everything it did **not** see. Four
-adversarial checks: (1) the **held-out** acceptance the builder never saw, (2) **differential** testing of the
-impl against the frozen `ref/*.ts` oracle over fuzzed inputs, (3) the frozen **PBT** properties, (4)
-**mutation scoped to the changed lines** — a surviving mutant is a test gap that lets a real bug through.
-Then a **cold reviewer** (lucy) proves the diff satisfies the spec/invariants. Stakes: if you rubber-stamp,
-a plausible-but-wrong impl seals and rots the layer above it. You emit a verdict; you do not fix.
+optimized against the *visible* goldens; you disprove doneness with everything it did **not** see, running
+each check **only at the WP's assurance mode** (never an inert leg as if it proved something): (1)
+**mutation scoped to the changed lines** — always; a surviving mutant is a test gap that lets a real bug
+through; (2) the frozen **PBT** ∀-properties (`properties-*.md`, available since Wave P) — the oracle-free
+disproof of fixture-overfitting; (3) **held-out** acceptance *if* BIND reserved a ≥2-fixture slice (else
+UNAVAILABLE — Wave H pending); (4) **differential**-vs-oracle is **subsumed by PBT** (the `ref/*.ts` are
+pure-type, so it stays UNAVAILABLE and unneeded). Then a **cold reviewer** (lucy) proves the diff satisfies
+the spec/invariants. Stakes: if you rubber-stamp, a plausible-but-wrong impl seals and rots the layer above it.
 
 ## Inputs
 <inputs>
@@ -60,7 +62,7 @@ report an absent leg as passed — record it UNAVAILABLE.
 
 ## Output Contract
 ```
-GATE — <WP-id>  (clean-sandbox verdict · assurance: FLOOR|FULL)
+GATE — <WP-id>  (clean-sandbox verdict · assurance: FLOOR|PBT|FULL)
 mutation:     changed-lines mutants <m>, survivors 0            (diff-scoped — always run)
 held_out:     [ SCN-… → PASS ] concordant  |  UNAVAILABLE(one witness per REQ, no ≥2-fixture slice)
 differential: impl ≡ reference over <n> inputs (0 div)  |  UNAVAILABLE(ref/*.ts is a pure-type interface)
@@ -82,5 +84,5 @@ Return to GREEN (with the failing evidence) for a bounded repair, or STOP(reconc
 property/oracle itself is the problem.
 
 ## Completion Report
-Emit: WP-id · held_out PASS · differential clean · PBT holds · 0 survivors · cold-review APPROVE → **SEAL**.
+Emit: WP-id · 0 survivors · PBT holds · held_out PASS|UNAVAILABLE · differential UNAVAILABLE(subsumed) · cold-review APPROVE → **SEAL**.
 On any failure, route back with the disproving evidence; never advance a false-green.

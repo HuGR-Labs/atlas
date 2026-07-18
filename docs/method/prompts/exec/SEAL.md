@@ -44,7 +44,7 @@ green through, and a seal that fabricates provenance breaks the audit chain fran
 1. **Diff-scope hard-block**: assert the diff touches only `packages/<pkg>/src/**` (+ non-acceptance tests).
    Any test/harness/golden/`ref/` path in the diff → **REJECT(gaming)**.
 2. **Fill `exec`** from the gate run: `outputs` = the sealed files content-addressed; `provenance` =
-   { attestation: in-toto/SLSA, gate_run: <hash>, **assurance: FLOOR|FULL**, mutation: survivors 0,
+   { attestation: in-toto/SLSA, gate_run: <hash>, **assurance: FLOOR|PBT|FULL**, mutation: survivors 0,
    held_out/differential/pbt: pass|UNAVAILABLE }; `trace_ref` = the appended event-log entry hash. The
    assurance mode is recorded, never hidden — a FLOOR seal is honestly a FLOOR seal.
 3. **Merge** in **wave-plan order**: onto `baseline_sha`, and — if the bind-record carried a `merge_after`
@@ -58,7 +58,7 @@ SEAL — <WP-id> @ <merge-sha>
 diff_scope:  src-only ✓  (no test/harness/golden/ref touch)
 exec:
   outputs:    [ src/<facet>.ts@<contentHash>, … ]
-  provenance: { attestation: <in-toto/SLSA>, gate_run: <hash>, assurance: FLOOR|FULL,
+  provenance: { attestation: <in-toto/SLSA>, gate_run: <hash>, assurance: FLOOR|PBT|FULL,
                 mutation: survivors 0, held_out|differential|pbt: pass|UNAVAILABLE }
   trace_ref:  <event-log entry hash>
 merge:       after <merge_after WP-id | baseline> (wave-plan conflict-map order)
