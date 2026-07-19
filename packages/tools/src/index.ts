@@ -37,3 +37,5 @@ export * from './query.js';       // WP-7.26-b.TOOLS — atlas-query read projec
 export * from './doctor.js';      // WP-7.26-b.TOOLS — read/advisory-only doctor (persists nothing; reground → plan via atlas-emit)
 export * from './transport.js';   // WP-7.26-c.TOOLS — tri-transport addressability + spawn ladder (one contract across MCP/poke/CLI, CLI-floor)
 export * from './diff.js';        // WP-7.32.TOOLS — atlas-diff read-only version-delta projection (CLI≡MCP, not a 5th tool)
+// Campaign-6 residual:
+export * from './push.js';        // WP-6.22.TOOLS — TOOLS-14 phase-transition auto-inject (push-no-grant, mid-task pull non-load-bearing)
