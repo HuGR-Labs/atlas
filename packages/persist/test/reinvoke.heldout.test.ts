@@ -8,7 +8,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { asHash } from '@atlas/kernel';
-import type { Checkpoint, TranscriptRef } from '../ref/types.js';
+import type { Checkpoint, TranscriptRef } from '../src/types.js';
 import { redispatch, replay } from '../src/reinvoke.js';
 import * as reinvoke from '../src/reinvoke.js';
 

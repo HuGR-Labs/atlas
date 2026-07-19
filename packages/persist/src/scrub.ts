@@ -1,16 +1,14 @@
 // @atlas/persist — src/scrub.ts  (WP-3.5-a.PERSIST · PERSIST-10a)
 //
-// Redact-at-source — the PRIMARY credential control (atlas-persist:132-140). Because the transcript object
-// is immutable + content-addressed, a captured secret would be permanent and hash-referenced, so no raw
-// credential may enter it. `scrub(buffer)` drops known credential SHAPES BEFORE the body is stored, and the
-// write-time gate `admitToBuffer` scrubs a chunk BEFORE it is admitted, so the raw credential never enters
-// the transcript buffer in the first place (not a post-persistence scan). The scrub redacts secrets WITHOUT
-// otherwise abridging the record — every non-secret byte is preserved (0 over-redaction).
-//
-// The ≥2-engine scanner (client + server-side pre-receive) is a BACKSTOP and is billy's FR-12 security
-// domain (REQ-PERSIST-10a-c / 10a-d) — NOT modeled here.
+// Redact-at-source — the PRIMARY credential control. `scrub` drops known credential SHAPES and the write
+// gate `admitToBuffer` scrubs a chunk BEFORE it enters the immutable content-addressed buffer (not a post-hoc
+// scan). Secrets are redacted WITHOUT abridging the record — every non-secret byte is preserved (0 over-redaction).
 
-import type { ScrubApi } from '../ref/scrub.js';
+/** Redact-at-source surface (PERSIST-10a): `scrub(buffer)` drops known credential shapes BEFORE the body
+ *  is stored; every non-secret byte preserved (no over-redaction). (method-tags-pst:91-92) */
+export interface ScrubApi {
+  scrub(buffer: Uint8Array): Uint8Array;
+}
 
 // Known credential SHAPES, matched by shape (never by a hard-coded secret literal) so an unseen secret of
 // the same family is caught too. GitHub token family: ghp_/gho_/ghu_/ghs_/ghr_ + ≥6 token chars.
@@ -57,6 +55,6 @@ export function admitToBuffer(existing: Uint8Array, chunk: Uint8Array): Uint8Arr
   return out;
 }
 
-// differential-vs-oracle (compile-time): `scrub` conforms to the frozen ScrubApi (ref/scrub.ts).
+// differential-vs-oracle (compile-time): `scrub` conforms to the co-located frozen ScrubApi.
 const _api: ScrubApi = { scrub };
 void _api;

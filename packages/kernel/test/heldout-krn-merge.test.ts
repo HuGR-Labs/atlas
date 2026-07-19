@@ -10,7 +10,7 @@
 
 import { describe, it, expect } from 'vitest';
 import type { Hash, NodeKey } from '@atlas/contracts';
-import type { AtlasState, Event, EventLog, Node } from '../ref/types.js';
+import type { AtlasState, Event, EventLog, Node } from '../src/types.js';
 import { createLog, eventId, combine } from '../src/log.js';
 import { fold, merge, mergeNode, head } from '../src/fold.js';
 import { toJsonl, parseJsonl, lineMerge, isContentKeyed } from '../src/jsonl.js';

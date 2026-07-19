@@ -1,28 +1,17 @@
 // @atlas/persist — barrel
 //
-// Layer 2: git-native durability / provenance / re-spawn. The implementation surface WPs fill in at
-// execution (incl. the `mergeAtlas(ours, theirs, base): EventLog` free function — PERSIST-11 — whose
-// oracle is the kernel `fold`, so it lives here in `src/`, NOT in `ref/`). For the skeleton, everything
-// lives frozen in `ref/*.ts`.
-//
-// The barrel re-exports the package's FULL public type surface so consumers can import from the bare
-// package root (`import type { VersionDelta } from '@atlas/persist'`). ref/*.ts is type-only, hence
-// `export type *`.
+// Layer 2: git-native durability / provenance / re-spawn. Re-exports the package's FULL public surface so
+// consumers import from the bare package root (`import type { VersionDelta } from '@atlas/persist'`). Each
+// frozen interface is co-located with its impl; the shared/multi-consumer data model lives in types.ts.
 
-export type * from '../ref/types.js';
-export type * from '../ref/attach.js';
-export type * from '../ref/diff.js';
-export type * from '../ref/host-adapter.js';
-export type * from '../ref/metering.js';
-export type * from '../ref/placement.js';
-export type * from '../ref/provenance.js';
-export type * from '../ref/reinvoke.js';
-export type * from '../ref/scrub.js';
-export type * from '../ref/source.js';
-export type * from '../ref/transcript-store.js';
+// The shared frozen data model + the multi-consumer version-delta types (VersionDelta/VersionDeltaEntry).
+export type * from './types.js';
 
 // WP-1.1-b.PERSIST runtime surface: store+trailers portable-source assembly + full-store OKF export.
+// (The frozen PortableSource/SourceApi are re-exported explicitly — source.js keeps its Home/Placement/
+//  Source model private, exactly as before.)
 export { clone, soleHomeViolations, exportStore, importStore } from './source.js';
+export type { PortableSource, SourceApi } from './source.js';
 
 // WP-1.2-b.PERSIST runtime surface: set-fold reconstruction over git history + archive/forget + rewind.
 export {

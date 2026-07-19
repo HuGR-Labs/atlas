@@ -6,7 +6,7 @@
 // Source: docs/requirements/goldens-pst.md SCN-PERSIST-10a-2 / 10-b-2 / 10-c-2 / 10-d-2 / 10a-a-2 / 10a-b-2 / 10a-e-2.
 
 import { describe, it, expect } from 'vitest';
-import type { TranscriptRef } from '../ref/types.js';
+import type { TranscriptRef } from '../src/types.js';
 import { createTranscriptStore, mitigate, reverse, toGitPointer } from '../src/transcript-store.js';
 import { scrub, admitToBuffer } from '../src/scrub.js';
 

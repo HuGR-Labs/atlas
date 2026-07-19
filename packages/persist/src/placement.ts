@@ -1,14 +1,21 @@
 // @atlas/persist — src/placement.ts  (trailer-vs-note placement oracle — PERSIST-13)
 //
-// Trailers are CANONICAL: a trailer block travels INSIDE the commit object, so it is present in any clone
-// by construction and survives a history rewrite onto the new SHA (REQ-PERSIST-13-a / -13-b). Notes are the
-// MUTABLE OVERLAY: `refs/notes/*` do not fetch/push by default (present only once the adapter configures the
-// refspec, REQ-PERSIST-13-c) and rebase/squash/cherry-pick ORPHAN them — a note keys on the commit SHA, so
-// a rewrite that mints a new SHA leaves the note behind (REQ-PERSIST-13-d). Therefore any datum that MUST be
-// present in any clone lives in a trailer, never solely a note. Identity types come from @atlas/contracts.
+// Trailers are CANONICAL (travel INSIDE the commit object, survive a rewrite onto the new SHA); notes are
+// the MUTABLE OVERLAY (`refs/notes/*` don't fetch/push by default, orphaned by rebase/squash/cherry-pick).
+// Therefore any datum that MUST be present in any clone homes to a trailer, never solely a note.
 
 import type { Hash } from '@atlas/contracts';
-import type { Placement, PlacementApi } from '../ref/placement.js';
+
+/** The two placement targets (PERSIST-13). `trailer` = canonical/clone-required; `note` = mutable
+ *  overlay/perimeter-conditional. */
+export type Placement = 'trailer' | 'note';
+
+/** The trailer-vs-note placement oracle (PERSIST-13): name the sole grounded home of a datum. A
+ *  clone-required datum MUST home to `trailer`; a PR-attachment-only home fails the sole-home
+ *  assertion (SCN-PERSIST-1b-1). */
+export interface PlacementApi {
+  home(datum: Hash): Placement;
+}
 
 /**
  * The PERSIST-13 placement decision: a clone-required datum homes to the TRAILER (canonical — travels in the
@@ -19,7 +26,7 @@ export function place(cloneRequired: boolean): Placement {
 }
 
 /**
- * The frozen oracle (`ref/placement.ts` `PlacementApi.home`): name the sole grounded home of a datum from the
+ * The frozen oracle (`PlacementApi.home`, co-located above): name the sole grounded home of a datum from the
  * clone-required registry. A clone-required datum homes to `trailer`; a note-only datum that MUST be in a
  * clone would fail the sole-home assertion (SCN-PERSIST-1b-1 / -13a-1).
  */

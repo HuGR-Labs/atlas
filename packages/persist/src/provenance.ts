@@ -1,17 +1,17 @@
 // @atlas/persist — src/provenance.ts  (trailer + git-note (de)serializer — PERSIST-3)
 //
-// Every WP's provenance is committed as a commit TRAILER block plus a mirroring `refs/notes/orchestra`
-// NOTE, both carrying `{WP, Model, Gates, Verdict, Transcript-SHA}` so it moves with the commit across
-// clone/fork/machine (PERSIST-3, atlas-persist:47-49). The oracle (ref/provenance.ts) PINS the frozen
-// round-trip as `Dossier ↔ string`: `serialize` produces the committed text form; `deserialize` is a
-// TOTAL read — a fully-absent / malformed commit yields `null`, never a throw (mirrors the Maestro
-// `readDossierNote` contract). The trailer/note SPLIT is behavioural, not a frozen surface, so the
-// portable committed form is the self-describing OKF-style JSON encoding of the whole `Dossier` (trailer
-// + optional metering/knowledgeDelta) — no lock-in, replayable by any consumer. No raw hashing here:
-// `TranscriptSha` is already the sealed `Hash` pointer carried on the `Trailer` (types.ts).
+// The frozen round-trip `Dossier ↔ string`: `serialize` emits the committed text form (self-describing OKF
+// JSON of the whole dossier, no lock-in); `deserialize` is a TOTAL read — a fully-absent / malformed /
+// trailer-less commit yields `null`, never a throw. `TranscriptSha` is already the sealed `Hash` pointer.
 
-import type { Dossier } from '../ref/types.js';
-import type { ProvenanceApi } from '../ref/provenance.js';
+import type { Dossier } from './types.js';
+
+/** The trailer+note (de)serializer surface (PERSIST-3): the frozen round-trip `Dossier` ↔ `string`.
+ *  `deserialize` is a TOTAL read — a fully-absent commit yields `null`, never a throw. (method-tags-pst:34-36) */
+export interface ProvenanceApi {
+  serialize(dossier: Dossier): string;
+  deserialize(serialized: string): Dossier | null;
+}
 
 /**
  * Serialize a dossier to its committed text form (the trailer block + note overlay). The whole `Dossier`
@@ -42,6 +42,6 @@ export function deserialize(serialized: string): Dossier | null {
   return d as Dossier;
 }
 
-// differential-vs-oracle (compile-time): the facet conforms to the frozen ProvenanceApi (ref/provenance.ts).
+// differential-vs-oracle (compile-time): the facet conforms to the co-located frozen ProvenanceApi.
 const _apiCheck: ProvenanceApi = { serialize, deserialize };
 void _apiCheck;

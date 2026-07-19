@@ -1,22 +1,19 @@
-// @atlas/persist — src/diff.ts  (WP-7.32.PERSIST · EPIC-32 — atlas-diff version-delta)
+// @atlas/persist — src/diff.ts  (WP-7.32.PERSIST · EPIC-32 — atlas-diff version-delta, PERSIST-14)
 //
-// PERSIST-14: the version-delta = a DETERMINISTIC, READ-ONLY fold-diff between two store states
-// (shaA, shaB). `diff(shaA,shaB) = partition(fold(shaA), fold(shaB))` — it partitions the changed facts
-// into a total, disjoint {added, edited, superseded, decayed}, EACH entry carrying its provenance;
-// performs ZERO mutation; is byte-identical across runs; and is well-defined regardless of fold/event
-// order. It is a CONSUMER of the SEALED @atlas/kernel `fold`/`head` oracle (NOT a second fold model): the
-// two AtlasStates are produced by the kernel `fold`, the active head per node by the kernel `head`, and
-// byte-identity is reached through the KERNEL-1 `canonicalForm` — no fold/head/hash is re-rolled here.
-//
-// Provenance is PERSIST-LOCAL (ADR-0001: derived from the fold-diff, NOT a kernel `Event` field): a
-// changed fact's provenance is the `prov` recorded on the responsible B-side event's opaque payload. A
-// fact with no recoverable provenance is NOT surfaced as a bare entry (PERSIST-14-c). No clock/network/
-// LLM is read; each call allocates fresh state and holds no module-level cache.
+// The version-delta = a DETERMINISTIC, READ-ONLY fold-diff over two store states → a total, disjoint
+// {added, edited, superseded, decayed}, each carrying persist-local provenance (a provenance-less fact is
+// never surfaced). Consumes the SEALED kernel fold/head/canonicalForm — 0 mutation, byte-identical.
 
 import { canonicalForm, fold, head } from '@atlas/kernel';
 import type { AtlasState, Event, EventLog, Node } from '@atlas/kernel';
 import type { Hash, NodeKey } from '@atlas/contracts';
-import type { DiffApi, VersionDelta, VersionDeltaEntry } from '../ref/diff.js';
+import type { VersionDelta, VersionDeltaEntry } from './types.js';
+
+/** The read-only fold-diff surface (PERSIST-14): `diff(shaA, shaB)` = a pure fold-comparison over two
+ *  commit states → the total, disjoint {added, edited, superseded, decayed} partition. (atlas-persist:94) */
+export interface DiffApi {
+  diff(shaA: Hash, shaB: Hash): VersionDelta;
+}
 
 /** Resolve a commit sha to its append-only event SET (read-only). The store wiring is the caller's; this
  *  facet only folds+partitions what the resolver yields — it opens/persists nothing. */

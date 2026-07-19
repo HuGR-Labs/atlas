@@ -1,18 +1,11 @@
-// @atlas/kernel — src/jsonl.ts  (the content-keyed JSONL log form + safe-degrade line-merge — KERNEL-12b/12c)
+// @atlas/kernel — src/jsonl.ts  (content-keyed JSONL log form + safe-degrade line-merge — KERNEL-12b/12c)
 //
-// The on-disk log form is APPEND-ONLY, one content-keyed JSON event per line (KERNEL-12c) — so git's default
-// text/line merge can only ever UNION or DUPLICATE whole lines, never splice two events into one corrupt
-// line. If the `orchestra-atlas` merge driver is bypassed on an un-configured clone, `lineMerge` degrades to
-// a lossless dedup-by-id union whose re-fold equals the real `RefLog.merge` fold (KERNEL-12b) — the worst
-// case is a harmless duplicate line the fold dedups by id. Identity is CONSUMED from the sealed log seam
-// (`eventId`), never re-rolled here (KERNEL-9).
-//
-// The self-install bootstrap (KERNEL-12a) has NO pure-function oracle (goldens-krn §SCN-KERNEL-12a-1 is
-// `gen: residue`) — the fresh-clone git-config re-registration is a hand-written integration test delegated
-// to PERSIST-11, and is deliberately NOT implemented in this pure kernel module.
+// APPEND-ONLY, one content-keyed JSON event per line (KERNEL-12c) ⇒ a git text merge can only union/
+// duplicate whole lines, never splice two events. INVARIANT: `lineMerge` degrades to a lossless
+// dedup-by-id union whose re-fold equals `RefLog.merge` (KERNEL-12b); identity via `eventId`, never re-rolled.
 
 import type { Hash } from '@atlas/contracts';
-import type { Event, EventLog } from '../ref/types.js';
+import type { Event, EventLog } from './types.js';
 import { eventId } from './log.js';
 
 /**

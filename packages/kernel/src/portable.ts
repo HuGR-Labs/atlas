@@ -1,18 +1,23 @@
 // @atlas/kernel — src/portable.ts  (OKF open-JSON export/import of the CAS — KERNEL-6)
 //
-// Portability / no lock-in (KERNEL-6): the content-addressed store exports to a self-contained OPEN JSON
-// dump (the OKF envelope) that replays 1:1 into a FRESH store — no proprietary encoding, no external
-// reference, no host dependency (REQ-KERNEL-6a/6b, A-8). The CAS is `Map<Hash, CasObject>` (ref/types.ts):
-// each entry is (content-key → opaque JSON body). The envelope is nothing but a format tag, a version
-// number, and the entries verbatim, with keys emitted in sorted order so the dump is DETERMINISTIC and
-// insertion-order-independent. `import` re-mints the keys through the sanctioned `asHash` boundary and
-// fails closed on a structurally-malformed bundle (never silently fabricating a partial store). No digest
-// is computed here — identity is carried by the key itself, so the seam is never re-implemented.
+// Portability / no lock-in (KERNEL-6): the CAS exports to a self-contained OPEN JSON (OKF) dump that
+// replays 1:1 into a FRESH store — no proprietary encoding, no host dependency (A-8). INVARIANT: keys
+// emitted sorted (deterministic); `import` re-mints keys via `asHash` and FAILS CLOSED on a malformed bundle.
 
 import type { Hash } from '@atlas/contracts';
-import type { Cas, CasObject } from '../ref/types.js';
-import type { PortableApi } from '../ref/portable.js';
+import type { Cas, CasObject } from './types.js';
 import { asHash } from './brand.js';
+
+/**
+ * Portability / no lock-in (frozen, KERNEL-6): the CAS exports to open JSON that replays 1:1 into a fresh
+ * store — no proprietary encoding, no host dependency. (atlas-kernel:104-105, 59-60)
+ */
+export interface PortableApi {
+  /** Open-JSON CAS dump (A-8). (atlas-kernel:104) */
+  export(): string;
+  /** Replays 1:1 into a fresh store. (atlas-kernel:105) */
+  import(json: string): Cas;
+}
 
 /** OKF envelope tag + version — the ONLY literals the serializer adds (both host-independent). */
 const OKF_FORMAT = 'atlas-okf';
@@ -75,7 +80,7 @@ function isOkfBundle(v: unknown): v is OkfBundle {
 }
 
 /**
- * Bind a CAS snapshot to the frozen `PortableApi` (ref/portable.ts) — `export()`/`import(json)` as the
+ * Bind a CAS snapshot to the frozen `PortableApi` — `export()`/`import(json)` as the
  * store-attached form the contract names. Thin adapters over the free functions above.
  */
 export function makePortable(cas: Cas): PortableApi {

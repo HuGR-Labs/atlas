@@ -1,40 +1,21 @@
 // @atlas/kernel — barrel
 //
-// The implementation surface WPs fill in at execution. For the skeleton, the only runtime export is
-// the branded-value mint boundary (src/brand.ts) — the sanctioned cast sites for Hash/SubtreeHash/
-// NodeKey. Everything else lives frozen in ref/*.ts until a WP implements it.
-//
-// The barrel re-exports the package's FULL public type surface so consumers can import from the bare
-// package root (`import type { Event } from '@atlas/kernel'`). ref/*.ts is type-only, hence
-// `export type *`; the brand line below is the sole runtime (value) export.
+// Layer-1 sealed identity/CAS seam: content-addressed store, append-only event log, convergent
+// fold + OR-Set merge, and the swappable digest seam. Re-exports the package's FULL public surface so
+// consumers import from the bare package root (`import { createStore } from '@atlas/kernel'`). Each
+// frozen interface is co-located with its impl; the shared data model lives in types.ts.
 
-export type * from '../ref/types.js';
-export type * from '../ref/encoder.js';
-export type * from '../ref/canonical.js';
-export type * from '../ref/store.js';
-export type * from '../ref/log.js';
-export type * from '../ref/fold.js';
-export type * from '../ref/portable.js';
+// The shared frozen data model (Event / EventLog / Node / AtlasState / CasObject / Cas / ClaimEntry).
+export type * from './types.js';
 
+// The branded-value mint boundary — the sanctioned cast sites for Hash/SubtreeHash/NodeKey.
 export { asHash, asSubtreeHash, asNodeKey } from './brand.js';
 
-// WP-1.1-a.KERNEL runtime surface: the content-addressed identity primitives.
-export { canonicalForm, id } from './canonical.js';
-export { defaultEncoder } from './encoder.js';
-
-// WP-1.2-a.KERNEL runtime surface: the single CAS + append-only event log.
-export { createStore } from './store.js';
-export { createLog } from './log.js';
-
-// WP-1.3-a.KERNEL runtime surface: event identity + idempotent set-union combine.
-export { eventId, combine, reseq } from './log.js';
-
-// WP-1.1-b.KERNEL runtime surface: self-contained open-JSON (OKF) export/import.
-export { exportCas, importCas, makePortable } from './portable.js';
-
-// WP-1.2-b.KERNEL runtime surface: fold() reconstruction over the event log.
-export { fold } from './fold.js';
-
-// WP-1.3-b.KERNEL runtime surface: convergent merge/head + content-keyed JSONL log form.
-export { merge, mergeNode, head } from './fold.js';
-export { toJsonl, parseJsonl, isContentKeyed, lineMerge } from './jsonl.js';
+// ── Runtime surface + co-located frozen interfaces ─────────────────────────────────────────────────
+export * from './encoder.js';   // the digest seam: default BLAKE3 encoder (Encoder / EncoderApi)
+export * from './canonical.js'; // canonicalForm + id — content-addressed identity (CanonicalApi)
+export * from './store.js';     // the single CAS: createStore (StoreApi)
+export * from './log.js';       // append-only event log + eventId/combine/reseq (LogApi/RefLog/RefLogStatics)
+export * from './fold.js';      // fold + convergent merge/mergeNode/head (FoldApi)
+export * from './portable.js';  // open-JSON (OKF) export/import of the CAS (PortableApi)
+export * from './jsonl.js';     // content-keyed JSONL log form + safe-degrade line-merge

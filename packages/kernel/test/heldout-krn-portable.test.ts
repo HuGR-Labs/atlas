@@ -8,7 +8,7 @@
 
 import { describe, it, expect } from 'vitest';
 import type { Hash, NodeKey } from '@atlas/contracts';
-import type { Cas, CasObject } from '../ref/types.js';
+import type { Cas, CasObject } from '../src/types.js';
 import { id } from '../src/index.js';
 import { asHash } from '../src/brand.js';
 import { exportCas, importCas } from '../src/portable.js';

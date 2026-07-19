@@ -1,14 +1,14 @@
 // @atlas/persist — test/wp-3.4-b.hostadapter-placement.test.ts
 //
 // RED→GREEN transcription of the VISIBLE `-1` goldens for WP-3.4-b.PERSIST: the forge-agnostic host adapter
-// (PERSIST-8, oracle `ref/host-adapter.ts`) and the trailer-vs-note placement model (PERSIST-13, oracle
-// `ref/placement.ts`). Facets are imported DIRECTLY from `../src/*.js` (the barrel is wired by the lead at
+// (PERSIST-8, oracle `HostAdapterApi`) and the trailer-vs-note placement model (PERSIST-13, oracle
+// `PlacementApi`). Facets are imported DIRECTLY from `../src/*.js` (the barrel is wired by the lead at
 // SEAL). Identity uses the SEALED @atlas/kernel `asHash` brand — never a hand-rolled digest. Held-out `-2`
 // fixtures are NOT transcribed here (the GATE runs those).
 
 import { describe, it, expect } from 'vitest';
 import { asHash } from '@atlas/kernel';
-import type { Dossier, PrAttach } from '../ref/types.js';
+import type { Dossier, PrAttach } from '../src/types.js';
 import {
   makeHostAdapter, directForgeCalls, pushCarriesNotes, ADAPTER_VIA,
 } from '../src/host-adapter.js';

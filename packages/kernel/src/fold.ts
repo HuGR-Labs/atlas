@@ -1,18 +1,30 @@
 // @atlas/kernel — src/fold.ts  (the fold reconstruction over the event log — KERNEL-5)
 //
-// `fold` reconstructs the current `AtlasState` from an `EventLog` by a PURE reduction over the set — no
-// mutable in-place snapshot backs it, so replaying the log from empty rebuilds a byte-identical Atlas
-// (KERNEL-5a) and every capability derives from the fold, never from a stored snapshot (KERNEL-5b). Each
-// call allocates a fresh state; the function reads no clock/network/LLM and holds no module-level cache.
-//
-// The projection is the per-nodeKey OR-Set: an event carrying a `nodeKey` contributes its `contentHash`
-// entry to that node's grow-only `entries` set; an event with no `nodeKey` is not node-forming and is
-// skipped. Union is idempotent by `contentHash` (first-seen wins) — a faithful content-addressed log never
-// carries two DISTINCT entries under one (nodeKey, contentHash), so the result is order-independent
-// (KERNEL-11). The merge/collision head-resolution over a shared nodeKey is EPIC-3-b (WP-1.3-b), not here.
+// `fold` PURELY reduces an `EventLog` to `AtlasState` (fresh state per call, no clock/network/LLM, no
+// cache) so replay from empty is byte-identical (KERNEL-5a/5b). INVARIANT: the per-nodeKey OR-Set union
+// is idempotent by `contentHash` (first-seen wins) ⇒ order-independent (KERNEL-11).
 
-import type { AtlasState, Event, EventLog, Node } from '../ref/types.js';
+import type { AtlasState, Event, EventLog, Node } from './types.js';
 import { combine } from './log.js';
+
+/**
+ * The convergent fold + CRDT OR-Set merge core (frozen, KERNEL-10/11): `fold` reduces the event set to
+ * `AtlasState` order-independently; `merge`/`mergeNode` are the set/grow-only unions; `head` picks the
+ * single FRESH head by `contentHash` ALONE (never seq/clock/LLM). (fspec-merge:128, 139-160)
+ */
+export interface FoldApi {
+  /** Convergent reconstruction of current state from the set; order-independent (KERNEL-11).
+   *  (atlas-kernel:103; fspec-merge:152) */
+  fold(log: EventLog): AtlasState;
+  /** Set-union by event id; commutative, associative, idempotent (KERNEL-9/11).
+   *  (atlas-kernel:102; fspec-merge:128) */
+  merge(a: EventLog, b: EventLog): EventLog;
+  /** Commutative, grow-only per-nodeKey union — 0 dropped (KERNEL-10). (fspec-merge:139-143) */
+  mergeNode(x: Node, y: Node): Node;
+  /** The forced single head = `max-by-contentHash` among FRESH, non-superseded entries — contentHash
+   *  ALONE, never seq/clock/LLM (KERNEL-10). (fspec-merge:144-147) */
+  head(n: Node): Event;
+}
 
 /**
  * Convergent reconstruction of the current `AtlasState` from the event set (KERNEL-5a/5b, KERNEL-11).
