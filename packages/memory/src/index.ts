@@ -23,3 +23,9 @@ export type * from '../ref/logbook.js';
 export type * from '../ref/memoize.js';
 export type * from '../ref/respawn.js';
 export type * from '../ref/portable.js';
+
+// Campaign-3 runtime surface: WP-3.5-a.MEM (memory-export + pre-write named-scanner gate) +
+// WP-3.5-b.MEM (every memory type versioned & travels + recall pushed at re-spawn). `src/awareness.ts`
+// (WP-6.24-a.MEM) is Campaign-6 — wired at that seal.
+export * from './portable.js';
+export * from './respawn.js';
