@@ -36,5 +36,12 @@ export * from './reconcile.js';   // WP-4.12-a.KNOW — drift split: mechanical 
 export * from './router.js';      // WP-5.13-a.KNOW — write-routing: every write an upsert (exhaustive over the KNOW-4 cells)
 export * from './evaluator.js';   // WP-5.16.KNOW  — predicate check-engine: deterministic index-query, no code execution
 export * from './produce.js';     // WP-5.17.KNOW  — production-moments: writes fire only at the 3 moments; sealing fed-or-why-not
-// WP-5.14 (template/authz/archive) + WP-5.15 (tier/ratify/fastpath) PARK on the R3 data-model reconciliation
-// (owner/scope/predicateSlot on the fact; contested/lowRisk on fast-path) — wired after that pass.
+// WP-5.14.KNOW (fact lifecycle) — unblocked by the R3 data-model reconciliation (ADR-0001):
+export * from './template.js';    // KNOW-10 — required-field ∧ ≤512B cap ∧ closed-12-slot template validate
+export * from './authz.js';       // KNOW-11 — inScope(actor, fact.scope) write-gate, fail-closed (reads the R3 scope field)
+export * from './archive.js';     // KNOW-12 — supersede via CAS dedup, supersededBy as a Hash return-leg
+// WP-5.15.KNOW (tier-routed ratification + confidence fast-path) — unblocked by R3 RatifyContext:
+export * from './init.js';        // KNOW-6  — $0-LLM territory classify (tier=T2, T0-candidate flag)
+export * from './tier.js';        // KNOW-7  — tier routing
+export * from './ratify.js';      // KNOW-8  — T0 → human+billy (never auto), staged/token
+export * from './fastpath.js';    // KNOW-18 — auto-accept ONLY grounded∧lowRisk∧T2∧advisory∧¬contested (route(candidate, ctx))
