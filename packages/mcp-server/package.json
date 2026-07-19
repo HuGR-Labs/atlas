@@ -15,7 +15,7 @@
     }
   },
   "dependencies": {
-    "@atlas/wire": "*",
+    "@atlas/adapter-io": "*",
     "@atlas/tools": "*"
   },
   "scripts": {

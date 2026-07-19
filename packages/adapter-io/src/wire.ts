@@ -1,23 +1,21 @@
-// @atlas/wire — src/wire.ts  (WIRE-1: the ONE shared handler assembly)
+// @atlas/adapter-io — src/wire.ts  (WIRE-1: the ONE shared handler assembly)
 //
 // The single composition seam shared by every entrypoint (CLI, MCP): assemble the four governance legs
 // (atlas-init / atlas-query / atlas-emit / atlas-reconcile) over the raw adapters and hand them to the one
-// frozen `createHandler`. SKELETON — the signature + the import graph are frozen here; the composition is
-// deferred to the WIRE WP. The imports below make the DAG edges real and tsc-checked.
+// frozen `createHandler`. Co-located with the adapters it composes (D2: the shared `wire` module lives in
+// @atlas/adapter-io, not a separate package). SKELETON — the signature + the import graph are frozen here;
+// the composition is deferred to the WIRE WP (WP-9.1.1-a.WIRE). The imports below make the DAG edges real
+// and tsc-checked.
 
 import { createHandler } from '@atlas/tools';
 import type { ToolLegs, NodeSource } from '@atlas/tools';
-import type { CasPath } from '@atlas/adapter-io';
-import {
-  walkFileTree,
-  readScip,
-  foldAstUnits,
-  createDiskStore,
-  createDriftSource,
-  createForge,
-  createHistorySource,
-  createSiteProposer,
-} from '@atlas/adapter-io';
+import type { CasPath } from './store.js';
+import { walkFileTree } from './fs.js';
+import { readScip } from './scip.js';
+import { foldAstUnits } from './ast.js';
+import { createDiskStore } from './store.js';
+import { createDriftSource, createForge, createHistorySource } from './git.js';
+import { createSiteProposer } from './llm.js';
 
 /** The one wired handler — the exact return of the frozen `createHandler` (@atlas/tools). */
 export type WiredHandler = ReturnType<typeof createHandler>;
