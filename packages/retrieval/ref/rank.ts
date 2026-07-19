@@ -7,14 +7,25 @@
 //
 // [LEAD-RATIFIED] `ppr` is a STORED numeric field read here for ranking — NOT a call into genesis.
 
+import type { NodeKey } from '@atlas/contracts';
+
+/**
+ * The minimal ranked item — carries EXACTLY the three sort keys the comparator reads (atlas-retrieval:70;
+ * method-tags-ret:32-33): `hits` (RETR-8 ledger), `ppr` ([LEAD-RATIFIED] stored field, GEN-11), `nodeKey`
+ * (identity). Pinned per the oracle-pin map: no existing record carries all three, so this is the minimal
+ * join over the ranked pack item / `RelatedFact` inputs.
+ */
+export interface RankItem {
+  readonly nodeKey: NodeKey;
+  readonly ppr: number;
+  readonly hits: number;
+}
+
 export interface RankApi {
   /** The shared within-tier comparator — a total order `(hits-desc, ppr-desc, nodeKey-asc)`. Returns a
    *  negative / zero / positive number (a standard comparator), deterministic + antisymmetric.
    *
-   *  [SIG-TBD — ranked-item type] The reference does not freeze the compared record's shape; it names
-   *  only the three sort keys the item must carry: `hits: number` (RETR-8 ledger), `ppr: number`
-   *  ([LEAD-RATIFIED] stored field, GEN-11), `nodeKey` (identity, ascending). Transcribed as `unknown`
-   *  rather than invented; the owning WP pins the ranked-item shape (a ranked pack item / `RelatedFact`).
+   *  [PINNED — ranked-item type] `RankItem` — the minimal join carrying the three sort keys.
    *  (atlas-retrieval:70; method-tags-ret:32-33) */
-  compare(a: unknown, b: unknown): number;
+  compare(a: RankItem, b: RankItem): number;
 }

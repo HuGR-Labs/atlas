@@ -10,7 +10,7 @@
 // (atlas-grounding:97-104, 116-123, 129; method-tags-grd:93-98, 107-112)
 
 import type { Freshness } from '@atlas/contracts';
-import type { Rollup } from '@atlas/index';
+import type { Axes, Rollup } from '@atlas/index';
 import type { Grounding } from './types.js';
 
 /**
@@ -29,10 +29,10 @@ export interface DriftApi {
    *  `STALE`, not `DRIFTED` (GROUND-13). Never asserts the claim is true. Pure + total.
    *  (atlas-grounding:129)
    *
-   *  [SIG-TBD — `src` underspecified] The reference names `driftDetect(grounding, src)` with NO
-   *  concrete type for `src` (the current tree/index snapshot it re-checks against, and the carrier of
-   *  the forward-closure interface-`rState` GROUND-11 folds — see `InterfaceRState`). Transcribed as
-   *  `unknown` rather than invented. Flagged for the WP.
+   *  [PIN — `src` = built-index snapshot `Axes`] Owner DEFINE 2026-07-18 (oracle-pin-map §5): `src` is
+   *  the BUILT-index snapshot drift re-checks against — the carrier of the forward-closure interface-
+   *  `rState` GROUND-11 folds (see `InterfaceRState`), which rides on the index nodes — NOT the raw
+   *  `FileTree`. Pinned to `@atlas/index` `Axes` (the rolled-up axis-views bearing `rState` per node).
    *
    *  [FLAG — GROUND-13 advisory router, upward-owned discriminant] The advisory→`STALE` vs
    *  predicate→(KNOW-5 split) routing keys on the fact's `kind` ('advisory' | 'predicate'), a
@@ -40,5 +40,5 @@ export interface DriftApi {
    *  NOT import (would invert the DAG). `driftDetect` returns the raw structural `Freshness`; where the
    *  advisory/predicate split is applied over a `Fact.kind` is left to the knowledge layer (KNOW-5).
    *  Flagged — not modeled here as an arg, to avoid inverting the DAG. */
-  driftDetect(grounding: Grounding, src: unknown): Freshness;
+  driftDetect(grounding: Grounding, src: Axes): Freshness;
 }

@@ -22,13 +22,13 @@ export type FacetState = 'seeded' | 'UN-SEEDED' | 'drifted';
 /**
  * One Awareness facet — a top-tier rollup grounded to its Atlas source(s) (MEM-11).
  *
- * [SIG-TBD — rendered `content` format not frozen] transcribed as `string` (the top-tier derived line
+ * [PINNED — rendered `content` format not frozen] transcribed as `string` (the top-tier derived line
  * under cap); the exact byte-stable render is a WP concern, NOT invented.
  * `grounding` is the `node@sha` anchor set the facet rolls up from — transcribed as the frozen
  * `StructRef` grounding anchor (`path@subtreeHash`, the drift oracle).
  */
 export interface AwarenessFacet {
-  readonly content: string; // [SIG-TBD] top-tier rendered rollup under ~400 tok — exact format not frozen
+  readonly content: string; // [PINNED] top-tier rendered rollup under ~400 tok — exact format not frozen
   readonly grounding: readonly StructRef[]; // the node@sha anchors — grounded + drift-checked
   readonly state: FacetState; // seeded / UN-SEEDED sentinel / drift flag
 }
@@ -58,7 +58,7 @@ export interface AwarenessApi {
   /** A single facet's rollup from ITS OWN source — absent source ⇒ `UN-SEEDED`, moved source ⇒ drift-flag
    *  (served flagged, not stale) (MEM-11).
    *
-   *  [SIG-TBD — `source` type] each facet's source differs (DEFINE artifact / T0 manifest / territory-axis
+   *  [OPAQUE-BY-DESIGN — `source` type] each facet's source differs (DEFINE artifact / T0 manifest / territory-axis
    *  top / `slot='definition'` nodes / `CONVENTIONS.md@sha`) and has no single frozen type; transcribed as
    *  `unknown` rather than invented. Flagged. */
   facet(source: unknown): AwarenessFacet;

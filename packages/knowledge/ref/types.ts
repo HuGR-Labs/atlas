@@ -30,15 +30,25 @@ export type KnowledgeFreshness = 'FRESH' | 'DRIFTED';
  * Named `ClaimProvenance` (NOT `Provenance`) per the LEAD-RATIFIED decision: `Provenance` is
  * @atlas/persist's per-agent metering type; the Knowledge claim-receipt is a distinct type.
  *
- * [SIG-TBD — `source` field type] The reference names `source` with no concrete type (a provenance
- * origin — a URL / commit / agent id). Transcribed as `string` (the honest nominal form), NOT invented
- * as a new exported type. Under `exactOptionalPropertyTypes`, `sha?` is genuinely absent-or-string.
+ * [PINNED — oracle-pin-map §Non-decisions] The reference names `source` with no concrete type (a
+ * provenance origin — a URL / commit / agent id); pinned to `string` (the honest nominal form), NOT a
+ * new exported type. Under `exactOptionalPropertyTypes`, `sha?` is genuinely absent-or-string.
  */
 export interface ClaimProvenance {
-  readonly source: string; // [SIG-TBD] reference names `source` without a concrete type
+  readonly source: string; // PINNED → string (provenance origin nominal form)
   readonly trusted: boolean;
   readonly sha?: string;
 }
+
+/**
+ * A predicate's mechanical `check` (KNOW-16, atlas-knowledge:66). RATIFIED oracle-pin (oracle-pin-map §1,
+ * cross-cutting DEFINE): KNOW-16's two named legs — "a deterministic index-query OR a pinned declarative
+ * assertion". A tagged union; both legs named by the reference. Consumers (`ref/evaluator.ts`,
+ * `normalize` into `nodeKey`) treat it opaquely — minimal, no speculative fields.
+ */
+export type Check =
+  | { readonly kind: 'index-query'; readonly query: string }
+  | { readonly kind: 'assertion'; readonly expr: string };
 
 /**
  * The Knowledge node — one of the two content kinds of the Atlas. Transcribed EXACTLY from
@@ -81,10 +91,9 @@ export interface AdvisoryNode {
  *   `PredicateNode = { kind:'predicate', id, tier, check, grounding, status, freshness,
  *                      claims: ClaimEntry[], authoring:'PREDICATED'|'SUPERSEDED' }`
  *
- * [SIG-TBD — `check` type] KNOW-16 (atlas-knowledge:66) defines a `check` as "a deterministic query
- * over the Atlas index (structural/dependency axes) or a pinned declarative assertion" — no concrete
- * record shape is frozen. Transcribed as `unknown` rather than invented; it is `normalize`d into the
- * predicate `nodeKey` (KNOW-15) and evaluated by `ref/evaluator.ts`. Flagged for the owning WP.
+ * [PINNED — oracle-pin-map §1] KNOW-16's `check` = "a deterministic index-query OR a pinned declarative
+ * assertion" is pinned to the ratified `Check` tagged union (above). It is `normalize`d into the
+ * predicate `nodeKey` (KNOW-15) and evaluated by `ref/evaluator.ts`.
  *
  * [FLAG — no stored `supersededBy`] KNOW-12 (atlas-knowledge:97-99) says a predicate SUPERSEDE adds a
  * `supersededBy` POINTER into CAS, yet the frozen shape lists no such field (only `authoring:'…'|
@@ -95,7 +104,7 @@ export interface PredicateNode {
   readonly kind: 'predicate';
   readonly id: NodeKey; // [FLAG] identity leg — see AdvisoryNode
   readonly tier: Tier;
-  readonly check: unknown; // [SIG-TBD] KNOW-16 index-query / declarative assertion — shape not frozen
+  readonly check: Check; // PINNED → Check (KNOW-16 index-query | declarative assertion)
   readonly grounding: Grounding;
   readonly status: Status;
   readonly freshness: KnowledgeFreshness;
@@ -123,17 +132,18 @@ export interface PredicateNode {
  * contracts membership. Transcribed as `string` — the same discipline contracts applied to
  * `Territory.owner`. NOT invented as a new exported type.
  *
- * [SIG-TBD — `regions?` / `blastRadius` types] The reference names `regions?` and `blastRadius` with NO
- * concrete type (a region set; the blast-radius reachability set). Transcribed as `unknown` rather than
- * invented. Under `exactOptionalPropertyTypes`, `regions?` is genuinely absent-or-value. Flagged.
+ * [PINNED — oracle-pin-map §1 blastRadius] The blast-radius reachability set + the region set both pin
+ * to `readonly NodeKey[]` — the reverse-dep closure already lives in index axis-3, so the SET is the
+ * honest carrier (no tighter shape in the reference). Under `exactOptionalPropertyTypes`, `regions?` is
+ * genuinely absent-or-value.
  */
 export interface TerritoryView {
   readonly path: string;
   readonly owner: string; // [FLAG] reference: `seat` (nominal seat id) — transcribed as string
   readonly tier: Tier;
   readonly files: readonly string[];
-  readonly regions?: unknown; // [SIG-TBD] region set — shape not frozen
-  readonly blastRadius: unknown; // [SIG-TBD] blast-radius reachability set — shape not frozen
+  readonly regions?: readonly NodeKey[]; // PINNED → NodeKey[] (region set)
+  readonly blastRadius: readonly NodeKey[]; // PINNED → NodeKey[] (reachability set)
 }
 
 /**
@@ -166,7 +176,7 @@ export type PredicateSlot =
  *   - `claimText` / `claimNorm` — the LLM proposes ONLY the claim body (atlas-knowledge:127; the body of
  *      a `ClaimEntry`, atlas-knowledge:26).
  *   - `slot`       — proposed alongside the body (atlas-knowledge:127), from the closed vocabulary.
- *   - `check?`     — predicate candidates only (atlas-knowledge:127); [SIG-TBD] shape, see `PredicateNode`.
+ *   - `check?`     — predicate candidates only (atlas-knowledge:127); pinned `Check`, see `PredicateNode`.
  *   - `grounding`  — the citations; `primaryAnchorId` is COMPUTED from these, never proposed (KNOW-15).
  *   - `provenance` — every claim carries a receipt (KNOW-14).
  *   - `tier`       — proposed tier (heuristics may only FLAG T0, never assign it — KNOW-7).
@@ -177,7 +187,7 @@ export interface Candidate {
   readonly claimText: string;
   readonly claimNorm: string;
   readonly slot: PredicateSlot;
-  readonly check?: unknown; // [SIG-TBD] predicate candidates only — check shape not frozen
+  readonly check?: Check; // PINNED → Check (predicate candidates only)
   readonly grounding: Grounding;
   readonly provenance: ClaimProvenance;
   readonly tier: Tier;

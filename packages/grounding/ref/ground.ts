@@ -6,6 +6,7 @@
 // ungrounded grounding is NEVER FRESH. Both pure + total. (atlas-grounding:128, 130, 79-82;
 // method-tags-grd:30-42)
 
+import type { Axes } from '@atlas/index';
 import type { Grounding } from './types.js';
 
 export interface GroundApi {
@@ -13,11 +14,12 @@ export interface GroundApi {
    *  (unit gone, path absent) is DROPPED, never throws — fail-closed (GROUND-3). Pure + total.
    *  (atlas-grounding:128)
    *
-   *  [SIG-TBD — args underspecified] The reference names `ground(node, src)` with NO concrete type for
-   *  either the cited `node` or the `src` source-of-truth snapshot. `node` (the thing being grounded)
-   *  and `src` (the current tree/index it is resolved against) are transcribed as `unknown` rather than
-   *  invented — do not guess a node schema or an `src` snapshot shape. Flagged for the owning WP. */
-  ground(node: unknown, src: unknown): Grounding;
+   *  [PIN — `src` = built-index `Axes`] Owner DEFINE 2026-07-18 (oracle-pin-map §5). `src` is the
+   *  built-index snapshot the anchor is re-derived against, consistent with `driftDetect`.
+   *  [SIG-TBD — `node`] the reference (atlas-grounding:128) gives `node` no concrete shape; §5 pinned
+   *  ONLY `src`, so `node` stays opaque here — the groundable-unit type is the owning WP's to pin from
+   *  its reference, NOT guessed (do not import the upward `GroundedFact` — that inverts the DAG). */
+  ground(node: unknown, src: Axes): Grounding;
 
   /** Real-grounding predicate: `true` iff `g` has ≥1 entry AND every entry's `anchor.subtreeHash` is
    *  non-empty (GROUND-2). An empty/partial grounding fails the predicate and MUST never surface FRESH.

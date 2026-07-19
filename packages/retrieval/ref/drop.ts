@@ -16,10 +16,9 @@ export interface DropApi {
    *  pins never drop — and drops from the bottom until `sum ≤ ~5K` ceiling; cold-start default order
    *  applies until the ledger has data. A deterministic total order. Pure + total.
    *
-   *  [SIG-TBD — `items` / return shapes] The reference does not freeze the argument/return records; it
-   *  names the ordering law over kinds and their per-kind ledger. Transcribed as the honest minimum: the
-   *  per-kind `Budget[]` ledger in (carrying `kind` + `hitRate` — the drop oracle) and the ordered drop
-   *  sequence `InjectionKind[]` out. NOT invented beyond that; flagged for the owning WP to pin.
+   *  [PINNED — `items` / return shapes] The honest minimum, per the oracle-pin map: the per-kind
+   *  `Budget[]` ledger in (carrying `kind` + `hitRate` — the drop oracle, both contracts-frozen) and the
+   *  ordered drop sequence `InjectionKind[]` out. Both records are @atlas/contracts-frozen.
    *  (method-tags-ret:60) */
   dropOrder(items: readonly Budget[]): readonly InjectionKind[];
 }

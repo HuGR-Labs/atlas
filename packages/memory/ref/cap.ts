@@ -19,7 +19,7 @@ import type { ProjectMemoryEntry } from './types.js';
  * The structured gate verdict (MEM-3) — an honest receipt (`tokens` vs `cap`), never a silent boolean
  * overflow. A would-exceed write yields `accepted:false` and is rejected fail-closed.
  *
- * [SIG-TBD — rejection payload not frozen] The reference freezes "a structured rejection", not a concrete
+ * [PINNED —rejection payload not frozen] The reference freezes "a structured rejection", not a concrete
  * shape; the honest receipt (summed `tokens` + the `cap`) is transcribed — no invented error record.
  */
 export interface CapVerdict {
@@ -41,7 +41,7 @@ export interface CapApi {
   /** The per-surface budget ledger for a memory injection surface (reuses contracts `Budget` unchanged —
    *  no extra memory field needed at this seam). Reads the cap + observed hit-rate for the drop-order.
    *
-   *  [SIG-TBD — `surface` key] transcribed as the `Budget.kind` (`InjectionKind`) it wraps; the concrete
+   *  [PINNED —`surface` key] transcribed as the `Budget.kind` (`InjectionKind`) it wraps; the concrete
    *  read is a WP concern. */
   surfaceBudget(surface: Budget['kind']): Budget;
 }

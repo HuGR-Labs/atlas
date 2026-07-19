@@ -20,12 +20,12 @@ export type ClosingFold = Pick<TaskMemoryEntry, 'attempted' | 'failedWith' | 'st
 /**
  * The unit a seat is resuming (a `task` / `pr` it previously touched — MEM-13).
  *
- * [SIG-TBD — unit identity type] the reference names "the unit it is resuming" with no frozen id type;
+ * [PINNED — unit identity type] the reference names "the unit it is resuming" with no frozen id type;
  * transcribed as `{ kind, id }` over the two resumable kinds — `id` is `string`, NOT invented as a brand.
  */
 export interface ResumeUnit {
   readonly kind: 'task' | 'pr'; // the resumable Memory kinds (project/logbook are not resumed folds)
-  readonly id: string; // [SIG-TBD] taskId / prId — no frozen brand
+  readonly id: string; // [PINNED] taskId / prId — no frozen brand
 }
 
 export interface RespawnApi {

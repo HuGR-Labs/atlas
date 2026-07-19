@@ -14,6 +14,29 @@ import type { Candidate, PredicateSlot } from './types.js';
 // `PredicateSlot` union in `ref/types.ts` (atlas-knowledge:161-180). Re-exported — NOT redefined.
 export type { PredicateSlot } from './types.js';
 
+/**
+ * The per-kind required template field set (KNOW-10, advisory kind). [PINNED — goldens-knw:60,
+ * Enumerated universe B] a well-formed advisory fact MUST carry every one of these 7 fields; a fact
+ * missing any is REJECTED (0 free-prose facts persist — SCN-KNOW-10b-1). Transcribed EXACTLY from the
+ * golden field list — NOT invented. (The predicate kind's template substitutes `check`; the golden's
+ * universe B enumerates the advisory set, so only it is pinned here.)
+ */
+export type RequiredAdvisoryField =
+  | 'claimNorm'
+  | 'claimText'
+  | 'provenance'
+  | 'owner'
+  | 'scope'
+  | 'grounding'
+  | 'predicateSlot';
+
+/**
+ * The per-kind size cap (KNOW-10). [PINNED — goldens-knw:61] `claimText ≤ 512 bytes`; a fact over the
+ * cap is REJECTED (SCN-KNOW-10b-2). Expressed as a type-level byte-count literal (zero-runtime ref — the
+ * bound, not a runtime const). The number IS frozen by the golden, so it is transcribed, not a DEFINE.
+ */
+export type ClaimTextCapBytes = 512;
+
 export interface TemplateApi {
   /** Per-kind template + closed-slot validator (KNOW-10). `true` iff the fact carries every required
    *  template field, is within its cap, AND its `slot` is one of the closed 12 (`PredicateSlot`); else
@@ -24,10 +47,9 @@ export interface TemplateApi {
    *  has no stored `slot` field (see the `ref/types.ts` FLAG). Flagged for the WP to confirm whether the
    *  validator runs on the `Candidate` or a raw proposal record.
    *
-   *  [SIG-TBD — required-field set + per-slot cap NOT frozen] atlas-knowledge:60/202 names "a per-kind
-   *  template + cap" but freezes NO concrete required-field list or numeric cap. The predicate the
-   *  boolean gates is thus reference-described, not fully pinned — the field set/cap are NOT invented
-   *  here. Flagged for DEFINE. */
+   *  [PINNED — goldens-knw:60-61] The required-field set (`RequiredAdvisoryField`, 7 fields) and the size
+   *  cap (`ClaimTextCapBytes` = 512 B) are transcribed from Enumerated universe B — the boolean gates
+   *  `all-required-present ∧ claimText ≤ 512 B ∧ slot ∈ closed-12`. */
   validateTemplate(fact: Candidate): boolean;
 
   /** Closed-vocabulary membership: `true` iff `slot` is one of the 12 (`PredicateSlot`). A fact whose

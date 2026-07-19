@@ -28,7 +28,7 @@ export interface OrientApi {
    *  `last/current/state` as a fold over the log — no per-seat input, so byte-identical across members and
    *  never stale (MEM-6). Reuses KERNEL-5 `fold.ts`. (method-tags-mem:60)
    *
-   *  [SIG-TBD — `define` type] the ratified DEFINE artifact has no frozen type at this layer (it is a
+   *  [OPAQUE-BY-DESIGN — `define` type] the ratified DEFINE artifact has no frozen type at this layer (it is a
    *  genesis GEN-9 artifact); transcribed as `unknown` rather than invented/imported. Flagged. */
   orient(define: unknown, log: EventLog): Orientation;
 }

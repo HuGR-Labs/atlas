@@ -7,12 +7,13 @@
 // paths. Reuses the KERNEL CAS ref. Transcribed from atlas-knowledge:62, 97-99, 206-207 and
 // method-tags-knw:95-100.
 //
-// [SIG-TBD — NO concrete signature frozen] method-tags-knw:99 describes "a reference store where
-// supersede mints a new CAS object + `supersededBy` link and never removes the old", but freezes no
-// concrete signature. The surface below transcribes the reference-DESCRIBED operations; unfrozen legs
-// are `unknown`, flagged, NOT invented.
+// [PINNED — oracle-pin-map §Transcribable] method-tags-knw:99 describes "a reference store where
+// supersede mints a new CAS object + `supersededBy` link and never removes the old". `supersede` is
+// frozen; `resolve` is pinned to the kernel `CasObject` (opaque `unknown` at layer 1 — the archived-node
+// projection is deferred THERE, by design, not here).
 
 import type { Hash } from '@atlas/contracts';
+import type { CasObject } from '@atlas/kernel';
 import type { PredicateNode } from './types.js';
 
 export interface ArchiveApi {
@@ -27,7 +28,7 @@ export interface ArchiveApi {
 
   /** Re-spawnable resolve: `get(oldId)` MUST resolve post-supersede — the old bytes persist in CAS as a
    *  content-addressed object (dedup by content-address identity). 0 API deletes (method-tags-knw:99).
-   *  [SIG-TBD] the resolved CAS object shape reuses the kernel `CasObject` (= `unknown` at layer 1) — the
-   *  concrete archived-node projection is not frozen here → `unknown`. Flagged. */
-  resolve(oldId: Hash): unknown;
+   *  [PINNED — oracle-pin-map §Transcribable] the resolved shape reuses the kernel `CasObject`
+   *  (opaque `unknown` at layer 1 — the archived-node projection is deferred there, not here). */
+  resolve(oldId: Hash): CasObject;
 }

@@ -14,7 +14,7 @@ import type { MemoryEntry, MemoryKind } from './types.js';
  * The fail-closed validation verdict (MEM-5). `valid:false` rejects the write — no invalid entry
  * persists.
  *
- * [SIG-TBD — error payload not frozen] the reference freezes "rejected fail-closed on any missing
+ * [PINNED —error payload not frozen] the reference freezes "rejected fail-closed on any missing
  * field / over cap / out-of-section prose", not a concrete error shape; `reasons` is the honest minimum
  * (the failed checks), NOT an invented diagnostic record.
  */
@@ -31,7 +31,7 @@ export interface TemplateApi {
   /** The canonical STRUCTURED render of a templated entry — never a prose blob, byte-stable for equal
    *  input (the driftless discipline mirrored from the pack/invariant render).
    *
-   *  [SIG-TBD — exact render format not frozen] The reference pins "structured, never prose" but freezes
+   *  [PINNED —exact render format not frozen] The reference pins "structured, never prose" but freezes
    *  no concrete serialization; transcribed as `string` (a canonical structured line/block), NOT an
    *  invented layout. */
   render(kind: MemoryKind, entry: MemoryEntry): string;

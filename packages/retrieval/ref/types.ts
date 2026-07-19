@@ -18,6 +18,7 @@
 
 import type { Hash, NodeKey, Tier } from '@atlas/contracts';
 import type { Pack, PackInvariant } from '@atlas/contracts';
+import type { ToolSchema } from '@atlas/contracts';
 import type { GroundedFact } from '@atlas/knowledge';
 
 // Re-export the contracts-owned injection vocabulary so consumers of the retrieval surface can pull the
@@ -55,18 +56,19 @@ export type RelationKind =
  * The handle behind an `own_<id>` tool (RETR-12). Transcribed EXACTLY from atlas-retrieval:22 —
  *   `OwnUnit = { level, id, grounding }`.
  *
- * [SIG-TBD — `id` type] The reference gives `id` no concrete type (the unit identity behind the tool
- * name `own_<id>`). Transcribed as `string`, NOT invented as a brand.
+ * [PINNED — `id` type] The reference gives `id` no concrete type (the unit identity behind the tool
+ * name `own_<id>`). Pinned to `string` (oracle-pin map: `OwnUnit.id: string`), NOT a brand.
  *
- * [SIG-TBD — `grounding` type] The reference names `grounding` with no concrete type; it is the
+ * [PINNED — `grounding` type] The reference names `grounding` with no concrete type; it is the
  * groundedness handle (tree for crate/module, declared manifest for service/feature — RETR-12).
- * @atlas/grounding is NOT a declared dependency of this package, so it is transcribed as `unknown`
- * rather than imported/invented. Flagged for the owning WP.
+ * @atlas/grounding is NOT a declared dependency of this package (deps: contracts/kernel/index/
+ * knowledge only), so it is pinned to `unknown` — the honest opaque handle — rather than silently
+ * adding a grounding dep. If the owning WP needs the grounded `Grounding` type, add the dep first.
  */
 export interface OwnUnit {
   readonly level: OwnLevel;
-  readonly id: string; // [SIG-TBD] unit identity behind `own_<id>` — reference gives no concrete type
-  readonly grounding: unknown; // [SIG-TBD] groundedness handle — grounding not a dep, not imported
+  readonly id: string; // [PINNED] unit identity behind `own_<id>` — string (no brand sourced)
+  readonly grounding: unknown; // [PINNED unknown] groundedness handle — grounding not a dep, not imported
 }
 
 /**
@@ -132,9 +134,11 @@ export interface RelationSet {
  * (from a `definition` fact / terrain)" — a rendered role line, transcribed as `string`. (Distinct from
  * `RelationSet.unit`, which is a touched-unit path.)
  *
- * [SIG-TBD — `shape` / `edges`] The reference gives no concrete type: `shape` = terrain (contents +
- * owner + tier, atlas-retrieval:26); `edges` = a bounded blast summary from `relate()` (key dependents /
- * dependencies, atlas-retrieval:27). Transcribed as `unknown` rather than invented; flagged.
+ * [PINNED — `shape` / `edges`] The reference gives no concrete type: `shape` = terrain (contents +
+ * owner + tier, atlas-retrieval:26) → pinned `{ contents: NodeKey[]; owner: string; tier: Tier }`;
+ * `edges` = a bounded blast summary from `relate()` (a capped subset of key dependents / dependencies,
+ * atlas-retrieval:27) → pinned `{ dependents: NodeKey[]; dependencies: NodeKey[] }`. Minimal, per the
+ * oracle-pin map (X1/D1 pack-grain design → concrete records).
  *
  * [FLAG — `gotchas` typed to knowledge `GroundedFact`] atlas-retrieval:28 leaves `gotchas` untyped ("the
  * non-obvious slots (gotcha / rationale)"); those slots ARE knowledge facts (the `gotcha` / `rationale`
@@ -149,8 +153,8 @@ export interface RelationSet {
 export interface OwnPack {
   readonly unit: string; // [FLAG] a 1-line role line (atlas-retrieval:24), not an OwnUnit
   readonly invariants: readonly PackInvariant[]; // top tier≥T1 of the unit, ranked, capped
-  readonly shape: unknown; // [SIG-TBD] terrain: contents + owner + tier
-  readonly edges: unknown; // [SIG-TBD] bounded blast summary from relate()
+  readonly shape: { readonly contents: readonly NodeKey[]; readonly owner: string; readonly tier: Tier }; // [PINNED] terrain: contents + owner + tier (atlas-retrieval:26)
+  readonly edges: { readonly dependents: readonly NodeKey[]; readonly dependencies: readonly NodeKey[] }; // [PINNED] capped relate() blast summary (atlas-retrieval:27)
   readonly gotchas: readonly GroundedFact[]; // [FLAG] gotcha/rationale slots — knowledge facts
   readonly memory: unknown; // [FLAG] upward memory-owned pointers — NOT a memory type, never imported
   readonly drill: OwnDrill;
@@ -161,13 +165,14 @@ export interface OwnPack {
  * inlined. Transcribed EXACTLY from atlas-retrieval:30 —
  *   `drill = { finer: OwnUnit[], refresh, complement }`.
  *
- * [SIG-TBD — `refresh` / `complement`] The reference gives no concrete type: `refresh` = re-poke;
- * `complement` = a `relate()` affordance. Transcribed as `unknown` rather than invented; flagged.
+ * [PINNED — `refresh` / `complement`] The reference gives no concrete type: `refresh` = re-poke;
+ * `complement` = a `relate()` affordance. Per D1 ("pointers + how-to-pull, never content"), each is a
+ * content-free affordance pointer pinned to `{ pull: string }` — a how-to-pull name/label only.
  */
 export interface OwnDrill {
   readonly finer: readonly OwnUnit[]; // finer scope-units
-  readonly refresh: unknown; // [SIG-TBD] re-poke affordance
-  readonly complement: unknown; // [SIG-TBD] relate() affordance
+  readonly refresh: { readonly pull: string }; // [PINNED] re-poke affordance — how-to-pull pointer (D1)
+  readonly complement: { readonly pull: string }; // [PINNED] relate() affordance — how-to-pull pointer (D1)
 }
 
 /**
@@ -187,13 +192,13 @@ export interface Poke {
  * One MCP tool per covering node, dynamic (RETR-5). Transcribed EXACTLY from atlas-retrieval:20 —
  *   `NodeTool = { nodeId, scope, schema }`.
  *
- * [SIG-TBD — `schema` type] The reference gives no concrete type: the MCP tool schema for a covering
- * node. Transcribed as `unknown` rather than invented (no MCP tool-schema shape is frozen here).
+ * [PINNED — `schema` type] The MCP tool schema for a covering node → `ToolSchema` from @atlas/contracts
+ * (oracle-pin theme #2: the ONE shared MCP tool-schema record, byte-identical with @atlas/tools).
  */
 export interface NodeTool {
   readonly nodeId: NodeKey;
   readonly scope: Path;
-  readonly schema: unknown; // [SIG-TBD] MCP tool schema — shape not frozen
+  readonly schema: ToolSchema; // [PINNED] shared MCP tool-schema record (@atlas/contracts)
 }
 
 /**

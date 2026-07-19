@@ -7,9 +7,10 @@
 // threshold is a function of OBSERVED hits, never the proposer's self-score. Spans the KNOW-17 ↔ MEM-7
 // substrate seam (DP-9). Transcribed from atlas-knowledge:67, 224-227 and method-tags-knw:131-136.
 //
-// [SIG-TBD — NO concrete signature frozen] method-tags-knw:135 describes "a reference hit-ledger + decay:
-// decays a fact iff `hits-in-window==0`, archives to CAS, re-admits on a later hit; `threshold==f(hits)`",
-// but freezes no concrete ledger signature. Unfrozen legs are `unknown`, flagged, NOT invented.
+// [PINNED — oracle-pin-map §4/§hits] method-tags-knw:135 freezes no concrete ledger signature; the
+// oracle-pin ratifies the minimal honest records: `window` = a ledger event-count (`number`), `logHit`
+// returns a `LedgerEntry`, `decay` returns the decayed/retained `NodeKey` sets. `threshold==f(hits)`
+// stays an OPEN-DEFINE parametric value (not a shape).
 
 import type { NodeKey } from '@atlas/contracts';
 
@@ -20,21 +21,35 @@ import type { NodeKey } from '@atlas/contracts';
  * the decay pass takes, never a baked-in constant. The value is NOT frozen (calibrates on observed
  * downstream hits, not the proposer's score). Flagged for DEFINE to pin.
  *
- * [SIG-TBD — `window` unit] The decay-window unit (waves / time / event count) is not frozen → `unknown`.
+ * [PINNED — oracle-pin-map §4] The decay-window unit is a logical LEDGER event-count (KNOW-17 ↔ MEM-7,
+ * ledger-driven not wall-clock) → `number`.
  */
 export interface DecayConfig {
-  readonly window: unknown; // [SIG-TBD] decay-window unit not frozen
+  /** logical ledger position (monotone event-count), never wall-clock. */
+  readonly window: number; // PINNED → number (ledger event-count)
   readonly threshold: number; // [OPEN DEFINE] door-2 threshold == f(hits) — parametric, value unpinned
+}
+
+/**
+ * The minimal honest per-node hit-ledger record (KNOW-17). [PINNED — oracle-pin-map §hits] no reference
+ * shape frozen → the minimal `{nodeKey, hits, window}`: the node cited, its observed hit-count, and the
+ * ledger `window` position (event-count) the count is measured over.
+ */
+export interface LedgerEntry {
+  readonly nodeKey: NodeKey;
+  readonly hits: number;
+  readonly window: number; // logical ledger position (monotone event-count), never wall-clock
 }
 
 export interface HitsApi {
   /** Log a `hit` citing a served fact's node-id (a fact governed a decision — KNOW-17). Append-only
-   *  ledger event. [SIG-TBD] the updated-ledger return is not frozen → `unknown`. */
-  logHit(nodeId: NodeKey): unknown;
+   *  ledger event. [PINNED — oracle-pin-map §hits] returns the minimal honest per-node ledger record
+   *  (no reference shape → the minimal `{nodeKey, hits, window}`). */
+  logHit(nodeId: NodeKey): LedgerEntry;
 
   /** Decay pass (parametric — `cfg`): a fact with 0 hits in the window is archived to CAS (never
    *  deleted — KNOW-12) and may re-enter on a later hit. `0-hit ⇒ archived ∧ re-spawnable`; the door-2
    *  threshold is `f(hits)`, never a self-score (method-tags-knw:135). Pure + total.
-   *  [SIG-TBD] the decay-result shape (the decayed/retained node-id sets) is not frozen → `unknown`. */
-  decay(cfg: DecayConfig): unknown;
+   *  [PINNED — oracle-pin-map §hits] the decay result is the decayed/retained node-id sets. */
+  decay(cfg: DecayConfig): { readonly decayed: readonly NodeKey[]; readonly retained: readonly NodeKey[] };
 }

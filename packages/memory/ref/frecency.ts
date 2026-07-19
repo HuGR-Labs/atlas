@@ -25,12 +25,13 @@ import type { ProjectMemoryEntry } from './types.js';
  * field. Transcribed as `ruleId: string`; flagged UPWARD for the reference to surface the entry↔ledger
  * identity key the citation binds to.
  *
- * [SIG-TBD — `wave` unit] the decay step is over LOGGED ledger events / waves, never wall-clock; the
- * ordering key is transcribed as `wave: number` (a logical position), NOT a clock brand.
+ * [PINNED — `wave` unit] the decay step is over LOGGED ledger events / waves, never wall-clock; the
+ * ordering key is `wave: number` — a logical ledger position (monotone event-count), never wall-clock
+ * (MEM-7), consistent with knowledge/hits.
  */
 export interface CitedHit {
   readonly ruleId: string; // [FLAG] no id on ProjectMemoryEntry — the entry↔ledger key is unfrozen
-  readonly wave: number; // [SIG-TBD] logical ledger position — ledger-driven, NOT wall-clock
+  readonly wave: number; // [PINNED] logical ledger position (monotone event-count), never wall-clock (MEM-7)
 }
 
 /** The append-only ledger of cited hits the frecency score decays over (MEM-7). */

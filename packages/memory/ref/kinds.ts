@@ -8,7 +8,7 @@
 // NEVER forked). Transcribed from method-tags-mem:28-33 (INV-MEM-2 down-model) + atlas-memory:39-58.
 
 import type { InjectionKind } from '@atlas/contracts';
-import type { MemoryEntry, MemoryStore } from './types.js';
+import type { MemoryEntry, MemoryRecord } from './types.js';
 
 /**
  * The store-partition discriminant (MEM-2) — Memory vs Knowledge over the ONE Atlas. This is a DISTINCT
@@ -33,10 +33,10 @@ export interface KindsApi {
    *  memory→knowledge or knowledge→memory store is REJECTED (MEM-2). Reuses KERNEL-3 `store.ts`.
    *  (method-tags-mem:32)
    *
-   *  [SIG-TBD — updated-store return not frozen] the post-write store projection has no frozen shape;
-   *  transcribed as `MemoryStore` for the `memory` partition — the knowledge partition is out of this
-   *  package's surface. */
-  put(kind: AtlasKind, entry: MemoryEntry): MemoryStore;
+   *  [PINNED — updated-store return] no post-write store projection is frozen; the minimal honest shape
+   *  the reference implies is the `MemoryRecord` actually written (owner-scoped, kind-partitioned) — the
+   *  knowledge partition is out of this package's surface. */
+  put(kind: AtlasKind, entry: MemoryEntry): MemoryRecord;
 
   /** The partition an entry belongs to; the reference asserts `partition(entry) == entry.kind` for every
    *  write (0 conflation — MEM-2). (method-tags-mem:32) */

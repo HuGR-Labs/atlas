@@ -41,7 +41,7 @@ export type RetrievalSurface = OwnPack | Pack | Poke;
  * The full per-seat auto-injection payload: the memory header + the co-injected retrieval surfaces, under
  * the shared per-`InjectionKind` `Budget` ceiling.
  *
- * [SIG-TBD — cap-application shape not frozen] The reference freezes the SLABS + the drop-order vocabulary
+ * [PINNED — cap-application shape not frozen] The reference freezes the SLABS + the drop-order vocabulary
  * (`Budget` per `InjectionKind`), not a concrete post-cap payload record; `budgets` carries the honest
  * per-surface ledger, `retrieval` the surfaces retrieval owns — no invented merged shape.
  */
@@ -68,7 +68,7 @@ export interface InjectApi {
   /** The ONLY path that returns consultable `task` / `pr` / `logbook` memory — an explicit
    *  `memory-recall`, never auto-injected on a running turn (MEM-4). (method-tags-mem:46)
    *
-   *  [SIG-TBD — `query` shape not frozen] `memory-recall` is queried by taskId / prId / date / territory;
+   *  [OPAQUE-BY-DESIGN — `query` shape not frozen] `memory-recall` is queried by taskId / prId / date / territory;
    *  no concrete query record is frozen → `unknown`, NOT invented. */
   recall(query: unknown): readonly MemoryRecord[];
 }

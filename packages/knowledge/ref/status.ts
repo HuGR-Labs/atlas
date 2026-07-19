@@ -13,10 +13,11 @@ export interface StatusApi {
    *  candidate-declared `HOLDS` is dropped; the served status is the recomputed one (method-tags-knw:22).
    *  Pure + total; `Status` is out of identity (never in the `nodeKey`).
    *
-   *  [SIG-TBD — inputs underspecified] The task inventory pins `recompute(node)`, but the reference model
-   *  (method-tags-knw:22) recomputes from {grounding, drift, evaluator-verdict} — the drift verdict
-   *  (`ref/reconcile.ts` / grounding) and the evaluator verdict (`ref/evaluator.ts`) are ADDITIONAL
-   *  inputs NOT present in the 1-arg signature. Transcribed to the frozen `recompute(node)` surface; the
-   *  extra drift/evaluator inputs are flagged as underspecified — NOT invented as parameters here. */
+   *  [PINNED — oracle-pin-map §Transcribable] The signature is pinned to the ratified frozen surface
+   *  `recompute(node: GroundedFact): Status`.
+   *  [FLAG — inputs underspecified] The reference model (method-tags-knw:22) recomputes from {grounding,
+   *  drift, evaluator-verdict} — the drift verdict (`ref/reconcile.ts` / grounding) and the evaluator
+   *  verdict (`ref/evaluator.ts`) are ADDITIONAL inputs NOT present in the pinned 1-arg signature; flagged
+   *  for the WP to reconcile whether they thread as parameters — NOT invented as parameters here. */
   recompute(node: GroundedFact): Status;
 }

@@ -22,7 +22,7 @@ export type { InjectionKind, Budget, Pack, PackInvariant } from '@atlas/contract
 
 /**
  * A member identity — a seat (`charlie` / `lucy` / `jimmy` / …) OR the orchestrator. Every member owns
- * its own private, decaying Memory (atlas-memory:7-11). [SIG-TBD — no member-id brand frozen] The
+ * its own private, decaying Memory (atlas-memory:7-11). [PINNED —no member-id brand frozen] The
  * reference names members by seat-string; no contracts brand exists, so transcribed as `string`, NOT
  * invented as a new brand. Flagged for a `MemberId` brand to be sourced if one is ratified.
  */
@@ -40,7 +40,7 @@ export type MemoryKind = 'task' | 'pr' | 'project' | 'logbook';
  * A grounding / provenance pointer (atlas-memory:76, 104; spec/memory:104). The reference names this
  * `Ref` — "a path@subtreeHash / PR / commit pointer".
  *
- * [SIG-TBD — `Ref` not frozen as a concrete type in contracts] @atlas/contracts freezes only `StructRef`
+ * [PINNED —`Ref` not frozen as a concrete type in contracts] @atlas/contracts freezes only `StructRef`
  * (the `path@subtreeHash` grounding-anchor leg). The PR / commit / ADR-URL leg has no frozen shape, so it
  * is transcribed as the underlying `string` (the same discipline retrieval applied to `Path = string`).
  * `Ref` is thus the honest superset: a structured grounding anchor OR a bare pointer string. NOT invented
@@ -73,14 +73,14 @@ export interface ProjectMemoryEntry {
  * The `{ attempted, failedWith, stoppedAt, lesson }` subset is the CLOSING FOLD auto-recalled at re-spawn
  * (MEM-13, see ref/respawn.ts).
  *
- * [SIG-TBD — element types] The reference lists `attempted[]` / `failedWith[]` as arrays with no element
+ * [PINNED —element types] The reference lists `attempted[]` / `failedWith[]` as arrays with no element
  * type; transcribed as `readonly string[]` (structured terse lines under the per-entry char cap), NOT a
  * concrete record. `taskId` / `stoppedAt` / `lesson` transcribed as `string`.
  */
 export interface TaskMemoryEntry {
   readonly taskId: string;
-  readonly attempted: readonly string[]; // [SIG-TBD] element type not frozen — terse lines
-  readonly failedWith: readonly string[]; // [SIG-TBD] element type not frozen — terse lines
+  readonly attempted: readonly string[]; // [PINNED] element type not frozen — terse lines
+  readonly failedWith: readonly string[]; // [PINNED] element type not frozen — terse lines
   readonly stoppedAt: string;
   readonly lesson: string;
   readonly ref?: Ref;
@@ -96,12 +96,12 @@ export interface TaskMemoryEntry {
  * @atlas/knowledge seam (same discipline retrieval used for `gotchas`). Flagged for the reference to
  * freeze the field type.
  *
- * [SIG-TBD — `decisions` / `reviewOutcomes` element types] no element type frozen → `readonly string[]`.
+ * [PINNED —`decisions` / `reviewOutcomes` element types] no element type frozen → `readonly string[]`.
  */
 export interface PrMemoryEntry {
   readonly prId: string;
-  readonly decisions: readonly string[]; // [SIG-TBD] element type not frozen — terse lines
-  readonly reviewOutcomes: readonly string[]; // [SIG-TBD] element type not frozen — terse lines
+  readonly decisions: readonly string[]; // [PINNED] element type not frozen — terse lines
+  readonly reviewOutcomes: readonly string[]; // [PINNED] element type not frozen — terse lines
   readonly knowledgeDelta: readonly GroundedFact[]; // [FLAG] the Knowledge delta — knowledge facts
   readonly ref?: Ref;
 }
@@ -111,13 +111,13 @@ export interface PrMemoryEntry {
  * EXACTLY. Fixed index fields + one prose block per FIXED section (never a free-form dump — MEM-5/8).
  * Consultable, never injected; append-only; a later entry supersedes by LINK, never by rewriting.
  *
- * [SIG-TBD — `at` type] the timestamp/ordering key has no frozen type; transcribed as `string` (an
+ * [PINNED —`at` type] the timestamp/ordering key has no frozen type; transcribed as `string` (an
  * ISO/label), NOT a wall-clock brand (MEM-7/frecency decay is ledger-driven, not wall-clock).
  * The five prose sections are `string` (prose confined WITHIN its fixed section — MEM-8).
  */
 export interface LogbookEntry {
   readonly prId: string;
-  readonly at: string; // [SIG-TBD] ordering/timestamp key — no frozen type
+  readonly at: string; // [PINNED] ordering/timestamp key — no frozen type
   readonly territories: readonly string[]; // structured index field — keeps it navigable
   readonly shipped: string; // prose within section
   readonly decisions: string; // prose within section — the key decisions AND WHY (the core)
@@ -134,7 +134,7 @@ export type MemoryEntry = ProjectMemoryEntry | TaskMemoryEntry | PrMemoryEntry |
  * The owner-tagged store envelope over the ONE Atlas store. `owner` is the frozen scoping key MEM-1's
  * `injectFor` filters on; `kind` is the MEM-2 partition discriminant; `entry` is the templated payload.
  *
- * [SIG-TBD — full envelope not frozen] The reference gives no concrete store record beyond the
+ * [PINNED —full envelope not frozen] The reference gives no concrete store record beyond the
  * owner-scoped, kind-partitioned entry (Memory is a git-native projection over the CAS/log — MEM-9/10).
  * Additional legs (archived flag, version pointer) ride the versioned record, not frozen here → the
  * envelope carries only the three grounded fields; extra state is NOT invented.

@@ -17,7 +17,7 @@ export interface LogbookApi {
   /** Append one orchestrator logbook entry — guarded ONE-per-PR + section-validated; append-only, never
    *  an in-place edit of a landed entry (MEM-8). Reuses KERNEL-4 `log.ts`. (method-tags-mem:74)
    *
-   *  [SIG-TBD — rejection of a 2nd-entry / non-orchestrator / over-section write not frozen as a return
+   *  [PINNED — rejection of a 2nd-entry / non-orchestrator / over-section write not frozen as a return
    *  shape] the guard behaviour is frozen; the reject payload is not → the append returns the updated
    *  append-only `LogbookLog`, the guard being a fail-closed precondition. */
   append(entry: LogbookEntry): LogbookLog;
@@ -28,7 +28,7 @@ export interface LogbookApi {
 
   /** The consultable listing (by PR / date / territory) — NEVER injected (MEM-8, enforced by MEM-4).
    *
-   *  [SIG-TBD — `query` shape not frozen] consulted by prId / date-range / territory / topic; no concrete
+   *  [OPAQUE-BY-DESIGN — `query` shape not frozen] consulted by prId / date-range / territory / topic; no concrete
    *  query record is frozen → `unknown`, NOT invented. */
   consult(query: unknown): LogbookLog;
 }

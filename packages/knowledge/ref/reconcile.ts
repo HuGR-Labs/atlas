@@ -7,7 +7,18 @@
 // `BROKEN`, blocks, exit 2). Human re-author count MUST equal `|semantic|`, never `|DRIFTED|`, never `N`.
 // Transcribed from atlas-knowledge:80, 191-193 and method-tags-knw:46-51.
 
+import type { Hash } from '@atlas/contracts';
 import type { GroundedFact } from './types.js';
+
+/**
+ * A drifted fact paired with the NEW `@sha` its claim must re-derive against (KNOW-5). [PINNED —
+ * oracle-pin-map §11] the minimal threading of the `reDerives(claim, newSha)` context method-tags-knw
+ * INV-KNOW-5 consumes — no invented fields beyond the fact + its new-sha re-derivation anchor.
+ */
+export interface DriftedFact {
+  readonly fact: GroundedFact;
+  readonly newSha: Hash;
+}
 
 export interface ReconcileApi {
   /** Partition the `DRIFTED` subset by `reDerives(claim, newSha)` (KNOW-5). Pure + total; the re-check
@@ -20,15 +31,15 @@ export interface ReconcileApi {
    *   - `exitCode`     — 0 when `semantic` is empty; 2 to block the merge on ANY semantic flip
    *                      (atlas-knowledge:80, 193). Reference names only exits {0, 2}.
    *
-   *  [SIG-TBD — `drifted` element context] The reference names `reconcile(drifted[])`; each element is a
-   *  drifted fact, but the per-element NEW-`@sha` re-derivation context that `reDerives(claim, newSha)`
-   *  consumes is NOT frozen as a field. Transcribed as `readonly GroundedFact[]` (the drifted facts);
-   *  the `newSha` carrier is flagged as underspecified, NOT invented.
+   *  [PINNED — oracle-pin-map §11] The reference names `reconcile(drifted[])` partitioning by
+   *  `reDerives(claim, newSha)`; the per-element NEW-`@sha` re-derivation context is threaded as the
+   *  minimal `DriftedFact` pair (fact ‖ newSha). The `mechanical`/`semantic` returns stay the partitioned
+   *  `GroundedFact` subsets (cardinality is `.length`).
    *
    *  [FLAG — `mechanical`/`semantic` as subsets vs counts] The reference uses cardinalities `|mechanical|`
    *  / `|semantic|`. Transcribed as the partitioned SUBSET arrays (the richer surface — cardinality is
    *  `.length`); flagged for the WP to confirm subsets vs bare counts. */
-  reconcile(drifted: readonly GroundedFact[]): {
+  reconcile(drifted: readonly DriftedFact[]): {
     readonly mechanical: readonly GroundedFact[];
     readonly semantic: readonly GroundedFact[];
     readonly reauthorCount: number;

@@ -6,10 +6,13 @@
 // bare seal records a violation. Transcribed from atlas-knowledge:63, 208-209 and method-tags-knw:
 // 102-107.
 //
-// [SIG-TBD — signatures partly frozen] method-tags-knw:106 describes "a reference producer that accepts
-// a production event only if tagged one of the 3 moments; the seal probe asserts `absorb ∨ why-not`".
-// The 3 moments ARE frozen (transcribed as `ProductionMoment`); the surrounding event/probe record
-// shapes are NOT — `unknown` where unfrozen, flagged, NOT invented.
+// [PARTLY PINNED] method-tags-knw:106 describes "a reference producer that accepts a production event
+// only if tagged one of the 3 moments; the seal probe asserts `absorb ∨ why-not`". The 3 moments ARE
+// frozen (`ProductionMoment`); the produce event/return are pinned minimally (Candidate → GroundedFact).
+// [SIG-TBD] the seal-probe `seal` input stays unfrozen — the "sealing wave" is an upward orchestration
+// artifact (cf. tools `absorb(ResultCard)`, oracle-pin-map §34 upward/Orchestra-owned); NOT pinned here.
+
+import type { Candidate, GroundedFact } from './types.js';
 
 /**
  * The three — and ONLY three — production moments (KNOW-13, atlas-knowledge:63). Facts produced outside
@@ -20,8 +23,10 @@ export type ProductionMoment = 'init-skeleton' | 'enrich-by-blast-radius' | 'wav
 export interface ProduceApi {
   /** Moment-gated producer (KNOW-13): a production event is ACCEPTED only if tagged one of the three
    *  `ProductionMoment`s; a repo-wide sweep produces 0 facts. Pure + total.
-   *  [SIG-TBD] the production-event body and the accepted-facts return are not frozen → `unknown`. */
-  produce(moment: ProductionMoment, event: unknown): unknown;
+   *  [PINNED — oracle-pin-map §11] minimal honest transcription (method-tags-knw INV-KNOW-13): the
+   *  production event carries the proposed `Candidate` facts; the accepted-facts return is the produced
+   *  `GroundedFact`s (a sweep / off-moment event ⇒ `[]`). No speculative fields — both types are frozen. */
+  produce(moment: ProductionMoment, event: readonly Candidate[]): readonly GroundedFact[];
 
   /** Seal probe (KNOW-13): a sealing wave that neither fed the Atlas (`absorb`) nor emitted a grounded
    *  why-not records a VIOLATION. `violation:true` on a bare seal. Pure + total.

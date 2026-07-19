@@ -9,7 +9,7 @@
 // 39-44, 116-122.
 
 import type { NodeKey } from '@atlas/contracts';
-import type { Candidate, GroundedFact } from './types.js';
+import type { Candidate } from './types.js';
 
 /**
  * The write-decision routes. Transcribed EXACTLY from the KNOW-15 routing table (atlas-knowledge:135-142):
@@ -57,10 +57,10 @@ export interface RouterApi {
    *  `check` is a distinct node, never a sibling-supersede (atlas-knowledge:123-124, 144-146). Pure +
    *  total, no LLM.
    *
-   *  [SIG-TBD — arg] The reference names `nodeKey(node)` without pinning whether the input is the
-   *  ratified `GroundedFact` or the staging `Candidate`. Transcribed as `GroundedFact` (the node whose
-   *  identity is minted); flagged. */
-  nodeKey(node: GroundedFact): NodeKey;
+   *  [PINNED — oracle-pin-map §10] Routed on `Candidate`: identity needs `primaryAnchorId ‖ predicateSlot
+   *  [‖ normalize(check)]`, and only `Candidate` carries the `slot`/`check` (the ratified `GroundedFact`
+   *  has no stored `slot`) — so the compute-able input is `Candidate`. */
+  nodeKey(node: Candidate): NodeKey;
 
   /** The COMPUTED primary anchor — the tightest structural unit (smallest AST subtree) containing every
    *  symbol the claim references (atlas-knowledge:114-119). NEVER an LLM-chosen anchor (the one landfill
@@ -73,6 +73,6 @@ export interface RouterApi {
    *  not itself a `nodeKey`. Transcribed to the task's `NodeKey` return; flagged for the two sources to
    *  reconcile whether the anchor id is its own brand or a `NodeKey`.
    *
-   *  [SIG-TBD — arg] `node` input underspecified (see `nodeKey`) → `GroundedFact`, flagged. */
-  primaryAnchorId(node: GroundedFact): NodeKey;
+   *  [PINNED — oracle-pin-map §10] `node` input routed on `Candidate` (see `nodeKey`). */
+  primaryAnchorId(node: Candidate): NodeKey;
 }
