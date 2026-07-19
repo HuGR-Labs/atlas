@@ -36,3 +36,5 @@ export * from './kinds.js';      // WP-6.23.MEM  — Memory≠Knowledge partitio
 export * from './awareness.js';  // WP-6.24-a.MEM — Awareness slab (root-assembled, per-facet grounded, UN-SEEDED sentinel)
 export * from './orient.js';     // WP-6.24-b.MEM — Orientation slab (goal from DEFINE, event-log fold, never-written)
 export * from './rules.js';      // WP-6.25-a.MEM — project Rules-slab (capped, top-12 frecency, evict-never-delete)
+export * from './template.js';   // WP-6.25-b.MEM — MEM-5 fail-closed templated-write gate (validate/render)
+export * from './logbook.js';    // WP-6.25-b.MEM — MEM-8 orchestrator-only append-only logbook (consultable-never-injected, supersede-by-link)

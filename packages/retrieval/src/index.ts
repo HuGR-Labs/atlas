@@ -30,3 +30,5 @@ export type * from '../ref/offatlas.js';
 export * from './relate.js';   // WP-2.8-b.RETR — partitioned, deterministic relate() over the index axes
 export * from './pack.js';     // WP-6.19.RETR — the bounded pack (relevance-from-index, ~2K cap, T0-then-T1-by-rank)
 export * from './own.js';      // WP-6.20.RETR — OwnPack (mechanical own_<unit>, capped, D1 content-free availability-manifest)
+export * from './poke.js';     // WP-6.21.RETR — debounced once-per-scope poke (N=2 settle) + covering-set tool projection (pack-grain announce, X1)
+export * from './drop.js';     // WP-6.22.RETR — injection-ceiling drop-order (ledger hitRate, 2 pins never drop) + stale-not-trusted
