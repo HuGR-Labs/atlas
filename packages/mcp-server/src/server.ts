@@ -1,10 +1,10 @@
 // @atlas/mcp-server — src/server.ts  (MCP-1/2: the stdio MCP server over the one wired handler)
 //
-// Stand up a stdio MCP server whose every tool call routes through the one wired handler (@atlas/wire),
+// Stand up a stdio MCP server whose every tool call routes through the one wired handler (@atlas/adapter-io),
 // returning the frozen `Verdict` (@atlas/tools) shape. SKELETON — the MCP SDK is NOT a dependency here
 // (the MCP WP adds it); the transport is a plain factory stub. Signature frozen, body deferred.
 
-import type { WiredHandler } from '@atlas/wire';
+import type { WiredHandler } from '@atlas/adapter-io';
 import type { Verdict } from '@atlas/tools';
 
 /** The stdio MCP server handle (ring shape stub — the MCP WP swaps in the real SDK transport). */
