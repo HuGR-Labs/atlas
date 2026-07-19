@@ -26,3 +26,6 @@ export type * from '../ref/store.js';
 export type * from '../ref/archive.js';
 export type * from '../ref/hits.js';
 export type * from '../ref/produce.js';
+
+// ── Runtime surface ────────────────────────────────────────────────────────────────────────────────
+export * from './freshness.js';   // WP-4.10-a.KNOW — knowledge drift oracle binds to the grounding subtreeHash (Campaign-4)

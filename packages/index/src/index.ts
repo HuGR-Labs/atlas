@@ -34,3 +34,4 @@ export * from './territory.js';    // WP-2.9-a.INDEX — territory assignment
 export * from './ownership.js';    // WP-2.9-a.INDEX — ownership reconcile
 export * from './coverage.js';     // WP-2.9-b.INDEX — per-territory unresolved-ratio gate
 export * from './compose.js';      // WP-2.6-b.INDEX — composed index: one structure backs drift + discovery
+export * from './cas.js';          // WP-4.10-a.INDEX — every Atlas object is one BLAKE3-CAS object (Campaign-4)
