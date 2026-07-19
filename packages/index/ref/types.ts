@@ -85,26 +85,61 @@ export interface Manifest {
   readonly territories: readonly Territory[];
 }
 
-/**
- * The set of built axis-views the index exposes (≥3, INDEX-10) — the return of `build` (method-tags-
- * idx:38, `build(tree, scipOutput)=axes`).
- *
- * [SIG-TBD — underspecified] No cited source gives `Axes` a concrete shape; atlas-index/method-tags
- * describe it only as "≥3 axis-views over one CAS, each with its own rollup" (method-tags-idx:87).
- * Transcribed as the honest minimal mapping `Axis → root IndexNode` (one rooted hierarchy per axis),
- * NOT invented with extra fields. Flagged for the owning WP to pin.
- */
-export type Axes = { readonly [K in Axis]: IndexNode };
+/** An edge's resolution class. `unresolved`/`dynamic` are declared, never guessed (INDEX-13).
+ *  Defined here (the base type module) and re-exported from `depgraph.ts` for its consumers.
+ *  (atlas-index:185-188; method-tags-idx:108) */
+export type EdgeKind = 'resolved' | 'unresolved' | 'dynamic';
+
+/** A depends-on edge in the dependency axis. `to` is `null` iff the target is unresolved/dynamic —
+ *  no target is ever invented (SCN-INDEX-3e-1; INDEX-13c). (atlas-index:105, 185-188) */
+export interface DepEdge {
+  readonly from: Hash;
+  readonly to: Hash | null;
+  readonly kind: EdgeKind;
+}
 
 /**
- * [SIG-TBD — opaque build input] The real file tree fed to `build` (atlas-index:57, "the file tree").
- * The reference gives it no concrete shape → transcribed as `unknown`; do not invent a tree schema.
+ * The set of built axis-views the index exposes (≥3, INDEX-10) — the return of `build`
+ * (method-tags-idx:38, `build(tree, scipOutput)=axes`). Owner DEFINE 2026-07-18: pinned from
+ * SCN-INDEX-10a-1 ("{spatial,territory,dependency}, each owning its own rollup") + the downstream
+ * consumer `@atlas/genesis` scan.ts (the INDEX-13 unresolved-edge ledger + per-node CAS ids ride
+ * inside `Axes`). Per-axis rollup is NOT stored — it is computed by `RollupApi.rollup(axis,key)`
+ * (an EPIC-7 facet), so `edges` is the only load-bearing addition beyond the three rooted hierarchies.
  */
-export type FileTree = unknown;
+export interface Axes {
+  readonly spatial: IndexNode;
+  readonly territory: IndexNode;
+  readonly dependency: IndexNode;
+  readonly edges: readonly DepEdge[];
+}
 
 /**
- * [SIG-TBD — opaque build input] Recorded output of a per-language SCIP indexer — a BLACK-BOX,
- * version-pinned external input (method-tags-idx:38-39, 140-143), fed as fixtures. No concrete shape
- * is (or should be) modeled → transcribed as `unknown`.
+ * The real file tree fed to `build` (atlas-index:52-57): paths + nesting along the spatial rail
+ * repo→crate→module→file→item→block, leaf `content` being the bytes normalized into the subtreeHash.
+ * Owner DEFINE 2026-07-18 (minimal — no derived `level` field; `IndexNode.level` already carries it).
  */
-export type ScipOutput = unknown;
+export interface FileTree {
+  readonly path: string;
+  readonly children: readonly FileTree[];
+  readonly content?: string;
+}
+
+/**
+ * The minimal projection of a per-language SCIP indexer's output the build actually reads — the
+ * external `scip.proto` black box (method-tags-idx:140-143), pinned to the occurrences+roles subset
+ * needed to derive depends-on edges (a `reference` with no in-index `definition` = an unresolved
+ * cross-language/FFI target — SCN-INDEX-3e-1). Owner DEFINE 2026-07-18: occurrences subset, not the
+ * full SCIP schema.
+ */
+export type ScipSymbolRole = 'definition' | 'reference';
+export interface ScipOccurrence {
+  readonly symbol: string;
+  readonly role: ScipSymbolRole;
+}
+export interface ScipDocument {
+  readonly relativePath: string;
+  readonly occurrences: readonly ScipOccurrence[];
+}
+export interface ScipOutput {
+  readonly documents: readonly ScipDocument[];
+}

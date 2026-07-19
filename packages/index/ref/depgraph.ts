@@ -9,9 +9,9 @@
 
 import type { Hash } from '@atlas/contracts';
 
-/** An edge's resolution class. `unresolved`/`dynamic` are declared, never guessed (INDEX-13).
+/** An edge's resolution class — defined in `./types.ts`, re-exported here for depgraph consumers.
  *  (atlas-index:185-188; method-tags-idx:108) */
-export type EdgeKind = 'resolved' | 'unresolved' | 'dynamic';
+export type { EdgeKind } from './types.js';
 
 /**
  * The result of a reverse (transpose) closure = blast radius. Transcribed from the reference model
