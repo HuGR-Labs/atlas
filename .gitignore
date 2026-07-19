@@ -3,3 +3,6 @@ dist/
 *.tsbuildinfo
 .DS_Store
 .orchestra/
+
+# agent worktrees (ephemeral, created by the Agent tool isolation)
+.claude/worktrees/
