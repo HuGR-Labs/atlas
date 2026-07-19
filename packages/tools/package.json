@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@atlas/contracts": "*",
+    "@atlas/kernel": "*",
     "@atlas/persist": "*",
     "@atlas/knowledge": "*",
     "@atlas/retrieval": "*"

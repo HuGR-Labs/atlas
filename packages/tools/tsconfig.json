@@ -6,6 +6,7 @@
   "include": ["ref", "src"],
   "references": [
     { "path": "../contracts" },
+    { "path": "../kernel" },
     { "path": "../persist" },
     { "path": "../knowledge" },
     { "path": "../retrieval" }

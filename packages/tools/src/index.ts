@@ -24,3 +24,6 @@ export type * from '../ref/node.js';
 export type * from '../ref/handler.js';
 export type * from '../ref/transport.js';
 export type * from '../ref/guard.js';
+
+// ── Runtime surface (Campaign-4) ───────────────────────────────────────────────────────────────────
+export * from './emit.js';        // WP-4.11-a.TOOLS — atlas-emit re-derives citation at source@sha, fail-closed reject
