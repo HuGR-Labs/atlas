@@ -17,6 +17,7 @@
 // `resolveNode` (EPIC-26-c, WP-7.26-c) ships here as an HONEST read-only minimal seam for the successor WP.
 
 import type { NodeKey, ToolSchema } from '@atlas/contracts';
+import type { GroundedFact } from '@atlas/knowledge';
 import type { ToolData, Transport, HandlerApi } from '../ref/handler.js';
 import type { Guidance, Tool, Verdict } from '../ref/types.js';
 
@@ -41,6 +42,22 @@ export type ToolLeg = (args: unknown) => ToolData;
 /** The injected legs, keyed by tool. Partial: a leg not wired at this seam fails closed to a rejected
  *  verdict (never a throw), so the handler is total over the whole surface. */
 export type ToolLegs = Partial<Record<Tool, ToolLeg>>;
+
+/** The READ-ONLY per-node projection port — the pack-grained node oracle (TOOLS-10, X1 drill-down). It
+ *  resolves a node by its CONTENT ADDRESS reached AS A DRILL-DOWN WITHIN its pack (never a top-level node
+ *  swarm — wave-plan §X1). Read/subscribe ONLY: it exposes NO store-mutating method (writes still funnel
+ *  through `atlas-emit`, TOOLS-1). @atlas/tools CONSUMES this port; the concrete pack/CAS resolution is the
+ *  @atlas/index / @atlas/knowledge axis, injected here, never computed in this facet. */
+export interface NodeSource {
+  /** Resolve a node by content address; `undefined` ⇒ no such grounded node. READ-ONLY. */
+  resolve(nodeAddr: NodeKey): GroundedFact | undefined;
+}
+
+/** The `next + invariant` guidance every per-node read ships (TOOLS-4) — non-empty on hit AND miss paths. */
+const NODE_GUIDANCE: Guidance = {
+  next: 'a node is reached as a drill-down within its pack; the same address resolves byte-identically over MCP | poke | CLI',
+  invariant: 'TOOLS-10: one read-only oracle, no divergence across transports, no write path',
+};
 
 /** The `next + invariant` guidance stamped on every result (TOOLS-4) — non-empty on ok AND reject paths. */
 const GUIDANCE: Record<Tool, Guidance> = {
@@ -134,12 +151,13 @@ const SCHEMA_OFF_SURFACE = (tool: Tool): ToolSchema => ({
 });
 
 /**
- * Build THE one handler over the injected per-tool `legs`. The returned object conforms EXACTLY to the
- * frozen `HandlerApi`. `handle` is pure + total: it reads no clock and holds no cache, and it converts a
- * missing leg OR a leg throw into a structured rejected `Verdict` — never a throw (TOOLS-2) — with guidance
- * stamped on every path (TOOLS-4).
+ * Build THE one handler over the injected per-tool `legs` and (optionally) a read-only per-node projection
+ * `nodes`. The returned object conforms EXACTLY to the frozen `HandlerApi`. `handle` is pure + total: it
+ * reads no clock and holds no cache, and it converts a missing leg OR a leg throw into a structured rejected
+ * `Verdict` — never a throw (TOOLS-2) — with guidance stamped on every path (TOOLS-4). When `nodes` is
+ * omitted, `resolveNode` fails closed to a rejected verdict (no source wired) — still total, never a throw.
  */
-export function createHandler(legs: ToolLegs): HandlerApi {
+export function createHandler(legs: ToolLegs, nodes?: NodeSource): HandlerApi {
   const handle = (tool: Tool, args: unknown): Verdict<ToolData> => {
     const guidance = guidanceFor(tool);
     const leg = legs[tool];
@@ -155,16 +173,21 @@ export function createHandler(legs: ToolLegs): HandlerApi {
     }
   };
 
-  // resolveNode / schema — HONEST, read-only, total minimal seams. The tri-transport node read (TOOLS-10)
-  // and the published-schema body are owned by the successor WPs (EPIC-26-c / -b) that extend this file.
-  const resolveNode = (_nodeAddr: NodeKey, _transport: Transport): Verdict => ({
-    ok: false,
-    rejected: 'node resolution is wired by the tri-transport read (EPIC-26-c)',
-    guidance: {
-      next: 'resolve nodes through the tri-transport read once EPIC-26-c is wired',
-      invariant: 'TOOLS-10: one oracle, read-only across MCP | poke | CLI',
-    },
-  });
+  // resolveNode — THE tri-transport per-node read (TOOLS-10, EPIC-26-c). READ-ONLY: it opens NO write path
+  // (writes still funnel through `atlas-emit`, TOOLS-1). `transport` records the ROUTE only — the resolved
+  // node content is byte-identical over MCP | poke | CLI (the one handler is the single oracle), so it never
+  // changes the result. Per wave-plan §X1 a node is reached as a DRILL-DOWN WITHIN its pack. Total: a missing
+  // source or an unknown address fails closed to a rejected verdict, never a throw; guidance rides every path.
+  const resolveNode = (nodeAddr: NodeKey, _transport: Transport): Verdict => {
+    if (nodes === undefined) {
+      return { ok: false, rejected: 'no per-node projection source wired at this seam', guidance: NODE_GUIDANCE };
+    }
+    const node = nodes.resolve(nodeAddr);
+    if (node === undefined) {
+      return { ok: false, rejected: `no grounded node at content address '${nodeAddr}'`, guidance: NODE_GUIDANCE };
+    }
+    return { ok: true, data: node, guidance: NODE_GUIDANCE };
+  };
 
   // schema — THE one published input schema (TOOLS-3): CLI ≡ MCP, byte-identical (no transport parameter).
   const schema = (tool: Tool): ToolSchema => SCHEMAS[tool] ?? SCHEMA_OFF_SURFACE(tool);
