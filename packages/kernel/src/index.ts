@@ -21,3 +21,10 @@ export { asHash, asSubtreeHash, asNodeKey } from './brand.js';
 // WP-1.1-a.KERNEL runtime surface: the content-addressed identity primitives.
 export { canonicalForm, id } from './canonical.js';
 export { defaultEncoder } from './encoder.js';
+
+// WP-1.2-a.KERNEL runtime surface: the single CAS + append-only event log.
+export { createStore } from './store.js';
+export { createLog } from './log.js';
+
+// WP-1.1-b.KERNEL runtime surface: self-contained open-JSON (OKF) export/import.
+export { exportCas, importCas, makePortable } from './portable.js';
