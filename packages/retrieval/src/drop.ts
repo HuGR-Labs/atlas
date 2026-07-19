@@ -1,41 +1,47 @@
-// @atlas/retrieval — src/drop.ts  (WP-6.22.RETR · injection ceiling + drop-by-hit-rate + fail-closed stale)
+// @atlas/retrieval — src/drop.ts  (injection ceiling + drop-by-hit-rate + fail-closed stale — RETR-6/RETR-3)
 //
-// The per-turn injection-budget enforcer (RETR-6) + fail-closed staleness (RETR-3) — one seam-freeze
-// ("injection-budget + fresh-pack contract") owned by RETR, consumed by TOOLS (WP-6.22.TOOLS). The SUM of
-// everything auto-injected in a turn MUST respect the hard `~5K` ceiling under the pinned `cl100k_base`
-// measure; on overflow, DROPPABLE kinds drop by OBSERVED per-kind `hitRate` — least-used first (the RETR-8
-// ledger, WP-6.18.RETR) — never a hardcoded order. TWO kinds are exempt and MUST NOT drop, ever:
-// `awareness` (Awareness.constitution, T0) and `protocols.safetyCritical` (T0-adjacent). Until the ledger
-// has data (cold start) the documented cold-start default order applies; once it has data every non-pin
-// kind reorders by observed `hitRate`. A per-kind drop-counter is ledgered (a kind dropped `>20%` of turns
-// is mis-capped / mis-prioritized). RETR-3: a pack whose `stale` is `true` MUST NOT be trusted as-is — it
-// is re-grounded BEFORE use; `stale` == the exact OR over its backings' drift-bit (never a guess).
-// Transcribed from atlas-retrieval:77-78 / 96-117 + goldens-ret.md §Fixture B / §REQ-RETR-6 / §REQ-RETR-3.
-//
-// SEAM CONSUMER. The facet READS the RETR-8 hits/hitRate ledger (WP-6.18.RETR) + the per-turn pinned
-// `cl100k_base` `tokenEstimate` the index supplies; it NEVER tokenizes and NEVER hashes (identity is minted
-// only through the sealed @atlas/kernel `asHash`; no raw hashing here). `related` is NOT a member of the
-// frozen @atlas/contracts `InjectionKind` closed vocabulary (goldens §Fixture B names it, but the sealed
-// enum does not) — never invented onto the frozen enum; the single frozen `awareness` is the constitution
-// pin (there is no separate awareness-tail kind).
-//
-// [FLAG — `dropOrder` returns the ranked drop SEQUENCE, not a ceiling-truncated set] the frozen `DropApi`
-// (ref/drop.ts) is `dropOrder(items: readonly Budget[]): readonly InjectionKind[]`, and the frozen `Budget`
-// (@atlas/contracts) carries `capTokens`, NOT this turn's actual `tokenEstimate`. So `dropOrder` can only
-// yield the deterministic drop ORDERING (drop-first first, pins excluded); the ceiling arithmetic ("drop
-// from the bottom until sum ≤ ~5K") needs the per-turn count and lives in `resolveCeiling`, which shares
-// the identical order. NOT widened onto the frozen `Budget`.
-//
-// [FLAG — hitRate-tie secondary key κ is an OPEN DEFINE dependency] method-tags-ret §RETR-6/8 guarantee a
-// deterministic TOTAL order over kinds but do NOT name the secondary tie-key κ when two kinds tie on
-// `hitRate` ([NEEDS RECONCILIATION], goldens §SCN-RETR-6b-2 `gen: residue`). The determinism MUST is fully
-// pinned, so this facet MUST ship a total order; it uses the reference's own documented COLD-START PRIORITY
-// order as the tie-break backbone (a pinned artifact, not an invented value). If DEFINE later ratifies a
-// distinct κ, only the tie-break line changes; the residue golden asserts determinism only, not a κ outcome.
+// Per-turn injection-budget enforcer (RETR-6): the turn's sum respects the hard `~5K` ceiling; on overflow
+// droppable kinds drop by observed `hitRate` (least-used first), `awareness` + `protocols.safetyCritical`
+// exempt and never drop; cold-start default order applies until the ledger has data. RETR-3 fail-closed
+// staleness: a `stale` pack (`= OR(backings.drifted)`) is re-grounded before use, never trusted as-is.
+// NEVER tokenizes/hashes. [FLAG] `dropOrder` yields only the ORDERING (frozen `Budget` lacks the per-turn
+// `tokenEstimate`); the ceiling arithmetic is `resolveCeiling`, sharing the identical order. [FLAG] the
+// hitRate-tie key κ is an OPEN DEFINE dependency — the cold-start priority is the pinned tie-break backbone.
 
 import type { Budget, InjectionKind, Pack } from '@atlas/contracts';
-import type { DropApi } from '../ref/drop.js';
-import type { StaleApi } from '../ref/stale.js';
+
+/**
+ * Bounded deterministic DROP under capacity (RETR-6). Droppable kinds drop by OBSERVED per-kind `hitRate`
+ * — least-used first (the RETR-8 ledger) — a total order `(pinned-desc, hitRate-asc)`; `awareness` and
+ * `protocols.safetyCritical` are exempt and never drop. (atlas-retrieval:96-106 / method-tags-ret:57-61)
+ */
+export interface DropApi {
+  /** The drop order under capacity (RETR-6): orders kinds by `(pinned-desc, hitRate-asc)` — the two
+   *  pins never drop — and drops from the bottom until `sum ≤ ~5K` ceiling; cold-start default order
+   *  applies until the ledger has data. A deterministic total order. Pure + total.
+   *
+   *  [PINNED — `items` / return shapes] The honest minimum, per the oracle-pin map: the per-kind
+   *  `Budget[]` ledger in (carrying `kind` + `hitRate` — the drop oracle, both contracts-frozen) and the
+   *  ordered drop sequence `InjectionKind[]` out. Both records are @atlas/contracts-frozen.
+   *  (method-tags-ret:60) */
+  dropOrder(items: readonly Budget[]): readonly InjectionKind[];
+}
+
+/**
+ * Fail-closed staleness (RETR-3): `stale` ⇔ ANY grounding backing the pack drifted; a `stale` pack MUST
+ * NOT be trusted as-is. `= OR(backings.drifted)` read from the index drift-oracle, never a heuristic.
+ * (atlas-retrieval:77-78 / method-tags-ret:35-40)
+ */
+export interface StaleApi {
+  /** Pack staleness (RETR-3): `= OR(backings.drifted)` — `true` iff any backing grounding drifted.
+   *  Pure + deterministic (reads the index drift-oracle's drifted bit, never a guess).
+   *
+   *  [FLAG — `backings` type] The reference freezes the EXPRESSION `OR(backings.drifted)` but not a
+   *  backing record; transcribed as the exact frozen expression's shape — a list of `{ drifted:
+   *  boolean }` (the drift bit per backing). NOT widened beyond the reference; the owning WP pins the
+   *  fuller backing record. (method-tags-ret:40) */
+  isStale(backings: readonly { readonly drifted: boolean }[]): boolean;
+}
 
 /** The hard injection ceiling `~5K` (RETR-6), a concrete count under the pinned `cl100k_base` measure. */
 export const CEILING = 5000;

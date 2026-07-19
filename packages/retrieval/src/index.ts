@@ -1,30 +1,14 @@
 // @atlas/retrieval — barrel
 //
-// Layer 5: the retrieval harness — bounded packs / OwnPack / poke / injection budget. It decides WHAT
-// knowledge reaches a worker and WHEN, with no embeddings and no RAG (A-14): relevance is resolved only
-// by the deterministic hashed structural index over scope / dependency / trigger. Retrieval OWNS the
-// pack / budget / drop mechanics and does NOT depend on @atlas/memory (the cycle was broken
-// memory→retrieval). The implementation surface WPs fill in at execution. The skeleton ships zero
-// runtime: every frozen interface lives in ref/*.ts until a WP implements it.
-//
-// The barrel re-exports the package's FULL public type surface so consumers can import from the bare
-// package root (`import type { OwnPack } from '@atlas/retrieval'`). ref/*.ts is type-only, hence
-// `export type *`.
+// Layer 5 retrieval harness: bounded packs / OwnPack / poke / injection budget; relevance is the
+// deterministic hashed structural index (no embeddings, no RAG — A-14). Re-exports the package's FULL
+// public surface so consumers import from the bare package root (`import { OwnPack } from '@atlas/retrieval'`).
+// Each frozen interface is co-located with its impl; the shared/unconsumed ones live in types.ts.
 
-export type * from '../ref/types.js';
-export type * from '../ref/resolve.js';
-export type * from '../ref/pack.js';
-export type * from '../ref/rank.js';
-export type * from '../ref/own.js';
-export type * from '../ref/relate.js';
-export type * from '../ref/bound.js';
-export type * from '../ref/poke.js';
-export type * from '../ref/project.js';
-export type * from '../ref/drop.js';
-export type * from '../ref/caps.js';
-export type * from '../ref/ledger.js';
-export type * from '../ref/stale.js';
-export type * from '../ref/offatlas.js';
+// The frozen data model + the co-located API interfaces that no src file re-exports (CapsApi / BoundApi /
+// ResolveApi). Every other frozen interface now lives beside its impl and is re-exported by `export *`
+// from the runtime files below.
+export type * from './types.js';
 
 // ── Runtime surface (WP-filled at execution) ───────────────────────────────────────────────────────
 export * from './relate.js';   // WP-2.8-b.RETR — partitioned, deterministic relate() over the index axes

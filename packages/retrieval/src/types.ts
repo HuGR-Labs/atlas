@@ -1,25 +1,15 @@
-// @atlas/retrieval — ref/types.ts  (FROZEN INTERFACE — pure types, zero runtime logic)
+// @atlas/retrieval — src/types.ts  (frozen data model + co-located API interfaces; zero runtime)
 //
-// Layer 5: the retrieval-local data model — bounded packs / OwnPack / poke / injection budget. The
-// retrieval layer decides WHAT knowledge reaches a worker AND WHEN, with no embeddings and no RAG
-// (A-14): relevance is resolved purely by the deterministic hashed structural index over scope /
-// dependency / trigger. Transcribed EXACTLY from `docs/reference/atlas-retrieval.md` §Data model
-// (lines 15-47) + method-tags-ret.md.
-//
-// The SHARED injection vocabulary — `Pack`, `PackInvariant`, `InjectionKind`, `Budget` — ALREADY lives
-// in @atlas/contracts (it is the dialect that breaks the retrieval⟷memory cycle: both speak it without
-// importing each other). It is IMPORTED here, NEVER redefined.
-//
-// [LEAD-RATIFIED] Retrieval OWNS pack / budget / drop mechanics and does NOT depend on @atlas/memory
-// (the cycle was broken memory→retrieval). No memory type is imported anywhere in this package.
-//
-// [LEAD-RATIFIED] `ppr` is a STORED numeric FIELD read here for ranking (RETR-11), NOT a call into
-// genesis — typed `ppr: number` on `RelatedFact`.
+// Layer 5 retrieval-local model: bounded packs / OwnPack / poke / injection budget; relevance is the
+// deterministic hashed structural index (no embeddings, no RAG — A-14). The injection vocabulary
+// (Pack/PackInvariant/InjectionKind/Budget) is @atlas/contracts-owned — re-exported here, never redefined;
+// retrieval never imports @atlas/memory (cycle broken memory→retrieval). `ppr` is a stored field, not a call.
 
-import type { Hash, NodeKey, Tier } from '@atlas/contracts';
+import type { Hash, NodeKey, Tier, InjectionKind, Territory } from '@atlas/contracts';
 import type { Pack, PackInvariant } from '@atlas/contracts';
 import type { ToolSchema } from '@atlas/contracts';
 import type { GroundedFact } from '@atlas/knowledge';
+import type { IndexNode } from '@atlas/index';
 
 // Re-export the contracts-owned injection vocabulary so consumers of the retrieval surface can pull the
 // whole dialect from the bare package root. Owned by @atlas/contracts — re-exported, NOT redefined.
@@ -217,4 +207,52 @@ export interface OffAtlas {
   readonly served: number;
   readonly offAtlasReads: number;
   readonly offAtlasRate: number;
+}
+
+// ── frozen API surface, co-located here (was ref/caps.ts · ref/bound.ts · ref/resolve.ts) ────────────
+// These interfaces carry zero runtime; they live with the shared data model because CapsApi is consumed
+// by BOTH ledger.ts and pack.ts, and BoundApi / ResolveApi are public surface not consumed by any src
+// file (they belong to the package's public type surface).
+
+/**
+ * Per-kind cap enforcement under the pinned measure (RETR-7). Each injection kind stays within its
+ * ratified sweet-spot cap; enforcement is a DETERMINISTIC function of the input under the pinned
+ * `cl100k_base` measure. The cap-table is a pure map `kind → pinnedCap`, shared by the packer (RETR-2),
+ * drop-policy (RETR-6), and `own` composer (RETR-12). (atlas-retrieval:107-112 / method-tags-ret:63-68)
+ */
+export interface CapsApi {
+  /** Injection kind → its pinned sweet-spot cap in the pinned cap-measure unit (RETR-7). A pure lookup
+   *  over the cap-table; deterministic. (method-tags-ret:67) */
+  capFor(kind: InjectionKind): number;
+}
+
+/**
+ * Bounded, ranked, deterministic truncation of the reverse closure (RETR-11): cut at `maxHops`, order by
+ * the total rank `(tier-desc, ppr-desc, distance-asc, nodeKey-asc)`, cap at `K`, truncate AFTER ranking
+ * with honest `BoundMeta`. Reuses RETR-10's closure. (atlas-retrieval:44 / 127-138 / method-tags-ret:91-96)
+ */
+export interface BoundApi {
+  /** Reverse closure of `node`, bounded: `closure(maxHops) → stable-sort-by-rank → take(K)` with honest
+   *  meta (RETR-11). Defaults per the reference: `maxHops = 2`, `K = 8`. Pure + deterministic +
+   *  truncate-after-rank (the returned set is a rank-prefix). (atlas-retrieval:44; method-tags-ret:95)
+   *
+   *  [FLAG — `node` type] The reference names `node` with no concrete type — the unit's node in the
+   *  index dependency axis. Transcribed as the index-provided `IndexNode` (@atlas/index), the honest
+   *  input the closure walks; NOT invented. Flagged for the reference to freeze the parameter. */
+  boundedClosure(
+    node: IndexNode,
+    maxHops: number,
+    K: number,
+  ): { readonly closure: readonly RelatedFact[]; readonly meta: BoundMeta };
+}
+
+/**
+ * Scope → covering territory/-ies via the hashed structural index (RETR-1, §3.5). Axes-only: relevance is
+ * a PURE function of (scope, dependency, trigger) over the index — 0 embedding/vector/RAG (A-14). Total:
+ * a malformed scope yields an empty result, never a throw (RETR-9). (atlas-retrieval:167 / method-tags-ret:21-26)
+ */
+export interface ResolveApi {
+  /** Scope (path) → the covering territory/-ies, resolved by the index (§3.5). Pure + total (miss ⇒
+   *  empty, no throw — RETR-9); byte-identical for equal input (RETR-1). (atlas-retrieval:167) */
+  resolve(scope: Path): readonly Territory[];
 }

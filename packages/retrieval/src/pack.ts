@@ -1,34 +1,51 @@
-// @atlas/retrieval — src/pack.ts  (WP-6.19.RETR · the bounded pack — RETR-1 / RETR-2 / RETR-7 / RETR-9)
+// @atlas/retrieval — src/pack.ts  (the bounded pack — RETR-1 / RETR-2 / RETR-7 / RETR-9)
 //
-// The bounded, deterministic pack assembler (RETR-2), over the hashed structural index ONLY (RETR-1, A-14 —
-// relevance is scope/dependency/trigger, resolved structurally, never by nearness-in-a-model). A pack carries every T0 invariant of its
-// territory IN FULL, then T1 by the total order `(hits-desc, ppr-desc, nodeKey-asc)` until the pinned `~2K`
-// cap; when the cap bites, the CAP WINS — the pack emits a truncation marker + a `pull-reachable` tail
-// (0 silent drops, RETR-2c). A merged pack over K covering territories shares ONE `~2K` budget, T0-first then
-// the same rank; owner-territory proximity is retired for PPR (RETR-2d/2e). A pack is 1-line `PackInvariant`s
-// only — never free prose (RETR-2f). Per-type caps (RETR-7) are the ratified pinned sweet-spots under the
-// pinned cap measure (`cl100k_base`, tiktoken). Total (RETR-9): a malformed/uncovered scope yields an empty
-// pack, never a throw. Composed with the shared within-tier comparator (ref/rank.ts) and the cap-table
-// (ref/caps.ts). Transcribed from atlas-retrieval:53-76 / 107-112 + goldens-ret.md §Fixture A.
-//
-// SEAM CONSUMER. The facet READS a per-territory axis snapshot from the index; each candidate ALREADY carries
-// its pinned `cl100k_base` `tokenEstimate` and `axisHash` — the facet NEVER tokenizes and NEVER hashes
-// (identity is minted only through the sealed @atlas/kernel `asHash`; no raw hashing here).
-//
-// [FLAG — truncation marker / tail have no frozen field] atlas-retrieval:72 mandates a "truncation marker +
-// `pull-reachable` tail", but the frozen `Pack` (@atlas/contracts) and ref/types.ts carry NO field for them.
-// Transcribed as a facet-local `BoundedPack` extension (`truncated` + `tail`), assignable to `Pack` — analogous
-// to the honest `BoundMeta.{total,returned,truncated}` on the relate side. NOT invented onto @atlas/contracts.
-//
-// [FLAG — tokenEstimate is index-supplied (simulated), not tokenized here] the pinned `cl100k_base` count
-// rides on each candidate (index-supplied). The facet only SUMS it; it hosts no tokenizer (keeps A-14 / the
-// byte-identity gate). If a real tiktoken measure is wired, it stays behind the index seam, never in the pack.
+// Bounded, deterministic pack assembler over the hashed structural index (RETR-2): every T0 invariant in
+// full, then T1 by `(hits-desc, ppr-desc, nodeKey-asc)` until the `~2K` cap; when the cap bites the CAP
+// WINS — a truncation marker + `pull-reachable` tail (0 silent drops). A merged pack over K territories
+// shares ONE `~2K` budget. Total (RETR-9): a malformed/uncovered scope ⇒ empty pack, never a throw. Seam
+// consumer: candidates arrive with index-supplied `tokenEstimate`/`axisHash` — NEVER tokenizes/hashes.
+// [FLAG] the truncation marker + tail have no frozen `Pack` field — carried on facet-local `BoundedPack`.
 
 import type { Hash, InjectionKind, NodeKey, Pack, PackInvariant, Territory, Tier } from '@atlas/contracts';
 import { asHash } from '@atlas/kernel';
-import type { PackApi } from '../ref/pack.js';
-import type { RankApi, RankItem } from '../ref/rank.js';
-import type { CapsApi } from '../ref/caps.js';
+import type { CapsApi } from './types.js';
+
+/**
+ * Bounded deterministic pack composition (RETR-2): a `≤ ~2K` pack carrying every T0 invariant in full,
+ * then T1 by `(hits-desc, ppr-desc, nodeKey-asc)` until the cap; the CAP WINS. Total: a malformed
+ * territory yields an empty pack, never a throw (RETR-9). (atlas-retrieval:170 / method-tags-ret:28-33)
+ */
+export interface PackApi {
+  /** Territory → its pack: `≤ ~2K` tier≥T1 invariants (T0 in full, then T1 by `(hits-desc, ppr-desc,
+   *  nodeKey-asc)` until the cap), stale-flagged (§3.4). Pure + total (miss ⇒ empty pack, no throw —
+   *  RETR-9). (atlas-retrieval:170) */
+  pack(territory: Territory): Pack;
+}
+
+/**
+ * The minimal ranked item — carries EXACTLY the three sort keys the shared comparator reads: `hits`
+ * (RETR-8 ledger), `ppr` (stored field, GEN-11), `nodeKey` (identity). The minimal join over the ranked
+ * pack item / `RelatedFact` inputs. (atlas-retrieval:70; method-tags-ret:32-33)
+ */
+export interface RankItem {
+  readonly nodeKey: NodeKey;
+  readonly ppr: number;
+  readonly hits: number;
+}
+
+/**
+ * THE shared within-tier comparator reused by the packer (RETR-2) and the bounder (RETR-11): the total,
+ * deterministic order `(hits-desc, ppr-desc, nodeKey-asc)`. (atlas-retrieval:70; method-tags-ret:32-33)
+ */
+export interface RankApi {
+  /** The shared within-tier comparator — a total order `(hits-desc, ppr-desc, nodeKey-asc)`. Returns a
+   *  negative / zero / positive number (a standard comparator), deterministic + antisymmetric.
+   *
+   *  [PINNED — ranked-item type] `RankItem` — the minimal join carrying the three sort keys.
+   *  (atlas-retrieval:70; method-tags-ret:32-33) */
+  compare(a: RankItem, b: RankItem): number;
+}
 
 /** The pinned pack sweet-spot cap `~2K` (RETR-2 / RETR-7), a concrete count under the pinned cap measure. */
 export const PACK_CAP = 2000;
@@ -53,7 +70,7 @@ const TIER_ORDINAL: Record<Tier, number> = { T0: 0, T1: 1, T2: 2 };
 /**
  * A pack candidate — one territory node the index resolved, carrying the three sort keys `(hits, ppr,
  * nodeKey)`, its criticality `tier`, its 1-line `claim`, its index-supplied pinned `tokenEstimate`, and its
- * drift `stale` flag. A structural superset of `RankItem` (ref/rank.ts), so the shared comparator applies.
+ * drift `stale` flag. A structural superset of `RankItem`, so the shared comparator applies.
  */
 export interface PackCandidate {
   readonly nodeKey: NodeKey;
@@ -95,7 +112,7 @@ export interface Packer {
   capFor(kind: InjectionKind): number;
 }
 
-// ── the shared within-tier comparator (RETR-2b; ref/rank.ts) ─────────────────────────────────────────────
+// ── the shared within-tier comparator (RETR-2b; RankApi) ─────────────────────────────────────────────
 /**
  * The total, deterministic, antisymmetric within-tier order `(hits-desc, ppr-desc, nodeKey-asc)`: the scarce
  * budget goes first to observed-useful facts (the `hits` ledger, RETR-8), ties broken by precomputed PPR
@@ -107,7 +124,7 @@ export function compare(a: RankItem, b: RankItem): number {
   return a.nodeKey < b.nodeKey ? -1 : a.nodeKey > b.nodeKey ? 1 : 0; // nodeKey-asc (code-point, byte-stable)
 }
 
-// ── per-type caps (RETR-7; ref/caps.ts) ──────────────────────────────────────────────────────────────────
+// ── per-type caps (RETR-7; CapsApi) ──────────────────────────────────────────────────────────────────
 /** Injection kind → its ratified pinned sweet-spot cap (RETR-7). A pure lookup over the cap-table. */
 export function capFor(kind: InjectionKind): number {
   return CAP_TABLE[kind];

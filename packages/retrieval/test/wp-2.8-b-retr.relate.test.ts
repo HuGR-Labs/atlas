@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import { asNodeKey } from '@atlas/kernel';
 import type { NodeKey, PackInvariant, Tier } from '@atlas/contracts';
-import type { RelatedFact, RelationKind, RelationSet } from '../ref/types.js';
+import type { RelatedFact, RelationKind, RelationSet } from '../src/types.js';
 import { createRelate, RELATE_RANK, type RelateAxes } from '../src/relate.js';
 
 // ── fixture builders ────────────────────────────────────────────────────────────────────────────────────
