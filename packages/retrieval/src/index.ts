@@ -28,3 +28,5 @@ export type * from '../ref/offatlas.js';
 
 // ── Runtime surface (WP-filled at execution) ───────────────────────────────────────────────────────
 export * from './relate.js';   // WP-2.8-b.RETR — partitioned, deterministic relate() over the index axes
+export * from './pack.js';     // WP-6.19.RETR — the bounded pack (relevance-from-index, ~2K cap, T0-then-T1-by-rank)
+export * from './own.js';      // WP-6.20.RETR — OwnPack (mechanical own_<unit>, capped, D1 content-free availability-manifest)

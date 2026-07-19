@@ -1,0 +1,212 @@
+// @atlas/retrieval — src/pack.ts  (WP-6.19.RETR · the bounded pack — RETR-1 / RETR-2 / RETR-7 / RETR-9)
+//
+// The bounded, deterministic pack assembler (RETR-2), over the hashed structural index ONLY (RETR-1, A-14 —
+// relevance is scope/dependency/trigger, resolved structurally, never by nearness-in-a-model). A pack carries every T0 invariant of its
+// territory IN FULL, then T1 by the total order `(hits-desc, ppr-desc, nodeKey-asc)` until the pinned `~2K`
+// cap; when the cap bites, the CAP WINS — the pack emits a truncation marker + a `pull-reachable` tail
+// (0 silent drops, RETR-2c). A merged pack over K covering territories shares ONE `~2K` budget, T0-first then
+// the same rank; owner-territory proximity is retired for PPR (RETR-2d/2e). A pack is 1-line `PackInvariant`s
+// only — never free prose (RETR-2f). Per-type caps (RETR-7) are the ratified pinned sweet-spots under the
+// pinned cap measure (`cl100k_base`, tiktoken). Total (RETR-9): a malformed/uncovered scope yields an empty
+// pack, never a throw. Composed with the shared within-tier comparator (ref/rank.ts) and the cap-table
+// (ref/caps.ts). Transcribed from atlas-retrieval:53-76 / 107-112 + goldens-ret.md §Fixture A.
+//
+// SEAM CONSUMER. The facet READS a per-territory axis snapshot from the index; each candidate ALREADY carries
+// its pinned `cl100k_base` `tokenEstimate` and `axisHash` — the facet NEVER tokenizes and NEVER hashes
+// (identity is minted only through the sealed @atlas/kernel `asHash`; no raw hashing here).
+//
+// [FLAG — truncation marker / tail have no frozen field] atlas-retrieval:72 mandates a "truncation marker +
+// `pull-reachable` tail", but the frozen `Pack` (@atlas/contracts) and ref/types.ts carry NO field for them.
+// Transcribed as a facet-local `BoundedPack` extension (`truncated` + `tail`), assignable to `Pack` — analogous
+// to the honest `BoundMeta.{total,returned,truncated}` on the relate side. NOT invented onto @atlas/contracts.
+//
+// [FLAG — tokenEstimate is index-supplied (simulated), not tokenized here] the pinned `cl100k_base` count
+// rides on each candidate (index-supplied). The facet only SUMS it; it hosts no tokenizer (keeps A-14 / the
+// byte-identity gate). If a real tiktoken measure is wired, it stays behind the index seam, never in the pack.
+
+import type { Hash, InjectionKind, NodeKey, Pack, PackInvariant, Territory, Tier } from '@atlas/contracts';
+import { asHash } from '@atlas/kernel';
+import type { PackApi } from '../ref/pack.js';
+import type { RankApi, RankItem } from '../ref/rank.js';
+import type { CapsApi } from '../ref/caps.js';
+
+/** The pinned pack sweet-spot cap `~2K` (RETR-2 / RETR-7), a concrete count under the pinned cap measure. */
+export const PACK_CAP = 2000;
+/** The hard injection ceiling `~5K` (RETR-6); no single kind's cap may equal or exceed it (RETR-7b). */
+export const CAP_CEILING = 5000;
+
+/** The ratified per-kind sweet-spot cap-table (RETR-7; atlas-retrieval:107-112), under the pinned measure. */
+const CAP_TABLE: Readonly<Record<InjectionKind, number>> = {
+  awareness: 400,
+  orientation: 250,
+  projectMem: 500,
+  own: 1500,
+  pack: PACK_CAP,
+  'protocols.safetyCritical': 500,
+  'protocols.advisory': 500,
+  poke: 150,
+};
+
+/** Criticality → sort ordinal (T0 highest ⇒ smallest ordinal). Only T0/T1 are pack-eligible (tier≥T1). */
+const TIER_ORDINAL: Record<Tier, number> = { T0: 0, T1: 1, T2: 2 };
+
+/**
+ * A pack candidate — one territory node the index resolved, carrying the three sort keys `(hits, ppr,
+ * nodeKey)`, its criticality `tier`, its 1-line `claim`, its index-supplied pinned `tokenEstimate`, and its
+ * drift `stale` flag. A structural superset of `RankItem` (ref/rank.ts), so the shared comparator applies.
+ */
+export interface PackCandidate {
+  readonly nodeKey: NodeKey;
+  readonly tier: Tier;
+  readonly ppr: number;
+  readonly hits: number;
+  readonly claim: string;
+  readonly tokenEstimate: number; // [FLAG] index-supplied pinned cl100k_base count — never tokenized here
+  readonly stale: boolean;
+}
+
+/** The per-territory axis snapshot the index supplies (the seam this facet consumes). */
+export interface PackAxis {
+  readonly territory: string;
+  readonly axisHash: Hash; // index-supplied content identity of the axis snapshot (no hashing here)
+  readonly candidates: readonly PackCandidate[];
+  readonly stale: boolean; // any backing grounding of this axis drifted (index drift-oracle)
+}
+
+/** The index seam: a (resolved) territory → its axis snapshot, or `null` when nothing covers it. */
+export interface PackIndex {
+  axis(territory: Territory): PackAxis | null;
+}
+
+/**
+ * A `Pack` plus the honest cap-wins receipt (RETR-2c). `truncated` is the truncation MARKER; `tail` is the
+ * `pull-reachable` list of nodeKeys the cap excluded (0 silent drops). Assignable to `Pack`. See file FLAG.
+ */
+export interface BoundedPack extends Pack {
+  readonly truncated: boolean;
+  readonly tail: readonly NodeKey[];
+}
+
+/** The bounded-pack facet surface (satisfies the frozen `PackApi` / `RankApi` / `CapsApi`). */
+export interface Packer {
+  pack(territory: Territory): BoundedPack;
+  mergedPack(territories: readonly Territory[]): BoundedPack;
+  compare(a: RankItem, b: RankItem): number;
+  capFor(kind: InjectionKind): number;
+}
+
+// ── the shared within-tier comparator (RETR-2b; ref/rank.ts) ─────────────────────────────────────────────
+/**
+ * The total, deterministic, antisymmetric within-tier order `(hits-desc, ppr-desc, nodeKey-asc)`: the scarce
+ * budget goes first to observed-useful facts (the `hits` ledger, RETR-8), ties broken by precomputed PPR
+ * importance (GEN-11), then by `nodeKey` (identity, the final total-order key). Pure; no LLM.
+ */
+export function compare(a: RankItem, b: RankItem): number {
+  if (a.hits !== b.hits) return b.hits - a.hits; // hits-desc
+  if (a.ppr !== b.ppr) return b.ppr - a.ppr; // ppr-desc
+  return a.nodeKey < b.nodeKey ? -1 : a.nodeKey > b.nodeKey ? 1 : 0; // nodeKey-asc (code-point, byte-stable)
+}
+
+// ── per-type caps (RETR-7; ref/caps.ts) ──────────────────────────────────────────────────────────────────
+/** Injection kind → its ratified pinned sweet-spot cap (RETR-7). A pure lookup over the cap-table. */
+export function capFor(kind: InjectionKind): number {
+  return CAP_TABLE[kind];
+}
+
+// ── the bounded fill (RETR-2a/2b/2c) ─────────────────────────────────────────────────────────────────────
+const toInvariant = (c: PackCandidate): PackInvariant => ({ nodeId: c.nodeKey, tier: c.tier, claim: c.claim });
+
+/**
+ * Greedy fill under one shared `cap`: all T0 IN FULL, then T1 by the shared rank until the next candidate
+ * would exceed the cap — at which point the cap WINS (stop) and every not-emitted candidate (in rank order)
+ * becomes the `pull-reachable` tail. Deterministic; T2 (below the tier≥T1 floor) is never pack-eligible.
+ */
+function fill(
+  candidates: readonly PackCandidate[],
+  cap: number,
+): { readonly emitted: readonly PackCandidate[]; readonly tail: readonly NodeKey[] } {
+  const eligible = candidates.filter((c) => c.tier === 'T0' || c.tier === 'T1');
+  const t0 = eligible.filter((c) => c.tier === 'T0').sort(compare);
+  const t1 = eligible.filter((c) => c.tier === 'T1').sort(compare);
+  const emitted: PackCandidate[] = [];
+  const tail: NodeKey[] = [];
+  let used = 0;
+  let capped = false;
+  for (const c of [...t0, ...t1]) {
+    if (!capped && used + c.tokenEstimate <= cap) {
+      emitted.push(c);
+      used += c.tokenEstimate;
+    } else {
+      capped = true; // the cap has bitten — the rest is the honest pull-reachable tail (no silent drop)
+      tail.push(c.nodeKey);
+    }
+  }
+  return { emitted, tail };
+}
+
+/** Assemble one `BoundedPack` from a set of axes budgeted under a single `cap` (single- or merged-territory). */
+function assemble(name: string, axisHash: Hash, axes: readonly PackAxis[], cap: number): BoundedPack {
+  const candidates = axes.flatMap((a) => a.candidates);
+  const { emitted, tail } = fill(candidates, cap);
+  return {
+    territory: name,
+    axisHash,
+    invariants: emitted.map(toInvariant),
+    tokenEstimate: emitted.reduce((s, c) => s + c.tokenEstimate, 0),
+    stale: axes.some((a) => a.stale) || emitted.some((c) => c.stale), // true iff any backing drifted (RETR-3)
+    truncated: tail.length > 0,
+    tail,
+  };
+}
+
+const EMPTY_HASH: Hash = asHash(''); // the sealed-seam zero identity for an uncovered/malformed scope
+function emptyPack(name: string): BoundedPack {
+  return { territory: name, axisHash: EMPTY_HASH, invariants: [], tokenEstimate: 0, stale: false, truncated: false, tail: [] };
+}
+const nameOf = (t: Territory): string => (t && typeof t.name === 'string' ? t.name : '');
+
+// ── the facet, over the index seam ───────────────────────────────────────────────────────────────────────
+/**
+ * Build the bounded-pack facet over the index seam. Every entry point is TOTAL (RETR-9): a malformed /
+ * uncovered scope yields an empty pack, never a throw.
+ */
+export function createPacker(index: PackIndex): Packer {
+  const axisOf = (t: Territory): PackAxis | null => {
+    try {
+      return index.axis(t);
+    } catch {
+      return null;
+    }
+  };
+
+  const pack = (territory: Territory): BoundedPack => {
+    try {
+      const axis = axisOf(territory);
+      if (axis === null) return emptyPack(nameOf(territory));
+      return assemble(axis.territory, axis.axisHash, [axis], PACK_CAP);
+    } catch {
+      return emptyPack(nameOf(territory)); // RETR-9: total — never propagate a throw
+    }
+  };
+
+  const mergedPack = (territories: readonly Territory[]): BoundedPack => {
+    try {
+      const axes = (Array.isArray(territories) ? territories : []).map(axisOf).filter((a): a is PackAxis => a !== null);
+      if (axes.length === 0) return emptyPack('');
+      const name = axes.map((a) => a.territory).join(',');
+      return assemble(name, axes[0]!.axisHash, axes, PACK_CAP); // ONE shared ~2K budget across all K axes
+    } catch {
+      return emptyPack('');
+    }
+  };
+
+  return { pack, mergedPack, compare, capFor };
+}
+
+// ── frozen-interface BIND (compile-time only) ────────────────────────────────────────────────────────────
+const _rankBind = { compare } satisfies RankApi;
+const _capsBind = { capFor } satisfies CapsApi;
+const _packBind: PackApi = createPacker({ axis: () => null }); // BoundedPack ⊑ Pack ⇒ satisfies PackApi
+void _rankBind;
+void _capsBind;
+void _packBind;

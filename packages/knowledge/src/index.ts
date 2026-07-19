@@ -45,3 +45,5 @@ export * from './init.js';        // KNOW-6  — $0-LLM territory classify (tier
 export * from './tier.js';        // KNOW-7  — tier routing
 export * from './ratify.js';      // KNOW-8  — T0 → human+billy (never auto), staged/token
 export * from './fastpath.js';    // KNOW-18 — auto-accept ONLY grounded∧lowRisk∧T2∧advisory∧¬contested (route(candidate, ctx))
+// Campaign-6:
+export * from './hits.js';        // WP-6.18.KNOW — served-fact hits ledger + door-2 threshold calibration + decay/re-entry
