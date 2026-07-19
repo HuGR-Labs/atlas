@@ -26,6 +26,9 @@ export { defaultEncoder } from './encoder.js';
 export { createStore } from './store.js';
 export { createLog } from './log.js';
 
+// WP-1.3-a.KERNEL runtime surface: event identity + idempotent set-union combine.
+export { eventId, combine, reseq } from './log.js';
+
 // WP-1.1-b.KERNEL runtime surface: self-contained open-JSON (OKF) export/import.
 export { exportCas, importCas, makePortable } from './portable.js';
 
