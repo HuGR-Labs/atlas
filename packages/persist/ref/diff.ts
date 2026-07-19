@@ -14,8 +14,9 @@ import type { Hash } from '@atlas/contracts';
 
 /**
  * One fact in a partition, carrying its provenance (PERSIST-14: "each entry carrying its provenance").
- * [SIG-TBD] The reference does not freeze the entry's fact-payload shape or the provenance shape — the
- * `provenance`-carrying requirement is transcribed; the fact body is kept `unknown`, flagged.
+ * OPAQUE-BY-DESIGN (kept `unknown`, flagged): NO ref/golden/consumer freezes either the fact-payload
+ * shape or the provenance shape — genuinely opaque at this layer, left honestly `unknown`. The
+ * `provenance`-carrying membership requirement is the only frozen part.
  */
 export interface VersionDeltaEntry {
   readonly fact: unknown;

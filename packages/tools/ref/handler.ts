@@ -9,8 +9,12 @@
 // transport, never in contract or result. Transcribed from atlas-tools:6-11, 187-190 +
 // method-tags-tls:26-45, 82-87.
 
-import type { NodeKey } from '@atlas/contracts';
-import type { Tool, Verdict } from './types.js';
+import type { NodeKey, ToolSchema } from '@atlas/contracts';
+import type { EmitOut, InitOut, QueryOut, ReconcileOut, Tool, Verdict } from './types.js';
+
+/** The per-tool result payload carried on a `Verdict.data` — the union of the four governance-tool result
+ *  records (TOOLS-5/6/7/8). The handler is one oracle over all four; the concrete leg is fixed by `tool`. */
+export type ToolData = InitOut | QueryOut | EmitOut | ReconcileOut;
 
 /** The transport a call arrived on (TOOLS-3/10). Transcribed from the reference's "one contract, two
  *  transports" (CLI≡MCP) plus the tri-transport node reads (MCP tool | poke | CLI). Behaviour MUST NOT
@@ -22,10 +26,11 @@ export interface HandlerApi {
    *  throw. Byte-identical over CLI and MCP against the one published schema (TOOLS-3). Carries
    *  `next+invariant` guidance on EVERY path (TOOLS-4). (method-tags-tls:30, 37, 44)
    *
-   *  [SIG-TBD — `args` / `data` shapes] the reference frames one PUBLISHED schema per tool but freezes no
-   *  concrete per-tool arg record here; `args` is `unknown` (fails closed if malformed) and the `Verdict`
-   *  payload is `unknown` (the per-tool `InitOut`/`QueryOut`/… record). NOT invented — flagged. */
-  handle(tool: Tool, args: unknown): Verdict;
+   *  [PINNED — `args` / `data` shapes] `args` STAYS `unknown` by design (TOOLS-2 totality boundary: a
+   *  malformed argument fails CLOSED to a rejected `Verdict`, so the input MUST be untyped at the door).
+   *  The `Verdict` payload is the per-tool result union `ToolData` (`InitOut | QueryOut | EmitOut |
+   *  ReconcileOut`) the reference frames — the concrete leg is fixed by `tool`. */
+  handle(tool: Tool, args: unknown): Verdict<ToolData>;
 
   /** Resolve a node by CONTENT ADDRESS through the same one handler (TOOLS-10) — the oracle behind the
    *  tri-transport reads (MCP tool | poke | CLI), byte-identical across all three. READ-ONLY: this opens
@@ -33,7 +38,7 @@ export interface HandlerApi {
   resolveNode(nodeAddr: NodeKey, transport: Transport): Verdict;
 
   /** The one PUBLISHED input schema for a tool (TOOLS-3) — CLI and MCP share it; the two transports MUST
-   *  NOT diverge. [SIG-TBD — schema shape] no concrete schema record is frozen here; `unknown`, NOT
-   *  invented (cf retrieval `NodeTool.schema: unknown`). */
-  schema(tool: Tool): unknown;
+   *  NOT diverge. [PINNED theme #2] the shared MCP tool-schema record → `ToolSchema` from @atlas/contracts
+   *  (decide once, share; retrieval `NodeTool.schema` pins to the SAME type — byte-identical schemas). */
+  schema(tool: Tool): ToolSchema;
 }

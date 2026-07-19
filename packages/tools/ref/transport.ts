@@ -18,6 +18,14 @@ import type { Poke } from '@atlas/retrieval';
 /** The delivery direction (TOOLS-11). `push` = orchestrator-driven, no grant; `pull` = ad-hoc seat query. */
 export type Direction = 'push' | 'pull';
 
+/** A seat's ad-hoc pull need (TOOLS-11). No `need` record is frozen in a lower layer at this seam, so it
+ *  is DEFINED minimally here: the `scope` the mid-task query resolves through the ladder (the same scope
+ *  `atlas-query`/`own_<unit>` takes). Kept minimal — a later spec MAY widen it; never invented beyond the
+ *  scope the reference names. */
+export interface PullNeed {
+  readonly scope: string;
+}
+
 /** The pull ladder, native-first (atlas-tools:161-168 / method-tags-tls:92). Transcribed EXACTLY as the
  *  ordered tier vocabulary — `sdk-mcp` (pull 1) → `registered-mcp` (pull 2) → `poke-as-file` (pull 3) →
  *  `relay` (pull 4) → `cli` (pull 5, the floor). */
@@ -54,16 +62,17 @@ export interface TransportApi {
    *  starts at push / pull 3 — never a silent fall-through (TOOLS-11a). Every tier is the one handler, so
    *  the result is byte-identical across tiers (method-tags-tls:93, 100).
    *
-   *  [SIG-TBD — `seat` / `need` shapes] no `MemberId`/`need` record is frozen at this seam (@atlas/memory
-   *  is NOT a dep of tools). `seat` is transcribed as `string`, `need` as `unknown` — NOT invented. */
-  resolve(seat: string, need: unknown, harness: HarnessCapability): Resolution;
+   *  [PINNED — `seat` / `need` shapes] no `MemberId` record is frozen at this seam (@atlas/memory is NOT
+   *  a dep of tools), so `seat` is pinned to `string`. `need` is the minimal package-local `PullNeed`
+   *  (`{scope}`) — the scope the ad-hoc pull resolves through the ladder; NOT invented beyond that. */
+  resolve(seat: string, need: PullNeed, harness: HarnessCapability): Resolution;
 
   /** The TOOLS-14 pre-phase discovery hook: at EVERY phase boundary auto-inject a fresh `atlas-query` /
    *  `own_<unit>` pack into the seat's context — a PUSH (no tool grant), so a `Read`-only seat on an
    *  MCP-`unavailable` harness is still correctly re-grounded purely by push (method-tags-tls:120-121).
    *  Ad-hoc mid-task pull stays available but is an optimization, never the mechanism.
    *
-   *  [SIG-TBD — return] the pushed surface is a fresh pack / poke (`Pack` | `Poke`); `scope` transcribed
-   *  as `string` (cf retrieval `Path = string`). */
+   *  [PINNED — return] the pushed surface is a fresh pack / poke (`Pack` | `Poke`, both imported); `scope`
+   *  pinned to `string` (cf retrieval `Path = string`). */
   prePhasePush(seat: string, scope: string): Pack | Poke;
 }

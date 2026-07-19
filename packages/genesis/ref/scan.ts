@@ -17,10 +17,10 @@ import type { Axes, Manifest } from '@atlas/index';
  *   - `manifest` — the territories manifest, every territory at `T2/advisory` with ZERO invariants; T0
  *     only flagged, never promoted (KNOW-6/7). Reused from the @atlas/index `Manifest`.
  *
- * [SIG-TBD — record beyond axes+manifest not frozen] atlas-genesis frames S0 as "= atlas-init" (the
- * TOOLS-5 move-in) but freezes no `Skeleton` field list. `axes` + `manifest` are the reference-attributed
- * minimum (the built axis-views + the T2 territory overlay); the unresolved-edge ledger (INDEX-13) and
- * per-node CAS ids ride inside `Axes`. NOT invented beyond this. Flagged for the owning WP.
+ * [PINNED — oracle-pin-map §genesis, settled by upstream @atlas/index] atlas-genesis frames S0 as
+ * "= atlas-init" (the TOOLS-5 move-in). `Skeleton` = `axes` + `manifest`, both IMPORTED from the now-frozen
+ * @atlas/index: the built axis-views (`Axes`) + the T2 territory overlay (`Manifest`). The INDEX-13
+ * unresolved-edge ledger (`Axes.edges`) and per-node CAS ids ride inside `Axes`. NOT invented beyond this.
  */
 export interface Skeleton {
   readonly axes: Axes; // the ≥3 content-addressed axis hierarchies (INDEX-10)

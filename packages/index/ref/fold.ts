@@ -6,7 +6,7 @@
 // the `rState` hash LAZILY / on-read, eager re-hash capped at `maxHops=2`, deeper nodes marked
 // `state-suspect`. (atlas-index:118-123, 178-184; method-tags-idx:97-102)
 
-import type { Delta } from './types.js';
+import type { Axes, Delta, IndexNode } from './types.js';
 
 /** The eager-re-hash cap: on an edit the `rState` re-hash is bounded to nodes within this many hops
  *  of the reverse closure; deeper nodes are `state-suspect`, resolved only on query (INDEX-12).
@@ -15,26 +15,19 @@ export type MaxHops = 2;
 
 export interface FoldApi {
   /** Which axis buckets changed, structure (`idChanged`) vs state (`stateChanged`); bounds a re-check
-   *  to the named `changedBuckets`, never `N` (INDEX-12). (atlas-index:212)
-   *
-   *  [SIG-TBD — args underspecified] atlas-index:212 gives `delta(before, after)` with NO concrete
-   *  type for the two snapshots (a pre/post rollup or axis snapshot). Transcribed as `unknown` rather
-   *  than invented — do not guess `before`/`after` into `Rollup` vs `Axes`. Flagged for the WP. */
-  delta(before: unknown, after: unknown): Delta;
+   *  to the named `changedBuckets`, never `N` (INDEX-12). The two compared snapshots are whole built
+   *  index states — the frozen `Axes` (the return of `build`, ref/types.ts) — so a rebuild/edit diffs
+   *  `before`→`after` into the changed buckets. (atlas-index:212) */
+  delta(before: Axes, after: Axes): Delta;
 
   /** Eager drift dirty-bit across the whole reverse closure — a bit per node, O(1)/node, never a hash
-   *  (INDEX-12). (method-tags-idx:101; atlas-index:121-122)
-   *
-   *  [SIG-TBD — args underspecified] The reference (atlas-index surface / method-tags-idx:101) names
-   *  `propagateDirty(...)` with NO signature. Transcribed as a variadic `unknown[]` placeholder — not
-   *  invented (likely the edited node + the dependency DAG). Flagged. */
-  propagateDirty(...args: readonly unknown[]): void;
+   *  (INDEX-12). The edited node is the frozen `IndexNode`; the traversal reads the dependency edge set
+   *  (`Axes.edges`) and is bounded structurally by `MaxHops` — neither is a further method arg, the
+   *  reference names none. (method-tags-idx:101; atlas-index:121-122) */
+  propagateDirty(node: IndexNode): void;
 
-  /** Lazy / on-read `rState` recompute, eager re-hash capped at `maxHops=2` (`MaxHops`); deeper nodes
-   *  stay `state-suspect` until queried (INDEX-12). (method-tags-idx:101; atlas-index:122-123)
-   *
-   *  [SIG-TBD — args underspecified] `rehashState(...)` is named with NO signature (method-tags-idx:
-   *  101). Transcribed as a variadic `unknown[]` placeholder — not invented (likely the node + a hop
-   *  budget bounded by `MaxHops`). Flagged. */
-  rehashState(...args: readonly unknown[]): void;
+  /** Lazy / on-read `rState` recompute over the edited `IndexNode`'s subtree (leaf→root), eager re-hash
+   *  capped at `maxHops=2` (`MaxHops`); deeper nodes stay `state-suspect` until queried (INDEX-12). The
+   *  `maxHops` cap is the module constant `MaxHops`, not a param. (method-tags-idx:101; atlas-index:122-123) */
+  rehashState(node: IndexNode): void;
 }

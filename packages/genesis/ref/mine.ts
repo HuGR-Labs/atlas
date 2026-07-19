@@ -17,8 +17,10 @@ import type { Candidate } from './types.js';
  * STRUCTURAL signals (PPR without history seeding + type/API-surface density) — history is a ranking
  * BOOSTER, never a dependency. GENESIS-HOME.
  *
- * [SIG-TBD — record not frozen] atlas-genesis §GEN-15 names the pre-check triggers in PROSE with no field
- * list. `thin` + the trigger `reason` are the honest minimum; NOT invented beyond that. Flagged.
+ * [PINNED — oracle-pin-map §genesis, GEN-15] the carrier is `thin` (the boolean verdict) + an optional
+ * `reason` drawn from GEN-15's three named triggers: `low-commit-count` (young/greenfield),
+ * `shallow-clone` (squashed / shallow history kills blame → SZZ + co-change collapse), and
+ * `blame-concentrated` (initial-commit monorepo import / vendored / generated). No fields beyond this.
  */
 export interface HistoryProbe {
   readonly thin: boolean; // degenerate history detected → fall back to structural centrality

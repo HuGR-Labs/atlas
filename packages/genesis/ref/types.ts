@@ -83,13 +83,13 @@ export interface Candidate {
  * emits a `WhyNot` — abstention is a VALID outcome, never a manufactured fact. GENESIS-HOME (frozen
  * nowhere below).
  *
- * [SIG-TBD — record NOT frozen] atlas-genesis §S2/GEN-12 names "a grounded why-not" in PROSE with no
- * frozen field list. The minimum below is the reference-attributed floor — `site` (grounded to the
- * anchored StructRef) + a `reason` — NOT an invented record. Flagged for the owning WP to pin the carrier.
+ * [PINNED — oracle-pin-map §12] atlas-genesis §S2/GEN-12 names "a grounded why-not" (:149). The minimal
+ * carrier is `site` (grounded to the anchored StructRef) + a `reason` (honest justification text) — no
+ * speculative fields. NOT an invented record.
  */
 export interface WhyNot {
   readonly site: StructRef; // the anchored site the model abstained on (grounded)
-  readonly reason: string; // [SIG-TBD] the why-not body — exact record not frozen (GEN-12)
+  readonly reason: string; // the why-not body — honest justification text (GEN-12)
 }
 
 /**
@@ -99,22 +99,22 @@ export interface WhyNot {
  *
  * [FLAG — `site` type] the reference lists `site` untyped; it is the anchored site under question →
  * transcribed as the frozen `StructRef` (mirrors `Candidate.site`).
- * [SIG-TBD — `rankReason` type] the reference lists `rankReason` untyped (the blast×tier rank
- * justification); transcribed as `string` (the honest nominal form), NOT invented as a record.
+ * [PINNED — oracle-pin-map §genesis] `rankReason` is the blast×tier rank justification text
+ * (atlas-genesis:194 surface literal) → `string`. NOT a record.
  */
 export interface OpenQ {
   readonly kind: 'owner' | 'tier' | 'contested' | 'intent';
   readonly site: StructRef; // [FLAG] reference untyped — the anchored site under question
   readonly options?: readonly string[];
-  readonly rankReason: string; // [SIG-TBD] blast×tier rank justification — carrier not frozen
+  readonly rankReason: string; // justification text — blast×tier rank reason (atlas-genesis:194)
 }
 
 /**
  * The per-stage cost line (GEN-13 — "report cost per stage"). GENESIS-HOME.
  *
- * [SIG-TBD — fields beyond stage/llmCalls not frozen] GEN-13/acceptance-13 require the report carry
- * per-stage cost "under the ceiling" but freeze no field list. `stage` + `llmCalls` are the honest
- * minimum (LLM-call count is the GEN-3 cost oracle); token / wall-clock / ceiling fields are NOT invented.
+ * [PINNED — oracle-pin-map §12] GEN-13 floor: `stage` + `llmCalls` only. LLM-call count is the GEN-3 cost
+ * oracle; token / wall-clock / ceiling legs are NOT invented (no golden forces them). `stage` is the
+ * reference-grounded `PipelineStage` (§The pipeline S0→S4) — a stricter transcription of the `string` floor.
  */
 export interface StageCost {
   readonly stage: PipelineStage;
@@ -128,9 +128,9 @@ export type CostReport = readonly StageCost[];
  * The resume cursor (GEN-8). An interrupted run resumes from the LAST COMPLETED RANKED SITE; a malformed
  * rev yields a partial report carrying this token, NEVER a throw. GENESIS-HOME.
  *
- * [SIG-TBD — full cursor shape not frozen] atlas-genesis §Surface names `resumeToken?` with no field list.
- * Sites are visited in a deterministic rank order (GEN-2/11), so a rank cursor is the honest minimum —
- * NOT invented. Additional cursor legs (partial skeleton hash, spent budget) are not frozen. Flagged.
+ * [PINNED — oracle-pin-map §genesis, GEN-8] sites are visited in a deterministic rank order (GEN-2/11), so
+ * the resume cursor is the last completed rank. Minimal single-leg carrier; additional legs (partial
+ * skeleton hash, spent budget) are NOT invented.
  */
 export interface ResumeToken {
   readonly lastCompletedRank: number; // resume from the last completed ranked site (GEN-8)

@@ -15,7 +15,8 @@
 // (TOOLS-16), `atlas doctor` (TOOLS-12), and the per-node projections (TOOLS-10) are read-only views;
 // they are NOT modeled as a fifth governance/write tool anywhere in this package.
 
-import type { Hash, Pack, Territory } from '@atlas/contracts';
+import type { Hash, NodeKey, Pack, StructRef, Territory } from '@atlas/contracts';
+import type { GroundedFact } from '@atlas/knowledge';
 import type { VersionDelta } from '@atlas/persist';
 
 // Re-export the contracts-owned surface vocab so consumers can pull the whole dialect from the bare
@@ -65,13 +66,13 @@ export interface Verdict<T = unknown> {
  * §8.6 — a T0-keyword territory yields a candidate flag AND `tier=='T2'`). `Territory` is the
  * contracts-owned manifest shape (`{name,owner,tier,globs}`) — imported, not redefined.
  *
- * [SIG-TBD — `blastRadius` type] atlas-tools:19 names `blastRadius` with NO concrete type (the move-in's
- * blast-radius summary). No blast-radius shape is frozen in contracts/index at this seam, so it is
- * transcribed as `unknown` rather than invented; flagged for the owning WP.
+ * [PINNED — `blastRadius` type] atlas-tools:19 names `blastRadius` (the move-in's blast-radius summary).
+ * Owner DEFINE 2026-07-18 (oracle-pin theme #3): the reachability set → `readonly NodeKey[]`. The
+ * reverse-dep closure already lives in index axis-3, so the *set* of reached nodes is the honest carrier.
  */
 export interface InitOut {
   readonly territories: readonly Territory[]; // all at T2/advisory, ZERO invariants (TOOLS-5)
-  readonly blastRadius: unknown; // [SIG-TBD] blast-radius summary — no concrete type frozen (atlas-tools:19)
+  readonly blastRadius: readonly NodeKey[]; // [PINNED theme #3] reachability set — reverse-dep closure (atlas-tools:19)
   readonly t0Candidates: readonly string[]; // T0-keyword territory NAMES flagged, NOT promoted (A-6)
 }
 
@@ -104,16 +105,16 @@ export interface EmitOut {
  * The `DRIFTED` subset is presented as a reviewable `DriftItem[]` set, NEVER all-or-nothing. The
  * `mechanical`/`semantic` split is the @atlas-knowledge KNOW-5 classifier (referenced, NOT redefined).
  *
- * [SIG-TBD — `anchorWas` / `anchorNow` type] atlas-tools:24 names the old/new grounding anchors with NO
- * concrete type (a `path@subtreeHash`-flavored pointer — cf contracts `StructRef`). No anchor shape is
- * frozen at this result seam, so they are transcribed as `string` (the honest nominal form), NOT invented
- * as a `StructRef`. Flagged for the owning WP to confirm the anchor carrier.
+ * [PINNED — `anchorWas` / `anchorNow` type] atlas-tools:24 names the old/new grounding anchors — a
+ * `path@subtreeHash`-flavored pointer whose `subtreeHash` IS the drift oracle. That is exactly the
+ * contracts-owned `StructRef` (the grounding anchor, `{kind,qualifiedPath,subtreeHash}`) — imported, NOT
+ * redefined. Reconciled to `StructRef` per the oracle-pin map (grounding anchor carrier).
  */
 export interface DriftItem {
   readonly fact: string;
   readonly class: 'mechanical' | 'semantic'; // the KNOW-5 split (referenced, not redefined)
-  readonly anchorWas: string; // [SIG-TBD] old anchor — no concrete type frozen (atlas-tools:24)
-  readonly anchorNow: string; // [SIG-TBD] new anchor — no concrete type frozen (atlas-tools:24)
+  readonly anchorWas: StructRef; // [PINNED] old grounding anchor (@atlas/contracts, atlas-tools:24)
+  readonly anchorNow: StructRef; // [PINNED] new grounding anchor (@atlas/contracts, atlas-tools:24)
 }
 
 /**
@@ -155,15 +156,16 @@ export interface HotSet {
  * then runs through `atlas-emit` — it PERSISTS NOTHING itself (the store changes only when the plan is run
  * through the single write door). Carries NO write authority.
  *
- * [SIG-TBD — plan shape not frozen] atlas-tools names the guided re-ground/retire flow but freezes NO
- * concrete plan record (only that it emits via `atlas-emit`, never a direct store mutation). `fact` +
- * `action` are transcribed from the reference's "re-ground / retire" wording (TOOLS-12, surface :139);
- * the emittable payload is `unknown` rather than invented. Flagged for the owning WP.
+ * [PINNED — `emit` payload] atlas-tools names the guided re-ground/retire flow that emits via `atlas-emit`,
+ * never a direct store mutation. `fact` + `action` are transcribed from the reference's "re-ground /
+ * retire" wording (TOOLS-12, surface :139); the emittable payload is the templated candidate fact the
+ * single write door consumes — the @atlas/knowledge `GroundedFact` (mirrors `EmitApi.emit(node:
+ * GroundedFact)`), imported, NOT redefined.
  */
 export interface RegroundPlan {
   readonly fact: string; // the drifted fact the plan targets
   readonly action: 'reground' | 'retire'; // the guided flow (TOOLS-12 "re-ground / retire")
-  readonly emit: unknown; // [SIG-TBD] the templated payload to run through atlas-emit — shape not frozen
+  readonly emit: GroundedFact; // [PINNED] templated candidate fact run through atlas-emit (@atlas/knowledge)
 }
 
 /**
@@ -173,14 +175,15 @@ export interface RegroundPlan {
  * persists nothing; any proposed write funnels through `atlas-emit`. NOT a fifth governance tool (the
  * write surface stays exactly four — TOOLS-1).
  *
- * [SIG-TBD — `archive` / `whyBroken` types] atlas-tools:25 names both with NO concrete type — `archive` =
- * the monotone supersede-lineage view; `whyBroken` = the drift-explain (which anchor drifted, mechanical
- * vs semantic). No concrete shape is frozen at this seam, so both are transcribed as `unknown`, NOT
- * invented. Flagged for the owning WP.
+ * [PINNED — `archive` / `whyBroken` types] atlas-tools:25 names both. `archive` = the monotone
+ * supersede-lineage view; nothing dies and the archive grows monotone (atlas-tools:136), so the honest
+ * minimal carrier is the ordered CAS lineage `readonly Hash[]` (the content-addressed supersede chain).
+ * `whyBroken` = the drift-explain (which anchor drifted, mechanical vs semantic) — that is exactly one
+ * reviewable `DriftItem` (imported from this module), NOT a fresh record.
  */
 export interface DoctorOut {
-  readonly archive?: unknown; // [SIG-TBD] monotone archive / supersede-lineage view — no concrete type
-  readonly whyBroken?: unknown; // [SIG-TBD] drift-explain view — no concrete type frozen (atlas-tools:25)
+  readonly archive?: readonly Hash[]; // [PINNED] monotone supersede-lineage — ordered CAS chain (atlas-tools:136)
+  readonly whyBroken?: DriftItem; // [PINNED] drift-explain — the reviewable DriftItem (atlas-tools:25)
   readonly hotSet?: HotSet; // hot-set size vs budget (advisory)
   readonly plan?: RegroundPlan; // guided re-ground/retire plan — emits via atlas-emit, never direct
 }

@@ -5,10 +5,12 @@
 // `get()` (resolves via the CAS by hash), with a size-gate that no inlined payload exceeds the pointer
 // threshold (method-tags-pst:42-43) — but freezes no concrete arg/return types.
 //
-// [SIG-TBD] The op NAMES (`attach`/`get`) and the pointer shape (`{hash}`) are grounded; the exact
-// arg/return signatures are NOT frozen — flagged, not invented beyond the named pointer-only contract.
+// PINNED (oracle-pin reconciliation) — the signature is now transcribed from golden SCN-PERSIST-4a-1/4b-1:
+// `attach(B)` takes the BODY and yields the `{hash}` pointer (goldens-pst:168-169); `get(hash)` resolves
+// the body from the CAS (goldens-pst:187-188). The previous `attach(pointer)` was INVERTED vs the golden.
 
 import type { Hash } from '@atlas/contracts';
+import type { CasObject } from '@atlas/kernel';
 
 /** A CAS pointer — the ONLY thing attached; the content resolves from the CAS by this hash
  *  (PERSIST-4, method-tags-pst:42). */
@@ -17,8 +19,9 @@ export interface Pointer {
 }
 
 export interface AttachApi {
-  /** Attach only `{hash}` pointers (never an inlined body). [SIG-TBD] exact arg/return not frozen. */
-  attach(pointer: Pointer): unknown;
-  /** Resolve the content from the CAS by hash. [SIG-TBD] exact return not frozen. */
-  get(hash: Hash): unknown;
+  /** Attach a content body; what is stored is the hashed `{hash}` pointer, never the inlined body
+   *  (SCN-PERSIST-4a-1: `attach(B) → {hash: blake3hex(B)}`). */
+  attach(body: CasObject): Pointer;
+  /** Resolve the content body from the single CAS by its hash (SCN-PERSIST-4b-1). */
+  get(hash: Hash): CasObject;
 }

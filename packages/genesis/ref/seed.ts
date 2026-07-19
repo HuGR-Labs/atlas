@@ -19,11 +19,12 @@ import type { Skeleton } from './scan.js';
  * assembles an UNRATIFIED thesis stub so Awareness's `mission` facet is not blank. It MUST stay
  * `unratified: true` until a real DEFINE artifact is ratified. GENESIS-HOME.
  *
- * [SIG-TBD — `content` render] the stub thesis line's exact byte-stable render is a WP concern (mirrors
- * @atlas/memory `AwarenessFacet.content: string`) — transcribed as `string`, NOT invented.
+ * [PINNED — oracle-pin-map §genesis] `content` mirrors the now-frozen @atlas/memory `AwarenessFacet.content:
+ * string` (the top-tier rendered line). The exact byte-stable render is a downstream format detail, but the
+ * carrier type is settled as `string` by the upstream memory pin.
  */
 export interface MissionStub {
-  readonly content: string; // [SIG-TBD] the DEFINE stub thesis line — exact render not frozen
+  readonly content: string; // the DEFINE stub thesis line — mirrors @atlas/memory AwarenessFacet.content
   readonly grounding: readonly StructRef[]; // the node@sha the stub anchors to (grounded, GEN-4)
   readonly unratified: true; // MUST stay unratified until a real DEFINE artifact exists (GEN-9)
 }
@@ -41,7 +42,8 @@ export interface SeedApi {
   /** One facet's seed from its OWN source — absent source ⇒ the `UN-SEEDED` sentinel (never fabricated,
    *  MEM-11). Mirrors @atlas/memory `AwarenessApi.facet`.
    *
-   *  [SIG-TBD — `source` type] each facet's source differs (DEFINE artifact / T0 manifest /
-   *  `CONVENTIONS.md@sha`) with no single frozen type — transcribed as `unknown`, NOT invented. Flagged. */
+   *  [OPAQUE-BY-DESIGN — oracle-pin-map non-decisions] each facet's source is heterogeneous (DEFINE
+   *  artifact / ratified T0 manifest / `CONVENTIONS.md@sha`) with no single frozen type at layer-0 →
+   *  `unknown` by design, the WP treats it opaquely. NOT invented into a record. */
   facet(source: unknown): AwarenessFacet;
 }

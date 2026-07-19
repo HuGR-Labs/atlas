@@ -13,9 +13,8 @@ import type { TranscriptRef } from './types.js';
 
 /**
  * The full, lossless transcript body.
- * [SIG-TBD] The reference guarantees byte-identity (`fetch(put(body)) ≡ body`, method-tags-pst:84) but
- * does not freeze a richer structure — typed as the raw byte body (`Uint8Array`) on that grounding; any
- * richer shape is not frozen.
+ * PINNED: byte-identity `fetch(put(body)) ≡ body` (SCN-PERSIST-10a-1, method-tags-pst:84) forces the raw
+ * byte body → `Uint8Array`. No richer structure is frozen.
  */
 export type Transcript = Uint8Array;
 

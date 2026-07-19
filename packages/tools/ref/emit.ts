@@ -29,7 +29,8 @@ export interface EmitApi {
    *  fail-closed `emit` path — a sealing wave MUST feed the Atlas or emit a grounded why-not; a seal with
    *  neither records a probe violation (method-tags-tls:78-80).
    *
-   *  [SIG-TBD — `ResultCard.absorb` shape] the reference names `ResultCard.absorb` (an orchestration
-   *  artifact owned upward, not frozen at this layer). Transcribed as `unknown`, NOT invented; flagged. */
+   *  [OPAQUE-BY-DESIGN — `ResultCard`] the reference names `ResultCard.absorb`, but a `ResultCard` is an
+   *  Orchestra orchestration artifact OUTSIDE atlas layer-0 (upward/Orchestra-owned) — it has no type at
+   *  this layer BY DESIGN. Pinned to explicit `unknown` (like `CasObject`), correct to leave opaque. */
   absorb(card: unknown): EmitOut;
 }

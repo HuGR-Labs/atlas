@@ -14,8 +14,8 @@ export interface QueryApi {
    *  invariants (`≤ ~2K`); `stale:true` MUST mean re-ground before trusting (TOOLS-6, §6.1). Pure + total.
    *  (method-tags-tls:58)
    *
-   *  [SIG-TBD — `scope` arg] atlas-tools:125 names `atlas-query <scope>`; no `Scope`/`Path` brand is
-   *  frozen at this seam (cf retrieval `Path = string`). Transcribed as `string`, NOT invented as a brand.
+   *  [PINNED — `scope` arg] atlas-tools:125 names `atlas-query <scope>`; no `Scope`/`Path` brand is
+   *  frozen at this seam (cf retrieval `Path = string`). Pinned to `string`, NOT a brand.
    *  ([NOTE] the `≤ ~2K` token bound is an ADVISORY size bound verified by a size test, not a type
    *  constraint — method-tags-tls:59.) */
   query(scope: string): QueryOut;

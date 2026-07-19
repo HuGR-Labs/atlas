@@ -18,13 +18,14 @@ import type { Candidate, CostReport } from './types.js';
  * budget-gated, with a fixpoint stop (a no-revision round / marginal value `< ε` / loop-until-dry on the
  * 2-door bar). No loop runs unbounded; the loops are the DEPTH DIAL, never a change to the default cost.
  *
- * [SIG-TBD — fixpoint predicate carrier] GEN-14 names the stop conditions in PROSE with no field list.
- * `enabled` (default false) + `depth` (the dial, 0 at base) are the honest minimum; the fixpoint / ε
- * carrier is NOT invented. Flagged for the owning WP.
+ * [PINNED — oracle-pin-map §12] the fixpoint/ε carrier. GEN-14 names the stop conditions in prose; the
+ * minimal carrier is `enabled` (the on/off gate) + `maxDepth` (the bounded depth dial, 0 at base) +
+ * `epsilon` (the marginal-value-`<ε` stop leg). No speculative fields beyond the three named stops.
  */
 export interface LoopConfig {
   readonly enabled: boolean; // default false — loops-off ⇒ single-pass baseline (GEN-13/14, Δ=0)
-  readonly depth: number; // the depth dial — 0 at the base tier
+  readonly maxDepth: number; // the bounded depth dial — 0 at the base tier
+  readonly epsilon: number; // marginal-value stop: halt a round when value gain < ε // DEFINE default, owner-tunable
 }
 
 /** The three governed deepening loops (GEN-14). With all three off, genesis cost == the single cheap pass. */
@@ -35,13 +36,23 @@ export interface DeepeningLoops {
 }
 
 /**
+ * The GEN-2 MARGINAL-VALUE STOP — a FIXED scheduler policy, NOT a tunable `GenesisBudget` field
+ * (atlas-genesis:117). The scheduler keeps a trailing window of the last 20 ranked sites and HALTS
+ * admission once that window admits fewer than 4 (a `< 20%` admit-rate). Named here at the type layer
+ * (zero-runtime literal-type consts) so the policy is documented where the budget lives; it is applied by
+ * the scheduler, never carried on `GenesisBudget`. [PINNED — oracle-pin-map §12, transcribed :117.]
+ */
+export interface MarginalValueStop {
+  readonly window: 20; // trailing window size (sites)
+  readonly minAdmits: 4; // halt below this many admits in the window (fewer than 4 of 20 ⇒ < 20%)
+}
+
+/**
  * The genesis cost policy (GEN-13). Carries the hard site ceiling + the governed deepening loops.
  *   - `ceiling`   — the hard `--budget` site ceiling; default `min(frontier_size, 200)` (GEN-2).
  *   - `deepening` — the three governed loops; ALL off ⇒ cost == single-pass baseline (GEN-14).
  *
- * [SIG-TBD — marginal-value-stop params] GEN-2's numeric stop (halt when the trailing-20-site admit-rate
- * `< 20%`) is a POLICY the scheduler applies; its threshold carrier is not frozen as a field here — NOT
- * invented. Flagged.
+ * The GEN-2 marginal-value stop is the fixed `MarginalValueStop` policy (above), NOT a field here.
  */
 export interface GenesisBudget {
   readonly ceiling: number; // hard site budget — default min(frontier_size, 200) (GEN-2)

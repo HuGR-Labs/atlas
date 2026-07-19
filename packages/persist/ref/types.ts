@@ -8,6 +8,7 @@
 
 import type { Hash } from '@atlas/contracts';
 import type { EventLog } from '@atlas/kernel';
+import type { VersionDelta } from './diff.js';
 
 /**
  * The CANONICAL per-commit provenance block. RFC-822-ish `Key: value` block committed INTO the commit
@@ -18,8 +19,8 @@ import type { EventLog } from '@atlas/kernel';
  * trailer is a text `Key: value` block, so the values are serialized strings — typed `string` here on
  * that grounding. `TranscriptSha` is the content-hash POINTER to the large-object transcript
  * (PERSIST-10 / `TranscriptRef.sha`), so it is typed `Hash`.
- * [SIG-TBD] the reference does not freeze richer value types for `Gates`/`Verdict` (cf. the structured
- * `Metering.gates`/`Metering.verdict` below) — the trailer text form is transcribed.
+ * PINNED: `Gates`/`Verdict` are the RFC-822-ish text-block values → `string` (the trailer text form; cf.
+ * the structured `Metering.gates`/`Metering.verdict` below).
  */
 export interface Trailer {
   readonly WP: string;
@@ -41,16 +42,16 @@ export type Note = Dossier;
  * The per-commit provenance dossier round-tripped by `attachToCommit` / `readCommit` through
  * {trailer, note} (PERSIST-3, method-tags-pst:34-36).
  *
- * [SIG-TBD — partial] The data-model block (atlas-persist:16-28) never freezes `Dossier`'s OWN record
- * shape. The CONSTITUENTS below are grounded in prose (atlas-persist:33-35): notes + trailers carry the
- * per-commit "provenance/metering and the knowledge-delta". Field names / which are optional are NOT
- * frozen — transcribed as the honest composite of the named constituents and flagged. `knowledgeDelta`
- * is owned by a HIGHER layer (knowledge) so it is kept opaque here [upward-type → unknown].
+ * PINNED (partial): the CONSTITUENTS are grounded in prose (atlas-persist:33-35): notes + trailers carry
+ * the per-commit "provenance/metering and the knowledge-delta". Membership is transcribed as the honest
+ * composite {trailer (required) + metering? + knowledgeDelta?}, optionality per atlas-persist:33-35.
+ * `knowledgeDelta` is the persist-LOCAL version-delta (the PERSIST-14 read-only fold-diff, `ref/diff.ts`)
+ * — NOT an upward knowledge-layer import (no DAG inversion).
  */
 export interface Dossier {
   readonly trailer: Trailer;
   readonly metering?: Metering;
-  readonly knowledgeDelta?: unknown;
+  readonly knowledgeDelta?: VersionDelta;
 }
 
 /**
@@ -66,14 +67,13 @@ export interface TranscriptRef {
  * The re-invoke substrate = redispatch + replay; DISTINCT from the raw transcript (PERSIST-10b).
  * (atlas-persist:19)
  *
- * [SIG-TBD] the element shapes of `seatBrief` / `llmOutputs[]` / `toolIO[]` are not frozen in the
- * reference — the array/field NAMES are transcribed exactly; element types are kept `unknown`.
- * `seatBrief` describes an orchestrator-owned seat brief [upward-type → unknown].
+ * PINNED: the field NAMES are frozen exactly (atlas-persist:19); the elements are honest serialized
+ * strings — `seatBrief` a text brief, `llmOutputs`/`toolIO` recorded I/O lines for faithful replay.
  */
 export interface Checkpoint {
-  readonly seatBrief: unknown;
-  readonly llmOutputs: readonly unknown[];
-  readonly toolIO: readonly unknown[];
+  readonly seatBrief: string;
+  readonly llmOutputs: readonly string[];
+  readonly toolIO: readonly string[];
 }
 
 /**
@@ -82,8 +82,9 @@ export interface Checkpoint {
  *
  * Field NAMES transcribed exactly. Numeric counters (tokens/toolUses/wallTime/retries/reworks) typed
  * `number`; `model` typed `string`; `transcriptSha` typed `Hash` (the transcript pointer).
- * [SIG-TBD] `gates` / `verdict` have no frozen value shape — kept `unknown` (the structured form, vs.
- * the `Trailer` text form above).
+ * PINNED: `gates` is the required, present list of gate results (PERSIST-6 — 0 missing field) → a
+ * `readonly string[]`; `verdict` is the single verdict value → `string` (the structured list/enum form,
+ * vs. the `Trailer` RFC-822 text form above).
  */
 export interface Metering {
   readonly model: string;
@@ -94,17 +95,18 @@ export interface Metering {
   readonly wallTime: number;
   readonly retries: number;
   readonly reworks: number;
-  readonly gates: unknown;
-  readonly verdict: unknown;
+  readonly gates: readonly string[];
+  readonly verdict: string;
   readonly transcriptSha: Hash;
 }
 
 /**
  * The projection rendered onto the host PR via the adapter (PERSIST-8). (atlas-persist:22)
  *
- * [SIG-TBD] Only the field NAMES are frozen. `prId` is the host PR identifier (typed `string`);
- * `prMemory` / `logbookEntry` shapes are not frozen (`unknown`); `knowledgeDelta` is knowledge-layer
- * owned [upward-type → unknown].
+ * Only the field NAMES are frozen. `prId` is the host PR identifier (typed `string`).
+ * OPAQUE-BY-DESIGN (kept `unknown`, flagged): `prMemory` / `logbookEntry` are memory-owned (a HIGHER
+ * layer — importing it upward here would invert the DAG), `knowledgeDelta` is likewise not pinned at
+ * this layer. No reference/golden/consumer freezes their shapes — left honestly opaque.
  */
 export interface PrAttach {
   readonly prId: string;

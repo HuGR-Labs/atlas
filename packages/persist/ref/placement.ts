@@ -6,13 +6,19 @@
 // by rebase/squash/cherry-pick). A clone-required datum stored ONLY in a note fails the placement
 // assertion (method-tags-pst:118-120) — but the reference freezes NO concrete oracle signature.
 //
-// [SIG-TBD] The placement TARGETS (`trailer` | `note`) are grounded; the oracle's method signature is
-// NOT frozen — flagged and NOT invented.
+// PINNED (oracle-pin reconciliation) — golden SCN-PERSIST-1b-1 asserts the sole-home invariant over
+// placement targets (goldens-pst:69-72). The oracle names the home of a datum; the PERSIST-13 targets
+// (`trailer` | `note`) are the frozen return. The sole-home invariant (`∀ datum: home ⊋ {PR-attachment}`)
+// is BEHAVIOURAL — no extra field carries it.
+
+import type { Hash } from '@atlas/contracts';
 
 /** The two placement targets (PERSIST-13). `trailer` = canonical/clone-required; `note` = mutable
  *  overlay/perimeter-conditional. */
 export type Placement = 'trailer' | 'note';
 
 export interface PlacementApi {
-  // [SIG-TBD] — placement-oracle signature intentionally empty pending a frozen signature; do not invent.
+  /** The sole grounded home of a datum (PERSIST-13 targets). A clone-required datum MUST home to
+   *  `trailer`; a PR-attachment-only home fails the sole-home assertion (SCN-PERSIST-1b-1). */
+  home(datum: Hash): Placement;
 }

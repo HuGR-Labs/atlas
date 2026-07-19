@@ -8,11 +8,11 @@
 import type { Checkpoint } from './types.js';
 
 /**
- * The audit view produced by replaying a recorded `Checkpoint`.
- * [SIG-TBD] The reference names `replay(checkpoint): TranscriptView` (atlas-persist:106) but freezes no
- * field shape for the view; kept opaque, flagged, not invented. (Distinct from the raw `Transcript`
- * body in `ref/transcript-store.ts`.)
- */
+ * The audit view produced by replaying a recorded `Checkpoint` (atlas-persist:106).
+ * [SIG-TBD — OWNER-DEFINE, oracle-pin-map §6/§20] The reference NAMES `replay(checkpoint):
+ * TranscriptView` but freezes no field list, and the Checkpoint substrate is deliberately DISTINCT
+ * from the raw transcript (PERSIST-7/10b; SCN-PERSIST-10d breaks-on conflating them). The view shape
+ * is the owning WP's to pin from its acceptance — NOT guessed here → stays opaque. */
 export type TranscriptView = unknown;
 
 export interface ReinvokeApi {

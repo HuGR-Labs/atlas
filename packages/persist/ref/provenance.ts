@@ -5,17 +5,17 @@
 // required field and returns `null` (never throws) on absence — mirrors the Maestro `readDossierNote`
 // contract (method-tags-pst:34-36).
 //
-// [SIG-TBD] The reference NAMES the behaviour (a "(de)serializer" + the `readCommit` round-trip) but
-// freezes no concrete method signatures. The `serialize`/`deserialize` pair below is the faithful
-// derivation of the named round-trip (Dossier ↔ {trailer, note}); the exact method names/shape are not
-// frozen — flagged, not invented beyond the named round-trip.
+// PINNED (oracle-pin reconciliation) — the frozen round-trip is `Dossier` ↔ `string` (the serialized
+// git-storable form the `attachToCommit`/`readCommit` pair round-trips, method-tags-pst:34-36): serialize
+// produces the committed text form, deserialize is a TOTAL read — a fully-absent commit yields `null`,
+// never a throw. The (de)serializer's internal trailer/note split is behavioural, not a frozen surface.
 
-import type { Dossier, Trailer, Note } from './types.js';
+import type { Dossier } from './types.js';
 
 export interface ProvenanceApi {
-  /** Split a dossier into its canonical trailer block + mutable note overlay. (method-tags-pst:36) */
-  serialize(dossier: Dossier): { readonly trailer: Trailer; readonly note: Note };
-  /** Reconstruct the dossier from the trailer (+ optional note); a total read — a missing note is
-   *  tolerated, a fully-absent commit yields `null`, never a throw. (method-tags-pst:35-36) */
-  deserialize(parts: { readonly trailer: Trailer; readonly note: Note | null }): Dossier | null;
+  /** Serialize a dossier to its committed text form (the trailer block + note overlay). (method-tags-pst:36) */
+  serialize(dossier: Dossier): string;
+  /** Reconstruct the dossier from the serialized form; a total read — a fully-absent commit yields
+   *  `null`, never a throw. (method-tags-pst:35-36) */
+  deserialize(serialized: string): Dossier | null;
 }

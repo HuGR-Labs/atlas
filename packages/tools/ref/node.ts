@@ -25,7 +25,7 @@ export interface NodeApi {
   /** The deterministic related-node set for a scope (atlas-tools:132, RETR-10). READ-ONLY; owned by
    *  @atlas/retrieval (`RelationSet`), imported, NOT redefined.
    *
-   *  [SIG-TBD — `scope` arg] transcribed as `string` (cf retrieval `Path = string`), NOT a brand. */
+   *  [PINNED — `scope` arg] pinned to `string` (cf retrieval `Path = string`), NOT a brand. */
   relate(scope: string): RelationSet;
 
   /** The CURATED zero-assembly briefing for a scope-unit (atlas-tools:133, RETR-12). READ-ONLY; owned by

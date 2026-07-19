@@ -32,8 +32,8 @@ export interface DepgraphApi {
    *  unions the correlational `coChanged` band when an `unresolved` edge is in scope (INDEX-13).
    *  (method-tags-idx:108)
    *
-   *  [SIG-TBD — arg underspecified] The reference names `reverseClosure(node)` with no concrete type
-   *  for `node`. Transcribed as the node's CAS `Hash` (a structural unit keyed by hash, atlas-index:105)
-   *  rather than invented — flagged for the WP to confirm (`Hash` vs `IndexNode`). */
+   *  The reference names `reverseClosure(node)` with no concrete type for `node`; CONFIRMED as the
+   *  node's CAS `Hash` — the dependency axis keys structural units by hash (atlas-index:105) and the
+   *  closure node set is referenced by hash (method-tags-idx:108). Finalized `Hash`, not `IndexNode`. */
   reverseClosure(node: Hash): ReverseClosure;
 }

@@ -13,16 +13,17 @@
 
 import type { Status, StructRef } from '@atlas/contracts';
 import type { IndexNode } from '@atlas/index';
+import type { Check } from '@atlas/knowledge';
 import type { Candidate } from './types.js';
 
 /**
- * A synthesized runnable check (CodeQL / Semgrep query or a pinned declarative assertion). Deliberately
- * ALIASED to `unknown` — KNOW-16 (atlas-knowledge:66) defines a check as "a deterministic index-query or a
- * pinned declarative assertion" with NO concrete record shape frozen (mirrors @atlas/knowledge
- * `PredicateNode.check: unknown` and `EvaluatorApi.evaluate(check: unknown, …)`). Named here for
- * readability; NOT invented into a record. [SIG-TBD] the check carrier shape is a WP concern.
+ * A synthesized runnable check. [PINNED — oracle-pin-map §1, KNOW-16] the check carrier is the RATIFIED
+ * @atlas/knowledge `Check` — the tagged union of KNOW-16's two named legs ("a deterministic index-query
+ * OR a pinned declarative assertion"). IMPORTED, never redefined: genesis synthesizes exactly the check
+ * kind the steady-state predicate evaluator consumes (mirrors @atlas/knowledge `PredicateNode.check` and
+ * `EvaluatorApi.evaluate(check, indexState)`). Re-exported so the genesis dialect reads from one place.
  */
-export type Check = unknown;
+export type { Check };
 
 export interface PredicateApi {
   /** GEN-12 PROPOSE. Synthesize a runnable check for a checkable candidate (CodeQL / Semgrep). `null` =
