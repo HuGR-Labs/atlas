@@ -10,6 +10,7 @@
     { "path": "packages/retrieval" },
     { "path": "packages/memory" },
     { "path": "packages/tools" },
-    { "path": "packages/genesis" }
+    { "path": "packages/genesis" },
+    { "path": "packages/e2e" }
   ]
 }
