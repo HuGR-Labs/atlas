@@ -18,7 +18,8 @@
     "@atlas/knowledge": "*",
     "@atlas/persist": "*",
     "@atlas/genesis": "*",
-    "@atlas/tools": "*"
+    "@atlas/tools": "*",
+    "@c4312/scip": "^0.1.0"
   },
   "scripts": {
     "build": "tsc -b",
