@@ -34,3 +34,7 @@ export { exportCas, importCas, makePortable } from './portable.js';
 
 // WP-1.2-b.KERNEL runtime surface: fold() reconstruction over the event log.
 export { fold } from './fold.js';
+
+// WP-1.3-b.KERNEL runtime surface: convergent merge/head + content-keyed JSONL log form.
+export { merge, mergeNode, head } from './fold.js';
+export { toJsonl, parseJsonl, isContentKeyed, lineMerge } from './jsonl.js';

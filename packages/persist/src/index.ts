@@ -20,3 +20,12 @@ export type * from '../ref/reinvoke.js';
 export type * from '../ref/scrub.js';
 export type * from '../ref/source.js';
 export type * from '../ref/transcript-store.js';
+
+// WP-1.1-b.PERSIST runtime surface: store+trailers portable-source assembly + full-store OKF export.
+export { clone, soleHomeViolations, exportStore, importStore } from './source.js';
+
+// WP-1.2-b.PERSIST runtime surface: set-fold reconstruction over git history + archive/forget + rewind.
+export {
+  collect, reconstruct, replay, replayFromExport, serializeState, rewind,
+  archive, del, mergeArchive, respawn, forget,
+} from './reconstruct.js';
