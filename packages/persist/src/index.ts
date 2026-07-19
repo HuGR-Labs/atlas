@@ -29,3 +29,12 @@ export {
   collect, reconstruct, replay, replayFromExport, serializeState, rewind,
   archive, del, mergeArchive, respawn, forget,
 } from './reconstruct.js';
+
+// WP-1.3-b.PERSIST runtime surface: the git merge-driver over the SEALED kernel merge/fold/head seam —
+// content-keyed union-fold, self-install, and the lossless safe-degrade path (PERSIST-11).
+export {
+  mergeAtlas, mergeDriver, degradeMerge,
+  gitattributesEntry, mergeDriverRegistration, setupHook,
+  ATLAS_LOG_PATH, MERGE_DRIVER_NAME,
+} from './merge.js';
+export type { DriverRegistration, SetupResult } from './merge.js';
