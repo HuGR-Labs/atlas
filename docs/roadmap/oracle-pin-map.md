@@ -8,8 +8,18 @@
 > `goldens-*`, external contracts, downstream consumers). Every entry is **transcription-sourced or
 > honestly escalated — nothing invented.**
 >
-> **Status:** survey COMPLETE (9/9 packages). Application pending. Kernel already executed (its 2 TBDs
-> are designed-opaque; 4 WPs sealed: `9c78762`, `1f28c1b`, `f94b94f`).
+> **Status:** ✅ **DONE** (2026-07-18). Survey + application complete, owner ratified all 12 DEFINE recs.
+> SIG-TBD across the scaffold: **135 → 11** (all honest parks — see below). Applied in gated waves, each
+> bobby cold-reviewed (2 FIX-FIRST caught: grounding `node` out-of-scope pick, persist `TranscriptView`
+> conflation — both reverted). Commits `9e19a81` (W1 contracts+index) · `c0d14e0` (W2a know/grd/ret/mem) ·
+> `d981fe0` (W2b tls/pst/gen + index-remainder). `tsc -b --force` green · vitest 52/52 · godfile green ·
+> DAG intact. Kernel executed earlier (4 WPs sealed: `9c78762`, `1f28c1b`, `f94b94f`).
+>
+> **The 11 remaining (honest parks, never invented):** kernel 2 (`CasObject`/`ClaimEntry`, designed-opaque
+> at L1) · persist 2 (`VersionDeltaEntry.fact/provenance` genuinely unsourced; `TranscriptView` OWNER-DEFINE)
+> · grounding 1 (`ground(node)` — the owning WP pins its groundable-unit type) · knowledge 6 (`sealProbe`
+> seal = upward Orchestra artifact; `init(tree)`; the composed emit→query→reconcile store surface). These
+> park their specific WPs until pinned; every other WP now binds against a frozen oracle.
 
 ## Three categories
 
