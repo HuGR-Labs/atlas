@@ -19,3 +19,8 @@ export type * from '../ref/admit.js';
 // ── Runtime surface (Campaign-4) ───────────────────────────────────────────────────────────────────
 export * from './gate.js';        // WP-4.11-a.GROUND — truth-gate: HOLDS only when grounded ∧ FRESH (fail-closed)
 export * from './emit-guard.js';  // WP-4.11-a.GROUND — GROUND-6 truth-door + GROUND-9 structured-template validate
+export * from './subtree.js';     // WP-4.10-a.GROUND — subtreeHash via the sealed kernel Encoder (seam-swappable)
+export * from './drift.js';       // WP-4.10-a.GROUND — driftDetect + isGrounded (local subtreeHash-equality oracle)
+export * from './freshness.js';   // WP-4.10-b.GROUND — transitive freshness fold (own hash + closure interface)
+// NOTE: `ground(node)` (src/ground.ts) is CARVED to a successor WP — its groundable-unit `node` type is
+// OWNER-DEFINE/unpinned; not implemented, not wired. See the Campaign-4 remainder seal.
