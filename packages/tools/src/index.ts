@@ -30,3 +30,10 @@ export * from './emit.js';        // WP-4.11-a.TOOLS — atlas-emit re-derives c
 export * from './reconcile.js';   // WP-4.12-a.TOOLS — atlas-reconcile: classify drift into a reviewable DriftItem[] (exit 2 on semantic)
 // Campaign-8:
 export * from './init.js';        // WP-8.27.TOOLS — atlas-init move-in: $0-LLM structural skeleton + blast radius + T0-candidate flags
+// ── Campaign-7 runtime surface (the governed tool / OKF public surface) ──────────────────────────────
+export * from './guard.js';       // WP-7.26-a.TOOLS — single governed write-door + append-only/permissioned store
+export * from './handler.js';     // WP-7.26-a/-b/-c.TOOLS — one pure+total handler (surface==4, write==atlas-emit) + schema + resolveNode
+export * from './query.js';       // WP-7.26-b.TOOLS — atlas-query read projection
+export * from './doctor.js';      // WP-7.26-b.TOOLS — read/advisory-only doctor (persists nothing; reground → plan via atlas-emit)
+export * from './transport.js';   // WP-7.26-c.TOOLS — tri-transport addressability + spawn ladder (one contract across MCP/poke/CLI, CLI-floor)
+export * from './diff.js';        // WP-7.32.TOOLS — atlas-diff read-only version-delta projection (CLI≡MCP, not a 5th tool)
