@@ -22,5 +22,4 @@ export * from './emit-guard.js';  // WP-4.11-a.GROUND — GROUND-6 truth-door + 
 export * from './subtree.js';     // WP-4.10-a.GROUND — subtreeHash via the sealed kernel Encoder (seam-swappable)
 export * from './drift.js';       // WP-4.10-a.GROUND — driftDetect + isGrounded (local subtreeHash-equality oracle)
 export * from './freshness.js';   // WP-4.10-b.GROUND — transitive freshness fold (own hash + closure interface)
-// NOTE: `ground(node)` (src/ground.ts) is CARVED to a successor WP — its groundable-unit `node` type is
-// OWNER-DEFINE/unpinned; not implemented, not wired. See the Campaign-4 remainder seal.
+export * from './ground.js';      // WP-4.10-c.GROUND — ground() anchor builder: re-derive anchor@src, fail-closed drop unresolvable (GROUND-3); node-type pinned from the frozen anchor model (StructRef minus the re-derived subtreeHash)
