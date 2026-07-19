@@ -13,7 +13,7 @@
 // MODELING NOTE (disciplined judgment, flagged — cf. index/src/fold.ts precedent): the frozen
 // `RouterApi.writeDecision(candidate,cfg)` FRONT DOOR consumes a `Candidate` + a store lookup,
 // but the identity hashes (nodeKey VALUE = WP-5.13-b's excluded facet) and the CAS/store lookup
-// (the OWNER-DEFINE composed store — ref/store.ts: "NO concrete signature frozen") are UPSTREAM.
+// (the OWNER-DEFINE composed store — StoreApi in types.ts: "NO concrete signature frozen") are UPSTREAM.
 // Per the interface_contract (method-tags-knw INV-KNOW-4 down-model + INV-KNOW-5 note) this facet
 // is the routing OVER the RESOLVED inputs; the goldens' `store S0` is therefore modeled by the
 // session-internal store projection this WP reduces over — opaque nodeKey/contentHash ids supplied

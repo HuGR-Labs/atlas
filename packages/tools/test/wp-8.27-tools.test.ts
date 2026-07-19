@@ -1,8 +1,8 @@
 // @atlas/tools — test/wp-8.27-tools.test.ts   (WP-8.27.TOOLS — TOOLS-5, spec A-5/A-6)
 //
 // RED→GREEN transcription of the frozen `-1` goldens for `atlas-init`, the `$0`-LLM STRUCTURAL move-in,
-// run against src/init.ts via the FROZEN oracle surface (`../ref/init.ts` `InitApi`, `../ref/types.ts`
-// `InitOut`). Tree `T` = territories `[finance/, auth/, kernel/]` where `auth/` hits the T0 keyword
+// run against src/init.ts via the FROZEN oracle surface (co-located `InitApi` + `src/types.ts` `InitOut`).
+// Tree `T` = territories `[finance/, auth/, kernel/]` where `auth/` hits the T0 keyword
 // `security-invariant`. Held-out `-2` goldens are NOT transcribed here (GATE-only, out of this facet):
 //   - SCN-TOOLS-5a-1 (happy) — move-in consults NO LLM; output is a pure structural function of the seams.
 //   - SCN-TOOLS-5b-1 (happy) — the InitOut carries all three fields (skeleton + blast radius + flags).

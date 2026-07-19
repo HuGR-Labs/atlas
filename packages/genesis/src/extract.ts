@@ -4,21 +4,12 @@
 // call per site, under a HARD budget ceiling (default `min(frontier_size, 200)`, GEN-2), halting at the
 // marginal-value floor (trailing-20 admit-rate `< 20%`). Every candidate is routed through the 2-door bar
 // at atlas-emit (grounding re-derives ∧ non-obvious, GEN-4); admission is the gate's MECHANICAL verdict —
-// a seed's self-declaration is NEVER consulted (GEN-4d). Mined signals stay ranking heuristics: the fact
-// set is built SOLELY from gate-admitted facts, never minted from a candidate's `signals` (GEN-6).
-//
-// SCOPE (card exclusions): this driver does NOT compute the ranking (consumed from the PPR frontier), does
-// NOT define the 2-door gate or the admission/teeth engine, does NOT set escalation defaults — it CALLS
-// them through the injected `ExtractDeps` seams (the `SiteProposer` bounded call + the `EmitGate` 2-door
-// bar). SEAM: no hashing/identity is performed here (grounded facts arrive from the gate); imports are
-// types-only. Digest `<filled-at-freeze>` on the interface_contract is SIMULATED (resolved by disciplined
-// judgment, not a real freeze hash) — FLAGGED.
+// a seed's self-declaration is NEVER consulted (GEN-4d). The ranking, the 2-door gate, and the escalation
+// defaults are CALLED through the injected `ExtractDeps` seams, never authored here.
 
-import type { Candidate, Fact, WhyNot } from '../ref/types.js';
-import type { GenesisBudget } from '../ref/budget.js';
-import type { ExtractApi, ExtractResult } from '../ref/extract.js';
+import type { Candidate, ExtractApi, ExtractResult, Fact, GenesisBudget, WhyNot } from './types.js';
 
-// ── GEN-2 marginal-value stop — the FIXED scheduler policy (atlas-genesis:117, ref/budget.ts) ──────────
+// ── GEN-2 marginal-value stop — the FIXED scheduler policy (atlas-genesis:117, types.ts) ──────────────
 // Transcribed from the frozen `MarginalValueStop` literal type: a trailing window of the last 20 ranked
 // sites; HALT once that window admits fewer than 4 (a `< 20%` admit-rate). Applied by the scheduler here,
 // never carried on `GenesisBudget`.
@@ -144,7 +135,7 @@ export function runExtract(
 }
 
 /**
- * Bind the driver to the frozen `ExtractApi` (ref/extract.ts) — `extract(cands, budget)` with the injected
+ * Bind the driver to the frozen `ExtractApi` (types.ts) — `extract(cands, budget)` with the injected
  * S2 seams captured in the closure. The signature is EXACTLY the frozen surface; the seams are the "it
  * calls them" ports (card exclusions), never a change to the contract.
  */

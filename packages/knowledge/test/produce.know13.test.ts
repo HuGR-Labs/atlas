@@ -1,5 +1,5 @@
 // WP-5.17.KNOW · RED/GREEN — the moment-gated producer + fed-or-why-not seal probe (KNOW-13) against the
-// FROZEN `ref/produce.ts` oracle. Transcribes the visible `-1` goldens SCN-KNOW-13a-1 / SCN-KNOW-13b-1
+// FROZEN `ProduceApi` oracle. Transcribes the visible `-1` goldens SCN-KNOW-13a-1 / SCN-KNOW-13b-1
 // (docs/requirements/goldens-knw.md). Held-out `-2` fixtures (scheduled full-tree re-scan; code-touching
 // bare wave) are NOT referenced here.
 //
@@ -7,14 +7,13 @@
 // the same discipline `bindFreshness`/`bindReconcile` use —
 //   • the Candidate→GroundedFact ratification transform (`Mint`) is OWNER-DEFINE (oracle-pin), owned by the
 //     write-decision/ratification route (WP-5.13-a / WP-5.15); this WP owns ONLY the moment GATE over it.
-//   • the sealing wave is a SIG-TBD upward Orchestra artifact (`seal: unknown`, ref/produce.ts:12-13,34);
+//   • the sealing wave is a SIG-TBD upward Orchestra artifact (`seal: unknown`, ProduceApi.sealProbe);
 //     its two legs are read by injected `SealLeg`s. This WP OWNS the fed-or-why-not DEFINITION: violation
 //     is the negation of the (absorb ∨ why-not) DISJUNCTION.
 
 import { describe, it, expect } from 'vitest';
 import { asNodeKey, asSubtreeHash } from '@atlas/kernel';
-import type { Candidate, GroundedFact } from '../ref/types.js';
-import type { ProductionMoment } from '../ref/produce.js';
+import type { Candidate, GroundedFact, ProductionMoment } from '@atlas/knowledge';
 import { bindProduce, type Mint, type SealLeg } from '../src/produce.js';
 
 // ── fixtures ────────────────────────────────────────────────────────────────

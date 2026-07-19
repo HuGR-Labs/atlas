@@ -1,22 +1,23 @@
 // @atlas/tools — src/query.ts   (WP-7.26-b.TOOLS — TOOLS-6, INV-TOOLS-6; guidance INV-TOOLS-4)
 //
-// `atlas-query` — the discovery entry point + one of the EXACTLY-FOUR governance tools (TOOLS-1). This is a
-// READ surface: it opens NO write path and carries NO write authority. It resolves ANY scope (file / folder
-// / module / crate) through an injected index port to the covering territory, and returns the MERGED
-// covering bounded `Pack` — `tier≥T1` only (the below-T1 noise is bounded out), stale-flagged, within the
-// `≤ ~2K` advisory token budget. A `stale:true` pack is a SIGNAL to re-ground, NOT a served truth. Pure +
-// total: no clock, no IO, no write, no throw of its own (the injected port MAY throw on a malformed scope;
-// the handler wrapper converts that to a rejected `Verdict`, TOOLS-2). Transcribed against the frozen oracle
-// `../ref/query.ts` (`QueryApi.query`) + `../ref/types.ts` (`QueryOut = Pack`).
-//
-// SCOPE (this facet): the governance shaping of the read — the `tier≥T1` bound + the merged-pack assembly +
-// the stale flag + the shipped guidance envelope. EXCLUDED — the concrete index axis-resolution (the walk
-// that maps a scope to its covering territory + raw invariant set) is an @atlas/index port, CONSUMED here as
-// `QueryIndex`, never computed here; identity/hashing stays behind the sealed @atlas/kernel seam.
+// `atlas-query` — the read-only discovery entry point + the frozen `QueryApi`. Resolves any scope through an
+// injected index port to the MERGED covering bounded `Pack` — `tier≥T1` only, stale-flagged (a stale pack
+// is a re-ground SIGNAL, not served truth). Pure + total; the concrete index resolution is @atlas/index.
 
 import type { Hash, Pack, PackInvariant } from '@atlas/contracts';
-import type { QueryApi } from '../ref/query.js';
-import type { Guidance, QueryOut } from '../ref/types.js';
+import type { Guidance, QueryOut } from './types.js';
+
+export interface QueryApi {
+  /** Resolve any scope (file/folder/module/crate) → the merged covering bounded `Pack` of `tier≥T1`
+   *  invariants (`≤ ~2K`); `stale:true` MUST mean re-ground before trusting (TOOLS-6, §6.1). Pure + total.
+   *  (method-tags-tls:58)
+   *
+   *  [PINNED — `scope` arg] atlas-tools:125 names `atlas-query <scope>`; no `Scope`/`Path` brand is
+   *  frozen at this seam (cf retrieval `Path = string`). Pinned to `string`, NOT a brand.
+   *  ([NOTE] the `≤ ~2K` token bound is an ADVISORY size bound verified by a size test, not a type
+   *  constraint — method-tags-tls:59.) */
+  query(scope: string): QueryOut;
+}
 
 /**
  * The covering skeleton the index axis resolves a scope to (the raw, pre-governance read). `invariants` is
@@ -72,7 +73,7 @@ export function createQuery(index: QueryIndex): QueryApi {
 }
 
 // differential-vs-oracle (compile-time): the impl's `query` conforms to the frozen `QueryApi.query(scope)`
-// signature (../ref/query.ts). The concrete index axis-resolution is a DISTINCT, out-of-facet port.
+// signature (co-located `QueryApi`). The concrete index axis-resolution is a DISTINCT, out-of-facet port.
 const _queryConforms: QueryApi = createQuery({
   cover: () => ({ territory: '', axisHash: '' as Hash, invariants: [], stale: false }),
 });

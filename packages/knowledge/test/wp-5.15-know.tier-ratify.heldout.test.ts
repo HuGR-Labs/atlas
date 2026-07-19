@@ -12,7 +12,7 @@ import { describe, it, expect } from 'vitest';
 import { asSubtreeHash } from '@atlas/kernel';
 import type { StructRef, Tier } from '@atlas/contracts';
 import type { Grounding } from '@atlas/grounding';
-import type { Candidate, TerritoryView, Check } from '../ref/types.js';
+import type { Candidate, TerritoryView, Check } from '@atlas/knowledge';
 
 import { init } from '../src/init.js';
 import type { StructuralTree } from '../src/init.js';

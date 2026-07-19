@@ -1,39 +1,77 @@
 // @atlas/tools — src/transport.ts   (WP-7.26-c.TOOLS — TOOLS-11 / TOOLS-11a / TOOLS-14, INV-TOOLS-11 / -11a)
 //
-// The push/pull SPAWN LADDER — the tri-transport addressability seam that keeps ONE handler contract
-// byte-identical across MCP / poke / CLI, with the CLI as the FLOOR (not a fallback). Delivery splits by
-// DIRECTION:
-//   • PUSH (poke / pack / RelationSet) is the ORCHESTRATOR's job and reaches a `Read`-only seat with NO
-//     tool grant (`PUSH_GRANTS_REQUIRED == 0`) — materialized as a file/brief the seat consumes. This is
-//     the always-works spine (TOOLS-14: re-grounding is PUSHED at every phase boundary, no seat decision).
-//   • PULL (an ad-hoc mid-task query) walks the fixed NATIVE-FIRST ladder `PULL_LADDER` and returns the
-//     first AVAILABLE tier — never a silent fall-through, and it REPORTS the tier it actually started on.
-// Every tier is backed by the ONE injected `handler` (TOOLS-10): `resolveAt` maps a tier to its transport
-// and delegates to `handler.resolveNode`, so a node resolved at any tier is byte-identical — and the SAME
-// handler serves knowledge ∧ memory ∧ tools (one transport contract, wave-plan §X1 / the CLI-floor note).
-// Transcribed against the FROZEN oracle `../ref/transport.ts` (`TransportApi` / `PullTier` / `Resolution` /
-// `HarnessCapability`); goldens SCN-TOOLS-11-a-1 / -b-1 / -c-1 / -d-1 + SCN-TOOLS-11a-a-1 / -b-1 / -c-1 / -d-1.
-//
-// This facet adds NO write path and NO fifth governance tool — resolve/spawn/push are read/subscribe only;
-// writes still funnel through `atlas-emit`. Identity/hashing stays behind the sealed @atlas/kernel seam.
+// The push/pull SPAWN LADDER + the frozen transport surface (`TransportApi` / `PullTier` / `Resolution` / …).
+// PUSH reaches a `Read`-only seat with NO grant (`PUSH_GRANTS_REQUIRED == 0`); PULL walks the native-first
+// `PULL_LADDER` (CLI is the FLOOR), every tier backed by the ONE injected `handler` (byte-identical, TOOLS-10).
 
-import type { Pack } from '@atlas/contracts';
-import type { NodeKey } from '@atlas/contracts';
+import type { NodeKey, Pack } from '@atlas/contracts';
 import type { Poke } from '@atlas/retrieval';
-import type { HandlerApi, Transport } from '../ref/handler.js';
-import type { Verdict } from '../ref/types.js';
-import type {
-  Direction,
-  HarnessCapability,
-  PullNeed,
-  PullTier,
-  Resolution,
-  TierStatus,
-  TransportApi,
-} from '../ref/transport.js';
+import type { HandlerApi, Transport, Verdict } from './types.js';
+
+/** The delivery direction (TOOLS-11). `push` = orchestrator-driven, no grant; `pull` = ad-hoc seat query. */
+export type Direction = 'push' | 'pull';
+
+/** A seat's ad-hoc pull need (TOOLS-11). No `need` record is frozen in a lower layer at this seam, so it
+ *  is DEFINED minimally here: the `scope` the mid-task query resolves through the ladder (the same scope
+ *  `atlas-query`/`own_<unit>` takes). Kept minimal — a later spec MAY widen it; never invented beyond the
+ *  scope the reference names. */
+export interface PullNeed {
+  readonly scope: string;
+}
+
+/** The pull ladder, native-first (atlas-tools:161-168 / method-tags-tls:92). Transcribed EXACTLY as the
+ *  ordered tier vocabulary — `sdk-mcp` (pull 1) → `registered-mcp` (pull 2) → `poke-as-file` (pull 3) →
+ *  `relay` (pull 4) → `cli` (pull 5, the floor). */
+export type PullTier =
+  | 'sdk-mcp' // pull 1 — in-process SDK MCP (zero-IPC, shared live state); native ONLY on the SDK path
+  | 'registered-mcp' // pull 2 — registered MCP + per-seat grant; native ONLY on the SDK path
+  | 'poke-as-file' // pull 3 — poke-as-file / brief-injection; `Read` only, trivially true
+  | 'relay' // pull 4 — orchestrator relay (proxies the native call); proven
+  | 'cli'; // pull 5 — CLI (`atlas node <addr>`); the floor
+
+/** Per-tier availability on a running harness (TOOLS-11a). `native` iff the harness can deliver that tier;
+ *  a harness that cannot propagate MCP marks pull 1-2 `unavailable` (never silently fallen through). */
+export type TierStatus = 'native' | 'unavailable';
+
+/** The harness capability the ladder is honest about (TOOLS-11a, method-tags-tls:100). `canPropagateMcp`
+ *  false (e.g. the Claude Code `.claude/agents` path — a reproduced defect) ⇒ pull 1-2 `unavailable`. */
+export interface HarnessCapability {
+  readonly canPropagateMcp: boolean;
+}
+
+/** The resolved delivery (TOOLS-11/11a). `startedTier` is the tier the ladder ACTUALLY started on for the
+ *  running harness (honesty about where native reach begins — never a fixed assumption). `tiers` is the
+ *  per-tier availability ledger (down-ranked per `HarnessCapability`). */
+export interface Resolution {
+  readonly direction: Direction;
+  readonly startedTier: PullTier; // the tier actually started on (TOOLS-11a) — reported, not assumed
+  readonly tiers: readonly { readonly tier: PullTier; readonly status: TierStatus }[];
+}
+
+export interface TransportApi {
+  /** Split by direction and resolve reach for a seat's need (TOOLS-11). PUSH materializes a file/brief a
+   *  `Read`-only seat consumes with NO grant; PULL walks the native-first ladder returning the first
+   *  AVAILABLE tier. On a harness with `canPropagateMcp:false`, pull 1-2 are `unavailable` and the ladder
+   *  starts at push / pull 3 — never a silent fall-through (TOOLS-11a). Every tier is the one handler, so
+   *  the result is byte-identical across tiers (method-tags-tls:93, 100).
+   *
+   *  [PINNED — `seat` / `need` shapes] no `MemberId` record is frozen at this seam (@atlas/memory is NOT
+   *  a dep of tools), so `seat` is pinned to `string`. `need` is the minimal package-local `PullNeed`
+   *  (`{scope}`) — the scope the ad-hoc pull resolves through the ladder; NOT invented beyond that. */
+  resolve(seat: string, need: PullNeed, harness: HarnessCapability): Resolution;
+
+  /** The TOOLS-14 pre-phase discovery hook: at EVERY phase boundary auto-inject a fresh `atlas-query` /
+   *  `own_<unit>` pack into the seat's context — a PUSH (no tool grant), so a `Read`-only seat on an
+   *  MCP-`unavailable` harness is still correctly re-grounded purely by push (method-tags-tls:120-121).
+   *  Ad-hoc mid-task pull stays available but is an optimization, never the mechanism.
+   *
+   *  [PINNED — return] the pushed surface is a fresh pack / poke (`Pack` | `Poke`, both imported); `scope`
+   *  pinned to `string` (cf retrieval `Path = string`). */
+  prePhasePush(seat: string, scope: string): Pack | Poke;
+}
 
 /** The pull ladder, native-first (TOOLS-11) — the fixed ordered tier vocabulary. Transcribed EXACTLY from
- *  `../ref/transport.ts` `PullTier`: SDK-MCP → registered-MCP+grant → poke-as-file → relay → CLI (floor). */
+ *  the co-located `PullTier`: SDK-MCP → registered-MCP+grant → poke-as-file → relay → CLI (floor). */
 export const PULL_LADDER: readonly PullTier[] = [
   'sdk-mcp', // pull 1 — in-process SDK MCP (native ONLY on the SDK path)
   'registered-mcp', // pull 2 — registered MCP + per-seat grant (native ONLY on the SDK path)
@@ -132,7 +170,7 @@ export function createTransport(deps: TransportDeps): SpawnLadder {
   return { resolve, prePhasePush, resolveAt, spawn };
 }
 
-// differential-vs-oracle (compile-time): the ladder conforms to the frozen `TransportApi` (../ref/transport.ts).
+// differential-vs-oracle (compile-time): the ladder conforms to the co-located frozen `TransportApi`.
 const _transportConforms: TransportApi = createTransport({
   handler: createHandlerStub(),
   push: () => ({ scope: '', pack: emptyPack, notice: '' }),

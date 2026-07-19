@@ -1,28 +1,21 @@
 // @atlas/tools — src/diff.ts   (WP-7.32.TOOLS — EPIC-32 — TOOLS-16, INV-TOOLS-16)
 //
-// `atlas-diff` — the READ-ONLY version-delta projection. It surfaces the frozen @atlas/persist PERSIST-14
-// delta (`{added, edited, superseded, decayed}`, each entry carrying its provenance) as a read-only VIEW:
-//   • it READS a version-delta from the injected @atlas/persist `DiffApi` (`persist/ref/diff.ts`) — it does
-//     NOT compute the fold-diff itself (that is @atlas/persist / WP-7.32.PERSIST);
-//   • CLI ≡ MCP: the projection is BYTE-IDENTICAL across transports — `render(transport, …)` ignores the
-//     `transport` (it records the ROUTE only), so the two adapters cannot diverge (TOOLS-16, like TOOLS-3);
-//   • 0 WRITE PATH: the handle exposes NO store-mutating method (read/subscribe only) and carries NO write
-//     authority. atlas-diff is a read projection like the per-node handler (TOOLS-10) and `atlas doctor`
-//     (TOOLS-12) — NOT a fifth governance tool: the governance write surface stays EXACTLY four and the
-//     single write path stays `atlas-emit` (`GOVERNANCE_SURFACE` / `WRITE_PATHS` in src/handler.js, TOOLS-1).
-// A malformed sha fails CLOSED to the SAME structured rejected `Verdict` on every transport (never a throw,
-// never a coercion). Transcribed against the FROZEN oracle `../ref/diff.ts` (`DiffApi`) + `../ref/types.ts`
-// (`DiffOut` / `Verdict` / `Guidance`); goldens SCN-TOOLS-16a-1 / 16b-1 / 16c-1 / 16d-1 / 16e-1.
-//
-// SCOPE (this facet): the read-only projection surface — the faithful delta render, the CLI≡MCP parity, the
-// fail-closed identical rejection, and the no-write-authority shape. The ∀-input CLI≡MCP determinism arm is
-// DELEGATED to the TOOLS-3 cross-transport PBT over the one handler. EXCLUDED — computing the fold-diff
-// (@atlas/persist), and identity/hashing (the sealed @atlas/kernel seam).
+// `atlas-diff` — the read-only PERSIST-14 version-delta projection + the frozen `DiffApi`. It READS the
+// injected @atlas/persist `DiffApi` (`persist/ref/diff.ts`) — never computes the fold-diff — and renders
+// CLI≡MCP byte-identical (0 write path). A malformed sha fails CLOSED to the SAME rejected `Verdict`.
 
 import type { Hash } from '@atlas/contracts';
-import type { DiffApi } from '../ref/diff.js';
-import type { Transport } from '../ref/handler.js';
-import type { DiffOut, Guidance, Verdict } from '../ref/types.js';
+import type { DiffOut, Guidance, Transport, Verdict } from './types.js';
+
+export interface DiffApi {
+  /** Read-only fold-diff between two commit states (TOOLS-16). Surfaces the PERSIST-14 delta faithfully;
+   *  0 mutation, 0 write path — reads/renders the @atlas/persist `VersionDelta`. The CLI≡MCP determinism
+   *  arm is delegated to the TOOLS-3 cross-transport PBT over the one handler (method-tags-tls:135).
+   *
+   *  [FLAG — `shaA`/`shaB` = `Hash`] atlas-tools:114 names `atlas-diff <shaA> <shaB>`; transcribed as
+   *  `Hash` exactly as @atlas/persist `DiffApi.diff(shaA,shaB)` pins them. */
+  diff(shaA: Hash, shaB: Hash): DiffOut;
+}
 
 /** The read-only version-delta source atlas-diff projects — the @atlas/persist `DiffApi`
  *  (`persist/ref/diff.ts`), injected. atlas-diff READS this delta; it does NOT compute the fold-diff (that
@@ -82,7 +75,7 @@ export function createAtlasDiff(source: DiffSource): AtlasDiff {
   return { diff, render };
 }
 
-// differential-vs-oracle (compile-time): the projection conforms to the frozen `DiffApi` (../ref/diff.ts) —
+// differential-vs-oracle (compile-time): the projection conforms to the co-located frozen `DiffApi` —
 // a read-only handle with NO write-returning method (the write surface stays exactly four, TOOLS-1/16).
 const _diffConforms: DiffApi = createAtlasDiff({
   diff: () => ({ added: [], edited: [], superseded: [], decayed: [] }),

@@ -3,21 +3,34 @@
 // The `$0`-LLM structural move-in (KNOW-6) — the machine behind `atlas-init`. Knowledge starts
 // UN-AUTHORED: the emitted skeleton carries ZERO invariants and every territory ships the T2/advisory
 // default BY CONSTRUCTION (nothing authored, nothing promoted — KNOW-7). Binds the FROZEN `InitApi`
-// (ref/init.ts): `init(tree: unknown): readonly TerritoryView[]`.
+// (co-located below): `init(tree: unknown): readonly TerritoryView[]`.
 //
-// FACET BOUNDARY (BIND — resolved vs FROZEN oracle ref/init.ts):
+// FACET BOUNDARY (BIND — resolved vs the frozen InitApi, co-located below):
 //  • The reference names `init(tree)` with NO concrete type for the structural tree snapshot; the frozen
 //    oracle transcribes it as `unknown` because the tree is a LOWER-layer artifact (index/kernel are
 //    below knowledge). This facet BINDS to `tree: unknown` exactly and NARROWS it session-internally to
 //    a `StructuralTree` seed shape (cf. router.ts `StoreProjection` — caller-side, NOT an invented frozen
 //    index type). A non-tree input yields the empty skeleton (total).
 //  • "family == advisory" + "count(invariants) == 0" are BY-CONSTRUCTION guarantees of the emitter, NOT
-//    fields on the returned view: `TerritoryView` (ref/types.ts) has no `family`/`invariants` leg. The
+//    fields on the returned view: `TerritoryView` (types.ts) has no `family`/`invariants` leg. The
 //    skeleton carries ONLY the frozen territory fields; nothing authored can leak.
 
 import type { NodeKey } from '@atlas/contracts';
-import type { TerritoryView } from '../ref/types.js';
-import type { InitApi } from '../ref/init.js';
+import type { TerritoryView } from './types.js';
+
+// ── frozen InitApi surface, co-located here (was ref/init.ts) ─────────────────────────────────────────
+
+export interface InitApi {
+  /** Structural move-in over a tree (KNOW-6). Emits the territory skeleton + blast radius, every
+   *  territory at `tier=T2` / advisory family with `invariants=[]` — auto-promotes nothing (KNOW-7).
+   *  Pure + total.
+   *
+   *  [SIG-TBD — `tree` arg, downward-owned] the reference names `init(tree)` with no concrete type for the
+   *  structural tree snapshot (a LOWER-layer artifact); transcribed as `unknown`, flagged.
+   *  [FLAG — return carries no `invariants`] the zero-invariant property is a by-construction guarantee of
+   *  the emitter, not a field on `TerritoryView`. Flagged. */
+  init(tree: unknown): readonly TerritoryView[];
+}
 
 /**
  * A single territory seed the move-in walks out of the structural tree. Session-internal (the frozen

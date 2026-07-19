@@ -1,5 +1,5 @@
 // WP-4.12-a.KNOW · RED/GREEN — the reconcile mechanical/semantic drift split (KNOW-5) against the FROZEN
-// `ref/reconcile.ts` oracle. Transcribes the visible `-1` goldens SCN-KNOW-5a-1 / 5b-1 / 5c-1 / 5d-1
+// `ReconcileApi` oracle. Transcribes the visible `-1` goldens SCN-KNOW-5a-1 / 5b-1 / 5c-1 / 5d-1
 // (docs/requirements/goldens-knw.md). Held-out `-2` fixtures (the 9-drift set) are NOT referenced here.
 //
 // SEAM (no raw hashing): the per-fact re-derivation `reDerives(claim, newSha)` is the pure re-hash at the

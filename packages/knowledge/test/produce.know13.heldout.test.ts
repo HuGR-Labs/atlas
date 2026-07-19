@@ -6,8 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { asNodeKey, asSubtreeHash } from '@atlas/kernel';
-import type { Candidate, GroundedFact } from '../ref/types.js';
-import type { ProductionMoment } from '../ref/produce.js';
+import type { Candidate, GroundedFact, ProductionMoment } from '@atlas/knowledge';
 import { bindProduce, type Mint, type SealLeg } from '../src/produce.js';
 
 const cand = (n: string): Candidate => ({

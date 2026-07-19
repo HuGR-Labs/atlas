@@ -8,8 +8,8 @@
 // ONLY, Semgrep-before-CodeQL, query DB built once, run scopable (no whole-repo pass), cost per stage.
 //
 // The facet is imported DIRECTLY from ../src/cost-policy.js (the barrel is wired by the lead at SEAL). The
-// oracle is the FROZEN `../ref/budget.ts` (`BudgetApi.escalate`/`report`, `EscalationDecision`,
-// `Mechanism`, `GenesisBudget`) + `../ref/types.ts` (`Candidate`, `StageCost`/`CostReport`, per-stage
+// oracle is the FROZEN `types.ts` (`BudgetApi.escalate`/`report`, `EscalationDecision`,
+// `Mechanism`, `GenesisBudget`, `Candidate`, `StageCost`/`CostReport`, per-stage
 // cost). The cheap SIGNAL that gates escalation is an injected seam (a `SignalOracle` port) — the frozen
 // `Candidate` carries no tier/uncertainty/checkability, so the signal is supplied, never invented onto the
 // contract. StructRef identity rides the SEALED @atlas/kernel mint (`asSubtreeHash`), never a hand-rolled
@@ -22,8 +22,8 @@
 import { describe, it, expect } from 'vitest';
 import { asSubtreeHash } from '@atlas/kernel';
 import type { StructRef, Tier } from '@atlas/contracts';
-import type { Candidate, MinedSignals } from '../ref/types.js';
-import type { GenesisBudget } from '../ref/budget.js';
+import type { Candidate, MinedSignals } from '@atlas/genesis';
+import type { GenesisBudget } from '@atlas/genesis';
 import {
   DEFAULT_SAMPLES,
   DEFAULT_CEGIS_K,

@@ -9,8 +9,8 @@
 // not deferred (REQ-KNOW-9a) — and the evaluator is an OPTIONAL, standalone module: with none wired the
 // store operates on advisory nodes alone (REQ-KNOW-9b, the frozen `StoreApi.evaluator?` seam).
 //
-// SEAM: implements the FROZEN `EvaluatorApi` (ref/evaluator.ts) over the pinned `Check` union
-// (ref/types.ts); types-only imports of the sealed lower layers; NO raw hashing, NO code-execution path.
+// SEAM: implements the FROZEN `EvaluatorApi` (types.ts, ≥2-consumer: here + StoreApi) over the pinned
+// `Check` union (types.ts); types-only imports of the sealed lower layers; NO raw hashing, NO code-exec path.
 //
 // [FLAG — indexState granularity] The frozen `EvaluatorApi.evaluate` pins `indexState` to a single
 // lower-layer `@atlas/index` `IndexNode` (DAG-safe). The reference prose says "over the Atlas index
@@ -26,8 +26,7 @@
 import type { Status } from '@atlas/contracts';
 import type { NodeKey } from '@atlas/contracts';
 import type { IndexNode } from '@atlas/index';
-import type { Check } from '../ref/types.js';
-import type { EvaluatorApi } from '../ref/evaluator.js';
+import type { Check, EvaluatorApi } from './types.js';
 
 /**
  * The evaluator verdict — the 3-state subset of `Status` the evaluator can yield. The `'advisory'`
@@ -139,7 +138,7 @@ export function evaluate(check: Check, indexState: IndexNode): Verdict {
     : evalAssertion(check.expr, indexState);
 }
 
-/** The FROZEN `EvaluatorApi` implementation (ref/evaluator.ts). Standalone + OPTIONAL — the store wires
+/** The FROZEN `EvaluatorApi` implementation (types.ts). Standalone + OPTIONAL — the store wires
  *  it only for the predicate family; with none wired, advisory nodes operate alone (REQ-KNOW-9b). */
 export function makeEvaluator(): EvaluatorApi {
   return { evaluate };

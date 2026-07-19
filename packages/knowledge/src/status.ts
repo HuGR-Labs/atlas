@@ -4,7 +4,7 @@
 // RECOMPUTED side-index (out of identity — atlas-knowledge:16,28), never a value the fact asserts about
 // itself. `recompute(node)` DROPS any node-declared `status` and derives the served verdict from the
 // recomputed side-index (KNOW-16 evaluator) DEFERRED through GROUND's truth-gate (KNOW-3 drift, GROUND-4).
-// Transcribed against the FROZEN oracle `../ref/status.ts` (`StatusApi.recompute`); golden SCN-KNOW-1-1.
+// Transcribed against the FROZEN oracle `StatusApi.recompute` (co-located below); golden SCN-KNOW-1-1.
 //
 // SEAM (card guardrails — "no second copy of the gate; consume-only; no raw hashing"): the served
 // verdict is GROUND's `gateHolds` (GROUND-4: `HOLDS` only if grounded ∧ FRESH, else downgraded to `NA`,
@@ -12,7 +12,7 @@
 // build-ahead (types-only import of the FROZEN interfaces) — same discipline as `bindFreshness`/
 // `bindGate`. The node's OWN `status` field is never read: that is the whole point of KNOW-1.
 //
-// [PINNED — ref/status.ts §Transcribable] the signature is pinned to `recompute(node: GroundedFact):
+// [PINNED — StatusApi §Transcribable] the signature is pinned to `recompute(node: GroundedFact):
 // Status`. The frozen ref FLAGS that the recompute inputs {drift, evaluator-verdict} are "ADDITIONAL
 // inputs NOT present in the pinned 1-arg signature; flagged for the WP to reconcile whether they thread
 // as parameters — NOT invented as parameters here." Reconciled WITHOUT touching the frozen 1-arg
@@ -24,13 +24,23 @@
 // NOT the fail-closed grounded write (KNOW-2, `./emit.ts`); NOT the write-decision routing (CAMPAIGN-5).
 //
 // [FLAG — simulated seal] the card `content_hash: <filled-at-freeze>` was never filled; this binding is
-// written against the VISIBLE frozen `../ref/status.ts` text + SCN-KNOW-1-1, flagged simulated.
+// written against the VISIBLE frozen `StatusApi` text + SCN-KNOW-1-1, flagged simulated.
 
 import type { Status } from '@atlas/contracts';
 import type { Axes } from '@atlas/index';
 import type { GateApi } from '@atlas/grounding';
-import type { GroundedFact } from '../ref/types.js';
-import type { StatusApi } from '../ref/status.js';
+import type { GroundedFact } from './types.js';
+
+// ── frozen StatusApi surface, co-located here (was ref/status.ts) ─────────────────────────────────────
+
+export interface StatusApi {
+  /** Recompute the served `Status` for a node (KNOW-1), IGNORING any `status` the node carries — a
+   *  candidate-declared `HOLDS` is dropped; the served status is the recomputed one (method-tags-knw:22).
+   *  Pure + total; `Status` is out of identity (never in the `nodeKey`). Signature pinned to
+   *  `recompute(node: GroundedFact): Status`; the {drift, evaluator-verdict} inputs thread as INJECTED
+   *  DEPS (the `bindStatus` closure), NOT as new call-args. */
+  recompute(node: GroundedFact): Status;
+}
 
 /**
  * The recompute seam (KNOW-1), injected build-ahead. `gate` is GROUND's frozen truth-gate (GROUND-4,

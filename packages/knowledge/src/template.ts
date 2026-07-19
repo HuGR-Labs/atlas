@@ -1,7 +1,7 @@
 // @atlas/knowledge — src/template.ts  (WP-5.14.KNOW · KNOW-10: templated-write validator + closed-slot gate)
 //
 // No free prose, ever (KNOW-10, atlas-knowledge:203; method-tags-knw:81-86). Implements the FROZEN
-// `TemplateApi` (ref/template.ts): a staged `Candidate` PERSISTS iff it carries every required template
+// `TemplateApi` (co-located below): a staged `Candidate` PERSISTS iff it carries every required template
 // field, its `claimText` is within the byte cap, AND its `slot` is one of the closed 12 (`PredicateSlot`);
 // any violation ⇒ REJECT — 0 free-prose facts persist. The reject/persist route is a TOTAL, mutually-
 // exclusive AND over the finite validity product {required-field∈(present,missing) × size∈(≤cap,>cap) ×
@@ -13,11 +13,46 @@
 // the KNOW-11 ownership fence — enforced fail-closed by the sibling authz facet, NOT re-checked here. No
 // field invented.
 
-import type { Candidate, PredicateSlot } from '../ref/types.js';
-import type { TemplateApi, ClaimTextCapBytes } from '../ref/template.js';
+import type { Candidate, PredicateSlot } from './types.js';
+
+// ── frozen TemplateApi surface, co-located here (was ref/template.ts) ─────────────────────────────────
+
+/**
+ * The per-kind required template field set (KNOW-10, advisory kind). [PINNED — goldens-knw:60,
+ * Enumerated universe B] a well-formed advisory fact MUST carry every one of these 7 fields; a fact
+ * missing any is REJECTED (0 free-prose facts persist — SCN-KNOW-10b-1). Transcribed EXACTLY from the
+ * golden field list — NOT invented.
+ */
+export type RequiredAdvisoryField =
+  | 'claimNorm'
+  | 'claimText'
+  | 'provenance'
+  | 'owner'
+  | 'scope'
+  | 'grounding'
+  | 'predicateSlot';
+
+/**
+ * The per-kind size cap (KNOW-10). [PINNED — goldens-knw:61] `claimText ≤ 512 bytes`; a fact over the
+ * cap is REJECTED (SCN-KNOW-10b-2). Expressed as a type-level byte-count literal (zero-runtime — the
+ * bound, not a runtime const). The number IS frozen by the golden, so it is transcribed, not a DEFINE.
+ */
+export type ClaimTextCapBytes = 512;
+
+export interface TemplateApi {
+  /** Per-kind template + closed-slot validator (KNOW-10). `true` iff the fact carries every required
+   *  template field, is within its cap, AND its `slot` is one of the closed 12 (`PredicateSlot`); else
+   *  REJECT — no free-prose fact ever persists (atlas-knowledge:203; method-tags-knw:84). Pure + total.
+   *  Typed on the staging `Candidate` (which carries the proposed `slot` + claim body the validator gates). */
+  validateTemplate(fact: Candidate): boolean;
+
+  /** Closed-vocabulary membership: `true` iff `slot` is one of the 12 (`PredicateSlot`). A fact whose
+   *  `slot` is outside the closed set is rejected (atlas-knowledge:220). Pure. */
+  isClosedSlot(slot: PredicateSlot): boolean;
+}
 
 /** The closed `predicateSlot` vocabulary as a runtime CLOSED set (KNOW-10) — the 12 members transcribed
- *  from the `PredicateSlot` union (ref/types.ts:163-175). A `slot` outside this set is REJECTED; adding a
+ *  from the `PredicateSlot` union (types.ts). A `slot` outside this set is REJECTED; adding a
  *  member is a `cv` bump, not a code change. Single source of truth is the union — mirrored here for the
  *  value boundary (a runtime tag whose type is erased). */
 const CLOSED_SLOTS: ReadonlySet<PredicateSlot> = new Set<PredicateSlot>([

@@ -22,7 +22,7 @@ import type { Poke } from '@atlas/retrieval';
 import { createGovernedStore } from '../src/guard.js';
 import { createHandler, GOVERNANCE_SURFACE, WRITE_PATHS } from '../src/handler.js';
 import type { NodeSource } from '../src/handler.js';
-import type { Transport } from '../ref/handler.js';
+import type { Transport } from '../src/types.js';
 import {
   createTransport,
   PULL_LADDER,

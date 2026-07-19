@@ -1,31 +1,63 @@
 // @atlas/genesis — src/rank.ts  (WP-8.27.GEN · GEN-1 / GEN-3 / GEN-10 / GEN-11 / GEN-15 — the S0/S1 stage)
 //
-// The deterministic `$0`-LLM genesis floor: S0 the structural SKELETON and S1 the reproducible PPR
-// RANKING, both PURE FUNCTIONS of (repo, rev). There is NO model call site anywhere in this facet — no
-// proposer/embedding/vector/ANN seam is even in the signatures (GEN-1a / GEN-10b). The ranking is a
-// PERSONALIZED PageRank over the def→ref graph (the Aider repo-map technique): nodes are the graph's
-// hash-addressed sites, edges are `referencing → defining`, the personalization vector is the mined
-// hotspot/SZZ/coupling frontier. It carries a PINNED damping and NO randomness/clock, is computed in
-// INTEGER fixed-point (exact on every machine — no IEEE drift), and breaks numeric ties with a stable
-// total order — so the ranking is BYTE-IDENTICAL across runs and machines (GEN-11). A cheap history
-// pre-check degrades a thin/degenerate history back to STRUCTURAL centrality — history is a booster,
-// never a dependency (GEN-15).
-//
-// SCOPE (card exclusions): this facet does NOT author the atlas-init skeleton — it CONSUMES the sealed
-// @atlas/index / atlas-init walk through the injected `SkeletonSource` seam (like tools/init.ts consumes
-// `MoveInIndex`); it does NOT fire the budgeted proposal (EPIC-28-a), admission/teeth (EPIC-28-b), or the
-// hand-off (EPIC-30). SEAM: identity rides the sealed @atlas/kernel brand (`asSubtreeHash`), never a
-// hand-rolled digest — there is no raw hashing here. Bound against the frozen oracles ../ref/scan.ts,
-// ../ref/mine.ts, ../ref/rank.ts. Digest `<filled-at-freeze>` on the interface_contract is SIMULATED
-// (resolved by disciplined judgment, not a real freeze hash) — FLAGGED.
+// The deterministic `$0`-LLM genesis floor: S0 the structural SKELETON and S1 the reproducible PPR RANKING
+// (personalized PageRank over the def→ref graph, PINNED damping, integer fixed-point ⇒ byte-identical), with
+// a cheap history pre-check that degrades thin/degenerate history back to STRUCTURAL centrality (GEN-15).
+// Co-locates the frozen S1 surfaces `HistoryProbe`/`MineApi` (was ref/mine.ts) + `RankApi` (was ref/rank.ts).
 
 import { asSubtreeHash } from '@atlas/kernel';
 import type { StructRef } from '@atlas/contracts';
 import type { Axes, IndexNode, Manifest } from '@atlas/index';
-import type { Candidate, CostReport, MinedSignals } from '../ref/types.js';
-import type { ScanApi, Skeleton } from '../ref/scan.js';
-import type { HistoryProbe, MineApi } from '../ref/mine.js';
-import type { RankApi } from '../ref/rank.js';
+import type { Candidate, CostReport, MinedSignals, ScanApi, Skeleton } from './types.js';
+
+/**
+ * The GEN-15 history-thin pre-check result. History is high-signal but degenerates SILENTLY on the repos
+ * where it is weakest — young/greenfield, squashed / shallow-cloned history (kills `git blame` → SZZ +
+ * co-change collapse), and initial-commit monorepo imports / vendored / generated code (blame resets to
+ * one mega-commit). A cheap pre-check MUST detect this and fall the personalization vector back to
+ * STRUCTURAL signals (PPR without history seeding + type/API-surface density) — history is a ranking
+ * BOOSTER, never a dependency. GENESIS-HOME.
+ *
+ * [PINNED — oracle-pin-map §genesis, GEN-15] the carrier is `thin` (the boolean verdict) + an optional
+ * `reason` drawn from GEN-15's three named triggers: `low-commit-count` (young/greenfield),
+ * `shallow-clone` (squashed / shallow history kills blame → SZZ + co-change collapse), and
+ * `blame-concentrated` (initial-commit monorepo import / vendored / generated). No fields beyond this.
+ */
+export interface HistoryProbe {
+  readonly thin: boolean; // degenerate history detected → fall back to structural centrality
+  readonly reason?: 'low-commit-count' | 'shallow-clone' | 'blame-concentrated';
+}
+
+export interface MineApi {
+  /** S1 mining (GEN-6). MECHANICAL `$0`-LLM pure function of (repo, rev) that returns RANKED CANDIDATES,
+   *  NEVER facts — SZZ (bug-introducing commits) + hotspots (change-freq × complexity) + temporal/logical
+   *  coupling + ownership feed the candidate `signals`/`rank` ONLY. A signal is NOT a fact until grounded
+   *  and ratified (GEN-6). The PPR ranking that fills `ppr`/`rank` is `RankApi` (GEN-11).
+   *
+   *  [FLAG — arg types] the surface `mine(repo, rev)` (atlas-genesis:187) leaves both untyped; transcribed
+   *  as `string` / `string` (a repo path + a free-form git rev), mirroring `scan`. */
+  mine(repo: string, rev: string): readonly Candidate[];
+
+  /** GEN-15 history-thin pre-check. A cheap MECHANICAL probe (commit count below threshold / shallow
+   *  clone / blame concentrated in one commit) that detects degenerate history so `mine`'s personalization
+   *  vector falls back to structural + type/API-surface density — never rank noise. History is a booster,
+   *  never a dependency. */
+  probeHistory(repo: string, rev: string): HistoryProbe;
+}
+
+export interface RankApi {
+  /** DETERMINISTIC personalized-PageRank ranking (GEN-11). Pure function of the def→ref graph (carried by
+   *  the S0 `Skeleton`'s dependency axis) + the personalization vector (the union of the hotspot / SZZ /
+   *  coupling frontier SITES). Returns the ranked `Candidate[]` with `ppr`/`rank` filled — a stable total
+   *  order (numeric ties broken deterministically), byte-identical across runs. NEVER facts (GEN-6).
+   *
+   *  [FLAG — arg carriers] the surface folds ranking INTO `mine` (no standalone `rank(...)` line), so the
+   *  arg carriers are reference-attributed, NOT frozen literals: `graph` transcribed as the S0 `Skeleton`
+   *  (which carries the def→ref dependency axis); `personalization` as the frontier `StructRef[]` (the
+   *  "union of the hotspot / SZZ / coupling frontiers", atlas-genesis:58). On a GEN-15 history-thin repo
+   *  the personalization vector is the STRUCTURAL + type/API-surface set instead (same signature). */
+  rank(graph: Skeleton, personalization: readonly StructRef[]): readonly Candidate[];
+}
 
 // ── PINNED determinism constants (GEN-11) ────────────────────────────────────────────────────────────
 // The personalized-PageRank damping is PINNED (atlas-genesis:142, golden `damping 0.85`); re-running with
@@ -266,7 +298,7 @@ export function rank(graph: Skeleton, personalization: readonly StructRef[]): re
   }));
 }
 
-/** Bind the ranker to the frozen `RankApi` (ref/rank.ts). */
+/** Bind the ranker to the frozen `RankApi` (above). */
 export function makeRank(): RankApi {
   return { rank };
 }

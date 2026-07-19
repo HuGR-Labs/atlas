@@ -19,8 +19,8 @@ import { describe, it, expect } from 'vitest';
 import { asSubtreeHash, asHash, asNodeKey } from '@atlas/kernel';
 import type { StructRef, Hash } from '@atlas/contracts';
 import type { Axes, DepEdge, IndexNode, Manifest } from '@atlas/index';
-import type { Candidate, MinedSignals } from '../ref/types.js';
-import type { Skeleton } from '../ref/scan.js';
+import type { Candidate, MinedSignals } from '@atlas/genesis';
+import type { Skeleton } from '@atlas/genesis';
 import {
   createScan,
   createMine,

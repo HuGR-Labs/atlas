@@ -4,16 +4,20 @@
 // ranked human interview — NEVER auto-promoted, NEVER one question at a time (atlas-genesis §S3, INV-GEN-5).
 // This facet models the ratify-router as an ENUMERABLE edge set whose sole `candidate→ratified` edge passes
 // through `interview`, writes every produced seed as a `candidate` (whatever its confidence), and assembles
-// the OPEN questions into ONE batched interview capped at the top-20/session — the tail deferred.
-//
-// SCOPE (card exclusions): this facet does NOT define ratification routing / tiers (CAMPAIGN-5 EPIC-15) — it
-// FEEDS the batch to the injected human `Ratifier` and returns the human-ratified facts (KNOW-8). SEAM: no
-// hashing / identity is performed here (ratified facts arrive from the human seam); imports are types-only.
-// Digest `<filled-at-freeze>` on the interface_contract is SIMULATED (disciplined judgment, not a real
-// freeze hash) — FLAGGED.
+// the OPEN questions into ONE batched interview capped at the top-20/session — the tail deferred. Co-locates
+// the frozen `AlignApi`. It FEEDS the batch to the injected human `Ratifier`; ratification routing is not
+// defined here.
 
-import type { Fact, OpenQ, Ratified } from '../ref/types.js';
-import type { AlignApi } from '../ref/align.js';
+import type { Fact, OpenQ, Ratified } from './types.js';
+
+export interface AlignApi {
+  /** S3 batched, ranked ratification (GEN-5). Consumes the OPEN questions (ranked by blast×tier) and
+   *  returns the human-RATIFIED facts (KNOW-8). The ONLY edge candidate→ratified for a `T0` / contested
+   *  fact passes THROUGH here — no auto-promote path exists; the batch is served together (size > 1),
+   *  never one question at a time. Capped at the top 20 Q/session; the tail defers or defaults to
+   *  `T0-strict deny`. */
+  interview(open: readonly OpenQ[]): readonly Ratified[];
+}
 
 /**
  * The genesis-domain write status (GEN-5). A genesis write is ALWAYS a `candidate`; `ratified` is reachable
@@ -109,7 +113,7 @@ export function canAutoPromote(): boolean {
 }
 
 /**
- * Bind the batched ratification to the frozen `AlignApi` (ref/align.ts) — `interview(open): Ratified[]`.
+ * Bind the batched ratification to the frozen `AlignApi` (above) — `interview(open): Ratified[]`.
  * Assembles ONE batch and feeds the injected human `Ratifier` EXACTLY ONCE (never one question at a time),
  * returning the human-ratified facts (KNOW-8). The deferred tail is dropped from this session's result
  * (it re-surfaces next session / defaults to `T0`-strict deny — the uncovered-path rule).

@@ -1,23 +1,22 @@
 // @atlas/tools — src/init.ts   (WP-8.27.TOOLS — TOOLS-5, spec A-5/A-6)
 //
-// `atlas-init`'s `$0`-LLM STRUCTURAL move-in — the territory-skeleton entrypoint (one of the EXACTLY-FOUR
-// governance tools, TOOLS-1). It consumes the structural index at the pinned rev and returns the move-in
-// verdict `InitOut = { territories, blastRadius, t0Candidates }`: EVERY territory ships at the `T2/advisory`
-// default with ZERO invariants, the blast radius is the reverse-dep reachability set, and a T0-keyword
-// territory yields a candidate FLAG while staying `tier=='T2'` — it AUTO-PROMOTES NOTHING (a heuristic MAY
-// only *flag*, A-6). Pure + total, `$0`-LLM: there is NO model call site in this facet at all. Transcribed
-// against the frozen oracle `../ref/init.ts` (`InitApi.init`) + `../ref/types.ts` (`InitOut`); goldens
-// SCN-TOOLS-5{a,b,c,d,e}-1.
-//
-// SCOPE (this facet): the governance shaping of the structural walk — the T2 default + T0 flag-not-promote
-// gate + the three-field assembly. EXCLUDED by the card — the deterministic S0/S1 skeleton BUILD + PPR
-// ranking (owned by WP-8.27.GEN), the four-tool surface / write-door integrity (EPIC-26 / CAMPAIGN-7), and
-// any embedding/vector/ANN. The structural WALK itself (raw territories + reverse-dep blast radius) is the
-// @atlas/index axis, CONSUMED here as an injected port (`MoveInIndex`) — it is NOT defined here.
+// `atlas-init` — the `$0`-LLM structural move-in + the frozen `InitApi`. Every territory ships at the
+// `T2/advisory` default with ZERO invariants; a T0-keyword territory only FLAGS (auto-promotes nothing).
+// The structural walk (raw territories + reverse-dep blast radius) is the @atlas/index port, CONSUMED here.
 
 import type { NodeKey, Territory } from '@atlas/contracts';
-import type { InitApi } from '../ref/init.js';
-import type { InitOut } from '../ref/types.js';
+import type { InitOut } from './types.js';
+
+export interface InitApi {
+  /** `$0`-LLM structural move-in over a tree path (TOOLS-5). Returns the `T2/advisory` skeleton + blast
+   *  radius + T0-candidate names; sets NO tier above `T2` and promotes NO `T0` (A-5, A-6). Pure + total.
+   *  (method-tags-tls:51)
+   *
+   *  [PINNED — `path` arg] atlas-tools:124 names `atlas-init <path>`; no `Path`/tree brand is frozen at
+   *  this seam (contracts exposes none — cf retrieval `Path = string`). Pinned to `string`, NOT a brand
+   *  nor a lower-layer index tree type. */
+  init(path: string): InitOut;
+}
 
 /**
  * A structurally-walked territory BEFORE move-in assigns its tier — `{name, owner, globs}`. The move-in
@@ -78,9 +77,8 @@ export function createInit(index: MoveInIndex, heuristic: T0Heuristic): { readon
   return { init };
 }
 
-// differential-vs-oracle (compile-time): the impl's `init` conforms to the frozen `InitApi.init(path)`
-// signature (../ref/init.ts). The GEN S0/S1 skeleton build + PPR ranking is a DISTINCT, out-of-facet req
-// (WP-8.27.GEN) — not asserted here.
+// differential-vs-oracle (compile-time): the impl's `init` conforms to the co-located frozen `InitApi.init`
+// signature. The GEN S0/S1 skeleton build + PPR ranking is a DISTINCT, out-of-facet req (WP-8.27.GEN).
 const _initConforms: InitApi['init'] = createInit(
   { territories: () => [], blastRadius: () => [] },
   { isCandidate: () => false },

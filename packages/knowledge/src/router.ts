@@ -8,11 +8,11 @@
 // The drift leg (`subtreeHash`, WHERE-current) NEVER enters the create/update decision
 // (atlas-knowledge:153), so it is absent from the inputs by construction.
 //
-// FACET BOUNDARY (BIND — resolved vs FROZEN oracle ref/router.ts):
+// FACET BOUNDARY (BIND — resolved vs the frozen RouterApi, co-located below):
 //  • This WP owns the routing OVER the resolved inputs. The nodeKey/contentHash VALUES (the
 //    identity hashes) are computed UPSTREAM — the `nodeKey` identity formula is WP-5.13-b.KNOW's
 //    excluded facet, and the CAS/store lookup that resolves hit/miss is the OWNER-DEFINE composed
-//    store (ref/store.ts: "NO concrete signature frozen"). Per INV-KNOW-5's note the matcher/store
+//    store (StoreApi in types.ts: "NO concrete signature frozen"). Per INV-KNOW-5's note the matcher/store
 //    "fixes the VALUE of the inputs, not the routing over them — feasible now". So this module
 //    takes RESOLVED opaque identity strings as inputs and does ZERO hashing (the sealed
 //    @atlas/kernel identity seam is not entered here — no raw hashing).
@@ -21,13 +21,65 @@
 //    it needs the OWNER-DEFINE composed store + 5.13-b's nodeKey. That composition is DEFERRED,
 //    not invented. The `StoreProjection` below is held caller-side / session-internal
 //    (cf. index/src/fold.ts `createDriftFold`), never an invented frozen `StoreApi` field.
-//  • REJECT (the 2-door admission bar, KNOW-2) is ref/emit.ts's facet — the upsert route never
+//  • REJECT (the 2-door admission bar, KNOW-2) is emit.ts's facet — the upsert route never
 //    returns REJECT.
 
 import { asNodeKey, canonicalForm, defaultEncoder } from '@atlas/kernel';
 import type { NodeKey } from '@atlas/contracts';
-import type { WriteDecision, NearDupConfig } from '../ref/router.js';
-import type { Candidate, Check, PredicateSlot } from '../ref/types.js';
+import type { Candidate, Check, PredicateSlot } from './types.js';
+
+// ── frozen RouterApi surface, co-located here (was ref/router.ts) ─────────────────────────────────────
+
+/**
+ * The write-decision routes. Transcribed EXACTLY from the KNOW-15 routing table (atlas-knowledge:135-142):
+ * total + deterministic + mutually-exclusive (method-tags-knw:119).
+ *   - `DEDUP`     — `contentHash` already in CAS; identical bytes ⇒ no-op (bump hits/freshness only).
+ *   - `CREATE`    — `nodeKey` miss (new `(anchor, slot[, check])`), OR a DIFFERENT predicate `check`.
+ *   - `UPDATE`    — `nodeKey` hit, advisory family; claim SET-UNION in place (git keeps prior, KNOW-4/12).
+ *   - `SUPERSEDE` — `nodeKey` hit, predicate, SAME `check` re-evidenced; mint new + `supersededBy` pointer.
+ *   - `REJECT`    — fails the 2-door bar (ungrounded, or obvious/useless) — KNOW-2.
+ */
+export type WriteDecision = 'DEDUP' | 'CREATE' | 'UPDATE' | 'SUPERSEDE' | 'REJECT';
+
+/**
+ * [OPEN DEFINE — parametric, threshold UNPINNED] The KNOW-15 move-aware near-duplicate matcher's
+ * `claimNorm`-collision threshold (method-tags-knw:122; atlas-knowledge:128-132). `subtreeHash` equality
+ * catches move/rename but NOT move+edit, so a similarity matcher is needed and its threshold value is NOT
+ * frozen. Per the task directive the threshold MUST be a PARAMETER, never a baked-in constant — surfaced
+ * here as an explicit config the matcher takes; DEFINE pins the value later. Flagged.
+ */
+export interface NearDupConfig {
+  readonly claimNormThreshold: number;
+}
+
+/** The frozen write-decision API (KNOW-4/15) — its impl is the pure functions below (no separate
+ *  anchor.ts: the identity legs live HERE per the LEAD-RATIFIED decision). */
+export interface RouterApi {
+  /** The pure write-decision (KNOW-4/15). Routes a candidate to exactly one `WriteDecision` from its
+   *  three orthogonal hashes; the drift leg (`subtreeHash`) NEVER changes the create/update leg
+   *  (atlas-knowledge:153). Before any CREATE a deterministic near-duplicate probe runs — a `claimNorm`
+   *  collision at adjacent granularity forces UPDATE/MERGE (atlas-knowledge:128-132). No LLM call enters
+   *  the decision (method-tags-knw:121). Pure + total.
+   *
+   *  [PARAMETRIC — see `NearDupConfig`] the near-dup matcher threshold is an EXPLICIT parameter, not a
+   *  constant (the threshold is an OPEN DEFINE, method-tags-knw:122). */
+  writeDecision(candidate: Candidate, cfg: NearDupConfig): WriteDecision;
+
+  /** The node identity leg. `nodeKey(advisory) = hash(primaryAnchorId ‖ predicateSlot)`;
+   *  `nodeKey(predicate) = hash(primaryAnchorId ‖ predicateSlot ‖ normalize(check))` — so a distinct
+   *  `check` is a distinct node, never a sibling-supersede (atlas-knowledge:123-124, 144-146). Pure +
+   *  total, no LLM. Routed on `Candidate` (identity needs its `slot`/`check`). */
+  nodeKey(node: Candidate): NodeKey;
+
+  /** The COMPUTED primary anchor — the tightest structural unit (smallest AST subtree) containing every
+   *  symbol the claim references (atlas-knowledge:114-119). NEVER an LLM-chosen anchor. ONLY the primary
+   *  anchor enters identity — secondary citations live in `grounding.entries` and feed DRIFT only, never
+   *  the `nodeKey`. Move-aware (name-stripped subtree match ⇒ rename is a MOVE). Pure + total, no LLM.
+   *
+   *  [FLAG — return leg] the reference frames `primaryAnchorId` as an ANCHOR id fed into `nodeKey`
+   *  (atlas-knowledge:123-124), not itself a `nodeKey`; transcribed to the `NodeKey` return, flagged. */
+  primaryAnchorId(node: Candidate): NodeKey;
+}
 
 /** The two content kinds of the Atlas (atlas-knowledge:19): advisory ⇒ UPDATE/union · predicate ⇒ SUPERSEDE. */
 export type NodeFamily = 'advisory' | 'predicate';
@@ -152,7 +204,7 @@ export function upsert(store: StoreProjection, req: WriteRequest): UpsertResult 
       });
       break;
     }
-    // REJECT is unreachable — admission (KNOW-2) is ref/emit.ts, not the upsert route.
+    // REJECT is unreachable — admission (KNOW-2) is emit.ts, not the upsert route.
   }
   return { decision, store: { current, cas } };
 }
@@ -164,13 +216,13 @@ export function currentNodes(store: StoreProjection): readonly CurrentNode[] {
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 // WP-5.13-b.KNOW · EPIC-13-b — THE ANCHOR-IDENTITY FACET (additive; 5.13-a's routeWrite/upsert above
-// are untouched). Implements the FROZEN `RouterApi.nodeKey` / `RouterApi.primaryAnchorId` (ref/router.ts,
-// which RATIFIES these live HERE — "no separate ref/anchor.ts") + the near-dup probe and the closed slot
+// are untouched). Implements the FROZEN `RouterApi.nodeKey` / `RouterApi.primaryAnchorId` (co-located
+// above, which RATIFIES these live HERE — "no separate anchor.ts") + the near-dup probe and the closed slot
 // vocabulary. The write-decision's identity leg is COMPUTED, never judged: pure hash+symbol functions,
 // ZERO LLM/clock/seq (KNOW-15j). All digests are minted through the SEALED @atlas/kernel encoder seam
 // (`defaultEncoder` + `canonicalForm`) and branded via `asNodeKey` — NO raw hashing (SEAM).
 //
-// BIND (vs FROZEN oracle ref/router.ts + ref/types.ts): `predicateSlot` is the required `Candidate.slot`
+// BIND (vs the frozen RouterApi + types.ts): `predicateSlot` is the required `Candidate.slot`
 // (closed 12-member `PredicateSlot`, R3-surfaced on `GroundedFact` too); `check` presence discriminates
 // predicate vs advisory. The move-aware RE-ANCHORING matcher (rename/move ⇒ same nodeKey) and the
 // near-synonym similarity threshold are UPSTREAM + OPEN-DEFINE parametric (SCN-KNOW-15f-2 θ / 15h-2 τ,
@@ -178,7 +230,7 @@ export function currentNodes(store: StoreProjection): readonly CurrentNode[] {
 // here, and NO verification is invented for an unpinned threshold (method-tags-knw §Refuse-to-model).
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 
-/** The closed `predicateSlot` vocabulary (NORMATIVE — all 12 members, ref/types.ts:163-175). CLOSED:
+/** The closed `predicateSlot` vocabulary (NORMATIVE — all 12 members, `PredicateSlot` in types.ts). CLOSED:
  *  adding a slot is a `cv` bump. Finiteness is what lets a `nodeKey` collide + force UPDATE/union
  *  instead of proliferating parallel nodes (atlas-knowledge:150 / SCN-KNOW-15i-1). */
 export const PREDICATE_SLOTS: readonly PredicateSlot[] = [

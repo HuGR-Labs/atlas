@@ -2,24 +2,48 @@
 //
 // A fresh brownfield move-in has no ratified DEFINE artifact, zero invariants (KNOW-6), an un-ratified T0 —
 // so @atlas/memory Awareness (MEM-11) would be BLANK exactly when a worker needs it. Genesis CREATES the
-// sources each facet rolls up from: `constitution` from the ratified `T0` manifest the S3 interview
-// produces, `taste` at `CONVENTIONS.md@sha`, plus a `DEFINE` stub `mission` marked UNRATIFIED. A facet with
-// NO source renders the labeled `UN-SEEDED` sentinel — NEVER fabricated (MEM-11). The mission stub STAYS
-// unratified until a real DEFINE artifact is ratified, so the mission FACET (whose source is a ratified
-// DEFINE) renders UN-SEEDED until then.
-//
-// SCOPE (card exclusions): this facet does NOT re-assemble the Awareness slab machinery (CAMPAIGN-6
-// EPIC-24-a) — it REUSES the MEM-11 reference discipline (`AwarenessFacet` / `FacetState`, the `UN-SEEDED`
-// sentinel, grounded facets, never fabricate). Locating the `CONVENTIONS.md@sha` source and the repo-root
-// anchor is the index's job — consumed through INJECTED seams (`SeedDeps`). SEAM: no hashing here (anchors
-// arrive from the seam / the ratified facts' grounding); imports are types-only. Digest `<filled-at-freeze>`
-// on the interface_contract is SIMULATED — FLAGGED.
+// sources each facet rolls up from: `constitution` from the ratified `T0` manifest, `taste` at
+// `CONVENTIONS.md@sha`, plus a `DEFINE` stub `mission` marked UNRATIFIED. A source-less facet renders the
+// labeled `UN-SEEDED` sentinel — NEVER fabricated (MEM-11). Co-locates the frozen `MissionStub` / `SeedApi`;
+// it REUSES the MEM-11 discipline and consumes the index source-locators via the injected `SeedDeps` seams.
 
 import type { StructRef } from '@atlas/contracts';
 import type { Awareness, AwarenessFacet } from '@atlas/memory';
-import type { MissionStub, SeedApi } from '../ref/seed.js';
-import type { Ratified } from '../ref/types.js';
-import type { Skeleton } from '../ref/scan.js';
+import type { Ratified, Skeleton } from './types.js';
+
+/**
+ * The `DEFINE` stub `mission` (GEN-9). On a brownfield move-in with no ratified DEFINE artifact, genesis
+ * assembles an UNRATIFIED thesis stub so Awareness's `mission` facet is not blank. It MUST stay
+ * `unratified: true` until a real DEFINE artifact is ratified. GENESIS-HOME.
+ *
+ * [PINNED — oracle-pin-map §genesis] `content` mirrors the now-frozen @atlas/memory `AwarenessFacet.content:
+ * string` (the top-tier rendered line). The exact byte-stable render is a downstream format detail, but the
+ * carrier type is settled as `string` by the upstream memory pin.
+ */
+export interface MissionStub {
+  readonly content: string; // the DEFINE stub thesis line — mirrors @atlas/memory AwarenessFacet.content
+  readonly grounding: readonly StructRef[]; // the node@sha the stub anchors to (grounded, GEN-4)
+  readonly unratified: true; // MUST stay unratified until a real DEFINE artifact exists (GEN-9)
+}
+
+export interface SeedApi {
+  /** GEN-9 seed the Awareness sources. Assembles the @atlas/memory `Awareness` slab from the seeded
+   *  skeleton + the S3-ratified facts: `mission` = the unratified DEFINE stub; `constitution` = the
+   *  ratified `T0` manifest; `taste` = `CONVENTIONS.md@sha`. A source-less facet → `UN-SEEDED` (never
+   *  fabricated, MEM-11). Reuses the MEM-11 reference; adds no new subsystem. */
+  seed(skeleton: Skeleton, ratified: readonly Ratified[]): Awareness;
+
+  /** The S0 `DEFINE` stub `mission` on a fresh brownfield move-in (GEN-9) — marked UNRATIFIED. */
+  mission(skeleton: Skeleton): MissionStub;
+
+  /** One facet's seed from its OWN source — absent source ⇒ the `UN-SEEDED` sentinel (never fabricated,
+   *  MEM-11). Mirrors @atlas/memory `AwarenessApi.facet`.
+   *
+   *  [OPAQUE-BY-DESIGN — oracle-pin-map non-decisions] each facet's source is heterogeneous (DEFINE
+   *  artifact / ratified T0 manifest / `CONVENTIONS.md@sha`) with no single frozen type at layer-0 →
+   *  `unknown` by design, the WP treats it opaquely. NOT invented into a record. */
+  facet(source: unknown): AwarenessFacet;
+}
 
 /** The labeled `UN-SEEDED` sentinel (MEM-11 / GEN-9b) — the ONLY line an absent source may render. */
 export const UN_SEEDED = 'UN-SEEDED' as const;
@@ -123,7 +147,7 @@ function isConventions(source: unknown): source is ConventionsSource {
 }
 
 /**
- * Bind the seeding surface to the frozen `SeedApi` (ref/seed.ts) with the injected index seams captured in
+ * Bind the seeding surface to the frozen `SeedApi` (above) with the injected index seams captured in
  * the closure: `seed(skeleton, ratified)` assembles Awareness; `mission(skeleton)` the unratified stub;
  * `facet(source)` one opaque facet rollup. The signatures are EXACTLY the frozen surface.
  */

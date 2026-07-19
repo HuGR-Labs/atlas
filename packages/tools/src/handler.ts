@@ -1,25 +1,12 @@
 // @atlas/tools — src/handler.ts   (WP-7.26-a.TOOLS — TOOLS-1 / TOOLS-2 / TOOLS-4, INV-TOOLS-1 / -2 / -4)
 //
-// THE ONE handler behind EVERY transport — the spine facet, created HEAD of the sequential handler chain
-// (WP-7.26-b / -c / -7.32 extend this file downstream). This slice lands the EPIC-26-a obligations:
-//   • the CLOSED four-tool governance surface (`GOVERNANCE_SURFACE`, count == 4) and the single write path
-//     (`WRITE_PATHS`, `writePaths == 1` → `atlas-emit`) — TOOLS-1;
-//   • `handle(tool, args)` PURE + TOTAL — a malformed argument fails CLOSED to a structured rejected
-//     `Verdict`, NEVER a throw (TOOLS-2), with `next + invariant` guidance stamped on EVERY path (TOOLS-4).
-// The per-tool legs (init / query / emit / reconcile) are INJECTED — the wrapper adds totality + guidance
-// around them; it reads no wall-clock and holds no mutable cache, so it is pure whenever its legs are.
-// Transcribed against the FROZEN oracle `../ref/handler.ts` (`HandlerApi`) + `../ref/types.ts`
-// (`Tool` / `Verdict` / `Guidance`); goldens SCN-TOOLS-1a-1 / 1b-1 / 2a-1 / 2b-1.
-//
-// SCOPE (this facet, 7.26-a): the surface constants + the pure/total wrapper. WP-7.26-b (this landing)
-// ADDITIVELY fills the published-schema body below (`SCHEMAS`, one byte-identical schema per tool, CLI ≡
-// MCP — TOOLS-3) alongside src/query.ts + src/doctor.ts. STILL EXCLUDED — the tri-transport node read
-// `resolveNode` (EPIC-26-c, WP-7.26-c) ships here as an HONEST read-only minimal seam for the successor WP.
+// THE ONE handler behind EVERY transport — the spine facet. Owns the CLOSED four-tool `GOVERNANCE_SURFACE`
+// (count == 4) + the single `WRITE_PATHS` (`atlas-emit`, TOOLS-1), the published per-tool `SCHEMAS` (CLI≡MCP,
+// TOOLS-3), and `handle`/`resolveNode` — PURE + TOTAL, malformed args fail CLOSED, guidance on every path.
 
 import type { NodeKey, ToolSchema } from '@atlas/contracts';
 import type { GroundedFact } from '@atlas/knowledge';
-import type { ToolData, Transport, HandlerApi } from '../ref/handler.js';
-import type { Guidance, Tool, Verdict } from '../ref/types.js';
+import type { Guidance, HandlerApi, Tool, ToolData, Transport, Verdict } from './types.js';
 
 /** The CLOSED governance surface — EXACTLY four tools, no more (TOOLS-1). The order is fixed; membership is
  *  the load-bearing fact (surface count == 4). */
@@ -195,6 +182,6 @@ export function createHandler(legs: ToolLegs, nodes?: NodeSource): HandlerApi {
   return { handle, resolveNode, schema };
 }
 
-// differential-vs-oracle (compile-time): the handler conforms to the frozen `HandlerApi` (../ref/handler.ts).
+// differential-vs-oracle (compile-time): the handler conforms to the frozen `HandlerApi` (co-located in types.ts).
 const _handlerConforms: HandlerApi = createHandler({});
 void _handlerConforms;

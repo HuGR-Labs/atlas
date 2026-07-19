@@ -3,7 +3,7 @@
   "compilerOptions": {
     "outDir": "dist"
   },
-  "include": ["ref", "src"],
+  "include": ["src"],
   "references": [
     { "path": "../contracts" },
     { "path": "../index" },

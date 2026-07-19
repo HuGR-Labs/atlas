@@ -21,7 +21,7 @@ import type { GroundedFact } from '@atlas/knowledge';
 import { createGovernedStore } from '../src/guard.js';
 import { createHandler, GOVERNANCE_SURFACE } from '../src/handler.js';
 import type { ToolLeg } from '../src/handler.js';
-import type { ToolData } from '../ref/handler.js';
+import type { ToolData } from '../src/types.js';
 import { createQuery, QUERY_GUIDANCE } from '../src/query.js';
 import type { QueryIndex } from '../src/query.js';
 import { createDoctor, DOCTOR_GUIDANCE } from '../src/doctor.js';

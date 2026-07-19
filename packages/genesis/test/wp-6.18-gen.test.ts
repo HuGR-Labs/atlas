@@ -15,8 +15,8 @@
 // counter. Branded node identity comes from the SEALED @atlas/kernel (`asNodeKey`/`asSubtreeHash`), never a
 // hand-rolled digest. Held-out `-2` fixtures are the GATE's — NOT transcribed.
 //
-// FLAG: the GEN-16 genesis reference oracle (`genesis/ref/usefulness.ts`, method-tags-gen:126) does not
-// exist in ref/ — this facet binds the SEALED KNOW-17 surface (@atlas/knowledge) + ref/types.ts instead.
+// FLAG: the GEN-16 genesis reference oracle (`genesis usefulness.ts`, method-tags-gen:126) was never frozen
+// — this facet binds the SEALED KNOW-17 surface (@atlas/knowledge) + genesis types.ts instead.
 // FLAG: interface_contract digest is `<filled-at-freeze>` (simulated) — resolved by disciplined judgment.
 // FLAG: the admission threshold `f(hits)` and the decay `window` are the KNOW-17 OPEN-DEFINE parametrics
 // (ref/hits.ts DecayConfig) — taken here as EXPLICIT injected parameters (`calibrate` / `cfg.window`), never
