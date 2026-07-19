@@ -17,3 +17,7 @@ export type * from '../ref/fold.js';
 export type * from '../ref/portable.js';
 
 export { asHash, asSubtreeHash, asNodeKey } from './brand.js';
+
+// WP-1.1-a.KERNEL runtime surface: the content-addressed identity primitives.
+export { canonicalForm, id } from './canonical.js';
+export { defaultEncoder } from './encoder.js';
