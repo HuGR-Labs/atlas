@@ -1,33 +1,20 @@
 // @atlas/genesis — src/loops.ts  (WP-8.31.GEN · GEN-14 — the governed deepening-loop controller)
 //
 // The three OPTIONAL deepening loops (REVIEW / ENRICH / EXPAND) as budget-gated, fixpoint-stopping passes
-// over the EXISTING machinery (propose→verify = ref/extract.ts `ExtractApi`; relate() = atlas-retrieval
-// RETR-10), adding NO new subsystem. Each loop is opt-in / default-shallow, halts at a diminishing-returns
-// stop (a no-revision round · marginal value `< ε` · loop-until-dry), and is bounded by a round cap +
-// budget — no loop runs unbounded (GEN-14a..d). With all loops OFF, the controller touches the machinery
-// ZERO times, so genesis cost equals the single cheap pass (GEN-13/14e, Δ=0). The loops are the DEPTH DIAL,
-// never a change to the default cost, and they do NOT duplicate born-from-work's free lazy enrichment
-// (GEN-14h) — a fact born-from-work would enrich lazily is skipped.
+// over the EXISTING machinery (propose→verify = `ExtractApi`; relate() = atlas-retrieval RETR-10), adding
+// NO new subsystem. Each loop is opt-in / default-shallow, halts at a diminishing-returns stop (a no-revision
+// round · marginal value `< ε` · loop-until-dry), and is bounded by a round cap + budget (GEN-14a..d). With
+// all loops OFF the machinery is touched ZERO times ⇒ genesis cost equals the single cheap pass (Δ=0). The
+// GEN-14 fixpoint/ε carrier `LoopConfig` is the FROZEN types.ts type — reused, not re-declared.
 //
-// SCOPE (card exclusions): this controller adds NO new subsystem and re-implements NEITHER propose→verify
-// NOR relate() — it REUSES them through the injected `LoopMachinery` seams (the two existing surfaces). It
-// does NOT change the base single-pass cost (loops-off ⇒ Δ=0) and does NOT re-do born-from-work's lazy
-// enrichment. SEAM: no hashing/identity here (grounded facts arrive from the reused gate); imports are
-// types-only. The GEN-14 fixpoint/ε carrier (`LoopConfig`) is the FROZEN ref/budget.ts type — reused, not
-// re-declared. Digest `<filled-at-freeze>` on the interface_contract is SIMULATED (disciplined judgment,
-// not a real freeze hash) — FLAGGED.
-//
-// FLAG — `LoopConfig.epsilon` DEFAULT: ref/budget.ts:28 marks the ε default OWNER-DEFINE. No MUST golden
-// fixes its value, so `defaultLoops()` uses an INERT placeholder (loops default off ⇒ ε is never consulted).
-// This is NOT the owner's ratified default — it is a required-field placeholder behind `enabled:false`.
+// FLAG — `LoopConfig.epsilon` DEFAULT is OWNER-DEFINE. No MUST golden fixes its value, so `defaultLoops()`
+// uses an INERT placeholder (loops default off ⇒ ε is never consulted) — NOT the owner's ratified default.
 
 import type { StructRef } from '@atlas/contracts';
-import type { Candidate } from '../ref/types.js';
-import type { ExtractApi } from '../ref/extract.js';
-import type { LoopConfig, DeepeningLoops, GenesisBudget } from '../ref/budget.js';
+import type { Candidate, DeepeningLoops, ExtractApi, GenesisBudget, LoopConfig } from './types.js';
 
 // ── the ε-default placeholder (FLAG above) — inert while a loop is off ─────────────────────────────────
-/** INERT placeholder for the OWNER-DEFINE `LoopConfig.epsilon` default (ref/budget.ts:28). Behind
+/** INERT placeholder for the OWNER-DEFINE `LoopConfig.epsilon` default (types.ts). Behind
  *  `enabled:false` in `defaultLoops()`, so it is never read; NOT the owner's ratified value. */
 export const DEFAULT_EPSILON_PLACEHOLDER = 0;
 
@@ -66,7 +53,7 @@ export interface RelateApi {
 }
 
 /** The EXISTING machinery the deepening loops reuse — nothing bespoke (GEN-14f/14g). Exactly two seams:
- *  the propose→verify harness (`ExtractApi`, ref/extract.ts) and relate() (`RelateApi`, RETR-10). */
+ *  the propose→verify harness (`ExtractApi`, types.ts) and relate() (`RelateApi`, RETR-10). */
 export interface LoopMachinery {
   readonly proposeVerify: ExtractApi;
   readonly relate: RelateApi;
@@ -159,7 +146,7 @@ export function runLoop(cfg: LoopConfig, budget: GenesisBudget, round: RoundFn):
 
 /**
  * REVIEW (quality) — an independent COLD re-pass over the just-seeded SET, reusing propose→verify
- * (ref/extract.ts) to drop contradictions / redundancy / mis-tiering (cross-fact, vs S2's per-fact check).
+ * (`ExtractApi`, types.ts) to drop contradictions / redundancy / mis-tiering (cross-fact, vs S2's per-fact check).
  * A round that drops/abstains nothing is a no-revision round ⇒ the controller reaches the fixpoint.
  */
 export function reviewRound(m: LoopMachinery, cands: readonly Candidate[]): RoundFn {

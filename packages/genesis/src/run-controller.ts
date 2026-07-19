@@ -1,33 +1,47 @@
 // @atlas/genesis — src/run-controller.ts  (WP-8.30.GEN · GEN-7 / GEN-8 — the run controller)
 //
 // The composition-root RUN CONTROLLER: it binds the two frozen surfaces of the one-time bootstrap —
-// `GenesisApi` (ref/resume.ts: `genesis`/`resume`) and `HandoffApi` (ref/handoff.ts:
-// `handoff`/`changed`/`rerun`). Its three duties:
-//   • CHECKPOINT + RESUME (GEN-8a) — sites are driven in the deterministic GEN-2/11 rank order; the
-//     controller records the LAST COMPLETED ranked site, and `resume(token)` continues from `rank >
-//     lastCompletedRank` — the already-done sites are NEVER re-visited.
-//   • TOTAL / MALFORMED-DEGRADE (GEN-8b/8c) — a malformed repo/rev, a plan that throws, or a site that
-//     throws mid-run yields an HONEST empty/partial `GenesisReport` + a `resumeToken` — NEVER a throw
-//     (0 exceptions; every entry point is wrapped total).
-//   • IDEMPOTENT + INCREMENTAL HAND-OFF (GEN-7a/7b/7c) — every fact write routes through the injected
-//     KNOW-15 upsert (dedup by `id`, `genesis∘genesis ≡ genesis`); a `rerun` re-indexes ONLY the buckets
-//     the INDEX-12 `changed` delta names; a complete run HANDS CONTROL to born-from-work (KNOW-13) and
-//     stands NO sweeper.
-//
-// SCOPE (card exclusions): this controller does NOT implement born-from-work (CAMPAIGN-5 EPIC-17), does
-// NOT define the KNOW-15 upsert write-decision (CAMPAIGN-5 EPIC-13), and does NOT run the S2
-// proposal/admission stages — it CALLS them through the injected `ControllerDeps` seams (`plan`/`visit`/
-// `upsert`/`changed`/`handoffTo`). SEAM: no hashing/identity is performed here (grounded facts arrive
-// from the injected upsert; the resume cursor is a rank, never a digest) — @atlas/kernel stays sealed.
-// The `interface_contract` digest `<filled-at-freeze>` is SIMULATED (resolved by disciplined judgment,
-// not a real freeze hash) — FLAGGED.
+// `GenesisApi` (`genesis`/`resume`) and `HandoffApi` (`handoff`/`changed`/`rerun`), both co-located below.
+// Its three duties: CHECKPOINT + RESUME (GEN-8a, drive sites in deterministic GEN-2/11 rank order, resume
+// from `rank > lastCompletedRank`); TOTAL / MALFORMED-DEGRADE (GEN-8b/8c, an honest partial `GenesisReport`
+// + `resumeToken`, NEVER a throw); IDEMPOTENT + INCREMENTAL HAND-OFF (GEN-7, KNOW-15 upsert dedup by `id`,
+// bucket-bounded `rerun`, hand control to born-from-work). Sibling stages are CALLED via `ControllerDeps`.
 
 import type { Delta } from '@atlas/index';
-import type { Candidate, Fact, GenesisReport, ResumeToken } from '../ref/types.js';
-import type { GenesisBudget } from '../ref/budget.js';
-import type { Skeleton } from '../ref/scan.js';
-import type { GenesisApi } from '../ref/resume.js';
-import type { HandoffApi } from '../ref/handoff.js';
+import type { Candidate, Fact, GenesisBudget, GenesisReport, ResumeToken, Skeleton } from './types.js';
+
+export interface GenesisApi {
+  /** The TOTAL composition-root entry (GEN-8): `atlas-genesis <repo> --at <rev> [--budget N]
+   *  [--scope <path>]` → `GenesisReport`. Runs S0→S4. TOTAL — a malformed repo/rev yields an honest
+   *  empty/partial report carrying a `resumeToken`, NEVER a throw (GEN-8). `--scope` seeds a subtree, not
+   *  the whole repo (GEN-13). With all deepening loops off (`budget`) cost == the single-pass baseline
+   *  (GEN-14).
+   *
+   *  [FLAG — arg carriers] the surface line (atlas-genesis:184) types none of the args; `repo`/`rev`
+   *  transcribed as `string` (mirroring `scan`/`mine`; `rev` deliberately a malformable raw string, not a
+   *  branded `Hash`), `budget?` as the `GenesisBudget` policy, `scope?` as a subtree path `string`. */
+  genesis(repo: string, rev: string, budget?: GenesisBudget, scope?: string): GenesisReport;
+
+  /** Resume an interrupted run from the last completed ranked site (GEN-8). Consumes the `resumeToken`
+   *  from a prior partial report and continues the deterministic rank-ordered spend. TOTAL — never throws. */
+  resume(token: ResumeToken): GenesisReport;
+}
+
+export interface HandoffApi {
+  /** S4 one-time handoff (GEN-7). Ends the one-time seeding and hands control to born-from-work (KNOW-13).
+   *  NOT a standing sweeper. Total — never throws. */
+  handoff(): void;
+
+  /** The bounded change set since a `prior` skeleton (INDEX-12 / GEN-7). Re-indexes ONLY the changed
+   *  buckets, never `N` — the `Delta` (`{idChanged, stateChanged, changedBuckets}`) reused verbatim from
+   *  @atlas/index. Bounds the incremental re-run below. */
+  changed(prior: Skeleton, rev: string): Delta;
+
+  /** INCREMENTAL idempotent re-run (GEN-7). Re-indexes only the changed files (via `changed`) and UPSERTS
+   *  already-grounded facts by id (0 duplicates, KNOW-15); a second run over an unchanged rev is a no-op
+   *  on the grounded set. Total — a malformed rev ⇒ a partial report, never a throw (GEN-8). */
+  rerun(repo: string, rev: string, prior: Skeleton): GenesisReport;
+}
 
 /** The GEN-2 hard-ceiling cap: default budget is `min(frontier_size, 200)` sites/run (atlas-genesis:198). */
 export const CEILING_CAP = 200 as const;
@@ -164,7 +178,7 @@ function toReport(res: DriveResult, malformed: boolean): GenesisReport {
 }
 
 /**
- * Bind the run controller to the frozen `GenesisApi` + `HandoffApi` surfaces (ref/resume.ts, ref/handoff.ts).
+ * Bind the run controller to the frozen `GenesisApi` + `HandoffApi` surfaces (co-located above).
  * The single-run bootstrap keeps its checkpoint in the closure `pending` (the persisted resume context);
  * `resume(token)` re-drives its remainder. The injected seams are the "it calls them" ports (card
  * exclusions), never a change to the frozen contract.

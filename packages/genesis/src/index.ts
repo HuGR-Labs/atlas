@@ -4,26 +4,18 @@
 // (brownfield) repo — DETERMINISTIC skeleton (S0/S1 `$0`-LLM, GEN-1/11), RATIONED intelligence (S2 the
 // ONLY LLM entry, GEN-2), the HUMAN ratifies only the contested (S3, GEN-5) — then HANDS OFF to
 // born-from-work (S4, GEN-7) and never remains a sweeper. As the composition root it imports DOWNWARD
-// only (contracts / index / knowledge / memory) and is imported by no lower layer. The implementation
-// surface WPs fill in at execution — the skeleton ships ZERO runtime: every frozen interface lives in
-// ref/*.ts until a WP implements it.
+// only (contracts / index / knowledge / memory) and is imported by no lower layer.
 //
 // GEN-6 is structural in these types: `mine`/`rank` return `Candidate[]` (a ranked SITE, NEVER a fact);
 // GEN-2 is structural too: `extract` is the sole facet whose signature admits the LLM. The barrel
 // re-exports the package's FULL public type surface so consumers can import from the bare package root
-// (`import type { GenesisReport } from '@atlas/genesis'`). ref/*.ts is type-only, hence `export type *`.
+// (`import type { GenesisReport } from '@atlas/genesis'`). Each frozen interface is now co-located with its
+// impl; the shared data model + the ≥2-consumer API interfaces (budget / extract / scan) live in types.ts.
 
-export type * from '../ref/types.js';
-export type * from '../ref/scan.js';
-export type * from '../ref/mine.js';
-export type * from '../ref/rank.js';
-export type * from '../ref/extract.js';
-export type * from '../ref/predicate.js';
-export type * from '../ref/align.js';
-export type * from '../ref/handoff.js';
-export type * from '../ref/seed.js';
-export type * from '../ref/budget.js';
-export type * from '../ref/resume.js';
+// The frozen data model + the co-located API interfaces consumed by ≥2 src files (the GEN-13/14 budget
+// vocabulary + BudgetApi, the S2 ExtractApi/ExtractResult, the S0 Skeleton/ScanApi). Every other frozen
+// interface now lives beside its impl and is re-exported by `export *` from the runtime files below.
+export type * from './types.js';
 
 // ── Runtime surface (Campaign-8 — bootstrap genesis) ─────────────────────────────────────────────────
 export * from './extract.js';        // WP-8.28-a.GEN — budgeted grounded proposal (spend highest-first, 2-door, WhyNot)

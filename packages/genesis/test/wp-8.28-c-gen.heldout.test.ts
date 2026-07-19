@@ -3,13 +3,13 @@
 // Cold held-out transcription of the `-2` goldens SCN-GEN-13a-2 … SCN-GEN-13k-2 (held_out:true) from
 // docs/requirements/goldens-gen.md. Authored by the reviewer against the EXISTING src (no src changes) to
 // probe over-fit to the visible `-1` fixtures. Same oracle surface (../src/cost-policy.js + frozen
-// ../ref/budget.ts / ../ref/types.ts); different fixtures (h1..h5, billing/ scope, 30 builds, 1200 syms).
+// types.ts); different fixtures (h1..h5, billing/ scope, 30 builds, 1200 syms).
 
 import { describe, it, expect } from 'vitest';
 import { asSubtreeHash } from '@atlas/kernel';
 import type { StructRef, Tier } from '@atlas/contracts';
-import type { Candidate, MinedSignals } from '../ref/types.js';
-import type { GenesisBudget } from '../ref/budget.js';
+import type { Candidate, MinedSignals } from '@atlas/genesis';
+import type { GenesisBudget } from '@atlas/genesis';
 import {
   DEFAULT_SAMPLES,
   DEFAULT_CEGIS_K,

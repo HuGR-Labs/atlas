@@ -1,20 +1,9 @@
 // @atlas/tools — src/push.ts   (WP-6.22.TOOLS — TOOLS-14, INV-TOOLS-14)
 //
-// The phase-transition auto-inject hook — push-driven pre-phase discovery. At EVERY phase boundary the
-// orchestrator auto-injects a FRESH `atlas-query`/`own_<unit>` pack into the seat's context, so a seat
-// never has to *decide* to re-ground when its context has drifted (atlas-tools:97-104 / INV-TOOLS-14). The
-// injection is a PUSH (TOOLS-11's push tier), so it MUST hold with NO tool grant and is unaffected by
-// TOOLS-11a: a seat that received its phase pack by push is correct even on a harness where native MCP pull
-// is `unavailable`, because it never needed the grant. Ad-hoc mid-task PULL stays available but MUST be an
-// optimization, never the mechanism that keeps a seat grounded (0 seats ungrounded at a boundary by
-// pull-failure). Transcribed against atlas-tools:212(TOOLS-14) + method-tags-tls:117-122(INV-TOOLS-14).
-//
-// SCOPE (this facet): the phase-boundary PUSH surface only — fire on the transition, materialize a fresh
-// pack from the RETR fresh-pack contract, deliver it grant-free, and keep pull non-load-bearing. EXCLUDED:
-// this facet does NOT define the injection ceiling / drop order (RETR-6) or the stale / re-ground law
-// (RETR-3); those are CONSUMED FROZEN from @atlas/retrieval as the injected `FreshPackSource` port and are
-// never recomputed here. It opens NO write path and registers NO fifth governance tool (the write surface
-// stays exactly four — TOOLS-1). Identity/hashing stays behind the sealed @atlas/kernel seam (none here).
+// The phase-transition auto-inject hook — push-driven pre-phase discovery. At EVERY phase boundary it
+// materializes a FRESH `own_<unit>`/`atlas-query` pack from the injected @atlas/retrieval `FreshPackSource`
+// and delivers it grant-free (`grantsRequired == 0`, `pulled == false`) — correct even where native pull is
+// unavailable. Pull stays a non-load-bearing optimization; opens NO write path, no fifth tool (TOOLS-1).
 
 import type { Pack, Territory } from '@atlas/contracts';
 import type { OwnApi, OwnPack, OwnUnit, PackApi } from '@atlas/retrieval';

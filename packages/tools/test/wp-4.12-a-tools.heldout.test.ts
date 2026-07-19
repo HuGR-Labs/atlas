@@ -1,7 +1,7 @@
 // @atlas/tools — test/wp-4.12-a-tools.heldout.test.ts   (WP-4.12-a.TOOLS — HELD-OUT GATE)
 //
 // Cold held-out `-2` goldens (SCN-TOOLS-8{a,b,c,d}-2) authored by the reviewer against the EXISTING
-// src/reconcile.ts. Different drift sets, same reconcile behaviour vs tools/ref/reconcile.ts. Fixtures
+// src/reconcile.ts. Different drift sets, same reconcile behaviour vs the co-located `ReconcileApi`. Fixtures
 // mirror the visible-test seams (GROUND DriftSource + KNOW-5 classifier), never redefining them.
 
 import { describe, it, expect } from 'vitest';

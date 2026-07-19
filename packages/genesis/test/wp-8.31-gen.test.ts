@@ -11,22 +11,22 @@
 //   - SCN-GEN-14h-1 (guard) — loops do not duplicate born-from-work's free lazy enrichment (lazy items skipped).
 //
 // The facet is imported DIRECTLY from ../src/loops.js (the barrel is wired by the lead at SEAL). The
-// propose→verify harness (ref/extract.ts `ExtractApi`) and relate() (atlas-retrieval RETR-10) are the
+// propose→verify harness (`ExtractApi`, types.ts) and relate() (atlas-retrieval RETR-10) are the
 // EXISTING machinery the loops reuse — modelled here as injected fakes/spies so the governed CONTROLLER
 // (opt-in · budget-gate · fixpoint stop · round cap · Δ=0) is the unit under test. No raw hashing: branded
 // ids come from the SEALED @atlas/kernel helpers. Held-out `-2` fixtures are the GATE's — NOT transcribed.
 //
 // FLAG: interface_contract digest is `<filled-at-freeze>` (simulated) — resolved by disciplined judgment,
 // not a real freeze hash.
-// FLAG: `LoopConfig.epsilon` default is OWNER-DEFINE (ref/budget.ts:28); no MUST golden fixes its value, so
+// FLAG: `LoopConfig.epsilon` default is OWNER-DEFINE (types.ts); no MUST golden fixes its value, so
 // the facet's `defaultLoops()` placeholder is INERT (enabled:false) and asserted by NO test here.
 
 import { describe, it, expect } from 'vitest';
 import { asSubtreeHash } from '@atlas/kernel';
 import type { StructRef } from '@atlas/contracts';
-import type { Candidate } from '../ref/types.js';
-import type { ExtractApi, ExtractResult } from '../ref/extract.js';
-import type { GenesisBudget, LoopConfig } from '../ref/budget.js';
+import type { Candidate } from '@atlas/genesis';
+import type { ExtractApi, ExtractResult } from '@atlas/genesis';
+import type { GenesisBudget, LoopConfig } from '@atlas/genesis';
 import {
   defaultLoops,
   isOptedIn,

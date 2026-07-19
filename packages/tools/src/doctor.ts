@@ -1,24 +1,27 @@
 // @atlas/tools — src/doctor.ts   (WP-7.26-b.TOOLS — TOOLS-12, INV-TOOLS-12; guidance INV-TOOLS-4)
 //
-// `atlas doctor` — the READ-ONLY + ADVISORY diagnostic surface. The human-facing inspect/repair/GC view for
-// a store where nothing dies and the archive grows monotone: archive browse, drift-explain / `why-broken`,
-// hot-set size vs budget, and a GUIDED re-ground/retire flow. It PERSISTS NOTHING (0 direct store mutation)
-// and carries NO write authority: it is built over a READ-ONLY diagnostic port and exposes NO
-// store-mutating method — so it is structurally incapable of writing. Any write it proposes is a
-// `RegroundPlan` that funnels through `atlas-emit` (the single write door, TOOLS-1) — doctor only PROPOSES
-// the templated candidate, never persists it. It is NOT a fifth governance tool: the write surface stays
-// EXACTLY FOUR (TOOLS-1), like the per-node read projections (TOOLS-10) and `atlas-diff` (TOOLS-16).
-// Transcribed against the frozen oracle `../ref/doctor.ts` (`DoctorApi`) + `../ref/types.ts` (`DoctorOut` /
-// `RegroundPlan` / `HotSet` / `DriftItem`).
-//
-// SCOPE (this facet): the read/advisory projection — the four read legs + the guided plan proposal + the
-// no-write-authority shape + the shipped guidance envelope. EXCLUDED — actually PERSISTING a re-ground (that
-// is `atlas-emit`, the sealed write door, NEVER doctor); the drift mechanical/semantic classifier itself
-// (the @atlas-knowledge KNOW-5 split, referenced not redefined); identity/hashing (sealed @atlas/kernel).
+// `atlas doctor` — the read-only + advisory diagnostic surface + the frozen `DoctorApi`: archive browse,
+// drift-explain, hot-set-vs-budget, and a GUIDED re-ground/retire plan. Built over a read-only port, it
+// PERSISTS NOTHING — any proposed write is a `RegroundPlan` funnelled through `atlas-emit` (not a 5th tool).
 
 import type { GroundedFact } from '@atlas/knowledge';
-import type { DoctorApi } from '../ref/doctor.js';
-import type { DoctorOut, DriftItem, Guidance, Hash, RegroundPlan } from '../ref/types.js';
+import type { DoctorOut, DriftItem, Guidance, Hash, RegroundPlan } from './types.js';
+
+export interface DoctorApi {
+  /** Browse the monotone archive / supersede lineage for a scope (atlas-tools:136). Read-only. */
+  archive(scope?: string): DoctorOut;
+
+  /** Drift-explain: which anchor drifted, mechanical vs semantic (atlas-tools:137). Read-only. */
+  whyBroken(fact: string): DoctorOut;
+
+  /** Hot-set size vs budget; flags an over-budget hot-set (advisory, atlas-tools:138). Read-only. */
+  hotSet(budget: number): DoctorOut;
+
+  /** Guided re-ground/retire — returns a `RegroundPlan` (on `DoctorOut.plan`) and PERSISTS NOTHING; the
+   *  store changes only when that plan is run through `atlas-emit` (TOOLS-12, atlas-tools:139). Read-only:
+   *  a write attempted directly via `doctor` is rejected (method-tags-tls:107). */
+  reground(fact: string): DoctorOut;
+}
 
 /**
  * The READ-ONLY diagnostic port doctor is built over. EVERY leg reads; NONE writes. Doctor holds no store
@@ -75,7 +78,7 @@ export function createDoctor(source: DoctorSource): DoctorApi {
   return { archive, whyBroken, hotSet, reground };
 }
 
-// differential-vs-oracle (compile-time): the impl conforms to the frozen `DoctorApi` (../ref/doctor.ts) —
+// differential-vs-oracle (compile-time): the impl conforms to the co-located frozen `DoctorApi` —
 // a read/advisory projection with NO write-returning method (the write surface stays exactly four, TOOLS-1).
 const _doctorConforms: DoctorApi = createDoctor({
   lineage: () => [],

@@ -13,12 +13,12 @@
 //
 // SCOPE (card exclusions): NOT the subtreeHash compute (owned by GROUND); NOT the write-decision/upsert
 // (EPIC-13); NOT the drift mechanical/semantic split nor the advisory→STALE router (EPIC-12 / GROUND-13).
-// A Knowledge fact carries the 2-state `KnowledgeFreshness` (FRESH | DRIFTED — no STALE, ref/types.ts):
+// A Knowledge fact carries the 2-state `KnowledgeFreshness` (FRESH | DRIFTED — no STALE, types.ts):
 // the structural verdict is FRESH iff the oracle says FRESH, else DRIFTED (fail-closed narrowing).
 
 import type { DriftApi } from '@atlas/grounding';
 import type { Axes } from '@atlas/index';
-import type { GroundedFact, KnowledgeFreshness } from '../ref/types.js';
+import type { GroundedFact, KnowledgeFreshness } from './types.js';
 
 /**
  * The bound Knowledge drift-verdict function: `freshness(fact, tree)` (KNOW-3a/3b/3c). Given a built-

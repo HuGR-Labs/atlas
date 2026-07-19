@@ -1,23 +1,15 @@
-// @atlas/tools — ref/types.ts  (FROZEN INTERFACE — pure types, zero runtime logic)
+// @atlas/tools — src/types.ts  (frozen data model + shared/unconsumed API interfaces; zero runtime)
 //
-// Layer 7: the PUBLIC tool / OKF surface — the Atlas's whole read/write API. The four governance tools
-// are the ONLY write/read governance surface (TOOLS-1); everything else (diff / doctor / node) is a
-// READ-ONLY projection of the same store, carrying NO write authority. This file carries the package's
-// shared data model: the tool result records + the shipped `next+invariant` guidance envelope.
-// Transcribed EXACTLY from `docs/reference/atlas-tools.md` §Data model (lines 14-26) + §Invariants
-// TOOLS-1..16 + method-tags-tls.md down-models.
-//
-// [LEAD-RATIFIED] The shared vocabulary — `Pack`/`PackInvariant`/`InjectionKind`/`Budget`/`Hash`/
-// `NodeKey`/`SubtreeHash`/`Territory` — lives in @atlas/contracts and is IMPORTED, NEVER redefined.
-//
-// [LEAD-RATIFIED / TOOLS-1 SACRED] The GOVERNANCE (write) surface is EXACTLY four tools — `atlas-init`,
-// `atlas-query`, `atlas-emit`, `atlas-reconcile` — and the ONLY write path is `atlas-emit`. `atlas-diff`
-// (TOOLS-16), `atlas doctor` (TOOLS-12), and the per-node projections (TOOLS-10) are read-only views;
-// they are NOT modeled as a fifth governance/write tool anywhere in this package.
+// Layer 7 PUBLIC tool / OKF data model: the tool result records + the `next+invariant` guidance envelope,
+// plus the co-located API interfaces no single impl owns — the handler union/oracle (ToolData / Transport /
+// HandlerApi, consumed by ≥2 src files) and the tri-transport NodeApi (which no src file re-exports). The
+// contracts-owned vocab (`Pack`/`Hash`/`NodeKey`/`Territory`/…) is IMPORTED, NEVER redefined. TOOLS-1: the
+// write surface is EXACTLY four (`atlas-init`/`-query`/`-emit`/`-reconcile`); diff/doctor/node are read-only.
 
-import type { Hash, NodeKey, Pack, StructRef, Territory } from '@atlas/contracts';
+import type { Hash, NodeKey, Pack, StructRef, Territory, ToolSchema } from '@atlas/contracts';
 import type { GroundedFact } from '@atlas/knowledge';
 import type { VersionDelta } from '@atlas/persist';
+import type { OwnPack, OwnUnit, RelationSet } from '@atlas/retrieval';
 
 // Re-export the contracts-owned surface vocab so consumers can pull the whole dialect from the bare
 // package root. Owned by @atlas/contracts — re-exported, NOT redefined.
@@ -196,3 +188,66 @@ export interface DoctorOut {
  * write authority; the governance write surface stays exactly four (TOOLS-1/16).
  */
 export type DiffOut = VersionDelta;
+
+// ── co-located handler surface (was ref/handler.ts — consumed by handler.ts + transport.ts + diff.ts) ──
+// The handler union / transport tag / oracle interface carry zero runtime; they live with the shared
+// model because each is consumed by ≥2 src files (housing them here keeps the impl files free of
+// impl→impl type imports). Transcribed from atlas-tools:6-11, 187-190 + method-tags-tls:26-45, 82-87.
+
+/** The per-tool result payload carried on a `Verdict.data` — the union of the four governance-tool result
+ *  records (TOOLS-5/6/7/8). The handler is one oracle over all four; the concrete leg is fixed by `tool`. */
+export type ToolData = InitOut | QueryOut | EmitOut | ReconcileOut;
+
+/** The transport a call arrived on (TOOLS-3/10). Transcribed from the reference's "one contract, two
+ *  transports" (CLI≡MCP) plus the tri-transport node reads (MCP tool | poke | CLI). Behaviour MUST NOT
+ *  diverge across these — the handler is the single oracle. */
+export type Transport = 'cli' | 'mcp' | 'poke';
+
+export interface HandlerApi {
+  /** THE one handler. Pure + total (TOOLS-2): malformed `args` ⇒ a structured rejected `Verdict`, never a
+   *  throw. Byte-identical over CLI and MCP against the one published schema (TOOLS-3). Carries
+   *  `next+invariant` guidance on EVERY path (TOOLS-4). (method-tags-tls:30, 37, 44)
+   *
+   *  [PINNED — `args` / `data` shapes] `args` STAYS `unknown` by design (TOOLS-2 totality boundary: a
+   *  malformed argument fails CLOSED to a rejected `Verdict`, so the input MUST be untyped at the door).
+   *  The `Verdict` payload is the per-tool result union `ToolData` (`InitOut | QueryOut | EmitOut |
+   *  ReconcileOut`) the reference frames — the concrete leg is fixed by `tool`. */
+  handle(tool: Tool, args: unknown): Verdict<ToolData>;
+
+  /** Resolve a node by CONTENT ADDRESS through the same one handler (TOOLS-10) — the oracle behind the
+   *  tri-transport reads (MCP tool | poke | CLI), byte-identical across all three. READ-ONLY: this opens
+   *  NO write path (writes still funnel through `atlas-emit`, TOOLS-1). (method-tags-tls:86) */
+  resolveNode(nodeAddr: NodeKey, transport: Transport): Verdict;
+
+  /** The one PUBLISHED input schema for a tool (TOOLS-3) — CLI and MCP share it; the two transports MUST
+   *  NOT diverge. [PINNED theme #2] the shared MCP tool-schema record → `ToolSchema` from @atlas/contracts
+   *  (decide once, share; retrieval `NodeTool.schema` pins to the SAME type — byte-identical schemas). */
+  schema(tool: Tool): ToolSchema;
+}
+
+// ── co-located node projection (was ref/node.ts — impl-less; no src file re-exports NodeApi) ────────────
+// The per-node READ projections / node-tools (TOOLS-10, RETR-5): every Atlas node is addressable by its
+// CONTENT ADDRESS over THREE transports against ONE handler (MCP tool | poke | CLI), which MUST NOT
+// diverge. Read/subscribe only — NO write path (writes still funnel through `atlas-emit`, TOOLS-1). Housed
+// here because no impl file consumes it. Transcribed from atlas-tools:59-66, 130-133, 175-176 +
+// method-tags-tls:82-87.
+
+export interface NodeApi {
+  /** Resolve a node by its CONTENT ADDRESS (TOOLS-10). READ-ONLY; resolves byte-identically over the MCP
+   *  tool | poke | CLI (0 contract divergence, method-tags-tls:85). The CLI is unscoped.
+   *
+   *  [FLAG — `nodeAddr` = `NodeKey`] atlas-tools:131 names `atlas node <nodeAddr>`; the node identity leg
+   *  is the `nodeKey` (mirrors retrieval `NodeTool.nodeId: NodeKey`). Transcribed as `NodeKey`. The return
+   *  is the @atlas/knowledge `GroundedFact` (the node). */
+  node(nodeAddr: NodeKey): GroundedFact;
+
+  /** The deterministic related-node set for a scope (atlas-tools:132, RETR-10). READ-ONLY; owned by
+   *  @atlas/retrieval (`RelationSet`), imported, NOT redefined.
+   *
+   *  [PINNED — `scope` arg] pinned to `string` (cf retrieval `Path = string`), NOT a brand. */
+  relate(scope: string): RelationSet;
+
+  /** The CURATED zero-assembly briefing for a scope-unit (atlas-tools:133, RETR-12). READ-ONLY; owned by
+   *  @atlas/retrieval (`OwnPack` / `OwnUnit`), imported, NOT redefined. */
+  own(unit: OwnUnit): OwnPack;
+}

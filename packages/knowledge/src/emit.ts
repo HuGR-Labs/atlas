@@ -4,7 +4,7 @@
 // does NOT enter: `admit(node) = isGrounded(node.grounding) ? persist : {emitted:false}`, where the
 // grounded predicate is GROUND's `isGrounded` (GROUND-2: ≥1 entry ∧ every entry a non-empty
 // `subtreeHash`). Admission is TOTAL — a structured rejection, NEVER a throw. Transcribed against the
-// FROZEN oracle `../ref/emit.ts` (`EmitApi.admit`); golden SCN-KNOW-2-1.
+// FROZEN oracle `EmitApi.admit` (co-located below); golden SCN-KNOW-2-1.
 //
 // SEAM (card guardrails — "no second copy of the gate; consume-only; no raw hashing"): the grounded
 // check is NOT re-implemented here — it is GROUND's frozen `GroundApi.isGrounded`, INJECTED build-ahead
@@ -17,15 +17,25 @@
 // write-decision routing / upsert (CAMPAIGN-5). The served-status recompute (KNOW-1) is `./status.ts`.
 //
 // [FLAG — simulated seal] the card `content_hash: <filled-at-freeze>` was never filled; this binding is
-// written against the VISIBLE frozen `../ref/emit.ts` text + SCN-KNOW-2-1, flagged simulated.
-// [FLAG — receipt `id`, from ref/emit.ts] the frozen oracle flags WHICH id the receipt surfaces
+// written against the VISIBLE frozen `EmitApi` text + SCN-KNOW-2-1, flagged simulated.
+// [FLAG — receipt `id`, from EmitApi] the frozen oracle flags WHICH id the receipt surfaces
 // ("the content-addressed CAS id of the persisted object"); this binding surfaces exactly the injected
 // sink's returned `Hash` (never a self-hashed value) — the which-id reconciliation stays the ref's flag.
 
 import type { Hash } from '@atlas/contracts';
 import type { GroundApi } from '@atlas/grounding';
-import type { GroundedFact } from '../ref/types.js';
-import type { EmitApi } from '../ref/emit.js';
+import type { GroundedFact } from './types.js';
+
+// ── frozen EmitApi surface, co-located here (was ref/emit.ts) ─────────────────────────────────────────
+
+export interface EmitApi {
+  /** Fail-closed admission (KNOW-2). Persists iff the node is grounded (≥1 grounding entry, each with a
+   *  non-empty `subtreeHash`); an ungrounded/partially-grounded node ⇒ `{emitted:false}`, nothing
+   *  persisted. Returns the CAS id on success. Pure + total — a structured rejection, never a throw
+   *  (atlas-knowledge:79). `id` is the content-addressed CAS id of the persisted object (a `Hash`);
+   *  under `exactOptionalPropertyTypes`, `id?` is genuinely absent-on-reject / present-on-emit. */
+  admit(node: GroundedFact): { readonly emitted: boolean; readonly id?: Hash };
+}
 
 /**
  * The fail-closed grounded-write seam (KNOW-2), injected build-ahead. Owned by WP-4.11-a.GROUND (the

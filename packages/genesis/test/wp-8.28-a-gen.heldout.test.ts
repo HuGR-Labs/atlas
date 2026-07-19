@@ -5,8 +5,8 @@
 import { describe, it, expect } from 'vitest';
 import { asSubtreeHash, asNodeKey } from '@atlas/kernel';
 import type { StructRef } from '@atlas/contracts';
-import type { Candidate, Fact, MinedSignals } from '../ref/types.js';
-import type { GenesisBudget } from '../ref/budget.js';
+import type { Candidate, Fact, MinedSignals } from '@atlas/genesis';
+import type { GenesisBudget } from '@atlas/genesis';
 import { runExtract, defaultCeiling, type SeedProposal, type SiteProposer, type EmitGate } from '../src/extract.js';
 
 const ZERO: MinedSignals = { hotspot: 0, szzBugCommits: 0, coChanged: [], owners: [], messages: [] };

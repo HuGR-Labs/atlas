@@ -3,28 +3,12 @@
 // The S2 ESCALATION CONTROLLER — tiered escalation defaults (cost discipline: CHEAP BY DEFAULT, ESCALATE BY
 // VALUE). Every S2 mechanism BEYOND a single grounded proposal is OFF at the base tier; it switches on ONLY
 // when a cheap signal shows the candidate is high-value (tier/blast) AND uncertain. Frozen defaults: one
-// sample (no self-consistency), advisory-unless-checkable ∧ `tier≥T1`, CEGIS `K≤1`, refuter for `T0` ONLY
-// (small model), Semgrep-before-CodeQL, any query DB built ONCE (amortized, never per-check). Genesis is
-// SCOPABLE — no whole-repo pass, the cold tail is left to born-from-work — and it reports cost PER STAGE
-// under the ceiling.
-//
-// Transcribed against the FROZEN oracle `../ref/budget.ts` (`BudgetApi.escalate`/`report`,
-// `EscalationDecision`, `Mechanism`, `GenesisBudget`) + `../ref/types.ts` (`Candidate`, `PipelineStage`,
-// `StageCost`/`CostReport`); interface_contract atlas-genesis.md#gen-13; goldens SCN-GEN-13a-1…13k-1.
-//
-// SCOPE (card exclusions): this controller does NOT perform the admission / teeth check (EPIC-28-b), does
-// NOT define the budget spend order (EPIC-28-a), and does NOT implement the CodeQL/Semgrep engines — it
-// ORDERS and GATES them. The deepening loops (EPIC-31 / GEN-14) are NOT touched here. SEAM: the cheap
-// escalation signal is an INJECTED port (`SignalOracle`) — the frozen `Candidate` carries no
-// tier/uncertainty/checkability, so the signal is supplied, never invented onto the contract. No hashing /
-// identity is performed here; imports are types-only.
-//
-// FLAG: interface_contract digest is `<filled-at-freeze>` (simulated) — resolved by disciplined judgment,
-// not a real freeze hash.
+// sample (no self-consistency), advisory-unless-checkable ∧ `tier≥T1`, CEGIS `K≤1`, refuter for `T0` ONLY,
+// Semgrep-before-CodeQL, any query DB built ONCE (amortized). Reports cost PER STAGE under the ceiling.
+// Implements the frozen `BudgetApi` (types.ts); the cheap escalation signal is an INJECTED `SignalOracle`.
 
 import type { StructRef, Tier } from '@atlas/contracts';
-import type { Candidate, CostReport, PipelineStage, StageCost } from '../ref/types.js';
-import type { BudgetApi, EscalationDecision, GenesisBudget, Mechanism } from '../ref/budget.js';
+import type { BudgetApi, Candidate, CostReport, EscalationDecision, GenesisBudget, Mechanism, PipelineStage, StageCost } from './types.js';
 
 // ── the frozen GEN-13 defaults ─────────────────────────────────────────────────────────────────────────
 
@@ -201,7 +185,7 @@ export interface BudgetDeps {
 }
 
 /**
- * Bind the escalation controller to the frozen `BudgetApi` (ref/budget.ts): `escalate(cand, budget)` reads
+ * Bind the escalation controller to the frozen `BudgetApi` (types.ts): `escalate(cand, budget)` reads
  * the injected cheap signal and returns the `{ tier, mechanisms }` decision (base ⇒ `[]`, exactly one call);
  * `report()` returns the accumulated per-stage `CostReport`. The signature is EXACTLY the frozen surface —
  * the signal port is the "it calls them" seam (card exclusions), never a change to the contract.

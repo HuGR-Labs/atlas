@@ -4,16 +4,16 @@
 // fact accrues a logged `hit` each time it governs a decision; a served fact with ZERO hits across the
 // decay window DECAYS out of the served/pack set (archived to CAS, never deleted — KNOW-12) and MAY
 // re-enter on a later hit; and the Door-2 admission threshold is a FUNCTION of observed hits, never the
-// proposer's self-assessment. This module implements the FROZEN `HitsApi` (ref/hits.ts) and owns the
+// proposer's self-assessment. This module implements the FROZEN `HitsApi` (co-located below) and owns the
 // door-2 calibration OVER the ledger — the KNOW-17 seam consumed by RETR (RETR-8) and GEN (GEN-16).
 //
 // SEAM (sealed lower layers; build-ahead injection — the same discipline `bindReconcile`/`bindFreshness`/
 // `produce` use; no raw hashing, no clock, no IO here):
 //   • the served/pack SNAPSHOT is upstream-owned (produce/router) — INJECTED as `servedSet`, consumed
 //     read-only; the decay pass iterates it, never recomputes it.
-//   • the CAS archive is KERNEL-owned (KNOW-12, ref/archive.ts) — INJECTED as `archive`, a sink that only
+//   • the CAS archive is KERNEL-owned (KNOW-12, archive.ts) — INJECTED as `archive`, a sink that only
 //     RECEIVES; decay archives and NEVER deletes. Re-entry re-spawns from it on a later hit.
-//   • the door-2 threshold `f(hits)` is the SECOND OPEN-DEFINE constant (ref/hits.ts DecayConfig.threshold)
+//   • the door-2 threshold `f(hits)` is the SECOND OPEN-DEFINE constant (DecayConfig.threshold, co-located)
 //     — it MUST be PARAMETRIC, so it is INJECTED as `calibrate`, never a baked-in constant. This module
 //     applies it to OBSERVED hits (the ledger), never to a proposer self-score.
 // The `window` is the oracle-pinned logical LEDGER event-count (a monotone `number`, KNOW-17 ↔ MEM-7),
@@ -24,11 +24,45 @@
 // ledger (RETR-13); does NOT define the pack cap/drop order. GEN/RETR CONSUME this contract downstream.
 
 import type { NodeKey } from '@atlas/contracts';
-import type { DecayConfig, LedgerEntry, HitsApi } from '../ref/hits.js';
+
+// ── frozen HitsApi surface, co-located here (was ref/hits.ts) ─────────────────────────────────────────
+
+/**
+ * [OPEN DEFINE — parametric, threshold UNPINNED] The KNOW-17 decay window + the door-2 admission
+ * threshold as a FUNCTION of observed hits (`threshold==f(hits)`, method-tags-knw:135). PARAMETRIC — a
+ * config the decay pass takes, never a baked-in constant; the threshold value is NOT frozen (calibrates
+ * on observed downstream hits). The decay-window unit is a logical LEDGER event-count (`number`).
+ */
+export interface DecayConfig {
+  /** logical ledger position (monotone event-count), never wall-clock. */
+  readonly window: number; // PINNED → number (ledger event-count)
+  readonly threshold: number; // [OPEN DEFINE] door-2 threshold == f(hits) — parametric, value unpinned
+}
+
+/**
+ * The minimal honest per-node hit-ledger record (KNOW-17). [PINNED — oracle-pin-map §hits] the minimal
+ * `{nodeKey, hits, window}`: the node cited, its observed hit-count, and the ledger `window` position.
+ */
+export interface LedgerEntry {
+  readonly nodeKey: NodeKey;
+  readonly hits: number;
+  readonly window: number; // logical ledger position (monotone event-count), never wall-clock
+}
+
+export interface HitsApi {
+  /** Log a `hit` citing a served fact's node-id (a fact governed a decision — KNOW-17). Append-only
+   *  ledger event. Returns the minimal honest per-node ledger record `{nodeKey, hits, window}`. */
+  logHit(nodeId: NodeKey): LedgerEntry;
+
+  /** Decay pass (parametric — `cfg`): a fact with 0 hits in the window is archived to CAS (never
+   *  deleted — KNOW-12) and may re-enter on a later hit. The door-2 threshold is `f(hits)`, never a
+   *  self-score (method-tags-knw:135). Pure + total. The result is the decayed/retained node-id sets. */
+  decay(cfg: DecayConfig): { readonly decayed: readonly NodeKey[]; readonly retained: readonly NodeKey[] };
+}
 
 /**
  * The DEFINE-supplied Door-2 admission threshold as a FUNCTION of observed hits (`threshold==f(hits)`,
- * method-tags-knw:135; ref/hits.ts DecayConfig.threshold). PARAMETRIC — injected, never a baked-in
+ * method-tags-knw:135; DecayConfig.threshold, co-located). PARAMETRIC — injected, never a baked-in
  * constant; the VALUE is not frozen (it calibrates on observed downstream hits, not the proposer's
  * score). This module applies it to the ledger's OBSERVED hit-count, never to a self-assessment.
  */

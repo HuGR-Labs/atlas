@@ -1,7 +1,7 @@
 // @atlas/knowledge — test/wp-5.14-know.lifecycle.test.ts  (WP-5.14.KNOW · EPIC-14)
 //
 // RED→GREEN transcription of the VISIBLE `-1` goldens for the fact lifecycle (templated + scope-checked
-// upserts, prior versions deduped in CAS) against the FROZEN oracles ref/{template,authz,archive}.ts:
+// upserts, prior versions deduped in CAS) against the FROZEN oracles {template,authz,archive}.ts:
 //   KNOW-10  templated write, no free prose — SCN-KNOW-10a-1 (free-prose reject), 10b-1 (missing field),
 //            10b-2 (over-cap); plus the closed-slot + totality teeth of INV-KNOW-10.
 //   KNOW-11  owner-scoped write, universal read — SCN-KNOW-11a-1 (carries owner+scope, fail-closed),
@@ -25,7 +25,8 @@
 import { describe, it, expect } from 'vitest';
 import { asNodeKey, asSubtreeHash, createStore } from '@atlas/kernel';
 import type { NodeKey } from '@atlas/contracts';
-import type { Candidate, GroundedFact, AdvisoryNode, PredicateNode, Grounding } from '../ref/types.js';
+import type { Candidate, GroundedFact, AdvisoryNode, PredicateNode } from '@atlas/knowledge';
+import type { Grounding } from '@atlas/grounding';
 import { validateTemplate, isClosedSlot } from '../src/template.js';
 import { authz, inScope } from '../src/authz.js';
 import { bindArchive } from '../src/archive.js';

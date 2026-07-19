@@ -2,12 +2,12 @@
 //
 // The criticality classifier (KNOW-7). Criticality is NEVER auto-assigned: a `T0`-keyword match yields
 // `t0Candidate:true` AND `tier=='T2'` (0 auto-promotes); the heuristic may only FLAG a candidate for
-// human ratification, never write the tier. Binds the FROZEN `TierApi` (ref/tier.ts):
+// human ratification, never write the tier. Binds the FROZEN `TierApi` (co-located below):
 // `classify(territory: TerritoryView): { t0Candidate: boolean; tier: Tier }`.
 //
-// FACET BOUNDARY (BIND — resolved vs FROZEN oracle ref/tier.ts):
+// FACET BOUNDARY (BIND — resolved vs the frozen TierApi, co-located below):
 //  • [FLAG — arg] the oracle types `classify(territory)` as the knowledge-local `TerritoryView` (the
-//    ref/init.ts output shape) while noting the canonical `Territory` could also apply. This facet binds
+//    init.ts output shape) while noting the canonical `Territory` could also apply. This facet binds
 //    to the oracle's declared type — `TerritoryView` — matching the init→classify pipeline; the flag is
 //    resolved, not an unpinned MUST-field.
 //  • The `T0` keyword corpus is a builder-owned HEURISTIC (heuristics only FLAG — KNOW-7), not a frozen
@@ -15,8 +15,17 @@
 //    NOTHING to the tier — the human ratifier owns any `T0` promotion.
 
 import type { Tier } from '@atlas/contracts';
-import type { TerritoryView } from '../ref/types.js';
-import type { TierApi } from '../ref/tier.js';
+import type { TerritoryView } from './types.js';
+
+// ── frozen TierApi surface, co-located here (was ref/tier.ts) ─────────────────────────────────────────
+
+export interface TierApi {
+  /** Classify a territory's criticality (KNOW-7). Sets `t0Candidate` by keyword but ALWAYS emits
+   *  `tier='T2'` — the invariant `t0Candidate ⇒ tier=='T2'` holds over the whole keyword corpus
+   *  (method-tags-knw:64). A `T0` tier is human-ratified only (never mechanical). Pure + total.
+   *  Typed on the knowledge-local `TerritoryView` (the init.ts output shape). */
+  classify(territory: TerritoryView): { readonly t0Candidate: boolean; readonly tier: Tier };
+}
 
 /** The closed `T0`-flag keyword corpus (heuristic — flags only, never assigns the tier). */
 export const T0_KEYWORDS: readonly string[] = [

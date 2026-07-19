@@ -1,27 +1,42 @@
 // @atlas/tools — src/guard.ts   (WP-7.26-a.TOOLS — TOOLS-1 / TOOLS-15, INV-TOOLS-1 / INV-TOOLS-15)
 //
-// The SINGLE-WRITE-DOOR — a STORE-LEVEL, STRUCTURAL guard (not a documented rule). TOOLS-10 leaves the
-// CLI unscoped and shell-reachable, so a seat with `Bash` + filesystem write could otherwise mutate the
-// store directly and bypass `atlas-emit`'s fail-closed grounding check (TOOLS-7). This closes that hole
-// with TWO structural legs, both keyed off the SEALED @atlas/kernel `id` content-address (never a
-// hand-rolled digest):
-//   • append-only / permissioned WRITE — the store medium admits a row ONLY when its key IS the content
-//     address of its value (`key == id(value)`), exactly what `atlas-emit`'s grounded path produces; a
-//     back-channel row (forged/mismatched key) is refused and nothing lands, and an existing row is never
-//     overwritten in place (append-only).
-//   • content-address integrity READ — every read recomputes the address and REJECTS any row whose bytes
-//     were NOT produced by the grounded path (an un-emitted / tampered / directly-injected row), so it is
-//     never served.
-// A direct write that skips `atlas-emit` therefore either cannot land (write leg) or is rejected at read
-// (read leg) — it never surfaces as a served fact. Transcribed against the FROZEN oracle `../ref/guard.ts`
-// (`GuardApi` / `GuardVerdict` / `StoreRow`); goldens SCN-TOOLS-1c-1 / 1d-1 / 15a-1 / 15b-1 / 15c-1.
-//
-// SCOPE (this facet): the FUNCTIONAL refusal only. Adversarial security-exploitability of this door (a
-// shell-armed seat red-teaming the append-only / permission model) is billy / FR-12 (FORTRESS), NOT here.
+// The SINGLE-WRITE-DOOR — a store-level STRUCTURAL guard + the frozen `GuardApi`/`GuardVerdict`/`StoreRow`.
+// Two legs keyed off the sealed @atlas/kernel `id`: append-only/permissioned WRITE (admit iff `key ==
+// id(value)`) and content-address integrity READ (reject any ungrounded row). Adversarial red-team = FR-12.
 
 import { id } from '@atlas/kernel';
 import type { CasObject } from '@atlas/kernel';
-import type { GuardApi, GuardVerdict, StoreRow } from '../ref/guard.js';
+
+/** One row of the append-only, permissioned store medium (TOOLS-15). No concrete store-row record is
+ *  frozen in a lower layer at this seam, so it is DEFINED minimally here: a content-addressed `key` and
+ *  its opaque persisted `value` (the byte payload the read-time integrity check recomputes the address
+ *  over). Kept minimal — the value stays `unknown` (heterogeneous persisted bytes); never invented wider. */
+export interface StoreRow {
+  readonly key: string;
+  readonly value: unknown;
+}
+
+/** The guard's verdict on a row (TOOLS-15). `admitted:false` ⇒ the row was NOT produced by `atlas-emit`'s
+ *  grounded, content-addressed path — a direct/back-channel write — and is refused (at write) or rejected
+ *  (at read), never served. `rejected` names the structural reason. */
+export interface GuardVerdict {
+  readonly admitted: boolean;
+  readonly rejected?: string; // structural refusal reason (append-only/permission | integrity-check)
+}
+
+export interface GuardApi {
+  /** Write-time gate: the store medium is append-only / permissioned — a direct write that skips the emit
+   *  path cannot land (TOOLS-15, method-tags-tls:128). Structural, not convention.
+   *
+   *  [PINNED — `row` shape] DEFINED minimally as the append-only `StoreRow` (`{key, value}`); the `value`
+   *  stays opaque (`unknown`), NOT invented wider. */
+  admitOnWrite(row: StoreRow): GuardVerdict;
+
+  /** Read-time integrity check: recompute the content address and REJECT any row whose bytes were NOT
+   *  produced by `atlas-emit`'s grounded path — an un-emitted (ungrounded) row fails and is not served
+   *  (TOOLS-15, method-tags-tls:128). This is the second leg that closes the unscoped-CLI hole. */
+  admitOnRead(row: StoreRow): GuardVerdict;
+}
 
 /** Structural refusal reasons (the `rejected` leg of `GuardVerdict`). */
 const REFUSED_WRITE =
@@ -111,6 +126,6 @@ export function createGovernedStore(
   };
 }
 
-// differential-vs-oracle (compile-time): the guard conforms to the frozen `GuardApi` (../ref/guard.ts).
+// differential-vs-oracle (compile-time): the guard conforms to the co-located frozen `GuardApi`.
 const _guardConforms: GuardApi = createGuard();
 void _guardConforms;

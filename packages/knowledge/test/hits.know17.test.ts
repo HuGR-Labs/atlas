@@ -1,5 +1,5 @@
 // WP-6.18.KNOW · RED/GREEN — the served-fact hits ledger + door-2 threshold calibration + decay/re-entry
-// (KNOW-17) against the FROZEN `ref/hits.ts` oracle. Transcribes the visible `-1` goldens
+// (KNOW-17) against the FROZEN `HitsApi` oracle. Transcribes the visible `-1` goldens
 // SCN-KNOW-17a-1 / 17b-1 / 17c-1 / 17d-1 (docs/requirements/goldens-knw.md). Held-out `-2` fixtures
 // (different node / territory `queue/` / self-score) are NOT referenced here.
 //
@@ -7,9 +7,9 @@
 // `produce` use):
 //   • the served/pack SNAPSHOT is upstream-owned (produce/router) — INJECTED as `servedSet`, never
 //     recomputed here.
-//   • the CAS archive is KERNEL-owned (KNOW-12, ref/archive.ts) — INJECTED as `archive` (a sink that only
+//   • the CAS archive is KERNEL-owned (KNOW-12, archive.ts) — INJECTED as `archive` (a sink that only
 //     receives; decay NEVER deletes).
-//   • the door-2 threshold `f(hits)` is OPEN-DEFINE + PARAMETRIC (ref/hits.ts DecayConfig.threshold) —
+//   • the door-2 threshold `f(hits)` is OPEN-DEFINE + PARAMETRIC (DecayConfig.threshold, hits.ts) —
 //     INJECTED as `calibrate`, never a baked-in constant.
 // This WP owns ONLY the ledger accrual, the door-2 calibration OVER observed hits, and the decay/re-entry.
 // No clock, no IO, no hash computed here (the `window` is a logical ledger event-count, not wall-clock).

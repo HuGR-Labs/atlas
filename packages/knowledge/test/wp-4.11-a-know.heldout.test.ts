@@ -9,7 +9,7 @@ import { asHash, asNodeKey, asSubtreeHash } from '@atlas/kernel';
 import type { Status, StructRef } from '@atlas/contracts';
 import type { Axes, IndexNode } from '@atlas/index';
 import type { GateApi, GroundApi, Grounding } from '@atlas/grounding';
-import type { GroundedFact, PredicateNode } from '../ref/types.js';
+import type { GroundedFact, PredicateNode } from '@atlas/knowledge';
 import { bindEmit } from '../src/emit.js';
 import { bindStatus } from '../src/status.js';
 

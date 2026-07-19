@@ -9,9 +9,9 @@
 // The held-out `-2` fixtures are NOT referenced here.
 //
 // BIND NOTE (disciplined judgment, flagged): the frozen ref oracles pin the SIGNATURES. Two inputs the
-// ratifier computes UPSTREAM are supplied as ctx here (R3 reconciliation, ref/fastpath.ts):
+// ratifier computes UPSTREAM are supplied as ctx here (R3 reconciliation, FastpathApi):
 // `contested` (store-state) + `lowRisk` (door-2 threshold verdict; the THRESHOLD VALUE stays OPEN-DEFINE
-// in ref/hits.ts — the BOOLEAN is consumed, the threshold is NOT pinned). The candidate-intrinsic
+// in hits.ts — the BOOLEAN is consumed, the threshold is NOT pinned). The candidate-intrinsic
 // conjuncts (grounded/T2/advisory) are computed by `route` itself. The init `tree` is the downward-owned
 // `unknown` snapshot (index/kernel below) — narrowed to a session-internal structural seed, not a frozen
 // index type (cf. router.ts StoreProjection precedent). No raw hashing; the sealed @atlas/kernel
@@ -21,7 +21,7 @@ import { describe, it, expect } from 'vitest';
 import { asSubtreeHash } from '@atlas/kernel';
 import type { StructRef, Tier } from '@atlas/contracts';
 import type { Grounding } from '@atlas/grounding';
-import type { Candidate, TerritoryView, Check } from '../ref/types.js';
+import type { Candidate, TerritoryView, Check } from '@atlas/knowledge';
 
 import { init } from '../src/init.js';
 import type { StructuralTree } from '../src/init.js';
@@ -90,7 +90,7 @@ describe('WP-5.15.KNOW — init empty-genesis (KNOW-6 visible goldens)', () => {
     // ∀ territory: tier == 'T2'
     expect(views.every((v) => v.tier === 'T2')).toBe(true);
     // advisory family + zero invariants by construction: the emitted skeleton leaks NO authored-content
-    // key (TerritoryView has no `family`/`invariants`/predicate leg — ref/types.ts)
+    // key (TerritoryView has no `family`/`invariants`/predicate leg — types.ts)
     const skeletonKeys = new Set(['path', 'owner', 'tier', 'files', 'blastRadius', 'regions']);
     for (const v of views) {
       for (const k of Object.keys(v)) expect(skeletonKeys.has(k)).toBe(true);

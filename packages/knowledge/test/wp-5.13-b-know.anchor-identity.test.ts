@@ -33,8 +33,7 @@ import {
   // guardrail — 5.13-a's SEALED surface must remain importable + intact
   routeWrite,
 } from '../src/router.js';
-import type { NearDupConfig } from '../ref/router.js';
-import type { Candidate, Check, PredicateSlot } from '../ref/types.js';
+import type { NearDupConfig, Candidate, Check, PredicateSlot } from '@atlas/knowledge';
 import type { StructRef } from '@atlas/contracts';
 import { asSubtreeHash } from '@atlas/kernel';
 

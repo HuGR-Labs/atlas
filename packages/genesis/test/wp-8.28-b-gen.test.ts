@@ -27,8 +27,8 @@ import { asNodeKey, asSubtreeHash } from '@atlas/kernel';
 import type { Status, StructRef } from '@atlas/contracts';
 import type { Check, PredicateSlot } from '@atlas/knowledge';
 import type { IndexNode } from '@atlas/index';
-import type { Candidate, WhyNot } from '../ref/types.js';
-import type { PredicateApi } from '../ref/predicate.js';
+import type { Candidate, WhyNot } from '@atlas/genesis';
+import type { PredicateApi } from '@atlas/genesis';
 import { admit, runSite, LIKELY_INVARIANT } from '../src/admit-harness.js';
 import type {
   AdmitDeps,

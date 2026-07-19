@@ -20,7 +20,7 @@ import type { CasObject } from '@atlas/kernel';
 import { createGuard, createGovernedStore } from '../src/guard.js';
 import { createHandler, GOVERNANCE_SURFACE, WRITE_PATHS } from '../src/handler.js';
 import type { ToolLeg } from '../src/handler.js';
-import type { ToolData } from '../ref/handler.js';
+import type { ToolData } from '../src/types.js';
 
 /** A GROUNDED store row — exactly what `atlas-emit`'s content-addressed path produces: key == id(value). */
 const grounded = (value: unknown): { key: string; value: unknown } => ({

@@ -1,5 +1,5 @@
 // WP-5.16.KNOW · RED/GREEN — the pure predicate check-engine (EPIC-16, KNOW-9/16) against the FROZEN
-// `EvaluatorApi` seam (knowledge/ref/evaluator.ts) over the ratified `Check` union (ref/types.ts).
+// `EvaluatorApi` seam (types.ts) over the ratified `Check` union (types.ts).
 // Transcribes the visible `-1` goldens SCN-KNOW-9a-1 / 9b-1 / 16a-1 / 16b-1 / 16c-1 / 16d-1 / 16e-1
 // (docs/requirements/goldens-knw.md). Held-out `-2` fixtures are NOT referenced here.
 //

@@ -26,8 +26,8 @@ import { describe, it, expect } from 'vitest';
 import { asSubtreeHash, asNodeKey } from '@atlas/kernel';
 import type { StructRef, Tier } from '@atlas/contracts';
 import type { GroundedFact } from '@atlas/knowledge';
-import type { Skeleton } from '../ref/scan.js';
-import type { OpenQ } from '../ref/types.js';
+import type { Skeleton } from '@atlas/genesis';
+import type { OpenQ } from '@atlas/genesis';
 import {
   writeCandidates,
   assembleInterview,

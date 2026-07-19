@@ -1,24 +1,29 @@
 // @atlas/tools — src/reconcile.ts   (WP-4.12-a.TOOLS — TOOLS-8, spec A-3/A-4)
 //
-// `atlas-reconcile`'s drift-classification + exit-code surface — the merge gate's REVIEWABLE face. At
-// merge-time it takes the DRIFTED subset, partitions it via the @atlas-knowledge KNOW-5 mechanical/semantic
-// split (CONSUMED as an injected port, NEVER redefined here — owned by WP-4.12-a.KNOW), and PRESENTS the
-// result as a reviewable `DriftItem[]` set — never one all-or-nothing verdict. The exit-gate is
-// deterministic and OWNED here (TOOLS): `exitCode == 2` ONLY when `|semantic| > 0` (block; never a silent
-// green there), `0` when drift is entirely `mechanical`, and `reauthorCount == |semantic|` (never the whole
-// store, A-4). Read-only classification: it persists NOTHING. Transcribed against the frozen oracle
-// `../ref/reconcile.ts` (`ReconcileApi.reconcile`) + `../ref/types.ts` (`ReconcileOut` / `DriftItem`);
-// goldens SCN-TOOLS-8{a,b,c,d}-1.
-//
-// SCOPE (this facet): the DriftItem[] surface + the exit-code/re-author gate only. EXCLUDED by the card —
-// DEFINING the mechanical/semantic split (owned by WP-4.12-a.KNOW), the `--accept-reground` auto-re-ground
-// WRITER (TOOLS-13, EPIC-12-b / WP-4.12-b.TOOLS), and advisory→STALE resolution (WP-4.12-a.GROUND). Since
-// the auto-writer is out of facet, `regroundedCount` stays `0` here — nothing is re-grounded at this seam.
+// `atlas-reconcile` — the merge-gate drift classifier + the frozen `ReconcileApi` / `ReconcileOptions`. It
+// partitions the DRIFTED subset via the @atlas-knowledge KNOW-5 split (CONSUMED, never redefined) into a
+// reviewable `DriftItem[]`; exits `2` ONLY on semantic drift, `reauthorCount == |semantic|`. Persists NOTHING.
 
 import type { Hash, StructRef } from '@atlas/contracts';
 import type { DriftedFact, GroundedFact, ReconcileApi as Know5Classifier } from '@atlas/knowledge';
-import type { ReconcileApi, ReconcileOptions } from '../ref/reconcile.js';
-import type { DriftItem, ReconcileOut } from '../ref/types.js';
+import type { DriftItem, ReconcileOut } from './types.js';
+
+/** Reconcile options (atlas-tools:128). `acceptReground` = the `--accept-reground` flag: auto-re-ground
+ *  the `mechanical` subset in one pass (TOOLS-13). Absent ⇒ classify-and-report only (TOOLS-8). */
+export interface ReconcileOptions {
+  readonly acceptReground?: boolean;
+}
+
+export interface ReconcileApi {
+  /** Classify drift at `mergeBase` via the KNOW-5 split; exit-gate `exitCode = |semantic|>0 ? 2 : 0`,
+   *  `reauthorCount == |semantic|` (TOOLS-8). Under `{acceptReground:true}`, auto-re-ground the
+   *  `mechanical` subset in one pass (`regroundedCount == |mechanical|`), never touching `semantic`
+   *  (TOOLS-13). Pure + total (method-tags-tls:72).
+   *
+   *  [FLAG — `mergeBase` = `Hash`] atlas-tools:127 names `atlas-reconcile <mergeBase>`; the merge-base sha
+   *  is transcribed as `Hash` (mirrors @atlas/persist `diff` typing a commit sha as `Hash`). */
+  reconcile(mergeBase: Hash, options?: ReconcileOptions): ReconcileOut;
+}
 
 /**
  * One drifted fact paired with its old + new grounding anchors (the GROUND drift-detection surface, an
@@ -86,9 +91,8 @@ export function createReconcile(
   return { reconcile };
 }
 
-// differential-vs-oracle (compile-time): the impl's `reconcile` conforms to the frozen
-// `ReconcileApi.reconcile` signature (../ref/reconcile.ts). TOOLS-13's auto-re-ground is a DISTINCT,
-// out-of-facet req — not asserted here.
+// differential-vs-oracle (compile-time): the impl's `reconcile` conforms to the co-located frozen
+// `ReconcileApi.reconcile` signature. TOOLS-13's auto-re-ground is a DISTINCT, out-of-facet req.
 const _reconcileConforms: ReconcileApi['reconcile'] = createReconcile(
   { driftAt: () => [] },
   { reconcile: () => ({ mechanical: [], semantic: [], reauthorCount: 0, exitCode: 0 }) },

@@ -3,28 +3,46 @@
 // The S2 MECHANICAL ADMISSION engine (mechanical admit + synthesized-check TEETH / mutant gate). In S2 the
 // LLM ONLY proposes typed candidates; admission is mechanical. A PREDICATE candidate is admitted only if its
 // synthesized `check` (a) compiles + returns `HOLDS` on current code AND (b) flips to `BROKEN` on ≥1
-// mechanically-mutated counterfactual of the anchored subtree (the TEETH / anti-vacuity — a check no mutant
-// can break is a tautology → DROP). A failing check is REFINED ≤K then DROPPED, never forced. An ADVISORY
-// candidate is admitted only through the 2-door bar (grounding ∧ non-obviousness). ABSTENTION is a VALID
-// outcome (a grounded why-not), and the proposer is invoked EXACTLY once — never pressured to emit.
-// SOUND ORACLE FIRST: a type-expressible slot (`contract` / `ownership` / visibility-`dependency`) uses the
-// language's sound `$0` type-checker / LSP diagnostics, not a synthesized CodeQL/Semgrep query. An admitted
-// predicate is labelled a *machine-checked likely invariant*, NEVER a proof.
-//
-// Transcribed against the frozen oracle `../ref/predicate.ts` (`PredicateApi.synthesize/verify/teeth`) +
-// `../ref/types.ts` (`Candidate`, `WhyNot`) and interface_contract atlas-genesis.md#gen-12; goldens
-// SCN-GEN-12a-1 … SCN-GEN-12k-1.
-//
-// SCOPE (this facet): the admission decision only. EXCLUDED by the card — candidate ranking/budget
-// (EPIC-28-a), escalation tiers / CEGIS-K defaults (EPIC-28-c), and DEFINING the check-engine / 2-door
-// semantics (CAMPAIGN-5 / CAMPAIGN-4) — those are consumed as injected ports, never defined here. Nothing is
-// persisted here; chain-of-thought never leaves the proposal (it is structurally absent from every emitted node).
+// mechanically-mutated counterfactual (the TEETH / anti-vacuity — a check no mutant can break → DROP). An
+// ADVISORY candidate passes the 2-door bar (grounding ∧ non-obviousness); abstention is a valid grounded
+// why-not. SOUND ORACLE FIRST for type-expressible slots. Co-locates the frozen `PredicateApi` + `Check`
+// re-export; the check-engine / 2-door semantics are consumed as injected ports, never defined here.
 
-import type { NodeKey, Status, Tier } from '@atlas/contracts';
+import type { NodeKey, Status, StructRef, Tier } from '@atlas/contracts';
 import type { AdvisoryNode, Check, GroundedFact, PredicateNode, PredicateSlot } from '@atlas/knowledge';
 import type { IndexNode } from '@atlas/index';
-import type { Candidate, WhyNot } from '../ref/types.js';
-import type { PredicateApi } from '../ref/predicate.js';
+import type { Candidate, WhyNot } from './types.js';
+
+/**
+ * A synthesized runnable check. [PINNED — oracle-pin-map §1, KNOW-16] the check carrier is the RATIFIED
+ * @atlas/knowledge `Check` — the tagged union of KNOW-16's two named legs ("a deterministic index-query
+ * OR a pinned declarative assertion"). IMPORTED, never redefined: genesis synthesizes exactly the check
+ * kind the steady-state predicate evaluator consumes (mirrors @atlas/knowledge `PredicateNode.check` and
+ * `EvaluatorApi.evaluate(check, indexState)`). Re-exported so the genesis dialect reads from one place.
+ */
+export type { Check };
+
+export interface PredicateApi {
+  /** GEN-12 PROPOSE. Synthesize a runnable check for a checkable candidate (CodeQL / Semgrep). `null` =
+   *  no admissible check (the candidate stays advisory, or abstains). Prefers the SOUND type-checker / LSP
+   *  verdict for a type-expressible slot (`contract` / `ownership` / visibility) over a synthesized query. */
+  synthesize(cand: Candidate): Check | null;
+
+  /** GEN-12 VERIFY. Evaluate the check against index state → `HOLDS | BROKEN | NA` (KNOW-16, deterministic
+   *  + pure — no code-exec, no clock, no IO; same index state ⇒ same verdict). Mirrors the @atlas/knowledge
+   *  `EvaluatorApi.evaluate` verdict domain (a subset of `Status`; `'advisory'` is refused UPSTREAM, not a
+   *  verdict here).
+   *
+   *  [FLAG — `indexState` carrier] typed as the @atlas/index `IndexNode` (mirrors KNOW-16
+   *  `evaluate(check, indexState: IndexNode)`); the reference "over the structural/dependency axes" may be
+   *  the multi-axis root (`Axes`) rather than a single node — flagged to reconcile at the WP. */
+  verify(check: Check, indexState: IndexNode): Status;
+
+  /** GEN-12 TEETH (anti-vacuity). Evaluate the check on a mechanically-MUTATED counterfactual of the
+   *  anchored subtree; admit ONLY if it flips to `BROKEN` on some mutant. A check that returns `HOLDS` but
+   *  survives EVERY mutant is vacuous (a tautology / matches nothing) → `false` ⇒ DROP. */
+  teeth(check: Check, anchor: StructRef): boolean;
+}
 
 /** The citations carrier of a grounded fact — reused from the frozen node shape, NEVER redefined. */
 type FactGrounding = AdvisoryNode['grounding'];
