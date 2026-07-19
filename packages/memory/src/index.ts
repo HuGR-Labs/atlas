@@ -29,3 +29,10 @@ export type * from '../ref/portable.js';
 // (WP-6.24-a.MEM) is Campaign-6 — wired at that seal.
 export * from './portable.js';
 export * from './respawn.js';
+
+// Campaign-6 runtime surface (serve — inject/scope + the three turn-header slabs):
+export * from './inject.js';     // WP-6.23.MEM  — inject only own Memory; scoping-not-access-control; recall (CLI-floor)
+export * from './kinds.js';      // WP-6.23.MEM  — Memory≠Knowledge partition gate (fail-closed on conflation)
+export * from './awareness.js';  // WP-6.24-a.MEM — Awareness slab (root-assembled, per-facet grounded, UN-SEEDED sentinel)
+export * from './orient.js';     // WP-6.24-b.MEM — Orientation slab (goal from DEFINE, event-log fold, never-written)
+export * from './rules.js';      // WP-6.25-a.MEM — project Rules-slab (capped, top-12 frecency, evict-never-delete)
