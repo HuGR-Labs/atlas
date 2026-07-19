@@ -34,3 +34,4 @@ export * from './seed.js';           // WP-8.29.GEN   — seed from ratified man
 export * from './run-controller.js'; // WP-8.30.GEN   — resume/checkpoint + malformed-degrade + born-from-work hand-off
 export * from './loops.js';          // WP-8.31.GEN   — governed deepening loops (opt-in, budget-gated, fixpoint-stopping)
 export * from './rank.js';           // WP-8.27.GEN   — deterministic $0-LLM S0/S1 (scan canonicalize + integer fixed-point PPR + degenerate-history fallback)
+export * from './usefulness.js';     // WP-6.18.GEN   — hits-calibrated seeds (GEN-16): loose-but-thin, decay/re-entry over the sealed KNOW-17 ledger

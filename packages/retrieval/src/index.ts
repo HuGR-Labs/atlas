@@ -32,3 +32,5 @@ export * from './pack.js';     // WP-6.19.RETR — the bounded pack (relevance-f
 export * from './own.js';      // WP-6.20.RETR — OwnPack (mechanical own_<unit>, capped, D1 content-free availability-manifest)
 export * from './poke.js';     // WP-6.21.RETR — debounced once-per-scope poke (N=2 settle) + covering-set tool projection (pack-grain announce, X1)
 export * from './drop.js';     // WP-6.22.RETR — injection-ceiling drop-order (ledger hitRate, 2 pins never drop) + stale-not-trusted
+export * from './ledger.js';   // WP-6.18.RETR — RETR-8 hits ledger (budget()) + caps tuned by observed hits (feeds the sealed dropOrder)
+export * from './offatlas.js'; // WP-6.18.RETR — RETR-13 per-territory off-atlas MISS-oracle (served-0 ⇒ rate 0, θ-threshold calibration prompt)
