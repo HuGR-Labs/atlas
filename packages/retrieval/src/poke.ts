@@ -1,34 +1,40 @@
-// @atlas/retrieval — src/poke.ts  (WP-6.21.RETR · poke debounce automaton + scope-tool projection — RETR-4 + RETR-5)
+// @atlas/retrieval — src/poke.ts  (poke debounce automaton + scope-tool projection — RETR-4 + RETR-5)
 //
-// Two frozen reference-models bound as ONE facet (they share the navigator's scope stream):
-//   • RETR-4 (ref/poke.ts)    — a debounced, once-per-scope poke on scope-entry. A poke fires iff a
-//     single-file navigation signal SETTLES as the current scope across `N = 2` consecutive tool calls
-//     AND that scope was not already poked this session (≤1 poke / scope / session). Transient in-and-out
-//     crossings fire 0 pokes. The event source is the harness tool-call hook (the push tier of TOOLS-11);
-//     scope is inferred from the paths in the navigator's tool calls — never from an explicit query.
-//   • RETR-5 (ref/project.ts) — location-scoped tool projection: only nodes covering the CURRENT scope may
-//     be exposed at once; on leaving the scope they retract; the whole graph is never projected. The live
-//     set follows the navigator with 0 cross-scope accumulation (A-15).
-//
-// This facet is a SEAM CONSUMER. It does NOT assemble the injected pack (RETR-2, EPIC-19 — supplied via
-// `sources.pack`), does NOT reimplement the TOOLS-11 push transport (consumed frozen upstream), and does
-// NOT compose covering-node schemas (index-supplied via `sources.covering`). It owns only the AUTOMATON
-// (when a poke fires) and the PROJECTION law (which tools are live, retracting on leave). NO hashing
-// happens here (identity stays behind the sealed @atlas/kernel seam); `NodeKey`s arrive already minted.
-// Total (RETR-9): a malformed call / missing covering knowledge yields `null` / an empty set, never a throw.
-//
-// EXECUTION NOTE (OWNER DECISION X1, wave-plan §X1): the announce unit is the logical PACK, NOT the
-// individual node — and the pack IS `own_<unit>`. On a settled scope-entry, only the pack(s) governing the
-// current scope announce (a handful, scope-local — never every crate, never a per-node swarm). Per-node
-// access is drill-down WITHIN the pack (`announce().drill`), reached through it, never a top-level swarm.
-// The RETR-4 `Poke` is already pack-grain (it carries one `Pack`). The RETR-5 covering-node set is reshaped
-// here into the pack's IN-PACK DRILL surface via `announce()`; `projectTools()` remains the frozen pure
-// covering-set law the goldens assert on (scope-local, retracting, never whole-graph).
+// Two frozen models bound as ONE facet over the navigator's scope stream. RETR-4: a debounced,
+// once-per-scope poke that fires iff a single-file navigation signal SETTLES as the current scope across
+// `N = 2` consecutive tool calls and was not already poked this session. RETR-5: location-scoped tool
+// projection — only nodes covering the CURRENT scope are exposed, retracting on leave, never whole-graph
+// (A-15). Seam consumer (pack/notice/covering supplied); owns only the automaton + projection law; NEVER
+// hashes. Total (RETR-9): malformed call / missing knowledge ⇒ `null` / empty set, never a throw.
+// X1 (owner decision): the announce unit is the pack `own_<unit>`; covering nodes are its in-pack drill.
 
 import type { Pack } from '@atlas/contracts';
-import type { NodeTool, Path, Poke } from '../ref/types.js';
-import type { PokeApi } from '../ref/poke.js';
-import type { ProjectApi } from '../ref/project.js';
+import type { NodeTool, Path, Poke } from './types.js';
+
+/**
+ * Debounced, once-per-scope poke on scope-entry (RETR-4): fires iff a single-file navigation signal
+ * SETTLES as the current scope across `N = 2` consecutive tool calls AND that scope was not already poked
+ * this session. Total: no covering knowledge ⇒ `null`, never a throw (RETR-9). (atlas-retrieval:171)
+ */
+export interface PokeApi {
+  /** Scope-entry push (RETR-4): returns the scope's `Poke` iff a single-file navigation signal settles
+   *  across the `N = 2` debounce window and the scope was not already poked this session; else `null`.
+   *  Pure + total (no covering knowledge / malformed scope ⇒ `null`, no throw — RETR-9).
+   *  (atlas-retrieval:171) */
+  poke(scope: Path): Poke | null;
+}
+
+/**
+ * Location-scoped tool projection (RETR-5): only nodes covering the CURRENT scope may be exposed as MCP
+ * tools at once; on leaving the scope they retract; the whole graph is never projected simultaneously
+ * (A-15). Total: a malformed scope yields an empty tool set, never a throw (RETR-9). (atlas-retrieval:172)
+ */
+export interface ProjectApi {
+  /** Current scope → the covering nodes as MCP tools (RETR-5). MUST be called on scope-entry and its
+   *  result retracted on scope-exit; MUST NOT accumulate across scopes / project the whole graph. Pure
+   *  + total (miss ⇒ empty set, no throw — RETR-9). (atlas-retrieval:172) */
+  projectTools(scope: Path): readonly NodeTool[];
+}
 
 // ── frozen constants ────────────────────────────────────────────────────────────────────────────────────
 /** The settle window (RETR-4g): a scope must remain current across `N = 2` consecutive tool calls before its

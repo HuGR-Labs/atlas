@@ -1,35 +1,32 @@
-// @atlas/retrieval — src/relate.ts  (WP-2.8-b.RETR · relate / blast-radius facet — RETR-10 / RETR-11)
+// @atlas/retrieval — src/relate.ts  (relate / blast-radius facet — RETR-10 / RETR-11)
 //
-// `relate(unit)` = the EXACT related-node set computed PURELY from the index's three axes (spatial roll-up
-// + `depends-on` forward & reverse closure + territory), PARTITIONED by relation kind, DETERMINISTIC
-// (byte-identical for equal input), with ZERO LLM in the path — the model supplies only the touched unit;
-// computing the closure is the index's job (RETR-10). This is a SEAM CONSUMER: it READS the index axes +
-// the correlational `coChanged` band via the FROZEN index/ref/depgraph.ts `ReverseClosure`; it NEVER
-// records/resolves edges and NEVER recomputes the closure (that is INDEX, WP-2.8-b.INDEX). RETR's job here
-// is presentation ONLY: partition → rank → cap.
-//
-//   • `dependents` = the reverse closure (blast radius), cut at `maxHops = 2`, ranked by the deterministic
-//     total order `(tier-desc, ppr-desc, distance-asc, nodeKey-asc)`, capped at `K = 8`, truncated AFTER
-//     ranking with honest `BoundMeta` (`total` / `returned` / `truncated`) — RETR-11.
-//   • `dependencies` = the forward closure, bounded by the SAME rank and the SAME `K = 8` (RETR-11e).
-//   • `enclosing` / `governing` = the spatial roll-up + territory rule, index-supplied, passed through.
-//   • `coChanged` = git-history-derived (deterministic but correlational): OPT-IN, LABELED, and DISJOINT
-//     from the structural bands — never mixed in (RETR-10e/10f).
-//
-// Total surface (RETR-9): a malformed/missing unit yields an empty `RelationSet`, never a throw. NO hashing
-// happens here (no identity is minted); identity/hashing stays behind the sealed @atlas/kernel seam.
+// `relate(unit)` = the related-node set PARTITIONED by relation kind, computed purely from the index axes,
+// deterministic + 0 LLM. Seam consumer: reads the frozen index `ReverseClosure`, never recomputes closure;
+// job is presentation only (partition → rank → cap). `coChanged` is opt-in, labeled, and disjoint from the
+// structural bands. Total (RETR-9): a malformed/missing unit ⇒ empty `RelationSet`, never a throw.
 
 import type { Tier, PackInvariant } from '@atlas/contracts';
 import type { ReverseClosure } from '@atlas/index';
-import type { BoundMeta, Path, RelatedFact, RelationSet } from '../ref/types.js';
-import type { RelateApi } from '../ref/relate.js';
+import type { BoundMeta, Path, RelatedFact, RelationSet } from './types.js';
 
-// ── frozen bounds (RETR-11; defaults per retrieval/ref/bound.ts) ─────────────────────────────────────────
+/**
+ * Deterministic partitioned closure (RETR-10). `relate(unit)` = the related-node set computed purely from
+ * the index axes, PARTITIONED by relation kind, byte-identical for equal input, 0 LLM. Total: a malformed
+ * unit yields an empty set, never a throw (RETR-9). (atlas-retrieval:169 / method-tags-ret:84-89)
+ */
+export interface RelateApi {
+  /** Touched unit (path) → ALL nodes related to it, PARTITIONED by relation kind (RETR-10). Consumes
+   *  the index's three axes; deterministic (byte-identical for equal input), 0 LLM. Pure + total (miss
+   *  ⇒ empty RelationSet, no throw — RETR-9). (atlas-retrieval:169) */
+  relate(unit: Path): RelationSet;
+}
+
+// ── frozen bounds (RETR-11; defaults per BoundApi) ─────────────────────────────────────────
 /** Hop-distance cut for the reverse/forward closure — `maxHops = 2` (RETR-11a). */
 export const MAX_HOPS = 2;
 /** Hard count cap on a bounded band — `K = 8` one-line `RelatedFact`s (RETR-11c/11e). */
 export const K = 8;
-/** The EXACT frozen deterministic total-rank literal (`BoundMeta.rank`, retrieval/ref/types.ts:100). */
+/** The EXACT frozen deterministic total-rank literal (`BoundMeta.rank`, types.ts). */
 export const RELATE_RANK = 'tier-desc,ppr-desc,distance-asc,nodeKey-asc' as const;
 
 /** Criticality → sort ordinal (T0 highest ⇒ smallest ordinal ⇒ first under ascending). `tier-desc`. */

@@ -13,7 +13,7 @@
 import { describe, it, expect } from 'vitest';
 import { asNodeKey } from '@atlas/kernel';
 import type { NodeKey, PackInvariant, Tier } from '@atlas/contracts';
-import type { RelatedFact, RelationKind } from '../ref/types.js';
+import type { RelatedFact, RelationKind } from '../src/types.js';
 import { createRelate, RELATE_RANK, type RelateAxes } from '../src/relate.js';
 
 const nk = (s: string): NodeKey => asNodeKey(s);

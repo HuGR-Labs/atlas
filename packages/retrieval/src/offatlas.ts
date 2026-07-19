@@ -1,26 +1,46 @@
-// @atlas/retrieval — src/offatlas.ts  (WP-6.18.RETR · RETR-13 per-territory off-atlas MISS-oracle)
+// @atlas/retrieval — src/offatlas.ts  (RETR-13 per-territory off-atlas MISS-oracle)
 //
-// The MISS-oracle — off-atlas coverage per territory (RETR-13), satisfying the frozen ref/offatlas.ts
-// `OffatlasApi`. The ledger logs, per territory, an OFF-ATLAS RATE = `offAtlasReads / served` = the fraction
-// of served turns in which a seat had to `Read`/`Grep` OUTSIDE the surfaced scope-set to finish (the served
-// pack under-covered the work). Where RETR-8 `hits` measure PRECISION, this measures COVERAGE — the one
-// silent failure the drift-oracle (RETR-3) cannot see, because un-anchored knowledge has no grounding to
-// drift. A territory whose rate crosses a threshold MUST raise a calibration prompt to author the missing
-// tag/edge. Deterministic; a territory with no served history yields rate `0`, NEVER a throw.
-// Transcribed from atlas-retrieval:154-162 / method-tags-ret:105-110 + goldens-ret.md §REQ-RETR-13.
-//
-// Identity is minted only through the sealed @atlas/kernel; this module NEVER hashes and NEVER tokenizes.
-// `served`/`offAtlasReads` accrue by a COMMUTATIVE integer reduction over the turn records, and `offAtlas()`
-// emits rows in sorted territory order, so the ledger is deterministic + order-independent (SCN-RETR-13c-1).
-//
-// [DEFINE-park — RETR-13 threshold θ] The off-atlas value that triggers the calibration prompt (REQ-RETR-13b)
-// is an OPEN DEFINE dependency — SILENT in the reference clause (`req-ret.md` §[NEEDS RECONCILIATION];
-// ref/offatlas.ts `OffAtlasThreshold`). It is NOT invented here: `crossesThreshold` takes the threshold as an
-// explicit PARAMETER (mirroring how `drop.ts` handled κ), with the frozen predicate `offAtlasRate > θ`
-// (goldens SCN-RETR-13b-1). A no-history territory has rate `0`, so it crosses no non-negative θ (⇒ `false`).
+// The MISS-oracle: per territory an OFF-ATLAS RATE = `offAtlasReads / served` — the fraction of served
+// turns a seat had to Read/Grep OUTSIDE the surfaced scope-set. Measures COVERAGE (the silent failure the
+// drift-oracle cannot see), where RETR-8 `hits` measure PRECISION. Accrual is a commutative integer
+// reduction; rows emit in sorted territory order (deterministic); NEVER hashes/tokenizes. No served
+// history ⇒ rate `0`, never a throw. [FLAG] the trigger threshold θ is an OPEN DEFINE dependency — taken
+// as an explicit parameter (`offAtlasRate > θ`), never a baked constant.
 
-import type { OffAtlas } from '../ref/types.js';
-import type { OffatlasApi, OffAtlasThreshold } from '../ref/offatlas.js';
+import type { OffAtlas } from './types.js';
+
+/**
+ * [OPEN DEFINE — RETR-13] The off-atlas rate value that triggers a calibration prompt. The reference is
+ * SILENT on this number (an open DEFINE reconciliation); transcribed as a parameter — a `number` —
+ * NEVER a baked constant. S3's golden binds the concrete value once DEFINE supplies it.
+ */
+export type OffAtlasThreshold = number;
+
+/**
+ * The MISS-oracle — off-atlas coverage per territory (RETR-13). Logs, per territory, an OFF-ATLAS RATE =
+ * `offAtlasReads / served`; measures COVERAGE (the silent failure the drift-oracle cannot see). A
+ * territory with no served history yields rate `0`, never a throw. (atlas-retrieval:154-162)
+ *
+ * [OPEN DEFINE — RETR-13 threshold is PARAMETRIC] The value that triggers the calibration prompt
+ * (REQ-RETR-13b) is routed to DEFINE (`req-ret.md` §[NEEDS RECONCILIATION]); it is SILENT in the
+ * reference clause and MUST NOT be invented at S2. `crossesThreshold` takes it as an explicit parameter.
+ */
+export interface OffatlasApi {
+  /** Per-territory coverage ledger (the MISS-oracle, RETR-13): each territory's `served` /
+   *  `offAtlasReads` / `offAtlasRate`. Deterministic; a territory with no served history reports rate
+   *  `0`, never a throw. (atlas-retrieval:174) */
+  offAtlas(): readonly OffAtlas[];
+
+  /** The threshold-crossing predicate (RETR-13), written PARAMETRIC over the OPEN-DEFINE threshold: a
+   *  territory whose off-atlas rate crosses `threshold` MUST raise a calibration prompt to author the
+   *  missing tag/edge. Pure + total (no served history ⇒ `false`, never a throw). The concrete
+   *  `threshold` is an OPEN DEFINE dependency — supplied at DEFINE, bound by S3's golden, NOT invented
+   *  here. (method-tags-ret:109-110)
+   *
+   *  [FLAG — `territory` arg type] transcribed as `string` (the territory name / governance key),
+   *  matching `OffAtlas.territory`. */
+  crossesThreshold(territory: string, threshold: OffAtlasThreshold): boolean;
+}
 
 /** One served turn for a territory + whether the seat had to `Read`/`Grep` OUTSIDE the surfaced scope-set. */
 export interface TurnRecord {

@@ -14,7 +14,7 @@
 import { describe, it, expect } from 'vitest';
 import { asNodeKey } from '@atlas/kernel';
 import type { NodeKey, Pack, Hash, ToolSchema } from '@atlas/contracts';
-import type { NodeTool, Path } from '../ref/types.js';
+import type { NodeTool, Path } from '../src/types.js';
 import {
   createPoke,
   classify,

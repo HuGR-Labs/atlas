@@ -1,30 +1,27 @@
-// @atlas/retrieval — src/own.ts  (WP-6.20.RETR · OwnPack composer facet — RETR-12 + owner-decision D1)
+// @atlas/retrieval — src/own.ts  (OwnPack composer facet — RETR-12 + owner-decision D1)
 //
-// `own_<unit>` projects a curated `OwnPack` composed by INDEX READS ALONE — 0 LLM, 0 free prose,
-// byte-identical for equal input, `≤ OWN_CAP` under the pinned cap measure (RETR-12). A seat receives its
-// `own` by DEFAULT (pushed at dispatch), never choosing a scope or assembling a pack. Composition is
-// mechanical: rank → cap → dedup → project. The facet is a SEAM CONSUMER — every index axis (role /
-// invariants / terrain / relate / gotchas / memory / finer / manifest) is SUPPLIED (the index resolved
-// them); this facet only presents them. NO hashing happens here (identity stays behind the sealed
-// @atlas/kernel seam); `NodeKey`s arrive already minted. Total (RETR-9): a malformed unit yields an EMPTY
-// briefing, never a throw.
-//
-// EXECUTION NOTE (OWNER DECISION D1, wave-plan §D1): the composer GAINS an AVAILABILITY-MANIFEST facet — a
-// bounded, frecency-ranked, CONTENT-FREE map of reachable surfaces (adjacent packs / memory scopes /
-// knowledge). It carries pointers + one-line labels + how-to-pull (name/digest) — NEVER the content. It
-// counts against the same `OWN_CAP` budget and drops by hit-rate like everything else (a "you-are-here"
-// map, not a second swarm). Transcribed into concrete records at BIND per oracle-pin-map §7.
-//
-// SHAPE NOTE: the composed result `OwnPackPlus` EXTENDS the frozen `OwnPack` (ref/types.ts) with the
-// exec-observable receipts the goldens assert on — `tokenEstimate` (cap law RETR-12f), `grounding.source`
-// (level→source law RETR-12i), `manifest` (D1), `pullReachable` (the pull-reachable overflow tail). These
-// are ADDITIVE fields on the return value; no frozen `OwnPack` field is re-shaped. Since `OwnPackPlus`
-// is assignable to `OwnPack`, `OwnFacet.own` is a valid narrowing of the frozen `OwnApi.own`.
+// `own_<unit>` projects a curated `OwnPack` composed by INDEX READS ALONE — 0 LLM, `≤ OWN_CAP`,
+// byte-identical for equal input; composition is mechanical (rank → cap → dedup → project). Seam consumer:
+// every index axis is supplied; NEVER hashes. Total (RETR-9): a malformed unit ⇒ empty briefing, no throw.
+// D1: the composer carries an AVAILABILITY-MANIFEST — a bounded, frecency-ranked, CONTENT-FREE map of
+// reachable surfaces (pointers + how-to-pull, never content), under the same `OWN_CAP` budget. The result
+// `OwnPackPlus` extends the frozen `OwnPack` with additive exec-observable receipts (assignable to it).
 
 import type { NodeKey, Pack, PackInvariant, Tier } from '@atlas/contracts';
 import type { GroundedFact } from '@atlas/knowledge';
-import type { OwnLevel, OwnPack, OwnUnit, RelatedFact, RelationSet } from '../ref/types.js';
-import type { OwnApi } from '../ref/own.js';
+import type { OwnLevel, OwnPack, OwnUnit, RelatedFact, RelationSet } from './types.js';
+
+/**
+ * The curated, zero-assembly `own` pack (RETR-12): `own_<unit>` returns a curated `OwnPack` composed by
+ * INDEX READS ALONE (0 LLM, 0 free prose), `≤ ~1.5K` under the pinned cap, byte-identical for equal
+ * input. Total: a malformed unit yields an empty briefing, never a throw (RETR-9). (atlas-retrieval:168)
+ */
+export interface OwnApi {
+  /** Scope-unit → its CURATED, mechanically-composed `OwnPack` (the `own_<id>` tool), `≤ ~1.5K` under
+   *  the pinned cap, deterministic (0 LLM). Pure + total (miss ⇒ empty briefing, no throw — RETR-9).
+   *  (atlas-retrieval:168) */
+  own(unit: OwnUnit): OwnPack;
+}
 
 // ── frozen bounds (RETR-12f/caps.ts: own ~1.5K under the ~5K ceiling; edges/finer/manifest bounded) ──────
 /** The `own` briefing budget in the pinned `cl100k_base` measure — `~1.5K` under the ceiling (RETR-12f). */

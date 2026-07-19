@@ -16,7 +16,7 @@ import { describe, it, expect } from 'vitest';
 import { asNodeKey } from '@atlas/kernel';
 import type { NodeKey, PackInvariant, Pack, Tier, Hash } from '@atlas/contracts';
 import type { GroundedFact } from '@atlas/knowledge';
-import type { OwnUnit, RelatedFact, RelationSet } from '../ref/types.js';
+import type { OwnUnit, RelatedFact, RelationSet } from '../src/types.js';
 import {
   createOwn,
   ownToolName,

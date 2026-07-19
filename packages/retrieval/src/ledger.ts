@@ -1,30 +1,24 @@
-// @atlas/retrieval — src/ledger.ts  (WP-6.18.RETR · RETR-8 hits/hitRate ledger + caps tuned by observed hits)
+// @atlas/retrieval — src/ledger.ts  (RETR-8 hits/hitRate ledger + caps tuned by observed hits)
 //
-// Calibration from observed use, not guesswork (RETR-8). This facet OWNS the per-kind hits/hitRate LEDGER
-// (the `budget()` surface, ref/ledger.ts `LedgerApi`) AND the caps tuned by observed hits (ref/caps.ts
-// `CapsApi.capFor`). The ledger is the calibration ORACLE that the ALREADY-BUILT drop-order (`src/drop.ts`,
-// WP-6.22.RETR) and the caps CONSUME — `hits` measure PRECISION (served facts used), never COVERAGE (that
-// is RETR-13's MISS-oracle, `src/offatlas.ts`). The drop ORDER itself is NOT re-implemented here — `drop.ts`
-// owns `dropOrder`; this facet only produces the `Budget[]` (with `hitRate`) it reads.
-// Transcribed from atlas-retrieval:113-117 / method-tags-ret:70-75 + goldens-ret.md §Fixture B / §REQ-RETR-8.
-//
-// SEAM. Identity is minted only through the sealed @atlas/kernel; this module NEVER hashes and NEVER
-// tokenizes. `hits`/`hitRate` accrue by a COMMUTATIVE integer reduction over the served-injection records,
-// so the ledger is deterministic and order-independent. The per-kind rows are emitted in a fixed key order
-// (the frozen `InjectionKind` vocabulary, sorted), never hashmap-iteration order.
-//
-// [FLAG — cap-tuning gain is underspecified] REQ-RETR-8a normatively requires "caps tuned by the ledger's
-// observed hits, never static guesswork" but the FORMULA is SILENT in the reference (like the RETR-6 tie-key
-// κ / the RETR-13 threshold θ). So the mechanism is bound PARAMETRIC — a documented `gain` argument, NOT a
-// baked magic constant. `capFor(kind) = round(base(kind) * (1 + gain*hitRate(kind)))`: a deterministic,
-// monotone-in-hits response whose FLOOR at `hitRate = 0` is exactly the ratified RETR-7 sweet-spot (a
-// never-used kind is untuned). SCN-RETR-8a-1 asserts only that the cap RESPONDS to observed hits (changes,
-// never a constant); it does not pin the gain. If DEFINE ratifies a distinct tuning law, only `tunedCap`
-// changes.
+// The per-kind hits/hitRate ledger (`budget()`) + caps tuned by observed hits (`capFor`); `hits` measure
+// PRECISION, never COVERAGE (that is RETR-13's MISS-oracle). Accrual is a commutative integer reduction
+// (order-independent, deterministic); rows emit in the sorted frozen `InjectionKind` order. NEVER hashes/
+// tokenizes. [FLAG] the cap-tuning `gain` is parametric (reference is silent — REQ-RETR-8a), not a baked
+// constant; floored at the RETR-7 sweet-spot when `hitRate = 0`. `dropOrder` lives in drop.ts, not here.
 
 import type { Budget, InjectionKind } from '@atlas/contracts';
-import type { LedgerApi } from '../ref/ledger.js';
-import type { CapsApi } from '../ref/caps.js';
+import type { CapsApi } from './types.js';
+
+/**
+ * Calibration from observed use, not guesswork (RETR-8). The per-kind `hits`/`hitRate` accumulator the
+ * cap-table (`CapsApi`) and drop-policy (`drop.ts`) READ; `hits` measure PRECISION (served facts used),
+ * never COVERAGE (that is RETR-13's MISS-oracle). (atlas-retrieval:113-117 / method-tags-ret:70-75)
+ */
+export interface LedgerApi {
+  /** The per-kind budget ledger (RETR-6/8): each kind's cap + live `hits` + observed `hitRate`, for
+   *  calibration. Pure. (atlas-retrieval:173) */
+  budget(): readonly Budget[];
+}
 
 /**
  * The ratified RETR-7 sweet-spot caps under the pinned `cl100k_base` measure — the never-used FLOOR the
