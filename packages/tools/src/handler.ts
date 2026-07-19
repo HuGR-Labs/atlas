@@ -11,10 +11,10 @@
 // Transcribed against the FROZEN oracle `../ref/handler.ts` (`HandlerApi`) + `../ref/types.ts`
 // (`Tool` / `Verdict` / `Guidance`); goldens SCN-TOOLS-1a-1 / 1b-1 / 2a-1 / 2b-1.
 //
-// SCOPE (this facet): the surface constants + the pure/total wrapper. EXCLUDED by the card — CLI/MCP
-// transport parity (EPIC-26-b, WP-7.26-b), the tri-transport node read `resolveNode` (EPIC-26-c,
-// WP-7.26-c), and the published-schema body (EPIC-26-b). Those extend this file downstream; `resolveNode`
-// and `schema` ship here as HONEST, read-only, total minimal seams for the successor WPs to fill in.
+// SCOPE (this facet, 7.26-a): the surface constants + the pure/total wrapper. WP-7.26-b (this landing)
+// ADDITIVELY fills the published-schema body below (`SCHEMAS`, one byte-identical schema per tool, CLI ≡
+// MCP — TOOLS-3) alongside src/query.ts + src/doctor.ts. STILL EXCLUDED — the tri-transport node read
+// `resolveNode` (EPIC-26-c, WP-7.26-c) ships here as an HONEST read-only minimal seam for the successor WP.
 
 import type { NodeKey, ToolSchema } from '@atlas/contracts';
 import type { ToolData, Transport, HandlerApi } from '../ref/handler.js';
@@ -72,6 +72,67 @@ const guidanceFor = (tool: Tool): Guidance => GUIDANCE[tool] ?? GUIDANCE_OFF_SUR
 
 const reason = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
+/** THE one published input schema per governance tool (TOOLS-3) — CLI and MCP share it byte-for-byte; the
+ *  schema carries NO transport parameter, so the same bytes back every surface (the divergence this seam
+ *  prevents). Each `inputSchema` is a JSON-Schema object (the external MCP schema DSL, kept structural). The
+ *  arg names mirror the frozen per-tool signatures: `init(path)` / `query(scope)` / `emit(node,at)` /
+ *  `reconcile(mergeBase, {acceptReground})`. */
+const SCHEMAS: Record<Tool, ToolSchema> = {
+  'atlas-init': {
+    name: 'atlas-init',
+    description: '$0-LLM structural move-in — returns the T2/advisory territory skeleton, blast radius, and T0-candidate flags (TOOLS-5)',
+    inputSchema: {
+      type: 'object',
+      properties: { path: { type: 'string', description: 'repo/subtree path to walk structurally' } },
+      required: ['path'],
+      additionalProperties: false,
+    },
+  },
+  'atlas-query': {
+    name: 'atlas-query',
+    description: 'bounded read projection — resolves a scope to the merged covering pack of tier>=T1 invariants, stale-flagged (TOOLS-6)',
+    inputSchema: {
+      type: 'object',
+      properties: { scope: { type: 'string', description: 'file/folder/module/crate scope to resolve' } },
+      required: ['scope'],
+      additionalProperties: false,
+    },
+  },
+  'atlas-emit': {
+    name: 'atlas-emit',
+    description: 'the single fail-closed write door — re-derives the citation at source@sha, rejects a node that does not re-derive (TOOLS-1/7)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        node: { type: 'object', description: 'the templated grounded candidate fact to admit' },
+        at: { type: 'string', description: 'the source@sha anchor the citation must re-derive at' },
+      },
+      required: ['node', 'at'],
+      additionalProperties: false,
+    },
+  },
+  'atlas-reconcile': {
+    name: 'atlas-reconcile',
+    description: 'the merge gate — classifies drift into a reviewable set, exits 2 on any semantic flip (TOOLS-8)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        mergeBase: { type: 'string', description: 'the merge-base sha to classify drift against' },
+        acceptReground: { type: 'boolean', description: 'auto-re-ground the mechanical subset in one pass (TOOLS-13)' },
+      },
+      required: ['mergeBase'],
+      additionalProperties: false,
+    },
+  },
+};
+
+/** Fallback schema for an off-surface tool token — still a well-formed `ToolSchema` (totality). */
+const SCHEMA_OFF_SURFACE = (tool: Tool): ToolSchema => ({
+  name: tool,
+  description: 'not one of the four governance tools (TOOLS-1)',
+  inputSchema: { type: 'object', additionalProperties: false },
+});
+
 /**
  * Build THE one handler over the injected per-tool `legs`. The returned object conforms EXACTLY to the
  * frozen `HandlerApi`. `handle` is pure + total: it reads no clock and holds no cache, and it converts a
@@ -105,11 +166,8 @@ export function createHandler(legs: ToolLegs): HandlerApi {
     },
   });
 
-  const schema = (tool: Tool): ToolSchema => ({
-    name: tool,
-    description: `atlas governance tool '${tool}' — one published schema, CLI ≡ MCP (TOOLS-3)`,
-    inputSchema: { type: 'object' },
-  });
+  // schema — THE one published input schema (TOOLS-3): CLI ≡ MCP, byte-identical (no transport parameter).
+  const schema = (tool: Tool): ToolSchema => SCHEMAS[tool] ?? SCHEMA_OFF_SURFACE(tool);
 
   return { handle, resolveNode, schema };
 }
