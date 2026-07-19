@@ -3,10 +3,66 @@
 // The raw fs adapter: walk a repo path into the frozen `FileTree` (@atlas/index) along the spatial rail
 // repo→crate→module→file→item→block. SKELETON — signature frozen, body deferred to the ADAPT-FS WP.
 
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { FileTree } from '@atlas/index';
 
-/** Walk a real repo into the frozen `FileTree` (leaf `content` = the bytes normalized into subtreeHash). */
+// A mutable directory node under construction: an ordered map from the next path segment to either a
+// nested directory builder or a materialized file leaf. Directories are keyed so siblings stay unique;
+// order is imposed at the end by an ASCII sort on `path`, matching `T_ref`.
+interface DirBuild {
+  readonly path: string;
+  readonly dirs: Map<string, DirBuild>;
+  readonly files: FileTree[];
+}
+
+const newDir = (path: string): DirBuild => ({ path, dirs: new Map(), files: [] });
+
+/**
+ * Walk a real repo into the frozen `FileTree` (ADAPT-FS-1). The tracked set is derived from
+ * `git ls-files` run in `repoPath` — which honors `.gitignore` by construction (ignored/untracked paths
+ * are never listed), so no ignore parser is needed and no gitignored path can leak in. Each tracked
+ * file's working-tree bytes become its leaf `content`; the paths are assembled into the nested
+ * `FileTree` (root `path: '.'`; directory nodes carry `children` and no `content`; files are leaves with
+ * `children: []`). Sibling order is ASCII sort by `path`. Every value derives purely from git-tracked
+ * bytes — no wall-clock, nonce, or counter on any node, so two walks are byte-identical.
+ */
 export function walkFileTree(repoPath: string): FileTree {
-  void repoPath;
-  throw new Error('unimplemented: ADAPT-FS-1 — faithful FileTree walk');
+  const out = execFileSync('git', ['ls-files', '-z'], {
+    cwd: repoPath,
+    encoding: 'utf8',
+  });
+  // NUL-delimited so paths with spaces/newlines survive; drop the trailing empty segment.
+  const tracked = out.split('\0').filter((p) => p.length > 0);
+
+  const root = newDir('.');
+  for (const rel of tracked) {
+    const segments = rel.split('/');
+    let node = root;
+    // Walk/create the directory chain (all but the final segment).
+    for (let i = 0; i < segments.length - 1; i++) {
+      const dirPath = segments.slice(0, i + 1).join('/');
+      let next = node.dirs.get(dirPath);
+      if (next === undefined) {
+        next = newDir(dirPath);
+        node.dirs.set(dirPath, next);
+      }
+      node = next;
+    }
+    // The final segment is the file leaf; `rel` (POSIX) is already the repo-relative path.
+    const content = readFileSync(join(repoPath, rel), 'utf8');
+    node.files.push({ path: rel, children: [], content });
+  }
+
+  return freeze(root);
+}
+
+/** Materialize a `DirBuild` into an immutable `FileTree`, with siblings ASCII-sorted by `path`. */
+function freeze(node: DirBuild): FileTree {
+  const children: FileTree[] = [
+    ...node.files,
+    ...[...node.dirs.values()].map(freeze),
+  ].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  return { path: node.path, children };
 }
