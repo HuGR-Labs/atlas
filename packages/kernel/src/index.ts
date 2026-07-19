@@ -28,3 +28,6 @@ export { createLog } from './log.js';
 
 // WP-1.1-b.KERNEL runtime surface: self-contained open-JSON (OKF) export/import.
 export { exportCas, importCas, makePortable } from './portable.js';
+
+// WP-1.2-b.KERNEL runtime surface: fold() reconstruction over the event log.
+export { fold } from './fold.js';
