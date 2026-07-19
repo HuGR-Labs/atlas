@@ -24,7 +24,10 @@
 //  • REJECT (the 2-door admission bar, KNOW-2) is ref/emit.ts's facet — the upsert route never
 //    returns REJECT.
 
-import type { WriteDecision } from '../ref/router.js';
+import { asNodeKey, canonicalForm, defaultEncoder } from '@atlas/kernel';
+import type { NodeKey } from '@atlas/contracts';
+import type { WriteDecision, NearDupConfig } from '../ref/router.js';
+import type { Candidate, Check, PredicateSlot } from '../ref/types.js';
 
 /** The two content kinds of the Atlas (atlas-knowledge:19): advisory ⇒ UPDATE/union · predicate ⇒ SUPERSEDE. */
 export type NodeFamily = 'advisory' | 'predicate';
@@ -157,4 +160,125 @@ export function upsert(store: StoreProjection, req: WriteRequest): UpsertResult 
 /** A territory query: the current nodes — exactly one per `nodeKey` by construction (KNOW-4g). */
 export function currentNodes(store: StoreProjection): readonly CurrentNode[] {
   return [...store.current.values()];
+}
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+// WP-5.13-b.KNOW · EPIC-13-b — THE ANCHOR-IDENTITY FACET (additive; 5.13-a's routeWrite/upsert above
+// are untouched). Implements the FROZEN `RouterApi.nodeKey` / `RouterApi.primaryAnchorId` (ref/router.ts,
+// which RATIFIES these live HERE — "no separate ref/anchor.ts") + the near-dup probe and the closed slot
+// vocabulary. The write-decision's identity leg is COMPUTED, never judged: pure hash+symbol functions,
+// ZERO LLM/clock/seq (KNOW-15j). All digests are minted through the SEALED @atlas/kernel encoder seam
+// (`defaultEncoder` + `canonicalForm`) and branded via `asNodeKey` — NO raw hashing (SEAM).
+//
+// BIND (vs FROZEN oracle ref/router.ts + ref/types.ts): `predicateSlot` is the required `Candidate.slot`
+// (closed 12-member `PredicateSlot`, R3-surfaced on `GroundedFact` too); `check` presence discriminates
+// predicate vs advisory. The move-aware RE-ANCHORING matcher (rename/move ⇒ same nodeKey) and the
+// near-synonym similarity threshold are UPSTREAM + OPEN-DEFINE parametric (SCN-KNOW-15f-2 θ / 15h-2 τ,
+// `residue`): they fix the VALUE of the nodeKey oracle-input the router routes over — NOT re-modeled
+// here, and NO verification is invented for an unpinned threshold (method-tags-knw §Refuse-to-model).
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+
+/** The closed `predicateSlot` vocabulary (NORMATIVE — all 12 members, ref/types.ts:163-175). CLOSED:
+ *  adding a slot is a `cv` bump. Finiteness is what lets a `nodeKey` collide + force UPDATE/union
+ *  instead of proliferating parallel nodes (atlas-knowledge:150 / SCN-KNOW-15i-1). */
+export const PREDICATE_SLOTS: readonly PredicateSlot[] = [
+  'invariant',
+  'contract',
+  'precondition',
+  'postcondition',
+  'sideeffect',
+  'ownership',
+  'perf-bound',
+  'security-property',
+  'gotcha',
+  'rationale',
+  'dependency',
+  'definition',
+];
+const SLOT_SET: ReadonlySet<string> = new Set(PREDICATE_SLOTS);
+
+/** Closed-vocabulary membership guard (KNOW-15i). A slot outside the 12 enumerated members is rejected —
+ *  a free-text slot never collides, so `nodeKey` never forces UPDATE and the store would proliferate. */
+export function isKnownSlot(slot: string): boolean {
+  return SLOT_SET.has(slot);
+}
+
+/** Canonical `normalize(check)` — the predicate identity ingredient (KNOW-15c). Deterministic + total:
+ *  the tagged-union kind + the NFC-normalized, trimmed body. Folded into the predicate `nodeKey` so a
+ *  DISTINCT check is a DISTINCT node (never a sibling-supersede). No LLM/clock. */
+export function normalizeCheck(check: Check): string {
+  const body = check.kind === 'index-query' ? check.query : check.expr;
+  return `${check.kind}${body.normalize('NFC').trim()}`;
+}
+
+/** Split a `qualifiedPath` on its structural-unit boundary (`::`) into ancestor segments. */
+function segments(qualifiedPath: string): readonly string[] {
+  return qualifiedPath.split('::');
+}
+
+/** The deepest common structural ancestor of a set of anchor paths — the smallest AST subtree that
+ *  contains every one of them (segment-wise longest common prefix). This is the mechanical
+ *  "tightest structural unit containing every referenced symbol" (KNOW-15d). Total + deterministic. */
+function deepestCommonUnit(paths: readonly string[]): string {
+  if (paths.length === 0) return '';
+  let common: readonly string[] = segments(paths[0]!);
+  for (const p of paths.slice(1)) {
+    const segs = segments(p);
+    let i = 0;
+    while (i < common.length && i < segs.length && common[i] === segs[i]) i++;
+    common = common.slice(0, i);
+  }
+  return common.join('::');
+}
+
+/**
+ * The COMPUTED primary anchor (KNOW-15d) — the tightest structural unit containing every SYMBOL the
+ * claim references, resolved MECHANICALLY from the grounding (never an LLM-chosen anchor, KNOW-15e).
+ * ONLY the primary symbol anchors enter identity: broader (block/file/repo/project) citations are
+ * SECONDARY — they live in `grounding.entries` and feed DRIFT only, never the `nodeKey` (KNOW-15g).
+ * Pure + total, no LLM. (The move-aware re-anchoring across rename/move is the UPSTREAM matcher —
+ * OPEN-DEFINE parametric, not computed here; see the facet header.)
+ */
+export function primaryAnchorId(node: Candidate): NodeKey {
+  const symbolAnchors = node.grounding.entries.filter((e) => e.anchor.kind === 'symbol');
+  const source = symbolAnchors.length > 0 ? symbolAnchors : node.grounding.entries.slice(0, 1);
+  return asNodeKey(deepestCommonUnit(source.map((e) => e.anchor.qualifiedPath)));
+}
+
+/**
+ * The node identity leg (KNOW-15b/15c) via the SEALED kernel digest seam:
+ *   advisory  → `hash(primaryAnchorId ‖ predicateSlot)`                    — body-wording independent
+ *   predicate → `hash(primaryAnchorId ‖ predicateSlot ‖ normalize(check))` — a distinct check ⇒ distinct node
+ * `check` presence discriminates the family. Pure + total, no LLM. The `‖` concatenation is the injective
+ * canonical preimage (`canonicalForm`, sorted keys / NFC / floats-forbidden), hashed through
+ * `defaultEncoder` and branded `asNodeKey` — the sole sanctioned nodeKey mint (no raw hashing).
+ */
+export function nodeKey(node: Candidate): NodeKey {
+  const anchor = primaryAnchorId(node) as string;
+  const preimage = node.check
+    ? { a: anchor, c: normalizeCheck(node.check), s: node.slot } // predicate: folds in normalize(check)
+    : { a: anchor, s: node.slot }; // advisory: anchor ‖ slot only
+  return asNodeKey(defaultEncoder.hash(canonicalForm(preimage)));
+}
+
+/** EXACT normalized claim similarity — the AIRTIGHT leg. Returns `1` iff the claims are byte-identical
+ *  after NFC+trim, else `0`. The near-SYNONYM metric (`0 < sim < 1`) is an OPEN-DEFINE threshold τ
+ *  (residue SCN-KNOW-15h-2) — deliberately NOT invented here. */
+function claimSimilarity(a: string, b: string): 0 | 1 {
+  return a.normalize('NFC').trim() === b.normalize('NFC').trim() ? 1 : 0;
+}
+
+/**
+ * The deterministic near-duplicate probe run BEFORE any CREATE (KNOW-15h): a `claimNorm` collision with
+ * an existing sibling-slot claim forces MERGE/UPDATE rather than minting a parallel node (door-2). The
+ * `claimNormThreshold` is surfaced as an EXPLICIT parameter (frozen `NearDupConfig`) — the OPEN-DEFINE τ
+ * is a config the caller supplies, never a baked-in constant. Pure + total, no LLM. Reports a collision
+ * iff some existing normalized claim reaches the threshold (exact match ⇒ `sim=1`, fires for any τ ≤ 1).
+ */
+export function nearDuplicateProbe(
+  candidate: Candidate,
+  existingClaimNorms: readonly string[],
+  cfg: NearDupConfig,
+): boolean {
+  return existingClaimNorms.some((c) => claimSimilarity(candidate.claimNorm, c) >= cfg.claimNormThreshold);
 }
