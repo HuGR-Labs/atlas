@@ -38,3 +38,16 @@ export {
   ATLAS_LOG_PATH, MERGE_DRIVER_NAME,
 } from './merge.js';
 export type { DriverRegistration, SetupResult } from './merge.js';
+
+// Campaign-3 runtime surface (provenance trailer + host-forge projection + scrubbed transcript + re-spawn):
+//   WP-3.4-a: provenance / attach / metering · WP-3.4-b: host-adapter / placement
+//   WP-3.5-a: transcript-store / scrub       · WP-3.5-b: reinvoke
+// `src/diff.ts` (WP-7.32.PERSIST) is DEFINE-parked (VersionDeltaEntry.provenance) — wired at its seal.
+export * from './provenance.js';
+export * from './attach.js';
+export * from './metering.js';
+export * from './host-adapter.js';
+export * from './placement.js';
+export * from './transcript-store.js';
+export * from './scrub.js';
+export * from './reinvoke.js';
