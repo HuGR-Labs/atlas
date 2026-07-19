@@ -7,7 +7,7 @@
 > are present-but-empty at S4-freeze. Modules in this campaign: `index`, `retrieval`.
 >
 > Seam-freezes in this campaign: **1** — EPIC-8-b: the relate-axes contract, owned-by INDEX, consumed-by RETR.
-> REQ→WP partition: 66 REQs → 8 WPs, exactly-one owner (self-check below).
+> REQ→WP partition: 66 REQs → 9 WPs, exactly-one owner (self-check below).
 
 ---
 
@@ -17,23 +17,17 @@
 epic: EPIC-6
 id: WP-2.6.INDEX
 content_hash: <filled-at-freeze>
-title: mechanical SCIP-derived single structural index (deterministic, fail-empty)
+title: mechanical SCIP-derived structural index build (model-free, byte-identical rebuild)
 intent: >
-  Build the one content-addressed index that backs both drift + discovery from the real file
-  tree / import graph via a per-language SCIP indexer, $0-LLM; identical builds are byte-identical;
-  a malformed path/tag/axis yields empty, never a throw; unresolvable edges are declared, not guessed.
+  Build the one content-addressed structural index mechanically from the real file tree / import graph
+  via a per-language SCIP indexer, $0-LLM and model-free on the build path; rebuilding twice with the
+  same indexer is byte-identical; unresolvable / cross-language edges are declared, not guessed.
 source_reqs:                             # ptr+digest
-  - source: ../req-idx.md#REQ-INDEX-1a  # ptr+digest
-  - source: ../req-idx.md#REQ-INDEX-1b  # ptr+digest
   - source: ../req-idx.md#REQ-INDEX-3a  # ptr+digest
   - source: ../req-idx.md#REQ-INDEX-3b  # ptr+digest
   - source: ../req-idx.md#REQ-INDEX-3c  # ptr+digest
   - source: ../req-idx.md#REQ-INDEX-3d  # ptr+digest
   - source: ../req-idx.md#REQ-INDEX-3e  # ptr+digest
-  - source: ../req-idx.md#REQ-INDEX-7a  # ptr+digest
-  - source: ../req-idx.md#REQ-INDEX-8a  # ptr+digest
-  - source: ../req-idx.md#REQ-INDEX-9a  # ptr+digest
-  - source: ../req-idx.md#REQ-INDEX-9b  # ptr+digest
 seam-freezes: [ ]
 anchor: index/ (build facet — single content-addressed index over the SCIP-derived axes)
 interface_contract:                      # ptr+digest
@@ -50,19 +44,53 @@ action_surface: [ Read, Edit, Write, Bash(index-test-runner + fmt/clippy only) ]
 guardrails: edits confined to index/**; no writes outside the module; no new runtime deps; goldens/reqs read-only; no LLM/embedding call site
 repair_budget: N=3 · early-stop on {repeated-identical-failure, no-change-diff, semantic-dup}
 acceptance:                              # ptr+digest = frozen goldens
-  - source: ../goldens-idx.md#SCN-INDEX-1a-1  # ptr+digest
-  - source: ../goldens-idx.md#SCN-INDEX-1b-1  # ptr+digest
   - source: ../goldens-idx.md#SCN-INDEX-3a-1  # ptr+digest
   - source: ../goldens-idx.md#SCN-INDEX-3b-1  # ptr+digest
   - source: ../goldens-idx.md#SCN-INDEX-3c-1  # ptr+digest
   - source: ../goldens-idx.md#SCN-INDEX-3d-1  # ptr+digest
   - source: ../goldens-idx.md#SCN-INDEX-3e-1  # ptr+digest
-  - source: ../goldens-idx.md#SCN-INDEX-7a-1  # ptr+digest
-  - source: ../goldens-idx.md#SCN-INDEX-8a-1  # ptr+digest
-  - source: ../goldens-idx.md#SCN-INDEX-9a-1  # ptr+digest
-  - source: ../goldens-idx.md#SCN-INDEX-9b-1  # ptr+digest
 deps: [ ]   parallel_group: [P]
-exit_predicate: all acceptance SCN green ∧ block gates (fmt/clippy + byte-identity determinism gate INDEX-8) pass
+exit_predicate: all acceptance SCN green ∧ block gates (fmt/clippy + byte-identical rebuild gate via SCN-INDEX-3d-1) pass
+context_refs:                            # closed list
+  - source: ../req-idx.md
+  - source: ../goldens-idx.md
+  - source: ../../reference/atlas-index.md
+owner: # value — techlead dispatch (FORGE seat)
+outputs:                                             # exec — empty at S4-freeze
+provenance:                                          # exec — empty at S4-freeze
+trace_ref:                                           # exec — empty at S4-freeze
+rationale:                               # ptr
+  - source: ../invariant-register.md#INV-INDEX-3
+### WP-2.6-b.INDEX — composed-index slice of EPIC-6
+epic: EPIC-6
+id: WP-2.6-b.INDEX
+content_hash: <filled-at-freeze>
+title: composed-index facet — one index over N axes backs both drift + discovery, 0 separate passes
+intent: >
+  Compose the single content-addressed index from the built axes (EPIC-6) and the resolve surface
+  (EPIC-8-a) so that one index, exposing N axes, serves both jobs — drift and discovery — with no
+  separate discovery structure and no separate staleness sweep.
+source_reqs:                             # ptr+digest
+  - source: ../req-idx.md#REQ-INDEX-1a  # ptr+digest
+  - source: ../req-idx.md#REQ-INDEX-1b  # ptr+digest
+seam-freezes: [ ]
+anchor: index/ (composition facet — one index, N axes, two jobs; composes build + resolve)
+interface_contract:                      # ptr+digest
+  - source: index/ref/index.ts  # ptr+digest
+exclusions: >
+  Composition facet ONLY — the mechanical build is EPIC-6 (WP-2.6.INDEX), resolve/modes is EPIC-8-a
+  (WP-2.8-a.INDEX); this card only composes them into the one index. No rollup fold, drift, relate,
+  territory, or coverage; does not rebuild the axes nor add a resolve mode.
+inputs: [ ]
+action: implement the composition in packages/index/src/index.ts (compose build + resolve into one index) to satisfy the frozen goldens; run the block conformance suite
+action_surface: [ Read, Edit, Write, Bash(index-test-runner + fmt/clippy only) ]
+guardrails: edit only packages/index/src/index.ts (composition); no writes outside the module; no new runtime deps; goldens/reqs read-only; no LLM/embedding call site
+repair_budget: N=3 · early-stop on {repeated-identical-failure, no-change-diff, semantic-dup}
+acceptance:                              # ptr+digest = frozen goldens
+  - source: ../goldens-idx.md#SCN-INDEX-1a-1  # ptr+digest
+  - source: ../goldens-idx.md#SCN-INDEX-1b-1  # ptr+digest
+deps: [ WP-2.6.INDEX, WP-2.8-a.INDEX ]   parallel_group: [ ]
+exit_predicate: all acceptance SCN green ∧ block gates (fmt/clippy + one-index/no-separate-pass assertion) pass
 context_refs:                            # closed list
   - source: ../req-idx.md
   - source: ../goldens-idx.md
@@ -73,10 +101,6 @@ provenance:                                          # exec — empty at S4-free
 trace_ref:                                           # exec — empty at S4-freeze
 rationale:                               # ptr
   - source: ../invariant-register.md#INV-INDEX-1
-  - source: ../invariant-register.md#INV-INDEX-3
-  - source: ../invariant-register.md#INV-INDEX-7
-  - source: ../invariant-register.md#INV-INDEX-8
-  - source: ../invariant-register.md#INV-INDEX-9
 ---
 
 ## EPIC-7-a — incremental rollup re-hash leaf→root
@@ -216,6 +240,10 @@ source_reqs:                             # ptr+digest
   - source: ../req-idx.md#REQ-INDEX-4b  # ptr+digest
   - source: ../req-idx.md#REQ-INDEX-6a  # ptr+digest
   - source: ../req-idx.md#REQ-INDEX-6b  # ptr+digest
+  - source: ../req-idx.md#REQ-INDEX-7a  # ptr+digest
+  - source: ../req-idx.md#REQ-INDEX-8a  # ptr+digest
+  - source: ../req-idx.md#REQ-INDEX-9a  # ptr+digest
+  - source: ../req-idx.md#REQ-INDEX-9b  # ptr+digest
   - source: ../req-idx.md#REQ-INDEX-10a  # ptr+digest
   - source: ../req-idx.md#REQ-INDEX-10b  # ptr+digest
   - source: ../req-idx.md#REQ-INDEX-10c  # ptr+digest
@@ -240,6 +268,10 @@ acceptance:                              # ptr+digest = frozen goldens
   - source: ../goldens-idx.md#SCN-INDEX-4b-1  # ptr+digest
   - source: ../goldens-idx.md#SCN-INDEX-6a-1  # ptr+digest
   - source: ../goldens-idx.md#SCN-INDEX-6b-1  # ptr+digest
+  - source: ../goldens-idx.md#SCN-INDEX-7a-1  # ptr+digest
+  - source: ../goldens-idx.md#SCN-INDEX-8a-1  # ptr+digest
+  - source: ../goldens-idx.md#SCN-INDEX-9a-1  # ptr+digest
+  - source: ../goldens-idx.md#SCN-INDEX-9b-1  # ptr+digest
   - source: ../goldens-idx.md#SCN-INDEX-10a-1  # ptr+digest
   - source: ../goldens-idx.md#SCN-INDEX-10b-1  # ptr+digest
   - source: ../goldens-idx.md#SCN-INDEX-10c-1  # ptr+digest
@@ -256,6 +288,9 @@ trace_ref:                                           # exec — empty at S4-free
 rationale:                               # ptr
   - source: ../invariant-register.md#INV-INDEX-4
   - source: ../invariant-register.md#INV-INDEX-6
+  - source: ../invariant-register.md#INV-INDEX-7
+  - source: ../invariant-register.md#INV-INDEX-8
+  - source: ../invariant-register.md#INV-INDEX-9
   - source: ../invariant-register.md#INV-INDEX-10
 ---
 
@@ -491,12 +526,12 @@ rationale:                               # ptr
 ## S4 self-check (partition proof)
 
 - **REQ→WP partition — 66/66, orphans = 0, doubles = 0:**
-  - INDEX (55): 1a,1b,3a,3b,3c,3d,3e,7a,8a,9a,9b (E6=11) · 2a,2b,2c,12a,12b,12c,12d,12e,12f (E7-a=9) ·
-    5a,5b,5c,12g,12h,12i,12j,12k (E7-b=8) · 4a,4b,6a,6b,10a,10b,10c (E8-a=7) ·
+  - INDEX (55): 1a,1b,3a,3b,3c,3d,3e (E6=7) · 2a,2b,2c,12a,12b,12c,12d,12e,12f (E7-a=9) ·
+    5a,5b,5c,12g,12h,12i,12j,12k (E7-b=8) · 4a,4b,6a,6b,7a,8a,9a,9b,10a,10b,10c (E8-a=11) ·
     13a,13b,13c,13d,13e,13f (E8-b=6) · 14a–14f,15a–15e (E9-a=11) · 16a,16b,16c (E9-b=3).
     (INDEX-11a/11b intentionally excluded — CAMPAIGN-4/EPIC-10-a.)
   - RETR (11): 10a,10b,10c,10d,10e,10f,11a,11b,11c,11d,11e (E8-b RETR slice).
-- **Per-epic coverage:** EPIC-6 ✓ · EPIC-7-a ✓ · EPIC-7-b ✓ · EPIC-8-a ✓ · EPIC-8-b ✓ (INDEX ∪ RETR) · EPIC-9-a ✓ · EPIC-9-b ✓.
+- **Per-epic coverage:** EPIC-6 ✓ (build ∪ composition) · EPIC-7-a ✓ · EPIC-7-b ✓ · EPIC-8-a ✓ · EPIC-8-b ✓ (INDEX ∪ RETR) · EPIC-9-a ✓ · EPIC-9-b ✓.
 - **Seam-freezes = 1:** relate-axes contract owned-by INDEX (WP-2.8-b.INDEX), consumed-by RETR (WP-2.8-b.RETR) — not smeared.
 - **Driftless:** every substantive field is a `ptr+digest`; acceptance = the frozen goldens by reference; `exec` fields present-but-empty.
 - **No new decision:** every card transcribes its epic's frozen reqs + goldens; the only open item is the upstream-flagged
