@@ -33,3 +33,4 @@ export * from './align.js';          // WP-8.29.GEN   — candidate-only writes 
 export * from './seed.js';           // WP-8.29.GEN   — seed from ratified manifest; Awareness sources never fabricated
 export * from './run-controller.js'; // WP-8.30.GEN   — resume/checkpoint + malformed-degrade + born-from-work hand-off
 export * from './loops.js';          // WP-8.31.GEN   — governed deepening loops (opt-in, budget-gated, fixpoint-stopping)
+export * from './rank.js';           // WP-8.27.GEN   — deterministic $0-LLM S0/S1 (scan canonicalize + integer fixed-point PPR + degenerate-history fallback)
