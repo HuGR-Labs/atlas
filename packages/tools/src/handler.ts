@@ -1,0 +1,119 @@
+// @atlas/tools — src/handler.ts   (WP-7.26-a.TOOLS — TOOLS-1 / TOOLS-2 / TOOLS-4, INV-TOOLS-1 / -2 / -4)
+//
+// THE ONE handler behind EVERY transport — the spine facet, created HEAD of the sequential handler chain
+// (WP-7.26-b / -c / -7.32 extend this file downstream). This slice lands the EPIC-26-a obligations:
+//   • the CLOSED four-tool governance surface (`GOVERNANCE_SURFACE`, count == 4) and the single write path
+//     (`WRITE_PATHS`, `writePaths == 1` → `atlas-emit`) — TOOLS-1;
+//   • `handle(tool, args)` PURE + TOTAL — a malformed argument fails CLOSED to a structured rejected
+//     `Verdict`, NEVER a throw (TOOLS-2), with `next + invariant` guidance stamped on EVERY path (TOOLS-4).
+// The per-tool legs (init / query / emit / reconcile) are INJECTED — the wrapper adds totality + guidance
+// around them; it reads no wall-clock and holds no mutable cache, so it is pure whenever its legs are.
+// Transcribed against the FROZEN oracle `../ref/handler.ts` (`HandlerApi`) + `../ref/types.ts`
+// (`Tool` / `Verdict` / `Guidance`); goldens SCN-TOOLS-1a-1 / 1b-1 / 2a-1 / 2b-1.
+//
+// SCOPE (this facet): the surface constants + the pure/total wrapper. EXCLUDED by the card — CLI/MCP
+// transport parity (EPIC-26-b, WP-7.26-b), the tri-transport node read `resolveNode` (EPIC-26-c,
+// WP-7.26-c), and the published-schema body (EPIC-26-b). Those extend this file downstream; `resolveNode`
+// and `schema` ship here as HONEST, read-only, total minimal seams for the successor WPs to fill in.
+
+import type { NodeKey, ToolSchema } from '@atlas/contracts';
+import type { ToolData, Transport, HandlerApi } from '../ref/handler.js';
+import type { Guidance, Tool, Verdict } from '../ref/types.js';
+
+/** The CLOSED governance surface — EXACTLY four tools, no more (TOOLS-1). The order is fixed; membership is
+ *  the load-bearing fact (surface count == 4). */
+export const GOVERNANCE_SURFACE: readonly Tool[] = [
+  'atlas-init',
+  'atlas-query',
+  'atlas-emit',
+  'atlas-reconcile',
+];
+
+/** The write surface — EXACTLY one entry (`writePaths == 1`): `atlas-emit` is the ONLY write path (TOOLS-1).
+ *  The other three governance tools read/derive; the read projections (diff / doctor / node) carry no write
+ *  authority (guarded structurally in `./guard.ts`). */
+export const WRITE_PATHS: readonly Tool[] = ['atlas-emit'];
+
+/** A per-tool leg — the concrete tool computation the handler wraps. It MAY throw on a malformed argument;
+ *  the wrapper converts that to a structured rejected `Verdict` (TOOLS-2 totality). */
+export type ToolLeg = (args: unknown) => ToolData;
+
+/** The injected legs, keyed by tool. Partial: a leg not wired at this seam fails closed to a rejected
+ *  verdict (never a throw), so the handler is total over the whole surface. */
+export type ToolLegs = Partial<Record<Tool, ToolLeg>>;
+
+/** The `next + invariant` guidance stamped on every result (TOOLS-4) — non-empty on ok AND reject paths. */
+const GUIDANCE: Record<Tool, Guidance> = {
+  'atlas-init': {
+    next: 'review the T2/advisory move-in skeleton, then promote territories via atlas-emit',
+    invariant: 'TOOLS-5: $0-LLM structural move-in, no auto-promotion above T2',
+  },
+  'atlas-query': {
+    next: 're-ground stale packs before trusting; scope must be a path string',
+    invariant: 'TOOLS-6: bounded read projection (tier>=T1)',
+  },
+  'atlas-emit': {
+    next: 'a rejected write did not re-derive at source@sha — fix the citation and re-emit',
+    invariant: 'TOOLS-1/7: atlas-emit is the single fail-closed write door',
+  },
+  'atlas-reconcile': {
+    next: 'a semantic flip blocks the merge (exit 2) — re-author before merging',
+    invariant: 'TOOLS-8: reviewable drift, block on any semantic flip',
+  },
+};
+
+/** Fallback guidance for an off-surface tool token — still non-empty (TOOLS-4 totality). */
+const GUIDANCE_OFF_SURFACE: Guidance = {
+  next: 'invoke one of the four governance tools: atlas-init | atlas-query | atlas-emit | atlas-reconcile',
+  invariant: 'TOOLS-1: the governance surface is exactly four tools',
+};
+
+const guidanceFor = (tool: Tool): Guidance => GUIDANCE[tool] ?? GUIDANCE_OFF_SURFACE;
+
+const reason = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+/**
+ * Build THE one handler over the injected per-tool `legs`. The returned object conforms EXACTLY to the
+ * frozen `HandlerApi`. `handle` is pure + total: it reads no clock and holds no cache, and it converts a
+ * missing leg OR a leg throw into a structured rejected `Verdict` — never a throw (TOOLS-2) — with guidance
+ * stamped on every path (TOOLS-4).
+ */
+export function createHandler(legs: ToolLegs): HandlerApi {
+  const handle = (tool: Tool, args: unknown): Verdict<ToolData> => {
+    const guidance = guidanceFor(tool);
+    const leg = legs[tool];
+    if (leg === undefined) {
+      return { ok: false, rejected: `tool '${tool}' not wired at this seam`, guidance };
+    }
+    try {
+      const data = leg(args);
+      return { ok: true, data, guidance };
+    } catch (e) {
+      // TOOLS-2: fail CLOSED on a malformed argument — a structured rejected verdict, never a throw.
+      return { ok: false, rejected: `malformed args — fail-closed: ${reason(e)}`, guidance };
+    }
+  };
+
+  // resolveNode / schema — HONEST, read-only, total minimal seams. The tri-transport node read (TOOLS-10)
+  // and the published-schema body are owned by the successor WPs (EPIC-26-c / -b) that extend this file.
+  const resolveNode = (_nodeAddr: NodeKey, _transport: Transport): Verdict => ({
+    ok: false,
+    rejected: 'node resolution is wired by the tri-transport read (EPIC-26-c)',
+    guidance: {
+      next: 'resolve nodes through the tri-transport read once EPIC-26-c is wired',
+      invariant: 'TOOLS-10: one oracle, read-only across MCP | poke | CLI',
+    },
+  });
+
+  const schema = (tool: Tool): ToolSchema => ({
+    name: tool,
+    description: `atlas governance tool '${tool}' — one published schema, CLI ≡ MCP (TOOLS-3)`,
+    inputSchema: { type: 'object' },
+  });
+
+  return { handle, resolveNode, schema };
+}
+
+// differential-vs-oracle (compile-time): the handler conforms to the frozen `HandlerApi` (../ref/handler.ts).
+const _handlerConforms: HandlerApi = createHandler({});
+void _handlerConforms;
