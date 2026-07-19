@@ -1,4 +1,5 @@
-# CI from commit #1 — the same bar Orchestra enforces on seats, enforced on Orchestra.
+# Product build gate. Gate implementations live in harness/ (Orchestra-bound).
+# Runs on push + pull_request. The bar Orchestra enforces on seats is enforced here.
 name: ci
 on: [push, pull_request]
 jobs:
@@ -7,8 +8,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20 }
+        with:
+          node-version: 20
+          cache: npm
       - run: npm ci
-      - run: npm run godfile-guard  # ≤400-LOC ceiling per source file (no godfiles)
-      - run: npm run typecheck   # tsc --strict, downward-only layers
-      - run: npm test            # own-suite-green + totality fences + no-self-attest lints
+      - run: npm run godfile-guard  # ≤400-LOC ceiling per source file (harness/gates)
+      - run: npm run typecheck       # tsc -b — strict, downward-only layers
+      - run: npm test                # vitest run — own-suite + held-out GATE + totality fences
