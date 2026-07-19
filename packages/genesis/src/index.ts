@@ -24,3 +24,12 @@ export type * from '../ref/handoff.js';
 export type * from '../ref/seed.js';
 export type * from '../ref/budget.js';
 export type * from '../ref/resume.js';
+
+// ── Runtime surface (Campaign-8 — bootstrap genesis) ─────────────────────────────────────────────────
+export * from './extract.js';        // WP-8.28-a.GEN — budgeted grounded proposal (spend highest-first, 2-door, WhyNot)
+export * from './admit-harness.js';  // WP-8.28-b.GEN — mechanical admission (HOLDS-and-flips-BROKEN; vacuous dropped)
+export * from './cost-policy.js';    // WP-8.28-c.GEN — tiered escalation defaults (1 sample/advisory/CEGIS≤1; refuter T0-only)
+export * from './align.js';          // WP-8.29.GEN   — candidate-only writes + one batched ratification pass
+export * from './seed.js';           // WP-8.29.GEN   — seed from ratified manifest; Awareness sources never fabricated
+export * from './run-controller.js'; // WP-8.30.GEN   — resume/checkpoint + malformed-degrade + born-from-work hand-off
+export * from './loops.js';          // WP-8.31.GEN   — governed deepening loops (opt-in, budget-gated, fixpoint-stopping)
