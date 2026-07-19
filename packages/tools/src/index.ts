@@ -27,3 +27,4 @@ export type * from '../ref/guard.js';
 
 // ── Runtime surface (Campaign-4) ───────────────────────────────────────────────────────────────────
 export * from './emit.js';        // WP-4.11-a.TOOLS — atlas-emit re-derives citation at source@sha, fail-closed reject
+export * from './reconcile.js';   // WP-4.12-a.TOOLS — atlas-reconcile: classify drift into a reviewable DriftItem[] (exit 2 on semantic)

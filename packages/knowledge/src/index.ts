@@ -29,3 +29,7 @@ export type * from '../ref/produce.js';
 
 // ── Runtime surface ────────────────────────────────────────────────────────────────────────────────
 export * from './freshness.js';   // WP-4.10-a.KNOW — knowledge drift oracle binds to the grounding subtreeHash (Campaign-4)
+export * from './emit.js';        // WP-4.11-a.KNOW — grounded emit: a fact is truth only if grounded (fail-closed)
+export * from './status.js';      // WP-4.11-a.KNOW — status recompute drops the node-declared verdict (never self-declared)
+export * from './reconcile.js';   // WP-4.12-a.KNOW — drift split: mechanical auto-reground, semantic block, reauthor==|semantic|
+// `router.js` (WP-5.13-a) + `evaluator.js` (WP-5.16) are Campaign-5 — wired at that seal.
