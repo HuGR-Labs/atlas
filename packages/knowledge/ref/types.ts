@@ -68,11 +68,12 @@ export type GroundedFact = AdvisoryNode | PredicateNode;
  * (the create/update identity leg), NOT a `Hash` — flagged for the two lines to reconcile which leg the
  * stored `id` field carries.
  *
- * [FLAG — no stored `slot`/`owner`/`scope`] The frozen node shapes (atlas-knowledge:21-24) list NO
- * `predicateSlot`, `owner`, or `scope` field, yet the `nodeKey` is `hash(primaryAnchorId ‖
- * predicateSlot)` (KNOW-15) and KNOW-11 requires every fact carry `owner` + `scope`. The slot feeds
- * identity and owner/scope feed authz (`ref/authz.ts`) but are ABSENT from the frozen record — NOT
- * invented here as fields. Flagged for the data model to surface them.
+ * [RESOLVED — R3 data-model reconciliation, owner-authorized 2026-07-19] The `owner`/`scope` (KNOW-11a)
+ * and `predicateSlot` (KNOW-15b nodeKey leg / KNOW-4g read-side grouping) fields are now SURFACED on both
+ * node shapes — OPTIONALLY. Optional because ~17 merged `GroundedFact` literals (src+test) omit them; the
+ * KNOW-11 "every fact MUST carry owner+scope" stays enforced BEHAVIORALLY by the WP-5.14 emit/authz facet +
+ * the conformance goldens, not by the type. Grounded shapes (`string`, closed `PredicateSlot`) — not
+ * invented. Discharges the former [FLAG — no stored slot/owner/scope].
  */
 export interface AdvisoryNode {
   readonly kind: 'advisory';
@@ -83,6 +84,9 @@ export interface AdvisoryNode {
   readonly freshness: KnowledgeFreshness;
   readonly claims: readonly ClaimEntry[]; // [FLAG] kernel `ClaimEntry` — see the union note below
   readonly authoring: 'ADVISORY' | 'SUPERSEDED';
+  readonly owner?: string; // R3 — KNOW-11a (authz keys inScope(actor, scope); nominal seat/owner id)
+  readonly scope?: string; // R3 — KNOW-11a (territory scope id)
+  readonly predicateSlot?: PredicateSlot; // R3 — KNOW-15b nodeKey leg / KNOW-4g read-side grouping
 }
 
 /**
@@ -110,6 +114,9 @@ export interface PredicateNode {
   readonly freshness: KnowledgeFreshness;
   readonly claims: readonly ClaimEntry[]; // [FLAG] kernel `ClaimEntry` — see the union note below
   readonly authoring: 'PREDICATED' | 'SUPERSEDED';
+  readonly owner?: string; // R3 — KNOW-11a (see AdvisoryNode)
+  readonly scope?: string; // R3 — KNOW-11a
+  readonly predicateSlot?: PredicateSlot; // R3 — KNOW-15b nodeKey leg / KNOW-4g grouping
 }
 
 // [FLAG — `ClaimEntry` reference divergence] atlas-knowledge:26 defines a Knowledge-local
