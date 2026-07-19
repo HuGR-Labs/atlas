@@ -14,7 +14,7 @@
 
 import type { Hash } from '@atlas/contracts';
 import type { CasObject, StoreApi } from '@atlas/kernel';
-import type { PredicateNode } from './types.js';
+import type { PredicateNode } from '../types.js';
 
 // ── frozen ArchiveApi surface, co-located here (was ref/archive.ts) ───────────────────────────────────
 

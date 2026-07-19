@@ -11,7 +11,7 @@ import type { Freshness as GroundingFreshness, StructRef } from '@atlas/contract
 import type { Axes, IndexNode } from '@atlas/index';
 import type { DriftApi, Grounding } from '@atlas/grounding';
 import type { GroundedFact } from '@atlas/knowledge';
-import { bindFreshness } from '../src/freshness.js';
+import { bindFreshness } from '../src/lifecycle/freshness.js';
 
 const emptyRoot = (axis: IndexNode['axis']): IndexNode => ({
   axis,

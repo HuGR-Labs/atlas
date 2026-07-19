@@ -15,7 +15,7 @@
 //    NOTHING to the tier — the human ratifier owns any `T0` promotion.
 
 import type { Tier } from '@atlas/contracts';
-import type { TerritoryView } from './types.js';
+import type { TerritoryView } from '../types.js';
 
 // ── frozen TierApi surface, co-located here (was ref/tier.ts) ─────────────────────────────────────────
 

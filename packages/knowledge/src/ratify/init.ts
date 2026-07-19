@@ -16,7 +16,7 @@
 //    skeleton carries ONLY the frozen territory fields; nothing authored can leak.
 
 import type { NodeKey } from '@atlas/contracts';
-import type { TerritoryView } from './types.js';
+import type { TerritoryView } from '../types.js';
 
 // ── frozen InitApi surface, co-located here (was ref/init.ts) ─────────────────────────────────────────
 

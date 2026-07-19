@@ -26,7 +26,7 @@
 
 import { asNodeKey, canonicalForm, defaultEncoder } from '@atlas/kernel';
 import type { NodeKey } from '@atlas/contracts';
-import type { Candidate, Check, PredicateSlot } from './types.js';
+import type { Candidate, Check, PredicateSlot } from '../types.js';
 
 // ── frozen RouterApi surface, co-located here (was ref/router.ts) ─────────────────────────────────────
 

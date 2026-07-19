@@ -17,7 +17,7 @@
 import { describe, it, expect } from 'vitest';
 import { asNodeKey } from '@atlas/kernel';
 import type { NodeKey } from '@atlas/contracts';
-import { bindHits, type HitsDeps, type Calibrate } from '../src/hits.js';
+import { bindHits, type HitsDeps, type Calibrate } from '../src/lifecycle/hits.js';
 
 // ── fixtures ────────────────────────────────────────────────────────────────
 

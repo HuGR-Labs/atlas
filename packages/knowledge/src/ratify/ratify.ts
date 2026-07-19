@@ -12,7 +12,7 @@
 //    `T0` candidate requires the billy token. The single-`by` token models "requires billy" as a token
 //    whose ratifier IS billy (the frozen signature carries one token — the honest binding).
 
-import type { Candidate } from './types.js';
+import type { Candidate } from '../types.js';
 
 // ── frozen RatifyApi surface, co-located here (was ref/ratify.ts) ─────────────────────────────────────
 

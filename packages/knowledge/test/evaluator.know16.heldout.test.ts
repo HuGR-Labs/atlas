@@ -13,7 +13,7 @@ import {
   verdictFor,
   type ProposedCheck,
   type VerdictFeed,
-} from '../src/evaluator.js';
+} from '../src/lifecycle/evaluator.js';
 
 const leaf = (axis: IndexNode['axis'], key: string, objects: string[] = []): IndexNode => ({
   axis,

@@ -10,8 +10,8 @@
 // probe confirms the reducer generalises past the specific fixture strings.
 
 import { describe, it, expect } from 'vitest';
-import { routeWrite, upsert, emptyStore, currentNodes } from '../src/router.js';
-import type { RouteInputs, WriteRequest, NodeFamily } from '../src/router.js';
+import { routeWrite, upsert, emptyStore, currentNodes } from '../src/write/router.js';
+import type { RouteInputs, WriteRequest, NodeFamily } from '../src/write/router.js';
 
 // Fresh S0': advisory @ K-alpha (bytes H-a0, claim c-init) + predicate @ K-beta (check folded, bytes H-b0)
 function seed(): ReturnType<typeof emptyStore> {

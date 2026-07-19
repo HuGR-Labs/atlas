@@ -5,9 +5,12 @@ git-native substrate that lets an AI coding agent (or a human) ask *what is true
 is it still true?* — and get a deterministic, drift-checked answer. No embeddings, no RAG: retrieval is
 a hashed structural index (BLAKE3-merkle CAS) resolved by scope, dependency blast-radius, and trigger.
 
-> **Status: design-first.** The full design is decomposed and frozen (`docs/`); product code is built
-> from the frozen Work Packages. The Atlas is consumed one-way by downstream orchestrators (e.g.
+> **Status: built.** All 72 Work Packages are implemented and sealed, with a story-driven end-to-end
+> suite over the wired runtime. The Atlas is consumed one-way by downstream orchestrators (e.g.
 > **Orchestra**, its first consumer) — it never depends on them.
+>
+> **New here?** Read [`ARCHITECTURE.md`](./ARCHITECTURE.md) — the module graph, where things live, and
+> the invariants that hold across the tree.
 
 ## What it guarantees
 

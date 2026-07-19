@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { asNodeKey } from '@atlas/kernel';
 import type { NodeKey } from '@atlas/contracts';
-import { bindHits, type HitsDeps, type Calibrate } from '../src/hits.js';
+import { bindHits, type HitsDeps, type Calibrate } from '../src/lifecycle/hits.js';
 
 // ── fixtures (different concrete data from the -1 leg) ────────────────────────
 const C = asNodeKey('fact-C');            // 17a-2: a different fact cited by a *second* seat
