@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist"
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../contracts" },
+    { "path": "../kernel" },
+    { "path": "../index" },
+    { "path": "../knowledge" },
+    { "path": "../persist" },
+    { "path": "../genesis" },
+    { "path": "../tools" }
+  ]
+}
