@@ -9,7 +9,7 @@ import { canonicalForm } from '@atlas/kernel';
 import type { Manifest, DepEdge } from '@atlas/index';
 import type { Territory } from '@atlas/contracts';
 import { reconcile } from '../src/ownership.js';
-import type { BlameEntry, OwnerMap } from '../ref/ownership.js';
+import type { BlameEntry, OwnerMap } from '../src/ownership.js';
 
 const T = (name: string, owner: string, tier: Territory['tier'], globs: string[]): Territory =>
   ({ name, owner, tier, globs });

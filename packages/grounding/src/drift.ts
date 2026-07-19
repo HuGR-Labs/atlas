@@ -9,7 +9,7 @@
 //     `displayLines`/line-ranges). An ungrounded grounding is DRIFTED (GROUND-2); an unresolvable citation
 //     is DRIFTED, fail-closed, NEVER a throw (GROUND-3); a real change to the cited unit's normalized
 //     subtree is DRIFTED (GROUND-5). Both pure + total. Transcribed against the frozen oracles
-//     `../ref/drift.ts` (`DriftApi.driftDetect`) + `../ref/ground.ts` (`GroundApi.isGrounded`).
+//     `./types.ts` (`DriftApi.driftDetect` + `GroundApi.isGrounded`).
 //
 // SCOPE (card exclusions): NOT the GROUND-11 forward-closure interface fold (owned by WP-4.10-b.GROUND) —
 // this slice folds only the LOCAL grounding-set; NOT the GROUND-13 advisory→`STALE` routing (owned by
@@ -20,9 +20,7 @@
 
 import type { Freshness, SubtreeHash } from '@atlas/contracts';
 import type { Axes, IndexNode } from '@atlas/index';
-import type { Grounding } from '../ref/types.js';
-import type { DriftApi } from '../ref/drift.js';
-import type { GroundApi } from '../ref/ground.js';
+import type { Grounding, DriftApi, GroundApi } from './types.js';
 
 /** Resolve a structural unit's CURRENT subtreeHash in `node`'s subtree by its qualified key (the anchor's
  *  `qualifiedPath`). Total: an absent unit returns `undefined` (unresolvable), never a throw. */

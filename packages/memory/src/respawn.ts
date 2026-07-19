@@ -1,32 +1,44 @@
-// @atlas/memory — src/respawn.ts  (WP-3.5-b.MEM)
+// @atlas/memory — src/respawn.ts  (WP-3.5-b.MEM · MEM-10 + MEM-13)
 //
-// MEM-10 (Versioned & nothing dies) + MEM-13 (Recall fires at re-spawn). Two obligations, one re-spawn
-// site:
-//   · MEM-10a — every memory TYPE of every member (incl. the orchestrator) is versioned WITH the repo and
-//     TRAVELS at each commit/PR/branch/fork; nothing is left behind, log length is monotone. Modelled as the
-//     SEALED @atlas/kernel insert-only content-keyed event log (KERNEL-4/9): a fork inherits the whole log by
-//     content-keyed set-union — grow-only, first-write-wins, no type dropped. No raw hashing: identity is the
-//     kernel `id`/`eventId` seam ALONE.
-//   · MEM-10b — an ephemeral agent's run is re-spawnable SOLELY from that versioned record — no mutable
-//     in-memory snapshot; `respawnFromRecord` is a total pure function of the record.
-//   · MEM-13 — at re-spawn a seat is PUSHED its OWN prior `task`/`pr` closing fold
-//     (`attempted/failedWith/stoppedAt/lesson`) for the unit it is RESUMING — a push at spawn, not a
-//     discretionary `memory-recall` — deterministic and ledger-driven off the unit's ARCHIVED fold, scoped
-//     to own+resumed only (MEM-4 still bars general consultable auto-injection). The archive is derived from
-//     MEM-10's versioned record (ref/respawn.ts: "Reuses MEM-10's versioned-record archive as its source").
-//
-// SEAM (WP-3.5-b.PERSIST, frozen upstream): the Checkpoint / archived-fold re-spawn substrate is produced on
-// the PERSIST side and consumed here. The persist `Checkpoint` is the run's re-invoke/replay substrate; the
-// MEMORY slice rebuilds its own git-native record off the versioned archive. The persist substrate is bound
-// as a fixture at the seam (see the test) — no upward package dependency is introduced here.
-//
-// Implements the FROZEN ref/respawn.ts `RespawnApi`. Types-only imports from ref/* + lower-layer barrels.
+// MEM-10 (Versioned & nothing dies) + MEM-13 (Recall fires at re-spawn). MEM-10a: every memory TYPE of every
+// member TRAVELS at each commit/PR/branch/fork (a fork inherits the whole log by content-keyed set-union,
+// grow-only), modelled as the SEALED @atlas/kernel insert-only event log (KERNEL-4/9), identity via the
+// kernel `id`/`eventId` seam ALONE. MEM-10b: a run is re-spawnable SOLELY from that versioned record.
+// MEM-13: at re-spawn a seat is PUSHED its OWN prior `task`/`pr` closing fold for the unit it is RESUMING —
+// a push at spawn, off the ARCHIVED fold, scoped to own+resumed only. The PERSIST Checkpoint substrate is
+// consumed as a seam fixture (see the test) — no upward package dependency introduced here.
 
 import { id, eventId, createLog, combine } from '@atlas/kernel';
 import type { Event, EventLog } from '@atlas/kernel';
 import type { Hash } from '@atlas/contracts';
-import type { MemberId, MemoryKind, MemoryRecord, MemoryStore, TaskMemoryEntry } from '../ref/types.js';
-import type { RespawnApi, ResumeUnit, ClosingFold } from '../ref/respawn.js';
+import type { MemberId, MemoryKind, MemoryRecord, MemoryStore, TaskMemoryEntry } from './types.js';
+
+// ── frozen re-spawn surface, co-located here (was ref/respawn.ts) ──────────────────────────────────────────
+
+/**
+ * The closing fold auto-recalled at re-spawn (MEM-13) — the retry-relevant subset of a `task` entry.
+ * Transcribed as the `{ attempted, failedWith, stoppedAt, lesson }` projection of `TaskMemoryEntry`
+ * (atlas-memory:19, 127). (`pr` folds carry the analogous decisions/outcomes subset of `PrMemoryEntry`.)
+ */
+export type ClosingFold = Pick<TaskMemoryEntry, 'attempted' | 'failedWith' | 'stoppedAt' | 'lesson'>;
+
+/**
+ * The unit a seat is resuming (a `task` / `pr` it previously touched — MEM-13).
+ *
+ * [PINNED — unit identity type] the reference names "the unit it is resuming" with no frozen id type;
+ * transcribed as `{ kind, id }` over the two resumable kinds — `id` is `string`, NOT invented as a brand.
+ */
+export interface ResumeUnit {
+  readonly kind: 'task' | 'pr'; // the resumable Memory kinds (project/logbook are not resumed folds)
+  readonly id: string; // [PINNED] taskId / prId — no frozen brand
+}
+
+export interface RespawnApi {
+  /** Push the seat's OWN archived closing fold for the resumed unit, ONCE at spawn — deterministic off
+   *  the archived record, scoped to own + resumed only, fires at SPAWN (not on a running turn — MEM-13).
+   *  Reuses MEM-10's versioned archive. Pure + deterministic. (method-tags-mem:109) */
+  spawnRecall(seat: MemberId, unit: ResumeUnit): ClosingFold;
+}
 
 // ── MEM-10a: the versioned record (SEALED kernel insert-only content-keyed log) ──────────────────────────
 
@@ -104,7 +116,7 @@ export type FoldArchive = readonly ArchivedFold[];
 
 /**
  * The PINNED `task` closing-fold projection — the `{ attempted, failedWith, stoppedAt, lesson }` `Pick` of a
- * `TaskMemoryEntry` (ref/respawn.ts `ClosingFold`; atlas-memory:19,127). This is the retry-relevant subset
+ * `TaskMemoryEntry` (the `ClosingFold` projection; atlas-memory:19,127). This is the retry-relevant subset
  * auto-recalled at re-spawn; a fold no re-spawn ever recalls is dead weight, so it is load-bearing.
  */
 export function taskClosingFold(t: TaskMemoryEntry): ClosingFold {
@@ -167,7 +179,7 @@ export function makeRespawn(archive: FoldArchive): RespawnApi {
 }
 
 // differential-vs-oracle (compile-time): the built surface conforms to the FROZEN `RespawnApi`
-// (ref/respawn.ts) — `spawnRecall(seat: MemberId, unit: ResumeUnit): ClosingFold` matches exactly. No
+// (the frozen `RespawnApi`) — `spawnRecall(seat: MemberId, unit: ResumeUnit): ClosingFold` matches exactly. No
 // discretionary-pull / general-consultable member is added to the surface (MEM-13 / MEM-4).
 const _apiCheck: (a: FoldArchive) => RespawnApi = makeRespawn;
 void _apiCheck;

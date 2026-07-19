@@ -21,7 +21,7 @@ import { describe, it, expect } from 'vitest';
 import { asSubtreeHash } from '@atlas/kernel';
 import type { Status, Freshness } from '@atlas/contracts';
 import type { Axes } from '@atlas/index';
-import type { Grounding } from '../ref/types.js';
+import type { Grounding } from '../src/types.js';
 import { bindGate } from '../src/gate.js';
 import type { GateDeps } from '../src/gate.js';
 import { validateTemplate, truthDoorHolds } from '../src/emit-guard.js';

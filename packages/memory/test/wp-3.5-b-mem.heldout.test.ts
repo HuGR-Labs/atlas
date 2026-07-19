@@ -8,8 +8,8 @@
 // (foldArchiveFromRecord's pr branch is deliberately left to a later WP and is not needed here).
 
 import { describe, it, expect } from 'vitest';
-import type { MemoryStore, TaskMemoryEntry } from '../ref/types.js';
-import type { ResumeUnit, ClosingFold } from '../ref/respawn.js';
+import type { MemoryStore, TaskMemoryEntry } from '../src/types.js';
+import type { ResumeUnit, ClosingFold } from '../src/respawn.js';
 import {
   versioned,
   carry,

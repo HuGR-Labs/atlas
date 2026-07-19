@@ -20,7 +20,7 @@
 // it only compares already-derived branded values. Held-out `-2` fixtures are NOT read.
 //
 // [FLAG — simulated freeze digest] The card's `content_hash: <filled-at-freeze>` was never filled and no
-// `ref/*.ts` frozen oracle declares a `freshness` symbol (drift.ts owns `driftDetect`, a SIBLING facet).
+// co-located frozen oracle (`src/types.ts`) declares a `freshness` symbol (drift.ts owns `driftDetect`, a SIBLING facet).
 // The fold's concrete SHAPE is therefore authored by disciplined judgment against atlas-grounding#ground-11
 // + these goldens, binding ONLY pinned types (SubtreeHash/Hash/Freshness, InterfaceRState = Rollup.rState).
 

@@ -11,8 +11,8 @@ import { fileURLToPath } from 'node:url';
 import fc from 'fast-check';
 import { asHash, asSubtreeHash } from '@atlas/kernel';
 import type { Hash } from '@atlas/contracts';
-import type { Axis, IndexNode } from '../ref/types.js';
-import type { Fact } from '../ref/retrieval.js';
+import type { Axis, IndexNode } from '../src/types.js';
+import type { Fact } from '../src/retrieval.js';
 import { createResolve } from '../src/resolve.js';
 import { createRetrieval, type RetrievalModel } from '../src/retrieval.js';
 

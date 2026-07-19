@@ -18,7 +18,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Hash } from '@atlas/contracts';
 import type { Event, EventLog } from '@atlas/kernel';
-import type { Orientation } from '../ref/orient.js';
+import type { Orientation } from '../src/types.js';
 import {
   orient,
   orientEvent,

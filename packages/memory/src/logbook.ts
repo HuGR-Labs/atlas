@@ -1,38 +1,42 @@
 // @atlas/memory — src/logbook.ts  (WP-6.25-b.MEM · MEM-8)
 //
-// The logbook discipline — the diary stays a LEDGER (MEM-8, atlas-memory:94-107 / 122). Six laws over the
-// orchestrator's decision journal, all fail-closed:
-//   · orchestrator-ONLY (v0) — a non-orchestrator author's write is REJECTED; only `orch` writes.
-//   · ONE append-only entry per PR — a second entry for an extant `prId` is rejected; the extant entry is
-//     never edited in place.
-//   · templated + capped fixed sections — each write fills the fixed sections within a per-section cap
-//     (reuses the MEM-5 gate in src/template.ts); an over-cap OR unfilled section is rejected.
-//   · CONSULTABLE, never injected — the store exposes ONLY a `consult` read path (by PR / date / territory);
-//     it carries NO inject method, so the logbook cannot auto-inject on a running turn (MEM-4, enforced by
-//     the SEALED ref/inject.ts — NOT imported here).
-//   · supersede BY LINK — a correction appends a supersede POINTER to a past decision; the extant entry's
-//     bytes are NEVER rewritten (0 history rewrites).
-//
-// SEAM (SEALED @atlas/kernel, KERNEL-4): the entry log's append-only floor + record identity go through the
-// kernel `createLog` / `id` seam ALONE — no hand-rolled digest. Implements the FROZEN ref/logbook.ts
-// `LogbookApi`. Types-only imports from ref/* + the co-facet src/template.ts (this WP's MEM-5 gate).
-//
-// BIND (disciplined judgment vs the FROZEN ref/logbook.ts oracle):
-//   · `LOGBOOK_AUTHOR = 'orch'` — the goldens name the sole authorized writer `orch`; no `MemberId` brand
-//     is frozen (ref PIN), so the seat is a bare string, used as given.
-//   · `LOGBOOK_SECTION_CAP` — atlas-memory:106-107 pins "per-section soft cap + hard per-entry cap" with NO
-//     magnitude frozen; carried as a named pinned bound (PROSE→constant, the WP-6.25-a `~500`/`~800`
-//     discipline). No unpinned SIG-TBD / OWNER-DEFINE MUST-field ⇒ no STOP.
-//   · the `append` reject payload is PINNED-not-frozen — rejection is a fail-closed precondition returning
-//     the append-only log UNCHANGED (the entry never persists), NOT an invented error record.
-//   · `consult`'s `query` is OPAQUE-BY-DESIGN (ref pins `unknown`) — narrowed defensively behind `unknown`.
+// The logbook discipline — the diary stays a LEDGER (MEM-8). The orchestrator's decision journal, all
+// fail-closed: orchestrator-ONLY (v0, non-`orch` rejected); ONE append-only entry per PR (a 2nd is rejected,
+// the extant never edited in place); templated + per-section capped (reuses the MEM-5 gate in template.ts);
+// CONSULTABLE, never injected (only a `consult` read path, no inject method); supersede BY LINK (a correction
+// appends a pointer, the extant bytes are NEVER rewritten). SEAM (SEALED @atlas/kernel, KERNEL-4): the entry
+// log's append-only floor + record identity go through the kernel `createLog` / `id` seam ALONE.
 
 import { id, createLog } from '@atlas/kernel';
 import type { Event, EventLog } from '@atlas/kernel';
 import type { Hash } from '@atlas/contracts';
-import type { LogbookEntry, MemberId, Ref } from '../ref/types.js';
-import type { LogbookApi, LogbookLog } from '../ref/logbook.js';
+import type { LogbookEntry, MemberId, Ref } from './types.js';
 import { validate } from './template.js';
+
+// ── frozen logbook surface, co-located here (was ref/logbook.ts) ───────────────────────────────────────────
+
+/** The append-only logbook projection — one entry per `prId`, chronological, never rewritten (MEM-8). */
+export type LogbookLog = readonly LogbookEntry[];
+
+export interface LogbookApi {
+  /** Append one orchestrator logbook entry — guarded ONE-per-PR + section-validated; append-only, never
+   *  an in-place edit of a landed entry (MEM-8). Reuses KERNEL-4 `log.ts`. (method-tags-mem:74)
+   *
+   *  [PINNED — rejection of a 2nd-entry / non-orchestrator / over-section write not frozen as a return
+   *  shape] the guard behaviour is frozen; the reject payload is not → the append returns the updated
+   *  append-only `LogbookLog`, the guard being a fail-closed precondition. */
+  append(entry: LogbookEntry): LogbookLog;
+
+  /** Supersede a past decision BY LINK: append a supersede pointer, NEVER mutate the extant entry
+   *  (history is not rewritten — MEM-8). Pure (append-only). (method-tags-mem:74) */
+  supersede(prId: string, link: Ref): LogbookLog;
+
+  /** The consultable listing (by PR / date / territory) — NEVER injected (MEM-8, enforced by MEM-4).
+   *
+   *  [OPAQUE-BY-DESIGN — `query` shape not frozen] consulted by prId / date-range / territory / topic; no concrete
+   *  query record is frozen → `unknown`, NOT invented. */
+  consult(query: unknown): LogbookLog;
+}
 
 // re-export the vocabulary the test builds fixtures over (barrel wired at SEAL — test imports src directly).
 export type {
@@ -44,8 +48,7 @@ export type {
   MemoryRecord,
   MemoryStore,
   ProjectMemoryEntry,
-} from '../ref/types.js';
-export type { LogbookLog } from '../ref/logbook.js';
+} from './types.js';
 
 // ── ratified pinned bounds (PROSE → named constants) ─────────────────────────────────────────────────────
 
@@ -116,7 +119,7 @@ function toEvent(entry: LogbookEntry): Event {
   return { id: contentHash, seq: 0, contentHash, fresh: true, supersedes: [], payload: entry };
 }
 
-/** The runtime narrowing of the OPAQUE `consult` query (ref/logbook.ts pins `query: unknown`). */
+/** The runtime narrowing of the OPAQUE `consult` query (`LogbookApi` pins `query: unknown`). */
 interface ConsultFilter {
   readonly prId?: string;
   readonly date?: string;
@@ -180,7 +183,7 @@ export function makeLogbookStore(): LogbookStore {
 // ── the frozen-`LogbookApi` binding (author bound once — the frozen `append(entry)` carries no author arg) ─
 
 /**
- * Bind the logbook surface to the FROZEN ref/logbook.ts `LogbookApi`. The author is bound at construction
+ * Bind the logbook surface to the FROZEN `LogbookApi`. The author is bound at construction
  * (the frozen `append(entry)` carries no author arg), defaulting to `orch` (orchestrator-only). The bound
  * API exposes EXACTLY `append` / `supersede` / `consult` — no inject path (consultable-never-injected).
  */

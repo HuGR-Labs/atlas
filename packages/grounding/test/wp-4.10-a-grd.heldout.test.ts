@@ -14,7 +14,7 @@ import { describe, it, expect } from 'vitest';
 import { asHash, asSubtreeHash, canonicalForm, defaultEncoder } from '@atlas/kernel';
 import type { CasObject, Encoder } from '@atlas/kernel';
 import type { Axes, IndexNode } from '@atlas/index';
-import type { Grounding, GroundingEntry } from '../ref/types.js';
+import type { Grounding, GroundingEntry } from '../src/types.js';
 import { bindSubtree } from '../src/subtree.js';
 import { driftDetect, isGrounded } from '../src/drift.js';
 

@@ -1,15 +1,41 @@
 // @atlas/index — src/depgraph.ts  (INDEX-13: the `dependency` axis — reverse closure = blast radius)
 //
-// `reverseClosure(node)` is the transpose closure over the depends-on DAG the build derives: every unit
-// that (transitively) depends on `node` = its blast radius. Honest under-approximation: if any
-// `unresolved`/`dynamic` edge sources from a node in scope, the result is flagged `underApprox: true`, and
-// ONLY then is the correlational `coChanged` git-history band unioned in — labeled correlational (a separate
-// field), never presented as a static edge, never omitted, never a fabricated target. The closure is a
-// sorted `Hash[]` so a rebuild is byte-identical. (atlas-index:103-125, 185-191; method-tags-idx:104-109)
+// `reverseClosure(node)` is the transpose closure over the depends-on DAG = every unit that (transitively)
+// depends on `node`. Honest under-approximation: an `unresolved`/`dynamic` edge in scope flags
+// `underApprox: true` and ONLY then unions the correlational `coChanged` band (labeled, never a static
+// edge). The closure is a sorted `Hash[]` so a rebuild is byte-identical.
 
 import type { Hash } from '@atlas/contracts';
-import type { DepEdge } from '../ref/types.js';
-import type { DepgraphApi, ReverseClosure } from '../ref/depgraph.js';
+import type { DepEdge } from './types.js';
+
+/** An edge's resolution class — defined in `./types.ts`, re-exported here for depgraph consumers.
+ *  (atlas-index:185-188; method-tags-idx:108) */
+export type { EdgeKind } from './types.js';
+
+/**
+ * The result of a reverse (transpose) closure = blast radius. Transcribed from the reference model
+ * (method-tags-idx:108): `reverseClosure(node) = { closure, underApprox, coChanged }`.
+ *   - `closure`    — the reachable reverse-closure node set (referenced by hash).
+ *   - `underApprox` — `true` iff any `unresolved`/`dynamic` edge is in scope (honest incompleteness).
+ *   - `coChanged`  — the correlational `coChanged` git-history band, unioned in ONLY when `underApprox`
+ *     (labeled correlational, never a static edge). Empty otherwise.
+ */
+export interface ReverseClosure {
+  readonly closure: readonly Hash[];
+  readonly underApprox: boolean;
+  readonly coChanged: readonly Hash[];
+}
+
+export interface DepgraphApi {
+  /** Reverse / transpose closure (blast radius) over the `depends-on` DAG; reports `underApprox` and
+   *  unions the correlational `coChanged` band when an `unresolved` edge is in scope (INDEX-13).
+   *  (method-tags-idx:108)
+   *
+   *  The reference names `reverseClosure(node)` with no concrete type for `node`; CONFIRMED as the
+   *  node's CAS `Hash` — the dependency axis keys structural units by hash (atlas-index:105) and the
+   *  closure node set is referenced by hash (method-tags-idx:108). Finalized `Hash`, not `IndexNode`. */
+  reverseClosure(node: Hash): ReverseClosure;
+}
 
 /**
  * Build a `DepgraphApi` over a fixed edge ledger + an optional correlational `coChanged` band map. The graph

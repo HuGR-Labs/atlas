@@ -1,29 +1,13 @@
 // @atlas/index — src/compose.ts  (WP-2.6-b.INDEX · composed-index facet — INV-INDEX-1)
 //
-// THE single content-addressed index (INDEX-1). ONE built index, exposing N axes, backs BOTH jobs —
-// drift AND discovery — with NO separate discovery structure and NO separate staleness sweep. This facet
-// only COMPOSES the mechanical axis build (EPIC-6, `build`) with the resolve surface (EPIC-8-a,
-// `createResolve`) into that one index; it does NOT rebuild the axes and does NOT add a resolve mode
-// (WP-2.6-b.INDEX exclusions).
-//
-//   - discovery  — `discover(path, axis)` resolves the covering node off the built axis forest (the
-//                  spatial `byScope` entry the goldens exercise), served straight off the one index.
-//   - drift      — `drift(anchorPath, recorded)` decides staleness INLINE at query time by comparing the
-//                  anchor's recorded `subtreeHash` against the node's CURRENT `subtreeHash` (the drift
-//                  oracle, ref/types.ts:26). No re-embedding, no background sweep (INDEX-5c).
-//
-// Both jobs close over the SAME `forest` derived once from the SAME `axes` — the auxiliary-structure count
-// (discovery/staleness structures stood up BEYOND the one index) is 0 (SCN-INDEX-1a-1 / 1b-1). Identity is
-// never minted here: `subtreeHash` is read as already-sealed off the built axes — no raw hashing, no
-// @atlas/kernel `id` call on this path. There is no LLM / embedding / vector-store call site (INDEX-7).
-//
-// NOTE this is the composition FACET `src/compose.ts`, distinct from the runtime barrel `src/index.ts`
-// (which re-exports it at SEAL) — the composed umbrella of atlas-index:209-216, wired without redefining
-// any facet signature.
+// THE single content-addressed index (INDEX-1): ONE built index, N axes, backs BOTH discovery (`discover`
+// off the axis forest) AND inline drift (`drift` compares recorded vs current `subtreeHash`) with NO
+// separate discovery/staleness structure — both close over the SAME forest, auxiliary-structure count 0.
+// Only composes build + resolve; adds no resolve mode, mints no identity (subtreeHash read already-sealed).
 
 import { build } from './build.js';
 import { createResolve, type AxisForest } from './resolve.js';
-import type { Axes, Axis, FileTree, IndexNode, ScipOutput } from '../ref/types.js';
+import type { Axes, Axis, FileTree, IndexNode, ScipOutput } from './types.js';
 
 /** The query-time drift verdict for an anchored fact (INDEX-5): the fact stays visible (`node` surfaced)
  *  yet is `stale` when its recorded `subtreeHash` ≠ the current one — decided INLINE by a comparison off

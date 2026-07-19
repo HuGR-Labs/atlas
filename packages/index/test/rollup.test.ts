@@ -12,7 +12,7 @@ import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import { asHash, asSubtreeHash } from '@atlas/kernel';
 import type { Hash, SubtreeHash } from '@atlas/contracts';
-import type { Axis, IndexNode } from '../ref/types.js';
+import type { Axis, IndexNode } from '../src/types.js';
 import { subtreeHash, rehashPath, createRollup } from '../src/rollup.js';
 
 const sh = (s: string): SubtreeHash => asSubtreeHash(s);

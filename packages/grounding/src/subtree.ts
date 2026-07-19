@@ -5,7 +5,7 @@
 // locally-inlined hash call, so a blake3↔stub digest swap flows through every anchor (the seam-
 // substitution property, SCN-GROUND-10a/10b). A semantically-irrelevant edit (reformat, import-above,
 // unrelated rename) leaves this byte-invariant; a real change to the cited unit changes it (GROUND-5).
-// Transcribed against the frozen oracle `../ref/subtree.ts` (`SubtreeApi.subtreeHash`).
+// Conforms to the co-located frozen oracle `SubtreeApi.subtreeHash` (defined below in this file).
 //
 // SEAM: the `unit` is already a NORMALIZED CasObject (its concrete `StructuralNode` shape is owned by the
 // lower index layer — `= unknown` at layer 1, per the ref FLAG). This WP does not normalize; it hashes
@@ -15,7 +15,28 @@
 import { asSubtreeHash, canonicalForm } from '@atlas/kernel';
 import type { CasObject, Encoder } from '@atlas/kernel';
 import type { SubtreeHash } from '@atlas/contracts';
-import type { SubtreeApi } from '../ref/subtree.js';
+
+/**
+ * The GROUND-10 seam contract. A reference to @atlas/contracts/@atlas/kernel's `Encoder` (KERNEL-2) —
+ * NOT a redefinition. `subtreeHash` MUST route through THIS seam so a blake3↔stub digest swap flows
+ * through every anchor (the seam-substitution property, method-tags-grd:89-91); an inlined local
+ * `blake3` digest call would diverge from the swapped seam and break the substitution test.
+ */
+export type SubtreeSeam = Encoder;
+
+export interface SubtreeApi {
+  /** BLAKE3 over the unit's normalized AST subtree — the drift oracle (branded `SubtreeHash`, from
+   *  contracts). Computed through the `Encoder` seam (GROUND-10). A semantically-irrelevant edit
+   *  (reformat, import added above, unrelated rename) leaves this byte-invariant; a real change to the
+   *  cited unit changes it (GROUND-5). (method-tags-grd:56)
+   *
+   *  [FLAG — `unit` arg, downward-owned] The reference names `subtreeHash(unit)` without a concrete
+   *  arg type; the "unit" is a structural node whose concrete `StructuralNode` shape is owned by the
+   *  lower index layer. Transcribed as the kernel `CasObject` (`= unknown` at layer 1 — a stored CAS
+   *  object, DAG-safe: index/kernel are BELOW grounding) rather than invented. Flagged for the index
+   *  layer to surface the concrete node shape. */
+  subtreeHash(unit: CasObject): SubtreeHash;
+}
 
 /**
  * Build the `subtreeHash` oracle over an INJECTED `Encoder` seam (GROUND-10). Parametrizing the digest

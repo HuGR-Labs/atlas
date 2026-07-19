@@ -1,26 +1,16 @@
-// @atlas/memory — src/orient.ts  (WP-6.24-b.MEM)
+// @atlas/memory — src/orient.ts  (WP-6.24-b.MEM · MEM-6 + MEM-12c)
 //
 // MEM-6 (Orientation is derived & shared) + the MEM-12c incremental-fold slice. The second injected slab is
-// DERIVED + SHARED, never a written memory (so it can never rot). `goal` is assembled from the ratified
-// DEFINE artifact; `last/current/state` are a FOLD over the event log. Orientation is byte-identical across
-// ALL members (no per-seat input), carries `≤ ~250 tok`, and MUST NOT be a per-member WRITTEN entry. Per
-// MEM-12c a new turn folds only the newly-appended event-log TAIL onto the prior Orientation, never a full
-// replay. Implements the FROZEN ref/orient.ts `OrientApi` (`orient`) + the `foldOrientation` slice of
-// ref/memoize.ts `MemoizeApi` (assembleAwareness is the sibling WP-6.24-a facet, NOT authored here).
-//
-// SEAM (sealed @atlas/kernel, KERNEL-1/5/10): the fold/head reconstruction goes through the sealed
-// `fold`/`head` seam, event + slab identity through `id`, and byte-identical serialization through
-// `canonicalForm` — no hand-rolled digest, no raw hashing. Types-only imports from ref/* + lower layers.
-//
-// [OPAQUE-BY-DESIGN — `define` type] the ratified DEFINE artifact has no frozen type at this layer (it is a
-// genesis GEN-9 artifact); it is transcribed as `unknown` and its `goal` is read OPAQUELY from a
-// conventional `goal` field — NOT invented as a new frozen artifact type, NOT imported. Flagged.
+// DERIVED + SHARED, never a written memory (so it can't rot): `goal` from the ratified DEFINE artifact,
+// `last/current/state` a FOLD over the event log — byte-identical across ALL members, `≤ ~250 tok`. Per
+// MEM-12c a new turn folds only the newly-appended event-log TAIL, never a full replay. SEAM (sealed
+// @atlas/kernel, KERNEL-1/5/10): fold/head reconstruction, `id`, and byte-identical `canonicalForm` go
+// through the sealed seam alone. `define` is OPAQUE (`unknown`, `goal` read from a conventional field).
 
 import { fold, head, id, canonicalForm, asNodeKey } from '@atlas/kernel';
 import type { Node, Event, EventLog, AtlasState } from '@atlas/kernel';
 import type { Hash, NodeKey } from '@atlas/contracts';
-import type { Orientation, OrientApi } from '../ref/orient.js';
-import type { MemoizeApi } from '../ref/memoize.js';
+import type { Orientation, OrientApi, MemoizeApi } from './types.js';
 
 // ── the two derived channels (fold targets) + the event model ───────────────────────────────────────────────
 
@@ -107,7 +97,7 @@ function readGoal(define: unknown): string {
 /**
  * Assemble Orientation as a PURE function of `(DEFINE artifact, event log)` (MEM-6): `goal` from the
  * ratified DEFINE, `last/current/state` as a fold over the log via the sealed `fold`/`head` seam. No seat
- * input, so it is byte-identical across members and never stale. (ref/orient.ts `orient`.)
+ * input, so it is byte-identical across members and never stale. (`orient`.)
  */
 export function orient(define: unknown, log: EventLog): Orientation {
   const state = fold(log);
@@ -209,7 +199,7 @@ export function foldOrientation(prev: Orientation, tail: EventLog): Orientation 
 
 // ── frozen-oracle conformance (compile-time differential-vs-oracle) ────────────────────────────────────────
 
-/** Bind the built surface to the FROZEN ref/orient.ts `OrientApi` (`orient`). */
+/** Bind the built surface to the FROZEN `OrientApi` (`orient`). */
 export function makeOrientApi(): OrientApi {
   return { orient };
 }
@@ -217,7 +207,7 @@ export function makeOrientApi(): OrientApi {
 const _apiCheck: () => OrientApi = makeOrientApi;
 void _apiCheck;
 
-// The `foldOrientation` slice conforms to the FROZEN ref/memoize.ts `MemoizeApi` (assembleAwareness is the
+// The `foldOrientation` slice conforms to the FROZEN `MemoizeApi` (assembleAwareness is the
 // sibling WP-6.24-a facet, NOT implemented here).
 type MemoizeFoldSlice = Pick<MemoizeApi, 'foldOrientation'>;
 const _foldCheck: MemoizeFoldSlice = { foldOrientation };

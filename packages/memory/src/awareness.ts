@@ -1,26 +1,25 @@
-// @atlas/memory — src/awareness.ts  (WP-6.24-a.MEM)
+// @atlas/memory — src/awareness.ts  (WP-6.24-a.MEM · MEM-11 + MEM-12a/b)
 //
-// MEM-11 (Awareness is a derived rollup, not a blob) + the MEM-12a/b memoization slice (facet cached on
-// its OWN source subtree hash; assembled ONCE per root-state, shared across seats). The injected Awareness
-// (mission / constitution / terrain / ontology / taste) is a PURE derivation of the Atlas root — never a
-// hand-written blob: each facet is GROUNDED (`node@sha`) + drift-checked, carries only the TOP tier under a
-// `≤ ~400 tok` cap (the tail stays pull-reachable), is BYTE-IDENTICAL across members, and an ABSENT source
-// renders a labeled `UN-SEEDED` sentinel (never a fabricated line, never a generic stack card). Ontology
-// sources ONLY walt-curated `slot='definition'` nodes. Assembly is memoized per-facet on the source's own
-// subtree hash so a root bump that moved nothing costs 0 re-rolls / 0 drift-checks (instrumented counter,
-// NOT timing — Refuse-to-model); a wave assembles once and shares. Implements the FROZEN ref/awareness.ts
-// `AwarenessApi` + the `assembleAwareness` slice of ref/memoize.ts `MemoizeApi` (foldOrientation is the
-// sibling WP-6.24-b facet, NOT authored here).
-//
-// SEAM (sealed @atlas/kernel, KERNEL-1): identity + byte-identical serialization go through the kernel
-// `id` / `canonicalForm` seam ALONE — no hand-rolled digest. Types-only imports from ref/* + lower layers.
+// MEM-11 (Awareness is a derived rollup, not a blob) + the MEM-12a/b memoization slice. The injected
+// Awareness (mission / constitution / terrain / ontology / taste) is a PURE derivation of the Atlas root:
+// each facet is GROUNDED (`node@sha`) + drift-checked, carries only the TOP tier under `≤ ~400 tok`, is
+// BYTE-IDENTICAL across members, and an ABSENT source renders a labeled `UN-SEEDED` sentinel (never
+// fabricated). Assembly is memoized per-facet on the source's own subtree hash so a root bump that moved
+// nothing costs 0 re-rolls / 0 drift-checks (instrumented counter, NOT timing). SEAM (sealed @atlas/kernel,
+// KERNEL-1): identity + byte-identical serialization go through `id` / `canonicalForm` ALONE.
 
 import { id, canonicalForm, asNodeKey } from '@atlas/kernel';
 import type { Node, Event } from '@atlas/kernel';
 import type { Hash, StructRef } from '@atlas/contracts';
-import type { Awareness, AwarenessApi, AwarenessFacet } from '../ref/awareness.js';
-import type { Memoized, AssemblyReceipt, MemoizeApi } from '../ref/memoize.js';
-import type { MemberId } from '../ref/types.js';
+import type {
+  Awareness,
+  AwarenessApi,
+  AwarenessFacet,
+  Memoized,
+  AssemblyReceipt,
+  MemoizeApi,
+  MemberId,
+} from './types.js';
 
 // ── the five facets + the root-source model ───────────────────────────────────────────────────────────────
 
@@ -191,7 +190,7 @@ function assembleFacets(
 /**
  * Assemble Awareness as a PURE rollup of the Atlas root (MEM-11) — a deterministic function of the root
  * ALONE (no seat input), so it is byte-identical across seats and re-runs; top tier only, under the
- * `≤ ~400 tok` cap; absent sources render `UN-SEEDED`. (ref/awareness.ts `rollup`.)
+ * `≤ ~400 tok` cap; absent sources render `UN-SEEDED`. (`rollup`.)
  */
 export function rollup(root: Node): Awareness {
   const a = assembleFacets(facetsOf(root), () => false);
@@ -204,7 +203,7 @@ export function awarenessBytes(a: Awareness): Uint8Array {
   return canonicalForm(a);
 }
 
-/** A single facet's rollup from its OWN opaque source (ref/awareness.ts `facet`); absent ⇒ `UN-SEEDED`. */
+/** A single facet's rollup from its OWN opaque source (`facet`); absent ⇒ `UN-SEEDED`. */
 export function facetOf(source: unknown): AwarenessFacet {
   if (source !== null && typeof source === 'object' && 'facet' in source) {
     const e = source as FacetEntry;
@@ -286,7 +285,7 @@ export function makeAwarenessMemo(): AwarenessMemo {
 
 // ── frozen-oracle conformance (compile-time differential-vs-oracle) ────────────────────────────────────────
 
-/** Bind the built surface to the FROZEN ref/awareness.ts `AwarenessApi` (`rollup` + `facet`). */
+/** Bind the built surface to the FROZEN `AwarenessApi` (`rollup` + `facet`). */
 export function makeAwarenessApi(): AwarenessApi {
   return { rollup, facet: facetOf };
 }
@@ -294,7 +293,7 @@ export function makeAwarenessApi(): AwarenessApi {
 const _apiCheck: () => AwarenessApi = makeAwarenessApi;
 void _apiCheck;
 
-// The memo conforms to the `assembleAwareness` slice of the FROZEN ref/memoize.ts `MemoizeApi`
+// The memo conforms to the `assembleAwareness` slice of the FROZEN `MemoizeApi`
 // (foldOrientation is the sibling WP-6.24-b facet, NOT implemented here).
 type MemoizeAwarenessSlice = Pick<MemoizeApi, 'assembleAwareness'>;
 const _memoCheck: (m: AwarenessMemo) => MemoizeAwarenessSlice = (m) => ({

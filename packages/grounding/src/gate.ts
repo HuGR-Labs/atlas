@@ -3,7 +3,7 @@
 // The truth-gate. `gateHolds(candidate, grounding, src)` serves `HOLDS` iff (grounded ∧ FRESH), else
 // downgrades to `NA`. It is DOWNGRADE-ONLY + idempotent: a non-`HOLDS` verdict passes through UNCHANGED,
 // and the only move the gate ever makes is `HOLDS→NA` — it never upgrades. Freshness is a STRUCTURAL
-// verdict, never a truth claim (FRESH ≠ true). Transcribed against the frozen oracle `../ref/gate.ts`
+// verdict, never a truth claim (FRESH ≠ true). Transcribed against the frozen oracle `./types.ts`
 // (`GateApi.gateHolds`); goldens SCN-GROUND-4-1 / SCN-GROUND-4-2.
 //
 // BUILD-AHEAD: the grounded/FRESH inputs are GROUND-2/3/5's `isGrounded` + `driftDetect` (owned by
@@ -17,7 +17,7 @@
 // THRESHOLD (SCN-GROUND-4-3, DEFINE-parametric residue, [NEEDS RECONCILIATION]) — the gate encodes the
 // downgrade, the concrete threshold REQ is pending the A-1 lift and is NOT fabricated here.
 //
-// [FLAG — `candidate`, upward-owned] `ref/gate.ts` pins the arg as `unknown` (the knowledge-layer
+// [FLAG — `candidate`, upward-owned] `GateApi` (in `./types.ts`) pins the arg as `unknown` (the knowledge-layer
 // `Candidate`/`Fact` is UPWARD-owned; importing it inverts the DAG). The INV-GROUND-4 down-model
 // automaton (method-tags-grd) is `gateHolds(status, grounded, freshness)` — so the gate reads the
 // candidate's incoming `Status` VERDICT and nothing else. `coerceStatus` reads it TOTALLY and
@@ -27,10 +27,7 @@
 
 import type { Status, Freshness } from '@atlas/contracts';
 import type { Axes } from '@atlas/index';
-import type { Grounding } from '../ref/types.js';
-import type { GateApi } from '../ref/gate.js';
-import type { GroundApi } from '../ref/ground.js';
-import type { DriftApi } from '../ref/drift.js';
+import type { Grounding, GateApi, GroundApi, DriftApi } from './types.js';
 
 /**
  * The grounded ∧ FRESH inputs the truth-gate gates on (GROUND-2/3/5), injected build-ahead. Owned by

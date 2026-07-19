@@ -1,11 +1,16 @@
-// @atlas/index — ref/types.ts  (FROZEN INTERFACE — pure types, zero runtime logic)
+// @atlas/index — src/types.ts  (frozen data model + the impl-less umbrella surface; zero runtime)
 //
-// The index's shared data model: the axes, the per-node index record, the dual-Merkle rollup, and the
-// change Delta. Transcribed EXACTLY from `docs/reference/atlas-index.md` §The axes (lines 36-47) +
-// §territory manifest (lines 76-78). Shared identity types (`Hash`, `SubtreeHash`, `Territory`) are
-// imported from @atlas/contracts — NEVER redefined here.
+// The index's shared data model — the axes, the per-node index record, the dual-Merkle rollup, the change
+// Delta, the depends-on edge, the SCIP projection — plus `IndexApi`, the single-index umbrella that
+// composes the facet interfaces (INV-INDEX-1). Shared identity types (`Hash`, `SubtreeHash`, `Territory`)
+// come from @atlas/contracts — NEVER redefined here.
 
 import type { Hash, SubtreeHash, Territory } from '@atlas/contracts';
+import type { CasIndexApi } from './cas.js';
+import type { FoldApi } from './fold.js';
+import type { ResolveApi } from './resolve.js';
+import type { RetrievalApi } from './retrieval.js';
+import type { RollupApi } from './rollup.js';
 
 /** The multiple hierarchies over the one CAS — each a Merkle rollup, each its own job (drift +
  *  discovery). `functional`/flows is the NEXT axis, NOT built here (atlas-index:127). (atlas-index:36) */
@@ -55,7 +60,7 @@ export interface IndexNode {
  * [FLAG — INDEX-16 tension, not added] INDEX-16 (atlas-index:202-205; method-tags-idx:128-130) says
  * the `unresolved/total` ratio is a "published health metric on every rollup", implying a `ratio`
  * field here. The canonical Rollup shape (atlas-index:40-44) does NOT list it, so it is NOT added —
- * the ratio surface is transcribed on `CoverageApi` (ref/coverage.ts) instead. Flagged for the two
+ * the ratio surface is transcribed on `CoverageApi` (src/coverage.ts) instead. Flagged for the two
  * references to reconcile whether `ratio` is a stored Rollup field.
  */
 export interface Rollup {
@@ -142,4 +147,21 @@ export interface ScipDocument {
 }
 export interface ScipOutput {
   readonly documents: readonly ScipDocument[];
+}
+
+/**
+ * The one content-addressed index (INDEX-1). Composes the public surface (atlas-index:209-216) from the
+ * facets — `resolve`/`rollup` (RollupApi)/`put` (CasIndexApi)/`byScope`+`byDependency`+`byTrigger`
+ * (RetrievalApi) — and pulls `delta` from `FoldApi` by its frozen signature (no redefinition). Exposes
+ * the ≥3 axes it indexes on (INDEX-10). No `search()`/free-text entry point exists (INDEX-6). This is
+ * the impl-less umbrella; the facet interfaces are co-located with their impls (build/cas/…), and the
+ * facet file that named it is dissolved into this module.
+ */
+export interface IndexApi extends ResolveApi, RollupApi, CasIndexApi, RetrievalApi {
+  /** The axes this single index cross-indexes on — ≥3 (`spatial`, `territory`, `dependency`),
+   *  each object stored once (INDEX-10). (atlas-index:174-175) */
+  readonly axes: readonly Axis[];
+  /** Which axis buckets changed, structure vs state (INDEX-12). Reused verbatim from `FoldApi`.
+   *  (atlas-index:212) */
+  delta: FoldApi['delta'];
 }

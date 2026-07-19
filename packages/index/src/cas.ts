@@ -1,19 +1,24 @@
 // @atlas/index — src/cas.ts  (WP-4.10-a.INDEX · INDEX-11 universal content-addressing)
 //
-// EVERY Atlas object kind — code, knowledge, memory, provenance, transcripts, AND the docs — is a
-// BLAKE3-keyed CAS object, registered for grounding + drift like any fact (atlas-index:176-177,216).
-// This facet is the OWNER side of the CAS-identity seam: it (1) content-addresses ANY kind through the
-// ONE kernel CAS — never a second, doc-exempt store — and (2) registers each put object as
-// drift-eligible + routes its drift verdict through GROUND's oracle. It does NOT redefine that oracle:
-// the FRESH/DRIFTED semantics are owned by WP-4.10-a.GROUND and consumed here through an INJECTED port,
-// keeping the layer DAG intact (grounding is ABOVE index; index never imports it).
-//
-// Identity is minted ONLY through the sealed @atlas/kernel store seam (`StoreApi.put` → canonicalForm →
-// BLAKE3 encoder) — this file computes no hash itself and holds no digest primitive (KERNEL-2/3).
+// EVERY Atlas object kind (code/knowledge/memory/provenance/transcripts/docs) is content-addressed through
+// the ONE kernel CAS — never a second store — and registered drift-eligible; the FRESH/DRIFTED verdict is
+// owned by GROUND (above index) and consumed via an INJECTED `DriftPort`, keeping the layer DAG intact.
+// Identity is minted only through the sealed kernel store seam (no hash computed here).
 
 import type { Hash, Freshness } from '@atlas/contracts';
 import type { CasObject, StoreApi } from '@atlas/kernel';
-import type { CasIndexApi } from '../ref/cas.js';
+
+/**
+ * Universal content-addressing (INDEX-11): `put` canonicalizes ANY object kind (incl. a `Doc`) through
+ * the ONE kernel CAS and returns its `Hash` — never a second, doc-exempt store (atlas-index:216).
+ */
+export interface CasIndexApi {
+  /** Canonicalize → BLAKE3 → store; content-address ANY object kind (incl. a `Doc`), returns its
+   *  hash. Shares the KERNEL CAS reference `kernel/ref/store.ts` — one store, not a second.
+   *  `object` is the kernel's `CasObject` (the stored-object type).
+   *  (atlas-index:216; method-tags-idx:95) */
+  put(object: CasObject): Hash;
+}
 
 /**
  * The drift-oracle port INDEX consumes (owned by WP-4.10-a.GROUND — `DriftApi.driftDetect`). Kept

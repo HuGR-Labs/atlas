@@ -1,29 +1,25 @@
 // @atlas/memory — src/portable.ts  (WP-3.5-a.MEM · MEM-9)
 //
-// Portable + scanner-gated (MEM-9). Two co-located obligations at the one anchor site
-// (reference/atlas-memory.md#mem-9 — "memory-export JSON + pre-write scanner gate site"):
-//
-//   1. REQ-MEM-9a — Memory exports to OPEN JSON that replays 1:1 into a fresh store, no lock-in:
-//      `deepEqual(mem, import(export(mem)))`. Mirrors KERNEL-6's OKF open-JSON discipline (a bare
-//      format tag + version + the records verbatim). The CAS-keyed KERNEL-6 serializer is NOT directly
-//      applicable to the flat `MemoryStore` array (that store carries no content-addressed keys to
-//      re-mint), so the same OPEN-JSON envelope discipline is applied to the array — no raw hashing,
-//      no @atlas/kernel identity seam re-implemented here.
-//
-//   2. REQ-MEM-9b / REQ-MEM-9c — the pre-write named-scanner gate: a NAMED cred-scanner
-//      (gitleaks / trufflehog) runs BEFORE the write persists, and a HIT fails the write CLOSED —
-//      the write is BLOCKED, never redacted-and-continued, never logged-and-passed.
-//
-// [DELEGATED — scanner DETECTION completeness is NOT authored here] Per method-tags-mem:80-82 the
-// black-box scanner has no pure-function oracle; its detection quality is an integration/conformance
-// gate against the real binary, delegated to FR-12 (billy). SCN-MEM-9b/9c are residue WIRING goldens:
-// they assert only that a named scanner is present in the pre-write path and that a HIT (the delegated
-// boolean input) fails closed. The scanner is consumed as an injected `NamedScanner` seam (the frozen
-// PERSIST scrub gate is a SEPARATE redact-at-source control, not re-implemented here; @atlas/persist is
-// not a dependency of this package — the named-scanner hit is the delegated input the golden names).
+// Portable + scanner-gated (MEM-9). Memory exports to OPEN JSON that replays 1:1 into a fresh store, no
+// lock-in: `deepEqual(mem, import(export(mem)))` (the KERNEL-6 OKF open-JSON discipline over the flat
+// `MemoryStore` array — no raw hashing). A pre-write NAMED cred-scanner (gitleaks / trufflehog) runs BEFORE
+// the write persists and a HIT fails the write CLOSED (blocked, never redacted-and-continued). Scanner
+// DETECTION completeness is DELEGATED (a conformance gate against the real binary, FR-12) — consumed here as
+// an injected `NamedScanner` seam; these residue goldens assert only pipeline wiring + fail-closed.
 
-import type { MemoryStore, MemoryRecord } from '../ref/types.js';
-import type { PortableApi } from '../ref/portable.js';
+import type { MemoryStore, MemoryRecord } from './types.js';
+
+// ── frozen portable surface, co-located here (was ref/portable.ts) ─────────────────────────────────────────
+
+export interface PortableApi {
+  /** Open-JSON dump of the member's Memory — replays 1:1, no proprietary encoding, no host dependency
+   *  (MEM-9). Reuses KERNEL-6 `portable.ts`. (method-tags-mem:81) */
+  export(): string;
+
+  /** Replay an open-JSON dump 1:1 into a fresh store — `deepEqual(mem, import(export(mem)))` (MEM-9).
+   *  (method-tags-mem:81) */
+  import(json: string): MemoryStore;
+}
 
 // ── MEM-9a: open-JSON export / import round-trip ──────────────────────────────────────────────────
 
@@ -79,7 +75,7 @@ function isOkfMemBundle(v: unknown): v is OkfMemBundle {
 }
 
 /**
- * Bind a Memory snapshot to the frozen `PortableApi` (ref/portable.ts) — `export()`/`import(json)` as
+ * Bind a Memory snapshot to the frozen `PortableApi` — `export()`/`import(json)` as
  * the store-attached form the contract names. Thin adapters over the free functions above.
  */
 export function makePortableMemory(mem: MemoryStore): PortableApi {
