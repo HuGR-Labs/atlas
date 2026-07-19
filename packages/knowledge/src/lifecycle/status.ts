@@ -29,7 +29,7 @@
 import type { Status } from '@atlas/contracts';
 import type { Axes } from '@atlas/index';
 import type { GateApi } from '@atlas/grounding';
-import type { GroundedFact } from './types.js';
+import type { GroundedFact } from '../types.js';
 
 // ── frozen StatusApi surface, co-located here (was ref/status.ts) ─────────────────────────────────────
 

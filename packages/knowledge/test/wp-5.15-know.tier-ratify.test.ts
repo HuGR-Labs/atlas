@@ -23,11 +23,11 @@ import type { StructRef, Tier } from '@atlas/contracts';
 import type { Grounding } from '@atlas/grounding';
 import type { Candidate, TerritoryView, Check } from '@atlas/knowledge';
 
-import { init } from '../src/init.js';
-import type { StructuralTree } from '../src/init.js';
-import { classify } from '../src/tier.js';
-import { stage, ratify } from '../src/ratify.js';
-import { route } from '../src/fastpath.js';
+import { init } from '../src/ratify/init.js';
+import type { StructuralTree } from '../src/ratify/init.js';
+import { classify } from '../src/ratify/tier.js';
+import { stage, ratify } from '../src/ratify/ratify.js';
+import { route } from '../src/ratify/fastpath.js';
 
 // ── fixtures ──────────────────────────────────────────────────────────────────
 

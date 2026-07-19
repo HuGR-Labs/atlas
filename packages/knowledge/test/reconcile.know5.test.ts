@@ -12,7 +12,7 @@ import { describe, it, expect } from 'vitest';
 import { asNodeKey, asSubtreeHash, asHash } from '@atlas/kernel';
 import type { Hash } from '@atlas/contracts';
 import type { DriftedFact, GroundedFact } from '@atlas/knowledge';
-import { bindReconcile, type ReDerives } from '../src/reconcile.js';
+import { bindReconcile, type ReDerives } from '../src/lifecycle/reconcile.js';
 
 // ── fixtures ────────────────────────────────────────────────────────────────
 

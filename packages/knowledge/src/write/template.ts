@@ -13,7 +13,7 @@
 // the KNOW-11 ownership fence — enforced fail-closed by the sibling authz facet, NOT re-checked here. No
 // field invented.
 
-import type { Candidate, PredicateSlot } from './types.js';
+import type { Candidate, PredicateSlot } from '../types.js';
 
 // ── frozen TemplateApi surface, co-located here (was ref/template.ts) ─────────────────────────────────
 

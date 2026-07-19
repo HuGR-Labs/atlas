@@ -19,7 +19,7 @@ import {
   verdictFor,
   type ProposedCheck,
   type VerdictFeed,
-} from '../src/evaluator.js';
+} from '../src/lifecycle/evaluator.js';
 
 // ── fixtures ──────────────────────────────────────────────────────────────────
 

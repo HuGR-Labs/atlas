@@ -26,8 +26,8 @@ import {
   upsert,
   emptyStore,
   currentNodes,
-} from '../src/router.js';
-import type { RouteInputs, WriteRequest, StoreProjection, NodeFamily } from '../src/router.js';
+} from '../src/write/router.js';
+import type { RouteInputs, WriteRequest, StoreProjection, NodeFamily } from '../src/write/router.js';
 
 // ---- S0 fixture: ADV (advisory @ nk-adv, bytes ch-a00, claim {cn-eqbytes}) + PRD (predicate @
 //      nk-prd, check chk-head folded into the nodeKey, bytes ch-p00) ----

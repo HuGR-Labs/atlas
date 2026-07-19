@@ -15,7 +15,7 @@
 //    each a non-empty `subtreeHash`; no raw hashing, the branded value is read), `T2` (the proposed tier),
 //    and `advisory` (a candidate carries a `check` iff predicate — so advisory ⟺ no `check`).
 
-import type { Candidate } from './types.js';
+import type { Candidate } from '../types.js';
 import type { Grounding } from '@atlas/grounding';
 
 // ── frozen FastpathApi surface, co-located here (was ref/fastpath.ts) ─────────────────────────────────

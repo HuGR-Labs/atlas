@@ -27,9 +27,9 @@ import { asNodeKey, asSubtreeHash, createStore } from '@atlas/kernel';
 import type { NodeKey } from '@atlas/contracts';
 import type { Candidate, GroundedFact, AdvisoryNode, PredicateNode } from '@atlas/knowledge';
 import type { Grounding } from '@atlas/grounding';
-import { validateTemplate, isClosedSlot } from '../src/template.js';
-import { authz, inScope } from '../src/authz.js';
-import { bindArchive } from '../src/archive.js';
+import { validateTemplate, isClosedSlot } from '../src/write/template.js';
+import { authz, inScope } from '../src/write/authz.js';
+import { bindArchive } from '../src/write/archive.js';
 
 // ── fixtures ────────────────────────────────────────────────────────────────
 

@@ -24,7 +24,7 @@
 
 import type { Hash } from '@atlas/contracts';
 import type { GroundApi } from '@atlas/grounding';
-import type { GroundedFact } from './types.js';
+import type { GroundedFact } from '../types.js';
 
 // ── frozen EmitApi surface, co-located here (was ref/emit.ts) ─────────────────────────────────────────
 

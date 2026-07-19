@@ -18,7 +18,7 @@
 // the tool surface consume it downstream.
 
 import type { Hash } from '@atlas/contracts';
-import type { GroundedFact } from './types.js';
+import type { GroundedFact } from '../types.js';
 
 // ── frozen ReconcileApi surface, co-located here (was ref/reconcile.ts) ───────────────────────────────
 

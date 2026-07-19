@@ -26,7 +26,7 @@
 import type { Status } from '@atlas/contracts';
 import type { NodeKey } from '@atlas/contracts';
 import type { IndexNode } from '@atlas/index';
-import type { Check, EvaluatorApi } from './types.js';
+import type { Check, EvaluatorApi } from '../types.js';
 
 /**
  * The evaluator verdict — the 3-state subset of `Status` the evaluator can yield. The `'advisory'`

@@ -10,8 +10,8 @@ import type { Status, StructRef } from '@atlas/contracts';
 import type { Axes, IndexNode } from '@atlas/index';
 import type { GateApi, GroundApi, Grounding } from '@atlas/grounding';
 import type { GroundedFact, PredicateNode } from '@atlas/knowledge';
-import { bindEmit } from '../src/emit.js';
-import { bindStatus } from '../src/status.js';
+import { bindEmit } from '../src/lifecycle/emit.js';
+import { bindStatus } from '../src/lifecycle/status.js';
 
 // ── GROUND fixtures (frozen seam, simulated) ─────────────────────────────────
 const isGrounded: GroundApi['isGrounded'] = (g) =>

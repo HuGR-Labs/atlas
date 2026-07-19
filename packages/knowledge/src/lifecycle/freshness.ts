@@ -18,7 +18,7 @@
 
 import type { DriftApi } from '@atlas/grounding';
 import type { Axes } from '@atlas/index';
-import type { GroundedFact, KnowledgeFreshness } from './types.js';
+import type { GroundedFact, KnowledgeFreshness } from '../types.js';
 
 /**
  * The bound Knowledge drift-verdict function: `freshness(fact, tree)` (KNOW-3a/3b/3c). Given a built-

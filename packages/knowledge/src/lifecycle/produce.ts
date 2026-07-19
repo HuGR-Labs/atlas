@@ -17,7 +17,7 @@
 // SCOPE (card exclusions): NOT the wave-close write DRIVER on the tool side (WP-5.17.TOOLS, consumes this);
 // NOT ratification routing (WP-5.15.KNOW); NOT the write-decision route (WP-5.13-a.KNOW).
 
-import type { Candidate, GroundedFact } from './types.js';
+import type { Candidate, GroundedFact } from '../types.js';
 
 // ── frozen ProduceApi surface, co-located here (was ref/produce.ts) ───────────────────────────────────
 

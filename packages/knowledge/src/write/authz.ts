@@ -12,7 +12,7 @@
 // `inScope(actor, fact.scope)` predicate — it is the ownership label carried on the persisted node, not a
 // second write-gate leg — so it is not re-checked here.
 
-import type { GroundedFact } from './types.js';
+import type { GroundedFact } from '../types.js';
 
 // ── frozen AuthzApi surface, co-located here (was ref/authz.ts) ───────────────────────────────────────
 
