@@ -33,3 +33,4 @@ export * from './retrieval.js';    // WP-2.8-a.INDEX — read-model retrieval
 export * from './territory.js';    // WP-2.9-a.INDEX — territory assignment
 export * from './ownership.js';    // WP-2.9-a.INDEX — ownership reconcile
 export * from './coverage.js';     // WP-2.9-b.INDEX — per-territory unresolved-ratio gate
+export * from './compose.js';      // WP-2.6-b.INDEX — composed index: one structure backs drift + discovery

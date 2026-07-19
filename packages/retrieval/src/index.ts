@@ -25,3 +25,6 @@ export type * from '../ref/caps.js';
 export type * from '../ref/ledger.js';
 export type * from '../ref/stale.js';
 export type * from '../ref/offatlas.js';
+
+// ── Runtime surface (WP-filled at execution) ───────────────────────────────────────────────────────
+export * from './relate.js';   // WP-2.8-b.RETR — partitioned, deterministic relate() over the index axes
