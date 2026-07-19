@@ -10,7 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import type { Hash } from '@atlas/contracts';
-import type { Event } from '../ref/types.js';
+import type { Event } from '../src/types.js';
 import { createStore } from '../src/store.js';
 import { createLog } from '../src/log.js';
 

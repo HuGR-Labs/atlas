@@ -9,7 +9,7 @@
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import type { Hash, NodeKey } from '@atlas/contracts';
-import type { Event, EventLog } from '../ref/types.js';
+import type { Event, EventLog } from '../src/types.js';
 import { createLog, eventId, combine, reseq } from '../src/log.js';
 import { fold } from '../src/fold.js';
 

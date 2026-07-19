@@ -8,9 +8,9 @@
 // execution GATE runs those). The ≥2-engine scanner architecture (10a-c / 10a-d) is billy/FR-12 — not here.
 
 import { describe, it, expect } from 'vitest';
-import type { ScrubApi } from '../ref/scrub.js';
-import type { Transcript, TranscriptStoreApi } from '../ref/transcript-store.js';
-import type { TranscriptRef } from '../ref/types.js';
+import type { ScrubApi } from '../src/scrub.js';
+import type { Transcript, TranscriptStoreApi } from '../src/transcript-store.js';
+import type { TranscriptRef } from '../src/types.js';
 import { createTranscriptStore, mitigate, reverse, toGitPointer } from '../src/transcript-store.js';
 import { scrub, admitToBuffer } from '../src/scrub.js';
 

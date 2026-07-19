@@ -1,21 +1,22 @@
 // @atlas/persist — src/transcript-store.ts  (WP-3.5-a.PERSIST · PERSIST-10)
 //
-// The content-addressed large-object transcript store. The transcript body is retained IN FULL — the raw,
-// unadulterated total context of the agent — never truncated, never lossily compressed (owner law,
-// atlas-persist:118-131). `put(body) → hash` stores the full, lossless body and returns its content hash;
-// `fetch(ref)` resolves the EXACT bytes on demand (byte-identity round-trip, 0 truncation). Only the
-// POINTER (`TranscriptRef {sha, store}`) lives in git — a routine clone no longer drags every MB, yet the
-// body is fetchable everywhere (fetch-on-demand). Any future size mitigation MUST stay LOSSLESS + REVERSIBLE
-// (never lossy): the current mitigation is the identity round-trip, the point at which that contract holds.
-//
-// Content-addressing goes ONLY through the SEALED @atlas/kernel `id` seam (KERNEL-1) — no hash is
-// hand-rolled here. The reference names the read `fetchTranscript(ref)`; the frozen `TranscriptStoreApi`
-// names it `fetch` (same operation).
+// The content-addressed large-object transcript store: the body is retained IN FULL (never truncated / lossily
+// compressed — owner law). `put(body) → hash` stores the lossless body; `fetch(ref)` returns the EXACT bytes
+// on demand (byte-identity round-trip). Only the `TranscriptRef` pointer lives in git; `id` is the SEALED seam.
 
 import type { Hash } from '@atlas/contracts';
 import { id } from '@atlas/kernel';
-import type { TranscriptRef } from '../ref/types.js';
-import type { Transcript, TranscriptStoreApi } from '../ref/transcript-store.js';
+import type { TranscriptRef } from './types.js';
+
+/** The full, lossless transcript body — byte-identity `fetch(put(body)) ≡ body` forces raw bytes. */
+export type Transcript = Uint8Array;
+
+/** The content-addressed large-object transcript store (PERSIST-10): `put(body) → hash` stores the full
+ *  lossless body; `fetch(ref)` returns the EXACT bytes on demand (0 truncation). (atlas-persist:107) */
+export interface TranscriptStoreApi {
+  put(body: Uint8Array): Hash;
+  fetch(ref: TranscriptRef): Transcript;
+}
 
 /** The large-object store kind for the CAS-backed transcript pointer (atlas-persist:122-124). */
 const STORE_KIND: TranscriptRef['store'] = 'cas';

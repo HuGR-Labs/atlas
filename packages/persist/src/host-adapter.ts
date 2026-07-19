@@ -1,17 +1,27 @@
 // @atlas/persist — src/host-adapter.ts  (forge-agnostic host adapter — PERSIST-8)
 //
-// One implementation per host abstracts the forge behind `attachToCommit` / `attachToPR` (+ reads); the
-// adapter is the SOLE caller of the low-level `Forge` port (0 direct forge calls elsewhere, REQ-PERSIST-8-a).
-// It configures the `refs/notes/*` push refspec (git does not push notes by default, REQ-PERSIST-8-b) and
-// treats the host-side PR surface as a PROJECTION — a bare clone fetches none of it (REQ-PERSIST-8-c). The
-// commit provenance is serialized as an RFC-822-ish trailer block (canonical) + a JSON `refs/notes/orchestra`
-// note (mutable overlay). `readCommit`/`readPR` are TOTAL — a missing note/attachment returns `null`, never
-// throws (atlas-persist:113-114). Identity types come from the SEALED @atlas/kernel brand seam.
+// One impl per host abstracts the forge (the adapter is the SOLE caller of the low-level `Forge` port).
+// Provenance serializes as an RFC-822-ish trailer (canonical) + a JSON `refs/notes/orchestra` note
+// (mutable overlay); the PR surface is a PROJECTION. `readCommit`/`readPR` are TOTAL — absence ⇒ `null`.
 
-import type { Dossier, Metering, PrAttach, Trailer } from '../ref/types.js';
-import type { HostAdapterApi } from '../ref/host-adapter.js';
-import type { VersionDelta } from '../ref/diff.js';
+import type { Dossier, Metering, PrAttach, Trailer, VersionDelta } from './types.js';
 import { asHash } from '@atlas/kernel';
+
+/**
+ * The forge-agnostic host adapter surface (PERSIST-8), one impl per forge. `readCommit`/`readPR` are
+ * TOTAL — a missing note/attachment returns `null`, never throws (atlas-persist:113-114). `sha` is a git
+ * commit SHA (a git object id) — deliberately NOT the branded CAS `Hash`, so it is typed `string`.
+ */
+export interface HostAdapterApi {
+  /** Write the trailer block + `refs/notes/orchestra` note carrying the dossier. (atlas-persist:100) */
+  attachToCommit(sha: string, dossier: Dossier): void;
+  /** Read back the note/trailer; absence ⇒ `null`, never throws. (atlas-persist:101) */
+  readCommit(sha: string): Dossier | null;
+  /** Render PR-memory/logbook/knowledge-delta onto the host PR. (atlas-persist:102) */
+  attachToPR(prId: string, prAttach: PrAttach): void;
+  /** Read back the projection; absence ⇒ `null`, never throws. (atlas-persist:103) */
+  readPR(prId: string): PrAttach | null;
+}
 
 /** The `refs/notes/orchestra` ref the mutable-overlay dossier note is written to (atlas-persist:17). */
 export const NOTES_REF = 'refs/notes/orchestra';

@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { id, asHash } from '@atlas/kernel';
 import type { Hash } from '@atlas/contracts';
 import type { Cas, CasObject } from '@atlas/kernel';
-import type { Trailer } from '../ref/types.js';
+import type { Trailer } from '../src/types.js';
 import { clone, soleHomeViolations, exportStore, importStore } from '../src/source.js';
 
 const LOCK_IN = /\/Users\/|\/home\/|file:\/\/|[A-Za-z]:\\|\.db\b|application\/octet-stream|;base64,/;

@@ -11,7 +11,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { Hash } from '@atlas/contracts';
-import type { Event } from '../ref/types.js';
+import type { Event } from '../src/types.js';
 import { id } from '../src/canonical.js';
 import { createStore } from '../src/store.js';
 import { createLog } from '../src/log.js';

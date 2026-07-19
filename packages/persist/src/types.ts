@@ -1,14 +1,12 @@
-// @atlas/persist — ref/types.ts  (FROZEN INTERFACE — pure types, zero runtime logic)
+// @atlas/persist — src/types.ts  (shared frozen data model + multi-consumer types; zero runtime)
 //
-// The persistence layer's shared data model, transcribed EXACTLY from
-// `docs/reference/atlas-persist.md` §Data model (lines 16-28) and the prose (lines 31-36) that grounds
-// the composite `Dossier`. Shared identity types (`Hash`) come from @atlas/contracts; the log/state
-// types (`Event`, `EventLog`, `AtlasState`, `CasObject`, `Cas`) come from @atlas/kernel — NEVER
-// redefined here.
+// The persistence layer's shared data model (atlas-persist §Data model). Shared identity types (`Hash`)
+// come from @atlas/contracts; the log/state types (`EventLog`, …) from @atlas/kernel — NEVER redefined
+// here. `VersionDelta`/`VersionDeltaEntry` live here (co-located above their DiffApi impl would break the
+// host-adapter ↔ diff sharing) since both diff.ts and host-adapter.ts consume them.
 
 import type { Hash } from '@atlas/contracts';
 import type { EventLog } from '@atlas/kernel';
-import type { VersionDelta } from './diff.js';
 
 /**
  * The CANONICAL per-commit provenance block. RFC-822-ish `Key: value` block committed INTO the commit
@@ -45,8 +43,8 @@ export type Note = Dossier;
  * PINNED (partial): the CONSTITUENTS are grounded in prose (atlas-persist:33-35): notes + trailers carry
  * the per-commit "provenance/metering and the knowledge-delta". Membership is transcribed as the honest
  * composite {trailer (required) + metering? + knowledgeDelta?}, optionality per atlas-persist:33-35.
- * `knowledgeDelta` is the persist-LOCAL version-delta (the PERSIST-14 read-only fold-diff, `ref/diff.ts`)
- * — NOT an upward knowledge-layer import (no DAG inversion).
+ * `knowledgeDelta` is the persist-LOCAL version-delta (the PERSIST-14 read-only fold-diff, below) —
+ * NOT an upward knowledge-layer import (no DAG inversion).
  */
 export interface Dossier {
   readonly trailer: Trailer;
@@ -117,9 +115,9 @@ export interface PrAttach {
 
 /**
  * The forge abstraction, one impl per host (PERSIST-8). This is the data-model record shape
- * (atlas-persist:23-26); the frozen callable surface is `HostAdapterApi` in `ref/host-adapter.ts`
- * (identical four methods). `sha` is a git commit SHA (a git object id — NOT the branded CAS `Hash`),
- * so it is typed `string`.
+ * (atlas-persist:23-26); the frozen callable surface is `HostAdapterApi` (host-adapter.ts, identical
+ * four methods). `sha` is a git commit SHA (a git object id — NOT the branded CAS `Hash`), so it is
+ * typed `string`.
  */
 export interface HostAdapter {
   attachToCommit(sha: string, dossier: Dossier): void;
@@ -137,4 +135,29 @@ export interface HostAdapter {
 export interface MergeDriver {
   readonly name: 'orchestra-atlas';
   merge(ours: EventLog, theirs: EventLog, base: EventLog): EventLog;
+}
+
+// ── version-delta data model (was ref/diff.ts) ────────────────────────────────────────────────────────
+// Shared by BOTH diff.ts (the DiffApi impl) and host-adapter.ts (serializes `Dossier.knowledgeDelta`),
+// so the data types live here; the frozen `DiffApi` callable surface is co-located in diff.ts.
+
+/**
+ * One fact in a partition, carrying its provenance (PERSIST-14: "each entry carrying its provenance").
+ * OPAQUE-BY-DESIGN (kept `unknown`, flagged): NO ref/golden/consumer freezes either the fact-payload
+ * shape or the provenance shape — genuinely opaque at this layer, left honestly `unknown`. The
+ * `provenance`-carrying membership requirement is the only frozen part.
+ */
+export interface VersionDeltaEntry {
+  readonly fact: unknown;
+  readonly provenance: unknown;
+}
+
+/**
+ * The read-only fold-diff result: a total, disjoint partition of the facts (method-tags-pst:125).
+ */
+export interface VersionDelta {
+  readonly added: readonly VersionDeltaEntry[];
+  readonly edited: readonly VersionDeltaEntry[];
+  readonly superseded: readonly VersionDeltaEntry[];
+  readonly decayed: readonly VersionDeltaEntry[];
 }

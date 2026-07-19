@@ -1,7 +1,7 @@
 // @atlas/contracts — pack.ts
 //
 // The shared injection vocabulary. These types break the retrieval⟷memory cycle: both packages
-// speak this dialect without importing each other. Transcribed from atlas-retrieval §Data model.
+// speak this dialect without importing each other.
 
 import type { Hash, NodeKey } from './hash.js';
 import type { Tier } from './tier.js';

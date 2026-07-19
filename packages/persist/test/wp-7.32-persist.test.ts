@@ -13,7 +13,8 @@ import { describe, it, expect } from 'vitest';
 import { asHash, asNodeKey } from '@atlas/kernel';
 import type { Event, EventLog, NodeKey } from '@atlas/kernel';
 import type { Hash } from '@atlas/contracts';
-import type { DiffApi, VersionDelta, VersionDeltaEntry } from '../ref/diff.js';
+import type { DiffApi } from '../src/diff.js';
+import type { VersionDelta, VersionDeltaEntry } from '../src/types.js';
 import { createDiff, serializeDelta } from '../src/diff.js';
 
 // ---- fixture builders (SYMBOLIC ids; the concrete two-version universe of goldens-pst.md:871-883) --------

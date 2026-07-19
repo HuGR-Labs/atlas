@@ -10,10 +10,10 @@
 import { describe, it, expect } from 'vitest';
 import { id, asHash } from '@atlas/kernel';
 import type { CasObject } from '@atlas/kernel';
-import type { Dossier, Trailer, Metering } from '../ref/types.js';
-import type { ProvenanceApi } from '../ref/provenance.js';
-import type { AttachApi } from '../ref/attach.js';
-import type { MeteringApi } from '../ref/metering.js';
+import type { Dossier, Trailer, Metering } from '../src/types.js';
+import type { ProvenanceApi } from '../src/provenance.js';
+import type { AttachApi } from '../src/attach.js';
+import type { MeteringApi } from '../src/metering.js';
 import { serialize, deserialize } from '../src/provenance.js';
 import { createAttach } from '../src/attach.js';
 import { meter } from '../src/metering.js';
@@ -31,7 +31,7 @@ const trailer7: Trailer = {
 const dossier7: Dossier = { trailer: trailer7 };
 
 // ======================================================================================================
-// PERSIST-3 — provenance committed to trailer + note (differential vs ref/provenance.ts)
+// PERSIST-3 — provenance committed to trailer + note (differential vs ProvenanceApi)
 // ======================================================================================================
 describe('PERSIST-3 — trailer + note (de)serializer (visible goldens)', () => {
   // differential-vs-oracle: the facet conforms to the frozen ProvenanceApi surface.
@@ -65,7 +65,7 @@ describe('PERSIST-3 — trailer + note (de)serializer (visible goldens)', () => 
 });
 
 // ======================================================================================================
-// PERSIST-4 — attachment = CAS pointers, content in the CAS (differential vs ref/attach.ts)
+// PERSIST-4 — attachment = CAS pointers, content in the CAS (differential vs AttachApi)
 // ======================================================================================================
 describe('PERSIST-4 — index-as-attachment over the single CAS (visible goldens)', () => {
   const bodyB: CasObject = { kind: 'blob', role: 'large-body', payload: 'SENTINEL-B-'.repeat(64) };
@@ -99,7 +99,7 @@ describe('PERSIST-4 — index-as-attachment over the single CAS (visible goldens
 });
 
 // ======================================================================================================
-// PERSIST-6 — full per-agent metering recorded (differential vs ref/metering.ts total-schema check)
+// PERSIST-6 — full per-agent metering recorded (differential vs MeteringApi total-schema check)
 // ======================================================================================================
 describe('PERSIST-6 — complete per-agent Metering constructor (visible golden)', () => {
   const meterApi: MeteringApi = { meter };

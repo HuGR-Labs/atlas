@@ -1,8 +1,6 @@
-// @atlas/kernel — ref/types.ts  (FROZEN INTERFACE — pure types, zero runtime logic)
+// @atlas/kernel — src/types.ts  (frozen shared data model; zero runtime)
 //
-// The kernel's shared data model: the content-addressed store (CAS), the append-only event log, and
-// the OR-Set fold node. Transcribed from `docs/reference/atlas-kernel.md` §Data model (lines 15-22)
-// and `docs/spec/fspec-merge.md` DOWN reference model (lines 104-107, 138). Shared identity types
+// The CAS store, the append-only event log, and the OR-Set fold node. Shared identity types
 // (`Hash`, `NodeKey`) are imported from @atlas/contracts — NEVER redefined here.
 
 import type { Hash, NodeKey } from '@atlas/contracts';

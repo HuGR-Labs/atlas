@@ -13,8 +13,8 @@ import fc from 'fast-check';
 import { id, asHash } from '@atlas/kernel';
 import type { Hash } from '@atlas/contracts';
 import type { Cas, CasObject } from '@atlas/kernel';
-import type { Trailer } from '../ref/types.js';
-import type { SourceApi } from '../ref/source.js';
+import type { Trailer } from '../src/types.js';
+import type { SourceApi } from '../src/source.js';
 import { clone, soleHomeViolations, exportStore, importStore } from '../src/source.js';
 import type { Home, Placement } from '../src/source.js';
 

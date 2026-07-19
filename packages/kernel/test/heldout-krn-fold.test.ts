@@ -11,7 +11,7 @@
 
 import { describe, it, expect } from 'vitest';
 import type { Hash, NodeKey } from '@atlas/contracts';
-import type { AtlasState, Cas, Event, EventLog } from '../ref/types.js';
+import type { AtlasState, Cas, Event, EventLog } from '../src/types.js';
 import { createLog } from '../src/log.js';
 import { exportCas, importCas } from '../src/portable.js';
 import { fold } from '../src/fold.js';

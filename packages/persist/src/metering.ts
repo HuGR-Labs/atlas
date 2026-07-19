@@ -1,18 +1,18 @@
 // @atlas/persist — src/metering.ts  (full per-agent metering constructor — PERSIST-6)
 //
-// Every ephemeral agent's WP MUST record `model`, tokens (input/output/cache), tool-uses, wall-time,
-// retries/reworks, gates, verdict, and `transcriptSha` in the event log + dossier (PERSIST-6,
-// atlas-persist:55-57). The oracle (ref/metering.ts) pins `meter(wp) → Metering` where `wp` is a
-// higher-layer (orchestrator) work-package kept `unknown` here [upward-type] — never imported upward. The
-// constructor is TOTAL over the pinned `Metering` schema (types.ts): every one of the eleven required
-// fields is populated, so NO required field can read back `undefined` even for an opaque/partial `wp`
-// (SCN-PERSIST-6-1). The `transcriptSha` pointer is minted through the SEALED @atlas/kernel `asHash` seam
-// — no raw hashing here.
+// `meter(wp) → Metering` populates the COMPLETE accounting record: TOTAL over the 11-field schema, so no
+// required field reads back `undefined` even for an opaque/partial `wp` (kept `unknown` — orchestrator-owned).
+// The `transcriptSha` pointer is minted through the SEALED @atlas/kernel `asHash` seam — no raw hashing here.
 
 import type { Hash } from '@atlas/contracts';
 import { asHash } from '@atlas/kernel';
-import type { Metering } from '../ref/types.js';
-import type { MeteringApi } from '../ref/metering.js';
+import type { Metering } from './types.js';
+
+/** The per-agent metering constructor (PERSIST-6): `meter(wp)` populates a full `Metering` record — no
+ *  required field left `undefined`. `wp` is a higher-layer work-package, kept `unknown`. (atlas-persist:104) */
+export interface MeteringApi {
+  meter(wp: unknown): Metering;
+}
 
 /** Narrow the deliberately-`unknown` work-package to the fields the metering schema reads. */
 type WpShape = Partial<Metering>;
@@ -40,6 +40,6 @@ export function meter(wp: unknown): Metering {
   };
 }
 
-// differential-vs-oracle (compile-time): the facet conforms to the frozen MeteringApi (ref/metering.ts).
+// differential-vs-oracle (compile-time): the facet conforms to the co-located frozen MeteringApi.
 const _apiCheck: MeteringApi = { meter };
 void _apiCheck;

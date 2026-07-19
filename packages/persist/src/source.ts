@@ -1,20 +1,26 @@
 // @atlas/persist — src/source.ts  (portable-source assembly + full-store OKF export path — PERSIST-1 / 9)
 //
-// The portable source is the tracked STORE + the commit TRAILERS (notes are a mutable overlay, not part of
-// the clone-required source; the PR attachment is a PROJECTION, never a datum's sole home) — PERSIST-1,
-// atlas-persist:40-43. `clone(source)` assembles that portable source: the CAS is the open-JSON (OKF) dump
-// of every STORE-homed datum — serialized over the SEALED @atlas/kernel portable seam (`exportCas`), so a
-// bare clone rebuilds Atlas state from {store, trailer} alone, never consulting the PR attachment. The
-// sole-home check (`soleHomeViolations`) flags any datum whose ONLY home is the PR attachment (PERSIST-1-b).
-// The full-store export path (`exportStore`/`importStore`) is the persist-side wiring of the KERNEL-6 OKF
-// (de)serializer — no lock-in is layered on top of git; the kernel serializer is consumed verbatim, never
-// re-implemented (PERSIST-9, exclusions: the open-JSON format is owned by WP-1.1-b.KERNEL).
+// The portable source = tracked STORE + commit TRAILERS (notes are a mutable overlay; the PR attachment is a
+// PROJECTION, never a datum's sole home — `soleHomeViolations` flags a violation). `clone` dumps every
+// STORE-homed datum as OKF over the SEALED kernel `exportCas`/`importCas` seam (consumed verbatim, no lock-in).
 
 import type { Hash } from '@atlas/contracts';
 import type { Cas, CasObject } from '@atlas/kernel';
 import { id, exportCas, importCas } from '@atlas/kernel';
-import type { Trailer } from '../ref/types.js';
-import type { PortableSource, SourceApi } from '../ref/source.js';
+import type { Trailer } from './types.js';
+
+/** The portable, clone-required source: the tracked store + the commit trailers (PERSIST-1,
+ *  atlas-persist:40-43). Notes are a mutable overlay and are NOT part of this canonical source. */
+export interface PortableSource {
+  readonly store: string;
+  readonly trailers: readonly Trailer[];
+}
+
+/** Portable-source assembly surface (PERSIST-1): `clone(source)` reconstructs the portable
+ *  {store, trailers} a bare clone rebuilds Atlas state from. `source` input is not frozen → `unknown`. */
+export interface SourceApi {
+  clone(source: unknown): PortableSource;
+}
 
 /** The persistence surfaces a datum may be homed on (PROP-PERSIST-1 arbitrary: each datum routed to some
  *  subset of {store, trailer, note, PR-attachment}). */
@@ -27,7 +33,7 @@ export interface Placement {
 }
 
 /** The clone-required source: a set of datum placements + the committed trailers. The `source` input to
- *  `SourceApi.clone` is frozen `unknown` (ref/source.ts) — this is the local model it is narrowed to. */
+ *  `SourceApi.clone` is frozen `unknown` (co-located above) — this is the local model it is narrowed to. */
 export interface Source {
   readonly placements: readonly Placement[];
   readonly trailers: readonly Trailer[];
@@ -85,6 +91,6 @@ export function importStore(json: string): Cas {
   return importCas(json);
 }
 
-// differential-vs-oracle (compile-time): `clone` conforms to the frozen SourceApi (ref/source.ts).
+// differential-vs-oracle (compile-time): `clone` conforms to the co-located frozen SourceApi.
 const _apiCheck: SourceApi = { clone };
 void _apiCheck;

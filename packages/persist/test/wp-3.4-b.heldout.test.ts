@@ -8,7 +8,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { asHash } from '@atlas/kernel';
-import type { Dossier, PrAttach } from '../ref/types.js';
+import type { Dossier, PrAttach } from '../src/types.js';
 import {
   makeHostAdapter, directForgeCalls, pushCarriesNotes, ADAPTER_VIA,
 } from '../src/host-adapter.js';

@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { id, asHash } from '@atlas/kernel';
 import type { CasObject } from '@atlas/kernel';
-import type { Dossier, Trailer, Metering } from '../ref/types.js';
+import type { Dossier, Trailer, Metering } from '../src/types.js';
 import { serialize, deserialize } from '../src/provenance.js';
 import { createAttach } from '../src/attach.js';
 import { meter } from '../src/metering.js';

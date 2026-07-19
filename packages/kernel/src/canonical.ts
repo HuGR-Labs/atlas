@@ -1,15 +1,25 @@
 // @atlas/kernel — src/canonical.ts  (canonicalForm + id — content-addressed object identity)
 //
-// The RFC-8785 / JCS SUBSET preimage (KERNEL-1): object keys are lexicographically sorted, all strings
-// (keys and values) are Unicode NFC-normalized, one fixed escape policy is applied (JSON string escaping),
-// and non-integer / non-finite numbers are a canonical-form VIOLATION (floats forbidden). The mutable
-// side-indexes grounding / status / freshness are EXCLUDED from the preimage at every nesting level
-// (KERNEL-8), so recomputing them never re-keys an object. `id` reaches the digest ONLY through the encoder
-// seam (KERNEL-2a) — this file imports no digest primitive.
+// The RFC-8785/JCS-subset preimage (KERNEL-1): keys sorted, strings NFC, one fixed escape, floats
+// forbidden. INVARIANT: mutable side-indexes (grounding/status/freshness) are EXCLUDED at every level
+// (KERNEL-8), and `id` reaches the digest ONLY through the encoder seam (KERNEL-2a) — no local primitive.
 
 import type { Hash } from '@atlas/contracts';
-import type { CasObject } from '../ref/types.js';
+import type { CasObject } from './types.js';
 import { defaultEncoder } from './encoder.js';
+
+/**
+ * The canonical-form contract (frozen): the §3.2 RFC-8785/JCS-subset preimage every encoder reproduces
+ * byte-for-byte (KERNEL-1); `id = hash(canonicalForm(obj))` is the only sanctioned identity computation.
+ */
+export interface CanonicalApi {
+  /** The RFC-8785/JCS-subset canonical preimage bytes (sorted keys, NFC, no floats). The bytes handed
+   *  to the encoder seam; MUST exclude mutable side-indexes (KERNEL-8). (atlas-kernel:39-41) */
+  canonicalForm(obj: CasObject): Uint8Array;
+  /** `Encoder.hash(canonicalForm(obj))` — content-addressed identity; MUST NOT be hand-rolled
+   *  (KERNEL-1). (atlas-kernel:39-41, 98) */
+  id(obj: CasObject): Hash;
+}
 
 /** Mutable side-indexes excluded from the canonical preimage (KERNEL-8) — recomputed, never a key. */
 const SIDE_INDEX: ReadonlySet<string> = new Set(['grounding', 'status', 'freshness']);

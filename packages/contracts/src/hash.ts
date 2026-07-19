@@ -1,13 +1,8 @@
 // @atlas/contracts — hash.ts
 //
-// Layer-0 identity vocabulary: the CAS key, the swappable encoder seam, and the two hash-derived
-// keys the rest of the Atlas anchors on. These three are ALL lower-hex strings at runtime but are
-// SEMANTICALLY ORTHOGONAL (KNOW-15: contentHash = what, nodeKey = which, subtreeHash = current);
-// conflating them is the classic way an Atlas rots. So they are BRANDED — the compiler forbids
-// passing one leg where another is expected. Branding is purely a compile-time discipline: the
-// values are minted (branded) at ~3 sites only — the @atlas/kernel encoder, the index subtreeHash
-// compute, the knowledge nodeKey compute — via `asHash`/`asSubtreeHash`/`asNodeKey` constructors
-// that live in @atlas/kernel (this package stays logic-free — types only).
+// Layer-0 identity vocabulary: the CAS key (Hash), the swappable Encoder seam, and the two
+// hash-derived keys (SubtreeHash, NodeKey). All lower-hex at runtime but BRANDED so they stay
+// orthogonal (KNOW-15) — types only; values are minted in @atlas/kernel.
 
 /** Lower-hex BLAKE3 digest — the CAS key (the `contentHash` / dedup leg). Branded so it can't be
  *  confused with a nodeKey or subtreeHash. (atlas-kernel §Data model, line 15) */

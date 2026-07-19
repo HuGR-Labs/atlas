@@ -1,8 +1,7 @@
 // @atlas/contracts — territory.ts
 //
-// The CANONICAL territories-manifest shape (the ownership + criticality overlay, NOT the file tree).
-// The richer knowledge shape `{ path, owner, tier, files, regions, blastRadius }` is a DIFFERENT
-// type (TerritoryView) that lives in @atlas/knowledge — it is deliberately NOT here.
+// The CANONICAL territories-manifest shape (ownership + criticality overlay, NOT the file tree).
+// The richer knowledge shape (TerritoryView) is a DIFFERENT type in @atlas/knowledge, not here.
 
 import type { Tier } from './tier.js';
 
