@@ -1,0 +1,633 @@
+# Goldens — Block ADAPTERS (Campaign-9 · the productization ring) · S3 generate-from-method-tag
+
+> **state:** S3 · **protocol:** [`goldens`](../../.claude/skills/goldens/SKILL.md) + [`completeness`](../../.claude/skills/completeness/SKILL.md) Gate-3 teeth ·
+> **axiom:** S1 frozen (`requirements-adapters.md`; 55 REQs) + S2 frozen (`method-tags-adapters.md`; every
+> behavioural INV method-tagged, **0 `formal`** in the ring — the sole `formal` cluster `FSPEC-merge` lives one
+> layer down and is unchanged, consumed via frozen seams) · **owner:** charlie (FORGE).
+>
+> **Derivation (generated from the method-tag, NOT hand-authored where a generator exists):**
+> - **15 `reference-model` INVs** (ADAPTER-1..6, 8..12, WIRE-1, CLI-3, CLI-4, MCP-2) → **`gen: conformance`**:
+>   each SCN is a differential/conformance witness against the named oracle in the S2 down-model — the
+>   committed fixture repo + its reference `FileTree`, the recorded `.scip` corpus, the kernel `StoreApi`
+>   reference, a pinned git-sandbox + write-spy, the spy `SiteProposer`, the `@atlas/index` reference + call-spy,
+>   the reference `Verdict` renderer, the frozen `genesis` run-controller, the fault-injecting reference
+>   transport, and the shared `WiredHandler` parity oracle. The named mock is the anti-rot; the SCN's teeth are
+>   the exact mutant that diverges from it.
+> - **3 `exhaustive` INVs** (CLI-1, CLI-2, MCP-1) → **`gen: exhaustive`**: the finite space is enumerated — the
+>   `command → wired-leg` map, the `command × authority` matrix, and the closed four-tool set — plus (CLI-1) the
+>   PBT-fuzz malformed-`argv` totality arm the enumeration cannot reach.
+> - **1 `PBT` INV** (ADAPTER-7, the one algebraic law the ring itself composes — durable dedup/supersede
+>   idempotence) → **`gen: PBT`**: concrete witness instances of the idempotence law (`write∘write ≡ write` over
+>   the DURABLE store) and the supersede-ordering law in **both** delivery orders, plus the reference-model
+>   equality arm against the existing `routeWrite`/`upsert`.
+> - **0 `residue`** — every ring INV has a named oracle (no oracle-less integration case survives the S2 tags).
+>
+> **Non-vacuity note (load-bearing for teeth direction):** the durable-store SCNs (ADAPTER-6/7/12) bite the
+> **flush→fresh-process→read-back** seam, not an in-memory shortcut — the anti-rot for ADAPTER-7 is explicit
+> that "a single-fact golden silently passes" the flush-ordering bug, so every durable teeth names a mutant a
+> memory-only golden cannot see. Every guard SCN carries an **interesting witness** (a genuine dangling ref, a
+> real un-indexed language adjacent to real edges, a real cross-writer supersede in both orders, a real rebase
+> that changes the sha, a tool that genuinely throws) — no antecedent-failure vacuity.
+
+## Fixture universe (reused concretely across every SCN — witnesses, not abstractions)
+
+### `fix-repo` — a committed multi-language repo (the walker/SCIP/index/genesis oracle)
+
+| path | lang | tracked | role |
+|---|---|---|---|
+| `.gitignore` | — | yes | contains `dist/` and `*.log` |
+| `src/app.ts` | ts | yes | imports `greet` from `./util` (→ resolvable ref) **and** references `missingHelper` (→ dangling, no in-index def) |
+| `src/util.ts` | ts | yes | **defines** `greet()` (SCIP symbol `scip-ts . . util/greet().`) |
+| `api/service.py` | py | yes | **defines** `compute()` (SCIP symbol via `scip-python`) |
+| `legacy/report.rb` | rb | yes | **no configured indexer** → honest structural hole (files-only) |
+| `dist/bundle.js` | — | **no** (gitignored) | must be ABSENT from the `FileTree` |
+| `debug.log` | — | **no** (gitignored) | must be ABSENT from the `FileTree` |
+
+Reference tree `T_ref` = the deterministic sorted walk of the 5 tracked paths with leaf `content`; `dist/` and
+`*.log` excluded by `.gitignore`. `LangId → IndexerPlan` dispatch: `ts → scip-typescript`, `py → scip-python`,
+`rb → honest-hole` (total over the repo's languages).
+
+### `fix.scip` — a recorded SCIP protobuf index (the SCIP-reader oracle)
+
+- document `src/util.ts`: one **definition** occurrence for `util/greet().`
+- document `src/app.ts`: one **reference** occurrence to `util/greet().` (has an in-index definition ⇒ resolvable)
+  and one **reference** occurrence to `util/missingHelper().` (**no** in-index definition ⇒ dangling, `to: null`).
+- contains **no** symbol `util/deletedFn()` and **no** edge `app.ts → api/service.py:compute`.
+
+### `git-sbx` — a git sandbox (the history/drift/forge oracle)
+
+- pinned rev `r0 = a1b2c3d`; `git blame` attributes `util/greet()` to commit `c_greet`.
+- branches `main` and `topic` share **merge-base** `mb = 9f8e7d6`; on `topic`, `src/util.ts`'s `greet()` anchor
+  moved (a cited file changed) — the `mb → topic` diff is the expected drifted-anchor set.
+- a shared change `X` landed on **both** `main` and `topic` after `mb` (a two-tip diff would show nothing).
+- host role: a commit `c1` receives a provenance trailer + a `refs/notes/orchestra` note + a PR projection; a
+  rebase rewrites `c1 → c1'` (new sha).
+
+### durable CAS + facts (the StoreApi / dedup-supersede / rehydrate oracle)
+
+- disk CAS at `.atlas/cas/` sharded `<h[0:2]>/<h>` (D4 default).
+- `CasObject O` with `H = id(O)`; a **tampered** on-disk copy at `.atlas/cas/<H[0:2]>/<H>` whose bytes give
+  `id(value) !== H`.
+- fact `F` = `{ nodeKey: 'claim:fix-cov', content: c1 }`; superseder `F'` = `{ nodeKey: 'claim:fix-cov',
+  content: c2, supersedes: [id(F)] }`.
+
+### entrypoint fixtures (CLI / MCP / wire)
+
+- command set = `{ init, query, emit, reconcile, doctor, mine }`; the four governed tools =
+  `{ atlas-init, atlas-query, atlas-emit, atlas-reconcile }`; `mine` drives the `genesis` run-controller.
+- `Verdict` fixture set: `V_ok = {status:'ok', exitCode:0, guidance:'index built'}`,
+  `V_rej = {status:'rejected', exitCode:2, guidance:'drift needs review'}`,
+  `V_err = {status:'error', exitCode:1, guidance:'malformed input: expected a repo path'}`.
+- `spyProposer` = the recorded `SiteProposer` (call-counter + budget stub); returns candidate `P0` for site
+  `S_greet`. No live model in CI.
+- `createHandler(adapters)` = the single shared `wire` module both entrypoints import.
+
+---
+
+## REQ-ADAPTER-1 — faithful file tree
+
+### SCN-ADAPTER-1a-1 — the walk equals the reference tree, .gitignore honored   (happy)
+source: REQ-ADAPTER-1a
+Given `fix-repo` committed with reference tree `T_ref` (the 5 tracked paths in deterministic sorted order with leaf `content`), and `.gitignore` listing `dist/` and `*.log`
+When `walk(fix-repo)` runs
+Then `deepEqual(walk(fix-repo), T_ref)` — exact paths·nesting·leaf `content` in the deterministic order, and `dist/bundle.js` + `debug.log` are absent
+teeth: breaks-on "a walker that invents a path — it ignores `.gitignore` and includes `dist/bundle.js`, so a phantom path enters the `FileTree` ≠ `T_ref`"
+gen: conformance
+
+### SCN-ADAPTER-1b-1 — a tracked file with no indexer is still in the tree   (guard)
+source: REQ-ADAPTER-1b
+Given `legacy/report.rb` is git-tracked (a `rb` file with no configured indexer)
+When `walk(fix-repo)` runs
+Then the `FileTree` includes `legacy/report.rb` with its leaf `content` — the tracked set is fully present
+teeth: breaks-on "a walker that drops a tracked file — it applies an extension allowlist and omits `legacy/report.rb`, so a tracked file is missing from the `FileTree`"
+gen: conformance
+
+### SCN-ADAPTER-1c-1 — no fabricated path is emitted   (guard)
+source: REQ-ADAPTER-1c
+Given `dist/bundle.js` is absent from the tracked set (gitignored) and no file `src/generated.ts` exists on disk
+When `walk(fix-repo)` runs
+Then the `FileTree` contains neither `dist/bundle.js` nor `src/generated.ts` — 0 phantom paths
+teeth: breaks-on "a walker that invents a path — it emits a stale `src/generated.ts` entry cached from a prior walk that no longer exists on disk, fabricating a file"
+gen: conformance
+
+### SCN-ADAPTER-1d-1 — two walks of the same tree are byte-identical   (happy)
+source: REQ-ADAPTER-1d
+Given `fix-repo` unchanged between two invocations
+When `walk(fix-repo)` runs twice → `w1`, `w2`
+Then `w1` ≡ `w2` byte-identically (identical sibling order and leaf `content`)
+teeth: breaks-on "a walker that stamps each `FileTree` node with a per-walk value (the wall-clock at visit time / a fresh nonce) instead of deriving the node purely from bytes — so `w1` and `w2` differ on that field across the two runs (`readdir` order alone is stable across consecutive walks and would not diverge)"
+gen: conformance
+
+---
+
+## REQ-ADAPTER-2 — SCIP is read into ScipOutput
+
+### SCN-ADAPTER-2a-1 — the reader yields exactly the fixture's occurrences   (happy)
+source: REQ-ADAPTER-2a
+Given `fix.scip` with document `src/util.ts` (one definition of `util/greet().`) and `src/app.ts` (a reference to `util/greet().` and a reference to `util/missingHelper().`)
+When `read(fix.scip)` runs
+Then `ScipOutput` == the fixture's per-document `definition`/`reference` occurrence set — exactly those three occurrences, no more
+teeth: breaks-on "the reader synthesizes a document-level `imports` occurrence the `.scip` does not contain — `ScipOutput` carries an occurrence absent from the fixture corpus"
+gen: conformance
+
+### SCN-ADAPTER-2b-1 — a dangling reference resolves to null   (guard)
+source: REQ-ADAPTER-2b
+Given `fix.scip`'s `src/app.ts` reference to `util/missingHelper().` has **no** definition occurrence anywhere in the index
+When the ring resolves the `ScipOutput`
+Then that reference stays unresolved — downstream `to: null` (INDEX-13)
+teeth: breaks-on "the reader resolves the dangling `util/missingHelper()` ref to the nearest same-named symbol — it invents a target so `to !== null`"
+gen: conformance
+
+### SCN-ADAPTER-2c-1 — no symbol or edge is synthesized   (guard)
+source: REQ-ADAPTER-2c
+Given `fix.scip` contains the resolvable `app.ts → util/greet().` edge but **no** edge `app.ts → api/service.py:compute`
+When `read(fix.scip)` runs
+Then `ScipOutput` carries the one recorded edge and 0 cross-file edges the `.scip` does not contain
+teeth: breaks-on "the reader adds a heuristic same-name edge `app.ts → api/service.py:compute` not present in the `.scip` — a synthesized edge appears"
+gen: conformance
+
+---
+
+## REQ-ADAPTER-3 — per-language indexer dispatch and merge
+
+### SCN-ADAPTER-3a-1 — each language runs its indexer and the outputs merge   (happy)
+source: REQ-ADAPTER-3a
+Given `fix-repo` spans `ts` and `py` with the total dispatch table `ts → scip-typescript`, `py → scip-python`, `rb → honest-hole`
+When the ring runs each configured indexer by `LangId` and merges the `.scip` outputs
+Then the dispatch table is total (every repo `LangId` routes to exactly one of {indexer, honest-hole}) and the merged index carries the `ts` edge `app.ts → util/greet()` and the `py` symbol `service.py:compute`, each from its own indexer
+teeth: breaks-on "a `LangId` with no dispatch entry (`rb`) falls through to the `ts` indexer instead of the honest-hole — the totality/dispatch assertion fails (a language routed to the wrong indexer)"
+gen: conformance
+
+### SCN-ADAPTER-3b-1 — the un-indexed language is files-only   (guard)
+source: REQ-ADAPTER-3b
+Given `legacy/report.rb` (`rb`, no configured indexer)
+When the ring builds the index over `fix-repo`
+Then `report.rb` appears in the `FileTree` with its `content` but contributes **0** edges (an honest structural hole)
+teeth: breaks-on "the ring drops `report.rb` entirely because `rb` has no indexer — a tracked file vanishes instead of becoming a files-only hole"
+gen: conformance
+
+### SCN-ADAPTER-3c-1 — the un-indexed language corrupts no other language   (guard)
+source: REQ-ADAPTER-3c
+Given `rb` has no indexer while `ts`/`py` do, with the `ts` edge `app.ts → util/greet()` adjacent to the `rb` hole
+When the merge runs
+Then the `ts` edge and the `py` `compute` symbol are intact — 0 fabricated or dropped edges for `ts` or `py`
+teeth: breaks-on "the missing `rb` indexer aborts the merge and drops the `ts` edge `app.ts → util/greet()` — an un-indexed language corrupts another language's edges (INDEX-13 cross-language honesty broken)"
+gen: conformance
+
+---
+
+## REQ-ADAPTER-4 — deterministic sub-file units
+
+### SCN-ADAPTER-4a-1 — same bytes fold to the reference unit set every run   (happy)
+source: REQ-ADAPTER-4a
+Given `src/util.ts` bytes with the `web-tree-sitter` layer **enabled** and reference unit set `U_ref` (item: the `greet` fn; block: its body)
+When the layer folds the bytes twice → `u1`, `u2`
+Then `u1 == u2 == U_ref` — identical sub-file units folded into the `FileTree` spatial rail
+teeth: breaks-on "a non-deterministic fold — the layer tags each unit with a monotonic/wall-clock id, so `u1` and `u2` carry different unit ids for the same bytes (same bytes ⇏ same units)"
+gen: conformance
+
+### SCN-ADAPTER-4b-1 — the file-level index is valid without the AST layer   (happy)
+source: REQ-ADAPTER-4b
+Given the `web-tree-sitter` layer **disabled**
+When the index is built over `fix-repo`
+Then the index is valid at file level (the `FileTree` is present and `resolve`/`coverage` answer) with no sub-file units — an honest additive refinement is simply absent
+teeth: breaks-on "disabling the AST layer leaves the index half-built — `resolve` throws because it assumes sub-file units exist, so the file-level index is no longer valid without the additive layer"
+gen: conformance
+
+### SCN-ADAPTER-4c-1 — repeated folds of identical bytes are identical   (guard)
+source: REQ-ADAPTER-4c
+Given the identical byte sequence of `src/util.ts` folded three times with the layer enabled
+When the three unit sets are compared
+Then all three are byte-identical (unit set and order)
+teeth: breaks-on "the fold assigns each unit an order index from a fold-scoped counter that advances across invocations (not from the unit's byte offset) — so the three folds of identical bytes disagree on unit order (same bytes ⇏ same units); distinct from 4a-1's wall-clock-id source"
+gen: conformance
+
+---
+
+## REQ-ADAPTER-5 — index adapter drives @atlas/index
+
+### SCN-ADAPTER-5a-1 — adapter outputs equal @atlas/index over the same inputs   (happy)
+source: REQ-ADAPTER-5a
+Given the walker + SCIP outputs over `fix-repo` fed to both the index-backing adapter and `@atlas/index` directly
+When `MoveInIndex`/`QueryIndex` run through the adapter and `@atlas/index` `build`/`resolve`/`coverage` run over the same inputs
+Then `deepEqual(adapterOutput, atlasIndexOutput)` — the adapter is pure delegation
+teeth: breaks-on "the adapter serves a stale cached `resolve` result instead of calling `@atlas/index` — its output diverges from the `@atlas/index` oracle"
+gen: conformance
+
+### SCN-ADAPTER-5b-1 — every resolution originates in @atlas/index, not the adapter   (guard)
+source: REQ-ADAPTER-5b
+Given a call-spy on `@atlas/index.resolve`
+When `QueryIndex` resolves the `app.ts → util/greet()` edge
+Then the spy count equals the number of resolutions — every resolution/ranking result originated from an `@atlas/index` call, 0 computed in the adapter
+teeth: breaks-on "the adapter resolves `util/greet()` with its own local shortcut and never calls `@atlas/index.resolve` — the spy count is 0 while a resolution was returned (the adapter introduced its own resolution)"
+gen: conformance
+
+---
+
+## REQ-ADAPTER-6 — durable content-addressed store
+
+### SCN-ADAPTER-6a-1 — put/get round-trips under the content hash   (happy)
+source: REQ-ADAPTER-6a
+Given the disk store at `.atlas/cas/` and `CasObject O` with `H = id(O)`
+When `put(O)` then `get(H)` run
+Then `get(H)` returns `O` byte-identical, and `O` is stored at `.atlas/cas/<H[0:2]>/<H>` — the `StoreApi` `put(obj)→Hash` / `get(h)→CasObject|undefined` contract holds
+teeth: breaks-on "`put` stores `O` under a random uuid filename instead of `id(O)` — `get(H)` misses (the content-addressing contract is violated)"
+gen: conformance
+
+### SCN-ADAPTER-6b-1 — an object put in process A is get-retrievable in a fresh process B   (happy)
+source: REQ-ADAPTER-6b
+Given process A calls `put(O) → H` and flushes to `.atlas/cas/`
+When a fresh process B (a new `StoreApi` instance over the same dir) calls `get(H)`
+Then B returns `O` byte-identical — durability across processes
+teeth: breaks-on "`put` keeps `O` only in an in-memory `Map` and never flushes to disk — process B's `get(H)` returns `undefined` (no durability; a same-process golden passes)"
+gen: conformance
+
+### SCN-ADAPTER-6c-1 — a tampered on-disk value reads as absent   (guard)
+source: REQ-ADAPTER-6c
+Given `.atlas/cas/<H[0:2]>/<H>` whose on-disk bytes were mutated so `id(value) !== H`
+When `get(H)` runs
+Then the store treats the mismatch as absent and returns `undefined` (tamper-safe, KERNEL-1)
+teeth: breaks-on "`get` returns the file's bytes without re-verifying `id(value) === key` — the tampered value is served as if genuine (tamper-safety broken)"
+gen: conformance
+
+---
+
+## REQ-ADAPTER-7 — governed persistent write binding
+
+### SCN-ADAPTER-7a-1 — the binding composes nodeKey→probe→routeWrite→upsert→flush   (happy)
+source: REQ-ADAPTER-7a
+Given candidate fact `F` (`nodeKey claim:fix-cov`, content `c1`) and the durable store
+When `writeDecision(F, cfg)` runs
+Then it computes `nodeKey(F)`, probes the **durable** store for the two hits + `nearDuplicateProbe`, calls the existing `routeWrite`, applies `upsert`, and flushes the projection through the store — and a fresh probe over the flushed store round-trips `F`
+teeth: breaks-on "the binding skips the flush step — `routeWrite`/`upsert` land in memory but the durable store never sees `F`, so the next write's durable probe misses the prior (a memory-only golden passes)"
+gen: PBT
+
+### SCN-ADAPTER-7b-1 — a governed write of the same fact twice lands once   (happy)
+source: REQ-ADAPTER-7b
+Given fact `F` (`nodeKey claim:fix-cov`, content `c1`) over the DURABLE store
+When `writeDecision(F)` runs, then `writeDecision(F)` runs a second time
+Then `F` lands exactly once — the second call is a no-op once the probe sees the flushed prior (`head-count(claim:fix-cov) == 1`); `write∘write ≡ write`
+teeth: breaks-on "the probe reads only the in-memory projection, not the flushed durable store — a flush-ordering bug lets the second write land a duplicate (`write∘write ≠ write`); the anti-rot's exact case a single-fact golden silently passes"
+gen: PBT
+
+### SCN-ADAPTER-7b-2 — a supersede lands one head in either delivery order   (happy)
+source: REQ-ADAPTER-7b
+Given fact `F` (content `c1`) and its superseder `F'` (content `c2`, `supersedes: [id(F)]`) over the durable store
+When they are delivered in order `[F, F']` and, separately, in order `[F', F]`
+Then both orders yield an identical single head `F'` with the supersedes-pointer recorded — order-independent, 0 double-lands
+teeth: breaks-on "supersede resolution reads arrival order — delivering `[F', F]` leaves `F` as head, so the two delivery orders disagree on the head (order-dependent)"
+gen: PBT
+
+### SCN-ADAPTER-7c-1 — the bound decision equals routeWrite's on the same inputs   (guard)
+source: REQ-ADAPTER-7c
+Given the existing `routeWrite`/`upsert` as the equality oracle and a near-duplicate of `F` that `routeWrite` would route to supersede
+When `writeDecision` makes its routing decision on the same inputs
+Then `boundDecision == routeWrite(sameInputs)` — the binding adds no path of its own
+teeth: breaks-on "the binding adds a local fast-path that routes the near-duplicate to `insert` instead of delegating to `routeWrite` — the bound decision diverges from the `routeWrite` oracle (new routing invented)"
+gen: PBT
+
+---
+
+## REQ-ADAPTER-8 — history is backed by real git
+
+### SCN-ADAPTER-8a-1 — HistorySource yields real git signals   (happy)
+source: REQ-ADAPTER-8a
+Given `git-sbx` pinned at rev `r0 = a1b2c3d` where `git blame` attributes `util/greet()` to commit `c_greet`
+When `HistorySource` yields `log`/`blame`/`coupling` for `src/util.ts`
+Then the signals equal the real git output at `r0` — `blame` attributes `greet()` to `c_greet`
+teeth: breaks-on "`HistorySource` returns a hardcoded stub signal instead of shelling to real git — `blame` attributes `greet()` to the wrong commit ≠ `git blame` at `r0`"
+gen: conformance
+
+### SCN-ADAPTER-8b-1 — the signals are byte-identical across runs at a fixed rev   (happy)
+source: REQ-ADAPTER-8b
+Given `git-sbx` at the fixed rev `r0`
+When `HistorySource` runs twice
+Then the two signal sets are byte-identical (deterministic for a fixed rev)
+teeth: breaks-on "`coupling` ranks by a `Map` iteration seeded from the wall-clock — the two runs at the same `r0` produce different coupling orders (non-deterministic at a fixed rev)"
+gen: conformance
+
+### SCN-ADAPTER-8c-1 — ranking mints no fact   (guard)
+source: REQ-ADAPTER-8c
+Given a write-spy on the fact store while `HistorySource` computes `log`/`blame`/`coupling` over `r0` to feed ranking
+When ranking runs
+Then the write-spy records 0 fact mints during ranking — history feeds ranking only
+teeth: breaks-on "the coupling miner upserts a `co-change` fact into the store while ranking — the write-spy fires (the GEN structural-only guarantee is broken)"
+gen: conformance
+
+---
+
+## REQ-ADAPTER-9 — drift over merge-base
+
+### SCN-ADAPTER-9a-1 — DriftSource anchors equal the merge-base diff   (happy)
+source: REQ-ADAPTER-9a
+Given `git-sbx` where `main` and `topic` share merge-base `mb = 9f8e7d6` and on `topic` the cited `src/util.ts` `greet()` anchor moved
+When `DriftSource` computes drifted anchors
+Then the anchor set == the `mb → topic` diff (`greet()` flagged drifted), feeding `atlas-reconcile`'s mechanical-vs-semantic classification (TOOLS-8 `exitCode` law unchanged)
+teeth: breaks-on "`DriftSource` diffs `merge-base → main` instead of `merge-base → topic` — the topic-only `greet()` drift is absent from `mb → main`, so the anchor set comes back empty and the real drift is missed (the two-tip mutant is caught by 9b-1's shared-`X` witness, not here)"
+gen: conformance
+
+### SCN-ADAPTER-9b-1 — drift is computed across the merge-base and nothing else   (guard)
+source: REQ-ADAPTER-9b
+Given a shared change `X` landed on **both** `main` and `topic` after `mb` (a two-tip diff would show nothing) plus the topic-only `greet()` change that predates it
+When `DriftSource` computes drift
+Then only the topic-only `greet()` change vs `mb` is in the anchor set — the shared `X` is not
+teeth: breaks-on "drift is computed over a fixed window `HEAD~1..HEAD` instead of across the merge-base — it misses the topic-only `greet()` drift that predates the window"
+gen: conformance
+
+---
+
+## REQ-ADAPTER-10 — forge carries the atlas
+
+### SCN-ADAPTER-10a-1 — the forge writes trailer + orchestra note + PR projection   (happy)
+source: REQ-ADAPTER-10a
+Given the `git-sbx` host and commit `c1`
+When the `Forge` writes the atlas for `c1`
+Then a provenance trailer is appended to `c1`'s message, a note is attached to `c1` under `refs/notes/orchestra`, and the PR projection is written
+teeth: breaks-on "the `Forge` writes the note to `refs/notes/commits` (the default namespace) instead of `refs/notes/orchestra` — the orchestra note is absent from the expected ref"
+gen: conformance
+
+### SCN-ADAPTER-10b-1 — a rewrite keeps the trailer and orphans the note data   (guard)
+source: REQ-ADAPTER-10b
+Given the atlas written to `c1` (trailer in the message + note on `c1`'s sha)
+When history is rewritten by a rebase (`c1 → c1'`, new sha)
+Then the trailer data survives in the rewritten message and the note-carried data is orphaned exactly as PERSIST-* specifies (the note still points at the old `c1` sha, not silently discarded)
+teeth: breaks-on "the rewrite drops the trailer from the rewritten message (trailer treated as ephemeral) — trailer data is lost, diverging from the PERSIST-* expected outcome"
+gen: conformance
+
+### SCN-ADAPTER-10c-1 — the forge executes PERSIST-* semantics unchanged   (guard)
+source: REQ-ADAPTER-10c
+Given PERSIST-* specifies the exact trailer/note/orphan semantics as the oracle
+When the `Forge` acts on `git-sbx` across the write + rewrite path
+Then the observed outcome == PERSIST-*'s expected outcome at every step — the adapter changed 0 of that semantics, only executed it
+teeth: breaks-on "the `Forge` 'improves' orphan handling by re-pointing the orphaned note to the rewritten `c1'` sha — it alters PERSIST-* orphan semantics, so the outcome diverges from the PERSIST oracle"
+gen: conformance
+
+---
+
+## REQ-ADAPTER-11 — the single model entry
+
+### SCN-ADAPTER-11a-1 — a model is invoked only via SiteProposer.propose   (guard)
+source: REQ-ADAPTER-11a
+Given `spyProposer` wrapping the only model seam and a module-graph audit for any other model call site, with genesis extraction run over `fix-repo`
+When extraction invokes the model
+Then every model invocation went through `SiteProposer.propose` — 0 out-of-band model call sites in the graph
+teeth: breaks-on "a second module calls the model client directly, bypassing `SiteProposer.propose` — the graph audit finds a 2nd model entry point"
+gen: conformance
+
+### SCN-ADAPTER-11b-1 — exactly one bounded call per site   (happy)
+source: REQ-ADAPTER-11b
+Given a call-counter on `spyProposer` and a budget stub (cost cap + timeout `t`)
+When `propose` runs for site `S_greet`
+Then exactly one bounded call is made for `S_greet`, honoring the cost/timeout budget (≤1 call/site)
+teeth: breaks-on "`propose` retries the model 3× on a low-confidence result — the call-counter records 3 calls for `S_greet` (>1 call/site, budget ignored)"
+gen: conformance
+
+### SCN-ADAPTER-11c-1 — the proposal enters as a gated candidate   (guard)
+source: REQ-ADAPTER-11c
+Given `spyProposer` returns proposal `P0` for `S_greet`
+When `P0` enters the pipeline
+Then it enters as a **candidate** gated by the 2-door admission + ratification — never auto-trusted
+teeth: breaks-on "`propose`'s return is written straight to the ratified store, skipping the 2-door admission — an auto-trusted proposal lands (the ratification gate is bypassed)"
+gen: conformance
+
+---
+
+## REQ-ADAPTER-12 — rehydrate the session projection
+
+### SCN-ADAPTER-12a-1 — a fresh process rehydrates the flushed fact byte-identically   (happy)
+source: REQ-ADAPTER-12a
+Given run A writes + flushes fact `F` (`nodeKey claim:fix-cov`) to `.atlas/cas/`
+When a fresh process (run B) reconstructs the `StoreProjection` current-node map from the durable store
+Then `F` is present byte-identical in the reconstructed current-node map (`head(claim:fix-cov) == F`)
+teeth: breaks-on "rehydrate reconstructs from an in-memory snapshot run B doesn't have (it never reads the durable CAS) — `F` is missing from the rehydrated projection"
+gen: conformance
+
+### SCN-ADAPTER-12b-1 — rehydrate reconstructs state only, minting nothing   (guard)
+source: REQ-ADAPTER-12b
+Given a write-spy on the fact store while run B rehydrates the projection from run A's flushed CAS
+When rehydration runs
+Then the write-spy records 0 mint/alter — rehydration reconstructs state only
+teeth: breaks-on "rehydrate re-runs `routeWrite` while rebuilding the projection and mints a fresh fact/pointer — the write-spy fires (reconstruct-only broken)"
+gen: conformance
+
+---
+
+## REQ-WIRE-1 — one shared handler assembly
+
+### SCN-WIRE-1a-1 — the wire module assembles one four-leg handler   (happy)
+source: REQ-WIRE-1a
+Given the shared `wire` module and the adapters
+When `createHandler(adapters)` is called
+Then a single `WiredHandler` exposes exactly the four legs (`atlas-init`/`query`/`emit`/`reconcile`) over the adapters
+teeth: breaks-on "the `wire` module assembles two separate handlers (one per entrypoint) instead of one shared assembly — two `WiredHandler` instances exist"
+gen: conformance
+
+### SCN-WIRE-1b-1 — both entrypoints return byte-identical verdicts   (guard)
+source: REQ-WIRE-1b
+Given the fixture set of tool calls `{init fix-repo, query greet, emit F, reconcile git-sbx}`
+When each is driven through the CLI entrypoint and the MCP entrypoint
+Then `deepEqual(cliVerdict, mcpVerdict)` for each call AND both entrypoints dispatch through the **same** `WiredHandler` instance (module-identity: `cliHandler === mcpHandler`, asserted via a shared-module import spy) — contract-identical by construction, not by copy
+teeth: breaks-on "the MCP entrypoint imports its own copy-assembled handler — the module-identity assertion (`cliHandler === mcpHandler`) fails even though a faithful copy still produces byte-identical verdicts, so only the instance-identity clause distinguishes shared-module from copy"
+gen: conformance
+
+---
+
+## REQ-CLI-1 — total command surface
+
+### SCN-CLI-1a-1 — every command maps to exactly one leg   (happy)
+source: REQ-CLI-1a
+Given the finite command set `{ init, query, emit, reconcile, doctor, mine }`
+When the `command → wired-leg` map is enumerated
+Then it is total and mutually exclusive: `init→atlas-init`, `query→atlas-query`, `emit→atlas-emit`, `reconcile→atlas-reconcile`, `doctor→atlas-query` (read path), `mine→genesis run-controller` — each command maps to exactly one leg
+teeth: breaks-on "a new command `export` is added with no leg binding — the enumeration finds a command mapping to zero legs (totality fails), or `query` is bound to two legs (uniqueness fails)"
+gen: exhaustive
+
+### SCN-CLI-1b-1 — a malformed invocation yields a structured error   (guard)
+source: REQ-CLI-1b
+Given the malformed invocation `atlas query --depth=notanumber`
+When the CLI parses it
+Then it yields a structured error `{ exitCode: non-zero, guidance }` — not a stack trace
+teeth: breaks-on "the parser passes `--depth=NaN` through and the tool throws deep inside — no structured error is produced and guidance is absent (a non-zero-with-guidance contract violated)"
+gen: PBT
+
+### SCN-CLI-1c-1 — no malformed input crashes the parser   (guard)
+source: REQ-CLI-1c
+Given a PBT-fuzz stream of malformed `argv` (empty, unknown flags, binary garbage, missing positional args)
+When each input is fed to the CLI parser
+Then every input returns a structured error with a non-zero exit — 0 uncaught throws / process crashes
+teeth: breaks-on "an unknown-flag input `atlas --??` throws an uncaught exception and the process crashes instead of returning a structured error (the totality clause the finite enumeration cannot reach)"
+gen: PBT
+
+---
+
+## REQ-CLI-2 — the CLI is the floor
+
+### SCN-CLI-2a-1 — reads resolve directly over the CLI   (happy)
+source: REQ-CLI-2a
+Given the read commands `{ query, reconcile, doctor }`
+When the `command × authority` matrix is enumerated
+Then each resolves over the CLI directly (a read path), classified as a read
+teeth: breaks-on "`reconcile` is routed through the `atlas-emit` write-door instead of resolving as a direct read — a read is misclassified in the matrix"
+gen: exhaustive
+
+### SCN-CLI-2b-1 — every write funnels through atlas-emit   (guard)
+source: REQ-CLI-2b
+Given the write command `emit`
+When the `command × authority` matrix is enumerated
+Then every write funnels through the single door `atlas-emit` — no other command carries a write path
+teeth: breaks-on "`init` is granted a direct write path to the store bypassing `atlas-emit` — a second write door appears in the matrix (the single-door partition breaks)"
+gen: exhaustive
+
+### SCN-CLI-2c-1 — a read carries no write authority   (guard)
+source: REQ-CLI-2c
+Given the read command `query`
+When its authority cell is asserted in the matrix
+Then `query` carries no write capability — read xor write, mutually exclusive
+teeth: breaks-on "`query` is granted write authority (it can mint a fact) — a command is both a read and a write, the partition assertion fails"
+gen: exhaustive
+
+---
+
+## REQ-CLI-3 — deterministic render
+
+### SCN-CLI-3a-1 — the render matches the reference renderer byte-for-byte   (happy)
+source: REQ-CLI-3a
+Given `V_ok` and the reference `Verdict` renderer
+When the CLI renders `V_ok` to stdout
+Then the output matches the reference renderer's output byte-for-byte
+teeth: breaks-on "the renderer interpolates a timestamp/duration into stdout — the render diverges from the reference renderer (non-deterministic bytes)"
+gen: conformance
+
+### SCN-CLI-3b-1 — the exit code is a function of the verdict status   (happy)
+source: REQ-CLI-3b
+Given the fixture set `{ V_ok, V_rej, V_err }`
+When each is rendered
+Then `exitCode == f(status)` — `0` for `ok`, non-zero for `rejected` (`2`) and `error` (`1`)
+teeth: breaks-on "the CLI hardcodes `exit 0` after rendering — a `rejected` verdict exits `0` (the exit code ignores the verdict)"
+gen: conformance
+
+### SCN-CLI-3c-1 — the same verdict renders identically twice   (happy)
+source: REQ-CLI-3c
+Given `V_rej`
+When it is rendered twice
+Then the two stdout strings are byte-identical
+teeth: breaks-on "the renderer stamps a per-render value (a wall-clock timestamp / fresh nonce) into stdout instead of deriving the output purely from the verdict — so the two renders of `V_rej` differ (a `Set`-iteration reorder would not: identical input iterates identically)"
+gen: conformance
+
+### SCN-CLI-3d-1 — the render carries the tool's guidance   (happy)
+source: REQ-CLI-3d
+Given `V_err` with guidance `"malformed input: expected a repo path"`
+When it is rendered
+Then the guidance text is present in stdout (TOOLS-4)
+teeth: breaks-on "the renderer prints only `status` + `exitCode` and drops the verdict's `guidance` field — guidance is absent from stdout"
+gen: conformance
+
+---
+
+## REQ-CLI-4 — mine drives the frozen run-controller
+
+### SCN-CLI-4a-1 — mine's write-set equals the frozen run-controller's   (happy)
+source: REQ-CLI-4a
+Given `fix-repo` and a recorded proposer, with the frozen `genesis` run-controller as the oracle
+When `atlas mine fix-repo` runs a single governed pass
+Then the produced write-set equals the run-controller's output over the same inputs
+teeth: breaks-on "the `mine` driver re-orders the `scan→rank→extract→admit→align→seed` stages (runs `extract` before `rank`) — its write-set diverges from the frozen run-controller's"
+gen: conformance
+
+### SCN-CLI-4b-1 — every mined write is candidate-only   (guard)
+source: REQ-CLI-4b
+Given `atlas mine fix-repo` produces facts from proposal `P0`
+When each written fact's status is inspected
+Then every write is candidate-only (status `candidate`), never ratified
+teeth: breaks-on "the `mine` driver stamps a high-confidence proposal as `ratified` — a mined fact lands ratified (the never-ratified invariant is broken)"
+gen: conformance
+
+### SCN-CLI-4c-1 — mine adds no admission of its own   (guard)
+source: REQ-CLI-4c
+Given the frozen run-controller owns the admission logic and a candidate the driver could pre-filter
+When `atlas mine fix-repo` runs
+Then the driver adds 0 admission of its own — the admitted set == the run-controller's admitted set
+teeth: breaks-on "the `mine` driver adds a local pre-filter that admits/rejects a candidate before the run-controller — the admitted set diverges from the frozen run-controller's (admission invented)"
+gen: conformance
+
+---
+
+## REQ-MCP-1 — exactly the four governed tools
+
+### SCN-MCP-1a-1 — the published set is exactly the four tools with schemas   (happy)
+source: REQ-MCP-1a
+Given the MCP stdio server
+When the published tool set is enumerated
+Then it equals exactly `{ atlas-init, atlas-query, atlas-emit, atlas-reconcile }`, each with its input schema
+teeth: breaks-on "the server publishes `atlas-init` without its input schema — the enumerated set does not match the four-with-schemas oracle"
+gen: exhaustive
+
+### SCN-MCP-1b-1 — no fifth tool is published   (guard)
+source: REQ-MCP-1b
+Given the published tool set
+When a set-equality assertion runs against the closed four
+Then no fifth tool is registered (cardinality == 4)
+teeth: breaks-on "a debug tool `atlas-dump` is registered as a fifth tool — the published set has cardinality 5 ≠ the closed four"
+gen: exhaustive
+
+### SCN-MCP-1c-1 — every MCP call routes through the shared handler and matches the CLI verdict   (happy)
+source: REQ-MCP-1c
+Given the tool call `query greet` over both transports
+When it is routed over MCP and over the CLI
+Then the MCP call dispatches through the shared `WiredHandler` (WIRE-1) and the MCP verdict == the CLI verdict, byte-identical
+teeth: breaks-on "the MCP server dispatches `query` through its own handler copy instead of the shared `WiredHandler` — the MCP verdict diverges from the CLI verdict (routing bypasses the parity oracle)"
+gen: exhaustive
+
+---
+
+## REQ-MCP-2 — fail-closed transport
+
+### SCN-MCP-2a-1 — a tool error surfaces as a rejected verdict   (guard)
+source: REQ-MCP-2a
+Given a tool stub for `atlas-emit` that throws mid-call
+When it is called over MCP
+Then the MCP result carries a structured rejected `Verdict` (`isError` set, status `rejected`/`error`, verdict present)
+teeth: breaks-on "the thrown error is swallowed and the server returns an empty `ok` result — no rejected `Verdict` in the MCP result"
+gen: conformance
+
+### SCN-MCP-2b-1 — the server does not crash on a tool error   (guard)
+source: REQ-MCP-2b
+Given the throwing `atlas-emit` stub
+When it throws
+Then the MCP stdio server stays up and continues serving the next request
+teeth: breaks-on "the uncaught tool exception propagates to the stdio loop and the server process exits (a transport crash)"
+gen: conformance
+
+### SCN-MCP-2c-1 — the fail-closed verdict is never dropped   (guard)
+source: REQ-MCP-2c
+Given the throwing `atlas-emit` stub
+When the error is handled
+Then no empty or `ok` result is emitted — the fail-closed rejected verdict is always carried in the MCP result
+teeth: breaks-on "on error the server returns `{ content: [] }` (an empty result) instead of the fail-closed rejected verdict — the verdict is dropped (TOOLS-2 broken across the transport)"
+gen: conformance
+
+---
+
+## Coverage ledger (S3 completeness facet)
+
+- **REQ coverage:** 55/55 REQ have ≥1 SCN.
+- **SCN count:** 56 (one extra under REQ-ADAPTER-7b: the supersede-ordering witness in both delivery orders,
+  distinct from the idempotence witness).
+- **Guard coverage:** every guard/`If-then` REQ has a guard SCN with an interesting witness —
+  ADAPTER-1b/1c, 2b/2c, 3b/3c, 4c, 5b, 6c, 7c, 8c, 9b, 10b/10c, 11a/11c, 12b, WIRE-1b, CLI-1b/1c, 2b/2c,
+  4b/4c, MCP-1b, 2a/2b/2c. No antecedent-failure vacuity: each guard SCN non-trivially enters the guarded
+  state (a real dangling ref, a real un-indexed language adjacent to real edges, a real supersede in both
+  orders, a real rebase that changes the sha, a tool that genuinely throws).
+- **Teeth (Gate 3):** 56/56 SCN name the exact mutant of their REQ they flip to BROKEN on; none vacuous. The
+  durable-store teeth (ADAPTER-6b/6c/7a/7b/12a/12b) bite the flush→fresh-process→read-back seam a memory-only
+  golden cannot see (per the ADAPTER-7 anti-rot). **100% teeth coverage.**
+- **gen histogram:** conformance 43 · exhaustive 7 (CLI-1a, CLI-2a/2b/2c, MCP-1a/1b/1c) · PBT 6
+  (ADAPTER-7a/7b-idempotence/7b-supersede/7c + CLI-1b/1c malformed-argv fuzz arm) · residue 0.
+- **Method-tag → gen mapping (audit):** all 15 `reference-model` INVs → `conformance`; the `PBT` INV (ADAPTER-7)
+  → `PBT`. The 3 `exhaustive` INVs → `exhaustive` for their finite-enumeration SCNs; CLI-1's malformed-`argv`
+  totality SCNs (1b/1c) are the **PBT-fuzz arm** its own S2 down-model mandates (the infinite argv space cannot
+  be exhaustively enumerated), so they carry `gen: PBT` — CLI-1a (the finite `command→leg` map) stays
+  `exhaustive`. No hand-authored generated case; no `residue` fabricated.
+- **No [NEEDS RECONCILIATION]:** every SCN stayed grounded in a frozen REQ normative-clause + its S2 down-model
+  oracle; no golden required deciding new behaviour, and no REQ lacked a writable golden (0 atom-gate bounces).
+- → next_state **C** (roadmap).
