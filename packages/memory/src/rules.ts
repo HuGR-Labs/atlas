@@ -1,32 +1,91 @@
-// @atlas/memory — src/rules.ts  (WP-6.25-a.MEM)
+// @atlas/memory — src/rules.ts  (WP-6.25-a.MEM · MEM-3 + MEM-7)
 //
-// The project Rules-slab — the ONLY WRITTEN injected memory (slab 3 of the turn-header). Two frozen laws:
-//   · MEM-3 (ref/cap.ts) — the injected `project` set is CAPPED (member `~500` / orchestrator `~800` tok).
-//     A would-exceed write is a STRUCTURED rejection (an honest `tokens`-vs-`cap` receipt), NEVER a silent
-//     overflow / truncation. `capGate(entries, cap) = Σ tok(e) ≤ cap ? accept : reject`.
-//   · MEM-7 (ref/frecency.ts) — the injected set is the TOP-12 by `frecency`, a SINGLE time-decayed score
-//     of LOGGED CITED hits. A hit increments ONLY when a seat / cold-reviewer explicitly CITES a rule-id as
-//     GOVERNING a decision (a mere read/mention is not a hit). An entry whose frecency decays to ~zero is
-//     EVICTED to the archive (retained, versioned, re-spawnable — no memory ever dies), so no old-popular
-//     rule can pin a slot (the LFU-ossification failure). Deterministic, ledger-driven — decay is over
-//     LOGGED WAVES (a monotone ledger event-count), never wall-clock (Refuse-to-model).
-//
-// SEAM (sealed @atlas/kernel, KERNEL-4): the versioned store's insert-only floor + record identity go
-// through the kernel `createLog` / `id` seam ALONE — no hand-rolled digest. Implements the FROZEN
-// ref/cap.ts `CapApi` + ref/frecency.ts `FrecencyApi`. Types-only imports from ref/* + lower layers.
-//
-// BIND: `wave` is PINNED (a logical ledger event-count — oracle-pin theme #4, transcribed in ref/frecency).
-// The `0.5/wave` decay rate + the `~500`/`~800`/`top-12`/`~zero` bounds are RATIFIED PINNED BOUNDS carried
-// as PROSE→named constants (the freeze discipline), sourced from goldens-mem SCN-MEM-3/7. `ruleId`-not-on-
-// `ProjectMemoryEntry` is the ref FLAG — bridged here by the `RuleRecord { id, entry }` pairing, not invented
-// as a frozen field.
+// The project Rules-slab — the ONLY WRITTEN injected memory (slab 3 of the turn-header). MEM-3: the injected
+// `project` set is CAPPED (member `~500` / orchestrator `~800` tok); a would-exceed write is a STRUCTURED
+// rejection (honest `tokens`-vs-`cap` receipt), never a silent overflow. MEM-7: the injected set is the
+// TOP-12 by `frecency`, a SINGLE time-decayed score of LOGGED CITED hits (decay over logged WAVES, never
+// wall-clock); a ~zero-frecency entry is EVICTED to the archive (retained, re-spawnable — no memory dies).
+// SEAM (sealed @atlas/kernel, KERNEL-4): the versioned store's insert-only floor + record identity go through
+// the kernel `createLog` / `id` seam ALONE. Bounds are ratified PINNED BOUNDS carried as PROSE→named constants.
 
 import { id, createLog } from '@atlas/kernel';
 import type { Event, EventLog } from '@atlas/kernel';
 import type { Hash, Budget } from '@atlas/contracts';
-import type { ProjectMemoryEntry } from '../ref/types.js';
-import type { CapApi, CapVerdict } from '../ref/cap.js';
-import type { CitedHit, HitLedger, FrecencyApi, FrecencyRanking } from '../ref/frecency.js';
+import type { ProjectMemoryEntry } from './types.js';
+
+// ── frozen cap + frecency surfaces, co-located here (was ref/cap.ts · ref/frecency.ts) ─────────────────────
+
+/**
+ * The structured cap-gate verdict (MEM-3) — an honest receipt (`tokens` vs `cap`), never a silent boolean
+ * overflow. A would-exceed write yields `accepted:false` and is rejected fail-closed.
+ *
+ * [PINNED —rejection payload not frozen] The reference freezes "a structured rejection", not a concrete
+ * shape; the honest receipt (summed `tokens` + the `cap`) is transcribed — no invented error record.
+ */
+export interface CapVerdict {
+  readonly accepted: boolean;
+  readonly tokens: number; // Σ tok(e) over the injected set (pinned tokenizer — a trusted primitive)
+  readonly cap: number; // the ratified per-member bound (~500 member / ~800 orchestrator)
+}
+
+export interface CapApi {
+  /** The cap gate: sums the pinned tokenizer over the injected `project` set and ACCEPTS iff `≤ cap`,
+   *  else a structured REJECT (never a silent overflow — MEM-3). Pure + total. (method-tags-mem:39)
+   *
+   *  [FLAG — the per-MEMBER total cap is a scalar, not a `Budget` field] contracts `Budget` is per
+   *  `InjectionKind` (`capTokens` per surface); the MEM-3 cap is a per-MEMBER TOTAL over the whole
+   *  injected `project` set. It is transcribed as the `cap: number` argument here (NOT a `Budget` leg);
+   *  `Budget` remains the per-surface ledger. Flagged if a per-member-total field is later added. */
+  capGate(entries: readonly ProjectMemoryEntry[], cap: number): CapVerdict;
+
+  /** The per-surface budget ledger for a memory injection surface (reuses contracts `Budget` unchanged —
+   *  no extra memory field needed at this seam). Reads the cap + observed hit-rate for the drop-order.
+   *
+   *  [PINNED —`surface` key] transcribed as the `Budget.kind` (`InjectionKind`) it wraps; the concrete
+   *  read is a WP concern. */
+  surfaceBudget(surface: Budget['kind']): Budget;
+}
+
+/**
+ * One logged, CITED hit — a ledger event where a seat / cold-reviewer cited a rule-id as governing a
+ * decision (MEM-7). The DENOMINATOR of the frecency score.
+ *
+ * [FLAG — `ruleId` is NOT a frozen field of `ProjectMemoryEntry`] MEM-7 cites a "rule-id" in the ledger,
+ * but the frozen `ProjectMemoryEntry` template (`{rule, scope, grounding?, frecency}`) carries NO id
+ * field. Transcribed as `ruleId: string`; flagged UPWARD for the reference to surface the entry↔ledger
+ * identity key the citation binds to.
+ *
+ * [PINNED — `wave` unit] the decay step is over LOGGED ledger events / waves, never wall-clock; the
+ * ordering key is `wave: number` — a logical ledger position (monotone event-count), never wall-clock
+ * (MEM-7), consistent with knowledge/hits.
+ */
+export interface CitedHit {
+  readonly ruleId: string; // [FLAG] no id on ProjectMemoryEntry — the entry↔ledger key is unfrozen
+  readonly wave: number; // [PINNED] logical ledger position (monotone event-count), never wall-clock (MEM-7)
+}
+
+/** The append-only ledger of cited hits the frecency score decays over (MEM-7). */
+export type HitLedger = readonly CitedHit[];
+
+/**
+ * The rank/evict result (MEM-7). `injected` = the top-slots hot set; `evicted` = decayed-to-~zero entries
+ * moved to the archive (retained, re-spawnable — never deleted). A total, deterministic partition.
+ */
+export interface FrecencyRanking {
+  readonly injected: readonly ProjectMemoryEntry[]; // top-N by frecency — the hot set
+  readonly evicted: readonly ProjectMemoryEntry[]; // ~zero-frecency — archived, versioned, re-spawnable
+}
+
+export interface FrecencyApi {
+  /** The single time-decayed frecency score of an entry = `decay(Σ cited-hit events)` over the ledger;
+   *  decayed on read/write; near-zero ⇒ eviction (MEM-7). Pure + deterministic. (method-tags-mem:67) */
+  score(entry: ProjectMemoryEntry, ledger: HitLedger): number;
+
+  /** Rank the injected set: sort-desc by `score`, take the top slots; partition off the ~zero-frecency
+   *  evictions to the archive. TOTAL order with a deterministic tie-break; an old-popular rule cannot pin
+   *  a slot; no memory deleted (MEM-7). Pure + deterministic. (method-tags-mem:67) */
+  rank(entries: readonly ProjectMemoryEntry[], ledger: HitLedger): FrecencyRanking;
+}
 
 // ── ratified pinned bounds (PROSE → named constants) ─────────────────────────────────────────────────────
 
@@ -34,7 +93,7 @@ import type { CitedHit, HitLedger, FrecencyApi, FrecencyRanking } from '../ref/f
 export const MEMBER_TOK_CAP = 500;
 /** Orchestrator injected-`project` token cap (MEM-3, `~800`). */
 export const ORCH_TOK_CAP = 800;
-/** The injected slot count — the top-12 by frecency (ref/frecency.ts, ratified PROSE bound). */
+/** The injected slot count — the top-12 by frecency (ratified PROSE bound). */
 export const RULES_SLAB_SLOTS = 12;
 /** The per-logged-wave decay factor (SCN-MEM-7b-1 fixture bound: `decay 0.5/wave`). */
 export const DECAY_PER_WAVE = 0.5;
@@ -137,7 +196,7 @@ export function frecencyOf(ruleId: string, events: readonly RuleEvent[]): number
 
 /**
  * A project rule as ranked — the frozen `ProjectMemoryEntry` PLUS its ledger identity `id` (the rule-id a
- * `CitedHit` cites). This pairing bridges the ref/frecency.ts FLAG (the entry carries no id) at the WP layer;
+ * `CitedHit` cites). This pairing bridges the `CitedHit` FLAG (the entry carries no id) at the WP layer;
  * `id` is NOT invented onto the frozen entry type.
  */
 export interface RuleRecord {
@@ -246,13 +305,13 @@ export function makeRuleStore(): RuleStore {
 
 // ── frozen-oracle conformance (compile-time differential-vs-oracle) ──────────────────────────────────────
 
-/** Bind the built surface to the FROZEN ref/cap.ts `CapApi` (`capGate` + `surfaceBudget`). */
+/** Bind the built surface to the FROZEN `CapApi` (`capGate` + `surfaceBudget`). */
 export function makeCapApi(): CapApi {
   return { capGate, surfaceBudget };
 }
 
 /**
- * Bind the built surface to the FROZEN ref/frecency.ts `FrecencyApi`. `score` decays the entry's own
+ * Bind the built surface to the FROZEN `FrecencyApi`. `score` decays the entry's own
  * cited-hit sub-ledger; `rank` bridges the FLAGGED entry↔ledger key by reading each entry's `rule` line as
  * its rule-id (the WP-layer identity), then partitions injected vs evicted — mapped back to the frozen
  * `ProjectMemoryEntry` partition.

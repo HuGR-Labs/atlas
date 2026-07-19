@@ -17,7 +17,7 @@ import type {
   TaskMemoryEntry,
   PrMemoryEntry,
   LogbookEntry,
-} from '../ref/types.js';
+} from '../src/types.js';
 import type { NamedScanner } from '../src/portable.js';
 import {
   exportMemory,

@@ -9,7 +9,7 @@
 // (propagateDirty full closure, lazy on-read rState, state-suspect) is WP-2.7-b's concern — NOT here.
 //
 // MODELING NOTE (disciplined-judgment, flagged for DEFINE ratification): the frozen `delta(before,after)`
-// input is `Axes` (ref/fold.ts), whose `IndexNode` carries STRUCTURE (`subtreeHash`) + the anchored CAS
+// input is `Axes` (src/fold.ts), whose `IndexNode` carries STRUCTURE (`subtreeHash`) + the anchored CAS
 // `objects`, but no separate status/freshness field. Per SCN-INDEX-12b the STATE half of the dual rollup
 // is modeled by the append-only `objects` payload: a status/freshness change lands a NEW content-addressed
 // object version (objects[] changes) while the node's structural `subtreeHash` is invariant — so `delta`
@@ -20,7 +20,7 @@ import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import { asHash, asSubtreeHash } from '@atlas/kernel';
 import type { Hash, SubtreeHash } from '@atlas/contracts';
-import type { Axes, Axis, DepEdge, IndexNode } from '../ref/types.js';
+import type { Axes, Axis, DepEdge, IndexNode } from '../src/types.js';
 import { delta, eagerRehashState, MAX_HOPS } from '../src/fold.js';
 import { rehashPath } from '../src/rollup.js';
 

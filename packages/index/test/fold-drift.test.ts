@@ -19,7 +19,7 @@
 import { describe, it, expect } from 'vitest';
 import { asHash, asSubtreeHash } from '@atlas/kernel';
 import type { Hash, SubtreeHash } from '@atlas/contracts';
-import type { Axis, DepEdge, IndexNode } from '../ref/types.js';
+import type { Axis, DepEdge, IndexNode } from '../src/types.js';
 import { createDriftFold, MAX_HOPS } from '../src/fold.js';
 
 const sh = (s: string): SubtreeHash => asSubtreeHash(s);

@@ -1,34 +1,79 @@
 // @atlas/memory — src/inject.ts  (WP-6.23.MEM · MEM-1 + MEM-4)
 //
-// The injection composer. Two load-bearing laws (implements the FROZEN ref/inject.ts `InjectApi`):
-//
-//   MEM-1 · injection-SCOPING (NOT confidentiality): a member's turn-header injects ONLY that member's
-//           own Memory — `injectFor(store, seat) = { e ∈ store | e.owner === seat }`, 0 cross-seat. This
-//           is a SCOPING predicate over a SHARED, git-native store — NOT access-control. Any repo reader
-//           still reads every seat's plaintext bytes: `readRepoBytes` witnesses that disclaimer (MEM-1b).
-//           True per-seat confidentiality is on the Refuse-to-model list.
-//
-//   MEM-4 · consultable is never free: `task` / `pr` / `logbook` NEVER auto-inject on a running turn. The
-//           assembled header's `rules` slab is the seat's OWN `project` memory ONLY, so
-//           `header ∩ {task,pr,logbook} = ∅`. Those kinds return SOLELY via an explicit `recall` (the sole
-//           carve-out being the MEM-13 re-spawn push, which lives in src/respawn.ts, not here).
-//
-// [BIND PIN — D2 CLI-floor (owner decision 2026-07-18, wave-plan §D2)] `memory-recall` is held to the
-// TOOLS-10/11 CLI-floor: `recall` is ONE handler — a single pure function, byte-identical whether reached
-// over MCP / poke / CLI (no transport branch), and Read-only (it never writes), so a `Read`-only no-grant
-// seat reaches it directly on the bash floor. WP-7.26-c threads this single handler through the shared
-// tri-transport contract so there is ONE transport across knowledge ∧ memory ∧ tools — that upward wiring
-// is out of this facet (no cross-package import here).
-//
-// SEAM: the shared Awareness / Orientation slabs (MEM-11 / MEM-6, sibling WP-6.24-a/-b) and the `rules`
-// frecency ranker / cap (MEM-3 / MEM-7, sibling WP-6.25-a) are CONSUMED, never authored here. Awareness and
-// Orientation are byte-identical + assembled once per root-state, so they are bound at `makeInject` (shared,
-// not per-seat). This facet owns only the MEM-1 owner-scoping + the MEM-4 consultable exclusion + recall.
+// The injection composer. MEM-1 · injection-SCOPING (NOT confidentiality): a member's turn-header injects
+// ONLY that member's own Memory — `injectFor(store, seat) = { e ∈ store | e.owner === seat }`, 0 cross-seat
+// (a scoping predicate over a SHARED git-native store, NOT access-control — `readRepoBytes` witnesses the
+// disclaimer). MEM-4 · consultable is never free: `task`/`pr`/`logbook` NEVER auto-inject on a running turn;
+// they return SOLELY via an explicit `recall` (the MEM-13 re-spawn push lives in respawn.ts). The shared
+// Awareness / Orientation slabs are CONSUMED (bound once at `makeInject`), never authored here.
 
-import type { Awareness } from '../ref/awareness.js';
-import type { Orientation } from '../ref/orient.js';
-import type { InjectApi, InjectionPayload, RetrievalSurface, TurnHeader } from '../ref/inject.js';
-import type { MemberId, MemoryKind, MemoryRecord, MemoryStore, ProjectMemoryEntry } from '../ref/types.js';
+import type { Budget } from '@atlas/contracts';
+import type { OwnPack, Pack, Poke } from '@atlas/retrieval';
+import type {
+  Awareness,
+  Orientation,
+  MemberId,
+  MemoryKind,
+  MemoryRecord,
+  MemoryStore,
+  ProjectMemoryEntry,
+} from './types.js';
+
+// ── frozen injection surface, co-located here (was ref/inject.ts) ──────────────────────────────────────────
+
+/**
+ * The injected turn-header — the THREE slabs (atlas-memory:27-66). `awareness` + `orientation` are shared
+ * + DERIVED (never rot); `rules` is the member's own written `ProjectMemoryEntry[]` (the only written
+ * project memory). This is the ONLY memory injected on a running turn — consultable kinds are excluded
+ * (MEM-4).
+ */
+export interface TurnHeader {
+  readonly awareness: Awareness; // slab 1 — derived rollup (MEM-11)
+  readonly orientation: Orientation; // slab 2 — derived fold (MEM-6)
+  readonly rules: readonly ProjectMemoryEntry[]; // slab 3 — the member's own written rules, scope-matched
+}
+
+/**
+ * A co-injected retrieval surface (the `own` / `pack` / `poke` `InjectionKind`s). Owned by
+ * @atlas/retrieval, IMPORTED here (the allowed memory→retrieval edge), NEVER redefined.
+ */
+export type RetrievalSurface = OwnPack | Pack | Poke;
+
+/**
+ * The full per-seat auto-injection payload: the memory header + the co-injected retrieval surfaces, under
+ * the shared per-`InjectionKind` `Budget` ceiling.
+ *
+ * [PINNED — cap-application shape not frozen] The reference freezes the SLABS + the drop-order vocabulary
+ * (`Budget` per `InjectionKind`), not a concrete post-cap payload record; `budgets` carries the honest
+ * per-surface ledger, `retrieval` the surfaces retrieval owns — no invented merged shape.
+ */
+export interface InjectionPayload {
+  readonly header: TurnHeader;
+  readonly retrieval: readonly RetrievalSurface[]; // [FLAG] retrieval-owned surfaces, co-injected under budget
+  readonly budgets: readonly Budget[]; // per-InjectionKind cap + hit-rate — the drop-order ledger
+}
+
+export interface InjectApi {
+  /** Owner-scoped filter: a member's own Memory ONLY — `{ e ∈ store | e.owner == seat }`, 0 cross-seat
+   *  (MEM-1, injection-SCOPING not access-control). Pure + total. (method-tags-mem:25) */
+  injectFor(store: MemoryStore, seat: MemberId): readonly MemoryRecord[];
+
+  /** Assemble the running-turn header (the three slabs) for a seat; the CONSULTABLE kinds
+   *  (`task`/`pr`/`logbook`) are EXCLUDED (running-turn header ∩ consultable == ∅ — MEM-4).
+   *  (method-tags-mem:46) */
+  assembleHeader(store: MemoryStore, seat: MemberId): TurnHeader;
+
+  /** Compose the full budget-capped auto-injection payload: the memory header + co-injected retrieval
+   *  surfaces (own/pack/poke) under the shared `InjectionKind` ceiling. The memory→retrieval edge. */
+  compose(store: MemoryStore, seat: MemberId, surfaces: readonly RetrievalSurface[]): InjectionPayload;
+
+  /** The ONLY path that returns consultable `task` / `pr` / `logbook` memory — an explicit
+   *  `memory-recall`, never auto-injected on a running turn (MEM-4). (method-tags-mem:46)
+   *
+   *  [OPAQUE-BY-DESIGN — `query` shape not frozen] `memory-recall` is queried by taskId / prId / date / territory;
+   *  no concrete query record is frozen → `unknown`, NOT invented. */
+  recall(query: unknown): readonly MemoryRecord[];
+}
 
 // ── MEM-1: owner-scoped injection (a SCOPING predicate, not access-control) ───────────────────────────────
 
@@ -79,7 +124,7 @@ export function assembleHeader(
 /**
  * The full budget-capped auto-injection payload: the memory header + the co-injected retrieval surfaces
  * (own/pack/poke — the ALLOWED memory→retrieval edge, passed through). The cap-application shape is
- * PINNED-not-frozen (ref/inject.ts), so no drop-order policy is invented — `budgets` is the honest empty
+ * PINNED-not-frozen (`InjectionPayload`), so no drop-order policy is invented — `budgets` is the honest empty
  * ledger until a cap policy is frozen (MEM-3/WP-6.25-a).
  */
 export function compose(
@@ -98,7 +143,7 @@ export function compose(
 
 // ── MEM-4 · the single explicit-recall handler (D2 CLI-floor) ─────────────────────────────────────────────
 
-/** The runtime narrowing of the OPAQUE `recall` query (ref/inject.ts pins `query: unknown` — it is queried
+/** The runtime narrowing of the OPAQUE `recall` query (`InjectApi` pins `query: unknown` — it is queried
  *  by owner / kind / taskId / prId, no concrete record frozen). Narrowed defensively behind `unknown`. */
 interface RecallFilter {
   readonly owner?: MemberId;
@@ -144,7 +189,7 @@ export function recall(store: MemoryStore, query: unknown): readonly MemoryRecor
 // ── the frozen-`InjectApi` binding (shared slabs bound once, byte-identical) ───────────────────────────────
 
 /**
- * Bind the injection surface to the FROZEN `InjectApi` (ref/inject.ts). The shared Awareness / Orientation
+ * Bind the injection surface to the FROZEN `InjectApi`. The shared Awareness / Orientation
  * slabs and the store are bound once (per root-state) — `recall` closes over the store since its frozen
  * signature carries no store arg. The pure methods honor their explicit `store` arg.
  */

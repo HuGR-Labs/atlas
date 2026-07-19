@@ -1,16 +1,35 @@
-// @atlas/index — src/territory.ts  (WP-2.9-a.INDEX — territory-assignment facet)
+// @atlas/index — src/territory.ts  (WP-2.9-a.INDEX — territory-assignment facet, INDEX-14)
 //
-// INDEX-14 (atlas-index:68-101, 192-196; method-tags-idx:111-116). `assign(path, manifest)` resolves a
-// path to EXACTLY one `{owner, tier}` from the hashed `territories` manifest by (1) longest literal
-// path-match, then (2) manifest declaration order — deterministic, byte-identical across rebuilds, and
-// `$0`-LLM (pure glob matching, no model call site). A path matched by NO glob is a `uncovered` VERDICT
-// (never a silent default owner); an `uncovered` path T0-adjacent (sharing its region/parent with a T0
-// member) defaults to `deny`. The frozen `ref/territory.ts` `TerritoryAssignment = {owner, tier}` is
-// WIDENED here to a discriminated union per its own [FLAG] (the `uncovered`/deny verdict is not an
-// owner+tier). Determinism is verified through the sealed kernel canonical seam by the goldens.
+// `assign(path, manifest)` resolves a path to EXACTLY one owner+tier from the hashed manifest by longest
+// literal path-match then declaration order — deterministic, byte-identical, `$0`-LLM (pure glob, no model
+// call). A no-glob path is an `uncovered` VERDICT (never a silent owner), defaulting to `deny` when
+// T0-adjacent; the frozen `TerritoryAssignment = {owner, tier}` is WIDENED here to the `Assignment` union.
 
 import type { Tier } from '@atlas/contracts';
-import type { Manifest } from '../ref/types.js';
+import type { Manifest } from './types.js';
+
+/**
+ * The single owner+tier a path resolves to (atlas-index:77-78; the `assign` return, method-tags-idx:115).
+ *   - `owner` — the resolved territory owner. Reference type is `seat` (a nominal seat id); the ratified
+ *     contracts membership carries it as `string` (see @atlas/contracts `Territory` FLAG) — so `string`.
+ *   - `tier`  — the criticality tier (human-ratified, `Tier` from contracts).
+ *
+ * [FLAG — `uncovered`/deny verdict not modeled in this minimal return] atlas-index:92-94 requires a
+ * no-glob path to resolve to an `uncovered` verdict (T0-adjacent ⇒ default deny), NOT an owner+tier.
+ * The task's frozen surface is `assign(...): { owner, tier }`, so the `uncovered`/deny verdict is NOT
+ * added to this shape — the impl below WIDENS it to `Assignment` per this flag.
+ */
+export interface TerritoryAssignment {
+  readonly owner: string;
+  readonly tier: Tier;
+}
+
+export interface TerritoryApi {
+  /** Assign a path to its single owner+tier from the hashed manifest; longest-path-match then
+   *  declaration-order tiebreak; deterministic, `$0`-LLM (INDEX-14). (atlas-index:77-78;
+   *  method-tags-idx:115) */
+  assign(path: string, manifest: Manifest): TerritoryAssignment;
+}
 
 /** An uncovered path's default access verdict: `deny` when T0-adjacent, else `open` (INDEX-14e). */
 export type Verdict = 'deny' | 'open';

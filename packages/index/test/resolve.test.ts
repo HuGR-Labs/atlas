@@ -10,7 +10,7 @@ import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import { asSubtreeHash } from '@atlas/kernel';
 import type { Hash } from '@atlas/contracts';
-import type { Axis, IndexNode } from '../ref/types.js';
+import type { Axis, IndexNode } from '../src/types.js';
 import { createResolve, coveringPath, pathSegments, type AxisForest } from '../src/resolve.js';
 
 // --- fixture builders (RELATIONAL; keys are the path segments, rollup roots per-axis distinct) ----------

@@ -15,7 +15,7 @@ import type {
   TaskMemoryEntry,
   PrMemoryEntry,
   LogbookEntry,
-} from '../ref/types.js';
+} from '../src/types.js';
 import { exportMemory, importMemory } from '../src/portable.js';
 
 // pm-A / pm-B — two members' project memories

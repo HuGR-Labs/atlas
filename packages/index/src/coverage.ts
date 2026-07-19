@@ -1,16 +1,28 @@
-// @atlas/index — src/coverage.ts
+// @atlas/index — src/coverage.ts  (INDEX-16: the STANDING coverage gate, not reactive)
 //
-// INDEX-16 — the STANDING coverage gate (not reactive). The unresolved-edge ratio (unresolved/total) is
-// a per-territory published health metric on every rollup; the T0 ceiling (> 15%) is enforced as a
-// standing gate FROM DAY ONE — a T0 territory that crosses it FAILs the gate (never merely schedules the
-// `functional` axis). Transcribes ref/coverage.ts against goldens SCN-INDEX-16a-1/16b-1/16c-1.
-//
-// EXCLUSIONS: coverage-gate rule ONLY. This facet does NOT record/resolve edges (EPIC-8-b/13) nor assign
-// territory (EPIC-9-a/14-15). The unresolved-edge set + territory assignment are consumed as FROZEN
-// UPSTREAM INPUTS (per-territory tallies), never computed here. No sibling src is imported.
+// The unresolved-edge ratio (unresolved/total) is a per-territory published health metric; a T0 territory
+// over the >15% ceiling FAILS the gate from day one. Coverage-gate rule ONLY — it does not record edges
+// or assign territory; the per-territory tallies are consumed as FROZEN upstream inputs, never computed.
 
 import type { Territory } from '@atlas/contracts';
-import type { CoverageApi } from '../ref/coverage.js'; // types-only (frozen oracle surface)
+
+/**
+ * The standing coverage gate (INDEX-16): the `unresolved/total` ratio is a per-territory published health
+ * metric; a T0 territory over the >15% ceiling FAILS the gate from day one (atlas-index:202-205).
+ */
+export interface CoverageApi {
+  /** The per-territory published health metric: `unresolvedEdges / totalEdges` (INDEX-16). Readable on
+   *  the rollup. (method-tags-idx:129) */
+  ratio(territory: Territory): number;
+
+  /** The standing gate: reference `gate(territory) = tier==T0 ∧ ratio>0.15 ⇒ FAIL` (method-tags-idx:129).
+   *
+   *  [FLAG — boolean polarity not pinned] The reference states the FAIL CONDITION but not whether the
+   *  returned `boolean` is `true`=pass or `true`=fail. Transcribed as the reference gives it (a boolean
+   *  verdict) WITHOUT choosing a polarity — flagged for the WP to fix the convention (recommend
+   *  `true`=PASS to read as a gate predicate, but not invented here). */
+  gate(territory: Territory): boolean;
+}
 
 /** The T0 unresolved-edge ceiling (INDEX-16): a T0 territory with ratio strictly above this FAILs. */
 export const T0_COVERAGE_CEILING = 0.15;

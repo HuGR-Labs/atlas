@@ -1,37 +1,23 @@
 // @atlas/index — barrel
 //
-// The implementation surface WPs fill in at execution. The skeleton ships zero runtime: every frozen
-// interface lives in ref/*.ts until a WP implements it.
-//
-// The barrel re-exports the package's FULL public type surface so consumers can import from the bare
-// package root (`import type { IndexNode } from '@atlas/index'`). ref/*.ts is type-only, hence
-// `export type *`. NOTE `../ref/index.js` is the FACET file (the single-index umbrella surface),
-// distinct from this runtime barrel `src/index.ts` — it is re-exported too.
+// The one content-addressed git-native index (axes / rollup / depgraph / drift). Re-exports the package's
+// FULL public surface so consumers import from the bare package root (`import type { IndexNode } from
+// '@atlas/index'`). Each frozen facet interface is co-located with its impl; the shared data model + the
+// impl-less `IndexApi` umbrella live in types.ts.
 
-export type * from '../ref/types.js';
-export type * from '../ref/index.js';
-export type * from '../ref/build.js';
-export type * from '../ref/cas.js';
-export type * from '../ref/coverage.js';
-export type * from '../ref/depgraph.js';
-export type * from '../ref/fold.js';
-export type * from '../ref/ownership.js';
-export type * from '../ref/resolve.js';
-export type * from '../ref/retrieval.js';
-export type * from '../ref/rollup.js';
-export type * from '../ref/territory.js';
+// The shared frozen data model (Axis / IndexNode / Rollup / Delta / Manifest / DepEdge / SCIP projection)
+// + the impl-less umbrella `IndexApi` that composes the facet interfaces.
+export type * from './types.js';
 
-// ── Runtime surface (Campaign-2 index facets, WP-filled at execution) ──────────────────────────────
-// Each facet's public runtime exports, wired at SEAL by the lead. `src/cas.ts` (WP-4.10-a.INDEX,
-// Campaign-4) is intentionally NOT wired here — it is exported at the Campaign-4 seal.
-export * from './build.js';        // WP-2.6.INDEX   — mechanical $0-LLM axis build
-export * from './depgraph.js';     // WP-2.6/2.8-b   — dependency axis + honest-edge reverse closure
-export * from './rollup.js';       // WP-2.7-a.INDEX — structural rollup (leaf→root re-hash)
-export * from './fold.js';         // WP-2.7-a/2.7-b — delta + drift (dirty-bit, lazy rState, maxHops)
-export * from './resolve.js';      // WP-2.8-a.INDEX — three-mode resolve
-export * from './retrieval.js';    // WP-2.8-a.INDEX — read-model retrieval
-export * from './territory.js';    // WP-2.9-a.INDEX — territory assignment
-export * from './ownership.js';    // WP-2.9-a.INDEX — ownership reconcile
-export * from './coverage.js';     // WP-2.9-b.INDEX — per-territory unresolved-ratio gate
+// ── Runtime surface + co-located frozen facet interfaces ───────────────────────────────────────────
+export * from './build.js';        // WP-2.6.INDEX   — mechanical $0-LLM axis build (BuildApi)
+export * from './depgraph.js';     // WP-2.6/2.8-b   — dependency axis + honest reverse closure (DepgraphApi/ReverseClosure/EdgeKind)
+export * from './rollup.js';       // WP-2.7-a.INDEX — structural rollup, leaf→root re-hash (RollupApi)
+export * from './fold.js';         // WP-2.7-a/2.7-b — delta + drift, dirty-bit/lazy rState/MaxHops (FoldApi)
+export * from './resolve.js';      // WP-2.8-a.INDEX — three-mode resolve (ResolveApi)
+export * from './retrieval.js';    // WP-2.8-a.INDEX — read-model retrieval (RetrievalApi/Fact)
+export * from './territory.js';    // WP-2.9-a.INDEX — territory assignment (TerritoryApi/TerritoryAssignment)
+export * from './ownership.js';    // WP-2.9-a.INDEX — ownership reconcile (OwnershipApi/OwnerMap/BlameEntry)
+export * from './coverage.js';     // WP-2.9-b.INDEX — per-territory unresolved-ratio gate (CoverageApi)
 export * from './compose.js';      // WP-2.6-b.INDEX — composed index: one structure backs drift + discovery
-export * from './cas.js';          // WP-4.10-a.INDEX — every Atlas object is one BLAKE3-CAS object (Campaign-4)
+export * from './cas.js';          // WP-4.10-a.INDEX — every Atlas object is one BLAKE3-CAS object (CasIndexApi, Campaign-4)

@@ -1,16 +1,30 @@
 // @atlas/index — src/retrieval.ts  (INDEX-6/7/8/9/10: the CLOSED three-mode retrieval surface)
 //
-// Relevance resolves by EXACTLY three deterministic modes (INDEX-6): `byScope` (spatial resolve + hierarchy
-// roll-up), `byDependency` (blast radius over the dependency axis), `byTrigger` (tag/pattern match). There is
-// no fourth mode, no free-text/similarity `search()`, and NO embedding / vector-store / ANN dependency on
-// this path — retrieval is pure lookup over the CAS/axes (INDEX-7). Every mode is TOTAL: a malformed/missing
-// path or tag returns empty, never a throw (INDEX-9). Results are ordered by a TOTAL deterministic sort on
-// the CAS hash, so two identical queries are byte-identical (INDEX-8). Objects are referenced by hash out of
-// the ONE store — never copied per axis (INDEX-10c). (atlas-index:213-220; method-tags-idx:55-74)
+// Relevance resolves by EXACTLY three deterministic modes (INDEX-6): `byScope`, `byDependency`,
+// `byTrigger` — no fourth mode, no free-text `search()`, NO embedding/vector/ANN (INDEX-7). Every mode is
+// TOTAL (miss ⇒ empty, never a throw) and ordered by a total CAS-hash sort, so equal queries are
+// byte-identical (INDEX-8); objects are referenced by hash out of the ONE store, never copied per axis.
 
 import type { Hash } from '@atlas/contracts';
-import type { Fact, RetrievalApi } from '../ref/retrieval.js';
 import { coveringPath, type AxisForest } from './resolve.js';
+
+// [UPWARD-TYPE — knowledge-owned, do NOT import upward] `Fact` (a `GroundedFact`, atlas-index:21, 59)
+// is owned by a HIGHER layer (@atlas/knowledge). Importing it here would invert the layer DAG, so it
+// is transcribed as `unknown` and flagged — NOT redefined as an index-local type. The retrieval
+// surface returns whatever the knowledge layer's `Fact` is; the index only addresses + orders it.
+export type Fact = unknown;
+
+/** The CLOSED three-mode retrieval surface (INDEX-6/7/8/9): relevance resolves by EXACTLY `byScope`,
+ *  `byDependency`, `byTrigger` — no free-text `search()`, no embeddings; every mode total + deterministic. */
+export interface RetrievalApi {
+  /** Mode 1 — scope: spatial resolve + hierarchy roll-up ("what's known here and above"). Total.
+   *  (atlas-index:213) */
+  byScope(path: string): readonly Fact[];
+  /** Mode 2 — dependency: follow `depends-on` / blast radius (reverse closure). Total. (atlas-index:214) */
+  byDependency(path: string): readonly Fact[];
+  /** Mode 3 — trigger: cross-cutting rules attached by tag/pattern match. Total. (atlas-index:215) */
+  byTrigger(tag: string): readonly Fact[];
+}
 
 /**
  * The read model the retrieval surface serves — assembled from the built axes (EPIC-6). It holds facts in

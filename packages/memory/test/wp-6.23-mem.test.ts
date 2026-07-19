@@ -15,9 +15,7 @@
 // `<filled-at-freeze>` (simulated) — resolved by disciplined judgment, not a real freeze hash.
 
 import { describe, it, expect } from 'vitest';
-import type { Awareness } from '../ref/awareness.js';
-import type { Orientation } from '../ref/orient.js';
-import type { MemoryEntry, MemoryStore, ProjectMemoryEntry } from '../ref/types.js';
+import type { Awareness, Orientation, MemoryEntry, MemoryStore, ProjectMemoryEntry } from '../src/types.js';
 import { assembleHeader, injectFor, readRepoBytes, recall } from '../src/inject.js';
 import { partition, put } from '../src/kinds.js';
 

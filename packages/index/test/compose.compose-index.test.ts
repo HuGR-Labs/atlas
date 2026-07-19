@@ -11,7 +11,7 @@
 // Held-out `-2` fixtures are NOT transcribed here (GATE runs those).
 
 import { describe, it, expect } from 'vitest';
-import type { FileTree, ScipOutput } from '../ref/types.js';
+import type { FileTree, ScipOutput } from '../src/types.js';
 import { composeIndex } from '../src/compose.js';
 
 // --- fixture: the CAS holding file:cas.ts with an item:put node (SCN-INDEX-1a-1 / 1b-1) ------------------

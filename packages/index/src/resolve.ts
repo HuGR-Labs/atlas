@@ -1,14 +1,18 @@
 // @atlas/index — src/resolve.ts  (INDEX-4/9: covering-node resolve over an axis hierarchy)
 //
-// `resolve(axis, key)` walks the named axis hierarchy and returns THE covering node for the path `key` —
-// the deepest node reached by matching each `/`-segment against a child key (atlas-index:164-165, 210). It
-// is TOTAL: an unknown axis, a non-string key, or a segment that leaves the tree yields `undefined`, never a
-// throw and never a wrong ancestor (INDEX-9). The hierarchy roll-up (a file query surfacing its module's +
-// crate's invariants, INDEX-4b) happens at the retrieval layer (`retrieval.ts`), which reuses `coveringPath`.
-// Pure: no clock, no network, no mutable cache — the same forest + key always resolves identically (INDEX-8).
+// `resolve(axis, key)` walks the named axis hierarchy to THE covering node (deepest node matched segment by
+// segment). TOTAL: an unknown axis, non-string key, or segment that leaves the tree yields `undefined`,
+// never a throw and never a wrong ancestor (INDEX-9). Pure — same forest + key resolves identically
+// (INDEX-8); the hierarchy roll-up lives at the retrieval layer, which reuses `coveringPath`.
 
-import type { Axis, IndexNode } from '../ref/types.js';
-import type { ResolveApi } from '../ref/resolve.js';
+import type { Axis, IndexNode } from './types.js';
+
+/** Path resolution over an axis hierarchy (INDEX-4/9): `resolve(axis, key)` returns the covering node,
+ *  total — a malformed/missing axis or key yields `undefined`, never a throw. */
+export interface ResolveApi {
+  /** Axis + key → the covering node, total (miss ⇒ `undefined`, no throw — INDEX-9). (atlas-index:210) */
+  resolve(axis: Axis, key: string): IndexNode | undefined;
+}
 
 /** The multi-axis view the resolver walks: one rooted `IndexNode` per axis (spatial/territory/dependency).
  *  Each root carries its OWN `subtreeHash` rollup — the axes are never collapsed onto a shared root. */

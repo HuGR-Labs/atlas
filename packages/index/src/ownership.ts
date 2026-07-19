@@ -1,19 +1,46 @@
-// @atlas/index — src/ownership.ts  (WP-2.9-a.INDEX — generated + reconciled ownership)
+// @atlas/index — src/ownership.ts  (WP-2.9-a.INDEX — generated + reconciled ownership, INDEX-15)
 //
-// INDEX-15 (atlas-index:83-91, 197-201; method-tags-idx:118-123), the anti-CODEOWNERS-rot reconciler.
-// `reconcile(graph, blame, manifest)` GENERATES each territory's `owner` from the structural graph +
-// git-blame authorship the index already holds, with the manifest as an OVERRIDE layer (an explicit
-// manifest `owner` beats the generated one). Reconciliation is deterministic + `$0`-LLM; `tier` stays
-// human-ratified (never generated — passed through on the key territory untouched); and the manifest is
-// NOT the sole source — a territory evidenced by blame but unlisted still resolves an owner. `git-blame`
-// is a BLACK-BOX signal (`BlameEntry`, refuse-to-model), never ownership ground truth. Owner-generation
-// is the DEFINE-parametric ENABLED case (REQ-INDEX-15a SHOULD/[NEEDS RECONCILIATION]); the MUST clauses
-// 15b-15e hold regardless.
+// The anti-CODEOWNERS-rot reconciler: `reconcile(graph, blame, manifest)` GENERATES each territory's
+// `owner` from the structural graph + git-blame, with the manifest as an OVERRIDE layer (manifest beats
+// generated). Deterministic + `$0`-LLM; `tier` stays human-ratified (passed through untouched); git-blame
+// is a BLACK-BOX signal (`BlameEntry`, refuse-to-model), never ownership ground truth.
 
 import type { Territory } from '@atlas/contracts';
-import type { DepEdge, Manifest } from '../ref/types.js';
-import type { OwnerMap, BlameEntry } from '../ref/ownership.js';
+import type { DepEdge, Manifest } from './types.js';
 import { pathMatchesGlob } from './territory.js';
+
+/**
+ * The reconciled ownership map — the deterministic partition (after overlap resolution): each territory
+ * → its reconciled `owner` (seat). Transcribed from the reference `reconcile(...)` return
+ * (method-tags-idx:122), keyed by the frozen `Territory` (atlas-index:76-78, §territory manifest);
+ * `owner` is the nominal seat id carried as `string` (see @atlas/contracts `Territory` owner FLAG).
+ *
+ * [FLAG — key granularity] atlas-index:80-82 says the partition is ultimately per structural unit
+ * (unit → one territory); this minimal map keys by `Territory` (the manifest's atomic governance unit),
+ * NOT per-`StructRef`. Left for the WP to widen to unit-granularity if the build needs it.
+ */
+export type OwnerMap = ReadonlyMap<Territory, string>;
+
+/**
+ * A git-blame authorship signal for one path — the minimal transcription of atlas-index:87 ("git-blame
+ * authorship"), fed as a black-box signal to the reconciler (refuse-to-model, method-tags-idx:148-149;
+ * blame is NOT modeled as ownership ground truth). A local build input, NOT a contracts type.
+ */
+export interface BlameEntry {
+  readonly path: string;
+  readonly authors: readonly string[];
+}
+
+export interface OwnershipApi {
+  /** Deterministic owner-generator over the structural depends-on graph + git-blame, then the manifest
+   *  override as a precedence layer (override beats generated); `tier` passed through untouched,
+   *  `$0`-LLM (INDEX-15). (method-tags-idx:122)
+   *
+   *  `graph` = the frozen depends-on graph (`DepEdge[]`, the structural signal — atlas-index:87, 105);
+   *  `blame` = the git-blame authorship signal (`BlameEntry[]`, a black-box signal — see `BlameEntry`);
+   *  `manifest` = the hashed `Manifest` override layer. */
+  reconcile(graph: readonly DepEdge[], blame: readonly BlameEntry[], manifest: Manifest): OwnerMap;
+}
 
 // Reconciliation is pure — it NEVER consults a model (INDEX-15c). SCN-INDEX-15c-1 witness: statically 0.
 const RECONCILE_MODEL_CALLS = 0;

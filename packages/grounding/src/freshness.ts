@@ -7,12 +7,12 @@
 // whose SIGNATURE/CONTRACT changed DRIFTS its callers, while a pure-body refactor of that callee does
 // NOT. The verdict is the STRUCTURAL predicate `Freshness` — it phrases freshness as "the cited unit and
 // its dependencies' interfaces are structurally unchanged," NEVER "the claim is true" (FRESH ≠ true).
-// Transcribed against the frozen GROUND-11 interface-fold seam (`../ref/drift.ts` `InterfaceRState`) +
+// Transcribed against the frozen GROUND-11 interface-fold seam (`./types.ts` `InterfaceRState`) +
 // atlas-grounding#ground-11; goldens SCN-GROUND-11a-1 … 11f-1.
 //
 // SCOPE (card WP-4.10-b.GROUND): this facet is ONLY the two-part fold + its structural rendering. NOT the
 // local single-entry drift oracle `driftDetect`/`ground`/`subtreeHash` (owned by WP-4.10-a.GROUND, the
-// SIBLING `ref/drift.ts`/`ground.ts`/`subtree.ts`); NOT the GROUND-13 advisory→STALE router (drift.ts);
+// SIBLING `./drift.ts`/`./ground.ts`/`./subtree.ts`); NOT the GROUND-13 advisory→STALE router (drift.ts);
 // NOT the truth-gate `gateHolds` admission (EPIC-11). The sibling `driftDetect` CONSUMES this fold to
 // obtain the forward-closure arm of its verdict.
 //
@@ -21,7 +21,7 @@
 // COMPARES already-derived branded values (own hash + closure INTERFACE), never a callee body (INV).
 
 import type { Freshness, Hash, SubtreeHash } from '@atlas/contracts';
-import type { InterfaceRState } from '../ref/drift.js';
+import type { InterfaceRState } from './types.js';
 
 /**
  * One member of a fact's forward closure (a dependency-axis callee), as seen at a single snapshot.

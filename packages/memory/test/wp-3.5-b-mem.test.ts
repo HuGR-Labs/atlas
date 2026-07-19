@@ -13,8 +13,8 @@
 // digest is `<filled-at-freeze>` (simulated) — resolved by disciplined judgment, not a real freeze hash.
 
 import { describe, it, expect } from 'vitest';
-import type { MemoryRecord, MemoryStore, TaskMemoryEntry } from '../ref/types.js';
-import type { ResumeUnit } from '../ref/respawn.js';
+import type { MemoryRecord, MemoryStore, TaskMemoryEntry } from '../src/types.js';
+import type { ResumeUnit } from '../src/respawn.js';
 import {
   versioned,
   carry,

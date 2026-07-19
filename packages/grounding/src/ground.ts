@@ -6,7 +6,7 @@
 // by walking the axes hierarchy on the citation's `qualifiedPath` (the same resolution the sealed sibling
 // `driftDetect` uses); a citation whose unit is gone / whose path is absent is DROPPED — fail-closed
 // (GROUND-3), never a throw. Pure + total (no clock, no IO). Conforms to the frozen `GroundApi.ground`
-// (../ref/ground.ts, atlas-grounding:128), pinning `node` from the reference data model.
+// (`GroundApi` in `./types.ts`, atlas-grounding:128), pinning `node` from the reference data model.
 //
 // `node` (SIG-TBD in the frozen oracle) is PINNED HERE, not guessed. The reference gives `ground` no
 // concrete `node` shape but its OUTPUT is fully pinned: a `Grounding` of `GroundingEntry`s each carrying an
@@ -23,7 +23,7 @@
 
 import type { StructRef, SubtreeHash } from '@atlas/contracts';
 import type { Axes, IndexNode } from '@atlas/index';
-import type { Grounding, GroundingEntry } from '../ref/types.js';
+import type { Grounding, GroundingEntry } from './types.js';
 
 /**
  * A CITATION TARGET on a groundable unit: the anchor coordinates `ground` re-resolves — everything a

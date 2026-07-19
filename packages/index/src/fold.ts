@@ -1,21 +1,41 @@
 // @atlas/index — src/fold.ts  (WP-2.7-a.INDEX · structural-fold arm: Delta + bounded eager re-hash)
 //
-// The bounded incremental re-check (INDEX-12) — the "never O(blast-radius)" property. `delta` diffs two
-// built `Axes` snapshots into a `Delta` that DISTINGUISHES structure (`idChanged`, from `subtreeHash`) from
-// state (`stateChanged`, from the anchored `objects` payload — a status/freshness change lands a new
-// content-addressed object version) and NAMES exactly the changed buckets (root→leaf pre-order), so a
-// re-check touches only affected buckets, never `N`. `eagerRehashState` bounds the dependency-axis eager
-// `rState` re-hash to nodes within `MAX_HOPS` of the reverse closure — independent of blast-radius.
-//
-// SCOPE: the STRUCTURAL fold only (WP-2.7-a). The drift-state arm — `propagateDirty` (eager dirty-bit over
-// the FULL closure), lazy on-read `rState`, `state-suspect` deeper marking — is WP-2.7-b and is NOT here.
+// The bounded incremental re-check (INDEX-12), "never O(blast-radius)": `delta` diffs two built `Axes`
+// into a `Delta` distinguishing structure (`idChanged`) from state (`stateChanged`) and naming exactly the
+// changed buckets. `eagerRehashState` bounds the eager `rState` re-hash to `MAX_HOPS` of the closure.
+// SCOPE: the STRUCTURAL fold only — the drift-state arm (propagateDirty/lazy rState) is WP-2.7-b, not here.
 
 import { id } from '@atlas/kernel';
 import type { Hash } from '@atlas/contracts';
-import type { Axes, Axis, Delta, DepEdge, IndexNode } from '../ref/types.js';
-import type { MaxHops } from '../ref/fold.js';
+import type { Axes, Axis, Delta, DepEdge, IndexNode } from './types.js';
 
-/** The eager-re-hash cap (`MaxHops` from ref/fold.ts): deeper nodes are not eagerly re-hashed here. */
+/** The eager-re-hash cap: on an edit the `rState` re-hash is bounded to nodes within this many hops
+ *  of the reverse closure; deeper nodes are `state-suspect`, resolved only on query (INDEX-12).
+ *  Reference pins this literal (atlas-index:123, 183-184). */
+export type MaxHops = 2;
+
+/** The bounded incremental re-check surface (INDEX-12) — `delta` (which buckets changed, structure vs
+ *  state), `propagateDirty` (eager O(1)/node drift bit), `rehashState` (lazy `rState`, eager ≤`MaxHops`). */
+export interface FoldApi {
+  /** Which axis buckets changed, structure (`idChanged`) vs state (`stateChanged`); bounds a re-check
+   *  to the named `changedBuckets`, never `N` (INDEX-12). The two compared snapshots are whole built
+   *  index states — the frozen `Axes` (the return of `build`, ./types.ts) — so a rebuild/edit diffs
+   *  `before`→`after` into the changed buckets. (atlas-index:212) */
+  delta(before: Axes, after: Axes): Delta;
+
+  /** Eager drift dirty-bit across the whole reverse closure — a bit per node, O(1)/node, never a hash
+   *  (INDEX-12). The edited node is the frozen `IndexNode`; the traversal reads the dependency edge set
+   *  (`Axes.edges`) and is bounded structurally by `MaxHops` — neither is a further method arg, the
+   *  reference names none. (method-tags-idx:101; atlas-index:121-122) */
+  propagateDirty(node: IndexNode): void;
+
+  /** Lazy / on-read `rState` recompute over the edited `IndexNode`'s subtree (leaf→root), eager re-hash
+   *  capped at `maxHops=2` (`MaxHops`); deeper nodes stay `state-suspect` until queried (INDEX-12). The
+   *  `maxHops` cap is the module constant `MaxHops`, not a param. (method-tags-idx:101; atlas-index:122-123) */
+  rehashState(node: IndexNode): void;
+}
+
+/** The eager-re-hash cap (`MaxHops`): deeper nodes are not eagerly re-hashed here. */
 export const MAX_HOPS: MaxHops = 2;
 
 const AXES: readonly Axis[] = ['spatial', 'territory', 'dependency'];
@@ -111,7 +131,7 @@ export function eagerRehashState(
 // A stale entry (anchor `subtreeHash` ≠ current) is visible + flagged/excluded INLINE at query time, with
 // NO re-embedding and NO separate sweep (INDEX-5a/5b/5c).
 //
-// DRIFT-CARRIER NOTE: the frozen `IndexNode`/`Rollup` (ref/types.ts) carry no `rState`/status field, and
+// DRIFT-CARRIER NOTE: the frozen `IndexNode`/`Rollup` (./types.ts) carry no `rState`/status field, and
 // `propagateDirty`/`rehashState` return `void`. So the dirty-bit set, the state-suspect set and the
 // resolved `rState` side-index are held as fold-internal state keyed by NODE IDENTITY (`node.key`, the
 // same identity `Axes.edges`' Hash endpoints are keyed by) — created per `createDriftFold(edges,nodes)`
