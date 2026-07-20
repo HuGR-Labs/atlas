@@ -6,14 +6,17 @@
 // smoke path — returns a structured error WITHOUT touching the (WIRE-deferred) assembler.
 
 import type { WiredHandler } from '@atlas/adapter-io';
-import type { Guidance, Tool, Verdict } from '@atlas/tools';
+import type { DoctorSource, Guidance, Tool, Verdict } from '@atlas/tools';
+import { runDoctor } from './doctor.js';
 import { COMMAND_LEG } from './map.js';
 import { parse } from './parse.js';
 import { renderVerdict } from './render.js';
 
-/** Optional dependency injection seam (additive): tests inject a FAKE `WiredHandler`; prod assembles it. */
+/** Optional dependency injection seam (additive): tests inject a FAKE `WiredHandler` + a FAKE read-only
+ *  `DoctorSource`; prod assembles both at the composition-root WP. */
 export interface CliDeps {
   readonly handler?: WiredHandler;
+  readonly doctorSource?: DoctorSource;
 }
 
 /** A structured error verdict for a CLI-layer failure (parse / unwired command) — guidance always present. */
@@ -43,7 +46,16 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
     return emit(errorVerdict("command 'mine' is not wired at this CLI seam — see WP-9.3.6-b.CLI"));
   }
 
-  // The remaining five commands each route to a governance `Tool` (doctor → atlas-query read path).
+  if (command === 'doctor') {
+    // CLI-1a: `doctor` sub-dispatches to the four read/advisory `DoctorApi` legs over the INJECTED read-only
+    // `DoctorSource` — it NEVER touches `deps.handler` (opens no write door; carries no write authority).
+    // Fails closed (no source / unknown subcommand) with guidance + non-zero exit, never a throw.
+    const dv = runDoctor(positionals, deps.doctorSource);
+    process.stdout.write(dv.stdout);
+    return dv.exitCode;
+  }
+
+  // The remaining four governance commands each route to a `Tool` through the one wired handler.
   const tool = COMMAND_LEG[command] as Tool;
   // The handler is INJECTED (dependency-inverted). Building the real one needs a fully-composed
   // `WireConfig` — including the adapter-less `seams` (heuristic/gate/classifier/driftFacts/resolveAnchorAt)
