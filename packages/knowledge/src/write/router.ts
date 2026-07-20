@@ -16,15 +16,18 @@
 //    "fixes the VALUE of the inputs, not the routing over them — feasible now". So this module
 //    takes RESOLVED opaque identity strings as inputs and does ZERO hashing (the sealed
 //    @atlas/kernel identity seam is not entered here — no raw hashing).
-//  • The frozen `RouterApi.writeDecision(candidate, cfg)` FRONT DOOR (which consumes a `Candidate`
-//    and composes the store lookup + the near-dup `claimNorm` probe) is therefore NOT wired here:
-//    it needs the OWNER-DEFINE composed store + 5.13-b's nodeKey. That composition is DEFERRED,
-//    not invented. The `StoreProjection` below is held caller-side / session-internal
-//    (cf. index/src/fold.ts `createDriftFold`), never an invented frozen `StoreApi` field.
+//  • The `RouterApi.writeDecision` FRONT DOOR is now WIRED here (owner-RATIFIED un-park, reversing the
+//    s05 PARK — govern writes now). It is COMPOSED, not reimplemented: it consumes a `Candidate`, mints
+//    the contentHash through the SEALED kernel seam (`id` = `defaultEncoder.hash(canonicalForm(·))`,
+//    atlas-knowledge:110), reuses `nodeKey` (5.13-b) for the WHICH leg + `nearDuplicateProbe` for the
+//    door-2 leg, and routes through the existing pure `routeWrite`. The store is passed as DATA
+//    (widened signature `writeDecision(candidate, store, cfg)`): the `StoreProjection` is held
+//    caller-side / session-internal (cf. index/src/fold.ts `createDriftFold`, and the `upsert(store, req)`
+//    idiom), never an invented frozen `StoreApi` field — so no OWNER-DEFINE composed store is invented.
 //  • REJECT (the 2-door admission bar, KNOW-2) is emit.ts's facet — the upsert route never
 //    returns REJECT.
 
-import { asNodeKey, canonicalForm, defaultEncoder } from '@atlas/kernel';
+import { asNodeKey, canonicalForm, defaultEncoder, id } from '@atlas/kernel';
 import type { NodeKey } from '@atlas/contracts';
 import type { Candidate, Check, PredicateSlot } from '../types.js';
 
@@ -62,8 +65,12 @@ export interface RouterApi {
    *  the decision (method-tags-knw:121). Pure + total.
    *
    *  [PARAMETRIC — see `NearDupConfig`] the near-dup matcher threshold is an EXPLICIT parameter, not a
-   *  constant (the threshold is an OPEN DEFINE, method-tags-knw:122). */
-  writeDecision(candidate: Candidate, cfg: NearDupConfig): WriteDecision;
+   *  constant (the threshold is an OPEN DEFINE, method-tags-knw:122).
+   *
+   *  [WIDENED — owner-RATIFIED un-park] the composed store is passed as DATA (`StoreProjection`), matching
+   *  the `upsert(store, req)` idiom + the caller-side/session-internal projection documented in the facet
+   *  header — NOT an invented frozen `StoreApi` field. See the `writeDecision` impl below. */
+  writeDecision(candidate: Candidate, store: StoreProjection, cfg: NearDupConfig): WriteDecision;
 
   /** The node identity leg. `nodeKey(advisory) = hash(primaryAnchorId ‖ predicateSlot)`;
    *  `nodeKey(predicate) = hash(primaryAnchorId ‖ predicateSlot ‖ normalize(check))` — so a distinct
@@ -333,4 +340,42 @@ export function nearDuplicateProbe(
   cfg: NearDupConfig,
 ): boolean {
   return existingClaimNorms.some((c) => claimSimilarity(candidate.claimNorm, c) >= cfg.claimNormThreshold);
+}
+
+/**
+ * THE composed write-decision FRONT DOOR (KNOW-4/15) — owner-RATIFIED un-park of the s05 PARK. COMPOSED
+ * end-to-end from the pure functions above; it invents NO routing. The three orthogonal legs resolve as:
+ *   1. contentHash (WHAT, atlas-knowledge:110) — `id(candidate) = defaultEncoder.hash(canonicalForm(·))`,
+ *      the SEALED kernel identity seam (no raw hashing); a CAS hit DEDUPs and SHORT-CIRCUITS everything.
+ *   2. nodeKey (WHICH) — the existing `nodeKey(candidate)` identity leg; its presence in the projection's
+ *      current map is the create/update oracle-input.
+ *   3. family/checkSame — `candidate.check ? 'predicate' : 'advisory'`, and (mirroring `upsert` at the
+ *      derivation above) `checkSame = family==='predicate' && nodeKeyHit` (a predicate nodeKey folds in
+ *      normalize(check), so a hit ⟺ the same check re-evidenced).
+ * These feed the existing pure `routeWrite`. PRECEDENCE: DEDUP short-circuits; else, before a CREATE, the
+ * deterministic near-duplicate probe (door-2, atlas-knowledge:128-132) may force UPDATE/MERGE; else
+ * `routeWrite`'s cell stands. Pure + total + deterministic — no LLM/clock/seq enters.
+ *
+ * [OPEN-DEFINE — honest subset, FLAGGED, NOT invented] the spec's near-dup scan matches at ADJACENT
+ * granularity (parent/child unit) against every `(primaryAnchor, *)` node across SIBLING slots. The
+ * `StoreProjection` carries no per-node `primaryAnchor` (a `CurrentNode` has none), and the near-SYNONYM
+ * threshold τ + the move-aware adjacency matcher are OPEN-DEFINE (facet header; `claimSimilarity` is 0|1).
+ * So the probe runs over the claim bodies the projection DOES expose (the airtight EXACT leg); the
+ * cross-anchor adjacency + synonym-τ stay OPEN-DEFINE upstream — deliberately not modeled here.
+ */
+export function writeDecision(candidate: Candidate, store: StoreProjection, cfg: NearDupConfig): WriteDecision {
+  const contentHashHit = store.cas.has(id(candidate) as string); // leg 1 — WHAT (sealed seam)
+  if (contentHashHit) return 'DEDUP'; // dedup precedence: identical bytes short-circuit (KNOW-4b)
+
+  const nodeKeyHit = store.current.has(nodeKey(candidate) as string); // leg 2 — WHICH
+  const family: NodeFamily = candidate.check ? 'predicate' : 'advisory';
+  const checkSame = family === 'predicate' && nodeKeyHit; // mirror upsert: predicate hit ⟺ same check
+  const route = routeWrite({ contentHashHit: false, nodeKeyHit, family, checkSame });
+
+  // door-2: a claimNorm collision forces a CREATE to MERGE/UPDATE (exact leg over the exposed claims).
+  if (route === 'CREATE') {
+    const exposedClaims = [...store.current.values()].flatMap((n) => n.claims);
+    if (nearDuplicateProbe(candidate, exposedClaims, cfg)) return 'UPDATE';
+  }
+  return route;
 }
