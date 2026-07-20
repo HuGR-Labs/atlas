@@ -12,5 +12,11 @@
     "@bufbuild/protobuf": "^2.12.1",
     "@c4312/scip": "^0.1.0",
     "@modelcontextprotocol/sdk": "1.29.0"
+  },
+  "devDependencies": {
+    "@atlas/adapter-io": "*",
+    "@atlas/contracts": "*",
+    "@atlas/index": "*",
+    "@atlas/knowledge": "*"
   }
 }
