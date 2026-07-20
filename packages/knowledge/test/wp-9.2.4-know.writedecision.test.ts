@@ -43,9 +43,15 @@ function cand(o: CandOpts = {}): Candidate {
 }
 const CFG: NearDupConfig = { claimNormThreshold: 1 }; // exact-match leg fires at τ ≤ 1
 
-/** Seed one current node at `key` (a real computed nodeKey), family + claims as given. */
-function nodeAt(key: string, family: 'advisory' | 'predicate', claims: readonly string[]): CurrentNode {
-  return { nodeKey: key, family, contentHash: `ch:${key}`, claims };
+/** Seed one current node at `key` (a real computed nodeKey), family + claims as given, with an OPTIONAL
+ *  `primaryAnchor` so the anchor-scoped door-2 (adjacencyNearDup) has a structural neighbor to collide with. */
+function nodeAt(
+  key: string,
+  family: 'advisory' | 'predicate',
+  claims: readonly string[],
+  primaryAnchor?: string,
+): CurrentNode {
+  return { nodeKey: key, family, contentHash: `ch:${key}`, claims, ...(primaryAnchor !== undefined ? { primaryAnchor } : {}) };
 }
 function projection(nodes: readonly CurrentNode[], cas: readonly string[]): StoreProjection {
   return { current: new Map(nodes.map((n) => [n.nodeKey, n])), cas: new Set(cas) };
@@ -75,13 +81,15 @@ describe('WP-9.2.4.KNOWLEDGE — writeDecision composed front door (un-parked)',
     // guard and always override) → this clean CREATE would flip to UPDATE.
   });
 
-  it('CREATE→UPDATE (door-2) — a claimNorm collision at a DIFFERENT node forces the CREATE to UPDATE', () => {
-    const c = cand({ claimNorm: 'cn-dup' }); // nodeKey MISS, but its claim collides elsewhere
-    // a sibling node (different nodeKey) already carries this exact claimNorm.
-    const store = projection([nodeAt('sibling-key', 'advisory', ['cn-dup'])], []);
+  it('CREATE→UPDATE (door-2) — a claimNorm collision at an ADJACENT-anchor node forces the CREATE to UPDATE', () => {
+    const c = cand({ claimNorm: 'cn-dup', path: 'pkg/mod::fn' }); // nodeKey MISS; primaryAnchor = pkg/mod::fn
+    // a node at the ANCESTOR unit `pkg/mod` (a structural prefix of `pkg/mod::fn`) already carries this exact
+    // claimNorm — the anchor-scoped door-2 (adjacencyNearDup) treats it as an adjacent-granularity neighbor.
+    const store = projection([nodeAt('sibling-key', 'advisory', ['cn-dup'], 'pkg/mod')], []);
     expect(writeDecision(c, store, CFG)).toBe('UPDATE');
     // teeth (MUTANT: drop the near-dup override leg) → the route stays CREATE (nodeKey miss), flipping
-    // this golden off UPDATE. Names the near-dup EXACT-leg composition.
+    // this golden off UPDATE. STRUCTURAL teeth (MUTANT: seed the neighbor at an UNRELATED anchor, e.g.
+    // `x/y::z`) → adjacencyNearDup finds no prefix-adjacent neighbor ⇒ no collision ⇒ stays CREATE.
   });
 
   it('UPDATE — an advisory whose nodeKey is present set-unions in place', () => {
