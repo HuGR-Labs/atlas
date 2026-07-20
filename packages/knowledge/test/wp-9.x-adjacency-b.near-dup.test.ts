@@ -108,24 +108,23 @@ describe('ADJACENCY-B — adjacencyNearDup: structural ancestor/descendant scan 
   });
 });
 
-describe('ADJACENCY-B — upsert fold: CREATE at an adjacent anchor with a dup claim MERGES into the neighbor', () => {
-  it('a CREATE adjacent (descendant) to an existing node + duplicate claim routes UPDATE-into-neighbor', () => {
+describe('ADJACENCY-B — upsert (WP-DEDUP-1 un-merge): a CREATE at an adjacent anchor mints its OWN node', () => {
+  it('a CREATE adjacent (descendant) to an existing node + duplicate claim mints a distinct node (no merge)', () => {
     let s: StoreProjection = emptyStore();
     // seed a parent-unit node at a::b carrying cn-dup.
     s = upsert(s, { nodeKey: 'nk-parent', contentHash: 'ch-p', family: 'advisory', claimNorm: 'cn-dup', primaryAnchor: 'a::b', slot: 'invariant' }).store;
     const before = currentNodes(s).length;
-    // a child-unit write at a::b::c with the SAME claim — nodeKey MISS (would CREATE), but merges into the parent.
+    // a child-unit write at a::b::c with the SAME claim — nodeKey MISS ⇒ CREATE. The always-merge is GONE
+    // (WP-DEDUP-1): each grounding stays distinct (A2), so the child mints its OWN node, never folding in.
     const child: WriteRequest = { nodeKey: 'nk-child', contentHash: 'ch-c', family: 'advisory', claimNorm: 'cn-dup', primaryAnchor: 'a::b::c', slot: 'gotcha' };
     const r = upsert(s, child);
-    expect(r.decision).toBe('UPDATE'); // re-routed, not a parallel CREATE
-    expect(currentNodes(r.store).length).toBe(before); // NO new node minted
-    expect(r.store.current.has('nk-child')).toBe(false); // the child key never lands
-    const merged = r.store.current.get('nk-parent')!;
-    expect(new Set(merged.claims)).toEqual(new Set(['cn-dup'])); // set-union dedup (already present)
-    expect(merged.primaryAnchor).toBe('a::b'); // the neighbor's anchor is preserved (merge INTO it)
-    expect(r.store.cas.has('ch-c')).toBe(true); // the merged bytes stay addressable
-    // teeth (MUTANT: skip the adjacency fold in upsert) → the child mints a 2nd node ⇒ length grows +
-    // nk-child lands, flipping BOTH goldens.
+    expect(r.decision).toBe('CREATE'); // no more re-route: a routed CREATE stays a CREATE
+    expect(currentNodes(r.store).length).toBe(before + 1); // a genuine new node is minted
+    expect(r.store.current.has('nk-parent')).toBe(true); // BOTH nodes present — parent kept
+    expect(r.store.current.has('nk-child')).toBe(true); //  ... AND the child lands as its own node
+    const neighbor = r.store.current.get('nk-parent')!;
+    expect(neighbor.claims).toEqual(['cn-dup']); // the neighbor's claims are UNCHANGED — no union into it
+    expect(neighbor.primaryAnchor).toBe('a::b'); // the neighbor is untouched by the child write
   });
 
   it('a CREATE adjacent with a NOVEL claim set-unions the new claim into the neighbor', () => {
@@ -160,12 +159,16 @@ describe('ADJACENCY-B — upsert fold: CREATE at an adjacent anchor with a dup c
     expect(currentNodes(r.store).length).toBe(before + 1);
   });
 
-  it('the default cfg (τ=1) makes the 2-arg upsert perform exact-match adjacency for free', () => {
+  it('the 2-arg upsert (default cfg) also mints a distinct node — no adjacency merge remains (WP-DEDUP-1)', () => {
     let s: StoreProjection = emptyStore();
     s = upsert(s, { nodeKey: 'nk-parent', contentHash: 'ch-p', family: 'advisory', claimNorm: 'cn-dup', primaryAnchor: 'a::b', slot: 'invariant' }).store;
-    // 2-arg call (no cfg) — the default { claimNormThreshold: 1 } still fires the merge.
+    const before = currentNodes(s).length;
+    // 2-arg call (no cfg) — with the always-merge removed, an adjacent dup CREATEs its own node.
     const r = upsert(s, { nodeKey: 'nk-child', contentHash: 'ch-c', family: 'advisory', claimNorm: 'cn-dup', primaryAnchor: 'a::b::c' });
-    expect(r.decision).toBe('UPDATE');
-    expect(r.store.current.has('nk-child')).toBe(false);
+    expect(r.decision).toBe('CREATE');
+    expect(currentNodes(r.store).length).toBe(before + 1); // a distinct node
+    expect(r.store.current.has('nk-parent')).toBe(true); // both nodes present
+    expect(r.store.current.has('nk-child')).toBe(true);
+    expect(r.store.current.get('nk-parent')!.claims).toEqual(['cn-dup']); // neighbor's claims unchanged
   });
 });
