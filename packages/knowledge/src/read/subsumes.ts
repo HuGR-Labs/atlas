@@ -7,13 +7,13 @@
 // never a fold. `broader` = the ANCESTOR (fewer `::`-segments); the direction is inherent, so each valid
 // pair is emitted exactly once. Pure + total — no throw, no clock, no LLM (A1).
 //
-// Reuses the airtight structural + exact-claim legs from the write side (DRY): `isPrefix` (segment-wise
-// structural prefix) and `claimSimilarity` (NFC+trim exact equality) are imported UNCHANGED from near-dup.
+// Reuses the airtight structural + exact-claim legs (DRY): `isPrefix` (segment-wise structural prefix)
+// and `claimSimilarity` (NFC+trim exact equality) — the neutral co-located `anchor-match` matcher legs.
 
 import { asNodeKey } from '@atlas/kernel';
 import type { NodeKey } from '@atlas/contracts';
 import type { CurrentNode, StoreProjection } from '../write/router.js';
-import { claimSimilarity, isPrefix } from '../write/near-dup.js';
+import { claimSimilarity, isPrefix } from './anchor-match.js';
 
 /** A derived non-destructive coverage edge: `broader`'s anchor is a PROPER structural ancestor of
  *  `narrower`'s, and they share a slot, family, and at least one exact claim. `broader ⊃ narrower`. */
