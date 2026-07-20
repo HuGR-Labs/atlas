@@ -9,8 +9,10 @@
 //                   injected for an advisory (no Status field); freshness is re-derived against the index
 //                   `Axes` built ONCE at the repo root (the `at` sha is vestigial — the gate re-derives
 //                   against the built index, not a passed sha).
-//   - reconcile seams — v1-EMPTY: no drifted facts, no anchor resolver, and a fail-closed `reDerives`
-//                   (index-at-rev re-derivation is a separate deferred WP). Reconcile detects NO drift in v1.
+//   - reconcile seams — the REAL arbitrary-rev drift seams over `createRevIndex(repoPath)` (COMPOSE-C):
+//                   `resolveAnchorAt` re-derives an anchor's `StructRef` at a rev, `reDerives` is the
+//                   `driftDetect` oracle at a rev, and `driftFacts` is the durable projection's grounded
+//                   facts (read back from CAS — invariant 6). Reconcile now DETECTS real structural drift.
 //
 // This module OWNS the runtime seam construction; `assembleHandler` (wire.ts) OWNS the leg assembly. Their
 // composition is the driver — no per-entrypoint copy (WIRE-1).
@@ -21,13 +23,15 @@ import type { Hash } from '@atlas/contracts';
 import { build } from '@atlas/index';
 import type { Axes, ScipOutput } from '@atlas/index';
 import { bindGate, isGrounded, driftDetect } from '@atlas/grounding';
-import { bindReconcile } from '@atlas/knowledge';
+import { bindReconcile, currentNodes } from '@atlas/knowledge';
 import type { GroundedFact } from '@atlas/knowledge';
 import type { T0Heuristic, TruthGate } from '@atlas/tools';
 import { walkFileTree } from './fs.js';
 import { readScip } from './scip.js';
 import { loadPolicy } from './policy.js';
 import type { AtlasPolicy } from './policy.js';
+import { createRevIndex } from './rev-index.js';
+import { createDiskStore, rehydrateProjection } from './store.js';
 import { assembleHandler } from './wire.js';
 import type { WireConfig, WireSeams, WiredHandler } from './wire.js';
 
@@ -64,13 +68,6 @@ export function buildGate(axes: Axes): TruthGate {
   };
 }
 
-/**
- * The v1 fail-closed `reDerives`: index-at-rev re-derivation is a separate deferred WP, so no drifted fact
- * ever auto-re-grounds — every DRIFTED fact is semantic. With `driftFacts: []` no drift is even detected in
- * v1, so this is never consulted; it is fail-closed by construction regardless.
- */
-const failClosedReDerives = (): boolean => false;
-
 /** Read the optional SCIP dump at `scipPath`, or the empty projection when none is present (§7). */
 function readScipOrEmpty(scipPath: string): ScipOutput {
   return existsSync(scipPath) ? readScip(scipPath) : EMPTY_SCIP;
@@ -87,12 +84,23 @@ export function composeRuntime(repoPath: string): WiredHandler {
   const scipPath = join(repoPath, SCIP_REL);
   const axes = build(walkFileTree(repoPath), readScipOrEmpty(scipPath));
 
+  // The REAL reconcile drift seams (COMPOSE-C). `revIndex` builds the code index at an arbitrary rev:
+  //   - `reDerives`         — a fact re-derives iff its grounding is still FRESH at the topic sha.
+  //   - `resolveAnchorAt`   — the anchor's `StructRef` at a rev (the drift-source diffs mergeBase vs topic).
+  //   - `driftFacts`        — the current grounded facts from the durable projection. Governed-emit
+  //     `store.put`s the WHOLE `GroundedFact` (invariant 6), so `store.get(contentHash)` reads it back.
+  const revIndex = createRevIndex(repoPath);
+  const store = createDiskStore(join(repoPath, CAS_REL));
+  const driftFacts = currentNodes(rehydrateProjection(store))
+    .map((n) => store.get(n.contentHash as Hash))
+    .filter((o): o is GroundedFact => o !== undefined);
+
   const seams: WireSeams = {
     heuristic: buildHeuristic(policy),
     gate: buildGate(axes),
-    classifier: { reconcile: bindReconcile(failClosedReDerives) },
-    driftFacts: [] as readonly GroundedFact[],
-    resolveAnchorAt: () => undefined,
+    classifier: { reconcile: bindReconcile(revIndex.reDerives) },
+    driftFacts,
+    resolveAnchorAt: revIndex.resolveAnchorAt,
   };
 
   const config: WireConfig = {
