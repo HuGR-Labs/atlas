@@ -13,13 +13,15 @@
   },
   "dependencies": {
     "@atlas/contracts": "*",
-    "@atlas/kernel": "*",
+    "@atlas/genesis": "*",
     "@atlas/index": "*",
+    "@atlas/kernel": "*",
     "@atlas/knowledge": "*",
     "@atlas/persist": "*",
-    "@atlas/genesis": "*",
     "@atlas/tools": "*",
-    "@c4312/scip": "^0.1.0"
+    "@c4312/scip": "^0.1.0",
+    "tree-sitter-typescript": "^0.23.2",
+    "web-tree-sitter": "^0.23.2"
   },
   "scripts": {
     "build": "tsc -b",
