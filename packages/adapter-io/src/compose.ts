@@ -102,22 +102,19 @@ export function gitUserEmail(repoPath: string): string | undefined {
  * durable persist). Returns THE one `WiredHandler`. Also builds the real read-only `DoctorSource`
  * (`atlas doctor`'s port) from the SAME store + revIndex.
  *
- * ACTOR RESOLUTION (KNOW-11): `actor = ATLAS_ACTOR ?? gitUserEmail(repoPath) ?? ''` — the env var wins;
- * otherwise the LOCAL git identity; otherwise empty. The actor comes ONLY from the environment / local
- * machine — NEVER from an emitted fact or a tool-call payload (the spoof-guard). The single actor seam is
- * `wire.ts` (`process.env.ATLAS_ACTOR ?? ''`); here we SEED that env from git ONLY when it is unset, so the
- * env-set value (including an explicit empty string) is never overridden. Fail-closed is preserved: an
- * actor (git email or env) not in a policy scope is still denied, and empty policy scopes deny every write.
+ * ACTOR RESOLUTION (KNOW-11): `actor = ATLAS_ACTOR ?? gitUserEmail(repoPath) ?? ''` — the env var wins
+ * (a `??` fall-through only on absent, so an explicit empty `ATLAS_ACTOR` stays empty); otherwise the LOCAL
+ * git identity; otherwise empty. The actor comes ONLY from the environment / local machine — NEVER from an
+ * emitted fact or a tool-call payload (the spoof-guard). It is passed EXPLICITLY into the WIRE config
+ * (`config.actor`) — no `process.env` mutation, no global state. Fail-closed is preserved: an actor (git
+ * email or env) not in a policy scope is still denied, and empty policy scopes deny every write.
  */
 export function composeRuntime(repoPath: string): ComposedRuntime {
-  // Seed the WIRE actor seam from the local git identity WHEN — and only when — `ATLAS_ACTOR` is unset.
-  // A better default than a bare env var: a developer with a configured `git config user.email` is a known
-  // actor without exporting anything. Never overrides an env-set value (env wins); never sources the actor
-  // from untrusted input; a missing git email leaves it unset ⇒ fail-closed (every write denied).
-  if (process.env.ATLAS_ACTOR === undefined) {
-    const gitActor = gitUserEmail(repoPath);
-    if (gitActor !== undefined) process.env.ATLAS_ACTOR = gitActor;
-  }
+  // Resolve the KNOW-11 write actor at the composition root: ATLAS_ACTOR (env) wins; else the LOCAL git
+  // identity (`git config user.email`); else empty (fail-closed ⇒ every write denied). A configured git
+  // email is a better default than a bare env var. NEVER sourced from untrusted input; passed EXPLICITLY
+  // to the assembler below (no global env write).
+  const actor = process.env.ATLAS_ACTOR ?? gitUserEmail(repoPath) ?? '';
 
   const policy = loadPolicy(repoPath);
   const scipPath = join(repoPath, SCIP_REL);
@@ -147,6 +144,7 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     casPath: join(repoPath, CAS_REL),
     scipPath,
     seams,
+    actor,
   };
 
   // The real read-only diagnostic port — built over the SAME durable store + revIndex the governed emit

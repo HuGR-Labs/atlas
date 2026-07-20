@@ -193,8 +193,9 @@ describe('COMPOSE-HARDENING — F3 git-derived actor + F5 shared SCIP guard', ()
       const out = v.data as EmitOut;
       expect(out.emitted).toBe(true);
       expect(out.id).toBeDefined();
-      // the seed reached the WIRE actor seam.
-      expect(process.env.ATLAS_ACTOR).toBe('alice@x');
+      // the actor was passed EXPLICITLY into the WIRE config — composeRuntime writes NO global env
+      // (ATLAS_ACTOR stays exactly as the caller left it: unset here).
+      expect(process.env.ATLAS_ACTOR).toBeUndefined();
     } finally {
       if (prev === undefined) delete process.env.ATLAS_ACTOR;
       else process.env.ATLAS_ACTOR = prev;
@@ -211,8 +212,7 @@ describe('COMPOSE-HARDENING — F3 git-derived actor + F5 shared SCIP guard', ()
     try {
       const { handler } = composeRuntime(repoPath);
       const v = handler.handle(EMIT, { node: groundedFact(repoPath, 'core'), at: AT });
-      expect((v.data as EmitOut).emitted).toBe(true);
-      expect(process.env.ATLAS_ACTOR).toBe('bob@x'); // env-set value never overridden by git
+      expect((v.data as EmitOut).emitted).toBe(true); // bob@x (env) used, not alice@x (git)
     } finally {
       if (prev === undefined) delete process.env.ATLAS_ACTOR;
       else process.env.ATLAS_ACTOR = prev;
