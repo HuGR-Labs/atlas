@@ -57,8 +57,18 @@ describe('ADJACENCY-B — adjacencyNearDup: structural ancestor/descendant scan 
   it('a partial-segment near-miss is NOT a prefix (a::bb is not adjacent to a::b::c — segment-wise)', () => {
     const store = projection([nodeAt('bb', 'a::bb', ['cn-dup'])]);
     expect(adjacencyNearDup('a::b::c', 'cn-dup', store, CFG)).toEqual({ collision: false });
-    // teeth (MUTANT: use string `startsWith` instead of segment-wise isPrefix) → 'a::b' would falsely
-    // prefix-match 'a::bb', flipping this golden to a spurious collision.
+    // (This orientation is a no-op under BOTH segment-wise isPrefix and a raw startsWith — the biting
+    // orientation is the reverse golden below, which a startsWith regression fails.)
+  });
+
+  it('SCN-ADJACENCY-B-segment-near-miss-reverse: candidate a::bb vs neighbor a::b is NOT adjacent', () => {
+    // The startsWith TRAP: as a raw string, `'a::bb'.startsWith('a::b') === true` — but segment-wise the
+    // second segment `bb` ≠ `b`, so `a::b` is NOT a structural ancestor of `a::bb` (they are siblings under
+    // `a`). The segment-wise isPrefix correctly returns NO adjacency ⇒ NO false-merge.
+    const store = projection([nodeAt('anc', 'a::b', ['cn-dup'])]);
+    expect(adjacencyNearDup('a::bb', 'cn-dup', store, CFG)).toEqual({ collision: false });
+    // teeth (MUTANT: swap isPrefix's segment compare for a raw `long.startsWith(short)`) → `'a::bb'`
+    // false-prefix-matches `'a::b'` ⇒ a spurious {collision:true, mergeTarget:'anc'}, flipping this golden.
   });
 
   it('on MULTIPLE collisions the NEAREST (longest common prefix) wins', () => {
