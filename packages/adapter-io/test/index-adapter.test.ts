@@ -96,18 +96,5 @@ describe('WP-9.1.1-b.INDEX — index-backing adapter (pure delegation)', () => {
       expect(cover.territory).toBe('src');
       expect(resolveCalls).toBe(1);
     });
-
-    it('teeth: a local-shortcut adapter returns a cover while the resolve spy count stays 0', () => {
-      // The negative witness the golden names: an adapter that resolves with its OWN local shortcut and
-      // never drives @atlas/index — the spy count is 0 while a cover was still returned. The real adapter
-      // MUST NOT behave this way (asserted by the count===1 test above).
-      let resolveCalls = 0;
-      const shortcut = {
-        cover: (scope: string) => ({ territory: scope, axisHash: '' as Hash, invariants: [], stale: false }),
-      };
-      const cover = shortcut.cover('src');
-      expect(cover.territory).toBe('src');
-      expect(resolveCalls).toBe(0);
-    });
   });
 });
