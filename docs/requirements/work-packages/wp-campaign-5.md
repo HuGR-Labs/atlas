@@ -109,7 +109,7 @@ id: WP-5.13-b.KNOW
 content_hash: <filled-at-freeze>
 title: Anchor-identity facet — mechanical nodeKey & primaryAnchorId (no LLM in the write-decision)
 intent: >
-  *(non-authoritative handle)* the write-decision is a pure function of three hashes; nodeKey and primaryAnchorId are computed mechanically (move-aware re-anchoring, secondary citations feed drift only, near-duplicate probe before CREATE, slot from a closed vocabulary) with no LLM choosing an anchor.
+  *(non-authoritative handle)* the write-decision is a pure function of three hashes; nodeKey and primaryAnchorId are computed mechanically (move-aware re-anchoring, secondary citations feed drift only, a `claimNorm`-collision report that is a signal not a write-time merge, slot from a closed vocabulary) with no LLM choosing an anchor.
 source_reqs:                             # ptr+digest
   - source: ../req-knw.md#REQ-KNOW-15a  # ptr+digest
   - source: ../req-knw.md#REQ-KNOW-15b  # ptr+digest
@@ -130,7 +130,7 @@ inputs:                                  # ptr+digest
   - source: ../req-knw.md#REQ-KNOW-15a  # ptr+digest
   - source: ../req-knw.md#REQ-KNOW-15j  # ptr+digest
   - source: ../goldens-knw.md  # ptr+digest
-action: implement nodeKey/primaryAnchorId as pure hash+symbol functions per each KNOW-15 golden cell; near-dup probe merges rather than minting a CREATE.
+action: implement nodeKey/primaryAnchorId as pure hash+symbol functions per each KNOW-15 golden cell; a `claimNorm` collision is **reported** (a deterministic signal) and the candidate mints its own node — no write-time merge; structural near-dup coverage is the derived-on-read `subsumes` relation (docs/design/dedup-identity.md).
 action_surface: `[ read(knowledge/**), edit(knowledge/**), run(test:knowledge) ]`
 guardrails: writes confined to `knowledge/**`; no LLM call in the identity path; forbidden zones = other module trees.
 repair_budget: `N=3 · early-stop: { repeated-identical-failure, no-change-diff, semantic-dup-edit }`

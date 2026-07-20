@@ -62,7 +62,7 @@ Each is falsifiable and maps to a spec axiom. `MUST` / `MUST NOT` are normative.
 | **KNOW-12** Nothing dies — git + CAS, no redundant copy | History is git-provided and CAS-retained, never a duplicated archive. | No fact-history is lost. Prior versions persist as their own **content-addressed CAS objects** (deduped, never byte-copied) plus the repo's git history (rewind a commit/PR ⇒ the Atlas rewinds). **Advisory** edit-in-place keeps **no** lineage pointer — git is the archive; a **predicate** SUPERSEDE adds only a `supersededBy` **pointer** into CAS — a link, not a redundant copy. The working store stays lean (edit-in-place / decay drops from the hot set). | A-16 |
 | **KNOW-13** Born from work | Coverage tracks the work. | Facts MUST be produced only at the three moments (init skeleton → enrich-by-blast-radius → wave-close write), never a repo-wide sweep. A sealing wave MUST have fed the Atlas or emitted a grounded why-not. | A-10, §8 |
 | **KNOW-14** Provenance | Every claim has a receipt. | → see spec **A-9**; enforced in atlas-knowledge (untrusted source ⇒ advisory, excluded from the gate). | A-9 |
-| **KNOW-15** Deterministic write-decision | Create-vs-update is computed, never judged. | Whether a candidate **DEDUPs / UPDATEs / CREATEs / SUPERSEDEs** MUST be a pure function of three hashes (see *The write decision*): the candidate's **content hash**; the **`nodeKey`** — `hash(primaryAnchorId ‖ predicateSlot)` for advisory, `hash(primaryAnchorId ‖ predicateSlot ‖ normalize(check))` for predicate (so a distinct `check` is a distinct node, never a sibling-supersede); and the anchor's **`subtreeHash`**. `primaryAnchorId` MUST be **computed mechanically** as the tightest structural unit containing every symbol the claim references — **never an LLM-chosen anchor** (an LLM-picked anchor is the one landfill leak: anchor-granularity drift + slot-overlap fork `nodeKey` across runs for the same real fact). It is move-aware (rename/move never orphans into a spurious CREATE); secondary citations feed drift only, never identity. Before any CREATE, `atlas-emit` MUST run a deterministic **near-duplicate probe** (see *The write decision*) that forces MERGE on a `claimNorm` collision. `predicateSlot` MUST come from the closed vocabulary. No step may consult an LLM. | A-12 |
+| **KNOW-15** Deterministic write-decision | Create-vs-update is computed, never judged. | Whether a candidate **DEDUPs / UPDATEs / CREATEs / SUPERSEDEs** MUST be a pure function of three hashes (see *The write decision*): the candidate's **content hash**; the **`nodeKey`** — `hash(primaryAnchorId ‖ predicateSlot)` for advisory, `hash(primaryAnchorId ‖ predicateSlot ‖ normalize(check))` for predicate (so a distinct `check` is a distinct node, never a sibling-supersede); and the anchor's **`subtreeHash`**. `primaryAnchorId` MUST be **computed mechanically** as the tightest structural unit containing every symbol the claim references — **never an LLM-chosen anchor** (an LLM-picked anchor is the one landfill leak: anchor-granularity drift + slot-overlap fork `nodeKey` across runs for the same real fact). It is move-aware (rename/move never orphans into a spurious CREATE); secondary citations feed drift only, never identity. A `claimNorm` collision at CREATE MUST be **reported** as a deterministic signal (exact NFC+trim, no fuzzy τ) but MUST NOT force a write-time MERGE — write-time dedup is `contentHash`/`nodeKey` only, and structural near-duplication is the **derived-on-read `subsumes` relation** (see `docs/design/dedup-identity.md`). `predicateSlot` MUST come from the closed vocabulary. No step may consult an LLM. | A-12 |
 | **KNOW-16** Predicate check = deterministic index-query | "HOLDS/BROKEN" needs a real, pure machine — not code. | A `PredicateNode.check` MUST be a **deterministic query over the Atlas index** (structural / dependency axes) or a pinned declarative assertion, evaluated mechanically to `HOLDS/BROKEN/NA` — **no arbitrary code execution, no sandbox**. A check needing runtime/behavioral execution is **out of scope for v0** and MUST stay `advisory`. The evaluator MUST be pure (same index state ⇒ same verdict, no clock/IO) and its verdict feeds `atlas-reconcile`. | §3.2 |
 | **KNOW-17** Usefulness is a-posteriori | Kept because *consumed*, not because *proposed*. | A served fact MUST accrue **`hits`** — a logged event each time it governs a decision (a seat or cold-reviewer cites its node-id as "fact applied" in the event log). Door-2 (non-obvious ∧ actionable) MUST calibrate its admission threshold against **observed downstream hits**, never the proposer's self-assessment. A served fact that **no wave ever consults** MUST **decay** out of the served/pack set (archived to CAS, never deleted — KNOW-12) and MAY re-enter on a later hit. Genesis starts loose-but-thin; born-from-work (KNOW-13) prunes by real usage. | A-10, A-16 |
 | **KNOW-18** Confidence fast-path | Human review is spent on risk, not rubber-stamp. | A candidate that is **grounded ∧ low-risk ∧ `T2` advisory** MAY **auto-accept** (fast-path, no human), backstopped by the KNOW-17 hits-decay — anything the fast-path over-admits decays out. `T0`, **contested** (reviewer veto / conflicting node), and **all predicate** candidates MUST route to full human ratification (KNOW-8; billy for `T0`). | A-6, A-7 |
@@ -125,12 +125,14 @@ nodeKey(predicate) = hash(primaryAnchorId ‖ predicateSlot ‖ normalize(check)
 ```
 
 The LLM proposes only the **claim body** (+ `slot`, + `check?`); the **anchor is computed** from the
-symbols the claim references, not proposed (KNOW-15). Before a CREATE, a deterministic **near-duplicate
-probe** runs: the candidate's anchor subtree is matched at **adjacent granularity** (parent/child unit) and
-its `claimNorm` compared against every existing `(primaryAnchor, *)` node across **sibling slots**; a
-similarity hit forces the router to **MERGE/UPDATE**, or the proposer must justify the CREATE — a claim that
-collides with an existing `claimNorm` is, by construction, **not novel** (door-2). The routing is then a
-pure lookup:
+symbols the claim references, not proposed (KNOW-15). Before a CREATE, a deterministic **`claimNorm`
+collision report** may fire (the candidate's `claimNorm` compared, under **exact NFC+trim equality** —
+`claimSimilarity∈{0,1}`, no fuzzy τ — against existing `(primaryAnchor, *)` sibling-slot nodes), but per the
+frozen dedup/identity model (see `docs/design/dedup-identity.md`, owner-ratified 2026-07-20) a collision is a
+**deterministic signal only — it never forces a write-time MERGE**. A routed CREATE at an adjacent anchor
+mints its **own** node (each keeps its own grounding). Write-time dedup is exactly the pure lookup below (D0
+`contentHash` / D1 `nodeKey`); structural near-duplication is instead a **derived-on-read `subsumes`
+relation** (broader ⊃ narrower coverage over the projection), never a merge. The routing is a pure lookup:
 
 | Look up | Result | Decision |
 |---|---|---|
@@ -153,10 +155,12 @@ pure lookup:
 - Legs are orthogonal: leg 3 (drift) decides `FRESH/DRIFTED`, **not** create/update — a drifted fact is
   re-checked (KNOW-5), not re-created.
 - **The 2-door bar (now partly mechanical).** Door-1 = grounded (KNOW-2). Door-2 = non-obvious ∧
-  actionable, and the LLM no longer self-certifies it: **obviousness** is decided by the near-dup probe (a
-  `claimNorm` collision against an existing `(anchor,*)` node ⇒ MERGE, not a new node), and **usefulness is
-  judged a-posteriori by `hits`** (KNOW-17) — a served fact no wave consults decays out; the threshold
-  calibrates on observed hits, never the proposer's score.
+  actionable, and the LLM no longer self-certifies it: **obviousness** is signaled by a deterministic
+  `claimNorm` collision **report** against an existing `(anchor,*)` node (a colliding claim is, by
+  construction, not novel) — a **signal, not a write-time merge** (`docs/design/dedup-identity.md`); the
+  colliding candidate still mints its own node and structural coverage is the derived-on-read `subsumes`
+  relation. **Usefulness is judged a-posteriori by `hits`** (KNOW-17) — a served fact no wave consults decays
+  out; the threshold calibrates on observed hits, never the proposer's score.
 
 ### The closed `predicateSlot` vocabulary (normative)
 
@@ -212,8 +216,9 @@ One falsifiable check per invariant; each MUST fail if its invariant is violated
 14. **Write-decision is mechanical & move-safe.** The **anchor is computed from the referenced symbols**, not
     LLM-chosen — the same real fact yields the same `nodeKey` across runs. Re-emitting a byte-identical fact
     ⇒ DEDUP (no new node); a restated advisory claim in the same `(anchor, slot)` ⇒ UPDATE/union, never a
-    parallel node; a **near-synonymous** claim at adjacent granularity ⇒ the near-dup probe forces MERGE, not
-    a parallel node; **renaming/moving the anchored unit ⇒ the fact re-anchors to the same node** (no spurious
+    parallel node; a **near-synonymous** claim at adjacent granularity ⇒ the collision is **reported** (a
+    deterministic signal) but mints its **own** node — no write-time merge — with coverage as the derived-on-read
+    `subsumes` relation (`docs/design/dedup-identity.md`); **renaming/moving the anchored unit ⇒ the fact re-anchors to the same node** (no spurious
     CREATE); citing a second anchor ⇒ same `nodeKey`; the whole routing runs with no LLM call. *(KNOW-15)*
 15. **No sibling-retire; slot is closed.** Two **distinct** predicate `check`s on the same `(anchor, slot)`
     ⇒ two coexisting nodes (neither supersedes the other); the *same* check re-evidenced ⇒ SUPERSEDE. A fact

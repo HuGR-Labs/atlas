@@ -47,7 +47,7 @@ describe('ADJACENCY-B — upsert (WP-DEDUP-1 un-merge): a CREATE at an adjacent 
     expect(r.decision).toBe('CREATE'); // unrelated anchors ⇒ adjacency never fires
     expect(currentNodes(r.store).length).toBe(before + 1); // a genuine new node
     expect(r.store.current.has('nk-a')).toBe(true);
-    // teeth (MUTANT: drop the prefix test in adjacencyNearDup) → this would falsely merge, dropping the node.
+    // teeth (MUTANT: reintroduce a write-time adjacency merge — the REMOVED always-merge, WP-DEDUP-1) → this would falsely fold the unrelated-anchor node in, dropping it.
   });
 
   it('a CREATE with NO primaryAnchor leaves adjacency DORMANT (even against an adjacent-claimed neighbor)', () => {

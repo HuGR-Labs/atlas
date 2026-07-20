@@ -235,10 +235,11 @@ source: INV-KNOW-15 @ reference/atlas-knowledge.md#know-15
 The knowledge module shall let secondary citations feed drift only, never identity.
 normative-clause: "secondary citations feed drift only, never identity"
 
-### REQ-KNOW-15h — near-duplicate probe before CREATE
+### REQ-KNOW-15h — a claimNorm collision is reported, not merged
 source: INV-KNOW-15 @ reference/atlas-knowledge.md#know-15
-Before any CREATE, the knowledge module shall run a deterministic near-duplicate probe that forces MERGE on a claimNorm collision.
-normative-clause: "Before any CREATE, `atlas-emit` MUST run a deterministic **near-duplicate probe** (see *The write decision*) that forces MERGE on a `claimNorm` collision"
+note: reconciled to the FROZEN dedup/identity model (`docs/design/dedup-identity.md`, owner-ratified 2026-07-20; WP-DEDUP-1/2). The old write-time near-duplicate MERGE was REMOVED — write-time dedup is now **D0 `contentHash` → DEDUP** and **D1 `nodeKey` → UPDATE/union** only; structural near-duplication is a derived-on-read relation, never a write-time merge.
+On a CREATE whose `claimNorm` collides with an existing sibling-slot node, the knowledge module shall report the collision as a deterministic signal and still mint the candidate's own node — never a write-time merge; structural near-duplication shall instead be the derived-on-read `subsumes` relation.
+normative-clause: "A `claimNorm` collision at write time MUST be **reported** (a deterministic, exact NFC+trim signal — `claimSimilarity∈{0,1}`, no fuzzy τ) but MUST NOT force a MERGE; write-time dedup is **D0 `contentHash` / D1 `nodeKey`** only, and structural near-duplication is the **derived-on-read `subsumes` relation** (see `docs/design/dedup-identity.md`), never a write-time merge"
 
 ### REQ-KNOW-15i — slot from closed vocabulary
 source: INV-KNOW-15 @ reference/atlas-knowledge.md#know-15
@@ -306,5 +307,5 @@ If a candidate is T0, contested, or predicate, then the knowledge module shall r
 normative-clause: "`T0`, **contested** (reviewer veto / conflicting node), and **all predicate** candidates MUST route to full human ratification"
 
 ## [NEEDS RECONCILIATION]
-- INV-KNOW-15: the clause asserts move-awareness ("rename/move never orphans into a spurious CREATE") and a near-duplicate probe that "forces MERGE on a `claimNorm` collision," but the register flags "⚠ move-aware needs similarity matcher" — the precision boundary (what counts as the same node vs a spurious CREATE, and the near-dup similarity threshold) is not pinned in the clause; route to DEFINE.
+- INV-KNOW-15: the clause asserts move-awareness ("rename/move never orphans into a spurious CREATE"), and the register flags "⚠ move-aware needs similarity matcher" — the precision boundary (what counts as the same node vs a spurious CREATE for a move+edit) is not pinned in the clause; route to DEFINE. *(The old near-dup "forces MERGE on a `claimNorm` collision" arm and its similarity threshold τ are now RESOLVED, not DEFINE-open: per the frozen dedup/identity model — `docs/design/dedup-identity.md` — a `claimNorm` collision is **reported** under exact NFC+trim equality (no fuzzy τ) and **never merges** at write time; structural near-duplication is the derived-on-read `subsumes` relation.)*
 - INV-KNOW-10: the Invariants-section clause states only "No free prose, ever." and delegates the concrete reject-triggers to spec A-13 ("→ see spec **A-13**"); the missing-field / over-cap guard (REQ-KNOW-10b) was necessarily lifted verbatim from the same reference's Acceptance check #9 rather than a KNOW-10 Invariants clause — confirm Acceptance #9 is the authoritative guard source or lift the triggers into the invariant clause.
