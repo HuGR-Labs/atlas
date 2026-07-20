@@ -17,17 +17,17 @@
 // This module OWNS the runtime seam construction; `assembleHandler` (wire.ts) OWNS the leg assembly. Their
 // composition is the driver — no per-entrypoint copy (WIRE-1).
 
-import { existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import type { Hash } from '@atlas/contracts';
 import { build } from '@atlas/index';
-import type { Axes, ScipOutput } from '@atlas/index';
+import type { Axes } from '@atlas/index';
 import { bindGate, isGrounded, driftDetect } from '@atlas/grounding';
 import { bindReconcile, currentNodes } from '@atlas/knowledge';
 import type { GroundedFact } from '@atlas/knowledge';
 import type { DoctorSource, T0Heuristic, TruthGate } from '@atlas/tools';
 import { walkFileTree } from './fs.js';
-import { readScip } from './scip.js';
+import { readScipOrEmpty } from './scip.js';
 import { loadPolicy } from './policy.js';
 import type { AtlasPolicy } from './policy.js';
 import { createRevIndex } from './rev-index.js';
@@ -48,8 +48,6 @@ export interface ComposedRuntime {
 const SCIP_REL = join('.atlas', 'index.scip');
 /** The durable CAS root under a repo (D4). */
 const CAS_REL = join('.atlas', 'cas');
-/** An empty SCIP projection — the honest input when no `.scip` dump is present at the repo root. */
-const EMPTY_SCIP: ScipOutput = { documents: [] };
 
 /**
  * The T0-candidate keyword heuristic (TOOLS-5): a territory is a T0 candidate iff its name contains one of
@@ -77,19 +75,50 @@ export function buildGate(axes: Axes): TruthGate {
   };
 }
 
-/** Read the optional SCIP dump at `scipPath`, or the empty projection when none is present (§7). */
-function readScipOrEmpty(scipPath: string): ScipOutput {
-  return existsSync(scipPath) ? readScip(scipPath) : EMPTY_SCIP;
+/**
+ * The LOCAL git identity (`git config user.email`) at `repoPath`, or `undefined`. TOTAL — never throws:
+ * no git, no configured email, a non-repo/absent path, or ANY execFile failure ⇒ `undefined`; an empty
+ * result ⇒ `undefined`. Uses the same no-shell git seam as git-history.ts (`execFileSync 'git'`, no shell).
+ *
+ * SECURITY: this is a LOCAL-MACHINE identity source ONLY (the developer's own git config) — it is NEVER
+ * derived from an emitted fact or a tool-call payload, so it cannot be used to spoof the KNOW-11 write actor.
+ */
+export function gitUserEmail(repoPath: string): string | undefined {
+  try {
+    const email = execFileSync('git', ['config', 'user.email'], {
+      cwd: repoPath,
+      encoding: 'utf8',
+    }).trim();
+    return email.length > 0 ? email : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
  * Stand up the FULLY GOVERNED, DURABLE runtime handler for a repo. Builds the index `Axes` ONCE at the
- * root, resolves the admin policy + the `ATLAS_ACTOR` identity (fail-closed when unset — every write
- * denied), assembles the real seams, and hands them to the shared WIRE assembler, which wires the governed
- * durable emit leg (truth-door → authz → upsert → durable persist). Returns THE one `WiredHandler`.
- * Also builds the real read-only `DoctorSource` (`atlas doctor`'s port) from the SAME store + revIndex.
+ * root, resolves the admin policy + the write-actor identity, assembles the real seams, and hands them to
+ * the shared WIRE assembler, which wires the governed durable emit leg (truth-door → authz → upsert →
+ * durable persist). Returns THE one `WiredHandler`. Also builds the real read-only `DoctorSource`
+ * (`atlas doctor`'s port) from the SAME store + revIndex.
+ *
+ * ACTOR RESOLUTION (KNOW-11): `actor = ATLAS_ACTOR ?? gitUserEmail(repoPath) ?? ''` — the env var wins;
+ * otherwise the LOCAL git identity; otherwise empty. The actor comes ONLY from the environment / local
+ * machine — NEVER from an emitted fact or a tool-call payload (the spoof-guard). The single actor seam is
+ * `wire.ts` (`process.env.ATLAS_ACTOR ?? ''`); here we SEED that env from git ONLY when it is unset, so the
+ * env-set value (including an explicit empty string) is never overridden. Fail-closed is preserved: an
+ * actor (git email or env) not in a policy scope is still denied, and empty policy scopes deny every write.
  */
 export function composeRuntime(repoPath: string): ComposedRuntime {
+  // Seed the WIRE actor seam from the local git identity WHEN — and only when — `ATLAS_ACTOR` is unset.
+  // A better default than a bare env var: a developer with a configured `git config user.email` is a known
+  // actor without exporting anything. Never overrides an env-set value (env wins); never sources the actor
+  // from untrusted input; a missing git email leaves it unset ⇒ fail-closed (every write denied).
+  if (process.env.ATLAS_ACTOR === undefined) {
+    const gitActor = gitUserEmail(repoPath);
+    if (gitActor !== undefined) process.env.ATLAS_ACTOR = gitActor;
+  }
+
   const policy = loadPolicy(repoPath);
   const scipPath = join(repoPath, SCIP_REL);
   const axes = build(walkFileTree(repoPath), readScipOrEmpty(scipPath));
