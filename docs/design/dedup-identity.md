@@ -31,7 +31,7 @@ species, not a foreign body.
 |---|---|---|---|
 | **D0** | `contentHash` equal | **DEDUP** — drop the new | byte-safe (identical) |
 | **D1** | `nodeKey` equal (`primaryAnchorId ‖ slot ‖ check`) | **UPDATE / union** claim-sets (KNOW-4c) | no (one node per nodeKey) |
-| **R1** | `subsumes`: `isPrefix(seg(anchorB), seg(anchorA)) ∧ slotA===slotB ∧ claim(A)==claim(B)` | **derived relation** (broader ⊃ narrower) | **no — never merges** |
+| **R1** | `subsumes` (see DP-2 for the exact, disambiguated predicate) | **derived relation** (broader ⊃ narrower) | **no — never merges** |
 | **H1** | same claim across **non-containment** groundings | **`sameAs` candidate → ratification only** | no |
 | — | anything else | two distinct grounded facts; keep both | no |
 
@@ -48,10 +48,32 @@ to human ratification** (A1-honest).
   anchor mints its **own** node (each keeps its own grounding — A2). `adjacencyNearDup`'s pure logic is
   **retained** and repurposed by DP-2. The `primaryAnchor`/`slot` carriers on `CurrentNode` stay.
 
-- **DP-2 — `subsumes` is derived on read, never stored.** `primaryAnchorId` is pure and the four
-  inputs (`anchorA`, `anchorB`, `slot`, `claim`) already live in the projection ⇒ `subsumes` is a total
-  pure function `deriveSubsumes(projection): readonly Relation[]`. **Zero new persisted state.** Adds the
-  `slotA===slotB` constraint the old matcher lacked (ADJACENCY spanned all slots — a bug).
+- **DP-2 — `subsumes` is derived on read, never stored.** `primaryAnchorId` is pure and the inputs
+  already live in the projection ⇒ `subsumes` is a total pure function
+  `deriveSubsumes(projection): readonly Subsumes[]`. **Zero new persisted state.** The emitted relation is
+  **explicitly named** to kill the positional-direction ambiguity:
+
+  ```
+  Subsumes = { broader: NodeKey; narrower: NodeKey }   // broader ⊃ narrower; broader's anchor is the ancestor
+  ```
+
+  A pair `(p, q)` of current nodes emits `{ broader: p, narrower: q }` **iff ALL hold** (post-suite-critic,
+  frozen):
+
+  1. **strict containment** — `seg(anchor(p))` is a **PROPER** prefix of `seg(anchor(q))`
+     (`isPrefix ∧ len(p) < len(q)`). Fewer `::`-segments = the ancestor = **broader**. Equal anchors are
+     **excluded** (they share a `nodeKey` ⇒ that is D1's union, not a subsumption — no `X ⊃ X`).
+  2. **same slot** — `slot(p) === slot(q)`. *(The old matcher spanned ALL slots — a bug; fixed here.)*
+  3. **same family** — both `advisory` or both `predicate`. Cross-family never subsumes (an advisory's
+     `claimNorm` and a predicate's `check` are different value spaces — comparing them is undefined).
+  4. **exact claim** — `advisory`: `claimSimilarity(claimNorm_p, claimNorm_q) === 1`; `predicate`:
+     `normalize(check_p) === normalize(check_q)`. No fuzzy τ.
+
+  **Full set, not transitive reduction** — every pair satisfying (1–4) is emitted (a 3-deep chain
+  crate⊃mod⊃fn yields all three edges incl. crate⊃fn). Subsumption *is* transitive; the pure "all valid
+  pairs" definition is the simplest deterministic one. The old "NEAREST target" was a merge artifact and is
+  dropped. **Ordering:** the result is sorted by `(broader, narrower)` `nodeKey` lexicographic ascending —
+  total, self-pair-free, each pair once (direction is inherent, so no `(a,b)`+`(b,a)` duplication).
 
 - **DP-3 — `sameAs` is the only new persisted state, and it is human-ratified.** *(Wave 2, model-gated.)*
   A cross-location sameness a human asserts. It rides existing rails: the projection sidecar already
@@ -72,6 +94,23 @@ to human ratification** (A1-honest).
 - ✝ **SimHash / MinHash / blocking / any fuzzy tier** — foreign to grounding; the case it would catch is
   usually not a dup (it would de-ground). Never built.
 - ✝ **stored `subsumes` edges** — derivable on read (DP-2); persisting them is redundant state.
+
+## Acceptance surface (suite-critic, pre-slice)
+
+**DP-1 goldens that MUST flip** (merge→two-nodes): the `upsert` fold + the 2-arg default-cfg case in the
+ADJACENCY-B near-dup test; the `CREATE→UPDATE` door-2 case in the `writeDecision` test; the "one node, not
+two" case in the write-governance e2e. Each flips to `CREATE` / `len == before+1` / **both** nodeKeys
+present / the neighbor's claims unchanged.
+
+**Vacuous tooth to correct** — `wp-5.13-b-know.anchor-identity.test.ts` SCN-KNOW-15h-1 asserts only
+`nearDuplicateProbe(...) === true` while its prose claims "⇒ forced MERGE"; it never exercises routing, so
+it stays green after DP-1 while its prose goes false. Correct the prose (the probe reports a collision; it
+does **not** merge) — do not count it as a DP-1 tooth.
+
+**DP-2 new goldens** (the old pure `adjacencyNearDup` cases take no slot arg and pin the OLD all-slot
+behavior — they are NOT a flip; `deriveSubsumes` needs fresh cases): direction (`broader` = the ancestor /
+shorter anchor), equal-anchor exclusion, self-pair absence, deterministic sort, cross-family non-subsumption,
+and the full-set (transitive) 3-deep chain.
 
 ## Waves
 
