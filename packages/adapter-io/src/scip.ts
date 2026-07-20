@@ -3,7 +3,7 @@
 // The raw scip adapter: read an external `scip.proto` dump into the frozen `ScipOutput` projection
 // (@atlas/index) and plan which indexer to run per language. SKELETON — signatures frozen, bodies deferred.
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { deserializeSCIP, SymbolRole } from '@c4312/scip';
 import type { ScipOutput } from '@atlas/index';
 
@@ -29,6 +29,19 @@ export function readScip(scipPath: string): ScipOutput {
       })),
     })),
   };
+}
+
+/**
+ * Read the optional SCIP dump at `scipPath`, DEGRADING to the empty projection (`{ documents: [] }`) when
+ * no dump is present — a fresh repo with no `.atlas/index.scip` yet is a files-only structural view, NEVER
+ * a throw (`readScip` calls `readFileSync`, which throws ENOENT on a missing path). This is the ONE shared
+ * missing-file guard: `wire.ts` (`assembleHandler`) and `compose.ts` (`composeRuntime`) both route the
+ * optional-SCIP case through here. A PRESENT-but-corrupt dump is out of scope — it keeps whatever `readScip`
+ * does; only the MISSING-file case is guarded. (compose.ts still holds a twin local copy pending a DRY
+ * follow-on that may migrate it to this export.)
+ */
+export function readScipOrEmpty(scipPath: string): ScipOutput {
+  return existsSync(scipPath) ? readScip(scipPath) : { documents: [] };
 }
 
 /** The real per-language SCIP indexer tools the ring knows how to run (constitution adapt-scip-2, D1:
