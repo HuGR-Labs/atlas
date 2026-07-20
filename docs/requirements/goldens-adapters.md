@@ -258,7 +258,7 @@ gen: conformance
 source: REQ-ADAPTER-7a
 Given candidate fact `F` (`nodeKey claim:fix-cov`, content `c1`) and the durable store
 When `writeDecision(F, cfg)` runs
-Then it computes `nodeKey(F)`, probes the **durable** store for the two hits + `nearDuplicateProbe`, calls the existing `routeWrite`, applies `upsert`, and flushes the projection through the store — and a fresh probe over the flushed store round-trips `F`
+Then it computes `nodeKey(F)`, probes the **durable** store for the contentHash (D0) and nodeKey (D1) hits, calls the existing `routeWrite`, applies `upsert`, and flushes the projection through the store — and a fresh probe over the flushed store round-trips `F`
 teeth: breaks-on "the binding skips the flush step — `routeWrite`/`upsert` land in memory but the durable store never sees `F`, so the next write's durable probe misses the prior (a memory-only golden passes)"
 gen: PBT
 
