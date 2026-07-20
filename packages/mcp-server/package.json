@@ -16,7 +16,8 @@
   },
   "dependencies": {
     "@atlas/adapter-io": "*",
-    "@atlas/tools": "*"
+    "@atlas/tools": "*",
+    "@modelcontextprotocol/sdk": "1.29.0"
   },
   "scripts": {
     "build": "tsc -b",
