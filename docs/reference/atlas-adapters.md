@@ -64,7 +64,7 @@ WiredHandler = ReturnType<createHandler>                       // the ONE 4-leg 
   `id(value) === key` and treat a mismatch as absent (tamper-safe, KERNEL-1).
 - **ADAPT-STORE-2 Governed persistent write (OWNER-DEFINE).** To make one governed **dedup/supersede** write
   land durably, the parked front-door `writeDecision(candidate,cfg)` (`→ knowledge/write/router.ts`) MUST be
-  bound: compute `nodeKey(candidate)`, probe the durable store for the two hits + `nearDuplicateProbe`, call the
+  bound: compute `nodeKey(candidate)`, probe the durable store for the contentHash (D0) and nodeKey (D1) hits, call the
   existing `routeWrite`, apply `upsert`, and flush the projection through the store. This binds existing pieces;
   it invents no new routing.
 - **ADAPT-STORE-3 Projection rehydrate (the read-back obligation).** Rehydrating the session projection from

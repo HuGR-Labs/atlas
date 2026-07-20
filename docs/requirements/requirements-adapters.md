@@ -99,8 +99,8 @@ normative-clause: "On read it MUST verify `id(value) === key` and treat a mismat
 
 ### REQ-ADAPTER-7a — governed persistent write binding
 source: INV-ADAPTER-7 @ reference/atlas-adapters.md#adapt-store-2
-To land one governed dedup/supersede write durably, the binding shall compute `nodeKey(candidate)`, probe the durable store for the two hits and `nearDuplicateProbe`, call the existing `routeWrite`, apply `upsert`, and flush the projection through the store.
-normative-clause: "compute `nodeKey(candidate)`, probe the durable store for the two hits + `nearDuplicateProbe`, call the existing `routeWrite`, apply `upsert`, and flush the projection through the store."
+To land one governed dedup/supersede write durably, the binding shall compute `nodeKey(candidate)`, probe the durable store for the contentHash (D0) and nodeKey (D1) hits, call the existing `routeWrite`, apply `upsert`, and flush the projection through the store.
+normative-clause: "compute `nodeKey(candidate)`, probe the durable store for the contentHash (D0) and nodeKey (D1) hits, call the existing `routeWrite`, apply `upsert`, and flush the projection through the store."
 
 ### REQ-ADAPTER-7b — idempotent governed write
 source: INV-ADAPTER-7 @ reference/atlas-adapters.md#adapt-store-2
