@@ -74,10 +74,13 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
     };
     const projection = upsert(rehydrateProjection(deps.store), req).store;
 
-    // 4. DURABLE PERSIST — the projection sidecar AND the whole GroundedFact into CAS (INVARIANT: the
-    //    content-addressed bytes ARE the fact, so driftFacts/doctor can read them back).
-    deps.store.persistProjection(projection);
+    // 4. DURABLE PERSIST — write the content-addressed bytes FIRST, then the projection sidecar that
+    //    references them (INVARIANT: the CAS bytes ARE the fact, so driftFacts/doctor can read them back).
+    //    Order matters for crash-safety: if `put` fails (disk-full/permission) the projection is never
+    //    written, so the sidecar can NEVER reference a contentHash whose bytes are absent from CAS. The
+    //    reverse order would leave a dangling reference on a mid-write failure.
     deps.store.put(node as CasObject);
+    deps.store.persistProjection(projection);
 
     return { emitted: true, id: contentHash };
   };

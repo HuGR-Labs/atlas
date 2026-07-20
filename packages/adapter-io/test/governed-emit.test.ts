@@ -135,4 +135,28 @@ describe('COMPOSE-A — createGovernedEmit (truth-door · authz · upsert · dur
     expect(spy.puts()).toHaveLength(0);
     expect(spy.persists()).toHaveLength(0);
   });
+
+  it('SCN-GE-5 — put-before-persist crash-safety: a failing `put` NEVER persists the projection (no dangling ref)', () => {
+    const persists: StoreProjection[] = [];
+    const throwingStore: DiskStore = {
+      put() {
+        throw new Error('EIO: disk full'); // CAS write fails mid-emit (authorized + grounded fact)
+      },
+      get() {
+        return undefined;
+      },
+      persistProjection(p) {
+        persists.push(p);
+      },
+      loadProjection() {
+        return persists.length > 0 ? persists[persists.length - 1] : undefined;
+      },
+    };
+    const { emit } = createGovernedEmit({ store: throwingStore, gate: HOLDS_GATE, policy: POLICY, actor: 'alice' });
+    // `put` runs BEFORE `persistProjection`, so a CAS-write failure throws before the sidecar is written.
+    expect(() => emit(advisory('core'), AT)).toThrow();
+    // TEETH — reverse the order (persistProjection before put) and this flips RED: the sidecar would be
+    // persisted referencing a contentHash whose bytes never landed in CAS (a dangling reference).
+    expect(persists).toHaveLength(0);
+  });
 });
