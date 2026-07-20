@@ -13,14 +13,16 @@ import { createHandler, createInit, createQuery, createReconcile } from '@atlas/
 import type { ToolLegs, ToolLeg, NodeSource } from '@atlas/tools';
 import { id } from '@atlas/kernel';
 import { build, createResolve, createDepgraph } from '@atlas/index';
+import { currentNodes, deriveSubsumes } from '@atlas/knowledge';
 import type { CasPath } from './store.js';
 import { walkFileTree } from './fs.js';
 import { readScipOrEmpty } from './scip.js';
 import { createIndexAdapter } from './index-adapter.js';
+import { createProjectionQueryIndex, underScope } from './projection-query-index.js';
 import { createDriftSource } from './git-drift.js';
 import { createGovernedEmit } from './governed-emit.js';
 import { loadPolicy } from './policy.js';
-import { createDiskStore } from './store.js';
+import { createDiskStore, rehydrateProjection } from './store.js';
 // DAG-pin imports — referenced (not wired as legs) to keep the frozen skeleton's dependency edges real.
 import { foldAstUnits } from './ast.js';
 import { createForge } from './git-forge.js';
@@ -105,18 +107,42 @@ export function assembleHandler(config: WireConfig): WiredHandler {
   // not a throwaway in-memory map. This closes the former store-bridge TODO: the durable store is the real
   // one now. The actor is passed in via `config.actor` (resolved from env/git-config by compose.ts) — this
   // module NEVER reads `process.env` or a fact/payload for the actor (the spoof-guard boundary).
+  // The ONE durable disk store this assembly rides — shared by the governed emit leg (the write side) AND
+  // the projection query-readback (the read side), so `atlas query` reads back the very facts `atlas emit`
+  // persists (WIRE-LOOP: emit→query is a closed loop over ONE store, never two divergent instances).
+  const store = createDiskStore(config.casPath);
+
   const governedEmit = createGovernedEmit({
-    store: createDiskStore(config.casPath),
+    store,
     gate: config.seams.gate,
     policy: loadPolicy(config.repoPath),
     actor: config.actor ?? '',
   });
 
+  // Seam-1: wrap the pure structural index-adapter with the durable projection readback, so a scope resolves
+  // to its covering territory skeleton (from @atlas/index) FOLDED with the emitted facts under it (from CAS).
+  const queryIndex = createProjectionQueryIndex(index, store);
+
   const legs: ToolLegs = {
     'atlas-init': ((args) =>
       createInit(index, config.seams.heuristic).init((args as { path: string }).path)) satisfies ToolLeg,
-    'atlas-query': ((args) =>
-      createQuery(index).query((args as { scope: string }).scope)) satisfies ToolLeg,
+    // Seam-3: the query leg's `Verdict.data` is the `{ pack, subsumes }` observability envelope. `subsumes`
+    // is `deriveSubsumes` (its FIRST production call site — DP-2 resolution-at-read) filtered to the edges
+    // whose BOTH endpoints are current nodes UNDER the covering scope, already deterministically sorted.
+    'atlas-query': ((args) => {
+      const scope = (args as { scope: string }).scope;
+      const pack = createQuery(queryIndex).query(scope);
+      const proj = rehydrateProjection(store);
+      const underKeys = new Set(
+        currentNodes(proj)
+          .filter((n) => n.primaryAnchor !== undefined && underScope(n.primaryAnchor, scope))
+          .map((n) => n.nodeKey),
+      );
+      const subsumes = deriveSubsumes(proj).filter(
+        (s) => underKeys.has(s.broader) && underKeys.has(s.narrower),
+      );
+      return { pack, subsumes };
+    }) satisfies ToolLeg,
     'atlas-emit': ((args) =>
       governedEmit.emit(
         (args as { node: import('@atlas/knowledge').GroundedFact }).node,

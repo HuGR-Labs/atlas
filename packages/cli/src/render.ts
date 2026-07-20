@@ -1,7 +1,11 @@
 // @atlas/cli — src/render.ts  (CLI-3: render a handler Verdict to a process outcome)
 //
 // Render the frozen `Verdict` (@atlas/tools) to the CLI's process-level outcome (exit code + stdout).
-// SKELETON — signature frozen, body deferred to the CLI WP.
+// DETERMINISTIC: a PURE function of the verdict — NO clock/nonce/paths — so the same verdict renders
+// byte-identically every time (CLI-3c). WIRE-LOOP Seam-2 adds the `data:` block that closes GAP-B (the CLI
+// used to DROP `verdict.data`, so an emitted fact was invisible at the user surface). The block is appended
+// AFTER the status/next/invariant lines and ONLY for a known `ok` data shape — an unknown/absent `data`
+// yields NO block, so every pre-existing rendering stays byte-unchanged (back-compat).
 
 import type { Verdict } from '@atlas/tools';
 import { deriveStatus, EXIT } from './map.js';
@@ -12,17 +16,77 @@ export interface CliVerdict {
   readonly stdout: string;
 }
 
+/** A `PackInvariant`-shaped row inside a query pack (structural — never a prose blob). */
+interface InvRow {
+  readonly nodeId: string;
+  readonly tier: string;
+  readonly claim: string;
+}
+
+/** A `broader ⊃ narrower` coverage edge inside the query envelope (Seam-3). */
+interface SubRow {
+  readonly broader: string;
+  readonly narrower: string;
+}
+
+/**
+ * Render the DETERMINISTIC `data:` block for a known `ok` verdict data shape, or `''` when the shape is
+ * unknown/absent (back-compat: no block ⇒ existing output byte-unchanged). PURE — every byte is a function
+ * of `data` alone, in a fixed field order (CLI-3c). The recognised shapes, in guard order:
+ *   - query envelope `{ pack, subsumes }` → `  inv <tier> <nodeId>: <claim>` per (pre-sorted) invariant,
+ *     `  stale: <bool>`, then `  subsumes <broader> ⊃ <narrower>` per (pre-sorted) edge.
+ *   - emit `{ id }` (a Hash) → `  id: <hash>`.
+ *   - init `{ territories }` → `  territory: <name>` per territory, sorted by name.
+ */
+function renderData(data: unknown): string {
+  if (typeof data !== 'object' || data === null) return '';
+  const d = data as Record<string, unknown>;
+
+  // query envelope { pack, subsumes } — the observability readback (Seam-1+3).
+  const pack = d.pack as { invariants?: unknown; stale?: unknown } | undefined;
+  if (pack && typeof pack === 'object' && Array.isArray(pack.invariants)) {
+    const invs = pack.invariants as readonly InvRow[];
+    const subs = Array.isArray(d.subsumes) ? (d.subsumes as readonly SubRow[]) : [];
+    const lines = [
+      ...invs.map((i) => `  inv ${i.tier} ${i.nodeId}: ${i.claim}`),
+      `  stale: ${pack.stale === true}`,
+      ...subs.map((s) => `  subsumes ${s.broader} ⊃ ${s.narrower}`),
+    ];
+    return `data:\n${lines.join('\n')}\n`;
+  }
+
+  // emit { id } — the CAS id of the persisted fact.
+  if (typeof d.id === 'string') {
+    return `data:\n  id: ${d.id}\n`;
+  }
+
+  // init { territories } — the structural move-in. An EMPTY territory set renders NO block (there are no
+  // lines to show) so a zero-territory init stays byte-identical to its pre-Seam-2 output (back-compat).
+  if (Array.isArray(d.territories)) {
+    const names = (d.territories as readonly { name: string }[])
+      .map((t) => t.name)
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    if (names.length === 0) return '';
+    return `data:\n${names.map((n) => `  territory: ${n}`).join('\n')}\n`;
+  }
+
+  return '';
+}
+
 /**
  * Render a frozen handler `Verdict` to an exit code + stdout (CLI-3). DETERMINISTIC: a PURE function of the
  * verdict — NO clock, NO nonce, NO duration — so the same verdict renders byte-identically every time
  * (CLI-3c). The exit code is `f(status)` (CLI-3b, `deriveStatus`), and the stdout block carries `status`
- * plus BOTH guidance fields (`next`, `invariant`) in a fixed order (CLI-3d — guidance always present).
+ * plus BOTH guidance fields (`next`, `invariant`) in a fixed order (CLI-3d — guidance always present), then
+ * the Seam-2 `data:` block when the verdict is `ok` and carries a known data shape (else nothing appended).
  */
 export function renderVerdict(v: Verdict): CliVerdict {
   const status = deriveStatus(v);
+  const dataBlock = v.ok && v.data !== undefined ? renderData(v.data) : '';
   const stdout =
     `status: ${status}\n` +
     `next: ${v.guidance.next}\n` +
-    `invariant: ${v.guidance.invariant}\n`;
+    `invariant: ${v.guidance.invariant}\n` +
+    dataBlock;
   return { exitCode: EXIT[status], stdout };
 }
