@@ -118,6 +118,13 @@ and the full-set (transitive) 3-deep chain.
 
 - **Wave 1 (now):** WP-DEDUP-1 (un-merge) → WP-DEDUP-2 (subsumes derive-on-read). Sequential (same files).
   Kills the live debt + lands the structural relation. No frozen-model mutation.
-- **Wave 2 (owner-gated):** WP-DEDUP-3 (`sameAs` persist + ratify-promote + read-fold). Touches
-  `StoreProjection` + `store.ts` sidecar + `ratify/*`. Held for an explicit nod before mutating the
-  frozen model — the biggest lift for the rarest case.
+- **Wave 2 (DEFERRED — owner decision 2026-07-20):** WP-DEDUP-3 (`sameAs` persist + ratify-promote +
+  read-fold). Touches `StoreProjection` + `store.ts` sidecar + `ratify/*`. **Not built.** It covers the
+  H1 case only — a human linking two facts at *unrelated* code sites that mean the same thing (no
+  structural signal can detect it). This is the biggest lift (mutates the frozen model) for the rarest
+  case, and the common "same fact in many places" is already served by multi-citation `grounding.entries`.
+  **This is a deliberate deferral, NOT debt** — the model is complete and correct without it (D0/D1 merge,
+  R1 subsumes relate; the fuzzy/cross-location residue is honestly routed to human ratification per A1).
+  Revisit only if a real need for machine-assisted cross-location linking appears; the insertion points
+  are known (sidecar edge like `supersededBy`; the native `ratify.ts` billy gate; a knowledge-side
+  union-find fold).
