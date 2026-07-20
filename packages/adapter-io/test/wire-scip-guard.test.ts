@@ -63,10 +63,11 @@ describe('SCIP-GUARD (#2) — assembleHandler degrades on a MISSING .scip (fresh
 
       // and the query leg actually RESOLVES a real scope over the files-only index (no scip needed): the
       // `src` territory (a top-level dir the FileTree yields) covers, returning a bounded pack — proof the
-      // empty-SCIP degrade is a working index, not a dead stub.
+      // empty-SCIP degrade is a working index, not a dead stub. (Seam-3: `data` is now the `{pack, subsumes}`
+      // observability envelope — the pack rides under `.pack`.)
       const v = handler.handle(QUERY, { scope: 'src' });
       expect(v.ok).toBe(true);
-      expect((v.data as Pack).territory).toBe('src');
+      expect((v.data as { pack: Pack }).pack.territory).toBe('src');
     } finally {
       repo.cleanup();
     }
@@ -90,7 +91,7 @@ describe('SCIP-GUARD (#2) — assembleHandler degrades on a MISSING .scip (fresh
       }
       const v = handler.handle(QUERY, { scope: 'src' });
       expect(v.ok).toBe(true);
-      expect((v.data as Pack).territory).toBe('src');
+      expect((v.data as { pack: Pack }).pack.territory).toBe('src');
     } finally {
       scip.cleanup();
       repo.cleanup();
