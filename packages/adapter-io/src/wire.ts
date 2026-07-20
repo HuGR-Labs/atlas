@@ -9,9 +9,8 @@
 // heuristic, the truth-gate, the KNOW-5 classifier, the drifted-fact set, and the anchor resolver) are
 // INJECTED via `WireConfig.seams`, so the assembly is testable with fakes/stubs.
 
-import { createHandler, createInit, createQuery, createEmit, createReconcile } from '@atlas/tools';
+import { createHandler, createInit, createQuery, createReconcile } from '@atlas/tools';
 import type { ToolLegs, ToolLeg, NodeSource } from '@atlas/tools';
-import type { Cas } from '@atlas/kernel';
 import { id } from '@atlas/kernel';
 import { build, createResolve, createDepgraph } from '@atlas/index';
 import type { CasPath } from './store.js';
@@ -19,9 +18,11 @@ import { walkFileTree } from './fs.js';
 import { readScip } from './scip.js';
 import { createIndexAdapter } from './index-adapter.js';
 import { createDriftSource } from './git-drift.js';
+import { createGovernedEmit } from './governed-emit.js';
+import { loadPolicy } from './policy.js';
+import { createDiskStore } from './store.js';
 // DAG-pin imports — referenced (not wired as legs) to keep the frozen skeleton's dependency edges real.
 import { foldAstUnits } from './ast.js';
-import { createDiskStore } from './store.js';
 import { createForge } from './git-forge.js';
 import { createHistorySource } from './git-history.js';
 import { createSiteProposer } from './llm.js';
@@ -91,12 +92,17 @@ export function assembleHandler(config: WireConfig): WiredHandler {
     nodeHashOfPath: (p: string) => id({ file: p }),
   });
 
-  // STORE BRIDGE (KEY): the frozen `createEmit(store: Cas, gate)` takes the kernel `Cas`
-  // (`Map<Hash, CasObject>`) — the durable `createDiskStore` (put/get) does NOT structurally fit that
-  // signature. For THIS WIRE slice, satisfy the frozen signature with a fresh in-memory `Cas`.
-  // TODO(durability): emit writes to an in-memory Cas; durable-store wiring is a follow-on (createEmit
-  // takes a Map; bridging to DiskStore.put is a separate WP — createEmit is NOT changed here).
-  const emitStore: Cas = new Map();
+  // GOVERNED DURABLE EMIT (COMPOSE-A): the emit leg persists through the governed path — the GROUND
+  // truth-gate, the KNOW-11 owner-scoped authz gate (actor = `ATLAS_ACTOR`, fail-closed when unset), the
+  // KNOW-15 `upsert` write-decision, and durable persistence (the projection sidecar + the whole fact into
+  // CAS) — over the DURABLE `createDiskStore(config.casPath)`, not a throwaway in-memory map. This closes
+  // the former store-bridge TODO: the durable store is the real one now.
+  const governedEmit = createGovernedEmit({
+    store: createDiskStore(config.casPath),
+    gate: config.seams.gate,
+    policy: loadPolicy(config.repoPath),
+    actor: process.env.ATLAS_ACTOR ?? '',
+  });
 
   const legs: ToolLegs = {
     'atlas-init': ((args) =>
@@ -104,7 +110,7 @@ export function assembleHandler(config: WireConfig): WiredHandler {
     'atlas-query': ((args) =>
       createQuery(index).query((args as { scope: string }).scope)) satisfies ToolLeg,
     'atlas-emit': ((args) =>
-      createEmit(emitStore, config.seams.gate).emit(
+      governedEmit.emit(
         (args as { node: import('@atlas/knowledge').GroundedFact }).node,
         (args as { at: import('@atlas/contracts').Hash }).at,
       )) satisfies ToolLeg,
@@ -122,9 +128,9 @@ export function assembleHandler(config: WireConfig): WiredHandler {
       )) satisfies ToolLeg,
   };
 
-  // The DAG-pin references NOT wired as handler legs (frozen skeleton edges): the AST fold, the durable
-  // disk store (deferred by the store bridge above), and the git-forge / history / site-proposer seams.
-  void [foldAstUnits, createDiskStore, createForge, createHistorySource, createSiteProposer, config.casPath];
+  // The DAG-pin references NOT wired as handler legs (frozen skeleton edges): the AST fold and the
+  // git-forge / history / site-proposer seams. (The durable disk store is now REALLY wired — the emit leg.)
+  void [foldAstUnits, createForge, createHistorySource, createSiteProposer];
 
   // ONE handler over the four legs — no per-entrypoint copy (WIRE-1).
   return createHandler(legs);

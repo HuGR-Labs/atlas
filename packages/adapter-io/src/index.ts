@@ -21,7 +21,12 @@ export { materializePoke, pokeFilePath, POKE_FILE_EXT } from './poke-file.js';
 
 // The ONE shared handler assembly (constitution WIRE-1) — consumed by every entrypoint (CLI, MCP).
 export { assembleHandler } from './wire.js';
-export type { WireConfig, WiredHandler } from './wire.js';
+export type { WireConfig, WiredHandler, WireSeams } from './wire.js';
+
+// The governed durable emit leg (COMPOSE-A) + the runtime composition root that supplies the real seams.
+export { createGovernedEmit } from './governed-emit.js';
+export type { GovernedEmitDeps } from './governed-emit.js';
+export { composeRuntime, buildHeuristic, buildGate } from './compose.js';
 
 // The admin-locked, versioned governance policy (WP-POLICY): declarative `.atlas/policy.json` + fail-closed loader.
 export { loadPolicy, defaultPolicy, actorInScope, nearDupConfig } from './policy.js';
