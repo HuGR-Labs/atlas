@@ -15,15 +15,18 @@ export type Command = (typeof COMMANDS)[number];
 export type Leg = Tool | 'genesis run-controller';
 
 /**
- * CLI-1a: the TOTAL + MUTUALLY-EXCLUSIVE command→leg map — the enumeration oracle. `doctor` binds the read
- * path (`atlas-query`); `mine` binds the genesis entry (data-only). Every command maps to EXACTLY one leg.
+ * CLI-1a: the TOTAL + MUTUALLY-EXCLUSIVE command→leg map — the enumeration oracle. `doctor` binds a READ
+ * leg (`atlas-query`) so the authority partition (CLI-2) classifies it read — but at runtime `doctor`
+ * SUB-DISPATCHES to the four read/advisory `DoctorApi` legs (see src/doctor.ts), never through the wired
+ * handler; the leg here is the authority oracle, not the dispatch target. `mine` binds the genesis entry
+ * (data-only). Every command maps to EXACTLY one leg.
  */
 export const COMMAND_LEG: Record<Command, Leg> = {
   init: 'atlas-init',
   query: 'atlas-query',
   emit: 'atlas-emit',
   reconcile: 'atlas-reconcile',
-  doctor: 'atlas-query', // read path (TOOLS-6 projection)
+  doctor: 'atlas-query', // READ authority oracle (TOOLS-6 projection); runtime sub-dispatches to DoctorApi
   mine: 'genesis run-controller', // data-only entry; not driven at this seam
 };
 
