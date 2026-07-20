@@ -18,8 +18,8 @@
 import { id } from '@atlas/kernel';
 import type { CasObject } from '@atlas/kernel';
 import type { Hash } from '@atlas/contracts';
-import { upsert, normalizeCheck } from '@atlas/knowledge';
-import type { GroundedFact, WriteRequest } from '@atlas/knowledge';
+import { upsert, normalizeCheck, primaryAnchorId } from '@atlas/knowledge';
+import type { Candidate, GroundedFact, WriteRequest } from '@atlas/knowledge';
 import type { EmitOut, TruthGate } from '@atlas/tools';
 import { actorInScope } from './policy.js';
 import type { AtlasPolicy } from './policy.js';
@@ -71,6 +71,11 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
       contentHash: contentHash as unknown as string,
       family: node.kind,
       claimNorm: claimNormOf(node),
+      // ── ADJACENCY carrier (ADDITIVE) — carry the computed primary anchor + the R3-optional slot onto
+      //    the node so a later sibling-adjacency scan reads them off the projection (WP-B); NOT read here.
+      //    `predicateSlot` is R3-optional; conditional spread keeps `slot` ABSENT (exactOptionalPropertyTypes).
+      primaryAnchor: primaryAnchorId(node as unknown as Candidate) as unknown as string,
+      ...(node.predicateSlot !== undefined ? { slot: node.predicateSlot } : {}),
     };
     const projection = upsert(rehydrateProjection(deps.store), req).store;
 

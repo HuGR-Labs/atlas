@@ -129,6 +129,40 @@ describe('rehydrateProjection — ADAPT-STORE-3 cross-process rehydrate, minting
     expect(p.current.get('claim:fix-cov')).toEqual(expected);
   });
 
+  it('ADJACENCY-A — the added primaryAnchor + slot round-trip through the durable projection sidecar', () => {
+    const dir = freshCasDir();
+    // a genuine projection carrying the ADDITIVE adjacency fields (via the REAL knowledge upsert).
+    const req: WriteRequest = {
+      nodeKey: 'claim:fix-cov',
+      contentHash: id({ claim: 'fix-cov', v: 1 }),
+      family: 'advisory',
+      claimNorm: 'coverage on the fix path',
+      primaryAnchor: 'pkg::mod::fix',
+      slot: 'invariant',
+    };
+    const { store: projection } = upsert(emptyStore(), req);
+    const s = createDiskStore(dir);
+    s.persistProjection(projection);
+
+    // a fresh process reconstructs the current-node map from the durable sidecar.
+    const rehydrated = rehydrateProjection(createDiskStore(dir)).current.get('claim:fix-cov')!;
+    // teeth: a WireProjection that dropped the whole-node stringify (or filtered fields) loses these.
+    expect(rehydrated.primaryAnchor).toBe('pkg::mod::fix');
+    expect(rehydrated.slot).toBe('invariant');
+  });
+
+  it('ADJACENCY-A — an OLD sidecar without the fields rehydrates with them ABSENT (forward/back compat)', () => {
+    const dir = freshCasDir();
+    // a projection minted with NO adjacency fields (the pre-ADJACENCY-A shape).
+    const { store: projection } = upsert(emptyStore(), reqF());
+    const s = createDiskStore(dir);
+    s.persistProjection(projection);
+    const node = rehydrateProjection(createDiskStore(dir)).current.get('claim:fix-cov')!;
+    // the absent optionals stay absent — no explicit undefined injected by the round-trip.
+    expect(node.primaryAnchor).toBeUndefined();
+    expect(node.slot).toBeUndefined();
+  });
+
   it('SCN-ADAPTER-12b-1 — rehydrate reconstructs state only, minting nothing (guard)', () => {
     const dir = freshCasDir();
     const { store: projection } = upsert(emptyStore(), reqF());

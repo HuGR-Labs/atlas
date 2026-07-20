@@ -33,8 +33,8 @@ import type {
 } from '@atlas/genesis';
 import { createDiskStore } from '@atlas/adapter-io';
 import type { DiskStore } from '@atlas/adapter-io';
-import { upsert as knowledgeUpsert, emptyStore, normalizeCheck } from '@atlas/knowledge';
-import type { WriteRequest, StoreProjection } from '@atlas/knowledge';
+import { upsert as knowledgeUpsert, emptyStore, normalizeCheck, primaryAnchorId } from '@atlas/knowledge';
+import type { WriteRequest, StoreProjection, Candidate as KnowledgeCandidate } from '@atlas/knowledge';
 import { id, asNodeKey, asSubtreeHash } from '@atlas/kernel';
 import { join } from 'node:path';
 import type { CliVerdict } from './render.js';
@@ -172,6 +172,11 @@ export function buildControllerDeps(repoPath: string, d: MineDeps): ControllerDe
           contentHash: id(f) as unknown as string,
           family: f.kind,
           claimNorm: claimNormOf(f),
+          // ── ADJACENCY carrier (ADDITIVE) — carry the computed primary anchor + R3-optional slot onto the
+          //    node for a later sibling-adjacency scan (WP-B); NOT read here, routing is byte-identical.
+          //    `predicateSlot` is R3-optional; conditional spread keeps `slot` ABSENT (exactOptionalPropertyTypes).
+          primaryAnchor: primaryAnchorId(f as unknown as KnowledgeCandidate) as unknown as string,
+          ...(f.predicateSlot !== undefined ? { slot: f.predicateSlot } : {}),
         };
         projection = knowledgeUpsert(projection, req).store; // route the write-decision (NOT store.put)
         grounded.set(f.id as unknown as string, f);

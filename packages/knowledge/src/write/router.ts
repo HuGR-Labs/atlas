@@ -131,6 +131,9 @@ export interface WriteRequest {
   readonly contentHash: string; // WHAT  — opaque CAS id (value computed upstream)
   readonly family: NodeFamily;
   readonly claimNorm: string; // the advisory claim body — the set-union element (KNOW-4c)
+  // ── ADJACENCY carrier (ADDITIVE, OPTIONAL) — anchor+slot for WP-B's sibling-adjacency scan; NOT routed.
+  readonly primaryAnchor?: string; // the computed primaryAnchorId VALUE (qualifiedPath-prefix), string form
+  readonly slot?: PredicateSlot; //  the closed-vocabulary predicate slot the node lives at (R3-optional)
 }
 
 /** A current node in the territory projection. Exactly one lives per `nodeKey` (KNOW-4g). */
@@ -140,6 +143,9 @@ export interface CurrentNode {
   readonly contentHash: string;
   readonly claims: readonly string[]; // claimNorms — the advisory set-union set (dedup by claimNorm)
   readonly supersededBy?: string; // predicate lineage pointer into CAS (KNOW-4e); absent for advisory
+  // ── ADJACENCY carrier (ADDITIVE, OPTIONAL) — carried from the req for WP-B; store.ts WireProjection round-trips them free. NOT read here.
+  readonly primaryAnchor?: string; // the primaryAnchorId VALUE (qualifiedPath-prefix), string form
+  readonly slot?: PredicateSlot; //  the closed-vocabulary predicate slot the node lives at (R3-optional)
 }
 
 /** The territory store projection: the one-current-node map + the append-only CAS retention set. */
@@ -188,6 +194,9 @@ export function upsert(store: StoreProjection, req: WriteRequest): UpsertResult 
         family: req.family,
         contentHash: req.contentHash,
         claims: [req.claimNorm],
+        // ADJACENCY carrier (additive) — spread keeps the field ABSENT when omitted (never explicit undefined).
+        ...(req.primaryAnchor !== undefined ? { primaryAnchor: req.primaryAnchor } : {}),
+        ...(req.slot !== undefined ? { slot: req.slot } : {}),
       });
       break;
     case 'UPDATE': {
@@ -196,11 +205,19 @@ export function upsert(store: StoreProjection, req: WriteRequest): UpsertResult 
         ? prior.claims // set-union: dedup by claimNorm (idempotent)
         : [...prior.claims, req.claimNorm];
       cas.add(req.contentHash);
-      current.set(req.nodeKey, { ...prior, contentHash: req.contentHash, claims }); // in place, no supersededBy
+      current.set(req.nodeKey, {
+        ...prior, // ADJACENCY: `...prior` carries prior anchor/slot; the req's WIN below when present
+        contentHash: req.contentHash,
+        claims, // in place, no supersededBy
+        ...(req.primaryAnchor !== undefined ? { primaryAnchor: req.primaryAnchor } : {}),
+        ...(req.slot !== undefined ? { slot: req.slot } : {}),
+      });
       break;
     }
-    case 'SUPERSEDE': {
+    case 'SUPERSEDE': { // ADJACENCY: anchor/slot = req ?? prior (below)
       const prior = current.get(req.nodeKey)!; // nodeKeyHit ⇒ present
+      const anchor = req.primaryAnchor ?? prior.primaryAnchor; // ADJACENCY: req wins, else preserve prior
+      const slot = req.slot ?? prior.slot;
       cas.add(req.contentHash); // prior.contentHash stays in `cas` (append-only) — old bytes addressable
       current.set(req.nodeKey, {
         nodeKey: req.nodeKey,
@@ -208,6 +225,8 @@ export function upsert(store: StoreProjection, req: WriteRequest): UpsertResult 
         contentHash: req.contentHash,
         claims: [req.claimNorm],
         supersededBy: prior.contentHash,
+        ...(anchor !== undefined ? { primaryAnchor: anchor } : {}), // ADJACENCY: spread avoids explicit undefined
+        ...(slot !== undefined ? { slot } : {}),
       });
       break;
     }
