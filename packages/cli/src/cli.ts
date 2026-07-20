@@ -5,7 +5,6 @@
 // handler is assembled LAZILY (only after a successful, non-`mine` parse) so `main([])` — the `bin.ts`
 // smoke path — returns a structured error WITHOUT touching the (WIRE-deferred) assembler.
 
-import { assembleHandler } from '@atlas/adapter-io';
 import type { WiredHandler } from '@atlas/adapter-io';
 import type { Guidance, Tool, Verdict } from '@atlas/tools';
 import { COMMAND_LEG } from './map.js';
@@ -46,9 +45,17 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
 
   // The remaining five commands each route to a governance `Tool` (doctor → atlas-query read path).
   const tool = COMMAND_LEG[command] as Tool;
-  const handler: WiredHandler =
-    deps.handler ?? assembleHandler({ repoPath: process.cwd(), casPath: '.atlas/cas' });
-  const verdict = handler.handle(tool, { positionals, flags });
+  // The handler is INJECTED (dependency-inverted). Building the real one needs a fully-composed
+  // `WireConfig` — including the adapter-less `seams` (heuristic/gate/classifier/driftFacts/resolveAnchorAt)
+  // that WIRE-1 does NOT construct; assembling those from the core factories + the disk store is the runtime
+  // composition-root WP. Until it lands, the production entrypoint fails closed WITH guidance rather than
+  // constructing an incomplete config; tests (and the composition root) inject `deps.handler`.
+  if (!deps.handler) {
+    return emit(
+      errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'),
+    );
+  }
+  const verdict = deps.handler.handle(tool, { positionals, flags });
   return emit(verdict);
 }
 
