@@ -12,7 +12,7 @@
 // diverge from the oracle (8a teeth); an unsorted list would diverge across runs (8b teeth); an upsert
 // would fire the spy (8c teeth).
 
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -121,14 +121,11 @@ describe('git-history HistorySource (ADAPT-GIT-1)', () => {
   });
 
   // ── SCN-ADAPTER-8c — ranking mints no fact ────────────────────────────────────────────────────────
-  it('SCN-ADAPTER-8c — computing signals/frontier mints 0 facts (write-spy)', () => {
+  it('SCN-ADAPTER-8c — computing signals/frontier mints 0 facts (structural: no store seam)', () => {
     sbx = makeGitSbx();
     const { repoPath, r0 } = sbx;
 
-    // A fact-store writer wrapped in a spy: driving the HistorySource must never call it.
-    const factStore = { upsert: (..._a: unknown[]) => undefined };
-    const spy = vi.spyOn(factStore, 'upsert');
-
+    // Drive every HistorySource method — none may reach a fact store.
     const hist = createHistorySource(repoPath, r0);
     const site = { kind: 'file' as const, qualifiedPath: QP, subtreeHash: '' as never };
     hist.signals(site);
@@ -137,10 +134,11 @@ describe('git-history HistorySource (ADAPT-GIT-1)', () => {
     hist.blameConcentration(repoPath, r0);
     hist.shallow(repoPath, r0);
 
-    expect(spy).toHaveBeenCalledTimes(0); // history feeds ranking only — 0 mints.
-
-    // Structural teeth: NO import line pulls a store/knowledge/upsert seam (a co-change upsert can't
-    // sneak in). Scoped to import statements so prose comments about "mints no fact" don't false-trip.
+    // The load-bearing 8c guarantee is STRUCTURAL: the factory takes no store and git-history.ts
+    // imports no store/knowledge/upsert seam, so a co-change upsert cannot sneak in. This is a
+    // STRONGER guarantee than a runtime write-spy, which — for a store-less factory that could never
+    // reach a store — would be vacuous (it could never fire). Scoped to import lines so prose comments
+    // about "mints no fact" don't false-trip.
     const src = readFileSync(fileURLToPath(new URL('../src/git-history.ts', import.meta.url)), 'utf8');
     const imports = src.split('\n').filter((l) => l.trimStart().startsWith('import')).join('\n');
     expect(imports).not.toMatch(/knowledge|store|upsert/i);
