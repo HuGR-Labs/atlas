@@ -66,8 +66,10 @@ to human ratification** (A1-honest).
   2. **same slot** — `slot(p) === slot(q)`. *(The old matcher spanned ALL slots — a bug; fixed here.)*
   3. **same family** — both `advisory` or both `predicate`. Cross-family never subsumes (an advisory's
      `claimNorm` and a predicate's `check` are different value spaces — comparing them is undefined).
-  4. **exact claim** — `advisory`: `claimSimilarity(claimNorm_p, claimNorm_q) === 1`; `predicate`:
-     `normalize(check_p) === normalize(check_q)`. No fuzzy τ.
+  4. **shared exact claim** — a `CurrentNode.claims` is a **set** of normalized claim strings (advisory
+     `claimNorm`s / predicate `normalize(check)`s, unioned by D1). Fire iff the two sets **intersect**:
+     `∃ c ∈ claims(p) ∩ claims(q)` under exact NFC+trim equality (`claimSimilarity === 1`). One shared
+     claim at two granularities is the subsumption; the nodes need not have identical claim-sets. No fuzzy τ.
 
   **Full set, not transitive reduction** — every pair satisfying (1–4) is emitted (a 3-deep chain
   crate⊃mod⊃fn yields all three edges incl. crate⊃fn). Subsumption *is* transitive; the pure "all valid
