@@ -11,7 +11,7 @@ import type { NearDupConfig, StoreProjection } from './router.js';
 /** EXACT normalized claim similarity — the AIRTIGHT leg. Returns `1` iff the claims are byte-identical
  *  after NFC+trim, else `0`. The near-SYNONYM metric (`0 < sim < 1`) is an OPEN-DEFINE threshold τ
  *  (residue SCN-KNOW-15h-2) — deliberately NOT invented here. */
-function claimSimilarity(a: string, b: string): 0 | 1 {
+export function claimSimilarity(a: string, b: string): 0 | 1 {
   return a.normalize('NFC').trim() === b.normalize('NFC').trim() ? 1 : 0;
 }
 
@@ -32,7 +32,7 @@ export function nearDuplicateProbe(
 
 /** `true` iff `short`'s segments are a leading run of `long`'s — the segment-wise structural-prefix
  *  test on `::`-split anchor paths. The degenerate equal case (`short === long`) is a prefix. Total. */
-function isPrefix(short: readonly string[], long: readonly string[]): boolean {
+export function isPrefix(short: readonly string[], long: readonly string[]): boolean {
   if (short.length > long.length) return false;
   for (let i = 0; i < short.length; i++) if (short[i] !== long[i]) return false;
   return true;
