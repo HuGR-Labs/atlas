@@ -22,3 +22,7 @@ export { materializePoke, pokeFilePath, POKE_FILE_EXT } from './poke-file.js';
 // The ONE shared handler assembly (constitution WIRE-1) — consumed by every entrypoint (CLI, MCP).
 export { assembleHandler } from './wire.js';
 export type { WireConfig, WiredHandler } from './wire.js';
+
+// The admin-locked, versioned governance policy (WP-POLICY): declarative `.atlas/policy.json` + fail-closed loader.
+export { loadPolicy, defaultPolicy, actorInScope, nearDupConfig } from './policy.js';
+export type { AtlasPolicy, NearDupPolicy, T0HeuristicPolicy, AuthzPolicy } from './policy.js';

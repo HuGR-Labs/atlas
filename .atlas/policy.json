@@ -1,0 +1,17 @@
+{
+  "$comment": "Atlas governance policy — ADMIN-OWNED, versioned. Locked via CODEOWNERS + branch protection (see docs/governance/policy-lock.md). Anyone MAY propose a change by PR; only atlas-admins ratify the merge. The engine reads this as data (fail-closed: absent/malformed => conservative default that denies writes).",
+  "nearDup": {
+    "$comment": "Near-duplicate matcher threshold (feeds @atlas/knowledge NearDupConfig.claimNormThreshold). 1 = exact-match only (conservative). Lower toward ~0.85 to merge near-synonym claims once the synonym-tau is trusted.",
+    "claimNormThreshold": 1
+  },
+  "t0Heuristic": {
+    "$comment": "Keywords that flag a fact as a T0 (human-ratification) candidate.",
+    "keywords": ["invariant", "security-property"]
+  },
+  "authz": {
+    "$comment": "Owner-scoped write (KNOW-11): scope => actor ids authorized to write it. Reads are universal regardless. An unlisted scope or actor is fail-closed (no write). Replace the placeholder seat with real actor ids.",
+    "scopes": {
+      "core/knowledge": ["seat:atlas-owner-placeholder"]
+    }
+  }
+}

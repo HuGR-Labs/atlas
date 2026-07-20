@@ -1,0 +1,7 @@
+# Atlas code ownership. GitHub requires a matching CODEOWNERS entry + branch protection
+# ("Require review from Code Owners") for these paths to be admin-gated on every PR.
+# See docs/governance/policy-lock.md.
+
+# The admin-locked governance policy: any change requires review from the atlas-admins team.
+# @HumanGuardrail/atlas-admins is a PLACEHOLDER team — replace with the real admin team handle.
+/.atlas/policy.json @HumanGuardrail/atlas-admins
