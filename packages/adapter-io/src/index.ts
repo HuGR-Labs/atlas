@@ -11,6 +11,8 @@ export { createDiskStore, rehydrateProjection } from './store.js';
 export type { CasPath } from './store.js';
 export { createHistorySource, createDriftSource, createForge } from './git.js';
 export { createSiteProposer } from './llm.js';
+export { createIndexAdapter } from './index-adapter.js';
+export type { IndexAdapterDeps } from './index-adapter.js';
 
 // The ONE shared handler assembly (constitution WIRE-1) — consumed by every entrypoint (CLI, MCP).
 export { assembleHandler } from './wire.js';
