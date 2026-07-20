@@ -15,10 +15,14 @@
 //   • ADAPT-AST-parsefail — a syntactically broken .ts leaf keeps its node with an EMPTY refinement [fabricate-on-error]
 //   • ADAPT-AST-nonts     — a non-TS leaf is untouched                                             [refine-non-ts]
 //   • ADAPT-AST-det       — folding twice is byte-identical (no clock/nonce)                        [nondeterminism]
+//   • ADAPT-AST-optin     — before `initAst()`, folding is a total no-op (unchanged, no throw)       [eager-load/throw-if-uninit]
+//
+// Grammar load is OPT-IN (`initAst()`), never eager at import: the refinement goldens warm up in a beforeAll,
+// while the ADAPT-AST-optin tooth runs FIRST (its own hook-less suite) so it observes the pre-init state.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import type { FileTree } from '@atlas/index';
-import { foldAstUnits } from '../src/ast.js';
+import { foldAstUnits, initAst } from '../src/ast.js';
 
 const SRC = [
   "import { z } from 'zod';",
@@ -61,7 +65,32 @@ function find(node: FileTree, path: string): FileTree | undefined {
 const unitName = (t: FileTree): string => t.path.slice(t.path.lastIndexOf(':') + 1);
 const unitKind = (t: FileTree): string => t.path.split(':').slice(-2)[0] ?? '';
 
+// ── opt-in-cost tooth: MUST run before `initAst()` so it observes the uninitialized (null-grammar) state. ──
+// This suite deliberately declares NO beforeAll — placed first, its tests execute while the module singletons
+// are still null, proving the barrel does no eager grammar load at import and the uninitialized fold is a
+// total no-op. TEETH: a mutant that eager-loads at import (units appear), or that throws when the grammars
+// are null, flips this RED.
+describe('foldAstUnits — ADAPT-AST-optin (grammar load is opt-in; uninitialized fold is a total no-op)', () => {
+  it('ADAPT-AST-optin: before initAst(), folding leaves the tree deep-equal unchanged, no throw [eager-load/throw-if-uninit]', () => {
+    const input = fixtureTree();
+    let out: FileTree | undefined;
+    expect(() => {
+      out = foldAstUnits(input);
+    }).not.toThrow();
+    // No grammar loaded ⇒ zero refinement: the source-bearing .ts leaves gain NO item children...
+    expect(find(out!, 'src/app.ts')?.children).toEqual([]);
+    expect(find(out!, 'src/broken.ts')?.children).toEqual([]);
+    // ...and the whole tree is byte-identical to a fresh, unrefined fixture (a pure additive no-op).
+    expect(out).toEqual(fixtureTree());
+  });
+});
+
 describe('foldAstUnits — ADAPT-AST-1 (fold item/block units onto the spatial rail)', () => {
+  // Warm up the opt-in grammar load once for the whole refinement suite (the goldens below need a real parser).
+  beforeAll(async () => {
+    await initAst();
+  });
+
   it('ADAPT-AST-preserve: every original spatial node survives; file leaf gains item children [drop-node]', () => {
     const out = foldAstUnits(fixtureTree());
     // Original structure preserved: root, README.md (content intact), src dir, both file leaves still present.

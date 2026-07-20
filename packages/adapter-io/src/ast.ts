@@ -9,8 +9,12 @@
 // EMPTY refinement — no node is dropped or mutated, and no unit is ever fabricated.
 //
 // Fork-2 (sync/async) resolution: `Parser.parse` and the whole tree walk are SYNCHRONOUS; only the one-time
-// WASM runtime `init()` + grammar `load()` are async — so they are hoisted to a single deterministic
-// module-level top-level await, leaving the frozen SYNC `foldAstUnits` signature intact.
+// WASM runtime `init()` + grammar `load()` are async. Rather than a module-level top-level await (which would
+// force EVERY consumer of the `@atlas/adapter-io` barrel to eager-load ~1.4MB of TS/TSX grammar at import,
+// even when they never touch AST), the async warmup is OPT-IN via `initAst()`. The grammars live in
+// module-level singletons (initially null); `foldAstUnits` reads them synchronously and — if warmup has not
+// completed — returns the tree UNCHANGED (a valid additive no-op: AST refinement is opt-in, so no refinement
+// is a correct additive result). This keeps the frozen SYNC `foldAstUnits` signature intact.
 
 import { createRequire } from 'node:module';
 import Parser from 'web-tree-sitter';
@@ -18,18 +22,34 @@ import type { FileTree } from '@atlas/index';
 
 const require = createRequire(import.meta.url);
 
-// ---- one-time, deterministic module init (the ONLY async work; parse/walk below are sync) --------------
+// ---- opt-in, deterministic module init (the ONLY async work; parse/walk below are sync) ----------------
 type TsLanguage = NonNullable<Parameters<Parser['setLanguage']>[0]>;
 
-await Parser.init();
-// `Parser.Language` is populated by `init()` (emscripten runtime), so it MUST be read after the await.
-const LanguageLoader = (Parser as unknown as { Language: { load(path: string): Promise<TsLanguage> } }).Language;
-const TS_LANG: TsLanguage = await LanguageLoader.load(
-  require.resolve('tree-sitter-typescript/tree-sitter-typescript.wasm'),
-);
-const TSX_LANG: TsLanguage = await LanguageLoader.load(
-  require.resolve('tree-sitter-typescript/tree-sitter-tsx.wasm'),
-);
+// Module-level singletons: null until `initAst()` completes. `foldAstUnits` treats null as "no grammar
+// loaded yet" and folds an honest empty (unchanged) refinement — never throwing, never blocking.
+let TS_LANG: TsLanguage | null = null;
+let TSX_LANG: TsLanguage | null = null;
+// Cache the warmup promise so concurrent/repeat `initAst()` calls share one load and never re-load.
+let initPromise: Promise<void> | null = null;
+
+/** Idempotent async warmup: run `Parser.init()` + load the TS/TSX grammars into the module singletons. Safe
+ *  to call any number of times (the in-flight/resolved promise is cached; the grammars are loaded once). This
+ *  is the ONLY async surface — importing the barrel triggers ZERO grammar/WASM load until this is awaited. */
+export function initAst(): Promise<void> {
+  if (initPromise !== null) return initPromise;
+  initPromise = (async () => {
+    await Parser.init();
+    // `Parser.Language` is populated by `init()` (emscripten runtime), so it MUST be read after the await.
+    const LanguageLoader = (Parser as unknown as { Language: { load(path: string): Promise<TsLanguage> } }).Language;
+    TS_LANG = await LanguageLoader.load(
+      require.resolve('tree-sitter-typescript/tree-sitter-typescript.wasm'),
+    );
+    TSX_LANG = await LanguageLoader.load(
+      require.resolve('tree-sitter-typescript/tree-sitter-tsx.wasm'),
+    );
+  })();
+  return initPromise;
+}
 
 // ---- the transcribed granularity (atlas-index:54-55) --------------------------------------------------
 // `item` = a top-level declaration (fn / struct / trait / class / const / type) — atlas-index:54. Mapped to
@@ -61,10 +81,12 @@ const BLOCK_KINDS: ReadonlySet<string> = new Set([
 
 type SyntaxNode = Parser.SyntaxNode;
 
-/** Pick the grammar for a file path, or `undefined` for a language this adapter does not parse. */
+/** Pick the grammar for a file path, or `undefined` for a language this adapter does not parse — OR when
+ *  `initAst()` has not yet loaded the grammars (singletons still null), so an uninitialized fold is a total
+ *  no-op that refines nothing. */
 function grammarFor(path: string): TsLanguage | undefined {
-  if (path.endsWith('.tsx')) return TSX_LANG;
-  if (path.endsWith('.ts') || path.endsWith('.mts') || path.endsWith('.cts')) return TS_LANG;
+  if (path.endsWith('.tsx')) return TSX_LANG ?? undefined;
+  if (path.endsWith('.ts') || path.endsWith('.mts') || path.endsWith('.cts')) return TS_LANG ?? undefined;
   return undefined;
 }
 
