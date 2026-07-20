@@ -79,6 +79,36 @@ describe('createDiskStore — ADAPT-STORE-1 durable, tamper-safe disk CAS', () =
     // teeth: returning the file's bytes without re-hashing (`id(value) === key`) serves the tampered value.
     expect(s.get(H)).toBeUndefined();
   });
+
+  it('put of a malformed CasObject is total — empty handle, writes nothing, never throws (KERNEL-7b)', () => {
+    const dir = freshCasDir();
+    const s = createDiskStore(dir);
+    // a value the sealed `id` seam rejects (BigInt is non-canonicalizable) → honest-empty, no write, no throw.
+    const bad = { kind: 'fact', n: 10n } as unknown;
+    let H = 'sentinel' as ReturnType<typeof s.put>;
+    // teeth: dropping the malformed-put try/catch (returning `id(obj)` directly) throws here.
+    expect(() => {
+      H = s.put(bad as never);
+    }).not.toThrow();
+    expect(H).toBe(''); // the non-resolving empty handle (asHash(''))
+    // and it persisted nothing — the CAS root was never even created by the rejected put.
+    expect(existsSync(dir)).toBe(false);
+  });
+
+  it('get over corrupt (non-JSON) on-disk bytes is total — undefined, never throws', () => {
+    const dir = freshCasDir();
+    const s = createDiskStore(dir);
+    const H = s.put({ kind: 'fact', body: 'genuine' });
+    // corrupt the bytes to NON-JSON — distinct from 6c's valid-JSON-different-object (rehash-mismatch) path;
+    // this exercises the disk-adapter-specific JSON.parse-failure branch the in-mem kernel store never has.
+    writeFileSync(join(dir, H.slice(0, 2), H), '{ this is not json ', 'utf8');
+    let out: unknown = 'sentinel';
+    // teeth: dropping the get JSON.parse try/catch throws on the corrupt read instead of returning undefined.
+    expect(() => {
+      out = s.get(H);
+    }).not.toThrow();
+    expect(out).toBeUndefined();
+  });
 });
 
 describe('rehydrateProjection — ADAPT-STORE-3 cross-process rehydrate, minting nothing', () => {
