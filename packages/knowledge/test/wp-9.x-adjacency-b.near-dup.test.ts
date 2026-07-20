@@ -1,114 +1,13 @@
-// @atlas/knowledge — test/wp-9.x-adjacency-b.near-dup.test.ts  (ADJACENCY-B · WP-9.x)
+// @atlas/knowledge — test/wp-9.x-adjacency-b.near-dup.test.ts  (ADJACENCY-B · WP-9.x · WP-DEDUP-1)
 //
-// The retained pure collision-detector `adjacencyNearDup` (still computes ancestor/descendant collision +
-// nearest mergeTarget), PLUS the WP-DEDUP-1 un-merge behavior on `upsert`. After the always-merge was
-// REMOVED (docs/design/dedup-identity.md DP-1), a CREATE at an adjacent anchor MINTS ITS OWN NODE — each
-// grounding stays distinct (A2). `adjacencyNearDup` is no longer wired into `upsert`/`writeDecision`; the
-// structural relation is now DERIVED ON READ (`deriveSubsumes`, DP-2), never a merge.
-// Deterministic, NO embeddings, exact `claimNorm` only. Every golden NAMES the mutant that flips it.
+// The WP-DEDUP-1 un-merge behavior on `upsert`. After the always-merge was REMOVED (docs/design/
+// dedup-identity.md DP-1), a CREATE at an adjacent anchor MINTS ITS OWN NODE — each grounding stays
+// distinct (A2). The old write-time adjacency matcher is GONE; the structural relation is now DERIVED
+// ON READ (`deriveSubsumes`, DP-2), never a merge. Every golden NAMES the mutant that flips it.
 
 import { describe, it, expect } from 'vitest';
-import { adjacencyNearDup } from '../src/write/near-dup.js';
 import { upsert, emptyStore, currentNodes } from '../src/write/router.js';
-import type { CurrentNode, StoreProjection, NearDupConfig, WriteRequest } from '../src/write/router.js';
-
-const CFG: NearDupConfig = { claimNormThreshold: 1 }; // exact-match leg fires at τ ≤ 1
-
-/** A current node anchored at `primaryAnchor`, carrying `claims`, at nodeKey `key`. */
-function nodeAt(key: string, primaryAnchor: string, claims: readonly string[]): CurrentNode {
-  return { nodeKey: key, family: 'advisory', contentHash: `ch:${key}`, claims, primaryAnchor };
-}
-function projection(nodes: readonly CurrentNode[]): StoreProjection {
-  return { current: new Map(nodes.map((n) => [n.nodeKey, n])), cas: new Set() };
-}
-
-describe('ADJACENCY-B — adjacencyNearDup: structural ancestor/descendant scan (exact claimNorm)', () => {
-  it('collides with the SAME claim at an ANCESTOR anchor (a::b is a prefix of a::b::c)', () => {
-    const store = projection([nodeAt('anc', 'a::b', ['cn-dup'])]);
-    expect(adjacencyNearDup('a::b::c', 'cn-dup', store, CFG)).toEqual({ collision: true, mergeTarget: 'anc' });
-    // teeth (MUTANT: drop the ancestor leg `isPrefix(nSegs, candSegs)`) → the ancestor is no longer
-    // adjacent ⇒ {collision:false}, flipping this golden.
-  });
-
-  it('collides with the SAME claim at a DESCENDANT anchor (a::b::c is a prefix of a::b::c::d)', () => {
-    const store = projection([nodeAt('desc', 'a::b::c::d', ['cn-dup'])]);
-    expect(adjacencyNearDup('a::b::c', 'cn-dup', store, CFG)).toEqual({ collision: true, mergeTarget: 'desc' });
-    // teeth (MUTANT: drop the descendant leg `isPrefix(candSegs, nSegs)`) → the descendant is no longer
-    // adjacent ⇒ {collision:false}, flipping this golden. (Names the ANY-prefix both-directions rule.)
-  });
-
-  it('collides at the SAME anchor (the degenerate prefix is included)', () => {
-    const store = projection([nodeAt('same', 'a::b::c', ['cn-dup'])]);
-    expect(adjacencyNearDup('a::b::c', 'cn-dup', store, CFG)).toEqual({ collision: true, mergeTarget: 'same' });
-  });
-
-  it('does NOT collide at an UNRELATED anchor (x::y shares no structural prefix with a::b::c)', () => {
-    const store = projection([nodeAt('far', 'x::y', ['cn-dup'])]);
-    expect(adjacencyNearDup('a::b::c', 'cn-dup', store, CFG)).toEqual({ collision: false });
-    // teeth (MUTANT: drop the prefix test entirely — treat every anchored neighbor as adjacent) → this
-    // unrelated node would collide, flipping this golden off {collision:false}.
-  });
-
-  it('does NOT collide when the adjacent neighbor carries a DIFFERENT claim (exact claimNorm leg)', () => {
-    const store = projection([nodeAt('anc', 'a::b', ['cn-other'])]);
-    expect(adjacencyNearDup('a::b::c', 'cn-dup', store, CFG)).toEqual({ collision: false });
-    // teeth (MUTANT: replace claimSimilarity with a constant `1`) → any adjacent neighbor would collide,
-    // flipping this golden.
-  });
-
-  it('a partial-segment near-miss is NOT a prefix (a::bb is not adjacent to a::b::c — segment-wise)', () => {
-    const store = projection([nodeAt('bb', 'a::bb', ['cn-dup'])]);
-    expect(adjacencyNearDup('a::b::c', 'cn-dup', store, CFG)).toEqual({ collision: false });
-    // (This orientation is a no-op under BOTH segment-wise isPrefix and a raw startsWith — the biting
-    // orientation is the reverse golden below, which a startsWith regression fails.)
-  });
-
-  it('SCN-ADJACENCY-B-segment-near-miss-reverse: candidate a::bb vs neighbor a::b is NOT adjacent', () => {
-    // The startsWith TRAP: as a raw string, `'a::bb'.startsWith('a::b') === true` — but segment-wise the
-    // second segment `bb` ≠ `b`, so `a::b` is NOT a structural ancestor of `a::bb` (they are siblings under
-    // `a`). The segment-wise isPrefix correctly returns NO adjacency ⇒ NO false-merge.
-    const store = projection([nodeAt('anc', 'a::b', ['cn-dup'])]);
-    expect(adjacencyNearDup('a::bb', 'cn-dup', store, CFG)).toEqual({ collision: false });
-    // teeth (MUTANT: swap isPrefix's segment compare for a raw `long.startsWith(short)`) → `'a::bb'`
-    // false-prefix-matches `'a::b'` ⇒ a spurious {collision:true, mergeTarget:'anc'}, flipping this golden.
-  });
-
-  it('on MULTIPLE collisions the NEAREST (longest common prefix) wins', () => {
-    // ancestor a::b (cpl=2) vs descendant a::b::c::d (cpl=3) vs candidate a::b::c — the descendant is nearer.
-    const store = projection([nodeAt('anc', 'a::b', ['cn-dup']), nodeAt('desc', 'a::b::c::d', ['cn-dup'])]);
-    expect(adjacencyNearDup('a::b::c', 'cn-dup', store, CFG)).toEqual({ collision: true, mergeTarget: 'desc' });
-    // teeth (MUTANT: drop the `cpl > best.cpl` nearest test — first/last wins) → the ancestor 'anc' would
-    // win, flipping mergeTarget off 'desc'.
-  });
-
-  it('ties on common-prefix length break by nodeKey lexicographic ASCENDING', () => {
-    // both at the SAME anchor a::b::c (cpl=3 each) — the smaller nodeKey wins deterministically.
-    const store = projection([nodeAt('zzz', 'a::b::c', ['cn-dup']), nodeAt('aaa', 'a::b::c', ['cn-dup'])]);
-    expect(adjacencyNearDup('a::b::c', 'cn-dup', store, CFG)).toEqual({ collision: true, mergeTarget: 'aaa' });
-    // teeth (MUTANT: flip the tie-break to `n.nodeKey > best.key` / last-wins) → 'zzz' would win,
-    // flipping mergeTarget off 'aaa'.
-  });
-
-  it('an empty/`` candidate anchor is a total no-op (no candSegs ⇒ no collision)', () => {
-    const store = projection([nodeAt('anc', 'a::b', ['cn-dup'])]);
-    expect(adjacencyNearDup('', 'cn-dup', store, CFG)).toEqual({ collision: false });
-  });
-
-  it('a neighbor with NO primaryAnchor never participates (adjacency dormant on anchor-less nodes)', () => {
-    const store: StoreProjection = {
-      current: new Map([['bare', { nodeKey: 'bare', family: 'advisory', contentHash: 'ch', claims: ['cn-dup'] } as CurrentNode]]),
-      cas: new Set(),
-    };
-    expect(adjacencyNearDup('a::b::c', 'cn-dup', store, CFG)).toEqual({ collision: false });
-  });
-
-  it('is PURE + deterministic — repeated calls agree, the projection is untouched', () => {
-    const store = projection([nodeAt('anc', 'a::b', ['cn-dup'])]);
-    const size = store.current.size;
-    expect(adjacencyNearDup('a::b::c', 'cn-dup', store, CFG)).toEqual(adjacencyNearDup('a::b::c', 'cn-dup', store, CFG));
-    expect(store.current.size).toBe(size);
-  });
-});
+import type { StoreProjection, WriteRequest } from '../src/write/router.js';
 
 describe('ADJACENCY-B — upsert (WP-DEDUP-1 un-merge): a CREATE at an adjacent anchor mints its OWN node', () => {
   it('a CREATE adjacent (descendant) to an existing node + duplicate claim mints a distinct node (no merge)', () => {
