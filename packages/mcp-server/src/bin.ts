@@ -8,5 +8,5 @@
 import { composeRuntime } from '@atlas/adapter-io';
 import { createMcpServer } from './server.js';
 
-const handler = composeRuntime(process.cwd());
+const { handler } = composeRuntime(process.cwd());
 void createMcpServer(handler).start();

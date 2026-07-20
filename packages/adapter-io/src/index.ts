@@ -31,6 +31,8 @@ export type { WireConfig, WiredHandler, WireSeams } from './wire.js';
 export { createGovernedEmit } from './governed-emit.js';
 export type { GovernedEmitDeps } from './governed-emit.js';
 export { composeRuntime, buildHeuristic, buildGate } from './compose.js';
+export type { ComposedRuntime } from './compose.js';
+export { createDoctorSource, regroundTemplate, retireTemplate } from './doctor-source.js';
 
 // The admin-locked, versioned governance policy (WP-POLICY): declarative `.atlas/policy.json` + fail-closed loader.
 export { loadPolicy, defaultPolicy, actorInScope, nearDupConfig } from './policy.js';
