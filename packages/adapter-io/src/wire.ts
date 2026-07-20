@@ -15,7 +15,7 @@ import { id } from '@atlas/kernel';
 import { build, createResolve, createDepgraph } from '@atlas/index';
 import type { CasPath } from './store.js';
 import { walkFileTree } from './fs.js';
-import { readScip } from './scip.js';
+import { readScipOrEmpty } from './scip.js';
 import { createIndexAdapter } from './index-adapter.js';
 import { createDriftSource } from './git-drift.js';
 import { createGovernedEmit } from './governed-emit.js';
@@ -82,7 +82,10 @@ export function assembleHandler(config: WireConfig): WiredHandler {
   // frozen FS + SCIP outputs, driving @atlas/index. `nodeHashOfPath` is the sealed-kernel path→node keying
   // (= build's keying, `id({file})`) — the exact IndexAdapterDeps shape (cf s01 / index-adapter.test).
   const fileTree = walkFileTree(config.repoPath);
-  const scipOutput = readScip(config.scipPath);
+  // DEGRADE gracefully on a fresh repo: a MISSING `.scip` dump (no `.atlas/index.scip` yet) is an empty
+  // files-only index, never a throw. `readScipOrEmpty` is the ONE shared missing-file guard (scip.ts) — the
+  // twin of the one `compose.ts` applies for the Axes build (COMPOSE-B).
+  const scipOutput = readScipOrEmpty(config.scipPath);
   const index = createIndexAdapter({
     fileTree,
     scipOutput,
