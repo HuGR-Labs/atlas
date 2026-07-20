@@ -132,10 +132,12 @@ describe('WP-5.13-b.KNOW — primaryAnchorId is the computed tightest unit (KNOW
 describe('WP-5.13-b.KNOW — near-dup probe + closed slot vocabulary (KNOW-15h/15i)', () => {
   const cfg: NearDupConfig = { claimNormThreshold: 1 };
 
-  it('SCN-KNOW-15h-1: a claimNorm collision is reported by the deterministic probe (⇒ forced MERGE)', () => {
+  it('SCN-KNOW-15h-1: a claimNorm collision is REPORTED by the deterministic probe (report only, no merge)', () => {
     const existing = ['cn-alpha', 'cn-beta'];
     const colliding = cand({ claimNorm: 'cn-alpha', anchors: XY });
-    // exact normalized collision ⇒ probe reports a collision (the router forces MERGE, not a parallel CREATE)
+    // exact normalized collision ⇒ the probe REPORTS a collision. It does NOT merge: the ADJACENCY-B
+    // always-merge is removed (WP-DEDUP-1), so a routed CREATE stays a CREATE. The probe is now a signal
+    // for the derived-on-read `subsumes` relation (WP-DEDUP-2), never a write-time fold.
     expect(nearDuplicateProbe(colliding, existing, cfg)).toBe(true);
     // teeth: a genuinely novel claimNorm is NOT a collision (CREATE allowed)
     const novel = cand({ claimNorm: 'cn-brand-new', anchors: XY });

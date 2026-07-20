@@ -216,8 +216,8 @@ describe('S5 · write governance — authorization + the human-in-the-loop T0 ba
           }
   });
 
-  // ── 6a-adjacency. STRUCTURAL ADJACENCY MERGE — a child-unit dup folds into the parent (one node) ────
-  it('merges a child-unit fact whose claim duplicates a parent node into the parent — one node, not two', () => {
+  // ── 6a-adjacency. UN-MERGE (WP-DEDUP-1) — a child-unit dup mints its OWN node (two nodes, not one) ────
+  it('mints a distinct node for a child-unit fact whose claim duplicates a parent — two nodes, not one', () => {
     // a parent-unit advisory at `payments::charge` carries the idempotency claim.
     let s: StoreProjection = emptyStore();
     s = upsert(s, {
@@ -227,18 +227,20 @@ describe('S5 · write governance — authorization + the human-in-the-loop T0 ba
     const before = currentNodes(s).length;
 
     // a NEW fact is CREATE'd at the CHILD unit `payments::charge::retry` with the SAME claimNorm — a fresh
-    // nodeKey (would mint a parallel node), but its anchor is a DESCENDANT of the parent's ⇒ it MERGES.
+    // nodeKey. The ADJACENCY-B always-merge is REMOVED (WP-DEDUP-1): each grounding stays distinct (A2), so
+    // the child mints its OWN node. Adjacency is now a derived-on-read `subsumes` relation (WP-DEDUP-2).
     const r = upsert(s, {
       nodeKey: 'nk-child', contentHash: 'ch-child', family: 'advisory',
       claimNorm: 'cn-idem', primaryAnchor: 'payments::charge::retry', slot: 'gotcha',
     });
 
-    expect(r.decision).toBe('UPDATE'); // re-routed by structural adjacency, not a parallel CREATE
-    // teeth (breaks-on "an adjacent-anchor duplicate mints a second parallel node"):
-    expect(currentNodes(r.store).length).toBe(before); // still ONE node — the child never lands
-    expect(r.store.current.has('nk-child')).toBe(false); // the child key is not in the territory
-    expect(r.store.current.get('nk-parent')!.primaryAnchor).toBe('payments::charge'); // merged INTO the parent
-    // a NON-adjacent fact with the same claim is NOT swallowed — a distinct subtree is a distinct node.
+    expect(r.decision).toBe('CREATE'); // a routed CREATE stays a CREATE — no write-time merge
+    // teeth (breaks-on "an adjacent-anchor duplicate is silently folded into the parent"):
+    expect(currentNodes(r.store).length).toBe(before + 1); // TWO nodes now — the child lands
+    expect(r.store.current.has('nk-parent')).toBe(true); // BOTH nodeKeys present
+    expect(r.store.current.has('nk-child')).toBe(true);
+    expect(r.store.current.get('nk-parent')!.claims).toEqual(['cn-idem']); // the parent's claims unchanged
+    // a NON-adjacent fact with the same claim is likewise its own node — a distinct subtree is a distinct node.
     const far = upsert(s, {
       nodeKey: 'nk-far', contentHash: 'ch-far', family: 'advisory',
       claimNorm: 'cn-idem', primaryAnchor: 'refunds::issue', slot: 'invariant',
