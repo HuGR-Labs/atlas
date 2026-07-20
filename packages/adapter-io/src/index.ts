@@ -8,7 +8,7 @@
 export { walkFileTree } from './fs.js';
 export { readScip, planIndexers } from './scip.js';
 export type { LangId, IndexerPlan } from './scip.js';
-export { foldAstUnits } from './ast.js';
+export { foldAstUnits, initAst } from './ast.js';
 export { createDiskStore, rehydrateProjection } from './store.js';
 export type { CasPath, DiskStore } from './store.js';
 export { createHistorySource } from './git-history.js';
