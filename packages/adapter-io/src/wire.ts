@@ -14,7 +14,9 @@ import { walkFileTree } from './fs.js';
 import { readScip } from './scip.js';
 import { foldAstUnits } from './ast.js';
 import { createDiskStore } from './store.js';
-import { createDriftSource, createForge, createHistorySource } from './git.js';
+import { createDriftSource } from './git-drift.js';
+import { createForge } from './git-forge.js';
+import { createHistorySource } from './git-history.js';
 import { createSiteProposer } from './llm.js';
 
 /** The one wired handler — the exact return of the frozen `createHandler` (@atlas/tools). */
