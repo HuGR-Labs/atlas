@@ -9,8 +9,10 @@ import type { WiredHandler } from '@atlas/adapter-io';
 import type { DoctorSource, Guidance, Tool, Verdict } from '@atlas/tools';
 import { runDoctor } from './doctor.js';
 import { COMMAND_LEG } from './map.js';
+import { runMine } from './mine.js';
 import { parse } from './parse.js';
 import { renderVerdict } from './render.js';
+import type { CliVerdict } from './render.js';
 
 /** Optional dependency injection seam (additive): tests inject a FAKE `WiredHandler` + a FAKE read-only
  *  `DoctorSource`; prod assembles both at the composition-root WP. */
@@ -41,9 +43,11 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
   const { command, positionals, flags } = parsed;
 
   if (command === 'mine') {
-    // CLI-1a: `mine` is in the map for TOTALITY only — its genesis driver is a separate WP (WP-9.3.6-b.CLI).
-    // Fail closed at this seam, never throw.
-    return emit(errorVerdict("command 'mine' is not wired at this CLI seam — see WP-9.3.6-b.CLI"));
+    // CLI-4: `mine` drives the FROZEN genesis run-controller (`runMine`) over the repo at cwd as ONE governed
+    // pass, projecting the outcome to a `CliVerdict`. It routes NOT through `deps.handler` (genesis is its own
+    // composed driver, mine.ts) but its rendered `CliVerdict` reaches the console over the SAME emit/exit path
+    // as every other command (uniform bytes). Every mined write is CANDIDATE-only (GEN-4/12); never throws.
+    return emitCli(await runMine(process.cwd()));
   }
 
   if (command === 'doctor') {
@@ -71,9 +75,15 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
   return emit(verdict);
 }
 
-/** Render a verdict, write its stdout, and return its exit code. */
+/** The ONE process-outcome path: write a `CliVerdict`'s stdout and return its exit code (uniform bytes —
+ *  every command's outcome, whether a rendered handler `Verdict` or a `mine`/`doctor` `CliVerdict`, exits
+ *  through here). */
+function emitCli(cv: CliVerdict): number {
+  process.stdout.write(cv.stdout);
+  return cv.exitCode;
+}
+
+/** Render a verdict to a `CliVerdict`, then emit it over the one process-outcome path. */
 function emit(verdict: Verdict): number {
-  const rendered = renderVerdict(verdict);
-  process.stdout.write(rendered.stdout);
-  return rendered.exitCode;
+  return emitCli(renderVerdict(verdict));
 }
