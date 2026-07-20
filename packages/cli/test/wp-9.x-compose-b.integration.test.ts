@@ -11,6 +11,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { create } from '@bufbuild/protobuf';
 import { serializeSCIP, IndexSchema, MetadataSchema, ToolInfoSchema } from '@c4312/scip';
 import { composeRuntime } from '@atlas/adapter-io';
@@ -18,8 +19,8 @@ import type { WiredHandler } from '@atlas/adapter-io';
 import type { Verdict } from '@atlas/tools';
 import { main } from '../src/cli.js';
 
-// the scratchpad root the harness pins for temp files (git-free by construction).
-const SCRATCH = '/private/tmp/claude-501/-Users-gustavoschneiter-Documents-HuGR/d2bb3a94-60d2-46d1-bf19-730ab06e45db/scratchpad';
+// OS temp root — portable across dev + CI (never a machine-specific absolute path).
+const SCRATCH = tmpdir();
 
 /** The fail-closed sentinel `main` renders when NO handler is injected — the mutant's tell (cli.ts). */
 const NOT_COMPOSED = 'atlas runtime is not composed yet';
