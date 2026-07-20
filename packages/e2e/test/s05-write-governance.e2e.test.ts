@@ -16,7 +16,8 @@
 // UN-PARK BOUNDARY (owner-RATIFIED, WP-9.2.4.KNOWLEDGE — govern writes now). The composed-store FRONT
 // DOOR `RouterApi.writeDecision(candidate, store, cfg)` — formerly PARKED — is now WIRED. It is COMPOSED,
 // not invented: it mints the contentHash through the SEALED kernel `id` seam (atlas-knowledge:110), reuses
-// WP-5.13-b's `nodeKey` VALUE + the pure `routeWrite` + the `nearDuplicateProbe` door-2 leg, and takes the
+// WP-5.13-b's `nodeKey` VALUE + the pure `routeWrite` (write-time dedup is D0 contentHash / D1 nodeKey only;
+// a `claimNorm` collision is reported, not merged), and takes the
 // `StoreProjection` as DATA (the `upsert(store, req)` idiom / caller-side session-internal projection) — so
 // NO OWNER-DEFINE composed store is fabricated. The runtime still ALSO routes via `routeWrite(RouteInputs)`
 // + `upsert(store, req)` over already-resolved identity (the primitives the front door composes). This
@@ -269,7 +270,7 @@ describe('S5 · write governance — authorization + the human-in-the-loop T0 ba
   // ── UN-PARK — the composed-store front-door is now WIRED (owner-RATIFIED reversal of the PARK) ──────
   it('the writeDecision front-door IS exported and governs a candidate — DEDUP/CREATE/UPDATE/SUPERSEDE', () => {
     // RATIFIED UN-PARK (WP-9.2.4.KNOWLEDGE): the front door is COMPOSED, not invented — it mints the
-    // contentHash through the SEALED kernel `id` seam, reuses `nodeKey` + `routeWrite` + `nearDuplicateProbe`,
+    // contentHash through the SEALED kernel `id` seam, reuses `nodeKey` + `routeWrite` (D0 contentHash / D1 nodeKey dedup only),
     // and takes the `StoreProjection` as DATA (the `upsert(store, req)` idiom), so no OWNER-DEFINE composed
     // store is fabricated. The barrel `export *` surfaces it — the presence assertion is now TRUE.
     expect('writeDecision' in knowledge).toBe(true);

@@ -17,13 +17,16 @@
 > - **KNOW-1 / 2 / 3 / 5 / 6 / 7 / 8 / 9 / 11 / 12 / 13 / 14 / 16 / 17 / 18** are `reference-model` →
 >   **conformance / differential** against the named build-language mock (`knowledge/ref/*.ts`, reused as the
 >   unit-test mock; anti-rot) — `gen: conformance`.
-> - **KNOW-15's move-aware similarity matcher** (rename/**move+edit** ⇒ same nodeKey; the near-dup probe's
->   `claimNorm`-collision threshold) is an **OPEN DEFINE reconciliation** (req-knw §NEEDS RECONCILIATION;
->   method-tags-knw §Refuse-to-model). It lives **upstream** of the enumerated inputs — it fixes the *value*
->   of the `nodeKey` / collision inputs, not the routing over them. So the **routing goldens are written fully
->   and are airtight NOW** (the three hashes are oracle inputs); only the golden that would pin the matcher's
->   **precision threshold** is **parametric** — `gen: residue` with a DEFINE-dependency note, no verification
->   invented for an unpinned threshold (**SCN-KNOW-15f-2**, **SCN-KNOW-15h-2**).
+> - **KNOW-15's move-aware similarity matcher** (rename/**move+edit** ⇒ same nodeKey) is an **OPEN DEFINE
+>   reconciliation** (req-knw §NEEDS RECONCILIATION; method-tags-knw §Refuse-to-model). It lives **upstream**
+>   of the enumerated inputs — it fixes the *value* of the `nodeKey` inputs, not the routing over them. So the
+>   **routing goldens are written fully and are airtight NOW** (the three hashes are oracle inputs); only the
+>   golden that would pin the matcher's **precision threshold θ** is **parametric** — `gen: residue` with a
+>   DEFINE-dependency note, no verification invented for an unpinned threshold (**SCN-KNOW-15f-2**).
+>   *(The old near-dup `claimNorm`-collision **threshold τ** is now RESOLVED, not DEFINE-open: per the frozen
+>   dedup/identity model — `docs/design/dedup-identity.md` — a collision is **reported** under exact NFC+trim
+>   equality (no fuzzy τ) and **never merges** at write time; structural near-dup is the derived-on-read
+>   `subsumes` relation. SCN-KNOW-15h-2 is accordingly a non-parametric exact-equality boundary now.)*
 > - **KNOW-10b guard source:** the missing-field / over-cap triggers are lifted from **reference Acceptance #9**
 >   (`atlas-knowledge.md` §Acceptance:9) — the KNOW-10 Invariants clause states only "No free prose, ever." and
 >   delegates the concrete reject-triggers to spec **A-13**; Acceptance #9 is the authoritative guard source
@@ -792,21 +795,21 @@ Then it is still `k-9a10` (unchanged) — the secondary citation feeds DRIFT (gr
 teeth: breaks-on "a secondary citation enters the nodeKey — adding a second citation to an existing fact re-mints it as a new node"
 gen: exhaustive   # nodeKey identity leg — secondary excluded
 
-### SCN-KNOW-15h-1 — a claimNorm collision forces MERGE before CREATE   (happy)
+### SCN-KNOW-15h-1 — a claimNorm collision is reported, not merged   (happy)
 source: REQ-KNOW-15h
-Given a CREATE candidate whose `claimNorm` collides (probe result = collision) with an existing `(anc-hdr, *)` sibling-slot node
-When the near-duplicate probe result is consumed by the router (collision taken as oracle input)
-Then the router forces **MERGE/UPDATE**, not a parallel CREATE — a claim colliding with an existing `claimNorm` is not novel (door-2)
-teeth: breaks-on "the router ignores the near-dup probe result — a colliding-claimNorm candidate CREATEs a parallel node (proliferation past door-2)"
-gen: exhaustive   # routing over the (collision ⇒ MERGE) oracle input — airtight now
+Given a CREATE candidate whose `claimNorm` collides (exact NFC+trim, `claimSimilarity === 1`) with an existing `(anc-hdr, *)` sibling-slot node
+When the write-decision routes the candidate (D0 `contentHash` / D1 `nodeKey` only — no collision-driven merge leg)
+Then the collision is **reported** as a deterministic signal and the candidate **CREATEs its own node** (each keeps its own grounding — A2); it is **not** merged at write time — structural coverage is instead the derived-on-read `subsumes` relation (`docs/design/dedup-identity.md`)
+teeth: breaks-on "the router merges on the claimNorm collision — a colliding-claimNorm candidate is folded into the neighbor instead of minting its own node (the REMOVED write-time MERGE, which de-grounds one fact past A2)"
+gen: exhaustive   # routing over the three hashes (D0/D1); the collision is a reported signal, not a merge-route input
 
-### SCN-KNOW-15h-2 — near-dup claimNorm collision threshold   (happy · DEFINE-parametric)
+### SCN-KNOW-15h-2 — no fuzzy near-dup threshold; near-synonyms route to ratification   (happy)
 source: REQ-KNOW-15h
-Given two claims whose normalized forms are near-synonymous at similarity `sim`
-When the probe decides collision vs distinct at the near-dup **threshold τ**
-Then for `sim ≥ τ` it must report a collision (⇒ forced MERGE) and for `sim < τ` distinct (⇒ CREATE allowed) — **τ is an OPEN DEFINE dependency** (req-knw §NEEDS RECONCILIATION INV-KNOW-15); the route *over* the probe output is airtight (SCN-KNOW-15h-1), only the τ boundary is unpinned
-teeth: breaks-on "τ is set to 1.0 (identical-only) — every near-synonymous claim reports distinct and proliferates a parallel node" — the breaking mutant is real; the *pass* boundary awaits DEFINE
-gen: residue   # DEFINE-dependency: near-dup similarity threshold τ unpinned (method-tags-knw §Refuse-to-model)
+Given two claims whose normalized forms are near-synonymous but not exactly equal (`claimSimilarity < 1` under NFC+trim)
+When the write-decision routes them
+Then neither a collision report nor any write-time merge fires on the near-synonymy — there is **no fuzzy threshold τ** (`claimSimilarity∈{0,1}`); the cross-location near-synonym residue is the **H1 `sameAs`** case, routed to **human ratification only** (DEFERRED, Wave 2 — `docs/design/dedup-identity.md`), never an automatic merge
+teeth: breaks-on "a fuzzy τ<1 is reintroduced so near-synonymous-but-distinct claims auto-collide/merge — de-grounding one fact and resurrecting the removed write-time MERGE"
+gen: exhaustive   # exact-equality boundary; the fuzzy/cross-location residue is honestly routed to human ratification (A1), not a threshold
 
 ### SCN-KNOW-15i-1 — a slot outside the closed vocabulary is rejected   (guard)
 source: REQ-KNOW-15i

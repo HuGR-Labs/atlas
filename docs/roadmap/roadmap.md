@@ -169,7 +169,7 @@ split: Rules (the write-routing rules) from EPIC-13
 
 ### EPIC-13-b — mechanical nodeKey & primary-anchor identity
 goal-trace: "the write-decision never asks an LLM where a fact belongs → nodeKey and primaryAnchorId are pure functions of hashes and symbols → the anchor-identity data facet"
-vertical: KNOW (write-decision is a pure function of three hashes · advisory/predicate nodeKey formulae · primaryAnchorId computed mechanically, no LLM-chosen anchor · move-aware re-anchoring · secondary citations feed drift only · near-duplicate probe before CREATE · slot from a closed vocabulary · no LLM in the write-decision) — demoable: the same fact yields the same nodeKey deterministically; a near-dup probe merges instead of minting a landfill CREATE
+vertical: KNOW (write-decision is a pure function of three hashes · advisory/predicate nodeKey formulae · primaryAnchorId computed mechanically, no LLM-chosen anchor · move-aware re-anchoring · secondary citations feed drift only · a `claimNorm`-collision report (a signal, not a write-time merge) · slot from a closed vocabulary · no LLM in the write-decision) — demoable: the same fact yields the same nodeKey deterministically; a `claimNorm` collision is reported and the candidate mints its own node, with structural near-dup coverage derived on read as `subsumes` (docs/design/dedup-identity.md)
 reqs: [ REQ-KNOW-15a, REQ-KNOW-15b, REQ-KNOW-15c, REQ-KNOW-15d, REQ-KNOW-15e, REQ-KNOW-15f, REQ-KNOW-15g, REQ-KNOW-15h, REQ-KNOW-15i, REQ-KNOW-15j ]
 campaign: CAMPAIGN-5
 split: Data (the anchor-identity facet) from EPIC-13
