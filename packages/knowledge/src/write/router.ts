@@ -30,7 +30,7 @@
 import { asNodeKey, canonicalForm, defaultEncoder, id } from '@atlas/kernel';
 import type { NodeKey } from '@atlas/contracts';
 import type { Candidate, Check, PredicateSlot } from '../types.js';
-import { nearDuplicateProbe } from './near-dup.js';
+import { adjacencyNearDup } from './near-dup.js';
 
 // ── frozen RouterApi surface, co-located here (was ref/router.ts) ─────────────────────────────────────
 
@@ -172,8 +172,17 @@ export interface UpsertResult {
  * a node; UPDATE set-unions the advisory claim in place (same node, no lineage pointer — git holds
  * the prior); SUPERSEDE mints a new predicate node at the SAME key with a `supersededBy` pointer
  * while the prior bytes remain in CAS.
+ *
+ * ADJACENCY FOLD (WP-ADJACENCY-B): a routed CREATE carrying a `primaryAnchor` runs the STRUCTURAL adjacency
+ * probe first — an EXACT `claimNorm` collision at an ANCESTOR/DESCENDANT anchor across ANY sibling slot
+ * MERGES (set-union) into the NEAREST neighbor rather than minting a parallel node (⇒ `'UPDATE'`). `cfg` is
+ * OPTIONAL (default exact-match τ=1) so 2-arg callers are unchanged; NO `primaryAnchor` ⇒ adjacency DORMANT.
  */
-export function upsert(store: StoreProjection, req: WriteRequest): UpsertResult {
+export function upsert(
+  store: StoreProjection,
+  req: WriteRequest,
+  cfg: NearDupConfig = { claimNormThreshold: 1 },
+): UpsertResult {
   const nodeKeyHit = store.current.has(req.nodeKey);
   const inputs: RouteInputs = {
     contentHashHit: store.cas.has(req.contentHash),
@@ -184,6 +193,19 @@ export function upsert(store: StoreProjection, req: WriteRequest): UpsertResult 
   const decision = routeWrite(inputs);
   const cas = new Set(store.cas);
   const current = new Map(store.current);
+
+  // ADJACENCY door-2: a CREATE with an anchor + a claim already carried by an adjacent-granularity neighbor
+  // MERGES (set-union) into that NEAREST neighbor instead of minting a parallel node (always-merge, v1).
+  if (decision === 'CREATE' && req.primaryAnchor !== undefined) {
+    const { mergeTarget } = adjacencyNearDup(req.primaryAnchor, req.claimNorm, store, cfg);
+    if (mergeTarget !== undefined) {
+      const target = current.get(mergeTarget)!; // adjacencyNearDup only returns a live nodeKey
+      const claims = target.claims.includes(req.claimNorm) ? target.claims : [...target.claims, req.claimNorm];
+      cas.add(req.contentHash); // merged bytes stay addressable; the neighbor's anchor/slot are preserved
+      current.set(mergeTarget, { ...target, contentHash: req.contentHash, claims });
+      return { decision: 'UPDATE', store: { current, cas } };
+    }
+  }
 
   switch (decision) {
     case 'DEDUP':
@@ -355,12 +377,10 @@ export function nodeKey(node: Candidate): NodeKey {
  * deterministic near-duplicate probe (door-2, atlas-knowledge:128-132) may force UPDATE/MERGE; else
  * `routeWrite`'s cell stands. Pure + total + deterministic — no LLM/clock/seq enters.
  *
- * [OPEN-DEFINE — honest subset, FLAGGED, NOT invented] the spec's near-dup scan matches at ADJACENT
- * granularity (parent/child unit) against every `(primaryAnchor, *)` node across SIBLING slots. The
- * `StoreProjection` carries no per-node `primaryAnchor` (a `CurrentNode` has none), and the near-SYNONYM
- * threshold τ + the move-aware adjacency matcher are OPEN-DEFINE (facet header; `claimSimilarity` is 0|1).
- * So the probe runs over the claim bodies the projection DOES expose (the airtight EXACT leg); the
- * cross-anchor adjacency + synonym-τ stay OPEN-DEFINE upstream — deliberately not modeled here.
+ * [WIRED — WP-ADJACENCY-B] door-2 is now the ANCHOR-SCOPED structural adjacency scan: a `CurrentNode` now
+ * CARRIES its `primaryAnchor`, so `adjacencyNearDup` matches an EXACT `claimNorm` collision at an ANCESTOR/
+ * DESCENDANT anchor across every `(primaryAnchor, *)` sibling slot and forces the CREATE to MERGE/UPDATE.
+ * The near-SYNONYM τ (0<sim<1) stays OPEN-DEFINE upstream (`claimSimilarity` is 0|1); the EXACT leg is airtight.
  */
 export function writeDecision(candidate: Candidate, store: StoreProjection, cfg: NearDupConfig): WriteDecision {
   const contentHashHit = store.cas.has(id(candidate) as string); // leg 1 — WHAT (sealed seam)
@@ -371,10 +391,9 @@ export function writeDecision(candidate: Candidate, store: StoreProjection, cfg:
   const checkSame = family === 'predicate' && nodeKeyHit; // mirror upsert: predicate hit ⟺ same check
   const route = routeWrite({ contentHashHit: false, nodeKeyHit, family, checkSame });
 
-  // door-2: a claimNorm collision forces a CREATE to MERGE/UPDATE (exact leg over the exposed claims).
-  if (route === 'CREATE') {
-    const exposedClaims = [...store.current.values()].flatMap((n) => n.claims);
-    if (nearDuplicateProbe(candidate, exposedClaims, cfg)) return 'UPDATE';
+  // door-2: an EXACT claimNorm collision at an ADJACENT-granularity anchor forces the CREATE to MERGE/UPDATE.
+  if (route === 'CREATE' && adjacencyNearDup(primaryAnchorId(candidate) as string, candidate.claimNorm, store, cfg).collision) {
+    return 'UPDATE';
   }
   return route;
 }

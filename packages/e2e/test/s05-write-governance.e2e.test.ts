@@ -216,6 +216,37 @@ describe('S5 · write governance — authorization + the human-in-the-loop T0 ba
           }
   });
 
+  // ── 6a-adjacency. STRUCTURAL ADJACENCY MERGE — a child-unit dup folds into the parent (one node) ────
+  it('merges a child-unit fact whose claim duplicates a parent node into the parent — one node, not two', () => {
+    // a parent-unit advisory at `payments::charge` carries the idempotency claim.
+    let s: StoreProjection = emptyStore();
+    s = upsert(s, {
+      nodeKey: 'nk-parent', contentHash: 'ch-parent', family: 'advisory',
+      claimNorm: 'cn-idem', primaryAnchor: 'payments::charge', slot: 'invariant',
+    }).store;
+    const before = currentNodes(s).length;
+
+    // a NEW fact is CREATE'd at the CHILD unit `payments::charge::retry` with the SAME claimNorm — a fresh
+    // nodeKey (would mint a parallel node), but its anchor is a DESCENDANT of the parent's ⇒ it MERGES.
+    const r = upsert(s, {
+      nodeKey: 'nk-child', contentHash: 'ch-child', family: 'advisory',
+      claimNorm: 'cn-idem', primaryAnchor: 'payments::charge::retry', slot: 'gotcha',
+    });
+
+    expect(r.decision).toBe('UPDATE'); // re-routed by structural adjacency, not a parallel CREATE
+    // teeth (breaks-on "an adjacent-anchor duplicate mints a second parallel node"):
+    expect(currentNodes(r.store).length).toBe(before); // still ONE node — the child never lands
+    expect(r.store.current.has('nk-child')).toBe(false); // the child key is not in the territory
+    expect(r.store.current.get('nk-parent')!.primaryAnchor).toBe('payments::charge'); // merged INTO the parent
+    // a NON-adjacent fact with the same claim is NOT swallowed — a distinct subtree is a distinct node.
+    const far = upsert(s, {
+      nodeKey: 'nk-far', contentHash: 'ch-far', family: 'advisory',
+      claimNorm: 'cn-idem', primaryAnchor: 'refunds::issue', slot: 'invariant',
+    });
+    expect(far.decision).toBe('CREATE');
+    expect(far.store.current.has('nk-far')).toBe(true);
+  });
+
   // ── 6b. SUPERSEDE IS A DEDUP POINTER — 0 byte-copy, 0 delete (injected real CAS) ────────────────────
   it('supersedes a predicate as a dedup CAS pointer, returning `next` unchanged (0 byte-copy, 0 delete)', () => {
     const archive = bindArchive(createStore()); // INJECTED PORT wired to the REAL sealed kernel CAS
