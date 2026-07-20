@@ -63,21 +63,21 @@ function makeResolveAnchorAt(repoPath: string) {
 }
 
 // ── ONE fact grounded at the greet anchor (minimal AdvisoryNode; only required fields, none invented) ───
-function greetFact(mbUtilRef: StructRef): AdvisoryNode {
+function advisoryAt(idStr: string, qp: string, subtreeHash: StructRef['subtreeHash']): AdvisoryNode {
   return {
     kind: 'advisory',
-    id: 'F_greet' as NodeKey,
+    id: idStr as NodeKey,
     tier: 'T2',
-    claimNorm: 'greet returns a greeting string',
-    grounding: {
-      entries: [
-        { anchor: { kind: 'file', qualifiedPath: 'src/util.ts', subtreeHash: mbUtilRef.subtreeHash }, path: 'src/util.ts' },
-      ],
-    },
+    claimNorm: `claim anchored at ${qp}`,
+    grounding: { entries: [{ anchor: { kind: 'file', qualifiedPath: qp, subtreeHash }, path: qp }] },
     freshness: 'FRESH',
     claims: [],
     authoring: 'ADVISORY',
   };
+}
+
+function greetFact(mbUtilRef: StructRef): AdvisoryNode {
+  return advisoryAt('F_greet', 'src/util.ts', mbUtilRef.subtreeHash);
 }
 
 describe('createDriftSource — drift over a git merge-base (ADAPT-GIT-2)', () => {
@@ -105,6 +105,30 @@ describe('createDriftSource — drift over a git merge-base (ADAPT-GIT-2)', () =
     const wasMb = resolveAnchorAt(sbx.mb, 'src/util.ts')!;
     const nowMain = resolveAnchorAt(sbx.mainTip, 'src/util.ts')!;
     expect(wasMb.subtreeHash).toBe(nowMain.subtreeHash);
+  });
+
+  it('SCN-ADAPTER-9a-1 (exclusion) — a resolvable but NON-drifting anchor is excluded; the predicate is subtreeHash≠, not resolvable [guard]', () => {
+    sbx = makeGitSbx();
+    const resolveAnchorAt = makeResolveAnchorAt(sbx.repoPath);
+
+    // `src/app.ts` is byte-identical mb→topic (only util.ts=A and service.py=X are rewritten on topic) —
+    // a genuine resolvable-but-UNCHANGED anchor. Sanity-check it truly does not drift.
+    const appMb = resolveAnchorAt(sbx.mb, 'src/app.ts');
+    expect(appMb).toBeDefined();
+    expect(appMb!.subtreeHash).toBe(resolveAnchorAt(sbx.topicTip, 'src/app.ts')!.subtreeHash);
+
+    const facts = [
+      greetFact(resolveAnchorAt(sbx.mb, 'src/util.ts')!), // drifts → emitted
+      advisoryAt('F_app', 'src/app.ts', appMb!.subtreeHash), // resolvable, unchanged → excluded
+      advisoryAt('F_ghost', 'src/ghost.ts', appMb!.subtreeHash), // path absent at every rev → unresolvable → excluded, no throw
+    ];
+    const src = createDriftSource({ repoPath: sbx.repoPath, resolveAnchorAt, facts });
+    const pairs = src.driftAt(sbx.mb as Hash);
+
+    // ONLY greet drifted. TEETH: dropping the `was.subtreeHash !== now.subtreeHash` guard (emit a pair for
+    // every resolvable fact) would ADD `src/app.ts` here → the set ≠ the mb→topic diff → this flips.
+    // F_ghost also proves totality: an anchor unresolvable at a rev yields no pair and never throws.
+    expect(pairs.map((p) => p.anchorNow.qualifiedPath)).toEqual(['src/util.ts']);
   });
 
   it('SCN-ADAPTER-9b-1 — drift baseline is the merge-base, not a HEAD~1..HEAD window [guard]', () => {
