@@ -1,10 +1,12 @@
 #!/usr/bin/env node
-import { assembleHandler } from '@atlas/adapter-io';
+// @atlas/mcp-server — src/bin.ts  (MCP entrypoint: the composed runtime, served over stdio)
+//
+// The thin production entrypoint: `composeRuntime(process.cwd())` reads the repo at the cwd (policy, index
+// axes, durable CAS) and returns THE one governed durable `WiredHandler`; `createMcpServer` serves it over
+// the SDK stdio transport. No per-entrypoint governance is constructed here — the composition root
+// (@atlas/adapter-io) owns the seams (COMPOSE-A), this bin owns nothing but the wiring (WIRE-1: CLI ≡ MCP).
+import { composeRuntime } from '@atlas/adapter-io';
 import { createMcpServer } from './server.js';
 
-// SKELETON entrypoint. The real run assembles a FULL `WireConfig` — including the injected `seams`
-// (heuristic / gate / classifier / driftFacts / resolveAnchorAt) that have no adapter — and starts the
-// SDK transport. Both land at WP-9.4.7.MCP; deferred here rather than faked (constructing placeholder
-// governance seams would be a lie about what is wired). The import edges are pinned so the DAG stays real.
-void [assembleHandler, createMcpServer];
-throw new Error('unimplemented: MCP bin — wire the full WireConfig + SDK transport at WP-9.4.7.MCP');
+const handler = composeRuntime(process.cwd());
+void createMcpServer(handler).start();
