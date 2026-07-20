@@ -19,6 +19,10 @@ export { createIndexAdapter } from './index-adapter.js';
 export type { IndexAdapterDeps } from './index-adapter.js';
 export { materializePoke, pokeFilePath, POKE_FILE_EXT } from './poke-file.js';
 
+// The standalone arbitrary-rev code index (COMPOSE-C) — builds `Axes` at any git rev via a memoized,
+// self-cleaning temp worktree so `atlas-reconcile` can detect real (non-HEAD) drift. Wiring is separate.
+export { createRevIndex, type RevIndex } from './rev-index.js';
+
 // The ONE shared handler assembly (constitution WIRE-1) — consumed by every entrypoint (CLI, MCP).
 export { assembleHandler } from './wire.js';
 export type { WireConfig, WiredHandler, WireSeams } from './wire.js';
