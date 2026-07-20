@@ -1035,10 +1035,10 @@ gen: conformance
 
 - **REQ coverage:** 61/61 REQ have ≥1 SCN.
 - **Guard coverage:** 19/19 unwanted/If-then REQ-clauses have a guard SCN — 1, 2, 5c, 7a, 8a, 8c, 10a, 10b(×2), 11c, 13a, 13b, 14b, 14c, 15e, 15i, 15j, 16b, 16c, 18b. (KNOW-10b's guard source = reference Acceptance #9, cited inline.)
-- **Teeth (Gate 3):** 64/64 SCN name the exact mutant of their REQ they flip to BROKEN on; none vacuous. The exhaustive cells are interesting witnesses (real 2-node collisions W3/W5, a real DEDUP W1, a real cross-family SUPERSEDE W4, a real drift-orthogonality pair W3/W3′ — no antecedent-failure passes). The 2 DEFINE-parametric SCNs still carry a **real breaking mutant** (θ/τ set to exact-match ⇒ every move+edit / near-synonym orphans); only their *pass* boundary awaits DEFINE.
+- **Teeth (Gate 3):** 64/64 SCN name the exact mutant of their REQ they flip to BROKEN on; none vacuous. The exhaustive cells are interesting witnesses (real 2-node collisions W3/W5, a real DEDUP W1, a real cross-family SUPERSEDE W4, a real drift-orthogonality pair W3/W3′ — no antecedent-failure passes). The 1 DEFINE-parametric SCN (SCN-KNOW-15f-2, move+edit θ) still carries a **real breaking mutant** (θ set to exact-match ⇒ every move+edit orphans); only its *pass* boundary awaits DEFINE.
 - **toothless dropped:** 0.
-- **gen histogram:** exhaustive 17 (KNOW-4: 4a/4b/4c/4d/4e/4f/4g · KNOW-10: 10a/10b-1/10b-2 · KNOW-15 routing: 15a/15b/15c/15f-1/15g/15h-1/15i) · conformance 45 (all reference-model REQ + KNOW-15d/15e/15j) · residue 2 (15f-2, 15h-2, both DEFINE-parametric).
-- **DEFINE-parametric SCN count:** 2 (SCN-KNOW-15f-2 move+edit threshold θ; SCN-KNOW-15h-2 near-dup threshold τ) — the routing *over* the matcher/probe output is airtight now (SCN-KNOW-15f-1 / 15h-1); only the precision boundary is unpinned.
+- **gen histogram:** exhaustive 18 (KNOW-4: 4a/4b/4c/4d/4e/4f/4g · KNOW-10: 10a/10b-1/10b-2 · KNOW-15 routing: 15a/15b/15c/15f-1/15g/15h-1/15h-2/15i) · conformance 45 (all reference-model REQ + KNOW-15d/15e/15j) · residue 1 (15f-2, DEFINE-parametric).
+- **DEFINE-parametric SCN count:** 1 (SCN-KNOW-15f-2 move+edit threshold θ) — the routing *over* the matcher output is airtight now (SCN-KNOW-15f-1); the near-dup τ is now RESOLVED to exact equality (SCN-KNOW-15h-1 / 15h-2, no fuzzy threshold); only the θ precision boundary is unpinned.
 
 ---
 
@@ -1055,8 +1055,8 @@ gen: conformance
 
 - **conformance REQs:** 45 (all reference-model REQ + KNOW-15d / 15e / 15j).
 - **held-out fixtures added:** 45 (one per conformance SCN) — every conformance REQ's held-out leg is now **AVAILABLE** (FULL assurance): 1 · 2 · 3a · 3b · 3c · 5a · 5b · 5c · 5d · 6a · 6b · 7a · 7b · 8a · 8b · 8c · 9a · 9b · 11a · 11b · 11c · 12a · 12b · 12c · 12d · 12e · 13a · 13b · 14a · 14b · 14c · 15d · 15e · 15j · 16a · 16b · 16c · 16d · 16e · 17a · 17b · 17c · 17d · 18a · 18b.
-- **skipped — exhaustive (17):** KNOW-4 (4a/4b/4c/4d/4e/4f/4g) · KNOW-10 (10a/10b-1/10b-2) · KNOW-15 routing (15a/15b/15c/15f-1/15g/15h-1/15i). A held-out leg is **moot** for an `exhaustive` SCN — the enumeration already covers every cell of the finite input space (universe A / universe B); there is nothing to hold out of a complete enumeration.
-- **skipped — residue / DEFINE-parametric (2):** SCN-KNOW-15f-2 (move+edit θ) · SCN-KNOW-15h-2 (near-dup τ) — **exempt + flagged**: no verification is invented for an unpinned threshold (method-tags-knw §Refuse-to-model; req-knw §NEEDS RECONCILIATION INV-KNOW-15). No held-out.
+- **skipped — exhaustive (18):** KNOW-4 (4a/4b/4c/4d/4e/4f/4g) · KNOW-10 (10a/10b-1/10b-2) · KNOW-15 routing (15a/15b/15c/15f-1/15g/15h-1/15h-2/15i). A held-out leg is **moot** for an `exhaustive` SCN — the enumeration already covers every cell of the finite input space (universe A / universe B); there is nothing to hold out of a complete enumeration.
+- **skipped — residue / DEFINE-parametric (1):** SCN-KNOW-15f-2 (move+edit θ) — **exempt + flagged**: no verification is invented for an unpinned threshold (method-tags-knw §Refuse-to-model; req-knw §NEEDS RECONCILIATION INV-KNOW-15). No held-out.
 - **skipped — delegated acceptance:** none in KNW.
 - **grounding check:** every `-2` reuses a grounded reference-model branch with different concrete data; **0** new behaviour introduced → **no [NEEDS RECONCILIATION]**.
 - **spot-check (5 differ from fixture-1):** 1-2 (declared BROKEN⇒recomputed HOLDS vs declared HOLDS⇒NA) · 5a-2 (k=9/s=4/mech=5 vs k=5/s=2/mech=3) · 7a-2 (`payments/` vs `auth/`) · 11b-2 (scope D reads C vs B reads A) · 16a-2 (dependency-axis BROKEN vs structural HOLDS→NA path). All independent, none a rename-clone.
