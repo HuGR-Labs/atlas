@@ -62,14 +62,24 @@ export interface AtlasPolicy {
  *   • `t0Heuristic.keywords: []` — the heuristic flags nothing on its own until an admin declares the set.
  *   • `authz.scopes: {}` — NO actor is in ANY scope ⇒ NO write is authorized. Reads stay universal
  *     (KNOW-11b), but a write requires an admin to have declared the scope membership first.
- * A fresh object is returned each call (no shared mutable default can be aliased/mutated).
+ * A fresh object is returned each call (no shared mutable default can be aliased/mutated). The scopes map
+ * is a null-prototype object ({@link emptyScopes}) — no inherited `Object.prototype` keys, no `__proto__`
+ * setter — so a prototype-named scope (`'constructor'`, `'__proto__'`, …) lands nowhere and reads back as
+ * absent, keeping {@link actorInScope} total + fail-closed.
  */
 export function defaultPolicy(): AtlasPolicy {
   return {
     nearDup: { claimNormThreshold: 1 },
     t0Heuristic: { keywords: [] },
-    authz: { scopes: {} },
+    authz: { scopes: emptyScopes() },
   };
+}
+
+/** A null-prototype scopes map: no inherited `Object.prototype` members, no `__proto__` accessor. Untrusted
+ *  JSON keys (`'constructor'`, `'__proto__'`, `'toString'`, …) land as plain own data props or nowhere —
+ *  never resolving to an inherited function and never polluting the prototype. */
+function emptyScopes(): Record<string, readonly string[]> {
+  return Object.create(null) as Record<string, readonly string[]>;
 }
 
 // ── the fail-closed loader ───────────────────────────────────────────────────────────────────────────
@@ -124,7 +134,7 @@ function parseAuthz(v: unknown): AuthzPolicy | undefined {
   if (!isRecord(v)) return undefined;
   const s = v.scopes;
   if (!isRecord(s)) return undefined;
-  const scopes: Record<string, readonly string[]> = {};
+  const scopes = emptyScopes(); // null-proto: untrusted keys land as own props, never invoke the __proto__ setter
   for (const [scope, actors] of Object.entries(s)) {
     if (!Array.isArray(actors) || !actors.every((a): a is string => typeof a === 'string')) return undefined;
     scopes[scope] = [...actors];
@@ -152,10 +162,20 @@ export function nearDupConfig(policy: AtlasPolicy): NearDupConfig {
  * `false` when `scope` is absent/empty, when the scope is not declared in the policy, or when `actor` is not
  * a listed member. `true` only when the policy declares the scope AND lists the actor. Pure + total, no IO —
  * an absent/broken policy (⇒ empty scopes via {@link defaultPolicy}) therefore authorizes NO write.
+ *
+ * The membership lookup is guarded by an OWN-property check ({@link Object.prototype.hasOwnProperty}) BEFORE
+ * `.includes`: a scope named after an INHERITED `Object.prototype` member (`'constructor'`, `'toString'`,
+ * `'hasOwnProperty'`, `'valueOf'`, …) resolves to the prototype function on a plain map and would throw on
+ * `.includes` — here it is not an OWN key of the (null-proto) map, so it fails closed `false` instead of
+ * throwing. `'__proto__'` is the one reserved name JSON.parse materializes as an OWN key, so it is rejected
+ * by name up front: a governance scope is an identifier like `'core/knowledge'`, never `'__proto__'`.
+ * Total — never throws — and never permits an unlisted actor.
  */
 export function actorInScope(policy: AtlasPolicy, actor: string, scope: string | undefined): boolean {
   if (scope === undefined || scope.length === 0) return false; // no ownership anchor ⇒ fail closed
-  const members = policy.authz.scopes[scope];
-  if (members === undefined) return false; // undeclared scope ⇒ fail closed
-  return members.includes(actor);
+  if (scope === '__proto__') return false; // reserved name (an own key after JSON.parse) ⇒ never anchors a scope
+  const scopes = policy.authz.scopes;
+  if (!Object.prototype.hasOwnProperty.call(scopes, scope)) return false; // undeclared / inherited-proto name ⇒ fail closed (total, never throws)
+  const members = scopes[scope]; // own key ⇒ defined; the `!== undefined` is only the noUncheckedIndexedAccess narrowing (it does NOT swallow the inherited-fn throw — that is what the hasOwnProperty guard prevents)
+  return members !== undefined && members.includes(actor);
 }
