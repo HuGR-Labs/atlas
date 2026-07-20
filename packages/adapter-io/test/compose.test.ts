@@ -70,7 +70,7 @@ describe('COMPOSE-A — composeRuntime end-to-end (governed durable handler)', (
     const prev = process.env.ATLAS_ACTOR;
     process.env.ATLAS_ACTOR = 'alice';
     try {
-      const handler = composeRuntime(repoPath);
+      const { handler } = composeRuntime(repoPath);
       const node = groundedFact(repoPath, 'core');
       const v = handler.handle(EMIT, { node, at: AT });
       expect(v.ok).toBe(true);
@@ -95,7 +95,7 @@ describe('COMPOSE-A — composeRuntime end-to-end (governed durable handler)', (
     const prev = process.env.ATLAS_ACTOR;
     process.env.ATLAS_ACTOR = 'alice';
     try {
-      const handler = composeRuntime(repoPath);
+      const { handler } = composeRuntime(repoPath);
       // alice holds `core`, not `secret` → the KNOW-11 authz gate denies, nothing persists.
       const v = handler.handle(EMIT, { node: groundedFact(repoPath, 'secret'), at: AT });
       const out = v.data as EmitOut;
@@ -120,7 +120,7 @@ describe('COMPOSE-A — composeRuntime end-to-end (governed durable handler)', (
     const prev = process.env.ATLAS_ACTOR;
     delete process.env.ATLAS_ACTOR;
     try {
-      const handler = composeRuntime(repoPath);
+      const { handler } = composeRuntime(repoPath);
       const v = handler.handle(EMIT, { node: groundedFact(repoPath, 'core'), at: AT });
       const out = v.data as EmitOut;
       expect(out.emitted).toBe(false);

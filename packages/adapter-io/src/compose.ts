@@ -25,15 +25,24 @@ import type { Axes, ScipOutput } from '@atlas/index';
 import { bindGate, isGrounded, driftDetect } from '@atlas/grounding';
 import { bindReconcile, currentNodes } from '@atlas/knowledge';
 import type { GroundedFact } from '@atlas/knowledge';
-import type { T0Heuristic, TruthGate } from '@atlas/tools';
+import type { DoctorSource, T0Heuristic, TruthGate } from '@atlas/tools';
 import { walkFileTree } from './fs.js';
 import { readScip } from './scip.js';
 import { loadPolicy } from './policy.js';
 import type { AtlasPolicy } from './policy.js';
 import { createRevIndex } from './rev-index.js';
+import { createDoctorSource } from './doctor-source.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
 import { assembleHandler } from './wire.js';
 import type { WireConfig, WireSeams, WiredHandler } from './wire.js';
+
+/** The composed runtime: the ONE governed durable `WiredHandler` every entrypoint drives, PLUS the real
+ *  read-only `DoctorSource` `atlas doctor` reads over — both built from the SAME store + revIndex so they
+ *  can never diverge (WIRE-1). The CLI passes both; the MCP entrypoint drives only the handler. */
+export interface ComposedRuntime {
+  readonly handler: WiredHandler;
+  readonly doctorSource: DoctorSource;
+}
 
 /** Where `composeRuntime` looks for the optional SCIP dump under a repo (empty axes if absent, per §7). */
 const SCIP_REL = join('.atlas', 'index.scip');
@@ -78,8 +87,9 @@ function readScipOrEmpty(scipPath: string): ScipOutput {
  * root, resolves the admin policy + the `ATLAS_ACTOR` identity (fail-closed when unset — every write
  * denied), assembles the real seams, and hands them to the shared WIRE assembler, which wires the governed
  * durable emit leg (truth-door → authz → upsert → durable persist). Returns THE one `WiredHandler`.
+ * Also builds the real read-only `DoctorSource` (`atlas doctor`'s port) from the SAME store + revIndex.
  */
-export function composeRuntime(repoPath: string): WiredHandler {
+export function composeRuntime(repoPath: string): ComposedRuntime {
   const policy = loadPolicy(repoPath);
   const scipPath = join(repoPath, SCIP_REL);
   const axes = build(walkFileTree(repoPath), readScipOrEmpty(scipPath));
@@ -110,5 +120,9 @@ export function composeRuntime(repoPath: string): WiredHandler {
     seams,
   };
 
-  return assembleHandler(config);
+  // The real read-only diagnostic port — built over the SAME durable store + revIndex the governed emit
+  // leg rides, so `atlas doctor` reads the very facts the write door persists (never a fresh oracle).
+  const doctorSource = createDoctorSource(store, revIndex);
+
+  return { handler: assembleHandler(config), doctorSource };
 }

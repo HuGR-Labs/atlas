@@ -8,7 +8,7 @@
 import { composeRuntime } from '@atlas/adapter-io';
 import { main } from './cli.js';
 
-const handler = composeRuntime(process.cwd());
-void main(process.argv.slice(2), { handler }).then((code) => {
+const { handler, doctorSource } = composeRuntime(process.cwd());
+void main(process.argv.slice(2), { handler, doctorSource }).then((code) => {
   process.exitCode = code;
 });

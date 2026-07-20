@@ -16,7 +16,7 @@ import { create } from '@bufbuild/protobuf';
 import { serializeSCIP, IndexSchema, MetadataSchema, ToolInfoSchema } from '@c4312/scip';
 import { composeRuntime } from '@atlas/adapter-io';
 import type { WiredHandler } from '@atlas/adapter-io';
-import type { Verdict } from '@atlas/tools';
+import type { DoctorSource, Verdict } from '@atlas/tools';
 import { main } from '../src/cli.js';
 
 // OS temp root — portable across dev + CI (never a machine-specific absolute path).
@@ -42,6 +42,7 @@ function expectWellFormedVerdict(v: Verdict): void {
 
 let tempRepo: string;
 let handler: WiredHandler;
+let doctorSource: DoctorSource;
 
 beforeAll(() => {
   tempRepo = mkdtempSync(join(SCRATCH, 'compose-b-'));
@@ -69,8 +70,9 @@ beforeAll(() => {
   git('config', 'user.email', 'test@atlas.local');
   git('config', 'user.name', 'atlas-test');
   git('add', '-A');
-  // THE real composition root — reads the repo at `tempRepo`, builds the governed durable handler.
-  handler = composeRuntime(tempRepo);
+  // THE real composition root — reads the repo at `tempRepo`, builds the governed durable handler AND the
+  // real read-only DoctorSource (`atlas doctor`'s port) from the same store + revIndex.
+  ({ handler, doctorSource } = composeRuntime(tempRepo));
 });
 
 afterAll(() => rmSync(tempRepo, { recursive: true, force: true }));
@@ -163,5 +165,31 @@ describe('COMPOSE-B — mine routes to runMine (uniform render), no throw', () =
     } finally {
       process.chdir(prevCwd);
     }
+  });
+});
+
+// ── the composed DoctorSource makes `atlas doctor` LIVE (not the fail-closed "no source" path) ──────────
+
+describe('COMPOSE-B — composeRuntime wires the real DoctorSource (doctor is LIVE)', () => {
+  it('main([doctor, hotset, 5], { handler, doctorSource }) resolves NOT the fail-closed "no source" path', async () => {
+    // The whole point of DOCTORSOURCE: with the real read-only source injected, `atlas doctor hotset`
+    // renders a REAL hot-set report over the composed durable projection — never the "no diagnostic source"
+    // sentinel. TEETH: the differential below drops `doctorSource` and the sentinel returns (golden RED).
+    captureStdout();
+    const code = await main(['doctor', 'hotset', '5'], { handler, doctorSource });
+    expect(code).toBe(0); // read-only ⇒ exit 0
+    const out = writes.join('');
+    expect(out).toContain('doctor: hotset');
+    expect(out).toContain('hotSet: size=');
+    expect(out).not.toContain('has no diagnostic source');
+  });
+
+  it('the fail-closed sentinel IS rendered when no doctorSource is injected (the mutant tell is real)', async () => {
+    // Differential: the SAME argv WITHOUT the source falls to the fail-closed "no diagnostic source" leg —
+    // proving the golden above actually depends on the composed DoctorSource, not a vacuous pass.
+    captureStdout();
+    const code = await main(['doctor', 'hotset', '5'], { handler });
+    expect(code).not.toBe(0);
+    expect(writes.join('')).toContain('has no diagnostic source');
   });
 });

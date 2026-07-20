@@ -143,7 +143,7 @@ function runLeg(
 describe('RECON-SEAMS — composeRuntime wires the REAL reconcile drift seams (COMPOSE-C)', () => {
   it('SCN-RS-1 — reconcile DETECTS a real structural change as DRIFTED (mechanical + semantic split)', () => {
     fix = makeFix();
-    const handler = composeRuntime(fix.repoPath);
+    const { handler } = composeRuntime(fix.repoPath);
 
     // Drive the reconcile leg through the assembled handler: mergeBase=A, topic=HEAD=B.
     const v = handler.handle(RECONCILE, { mergeBase: fix.A as Hash });
@@ -160,7 +160,7 @@ describe('RECON-SEAMS — composeRuntime wires the REAL reconcile drift seams (C
 
   it('SCN-RS-2 (control) — NO structural change (mergeBase == topic) ⇒ nothing drifts', () => {
     fix = makeFix();
-    const handler = composeRuntime(fix.repoPath);
+    const { handler } = composeRuntime(fix.repoPath);
 
     // mergeBase = HEAD (B) == topic ⇒ the anchor is identical at both ends ⇒ no drift pair.
     const out = handler.handle(RECONCILE, { mergeBase: fix.B as Hash }).data as ReconcileOut;
