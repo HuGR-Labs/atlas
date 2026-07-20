@@ -1,8 +1,10 @@
 // @atlas/knowledge — test/wp-9.x-adjacency-b.near-dup.test.ts  (ADJACENCY-B · WP-9.x)
 //
-// The STRUCTURAL adjacency near-duplicate matcher `adjacencyNearDup` + its `upsert` fold. A CREATE whose
-// claim EXACTLY matches an existing claim at an ADJACENT code granularity (ancestor/descendant anchor,
-// ANY sibling slot) is re-routed to MERGE into that NEAREST neighbor instead of minting a parallel node.
+// The retained pure collision-detector `adjacencyNearDup` (still computes ancestor/descendant collision +
+// nearest mergeTarget), PLUS the WP-DEDUP-1 un-merge behavior on `upsert`. After the always-merge was
+// REMOVED (docs/design/dedup-identity.md DP-1), a CREATE at an adjacent anchor MINTS ITS OWN NODE — each
+// grounding stays distinct (A2). `adjacencyNearDup` is no longer wired into `upsert`/`writeDecision`; the
+// structural relation is now DERIVED ON READ (`deriveSubsumes`, DP-2), never a merge.
 // Deterministic, NO embeddings, exact `claimNorm` only. Every golden NAMES the mutant that flips it.
 
 import { describe, it, expect } from 'vitest';
@@ -127,7 +129,7 @@ describe('ADJACENCY-B — upsert (WP-DEDUP-1 un-merge): a CREATE at an adjacent 
     expect(neighbor.primaryAnchor).toBe('a::b'); // the neighbor is untouched by the child write
   });
 
-  it('a CREATE adjacent with a NOVEL claim set-unions the new claim into the neighbor', () => {
+  it('a CREATE adjacent with a NOVEL claim mints its own node (no collision ⇒ plain CREATE)', () => {
     let s: StoreProjection = emptyStore();
     s = upsert(s, { nodeKey: 'nk-parent', contentHash: 'ch-p', family: 'advisory', claimNorm: 'cn-a', primaryAnchor: 'a::b', slot: 'invariant' }).store;
     // NOTE: a NOVEL claim at a child unit does NOT collide (exact leg) ⇒ it CREATEs its own node.
