@@ -13,13 +13,15 @@
 //   • every write routes to an upsert cell (DEDUP/CREATE/UPDATE/SUPERSEDE) — never a silent REJECT/loss —
 //     and a predicate supersede is a dedup POINTER into CAS (0 byte-copy, 0 delete).
 //
-// HONESTY / PARK BOUNDARY (stated, not glossed). The frozen composed-store FRONT DOOR
-// `RouterApi.writeDecision(candidate, cfg)` is an OWNER-DEFINE seam: it needs the OWNER-DEFINE composed
-// store (knowledge/ref/store.ts — "NO concrete signature frozen") + WP-5.13-b's nodeKey VALUE, so it is
-// DEFERRED (PARK), deliberately NOT wired in src — NOT a gap glossed here. The runtime routes AROUND it
-// via `routeWrite(RouteInputs)` + `upsert(store, req)` over ALREADY-RESOLVED identity. This story
-// exercises that routed-around path and asserts, with teeth, that `writeDecision` has NO runtime binding
-// (it must NOT be called expecting it to work) while `routeWrite`/`upsert` ARE wired — the PARK is real.
+// UN-PARK BOUNDARY (owner-RATIFIED, WP-9.2.4.KNOWLEDGE — govern writes now). The composed-store FRONT
+// DOOR `RouterApi.writeDecision(candidate, store, cfg)` — formerly PARKED — is now WIRED. It is COMPOSED,
+// not invented: it mints the contentHash through the SEALED kernel `id` seam (atlas-knowledge:110), reuses
+// WP-5.13-b's `nodeKey` VALUE + the pure `routeWrite` + the `nearDuplicateProbe` door-2 leg, and takes the
+// `StoreProjection` as DATA (the `upsert(store, req)` idiom / caller-side session-internal projection) — so
+// NO OWNER-DEFINE composed store is fabricated. The runtime still ALSO routes via `routeWrite(RouteInputs)`
+// + `upsert(store, req)` over already-resolved identity (the primitives the front door composes). This
+// story exercises the routed-around path AND, with teeth, that `writeDecision` is exported and governs a
+// candidate correctly — the un-park is real.
 //
 // INJECTED PORT (legitimate seam): the archive's SUPERSEDE defers its dedup/re-spawn to the CAS —
 // `bindArchive(StoreApi)` is wired to the REAL sealed @atlas/kernel `createStore()` (the truest double),
@@ -39,8 +41,8 @@ import {
 import type {
   Candidate, AdvisoryNode, PredicateNode, TerritoryView, Check,
 } from '@atlas/knowledge';
-import type { RouteInputs, WriteRequest, StoreProjection, NodeFamily } from '@atlas/knowledge';
-import { asNodeKey, asSubtreeHash, createStore } from '@atlas/kernel';
+import type { RouteInputs, WriteRequest, StoreProjection, NodeFamily, NearDupConfig } from '@atlas/knowledge';
+import { asNodeKey, asSubtreeHash, createStore, id as kid } from '@atlas/kernel';
 import type { Tier } from '@atlas/contracts';
 import type { Grounding } from '@atlas/grounding';
 
@@ -231,14 +233,41 @@ describe('S5 · write governance — authorization + the human-in-the-loop T0 ba
     expect(a).toBe(b);
   });
 
-  // ── PARK boundary — the composed-store front-door is intentionally unbuilt (NOT a glossed gap) ──────
-  it('PARK: the frozen writeDecision front-door has NO runtime binding — the runtime routes AROUND it', () => {
-    // RouterApi.writeDecision(candidate,cfg) needs the OWNER-DEFINE composed store (knowledge/ref/store.ts:
-    // "NO concrete signature frozen") + WP-5.13-b's nodeKey VALUE — DEFERRED (PARK), never invented. So it
-    // must NOT be called expecting it to work: there is deliberately no runtime `writeDecision` export.
-    expect('writeDecision' in knowledge).toBe(false);
-    // ...while the routed-around path this story exercised IS wired:
+  // ── UN-PARK — the composed-store front-door is now WIRED (owner-RATIFIED reversal of the PARK) ──────
+  it('the writeDecision front-door IS exported and governs a candidate — DEDUP/CREATE/UPDATE/SUPERSEDE', () => {
+    // RATIFIED UN-PARK (WP-9.2.4.KNOWLEDGE): the front door is COMPOSED, not invented — it mints the
+    // contentHash through the SEALED kernel `id` seam, reuses `nodeKey` + `routeWrite` + `nearDuplicateProbe`,
+    // and takes the `StoreProjection` as DATA (the `upsert(store, req)` idiom), so no OWNER-DEFINE composed
+    // store is fabricated. The barrel `export *` surfaces it — the presence assertion is now TRUE.
+    expect('writeDecision' in knowledge).toBe(true);
+    expect(typeof knowledge.writeDecision).toBe('function');
+    // ...and the routed-around primitives this story exercised REMAIN wired (the front door composes them):
     expect(typeof routeWrite).toBe('function');
     expect(typeof upsert).toBe('function');
+
+    // It governs a candidate over a projection CONSISTENT with the routed-around routeWrite/upsert above:
+    // the projection is seeded from the SAME sealed `nodeKey`/`id` the front door computes (real hit/miss).
+    const cfg: NearDupConfig = { claimNormThreshold: 1 };
+    const adv = candidate({ claimNorm: 'cn-gov' }); // advisory (no check)
+    const prd = candidate({ claimNorm: 'cn-gov-p', check: predicateCheck }); // predicate
+    const advKey = knowledge.nodeKey(adv) as string;
+    const prdKey = knowledge.nodeKey(prd) as string;
+    const advHash = kid(adv) as string;
+
+    const empty: StoreProjection = emptyStore();
+    const seeded: StoreProjection = {
+      current: new Map([
+        [advKey, { nodeKey: advKey, family: 'advisory' as NodeFamily, contentHash: 'ch-x', claims: ['cn-old'] }],
+        [prdKey, { nodeKey: prdKey, family: 'predicate' as NodeFamily, contentHash: 'ch-y', claims: ['cn-old'] }],
+      ]),
+      cas: new Set<string>(),
+    };
+
+    expect(knowledge.writeDecision(adv, empty, cfg)).toBe('CREATE'); // fresh subject
+    expect(knowledge.writeDecision(adv, seeded, cfg)).toBe('UPDATE'); // advisory nodeKey hit ⇒ set-union
+    expect(knowledge.writeDecision(prd, seeded, cfg)).toBe('SUPERSEDE'); // predicate hit, same check
+    // dedup precedence: the same bytes already retained short-circuits regardless of the nodeKey leg.
+    const withBytes: StoreProjection = { current: seeded.current, cas: new Set<string>([advHash]) };
+    expect(knowledge.writeDecision(adv, withBytes, cfg)).toBe('DEDUP');
   });
 });
