@@ -1,0 +1,6 @@
+{"id":"G7","probe":"session-start progress fold","passed":false,"at":"2026-07-20T02:21:33.194Z"}
+{"id":"G4","probe":"session-start memory recall","passed":false,"at":"2026-07-20T02:21:33.196Z"}
+{"id":"G3","probe":"session-start doctrine re-injection","passed":true,"at":"2026-07-20T02:21:33.197Z"}
+{"id":"G7","probe":"session-start progress fold","passed":true,"at":"2026-07-20T17:36:52.426Z"}
+{"id":"G4","probe":"session-start memory recall","passed":false,"at":"2026-07-20T17:36:52.428Z"}
+{"id":"G3","probe":"session-start doctrine re-injection","passed":true,"at":"2026-07-20T17:36:52.429Z"}

@@ -17,6 +17,7 @@ export * from './lifecycle/status.js';      // WP-4.11-a.KNOW — status recompu
 export * from './lifecycle/reconcile.js';   // WP-4.12-a.KNOW — drift split: mechanical auto-reground, semantic block, reauthor==|semantic|
 // Campaign-5 (knowledge lifecycle) runtime surface:
 export * from './write/router.js';      // WP-5.13-a.KNOW — write-routing: every write an upsert (exhaustive over the KNOW-4 cells)
+export * from './write/near-dup.js';    // KNOW-15h — the near-duplicate probe (split from router for the ≤400-LOC ceiling)
 export * from './lifecycle/evaluator.js';   // WP-5.16.KNOW  — predicate check-engine: deterministic index-query, no code execution
 export * from './lifecycle/produce.js';     // WP-5.17.KNOW  — production-moments: writes fire only at the 3 moments; sealing fed-or-why-not
 // WP-5.14.KNOW (fact lifecycle) — unblocked by the R3 data-model reconciliation (ADR-0001):
