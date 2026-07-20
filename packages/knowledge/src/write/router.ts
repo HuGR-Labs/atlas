@@ -30,6 +30,7 @@
 import { asNodeKey, canonicalForm, defaultEncoder, id } from '@atlas/kernel';
 import type { NodeKey } from '@atlas/contracts';
 import type { Candidate, Check, PredicateSlot } from '../types.js';
+import { nearDuplicateProbe } from './near-dup.js';
 
 // ── frozen RouterApi surface, co-located here (was ref/router.ts) ─────────────────────────────────────
 
@@ -339,27 +340,6 @@ export function nodeKey(node: Candidate): NodeKey {
   return asNodeKey(defaultEncoder.hash(canonicalForm(preimage)));
 }
 
-/** EXACT normalized claim similarity — the AIRTIGHT leg. Returns `1` iff the claims are byte-identical
- *  after NFC+trim, else `0`. The near-SYNONYM metric (`0 < sim < 1`) is an OPEN-DEFINE threshold τ
- *  (residue SCN-KNOW-15h-2) — deliberately NOT invented here. */
-function claimSimilarity(a: string, b: string): 0 | 1 {
-  return a.normalize('NFC').trim() === b.normalize('NFC').trim() ? 1 : 0;
-}
-
-/**
- * The deterministic near-duplicate probe run BEFORE any CREATE (KNOW-15h): a `claimNorm` collision with
- * an existing sibling-slot claim forces MERGE/UPDATE rather than minting a parallel node (door-2). The
- * `claimNormThreshold` is surfaced as an EXPLICIT parameter (frozen `NearDupConfig`) — the OPEN-DEFINE τ
- * is a config the caller supplies, never a baked-in constant. Pure + total, no LLM. Reports a collision
- * iff some existing normalized claim reaches the threshold (exact match ⇒ `sim=1`, fires for any τ ≤ 1).
- */
-export function nearDuplicateProbe(
-  candidate: Candidate,
-  existingClaimNorms: readonly string[],
-  cfg: NearDupConfig,
-): boolean {
-  return existingClaimNorms.some((c) => claimSimilarity(candidate.claimNorm, c) >= cfg.claimNormThreshold);
-}
 
 /**
  * THE composed write-decision FRONT DOOR (KNOW-4/15) — owner-RATIFIED un-park of the s05 PARK. COMPOSED
