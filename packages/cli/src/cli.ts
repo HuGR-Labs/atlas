@@ -9,6 +9,7 @@ import type { WiredHandler } from '@atlas/adapter-io';
 import type { DoctorSource, Guidance, Tool, Verdict } from '@atlas/tools';
 import { runDoctor } from './doctor.js';
 import { COMMAND_LEG } from './map.js';
+import { marshalArgs } from './marshal.js';
 import { runMine } from './mine.js';
 import { parse } from './parse.js';
 import { renderVerdict } from './render.js';
@@ -71,7 +72,15 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
       errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'),
     );
   }
-  const verdict = deps.handler.handle(tool, { positionals, flags });
+  // ARG-MARSHALLING: map the parsed positionals/flags to the NAMED arg shape THIS command's leg reads
+  // (init→{path}, query→{scope}, emit→{node,at}, reconcile→{mergeBase,options}). Without it every routed
+  // command fails closed with "malformed args". TOTAL: a missing --at / unreadable emit fact file → a
+  // structured error + guidance + non-zero exit, never a throw (CLI-1b).
+  const marshalled = marshalArgs(command, positionals, flags);
+  if (!marshalled.ok) {
+    return emit(errorVerdict(marshalled.error));
+  }
+  const verdict = deps.handler.handle(tool, marshalled.args);
   return emit(verdict);
 }
 
