@@ -65,6 +65,9 @@ export interface WireConfig {
   readonly scipPath: string;
   /** The injected seams that have no adapter (tests pass fakes/stubs). */
   readonly seams: WireSeams;
+  /** The KNOW-11 write actor (owner-scoped authz). Resolved by the composition root from the environment /
+   *  local machine ONLY (never from a fact/payload); ABSENT ⇒ `''` ⇒ fail-closed (every write denied). */
+  readonly actor?: string;
 }
 
 /**
@@ -96,15 +99,17 @@ export function assembleHandler(config: WireConfig): WiredHandler {
   });
 
   // GOVERNED DURABLE EMIT (COMPOSE-A): the emit leg persists through the governed path — the GROUND
-  // truth-gate, the KNOW-11 owner-scoped authz gate (actor = `ATLAS_ACTOR`, fail-closed when unset), the
-  // KNOW-15 `upsert` write-decision, and durable persistence (the projection sidecar + the whole fact into
-  // CAS) — over the DURABLE `createDiskStore(config.casPath)`, not a throwaway in-memory map. This closes
-  // the former store-bridge TODO: the durable store is the real one now.
+  // truth-gate, the KNOW-11 owner-scoped authz gate (actor supplied by the composition root, fail-closed
+  // to `''` when absent ⇒ every write denied), the KNOW-15 `upsert` write-decision, and durable persistence
+  // (the projection sidecar + the whole fact into CAS) — over the DURABLE `createDiskStore(config.casPath)`,
+  // not a throwaway in-memory map. This closes the former store-bridge TODO: the durable store is the real
+  // one now. The actor is passed in via `config.actor` (resolved from env/git-config by compose.ts) — this
+  // module NEVER reads `process.env` or a fact/payload for the actor (the spoof-guard boundary).
   const governedEmit = createGovernedEmit({
     store: createDiskStore(config.casPath),
     gate: config.seams.gate,
     policy: loadPolicy(config.repoPath),
-    actor: process.env.ATLAS_ACTOR ?? '',
+    actor: config.actor ?? '',
   });
 
   const legs: ToolLegs = {
