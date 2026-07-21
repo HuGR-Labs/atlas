@@ -12,11 +12,11 @@
 // ROOT — value files land at `<casPath>/<H[0:2]>/<H>` and the projection sidecar beside it (outside cas/).
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { id } from '@atlas/kernel';
+import { asHash, id } from '@atlas/kernel';
 import { upsert, emptyStore } from '@atlas/knowledge';
 import type { WriteRequest } from '@atlas/knowledge';
 import { createDiskStore, rehydrateProjection } from '../src/store.js';
@@ -108,6 +108,41 @@ describe('createDiskStore — ADAPT-STORE-1 durable, tamper-safe disk CAS', () =
       out = s.get(H);
     }).not.toThrow();
     expect(out).toBeUndefined();
+  });
+
+  it('N13 — a symlink planted in CAS pointing OUTSIDE the root reads as absent (escape guard; red→green)', () => {
+    const dir = freshCasDir();
+    const s = createDiskStore(dir);
+    // C is a genuine CasObject; its JSON is written to a file OUTSIDE the CAS root. A symlink is planted at the
+    // content-addressed path `<cas>/<xx>/<H>` (H = id(C), so the filename passes the 64-hex charset gate AND the
+    // bytes re-hash to H). PRE-N13 the read-before-verify FOLLOWS the symlink, reads the out-of-cas file, and —
+    // id matches — SERVES it: a successful escape (get(H) === C). The realpath sandbox now rejects it.
+    const C = { kind: 'advisory', tier: 'T1', freshness: 'FRESH', body: 'ESCAPED-OUT-OF-CAS' };
+    const H = id(C) as string;
+    const outside = join(tmp!, 'outside.json');
+    writeFileSync(outside, JSON.stringify(C), 'utf8');
+    const shardDir = join(dir, H.slice(0, 2));
+    mkdirSync(shardDir, { recursive: true });
+    symlinkSync(outside, join(shardDir, H));
+    // teeth: pre-N13 this returned `C` (the escape succeeded); the realpath-resolved cas-root sandbox is a miss.
+    expect(s.get(asHash(H))).toBeUndefined();
+  });
+
+  it('N13 — a symlink in CAS to a NON-REGULAR target is a FAST miss, no unbounded read (DoS guard)', () => {
+    const dir = freshCasDir();
+    const s = createDiskStore(dir);
+    // A 64-hex addr passes the charset gate; the symlink target is a DIRECTORY — a portable, deterministic
+    // stand-in for the measured OOM vector (a symlink → /dev/zero or a FIFO, whose read is unbounded/blocking).
+    // `statSync` follows the link → `isFile()` false → rejected BEFORE any read (no open of a device/FIFO).
+    const H = 'a'.repeat(64);
+    const targetDir = join(tmp!, 'a-directory');
+    mkdirSync(targetDir, { recursive: true });
+    const shardDir = join(dir, H.slice(0, 2));
+    mkdirSync(shardDir, { recursive: true });
+    symlinkSync(targetDir, join(shardDir, H));
+    const t0 = Date.now();
+    expect(s.get(asHash(H))).toBeUndefined();
+    expect(Date.now() - t0).toBeLessThan(2000); // fast — non-regular target rejected without an unbounded read
   });
 });
 

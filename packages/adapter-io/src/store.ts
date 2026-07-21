@@ -10,8 +10,8 @@
 // KNOWLEDGE flush CALLS and rehydrate READS back), and `rehydrateProjection` takes the widened `DiskStore`.
 // The kernel `StoreApi` stays frozen — this widening is additive and lives only in this adapter package.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve, sep } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, join, sep } from 'node:path';
 import type { Hash } from '@atlas/contracts';
 import { asHash, id } from '@atlas/kernel';
 import type { CasObject, StoreApi } from '@atlas/kernel';
@@ -27,6 +27,11 @@ const EMPTY: Hash = asHash('');
 
 /** The mutable projection sidecar filename — NOT content-addressed; lives beside the CAS root (D4). */
 const PROJECTION_FILE = 'projection.json';
+
+/** The upper bound on a single CAS object read (N13 DoS guard): a CAS object is a small JSON fact/skeleton
+ *  (KB-scale). A value whose on-disk size exceeds this is rejected as a miss BEFORE it is read — belt for a
+ *  planted oversized regular file. Generous (64 MiB) so it never trips a legitimate object, far below OOM. */
+const MAX_CAS_BYTES = 64 * 1024 * 1024;
 
 /** The sharded, content-addressed value path for `H`: `<casPath>/<H[0:2]>/<H>` (D4). */
 function valuePath(casPath: CasPath, h: Hash): string {
@@ -93,7 +98,30 @@ export function createDiskStore(casPath: CasPath): DiskStore {
       // as a plain miss (`undefined`), never a filesystem touch.
       if (!/^[0-9a-f]{64}$/.test(h)) return undefined;
       const path = valuePath(casPath, h);
-      if (!resolve(path).startsWith(resolve(casPath) + sep)) return undefined;
+      // N13 (billy PoC — symlink-in-CAS re-opens the OOM): a purely LEXICAL sandbox does NOT stop a symlink
+      // planted at `<cas>/<xx>/<64-hex>` (filename passes charset, path is lexically inside cas/) that points
+      // at an unbounded/non-regular file (`/dev/zero`, a FIFO) or a regular file OUTSIDE cas. `readFileSync`
+      // FOLLOWS the symlink BEFORE the re-hash guard, so a device/FIFO target ⇒ unbounded synchronous read ⇒
+      // OOM/hang, and an out-of-cas regular file is exfiltrated. Guard BEFORE the read, total on every branch:
+      //   (a) `statSync` FOLLOWS the symlink to its target — a CAS object is ALWAYS a small REGULAR file, so a
+      //       non-regular target (device/FIFO/dir) or an oversized file is a MISS (no read starts — the OOM
+      //       vector is closed WITHOUT ever opening a blocking device/FIFO handle).
+      //   (b) `realpathSync` resolves the symlink chain — the real target MUST stay inside the CAS root (both
+      //       sides resolved, so a symlinked tmp root like macOS /tmp→/private/tmp does not false-reject).
+      let st: import('node:fs').Stats;
+      try {
+        st = statSync(path); // follows symlinks to the target; ENOENT / broken link ⇒ throw ⇒ miss
+      } catch {
+        return undefined;
+      }
+      if (!st.isFile() || st.size > MAX_CAS_BYTES) return undefined; // non-regular / oversized ⇒ never read
+      try {
+        const realCas = realpathSync(casPath);
+        const real = realpathSync(path);
+        if (real !== realCas && !real.startsWith(realCas + sep)) return undefined; // symlink escapes cas ⇒ miss
+      } catch {
+        return undefined;
+      }
       let raw: string;
       try {
         raw = readFileSync(path, 'utf8');
