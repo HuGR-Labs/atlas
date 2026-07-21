@@ -33,15 +33,23 @@ export function readScip(scipPath: string): ScipOutput {
 
 /**
  * Read the optional SCIP dump at `scipPath`, DEGRADING to the empty projection (`{ documents: [] }`) when
- * no dump is present — a fresh repo with no `.atlas/index.scip` yet is a files-only structural view, NEVER
- * a throw (`readScip` calls `readFileSync`, which throws ENOENT on a missing path). This is the ONE shared
- * missing-file guard: `wire.ts` (`assembleHandler`) and `compose.ts` (`composeRuntime`) both route the
- * optional-SCIP case through here. A PRESENT-but-corrupt dump is out of scope — it keeps whatever `readScip`
- * does; only the MISSING-file case is guarded. (compose.ts still holds a twin local copy pending a DRY
- * follow-on that may migrate it to this export.)
+ * the dump cannot be projected — NEVER a throw. Both failure modes fold to the SAME files-only structural
+ * view:
+ *   • MISSING file      — a fresh repo with no `.atlas/index.scip` yet (`readScip` → `readFileSync` ENOENT).
+ *   • PRESENT-but-corrupt — garbage bytes, a truncated protobuf, or a foreign/stale schema that makes
+ *     `deserializeSCIP` THROW. Fail CLOSED here rather than at boot: `wire.ts` (`assembleHandler`) and
+ *     `compose.ts` (`composeRuntime`) BOTH read the `.scip` at startup through this ONE shared guard, so an
+ *     unguarded deserialize would crash BOTH bins on a corrupt index. Degrading loses symbol granularity
+ *     (files-only), it never crashes.
+ * The valid-SCIP happy path is byte-identical to `readScip` (only the throwing paths are absorbed).
  */
 export function readScipOrEmpty(scipPath: string): ScipOutput {
-  return existsSync(scipPath) ? readScip(scipPath) : { documents: [] };
+  if (!existsSync(scipPath)) return { documents: [] };
+  try {
+    return readScip(scipPath);
+  } catch {
+    return { documents: [] };
+  }
 }
 
 /** The real per-language SCIP indexer tools the ring knows how to run (constitution adapt-scip-2, D1:
