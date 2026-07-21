@@ -31,9 +31,10 @@ const ARITY: Record<Command, number> = {
   reconcile: 1, // reconcile <mergeBase>
   doctor: 1, // doctor <scope>
   mine: 1, // mine <repo>
+  node: 1, // node <addr>
 };
 
-const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine';
+const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine|node';
 
 function isCommand(s: string): s is Command {
   return Object.prototype.hasOwnProperty.call(COMMAND_LEG, s);
@@ -44,7 +45,7 @@ function isCommand(s: string): s is Command {
  * `--at` (the emit anchor rev) is valued; everything else stays a bare boolean. Any unknown flag simply
  * folds into the bag (a bare `--x` becomes `'true'`) — it is never a parse error, preserving totality.
  */
-const VALUED_FLAGS = new Set(['at']);
+const VALUED_FLAGS = new Set(['at', 'by']);
 
 /**
  * Fold one `-x`/`--x`/`--x=y`/`--x y` token into the flag bag — a bare flag is `'true'`. For a VALUED flag in

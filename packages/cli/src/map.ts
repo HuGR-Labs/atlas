@@ -6,8 +6,8 @@
 import { WRITE_PATHS } from '@atlas/tools';
 import type { Tool, Verdict } from '@atlas/tools';
 
-/** The finite command surface — EXACTLY these six, no more (CLI-1a). Order fixed; membership load-bearing. */
-export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine'] as const;
+/** The finite command surface — EXACTLY these seven, no more (CLI-1a). Order fixed; membership load-bearing. */
+export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node'] as const;
 export type Command = (typeof COMMANDS)[number];
 
 /** The leg a command routes to — a governance `Tool`, or the genesis entry (data-only; NOT executed here —
@@ -28,6 +28,8 @@ export const COMMAND_LEG: Record<Command, Leg> = {
   reconcile: 'atlas-reconcile',
   doctor: 'atlas-query', // READ authority oracle (TOOLS-6 projection); runtime sub-dispatches to DoctorApi
   mine: 'genesis run-controller', // data-only entry; not driven at this seam
+  node: 'atlas-query', // READ authority oracle (TOOLS-10 per-node read); intercepted before the handler (cli.ts),
+  //                      resolves via handler.resolveNode over the read-only NodeSource — carries NO write authority
 };
 
 export type Authority = 'read' | 'write';

@@ -60,6 +60,21 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
     return dv.exitCode;
   }
 
+  if (command === 'node') {
+    // N6/TOOLS-10: `atlas node <addr>` — the READ-ONLY per-node door. It resolves a node by its CONTENT
+    // ADDRESS through the ONE wired handler's `resolveNode` over the injected read-only `NodeSource`; it opens
+    // NO write door (writes still funnel through `atlas-emit`, TOOLS-1). Rendered through the SAME shared
+    // `renderVerdict` path (exit 0 on a hit carrying the `GroundedFact`; a structured `error` + exit 1 on a
+    // miss / an uncomposed runtime). Never a throw — the handler's `resolveNode` is total (TOOLS-2).
+    if (!deps.handler) {
+      return emit(
+        errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'),
+      );
+    }
+    const addr = positionals[0] as Parameters<WiredHandler['resolveNode']>[0];
+    return emit(deps.handler.resolveNode(addr, 'cli'));
+  }
+
   // The remaining four governance commands each route to a `Tool` through the one wired handler.
   const tool = COMMAND_LEG[command] as Tool;
   // The handler is INJECTED (dependency-inverted). Building the real one needs a fully-composed

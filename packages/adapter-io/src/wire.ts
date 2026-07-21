@@ -13,7 +13,11 @@ import { createHandler, createInit, createQuery, createReconcile } from '@atlas/
 import type { ToolLegs, ToolLeg, NodeSource } from '@atlas/tools';
 import { id } from '@atlas/kernel';
 import { build, createResolve, createDepgraph } from '@atlas/index';
+import type { RetrievalModel } from '@atlas/index';
 import { currentNodes, deriveSubsumes } from '@atlas/knowledge';
+import type { GroundedFact } from '@atlas/knowledge';
+import type { Hash } from '@atlas/contracts';
+import { retrievalPack } from './retrieval-model.js';
 import type { CasPath } from './store.js';
 import { walkFileTree } from './fs.js';
 import { readScipOrEmpty } from './scip.js';
@@ -74,6 +78,10 @@ export interface WireConfig {
    *  composition root from the environment ONLY (`ATLAS_RATIFY_TOKEN`, never a fact/payload); ABSENT ⇒ a
    *  full-ratify fact fails closed, a T0 fact needs `billy`. Fast-pathed (auto-accept) facts ignore it. */
   readonly ratifyToken?: string;
+  /** The read model the CLOSED three-mode retrieval surface serves (N2 — `atlas query --by dependency|trigger`).
+   *  Constructed by the composition root (`composeRuntime`) over the SAME axes + durable store; ABSENT for the
+   *  bare WIRE assembly (wire-only fake tests exercise `--by scope` only), where the non-scope modes fail closed. */
+  readonly retrieval?: RetrievalModel;
 }
 
 /**
@@ -144,7 +152,20 @@ export function assembleHandler(config: WireConfig): WiredHandler {
     // is `deriveSubsumes` (its FIRST production call site — DP-2 resolution-at-read) filtered to the edges
     // whose BOTH endpoints are current nodes UNDER the covering scope, already deterministically sorted.
     'atlas-query': ((args) => {
-      const scope = (args as { scope: string }).scope;
+      const a = args as { scope: string; by?: string };
+      // N2: `--by dependency|trigger` routes THROUGH the designed three-mode `createRetrieval` surface (INDEX-6),
+      // NOT re-implemented here. `scope` (the default, and every MCP/wire-fake call) stays the byte-identical
+      // pre-existing projection path below. The mode is marshal-validated ∈ {scope,dependency,trigger} (CLI).
+      const by = a.by;
+      if (by === 'dependency' || by === 'trigger') {
+        if (config.retrieval === undefined) {
+          // No retrieval model wired at this seam (bare WIRE fake assembly) — fail closed; the handler wraps
+          // this throw into a structured rejected Verdict (TOOLS-2), never a raw throw at the user door.
+          throw new Error('atlas query --by dependency|trigger needs the composition-root retrieval model');
+        }
+        return retrievalPack(config.retrieval, by, a.scope, store);
+      }
+      const scope = a.scope;
       const pack = createQuery(queryIndex).query(scope);
       const proj = rehydrateProjection(store);
       const underKeys = new Set(
@@ -181,6 +202,14 @@ export function assembleHandler(config: WireConfig): WiredHandler {
   // disk store is REALLY wired — the emit leg.)
   void [createForge, createHistorySource, createSiteProposer];
 
-  // ONE handler over the four legs — no per-entrypoint copy (WIRE-1).
-  return createHandler(legs);
+  // N6: the READ-ONLY per-node projection source (TOOLS-10). `resolveNode(addr)` reads the whole fact back
+  // from CAS by its CONTENT ADDRESS — the SAME durable store the query readback + governed emit ride (the CAS
+  // bytes ARE the fact). READ-ONLY: it opens NO write path (writes still funnel through `atlas-emit`, TOOLS-1);
+  // a miss ⇒ `undefined` (the handler renders a structured "no grounded node" rejection, never a throw).
+  const nodes: NodeSource = {
+    resolve: (nodeAddr) => store.get(nodeAddr as unknown as Hash) as GroundedFact | undefined,
+  };
+
+  // ONE handler over the four legs + the read-only per-node source — no per-entrypoint copy (WIRE-1).
+  return createHandler(legs, nodes);
 }

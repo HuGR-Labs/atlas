@@ -55,6 +55,19 @@ function renderData(data: unknown): string {
     return `data:\n${lines.join('\n')}\n`;
   }
 
+  // node — a resolved `GroundedFact` (the `atlas node <addr>` read door, N6). Recognised by its `kind`
+  // (advisory|predicate) + a `grounding` object — the emit `{ id }` shape below has NEITHER, so it is never
+  // shadowed. Renders the node's identity + tier + claim (advisory `claimNorm`, else the `claims` set-union).
+  if ((d.kind === 'advisory' || d.kind === 'predicate') && typeof d.grounding === 'object' && d.grounding !== null) {
+    const claim =
+      typeof d.claimNorm === 'string' && d.claimNorm.length > 0
+        ? d.claimNorm
+        : Array.isArray(d.claims)
+          ? (d.claims as readonly string[]).join('; ')
+          : '';
+    return `data:\n  node: ${String(d.id)}\n  tier: ${String(d.tier)}\n  kind: ${d.kind}\n  claim: ${claim}\n`;
+  }
+
   // emit { id } — the CAS id of the persisted fact.
   if (typeof d.id === 'string') {
     return `data:\n  id: ${d.id}\n`;
