@@ -81,10 +81,16 @@ export function createReconcile(
     const reauthorCount = semantic.length;
     const exitCode = semantic.length > 0 ? 2 : 0;
 
-    // TOOLS-13 auto-re-ground WRITE is EXCLUDED (EPIC-12-b, WP-4.12-b.TOOLS): even under `acceptReground`
-    // nothing is re-grounded at this seam — the flag's writer is a downstream facet.
-    void options;
-    const regroundedCount = 0;
+    // TOOLS-13 `--accept-reground`: the MECHANICAL subset (anchor moved but the claim STILL re-derives at
+    // HEAD) is the auto-re-groundable set. Under `{acceptReground:true}`, `regroundedCount == |mechanical|`
+    // — the count of drifted facts ACCEPTED for one-pass re-grounding (frozen `ReconcileOut`). SEMANTIC drift
+    // is NEVER counted (that would launder a BROKEN claim past the exit-2 block, which stays `2` above).
+    // Absent/`false` ⇒ `0` — report-only, behaviour UNCHANGED. This read/advisory seam COUNTS + SURFACES the
+    // regroundable set (`mechanical`); it opens NO write door of its own. The actual re-ground WRITE is applied
+    // DOWNSTREAM through the SINGLE governed door — @atlas/adapter-io `regroundTemplate` swaps the primary
+    // anchor to `anchorNow` + resets freshness FRESH, then funnels the template through `atlas-emit` (the
+    // doctor-source seam / EPIC-12-b). Reconcile therefore reports what WILL be re-grounded, never a phantom write.
+    const regroundedCount = options?.acceptReground ? mechanical.length : 0;
 
     return { drift: driftItems, mechanical, semantic, regroundedCount, reauthorCount, exitCode };
   };
