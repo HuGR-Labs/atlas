@@ -50,9 +50,13 @@ export interface RevIndexDeps {
   readonly runGit?: (repo: string, args: readonly string[]) => string;
 }
 
-/** The one git seam — `execFileSync`, NO shell (mirrors git-history.ts's `git`). */
+/** The one git seam — `execFileSync`, NO shell (mirrors git-history.ts's `git`). `stdin` is closed and
+ *  `stderr` is CAPTURED (not inherited) so git's benign worktree progress ("Preparing worktree…") never
+ *  leaks to the parent process's stderr during `atlas reconcile`. Capturing (not `'ignore'`) preserves
+ *  failure surfacing: on a non-zero exit `execFileSync` still THROWS, and the thrown error carries the
+ *  captured stderr on `.stderr` — a real git failure is diagnosable, never silently swallowed. */
 const realGit = (repo: string, args: readonly string[]): string =>
-  execFileSync('git', args as string[], { cwd: repo, encoding: 'utf8' });
+  execFileSync('git', args as string[], { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 
 /** The deterministic empty snapshot returned on any checkout/build failure (fail-closed totality). Built
  *  once from an empty tree — `build` is deterministic, so this is a stable, side-effect-free sentinel: no
