@@ -61,6 +61,13 @@ export interface WireSeams {
   readonly driftFacts: readonly import('@atlas/knowledge').GroundedFact[];
   /** GROUND-owned anchor resolution at a rev (createDriftSource dep, git-drift.ts:24). */
   readonly resolveAnchorAt: (rev: string, qp: string) => import('@atlas/contracts').StructRef | undefined;
+  /** N10 — GROUND-owned CONTENT-addressed resolution at a rev: the recorded `subtreeHash` re-located to its
+   *  new qualifiedPath (or `undefined` if the content is gone). Feeds `createDriftSource`'s pure-rename
+   *  widening (git-drift.ts). OPTIONAL — a bare WIRE fake that omits it simply never surfaces a rename. */
+  readonly resolveBySubtreeAt?: (
+    rev: string,
+    subtreeHash: string,
+  ) => import('@atlas/contracts').StructRef | undefined;
 }
 
 /** What the assembler needs to stand up the runtime (ring shape). */
@@ -191,6 +198,11 @@ export function assembleHandler(config: WireConfig): WiredHandler {
         createDriftSource({
           repoPath: config.repoPath,
           resolveAnchorAt: config.seams.resolveAnchorAt,
+          // N10 — thread the content-addressed resolver so `driftAt` surfaces a pure rename (spread keeps it
+          // ABSENT, not `undefined`, when a fake omits it — exactOptionalPropertyTypes).
+          ...(config.seams.resolveBySubtreeAt !== undefined
+            ? { resolveBySubtreeAt: config.seams.resolveBySubtreeAt }
+            : {}),
           facts: config.seams.driftFacts,
         }),
         config.seams.classifier,
