@@ -82,11 +82,6 @@ for (const f of files) {
 // ── (3) DIGEST TRIPWIRE (whole-file scheme: properties-<m> ↔ method-tags-<m>) ─────────────────────
 // Only WHOLE-FILE-pinned modules are gated here (short 8-hex digest of the entire method-tags file, as the
 // TLS + MEM headers document). Both were verified consistent before wiring (pins == current whole-file digest).
-// NOT covered, on purpose:
-//   • IDX pins are per-`### INV-INDEX-n`-BLOCK digests (`sha256(block)[:12]`). The recipe is reconstructable to
-//     16/16 ONLY with a non-uniform last-block boundary — i.e. reverse-FITTED, not the true generator. Gating
-//     on a fitted hash recipe would disagree with the real S2→S3 render on a future edit (false failures), so
-//     IDX must be gated by its ORIGINAL generator, not by this guess. Left out honestly.
 //   • gen/grd/knw/krn/pst/ret carry NO @sha256 pins — nothing to check.
 const WHOLE_FILE_PINNED = ['tls', 'mem'];
 for (const mod of WHOLE_FILE_PINNED) {
@@ -101,6 +96,38 @@ for (const mod of WHOLE_FILE_PINNED) {
     problems.push(`DIGEST: properties-${mod}.md pins [${stalePins}] ≠ current method-tags-${mod}.md digest ${digest8}. ` +
       `Re-freeze the pins (reconcile the properties against the amended method-tags) or revert the method-tags edit.`);
   }
+}
+
+// ── (3b) IDX PER-INV-BLOCK TRIPWIRE (partial, honest) ────────────────────────────────────────────
+// properties-idx pins are per-`### INV-INDEX-n`-block digests: sha256(<raw byte substring from the INV
+// header to the next section delimiter>)[:12]. That rule reproduces 15/16 pins EXACTLY (every trailing-byte
+// normalization does strictly worse — confirming it IS the generator's rule, not a fit). The SOLE exception
+// is the TERMINAL INV block (the last one before the trailing `---`/EOF), whose trailing-byte handling can't
+// be inferred without the original render tool. So we gate every NON-TERMINAL block and DECLARE the terminal
+// one uncovered — honest partial coverage, not a special-cased fake.
+{
+  const mtSrc = readFileSync(join(REPO, 'docs/requirements/method-tags-idx.md'), 'utf8');
+  const propsSrc = readFileSync(join(REPO, 'docs/requirements/properties-idx.md'), 'utf8');
+  const pinFor = {};
+  for (const m of propsSrc.matchAll(/method-tags-idx\.md#INV-INDEX-(\d+) @sha256:([0-9a-f]{12})/g)) pinFor[m[1]] = m[2];
+  const lines = mtSrc.split('\n');
+  const offset = []; let acc = 0; for (const l of lines) { offset.push(acc); acc += l.length + 1; }
+  const isDelim = (l) => /^### INV-INDEX-\d+/.test(l) || /^## /.test(l) || /^---/.test(l);
+  const heads = lines.map((l, i) => (/^### INV-INDEX-(\d+)/.test(l) ? i : -1)).filter((i) => i >= 0);
+  const terminal = heads[heads.length - 1]; // last INV block — trailing-byte rule not reproducible
+  for (const hi of heads) {
+    if (hi === terminal) continue; // declared uncovered (see note above)
+    const n = lines[hi].match(/INV-INDEX-(\d+)/)[1];
+    let end = lines.length;
+    for (let j = hi + 1; j < lines.length; j++) if (isDelim(lines[j])) { end = j; break; }
+    const block = mtSrc.slice(offset[hi], end < lines.length ? offset[end] : mtSrc.length);
+    const got = createHash('sha256').update(block).digest('hex').slice(0, 12);
+    if (pinFor[n] && got !== pinFor[n]) {
+      problems.push(`DIGEST(idx): INV-INDEX-${n} block digest ${got} ≠ pin ${pinFor[n]} in properties-idx.md. ` +
+        `Re-freeze the pin or revert the method-tags-idx block edit.`);
+    }
+  }
+  console.log(`  (idx: ${heads.length - 1}/${heads.length} INV blocks gated; terminal INV-INDEX-${lines[terminal].match(/INV-INDEX-(\d+)/)[1]} declared uncovered — needs the original render tool.)`);
 }
 
 // ── report ────────────────────────────────────────────────────────────────────────────────────────
