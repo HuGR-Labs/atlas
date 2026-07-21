@@ -5,10 +5,10 @@
 // owns ONLY the merge-base(param)-vs-topic(HEAD) diff logic; anchor RESOLUTION is INJECTED (owned by
 // GROUND — `resolveAnchorAt`), never an index built here (reconcile.ts:28-32).
 
-import { execFileSync } from 'node:child_process';
 import type { DriftPair, DriftSource } from '@atlas/tools';
 import type { Hash, StructRef } from '@atlas/contracts';
 import type { GroundedFact } from '@atlas/knowledge';
+import { runGit } from './run-git.js';
 
 /**
  * Construct the GROUND `DriftSource` — the drifted set at a merge base (ADAPT-GIT-2).
@@ -37,10 +37,7 @@ export function createDriftSource(deps: {
     driftAt(mergeBase: Hash): readonly DriftPair[] {
       // HEAD is the topic tip — the branch reconcile runs on. The two revs diffed are `mergeBase`
       // (the param) vs HEAD (topic); this adapter owns that choice.
-      const topicSha = execFileSync('git', ['rev-parse', 'HEAD'], {
-        cwd: deps.repoPath,
-        encoding: 'utf8',
-      }).trim();
+      const topicSha = runGit(deps.repoPath, ['rev-parse', 'HEAD']).trim();
 
       const pairs: DriftPair[] = [];
       for (const f of deps.facts) {

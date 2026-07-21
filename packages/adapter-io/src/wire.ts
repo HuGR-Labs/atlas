@@ -24,6 +24,7 @@ import { readScipOrEmpty } from './scip.js';
 import { createIndexAdapter } from './index-adapter.js';
 import { createProjectionQueryIndex, underScope } from './projection-query-index.js';
 import { createDriftSource } from './git-drift.js';
+import { headSha } from './run-git.js';
 import { createGovernedEmit } from './governed-emit.js';
 import { loadPolicy } from './policy.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
@@ -138,7 +139,10 @@ export function assembleHandler(config: WireConfig): WiredHandler {
   // The ONE durable disk store this assembly rides — shared by the governed emit leg (the write side) AND
   // the projection query-readback (the read side), so `atlas query` reads back the very facts `atlas emit`
   // persists (WIRE-LOOP: emit→query is a closed loop over ONE store, never two divergent instances).
-  const store = createDiskStore(config.casPath);
+  // N11: inject the freshness-watermark seam — a cheap `git rev-parse HEAD` (no worktree). The store stamps
+  // `builtAt` at each persist; the query index (below) compares it to live HEAD to flag a behind-HEAD read.
+  const currentHead = (): string | undefined => headSha(config.repoPath);
+  const store = createDiskStore(config.casPath, currentHead);
 
   const governedEmit = createGovernedEmit({
     store,
@@ -152,7 +156,7 @@ export function assembleHandler(config: WireConfig): WiredHandler {
 
   // Seam-1: wrap the pure structural index-adapter with the durable projection readback, so a scope resolves
   // to its covering territory skeleton (from @atlas/index) FOLDED with the emitted facts under it (from CAS).
-  const queryIndex = createProjectionQueryIndex(index, store);
+  const queryIndex = createProjectionQueryIndex(index, store, currentHead);
 
   const legs: ToolLegs = {
     'atlas-init': ((args) =>

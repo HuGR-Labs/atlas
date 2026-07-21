@@ -17,7 +17,6 @@
 // This module OWNS the runtime seam construction; `assembleHandler` (wire.ts) OWNS the leg assembly. Their
 // composition is the driver — no per-entrypoint copy (WIRE-1).
 
-import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import type { Hash } from '@atlas/contracts';
 import { build } from '@atlas/index';
@@ -32,6 +31,7 @@ import { readScipOrEmpty } from './scip.js';
 import { loadPolicy } from './policy.js';
 import type { AtlasPolicy } from './policy.js';
 import { createRevIndex } from './rev-index.js';
+import { runGit, headSha } from './run-git.js';
 import { createDoctorSource, primaryAnchor } from './doctor-source.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
 import { assembleHandler } from './wire.js';
@@ -79,17 +79,14 @@ export function buildGate(axes: Axes): TruthGate {
 /**
  * The LOCAL git identity (`git config user.email`) at `repoPath`, or `undefined`. TOTAL — never throws:
  * no git, no configured email, a non-repo/absent path, or ANY execFile failure ⇒ `undefined`; an empty
- * result ⇒ `undefined`. Uses the same no-shell git seam as git-history.ts (`execFileSync 'git'`, no shell).
+ * result ⇒ `undefined`. Uses the shared no-shell git seam (`runGit`, #74).
  *
  * SECURITY: this is a LOCAL-MACHINE identity source ONLY (the developer's own git config) — it is NEVER
  * derived from an emitted fact or a tool-call payload, so it cannot be used to spoof the KNOW-11 write actor.
  */
 export function gitUserEmail(repoPath: string): string | undefined {
   try {
-    const email = execFileSync('git', ['config', 'user.email'], {
-      cwd: repoPath,
-      encoding: 'utf8',
-    }).trim();
+    const email = runGit(repoPath, ['config', 'user.email']).trim();
     return email.length > 0 ? email : undefined;
   } catch {
     return undefined;
@@ -138,7 +135,8 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
   //   - `driftFacts`        — the current grounded facts from the durable projection. Governed-emit
   //     `store.put`s the WHOLE `GroundedFact` (invariant 6), so `store.get(contentHash)` reads it back.
   const revIndex = createRevIndex(repoPath);
-  const store = createDiskStore(join(repoPath, CAS_REL));
+  // N11: the doctor/reconcile store stamps the same freshness watermark (HEAD at persist) as the handler's.
+  const store = createDiskStore(join(repoPath, CAS_REL), () => headSha(repoPath));
   const driftFacts = currentNodes(rehydrateProjection(store))
     .map((n) => store.get(n.contentHash as Hash))
     .filter((o): o is GroundedFact => o !== undefined);

@@ -7,12 +7,12 @@
 // is left orphaned exactly per PERSIST-13); the PR is a host-side projection (a bare clone never fetches
 // it). The forge changes NONE of that semantics — git's native behavior IS the PERSIST-* oracle.
 
-import { execFileSync } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Forge, ForgeCall } from '@atlas/persist';
 import { NOTES_REF } from '@atlas/persist';
+import { runGit } from './run-git.js';
 
 /** The message boundary the trailer block is appended below, so `readTrailer` round-trips it byte-exact. */
 const SENTINEL = '--- atlas-provenance ---';
@@ -32,12 +32,11 @@ export function createForge(repoPath: string): Forge {
   const refspecs: string[] = [];
   const log: ForgeCall[] = [];
 
-  const git = (...args: string[]): string =>
-    execFileSync('git', args, { cwd: repoPath, encoding: 'utf8' }).toString();
+  const git = (...args: string[]): string => runGit(repoPath, args);
   // Absence is NOT an error here (a missing trailer/note ⇒ `null`, never a throw — the reads are TOTAL).
   const gitOrNull = (...args: string[]): string | null => {
     try {
-      return execFileSync('git', args, { cwd: repoPath, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).toString();
+      return runGit(repoPath, args);
     } catch {
       return null;
     }
@@ -57,11 +56,7 @@ export function createForge(repoPath: string): Forge {
       const atlasSha = git('rev-parse', 'HEAD').trim();
       // The mutable overlay homes to `refs/notes/orchestra` (NOT `refs/notes/commits`) keyed on the
       // atlas-bearing SHA. `-F -` writes the payload verbatim; a rewrite later orphans it via git-native.
-      execFileSync('git', ['notes', `--ref=${NOTES_REF}`, 'add', '-f', '-F', '-', atlasSha], {
-        cwd: repoPath,
-        input: note,
-        stdio: ['pipe', 'ignore', 'pipe'],
-      });
+      runGit(repoPath, ['notes', `--ref=${NOTES_REF}`, 'add', '-f', '-F', '-', atlasSha], { input: note });
     },
     readTrailer(sha, via) {
       log.push({ op: 'readTrailer', via });
@@ -99,7 +94,7 @@ export function createForge(repoPath: string): Forge {
       // A real `git clone --bare` copies commit objects (the trailer travels in the message), but NOT
       // `refs/notes/*` (perimeter-conditional overlay, PERSIST-13c) nor the host-side PR surface/refspecs.
       const dst = mkdtempSync(join(tmpdir(), 'atlas-forge-bare-'));
-      execFileSync('git', ['clone', '--quiet', '--bare', repoPath, dst], { stdio: 'pipe' });
+      runGit(repoPath, ['clone', '--quiet', '--bare', repoPath, dst]);
       return createForge(dst);
     },
     calls() {

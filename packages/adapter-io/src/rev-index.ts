@@ -18,7 +18,6 @@
 // It is warmup-gated (a no-op until `initAst()` is awaited — the entrypoint bins do this once), so a caller
 // that never warms the grammar sees the identical file/dir-only snapshot as before.
 
-import { execFileSync } from 'node:child_process';
 import { mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -29,6 +28,13 @@ import type { Hash, StructRef } from '@atlas/contracts';
 import type { GroundedFact } from '@atlas/knowledge';
 import { foldAstUnits } from './ast.js';
 import { walkFileTree } from './fs.js';
+import {
+  runGit as gitExec,
+  isDeterministicGitError,
+  gitYieldMs,
+  GIT_BACKOFF_MS,
+  GIT_MAX_ATTEMPTS,
+} from './run-git.js';
 
 /** The arbitrary-rev code-index capability. `axesAt` builds (once, memoized) the index at a rev; the two
  *  derived readers ride on it — `resolveAnchorAt` re-derives a grounding anchor's `StructRef` at that rev,
@@ -63,43 +69,10 @@ export interface RevIndexDeps {
   readonly runGit?: (repo: string, args: readonly string[]) => string;
 }
 
-/** The one git seam — `execFileSync`, NO shell (mirrors git-history.ts's `git`). `stdin` is closed and
- *  `stderr` is CAPTURED (not inherited) so git's benign worktree progress ("Preparing worktree…") never
- *  leaks to the parent process's stderr during `atlas reconcile`. Capturing (not `'ignore'`) preserves
- *  failure surfacing: on a non-zero exit `execFileSync` still THROWS, and the thrown error carries the
- *  captured stderr on `.stderr` — a real git failure is diagnosable, never silently swallowed. */
-const realGit = (repo: string, args: readonly string[]): string =>
-  execFileSync('git', args as string[], { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-
 /** The deterministic empty snapshot returned on any checkout/build failure (fail-closed totality). Built
  *  once from an empty tree — `build` is deterministic, so this is a stable, side-effect-free sentinel: no
  *  real file-path anchor resolves in it, so `driftDetect` against it is DRIFTED (⇒ `reDerives` false). */
 const EMPTY_AXES: Axes = build({ path: '.', children: [] }, { documents: [] });
-
-/** DETERMINISTIC bad-rev signatures — a genuinely bad/unknown rev fails IDENTICALLY on every retry, so it
- *  is classified as GENUINE-empty and fail-closed to `EMPTY_AXES` at once (no retry latency). Matched
- *  against the git error's captured `.stderr` (realGit runs `stdio:['ignore','pipe','pipe']`). */
-const BAD_REV_RE = /invalid reference|unknown revision|not a valid object|bad revision/i;
-
-/** Read a caught git error's diagnostic text — `execFileSync` attaches the captured `.stderr` (and a
- *  generic `.message`) to the thrown Error. Total: any shape collapses to a string, never a throw. This is
- *  classification-only — it never enters the built `Axes`, so it stays OFF the identity path. */
-function errText(err: unknown): string {
-  if (err !== null && typeof err === 'object') {
-    const e = err as { stderr?: unknown; message?: unknown };
-    return [e.stderr, e.message].map((p) => (p == null ? '' : String(p))).join('\n');
-  }
-  return String(err);
-}
-
-/** Clock-FREE synchronous inter-attempt yield — a brief pause to let a cross-process `git worktree` admin
- *  lock clear before retrying. `Atomics.wait` blocks the thread on a never-signaled `SharedArrayBuffer`
- *  word, so NO wall-clock value (`Date.now`/`Math.random`) enters any computation. The built `Axes` is
- *  byte-identical regardless of how many yields occur, so retries stay OFF the identity path (KERNEL
- *  guardrail: no clock/random). The `ms` argument comes from a fixed escalating schedule, not a clock. */
-function yieldMs(ms: number): void {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-}
 
 /** Resolve the `IndexNode` whose key is `qp`, across the three axes — the SAME traversal grounding's
  *  `resolveCurrent`/`findByKey` (drift.ts) uses, so `resolveAnchorAt` and `reDerives` agree by construction.
@@ -145,7 +118,7 @@ function kindOf(node: IndexNode): StructRef['kind'] {
  * concurrent-reconcile contention can no longer masquerade as a genuinely-empty rev (finding #73).
  */
 export function createRevIndex(repoPath: string, deps: RevIndexDeps = {}): RevIndex {
-  const runGit = deps.runGit ?? realGit;
+  const runGit = deps.runGit ?? gitExec;
   const cache = new Map<string, Axes>();
   const base = join(tmpdir(), 'atlas-revcache');
   let seq = 0;
@@ -193,18 +166,18 @@ export function createRevIndex(repoPath: string, deps: RevIndexDeps = {}): RevIn
     // brief clock-free yield, so it is RETRIED a BOUNDED number of times. Only a retries-EXHAUSTED transient
     // (or an unclassified error that never clears) falls through to EMPTY_AXES — a real transient never
     // masquerades as a genuinely-empty rev (finding #73: that masquerade silently dropped drift).
-    const BACKOFF_MS = [5, 10, 20] as const; // fixed escalating schedule (values are NOT read from a clock)
-    const MAX_ATTEMPTS = 4;
-    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    for (let attempt = 0; attempt < GIT_MAX_ATTEMPTS; attempt++) {
       try {
         const axes = attemptBuild(rev, nextDir());
         cache.set(rev, axes); // memoize the immutable rev's Axes (NOT the worktree)
         return axes;
       } catch (err) {
-        // DETERMINISTIC bad rev ⇒ genuine empty, immediately (retrying a bad rev only wastes latency).
-        if (BAD_REV_RE.test(errText(err))) return EMPTY_AXES;
+        // DETERMINISTIC bad rev ⇒ genuine empty, immediately (retrying a bad rev only wastes latency). The
+        // classifier is the shared run-git.ts one (superset of the former local BAD_REV_RE; same result).
+        if (isDeterministicGitError(err)) return EMPTY_AXES;
         // Transient/lock/unclassified ⇒ yield briefly (clock-free) and retry, unless attempts are exhausted.
-        if (attempt < MAX_ATTEMPTS - 1) yieldMs(BACKOFF_MS[attempt] ?? BACKOFF_MS[BACKOFF_MS.length - 1]!);
+        if (attempt < GIT_MAX_ATTEMPTS - 1)
+          gitYieldMs(GIT_BACKOFF_MS[attempt] ?? GIT_BACKOFF_MS[GIT_BACKOFF_MS.length - 1]!);
       }
     }
     return EMPTY_AXES; // fail-closed: a transient that never cleared within the bounded attempts ⇒ empty

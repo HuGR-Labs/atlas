@@ -14,6 +14,10 @@ export type { CasPath, DiskStore } from './store.js';
 export { createHistorySource } from './git-history.js';
 export { createDriftSource } from './git-drift.js';
 export { createForge } from './git-forge.js';
+// The cheap `headSha` freshness-watermark reader (N11, no worktree) — the ONLY member of the shared no-shell
+// git seam (#74, `run-git.ts`) that crosses the package boundary (the mine driver injects it). `runGit` + the
+// error classifier/backoff primitives stay module-internal, consumed intra-package via relative import.
+export { headSha } from './run-git.js';
 export { createSiteProposer } from './llm.js';
 export { createIndexAdapter } from './index-adapter.js';
 export type { IndexAdapterDeps } from './index-adapter.js';

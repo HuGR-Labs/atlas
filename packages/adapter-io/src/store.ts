@@ -71,6 +71,7 @@ function projectionPath(casPath: CasPath): string {
 interface WireProjection {
   readonly current: ReadonlyArray<readonly [string, CurrentNode]>;
   readonly cas: readonly string[];
+  readonly builtAt?: string; // N11 freshness watermark (HEAD sha at persist); absent ⇒ unknown (old sidecars)
 }
 
 /**
@@ -86,8 +87,18 @@ export interface DiskStore extends StoreApi {
   loadProjection(): StoreProjection | undefined;
 }
 
-/** Construct a disk-backed content-addressed store conforming to the frozen `StoreApi` (ADAPT-STORE-1). */
-export function createDiskStore(casPath: CasPath): DiskStore {
+/**
+ * Construct a disk-backed content-addressed store conforming to the frozen `StoreApi` (ADAPT-STORE-1).
+ *
+ * `headSha` (N11, OPTIONAL) is the injected freshness-watermark seam — a pure `() => currentHEAD | undefined`
+ * supplied by the composition root (which owns git; the store stays git-ignorant). When present, every
+ * `persistProjection` STAMPS the projection with the HEAD its stored per-fact freshness reflects, so a later
+ * query can cheaply detect a behind-HEAD (⇒ unverified ⇒ honestly `stale`) read. Absent (tests / non-git) ⇒
+ * no stamp ⇒ `builtAt` stays `undefined` and the reader treats the watermark as "unknown" (never a false
+ * flag). Injected here (not at each write door) so BOTH persist sites — governed emit + the mine driver —
+ * stamp uniformly with zero change to their code.
+ */
+export function createDiskStore(casPath: CasPath, headSha?: () => string | undefined): DiskStore {
   return {
     put(obj: CasObject): Hash {
       let h: Hash;
@@ -172,10 +183,17 @@ export function createDiskStore(casPath: CasPath): DiskStore {
     },
 
     persistProjection(projection: StoreProjection): void {
-      // serialize the mutable sidecar: Map → entry-array, Set → array (single source of truth, no dir-walk).
+      // N11: STAMP the freshness watermark at persist — `builtAt` = the HEAD this projection's stored per-fact
+      // freshness reflects. The injected `headSha` seam is authoritative (git lives in the composition root),
+      // so the store re-derives it here on every persist rather than trusting a caller-set field; when the
+      // seam is absent (tests / non-git) or resolves undefined, no stamp is written (the reader then treats
+      // the watermark as "unknown"). JSON drops an undefined key, so an unstamped projection round-trips to
+      // `undefined` exactly as before this field existed (deepEqual-preserving).
+      const builtAt = headSha?.();
       const wire: WireProjection = {
         current: [...projection.current.entries()],
         cas: [...projection.cas],
+        ...(builtAt !== undefined ? { builtAt } : {}),
       };
       const path = projectionPath(casPath);
       mkdirSync(dirname(path), { recursive: true });
@@ -203,8 +221,11 @@ export function createDiskStore(casPath: CasPath): DiskStore {
       // valid-JSON-but-wrong-shape sidecar (e.g. `{}`, `[]`, `{current:5}`) throws in `new Map(...)`.
       if (!wire || !Array.isArray(wire.current) || !Array.isArray(wire.cas)) return undefined;
       // deserialize back: entry-array → Map, array → Set — defended in case an entry itself is non-iterable.
+      // N11: carry the watermark back only when a string was persisted (a non-string wire value ⇒ omit ⇒
+      // "unknown", the conservative reader default) — keeps the projection shape honest, never a bad type.
       try {
-        return { current: new Map(wire.current), cas: new Set(wire.cas) };
+        const builtAt = typeof wire.builtAt === 'string' ? { builtAt: wire.builtAt } : {};
+        return { current: new Map(wire.current), cas: new Set(wire.cas), ...builtAt };
       } catch {
         return undefined; // malformed entries (e.g. a non-[k,v] element)
       }
