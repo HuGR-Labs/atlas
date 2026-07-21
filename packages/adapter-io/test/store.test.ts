@@ -128,12 +128,15 @@ describe('createDiskStore — ADAPT-STORE-1 durable, tamper-safe disk CAS', () =
     expect(s.get(asHash(H))).toBeUndefined();
   });
 
-  it('N13 — a symlink in CAS to a NON-REGULAR target is a FAST miss, no unbounded read (DoS guard)', () => {
+  it('N13 — a symlink in CAS to a NON-REGULAR target is a total miss (portable smoke of the isFile() branch)', () => {
     const dir = freshCasDir();
     const s = createDiskStore(dir);
-    // A 64-hex addr passes the charset gate; the symlink target is a DIRECTORY — a portable, deterministic
-    // stand-in for the measured OOM vector (a symlink → /dev/zero or a FIFO, whose read is unbounded/blocking).
-    // `statSync` follows the link → `isFile()` false → rejected BEFORE any read (no open of a device/FIFO).
+    // HONEST teeth note: this DIRECTORY case is NOT a red→green for the DoS — a directory read throws EISDIR
+    // pre-N13 too, so it is a total miss on BOTH sides. It is a portable, CI-safe smoke check that a non-regular
+    // target is rejected fast by `statSync` → `isFile()` false BEFORE any read handle opens. The genuine OOM
+    // closure — a symlink → /dev/zero (unbounded read) or → a FIFO (blocking read) — is un-CI-able (it would
+    // hang/OOM the PRE-fix code) and is verified out-of-band by an adversarial harness, not by this suite.
+    // The real red→green tooth for N13 is the ESCAPE case above (pre-fix SERVED the out-of-cas object).
     const H = 'a'.repeat(64);
     const targetDir = join(tmp!, 'a-directory');
     mkdirSync(targetDir, { recursive: true });
