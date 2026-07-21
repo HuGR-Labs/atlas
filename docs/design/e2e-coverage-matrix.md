@@ -16,19 +16,32 @@
 
 > **SEVERITY: N3 + N4 are BOOT-CRASHERS** — a corrupt `.atlas/projection.json` (`compose.ts:137`) or a corrupt-present `.atlas/index.scip` (`compose.ts:128`) throws through `composeRuntime`, crashing BOTH bins at startup (not just the read path). Total-failure, not a degraded read. Must-fix.
 
+## Status of the findings (N1–N7 + W3-surfaced N8–N14)
+- **N1** `--accept-reground` → FIXED (`reconcile.ts:93` counts `mechanical.length`, no phantom write). **N2** byDependency/byTrigger → FIXED (s9: byDependency real via the designed retrieval surface; byTrigger dormant-documented). **N3/N4** boot-crashers → FIXED (total-undefined / fail-closed-empty). **N5** `--depth` → REMOVED. **N6** node/poke → FIXED-read (`atlas node`, s10) + DOC-push (orchestrator-owned). **N7** tier-ratify → FIXED (RATIFY gate composed into `governed-emit.ts`). **N8** walkFileTree → FIXED. **N9** doctor drift class → FIXED.
+- **N10 (open, follow-up)** — reconcile's MECHANICAL arm is path-keyed, not content-addressed, so it is effectively unreachable in practice (a moved anchor whose content resolves elsewhere isn't matched). N9 fixed the *doctor* drift-classification the content-addressed way; reconcile's arm could get the same treatment. Non-blocking.
+- **N11 (open → DOCUMENTED, product-behavior)** — `atlas query`'s `stale` flag reads the `freshness` field STORED at emit time (verbatim off CAS); NO emit/reconcile/doctor path flips a persisted fact to `DRIFTED`, so a genuinely-drifted fact still queries `stale:false`. The LIVE drift oracle is `doctor why` / `reconcile` (they re-derive against HEAD). Deliberate design boundary (query = fast projection read), recorded in the ADR. **Owner may elect to make query.stale a live oracle later.**
+- **N12 (FIXED)** — `atlas query` CLI omitted `tokenEstimate` (only MCP JSON carried it). CLI/MCP parity line added to `render.ts`; s13 asserts both doors.
+- **N13 (FIXED)** — `atlas node <addr>` fed a raw external string to the CAS path builder → `../`-traversal to `/dev/zero`/FIFO hung+OOM'd (billy PoC 4.67–8.28GB RSS) AND a symlink re-hashing to the addr was SERVED (integrity escape). Closed: charset gate `^[0-9a-f]{64}$` + `realpathSync` CAS-root sandbox + `statSync` non-regular/oversize reject, all before the read.
+- **N14 (open, follow-up, race-gated hardening)** — N13's guard is 3 separate path-based syscalls (stat→realpath→read); a concurrent-write attacker racing sub-ms could TOCTOU-swap the symlink between check and read. Strictly stronger precondition than the closed vectors. Fix: `openSync(O_NOFOLLOW)` + `fstatSync(fd)` + read from the same fd. Non-blocking.
+- **byDependency multimap (FIXED in review)** — the first byDependency wiring used a 1:1 anchor→contentHash map that dropped all-but-one fact per reachable file (slot-lossy-cast class); caught by lucy cold-review + a 2-facts/file regression before merge. Now a multimap.
+- **CI gap (open, follow-up)** — the W3 integration gate showed `npm test` exits 0 despite a failing package; caught only by cold-checking printed counts. The root runner must fail-closed on any workspace failure.
+
+> **W3 process note** — every fix round in this wave surfaced a *new* real defect (staleness, traversal-DoS, multimap-loss, symlink-integrity, the s13/N12 integration collision at the gate). The integration gate caught the s13 collision that all five isolated-green WPs missed — the "isolated-green ≠ integrated-green" law holding once more.
+
 ## Coverage matrix — the cells (grouped into remediation waves)
 
-### WAVE-COV-1 — write/read matrix (the core knowledge behaviors)
-| cell | now | action |
+### WAVE-COV-1 — write/read matrix (the core knowledge behaviors) — CLOSED (W3)
+| cell | now | note |
 |---|---|---|
-| predicate facts: CREATE + SUPERSEDE lineage | `[gap]` (advisory-only BB) | BB story: emit a predicate, re-evidence → SUPERSEDE, query |
-| check-engine per-op: index-query {exists/absent/has-object}, assertion {child-count/subtree-hash}, unrecognized→NA | `[gap]` (unit only) | BB per op + the fail-closed NA |
-| grounding-kind axis: symbol/file/block/repo/project — gate/drift per kind (only symbol enters nodeKey) | `[gap]` | BB across kinds |
-| `query byDependency` / `byTrigger` | `[FINDING N2]` | wire+BB, or document |
-| pack `stale:true` rendered (a DRIFTED fact) | `[gap]` | BB story: emit → drift → query shows `stale: true` |
-| pack `tokenEstimate` / ~2K budget | `[gap]` | BB story asserting the budget bound |
-| `underScope` segment boundary (`sr`⊄`src`) | `[gap]` | BB story: out-of-scope-by-segment fact excluded |
-| `cover` miss → rejected verdict (unknown scope) | `[gap]` | BB story: `query nonesuch` → rejected, total |
+| predicate facts: CREATE + SUPERSEDE lineage | `[BB]` s11 | emit predicate → re-emit variant → SUPERSEDE (same nodeKey, new contentHash) → `doctor archive` lists both (append-only) |
+| check-engine per-op: index-query {exists/absent/has-object}, assertion {child-count/subtree-hash}, unrecognized→NA | `[DOC unit-owned]` | the evaluator (`knowledge/src/lifecycle/evaluator.ts`) is a LIBRARY — NO CLI/MCP verb renders its verdicts; consumed internally by reconcile's drift re-derivation (which IS BB via s8/s12). Verdicts stay unit-asserted; documented non-door. |
+| grounding-kind axis: symbol/file/block/repo/project — gate/drift per kind (only symbol enters nodeKey) | `[BB]` s12 | symbol+file covered; symbol-only identity + symbol=mechanical/file=semantic drift proven; block/repo/project fail-closed (fixture builds no such node) via real `atlas emit` |
+| `query byDependency` / `byTrigger` (was N2) | `[BB]` s9 | byDependency WIRED real through the designed `createRetrieval`/`RetrievalModel` (per-query rebuild); byTrigger = declared-but-**dormant** mode (`triggers:new Map()`, no producer exists) returns honest empty — documented in ADR |
+| pack `stale:true` rendered (a DRIFTED fact) | `[BB]` s13 + `[FINDING N11]` | s13 authors a `freshness:'DRIFTED'` fact (the ONLY black-box route); **N11**: query.stale reads STORED freshness verbatim, is NOT a live drift oracle (see findings below) |
+| pack `tokenEstimate` (~2K budget) | `[BB]` s13 + `[N12 FIXED]` | tokenEstimate now rendered on BOTH CLI+MCP (N12 parity fix); NO truncation on the query path — the hard ~2K cap lives in the retrieval Packer (`retrieval/src/pack.ts`), a DIFFERENT unit-owned consumer, documented |
+| `underScope` segment boundary (`sr`⊄`src`) | `[BB]` s13 | segment-wise prefix on the file-path portion; `query sr` excludes `src/…` (not raw startsWith) |
+| `cover` miss → verdict (unknown scope) | `[BB]` s13 | `query nonesuch` → `status: error`/exit 1 (NOT rejected/exit 2), reason `cover: no covering territory`, total (no crash) |
+| `atlas node <addr>` read door (was N6) | `[BB]` s10 | resolveNode wired via NodeSource over durable CAS; read-only; addr charset-gated + CAS-sandboxed (N13); miss = structured exit 1 |
 
 ### WAVE-COV-2 — doctor + reconcile lifecycle
 | cell | now | action |
@@ -58,14 +71,14 @@
 | unknown tool / malformed args (both doors) | `[BB]` s5 partial | BB explicit |
 | `--depth` | `[FINDING N5]` | wire-or-remove |
 
-### WAVE-COV-5 — transports / memory / mine / provenance
-| cell | now | action |
+### WAVE-COV-5 — transports / memory / mine / provenance — CLOSED (W3)
+| cell | now | note |
 |---|---|---|
-| `mine` CLI command (abstain-by-design line, exit) | `[gap]` (in-proc only) | BB |
-| poke transport | `[FINDING N6]` | document/expose + BB if reachable |
-| memory per-seat scoping + recall explicit-only | `[gap]` (in-proc s07) | BB if a user door exists; else document |
-| hits ledger / decay / door-2 | `[gap]` | BB if observable; else unit-owned |
-| provenance/dossier via `doctor why` blame | `[gap]` | BB |
+| `mine` CLI command (abstain-by-design line, exit) | `[BB]` s14 | default run exits 0, seeds 0, exact `MINE_ABSTAIN_LINE`; no-model⇒abstain, never fabricate |
+| poke transport (push half of N6) | `[DOC orchestrator-owned]` | push (poke/pack) is the ORCHESTRATOR's job per `req-tls.md:165-171` (zero-grant, auto at phase boundary); exposing a user `poke` command would contradict that contract → left a library seam (`materializePoke`), documented in ADR. The READ half (resolveNode → `atlas node`) IS exposed (s10). |
+| memory per-seat scoping + recall explicit-only | `[DOC orchestrator-owned]` | the memory-injection/push surface rides the same orchestrator-owned transport as poke; no user door in Atlas layer-0 → in-proc/unit-owned (s07), documented non-door |
+| hits ledger / decay / door-2 | `[unit-owned]` | store/threshold-derived, not observable at a user door; unit-asserted |
+| provenance/dossier via `doctor why` | `[BB]` s12/s8 | `doctor why` classifies mechanical/semantic drift (blame-grained provenance) — exercised black-box in s12 + s8 |
 
 ## Closure predicates (functional-surface gate) — status
 - [~] Actor×Goal matrix — actors: human-CLI, agent-MCP, orchestrator-poke, time/git-event (drift). human-CLI + agent-MCP full; **orchestrator-poke column is EMPTY at the user surface (N6 unreachable)** → not [x].
