@@ -146,7 +146,70 @@ describe('createRevIndex — arbitrary-rev code index (COMPOSE-C)', () => {
       .filter((l) => l.length > 0);
     expect(worktrees).toHaveLength(1); // only the main worktree
     // MUTANT: drop the WHOLE `finally` cleanup block and stale worktrees pile up → length > 1 → flips.
-    // (Verified: the three steps — worktree remove / rmSync / worktree prune — are redundant nets, so
-    // dropping any ONE alone still cleans; the tooth bites on removing the entire block.)
+    // (Verified: the two steps — worktree remove / rmSync — are redundant nets, so dropping either ONE
+    // alone still cleans; the tooth bites on removing the entire block.)
+  });
+
+  // ── finding #73: transient git-contention must NOT masquerade as a genuinely-empty rev ──────────────
+  // The gate-integrity core. `axesAt` shells `git worktree add`, which under concurrent reconcile/doctor
+  // load intermittently fails on a SHARED `.git/worktrees` admin lock. The pre-fix bare `catch {}` collapsed
+  // that transient onto EMPTY_AXES — reconcile then read `was === undefined` (git-drift.ts:50-51) and DROPPED
+  // a genuinely-drifted fact ⇒ silent green. The classifier+retry surfaces it; a bad rev stays fast-empty.
+
+  // A runGit wrapper that throws a chosen signature on the first `throwFor` `worktree add`s then delegates to
+  // real git. `adds` counts add attempts; other subcommands (remove) always delegate so cleanup is real.
+  function flakyGit(realRepo: string, throwFor: number, sig: string, kind: 'stderr' | 'message') {
+    let adds = 0;
+    const runGit = (r: string, args: readonly string[]): string => {
+      if (args[0] === 'worktree' && args[1] === 'add') {
+        adds += 1;
+        if (adds <= throwFor) {
+          const err = new Error(kind === 'message' ? sig : 'Command failed: git worktree add') as Error & {
+            stderr?: string;
+          };
+          if (kind === 'stderr') err.stderr = sig;
+          throw err;
+        }
+      }
+      return g(r, args);
+    };
+    return { runGit, adds: () => adds };
+  }
+
+  it('transient-retry teeth: a lock-signature failure on attempt 1 then success ⇒ REAL axes, not EMPTY [teeth: bare catch ⇒ EMPTY, drift dropped ⇒ RED]', () => {
+    repo = makeAbRepo();
+    const flaky = flakyGit(repo.repoPath, 1, 'fatal: could not lock ref: another git process seems to be running', 'stderr');
+    const rev = createRevIndex(repo.repoPath, { runGit: flaky.runGit });
+
+    // Pre-fix: the first throw returned EMPTY_AXES → the anchor would NOT resolve. Post-fix: the retry
+    // rebuilds the real index → the anchor resolves → drift is surfaced, not silently green.
+    const ref = rev.resolveAnchorAt(repo.A, QP);
+    expect(ref).toBeDefined();
+    expect(ref!.qualifiedPath).toBe(QP);
+    expect(flaky.adds()).toBe(2); // one thrown attempt + one successful retry
+  });
+
+  it('bad-rev stays fast-empty: an invalid-reference signature ⇒ EMPTY with NO retry [teeth: retry a bad rev ⇒ adds > 1 ⇒ RED]', () => {
+    repo = makeAbRepo();
+    const flaky = flakyGit(repo.repoPath, 99, 'fatal: invalid reference: deadbeef-not-a-rev', 'stderr');
+    const rev = createRevIndex(repo.repoPath, { runGit: flaky.runGit });
+
+    // A deterministic bad rev is genuine-empty at once — the classifier must NOT pay the retry latency.
+    // (EMPTY is deliberately NOT memoized — a transient must not poison the cache — so check adds after the
+    // single axesAt, before resolveAnchorAt re-attempts.)
+    expect(() => rev.axesAt('deadbeef-not-a-rev')).not.toThrow();
+    expect(flaky.adds()).toBe(1); // classified bad rev ⇒ exactly one attempt, no retry
+    expect(rev.resolveAnchorAt('deadbeef-not-a-rev', QP)).toBeUndefined();
+  });
+
+  it('retries-exhausted ⇒ EMPTY, total: a lock signature on EVERY attempt ⇒ empty snapshot, no throw', () => {
+    repo = makeAbRepo();
+    const flaky = flakyGit(repo.repoPath, 99, 'fatal: Unable to create worktree lock: File exists', 'stderr');
+    const rev = createRevIndex(repo.repoPath, { runGit: flaky.runGit });
+
+    // A transient that never clears within the bounded attempts falls through to EMPTY_AXES — still TOTAL.
+    expect(() => rev.axesAt(repo!.A)).not.toThrow();
+    expect(flaky.adds()).toBe(4); // bounded MAX_ATTEMPTS — not an unbounded spin
+    expect(rev.resolveAnchorAt(repo.A, QP)).toBeUndefined();
   });
 });
