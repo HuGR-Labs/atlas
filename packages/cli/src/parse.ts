@@ -39,12 +39,34 @@ function isCommand(s: string): s is Command {
   return Object.prototype.hasOwnProperty.call(COMMAND_LEG, s);
 }
 
-/** Fold one `-x`/`--x`/`--x=y` token into the flag bag — a bare flag is `'true'`. Never throws. */
-function foldFlag(tok: string, flags: Record<string, string>): void {
+/**
+ * Flags that carry a VALUE token, accepting both the joined `--flag=v` and the space `--flag v` forms.
+ * `--at` (the emit anchor rev) is valued; everything else stays a bare boolean. `--depth` is deliberately
+ * NOT here — it keeps its `--depth=<int>` typed-flag behavior (a bare `--depth` folds to the invalid `'true'`).
+ */
+const VALUED_FLAGS = new Set(['at']);
+
+/**
+ * Fold one `-x`/`--x`/`--x=y`/`--x y` token into the flag bag — a bare flag is `'true'`. For a VALUED flag in
+ * the space form (`--at <v>`), the following token `next` is consumed as the value; the return is the number of
+ * EXTRA tokens consumed (0, or 1 when a valued flag swallowed its value). Never throws. The value is only
+ * consumed when `next` is a real value token (not another flag / not absent) — so a following positional that
+ * belongs to a non-valued flag is never swallowed and totality is preserved (a valueless `--at` folds to
+ * `'true'`, which the emit marshaller rejects as a missing `--at`).
+ */
+function foldFlag(tok: string, next: string | undefined, flags: Record<string, string>): number {
   const body = tok.replace(/^-+/, '');
   const eq = body.indexOf('=');
-  if (eq >= 0) flags[body.slice(0, eq)] = body.slice(eq + 1);
-  else flags[body] = 'true';
+  if (eq >= 0) {
+    flags[body.slice(0, eq)] = body.slice(eq + 1);
+    return 0;
+  }
+  if (VALUED_FLAGS.has(body) && next !== undefined && !next.startsWith('-')) {
+    flags[body] = next;
+    return 1;
+  }
+  flags[body] = 'true';
+  return 0;
 }
 
 /**
@@ -66,8 +88,11 @@ export function parse(argv: readonly string[]): ParseResult {
 
   const positionals: string[] = [];
   const flags: Record<string, string> = {};
-  for (const tok of argv.slice(1)) {
-    if (tok.startsWith('-')) foldFlag(tok, flags);
+  const rest = argv.slice(1);
+  for (let i = 0; i < rest.length; i++) {
+    const tok = rest[i];
+    if (tok === undefined) continue;
+    if (tok.startsWith('-')) i += foldFlag(tok, rest[i + 1], flags);
     else positionals.push(tok);
   }
 
