@@ -13,6 +13,7 @@
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -146,6 +147,52 @@ describe('createDiskStore — ADAPT-STORE-1 durable, tamper-safe disk CAS', () =
     const t0 = Date.now();
     expect(s.get(asHash(H))).toBeUndefined();
     expect(Date.now() - t0).toBeLessThan(2000); // fast — non-regular target rejected without an unbounded read
+  });
+
+  it('N14 — a symlink at the CAS final component to an IN-CAS object that re-hashes to the addr is a MISS (fd O_NOFOLLOW; red→green)', () => {
+    const dir = freshCasDir();
+    const s = createDiskStore(dir);
+    // The residual TOCTOU that N13 did NOT close: N13 only rejected symlinks whose target escapes cas. A
+    // symlink whose target is a REGULAR file INSIDE cas whose bytes re-hash to the addr passed EVERY N13 gate
+    // (statSync→isFile true, realpathSync→inside cas, readFileSync→bytes re-hash to H) and was SERVED — the
+    // exact primitive a race-attacker uses to slip a swapped inode past the path-based checks. N14 opens the
+    // final component with O_NOFOLLOW, so the symlink ITSELF fails to open (ELOOP) ⇒ MISS, regardless of where
+    // it points. Genuine red→green vs the pre-fix statSync/realpath code: pre-N14 this returned `C`.
+    const C = { kind: 'advisory', tier: 'T1', freshness: 'FRESH', body: 'IN-CAS-SYMLINK-TARGET' };
+    const H = id(C) as string;
+    // the symlink TARGET: a regular file that lives INSIDE the cas root (so N13's realpath sandbox passes).
+    const inCasTarget = join(dir, 'target.json');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(inCasTarget, JSON.stringify(C), 'utf8');
+    // plant the symlink AT the content-addressed final component `<cas>/<xx>/<H>` (filename passes charset).
+    const shardDir = join(dir, H.slice(0, 2));
+    mkdirSync(shardDir, { recursive: true });
+    symlinkSync(inCasTarget, join(shardDir, H));
+    // teeth: pre-N14 the path-based statSync/realpath/readFileSync chain SERVED `C` (all three gates passed);
+    // the fd O_NOFOLLOW open refuses the final-component symlink itself ⇒ a plain miss.
+    expect(s.get(asHash(H))).toBeUndefined();
+  });
+
+  it('N14 — a FIFO AT the CAS final component is a FAST fd-based miss (O_NONBLOCK non-block + fstat-on-fd non-regular)', () => {
+    const dir = freshCasDir();
+    const s = createDiskStore(dir);
+    // A FIFO planted directly at `<cas>/<xx>/<H>` (NOT a symlink — a named pipe at the final component). This
+    // is the un-CI-able OOM/hang vector made CI-safe: without O_NONBLOCK, openSync(read) of a FIFO BLOCKS
+    // until a writer appears (the test would hang forever); with O_NONBLOCK the open returns immediately, then
+    // fstatSync on the OPEN fd sees isFIFO() (isFile() false) and rejects — proving the reject is decided by
+    // fstat-on-fd on the pinned inode, not a path stat. Skip only if `mkfifo` is unavailable.
+    const H = 'b'.repeat(64);
+    const shardDir = join(dir, H.slice(0, 2));
+    mkdirSync(shardDir, { recursive: true });
+    const fifoPath = join(shardDir, H);
+    try {
+      execFileSync('mkfifo', [fifoPath]);
+    } catch {
+      return; // no mkfifo on this host (both CI targets have it) — skip rather than false-fail
+    }
+    const t0 = Date.now();
+    expect(s.get(asHash(H))).toBeUndefined(); // if O_NONBLOCK were missing this line would never return
+    expect(Date.now() - t0).toBeLessThan(2000); // fast — the FIFO open did not block, fstat rejected it
   });
 });
 
