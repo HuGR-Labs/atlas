@@ -70,15 +70,20 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
     //    seam that mints `contentHash`/`primaryAnchor` below. The author-supplied payload `node.id` is NEVER
     //    used for routing — trusting it would let an author spoof/collide/dodge another node's identity.
     const contentHash = id(node as CasObject);
+    // A GroundedFact carries its slot as `predicateSlot`; the `Candidate` identity fns (`nodeKey`/
+    // `primaryAnchorId`) read `.slot`. Map it onto a candidate VIEW before minting — else the cast is
+    // LOSSY (`.slot` undefined) and the nodeKey is computed slot-free, diverging from the true
+    // `hash(primaryAnchorId ‖ predicateSlot)` identity (the E2E emit→query readback exposed this).
+    const candidateView = { ...node, slot: node.predicateSlot } as unknown as Candidate;
     const req: WriteRequest = {
-      nodeKey: nodeKey(node as unknown as Candidate) as unknown as string,
+      nodeKey: nodeKey(candidateView) as unknown as string,
       contentHash: contentHash as unknown as string,
       family: node.kind,
       claimNorm: claimNormOf(node),
       // ── ADJACENCY carrier (ADDITIVE) — carry the computed primary anchor + the R3-optional slot onto
       //    the node so a later sibling-adjacency scan reads them off the projection (WP-B); NOT read here.
       //    `predicateSlot` is R3-optional; conditional spread keeps `slot` ABSENT (exactOptionalPropertyTypes).
-      primaryAnchor: primaryAnchorId(node as unknown as Candidate) as unknown as string,
+      primaryAnchor: primaryAnchorId(candidateView) as unknown as string,
       ...(node.predicateSlot !== undefined ? { slot: node.predicateSlot } : {}),
     };
     const projection = upsert(rehydrateProjection(deps.store), req).store;

@@ -171,7 +171,11 @@ export function buildControllerDeps(repoPath: string, d: MineDeps): ControllerDe
         // via the frozen `nodeKey(f)` formula (KNOW-15b), the SAME seam that mints contentHash/primaryAnchor.
         // The author-supplied payload `f.id` is NEVER used for routing or the grounded-set key — trusting it
         // would let an author spoof/collide/dodge another node's identity (governed-emit.ts parity, WP-F3).
-        const key = nodeKey(f as unknown as KnowledgeCandidate) as unknown as string;
+        // Map `predicateSlot` → the Candidate's `.slot` before minting — the cast is otherwise LOSSY
+        // (identity fns read `.slot`, a GroundedFact carries `predicateSlot`), producing a slot-free nodeKey
+        // that diverges from the true `hash(primaryAnchorId ‖ predicateSlot)` (governed-emit.ts parity).
+        const view = { ...f, slot: f.predicateSlot } as unknown as KnowledgeCandidate;
+        const key = nodeKey(view) as unknown as string;
         const req: WriteRequest = {
           nodeKey: key,
           contentHash: id(f) as unknown as string,
@@ -180,7 +184,7 @@ export function buildControllerDeps(repoPath: string, d: MineDeps): ControllerDe
           // ── ADJACENCY carrier (ADDITIVE) — carry the computed primary anchor + R3-optional slot onto the
           //    node for a later sibling-adjacency scan (WP-B); NOT read here, routing is byte-identical.
           //    `predicateSlot` is R3-optional; conditional spread keeps `slot` ABSENT (exactOptionalPropertyTypes).
-          primaryAnchor: primaryAnchorId(f as unknown as KnowledgeCandidate) as unknown as string,
+          primaryAnchor: primaryAnchorId(view) as unknown as string,
           ...(f.predicateSlot !== undefined ? { slot: f.predicateSlot } : {}),
         };
         projection = knowledgeUpsert(projection, req).store; // route the write-decision (NOT store.put)
