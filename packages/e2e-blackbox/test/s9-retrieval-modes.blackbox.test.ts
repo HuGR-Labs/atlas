@@ -35,7 +35,8 @@ import { ACTOR, RATIFIER, emitFact, invLines, scopedPolicy } from './support.js'
 
 /** The distinct claim bodies — so a mode's pack is identified by WHICH fact it surfaces (never a coincidence). */
 const CLAIM_DEP = 'dep is the base unit';
-const CLAIM_USE = 'use depends on dep';
+const CLAIM_USE = 'use depends on dep'; //     src/use.ts @ slot invariant
+const CLAIM_USE2 = 'use also has a gotcha'; // src/use.ts @ slot gotcha (SAME file, DIFFERENT slot)
 
 /**
  * Overwrite the fixture's `.atlas/index.scip` with a REAL depends-on edge: `src/use.ts` has a REFERENCE
@@ -65,8 +66,9 @@ function writeScipDepEdge(repoPath: string): void {
 }
 
 let repo: FixtureRepo;
-let factDep: GroundedFact; // anchored at src/dep.ts — the depended-upon unit
-let factUse: GroundedFact; // anchored at src/use.ts — the dependent unit
+let factDep: GroundedFact; //  anchored at src/dep.ts — the depended-upon unit
+let factUse: GroundedFact; //  anchored at src/use.ts @ slot invariant — a dependent-unit fact
+let factUse2: GroundedFact; // anchored at src/use.ts @ slot gotcha — a SECOND dependent-unit fact (SAME file)
 let priorActor: string | undefined;
 let priorRatify: string | undefined;
 
@@ -87,10 +89,13 @@ beforeAll(() => {
 
   factDep = groundedAdvisoryFact({ repoPath: repo.repoPath, filePath: 'src/dep.ts', slot: 'invariant', claim: CLAIM_DEP });
   factUse = groundedAdvisoryFact({ repoPath: repo.repoPath, filePath: 'src/use.ts', slot: 'invariant', claim: CLAIM_USE });
-  const e1 = emitFact(repo, factDep);
-  if (e1.exitCode !== 0) throw new Error(`S9 setup: dep grounded emit failed:\n${e1.stdout}`);
-  const e2 = emitFact(repo, factUse);
-  if (e2.exitCode !== 0) throw new Error(`S9 setup: use grounded emit failed:\n${e2.stdout}`);
+  // TWO facts on the SAME file at DIFFERENT slots ⇒ distinct nodeKeys, ONE shared primaryAnchor. depgraph
+  // edges are file-granular, so the blast-radius bridge maps one closure key to BOTH — the multimap teeth.
+  factUse2 = groundedAdvisoryFact({ repoPath: repo.repoPath, filePath: 'src/use.ts', slot: 'gotcha', claim: CLAIM_USE2 });
+  for (const [label, f] of [['dep', factDep], ['use', factUse], ['use2', factUse2]] as const) {
+    const e = emitFact(repo, f);
+    if (e.exitCode !== 0) throw new Error(`S9 setup: ${label} grounded emit failed:\n${e.stdout}`);
+  }
 });
 
 afterAll(() => {
@@ -102,26 +107,32 @@ afterAll(() => {
 });
 
 describe('S9 — atlas query: the CLOSED three retrieval modes (scope | dependency | trigger)', () => {
-  it('(i) `--by dependency <path>` returns the dependency-reachable fact via the real authored edge', () => {
+  it('(i) `--by dependency <path>` returns ALL dependency-reachable facts — incl. 2 on ONE file (multimap teeth)', () => {
     // Query the DEPENDED-UPON node (`src/dep.ts`); the blast radius (reverse closure) is `{use}`, so the pack
-    // carries the DEPENDENT's fact — routed THROUGH the designed `createRetrieval(model).byDependency`.
+    // carries EVERY fact anchored at the dependent — routed THROUGH the designed `createRetrieval`. The two
+    // src/use.ts facts share one file-granular closure key: the lossy 1:1 bridge (pre-fix) kept only the LAST,
+    // silently dropping one — this asserts BOTH come back (the multimap fix; lucy's red→green).
     const dep = runAtlas(repo.repoPath, ['query', 'src/dep.ts', '--by', 'dependency']);
     expect(dep.exitCode).toBe(0);
     expect(dep.stdout).toContain('status: ok');
     const lines = invLines(dep.stdout);
-    expect(lines.length).toBe(1); //                               exactly the one dependent fact
-    expect(lines[0]).toContain(CLAIM_USE); //                      the dependent `use` fact is reachable
+    expect(lines.length).toBe(2); //                               BOTH dependent facts (not just the last-written)
+    expect(dep.stdout).toContain(CLAIM_USE); //                    the invariant-slot dependent fact
+    expect(dep.stdout).toContain(CLAIM_USE2); //                   the gotcha-slot dependent fact (SAME file)
     expect(dep.stdout).not.toContain(CLAIM_DEP); //               a node is NEVER in its own blast radius
   });
 
-  it('(ii) `--by scope` is UNCHANGED — both under-scope facts appear (byte-identical projection path)', () => {
-    // The default mode (and the explicit `--by scope`) resolve the covering pack; BOTH facts live under `src`.
+  it('(ii) `--by scope` is UNCHANGED — every under-scope fact appears (byte-identical projection path)', () => {
+    // The default mode (and the explicit `--by scope`) resolve the covering pack; ALL facts live under `src`.
     const explicit = runAtlas(repo.repoPath, ['query', 'src', '--by', 'scope']);
     expect(explicit.exitCode).toBe(0);
     const lines = invLines(explicit.stdout);
-    expect(lines.length).toBe(2);
+    expect(lines.length).toBe(3);
     expect(explicit.stdout).toContain(CLAIM_DEP);
     expect(explicit.stdout).toContain(CLAIM_USE);
+    expect(explicit.stdout).toContain(CLAIM_USE2);
+    // N12 CLI/MCP parity: the CLI query block surfaces `tokenEstimate` (previously MCP-only).
+    expect(explicit.stdout).toMatch(/tokenEstimate: \d+/);
 
     // `--by` OMITTED defaults to scope — byte-identical stdout to the explicit `--by scope` (back-compat).
     const bare = runAtlas(repo.repoPath, ['query', 'src']);

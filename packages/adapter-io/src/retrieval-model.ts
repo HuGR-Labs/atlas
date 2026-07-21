@@ -2,17 +2,24 @@
 //
 // The designed three-mode `RetrievalApi` (@atlas/index retrieval.ts, `createRetrieval(model)`) resolves
 // relevance by EXACTLY `byScope`/`byDependency`/`byTrigger` (INDEX-6) but had ZERO production callers. This
-// module is its composition-root feed: it materializes the `RetrievalModel` the surface serves (over the
-// SAME durable CAS + built axes the rest of the runtime rides) and shapes a mode's `readonly Fact[]` into the
-// user-facing `{ pack, subsumes }` envelope the CLI renderer already understands. Pure + total, no clock/random.
+// module is its feed: it materializes the `RetrievalModel` the surface serves (over the SAME durable CAS +
+// built axes the rest of the runtime rides) and shapes a mode's `readonly Fact[]` into the user-facing
+// `{ pack, subsumes }` envelope the CLI renderer already understands. Pure + total, no clock/random.
+//
+// FRESHNESS (bobby N-fix): the model is rebuilt PER QUERY from the LIVE projection (the same discipline the
+// scope path uses via `rehydrateProjection`), so on a long-lived MCP session an in-session `atlas-emit` is
+// reflected by `--by dependency|trigger` EXACTLY as it is by `--by scope` — never a frozen startup snapshot.
+// Only the STRUCTURAL axes (`forest`/`edges`, the process's fixed code-tree snapshot — the SAME snapshot the
+// scope path's `queryIndex` is built over) are static; the fact-dependent parts are re-read each call.
 
 import { id } from '@atlas/kernel';
 import type { CasObject } from '@atlas/kernel';
-import type { Hash, NodeKey, Pack, PackInvariant } from '@atlas/contracts';
+import type { Hash, Pack, PackInvariant } from '@atlas/contracts';
 import { createDepgraph, createRetrieval } from '@atlas/index';
 import type { Axes, AxisForest, Fact, RetrievalModel } from '@atlas/index';
 import { currentNodes } from '@atlas/knowledge';
 import type { GroundedFact } from '@atlas/knowledge';
+import { factToInvariant } from './pack-shape.js';
 import { rehydrateProjection } from './store.js';
 import type { DiskStore } from './store.js';
 
@@ -22,14 +29,16 @@ export type RetrievalMode = 'dependency' | 'trigger';
 
 /**
  * Materialize the `RetrievalModel` the CLOSED three-mode surface serves, over the built `axes` + the durable
- * projection read back from `store`:
- *   - `forest`      — the already-built axis hierarchies (surfaced, NOT rebuilt — INDEX-10c one store).
- *   - `store`       — `contentHash → Fact`: every current node's whole fact read back from CAS (the readback
- *                     pattern compose.ts already uses; the CAS bytes ARE the fact).
+ * projection read back from `store` at CALL TIME (fresh):
+ *   - `forest`      — the already-built axis hierarchies (the process's structural snapshot; NOT rebuilt).
+ *   - `store`       — `contentHash → Fact`: every current node's whole fact read back from CAS (the CAS bytes
+ *                     ARE the fact).
  *   - `blastRadius` — `anchor path → dependency-reachable fact CAS hashes`: the EXISTING depgraph reverse
  *                     closure (blast radius) over `axes.edges`, keyed by each current node's `primaryAnchor`.
- *                     The closure returns index NodeKeys (`id({file: path})`); each is bridged to a fact's
- *                     `contentHash` through the current-anchor set (`id({file: anchor}) → contentHash`).
+ *                     The closure returns index NodeKeys (`id({file: path})`); each is bridged to fact CAS
+ *                     hashes through the current-anchor MULTIMAP (`id({file: anchor}) → contentHash[]`) — one
+ *                     file-granular closure key legitimately maps to N facts (same file, different slots), so
+ *                     ALL are unioned in (`dereferenceSorted` dedups+sorts downstream), never just the last.
  *   - `triggers`    — EMPTY (`new Map()`). DOCUMENTED NON-BEHAVIOR: no trigger-axis producer exists anywhere
  *                     in the monorepo, so `byTrigger` is a declared-but-unpopulated mode that returns `[]` for
  *                     every tag. Populating it (fact-level trigger tags) is a SEPARATE future feature — NOT
@@ -40,14 +49,17 @@ export function buildRetrievalModel(axes: Axes, store: DiskStore): RetrievalMode
 
   // store: contentHash → the whole fact read back from CAS.
   const factStore = new Map<Hash, Fact>();
-  // bridge: the index-node key of an anchor (`id({file: anchor})`) → the fact's CAS contentHash.
-  const anchorKeyToContentHash = new Map<string, Hash>();
+  // bridge MULTIMAP: the index-node key of an anchor (`id({file: anchor})`) → the fact CAS hashes anchored there.
+  const anchorKeyToContentHashes = new Map<string, Hash[]>();
   for (const n of nodes) {
     const contentHash = n.contentHash as Hash;
     const fact = store.get(contentHash);
     if (fact !== undefined) factStore.set(contentHash, fact);
     if (n.primaryAnchor !== undefined) {
-      anchorKeyToContentHash.set(String(id({ file: n.primaryAnchor })), contentHash);
+      const key = String(id({ file: n.primaryAnchor }));
+      const bucket = anchorKeyToContentHashes.get(key) ?? [];
+      bucket.push(contentHash); // APPEND — one anchor can carry N facts (different slots); keep every one.
+      anchorKeyToContentHashes.set(key, bucket);
     }
   }
 
@@ -58,9 +70,8 @@ export function buildRetrievalModel(axes: Axes, store: DiskStore): RetrievalMode
     if (n.primaryAnchor === undefined) continue;
     const closure = depgraph.reverseClosure(id({ file: n.primaryAnchor }) as Hash).closure;
     const hashes: Hash[] = [];
-    for (const nodeKey of closure) {
-      const ch = anchorKeyToContentHash.get(String(nodeKey));
-      if (ch !== undefined) hashes.push(ch);
+    for (const closureKey of closure) {
+      hashes.push(...(anchorKeyToContentHashes.get(String(closureKey)) ?? [])); // ALL facts at each closure node
     }
     blastRadius.set(n.primaryAnchor, hashes);
   }
@@ -72,19 +83,20 @@ export function buildRetrievalModel(axes: Axes, store: DiskStore): RetrievalMode
 
 /**
  * Drive a NON-scope mode through the designed `createRetrieval(model)` surface and shape the returned
- * `readonly Fact[]` into the `{ pack, subsumes }` envelope the CLI renderer understands. Each fact is shaped
- * into a `PackInvariant` EXACTLY as projection-query-index.ts does — `{ nodeId: node.nodeKey, tier: fact.tier,
- * claim: node.claims.join('; ') }` — recovering the projection `CurrentNode` for a returned fact by its CAS
- * contentHash (`id(fact)`), so the trusted (recomputed) nodeKey + claim set are used, not the untrusted
- * author payload. Invariants sorted by `nodeId`; `subsumes` is `[]` (a scope-only coverage relation);
- * `stale: false` (the non-scope modes carry no drift flag). Pure + total.
+ * `readonly Fact[]` into the `{ pack, subsumes }` envelope the CLI renderer understands. The model is built
+ * FRESH from the live `store` on every call (freshness parity with the scope path). Each fact is shaped into a
+ * `PackInvariant` via the shared `factToInvariant` — recovering the projection `CurrentNode` for a returned
+ * fact by its CAS contentHash (`id(fact)`), so the trusted (recomputed) nodeKey + claim set are used, not the
+ * untrusted author payload. Invariants sorted by `nodeId`; `subsumes` is `[]` (a scope-only coverage
+ * relation); `stale: false` (the non-scope modes carry no drift flag). Pure + total.
  */
 export function retrievalPack(
-  model: RetrievalModel,
+  axes: Axes,
   mode: RetrievalMode,
   target: string,
   store: DiskStore,
 ): { readonly pack: Pack; readonly subsumes: readonly never[] } {
+  const model = buildRetrievalModel(axes, store); // FRESH per query — reads the live projection
   const api = createRetrieval(model);
   const facts = (mode === 'dependency' ? api.byDependency(target) : api.byTrigger(target)) as readonly GroundedFact[];
 
@@ -93,7 +105,7 @@ export function retrievalPack(
   for (const fact of facts) {
     const node = nodeByContentHash.get(String(id(fact as unknown as CasObject)));
     if (node === undefined) continue; // a fact with no current-node projection is not locatable — skip (total)
-    invariants.push({ nodeId: node.nodeKey as NodeKey, tier: fact.tier, claim: node.claims.join('; ') });
+    invariants.push(factToInvariant(node, fact));
   }
   invariants.sort((a, b) => (a.nodeId < b.nodeId ? -1 : a.nodeId > b.nodeId ? 1 : 0));
 

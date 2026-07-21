@@ -45,3 +45,29 @@ the poke/push channel is ORCHESTRATOR-OWNED and zero-grant: it fires AUTOMATICAL
 no human/user grant. A user-facing `atlas poke` command would contradict that contract (it would hand a user
 a grant the design withholds). The capability therefore stays a LIBRARY SEAM, invoked by the orchestrator at
 the phase boundary, never surfaced as a governance/CLI door.
+
+## 4. `atlas query`'s `stale` flag is a STORED read, not a live drift oracle (N11)
+
+`atlas query`'s `stale` flag reflects the `freshness` field STORED at emit time (read verbatim off the CAS
+fact — the projection readback surfaces `stale=true` only when a backing fact's persisted `freshness` is
+`DRIFTED`). NO emit/reconcile/doctor path flips an already-persisted fact's `freshness` to `DRIFTED` in place,
+so a fact that has genuinely drifted since it was written still queries `stale: false`.
+
+This is a deliberate design boundary, not a bug: `atlas query` is the FAST projection read (a cheap covering
+pack), so it does NOT re-derive groundings against HEAD. The LIVE drift oracle is `atlas doctor why` /
+`atlas reconcile` — they re-derive each anchor against the working tree / a rev and classify mechanical vs
+semantic drift. Trust `stale` as a "was-drifted-when-last-touched" hint, and `doctor`/`reconcile` as the
+authoritative "is-drifted-now" verdict. (The three-mode `--by dependency|trigger` packs carry `stale: false`
+for the same reason — they are projection reads, not live re-derivations.)
+
+## 5. `atlas node <addr>` resolves ANY fact in CAS by hash — a wider read surface, not an escalation
+
+`atlas node <addr>` resolves ANY content-addressed fact present in CAS — INCLUDING superseded / historical
+facts that the current-projection `atlas query` would not surface (query returns only the ONE current node per
+`nodeKey`; CAS retains prior versions). This is a WIDER read surface than query, deliberately: a content
+address is an exact, grounded, hash-gated handle (you must already know the 64-hex address; there is no
+enumeration and no fuzzy match), and the door is READ-ONLY. It is NOT a privilege escalation — there is no
+per-node read authorization in the model (reads are open; only WRITES are owner-scoped via KNOW-11), so
+exposing historical facts by exact hash grants no capability a user did not already have over CAS. The address
+is charset-gated (`^[0-9a-f]{64}$`) + sandboxed to the CAS root at the door AND in the store, so a non-CAS or
+traversal address is a structured miss, never a filesystem read (see §2).

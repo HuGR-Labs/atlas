@@ -11,10 +11,11 @@
 // The wrapped index-adapter is NOT modified — its purity/spy invariant is preserved; this readback is a
 // strictly additive composition layer over it.
 
-import type { Hash, NodeKey, PackInvariant } from '@atlas/contracts';
+import type { Hash, PackInvariant } from '@atlas/contracts';
 import type { QueryIndex } from '@atlas/tools';
 import { currentNodes } from '@atlas/knowledge';
 import type { GroundedFact } from '@atlas/knowledge';
+import { factToInvariant } from './pack-shape.js';
 import type { DiskStore } from './store.js';
 import { rehydrateProjection } from './store.js';
 
@@ -55,11 +56,7 @@ export function createProjectionQueryIndex(structural: QueryIndex, store: DiskSt
         if (!underScope(node.primaryAnchor, scope)) continue; // out-of-scope facts never leak into the pack
         const fact = store.get(node.contentHash as Hash) as GroundedFact | undefined;
         if (fact === undefined) continue; // the CAS bytes ARE the fact; a miss ⇒ skip (never a throw)
-        invariants.push({
-          nodeId: node.nodeKey as NodeKey,
-          tier: fact.tier,
-          claim: node.claims.join('; '),
-        });
+        invariants.push(factToInvariant(node, fact)); // the ONE shared shaping (shared with retrieval-model.ts)
         if (fact.freshness === 'DRIFTED') stale = true; // any drifted backing grounding ⇒ re-ground signal
       }
       invariants.sort((a, b) => (a.nodeId < b.nodeId ? -1 : a.nodeId > b.nodeId ? 1 : 0));

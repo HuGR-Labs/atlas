@@ -83,4 +83,21 @@ describe('S10 — atlas node <addr>: the read-only per-node door + totality on a
     expect(bare.stdout).toMatch(/requires 1 positional argument/);
     expect(bare.stderr).toBe('');
   });
+
+  it('a PATH-TRAVERSAL addr is a FAST structured miss — no filesystem read, no hang/OOM (billy PoC)', () => {
+    // The raw <addr> reaches store.get → valuePath(join) → readFileSync. Without the charset/sandbox guard a
+    // `../`-traversal to an UNBOUNDED file (/dev/zero) would readFileSync BEFORE the re-hash check → hang+OOM
+    // (billy measured 4.67GB RSS). A CAS address is EXACTLY 64 lowercase hex, so a traversal addr is rejected
+    // BEFORE any read → the SAME structured "no grounded node" miss. Each run must complete near-instantly.
+    for (const evil of ['../../../../dev/zero', '../../../../../../etc/passwd', 'AB'.repeat(32) /* uppercase ≠ CAS */]) {
+      const t0 = Date.now();
+      const miss = runAtlas(repo.repoPath, ['node', evil]);
+      const elapsedMs = Date.now() - t0;
+      expect(miss.exitCode).toBe(1); //                   fail-closed structured miss (never a read)
+      expect(miss.stdout).toContain('status: error');
+      expect(miss.stdout).toContain('no grounded node at content address');
+      expect(miss.stderr).toBe(''); //                    no crash / no OOM stack
+      expect(elapsedMs).toBeLessThan(10_000); //          FAST — a subprocess spin-up, not an unbounded read
+    }
+  });
 });

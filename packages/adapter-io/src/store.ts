@@ -11,7 +11,7 @@
 // The kernel `StoreApi` stays frozen — this widening is additive and lives only in this adapter package.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import type { Hash } from '@atlas/contracts';
 import { asHash, id } from '@atlas/kernel';
 import type { CasObject, StoreApi } from '@atlas/kernel';
@@ -85,7 +85,15 @@ export function createDiskStore(casPath: CasPath): DiskStore {
 
     get(h: Hash): CasObject | undefined {
       // total: any miss/malformed/tampered read ⇒ `undefined`, never a throw (KERNEL-7a).
+      // SECURITY (billy PoC — path-traversal / read-amplification DoS): `h` may be attacker-controlled (the
+      // `atlas node <addr>` read door reaches here over MCP/poke). A CAS key is EXACTLY 64 lowercase hex, so
+      // reject anything else BEFORE `readFileSync` — the tamper re-hash guard below runs AFTER the read, too
+      // late to stop an unbounded read (a `../`-traversal to /dev/zero would hang + OOM). Belt-and-suspenders:
+      // also require the resolved value path to stay INSIDE the CAS root (no escape), treating either failure
+      // as a plain miss (`undefined`), never a filesystem touch.
+      if (!/^[0-9a-f]{64}$/.test(h)) return undefined;
       const path = valuePath(casPath, h);
+      if (!resolve(path).startsWith(resolve(casPath) + sep)) return undefined;
       let raw: string;
       try {
         raw = readFileSync(path, 'utf8');

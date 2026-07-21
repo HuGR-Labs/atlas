@@ -34,7 +34,6 @@ import type { AtlasPolicy } from './policy.js';
 import { createRevIndex } from './rev-index.js';
 import { createDoctorSource } from './doctor-source.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
-import { buildRetrievalModel } from './retrieval-model.js';
 import { assembleHandler } from './wire.js';
 import type { WireConfig, WireSeams, WiredHandler } from './wire.js';
 
@@ -152,19 +151,18 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     resolveAnchorAt: revIndex.resolveAnchorAt,
   };
 
-  // N2: the read model the CLOSED three-mode retrieval surface serves — built over the SAME `axes` (its
-  // `edges` drive the dependency blast radius) and the SAME durable `store` (the fact readback), so
-  // `atlas query --by dependency|trigger` can never diverge from the write door. `byTrigger` is a documented
-  // dormant mode (no trigger producer exists — empty `triggers`).
-  const retrieval = buildRetrievalModel(axes, store);
-
   const config: WireConfig = {
     repoPath,
     casPath: join(repoPath, CAS_REL),
     scipPath,
     seams,
     actor,
-    retrieval,
+    // N2: the STRUCTURAL axes the CLOSED three-mode retrieval surface reads (`edges` drive the dependency blast
+    // radius). Only the axes are threaded — the fact-dependent read model is rebuilt PER QUERY from the live
+    // durable store inside the query leg (retrieval-model.ts), so `--by dependency|trigger` reflects an
+    // in-session `atlas-emit` EXACTLY as `--by scope` does (no frozen startup snapshot). `byTrigger` stays a
+    // documented dormant mode (no trigger producer exists).
+    axes,
     // Conditional spread keeps `ratifyToken` ABSENT (not `undefined`) when unset — exactOptionalPropertyTypes.
     ...(ratifyToken !== undefined ? { ratifyToken } : {}),
   };

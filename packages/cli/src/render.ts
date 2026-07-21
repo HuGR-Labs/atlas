@@ -43,13 +43,17 @@ function renderData(data: unknown): string {
   const d = data as Record<string, unknown>;
 
   // query envelope { pack, subsumes } — the observability readback (Seam-1+3).
-  const pack = d.pack as { invariants?: unknown; stale?: unknown } | undefined;
+  const pack = d.pack as { invariants?: unknown; stale?: unknown; tokenEstimate?: unknown } | undefined;
   if (pack && typeof pack === 'object' && Array.isArray(pack.invariants)) {
     const invs = pack.invariants as readonly InvRow[];
     const subs = Array.isArray(d.subsumes) ? (d.subsumes as readonly SubRow[]) : [];
+    // N12 CLI/MCP parity: surface `tokenEstimate` (the advisory pack size) on the CLI too — MCP already ships
+    // it in the pack JSON, so dropping it here was a real CLI-vs-MCP asymmetry. Deterministic (a number field).
+    const tokenEstimate = typeof pack.tokenEstimate === 'number' ? pack.tokenEstimate : 0;
     const lines = [
       ...invs.map((i) => `  inv ${i.tier} ${i.nodeId}: ${i.claim}`),
       `  stale: ${pack.stale === true}`,
+      `  tokenEstimate: ${tokenEstimate}`,
       ...subs.map((s) => `  subsumes ${s.broader} ⊃ ${s.narrower}`),
     ];
     return `data:\n${lines.join('\n')}\n`;

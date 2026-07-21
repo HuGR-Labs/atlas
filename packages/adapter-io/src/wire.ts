@@ -13,7 +13,7 @@ import { createHandler, createInit, createQuery, createReconcile } from '@atlas/
 import type { ToolLegs, ToolLeg, NodeSource } from '@atlas/tools';
 import { id } from '@atlas/kernel';
 import { build, createResolve, createDepgraph } from '@atlas/index';
-import type { RetrievalModel } from '@atlas/index';
+import type { Axes } from '@atlas/index';
 import { currentNodes, deriveSubsumes } from '@atlas/knowledge';
 import type { GroundedFact } from '@atlas/knowledge';
 import type { Hash } from '@atlas/contracts';
@@ -78,10 +78,12 @@ export interface WireConfig {
    *  composition root from the environment ONLY (`ATLAS_RATIFY_TOKEN`, never a fact/payload); ABSENT ⇒ a
    *  full-ratify fact fails closed, a T0 fact needs `billy`. Fast-pathed (auto-accept) facts ignore it. */
   readonly ratifyToken?: string;
-  /** The read model the CLOSED three-mode retrieval surface serves (N2 — `atlas query --by dependency|trigger`).
-   *  Constructed by the composition root (`composeRuntime`) over the SAME axes + durable store; ABSENT for the
-   *  bare WIRE assembly (wire-only fake tests exercise `--by scope` only), where the non-scope modes fail closed. */
-  readonly retrieval?: RetrievalModel;
+  /** The built structural axes the CLOSED three-mode retrieval surface reads (N2 — `atlas query --by
+   *  dependency|trigger`). Supplied by the composition root (`composeRuntime` builds the SAME axes the index
+   *  adapter rides); the fact-dependent read model is rebuilt PER QUERY from the live store over these axes,
+   *  so dependency/trigger are as fresh as scope. ABSENT for the bare WIRE assembly (wire-only fake tests
+   *  exercise `--by scope` only), where the non-scope modes fail closed. */
+  readonly axes?: Axes;
 }
 
 /**
@@ -158,12 +160,13 @@ export function assembleHandler(config: WireConfig): WiredHandler {
       // pre-existing projection path below. The mode is marshal-validated ∈ {scope,dependency,trigger} (CLI).
       const by = a.by;
       if (by === 'dependency' || by === 'trigger') {
-        if (config.retrieval === undefined) {
-          // No retrieval model wired at this seam (bare WIRE fake assembly) — fail closed; the handler wraps
+        if (config.axes === undefined) {
+          // No structural axes wired at this seam (bare WIRE fake assembly) — fail closed; the handler wraps
           // this throw into a structured rejected Verdict (TOOLS-2), never a raw throw at the user door.
-          throw new Error('atlas query --by dependency|trigger needs the composition-root retrieval model');
+          throw new Error('atlas query --by dependency|trigger needs the composition-root axes');
         }
-        return retrievalPack(config.retrieval, by, a.scope, store);
+        // retrievalPack rebuilds the read model FRESH from the live store each call — freshness parity w/ scope.
+        return retrievalPack(config.axes, by, a.scope, store);
       }
       const scope = a.scope;
       const pack = createQuery(queryIndex).query(scope);
@@ -207,7 +210,15 @@ export function assembleHandler(config: WireConfig): WiredHandler {
   // bytes ARE the fact). READ-ONLY: it opens NO write path (writes still funnel through `atlas-emit`, TOOLS-1);
   // a miss ⇒ `undefined` (the handler renders a structured "no grounded node" rejection, never a throw).
   const nodes: NodeSource = {
-    resolve: (nodeAddr) => store.get(nodeAddr as unknown as Hash) as GroundedFact | undefined,
+    resolve: (nodeAddr) => {
+      // SECURITY (billy PoC): `nodeAddr` is attacker-controllable over MCP/poke. A CAS content address is
+      // EXACTLY 64 lowercase hex; anything else (a `../` traversal to an unbounded file like /dev/zero) is a
+      // MISS — rejected BEFORE any filesystem read, so it can never hang/OOM. Defense-in-depth: `store.get`
+      // re-applies the same charset + sandbox guard (store.ts). READ-ONLY: no write path (TOOLS-1).
+      const addr = String(nodeAddr);
+      if (!/^[0-9a-f]{64}$/.test(addr)) return undefined;
+      return store.get(addr as unknown as Hash) as GroundedFact | undefined;
+    },
   };
 
   // ONE handler over the four legs + the read-only per-node source — no per-entrypoint copy (WIRE-1).

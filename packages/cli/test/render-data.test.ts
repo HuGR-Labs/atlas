@@ -29,8 +29,10 @@ describe('renderVerdict — Seam-2 deterministic data: block', () => {
     };
     const { stdout } = renderVerdict(v);
     // TEETH: the original render printed ONLY status/next/invariant — none of the below appeared (GAP-B).
+    // N12: `tokenEstimate` now rides the CLI query block too (CLI/MCP parity), after `stale`, before subsumes.
     expect(stdout).toBe(
-      PREFIX + 'data:\n  inv T1 n1: claim one\n  inv T0 n2: claim two\n  stale: false\n  subsumes b1 ⊃ q1\n',
+      PREFIX +
+        'data:\n  inv T1 n1: claim one\n  inv T0 n2: claim two\n  stale: false\n  tokenEstimate: 0\n  subsumes b1 ⊃ q1\n',
     );
   });
 
