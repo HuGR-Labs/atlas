@@ -200,18 +200,35 @@ export function driveMine(repoPath: string, deps?: Partial<MineDeps>): GenesisRe
   return makeRunController(buildControllerDeps(repoPath, d)).genesis(repoPath, d.rev, d.budget, d.scope);
 }
 
+/**
+ * The abstain-by-design legibility line (WP-F6). Mining is MODEL-GATED and fails CLOSED by default: with no
+ * proposer model wired, the extractor ABSTAINS at every site (`genesis/extract.ts:118` "model abstained")
+ * rather than fabricate an ungrounded fact — so a default pass seeds 0 candidates NOT as an error but as an
+ * honest abstain. This driver invents NO miner and seeds NO fake fact (facts come solely from real gate
+ * verdicts, GEN-6). Emit an explicit line whenever a 0-candidate run is caused by the absent model, so the
+ * abstention is LEGIBLE to a user — never a silent/mysterious empty render.
+ */
+export const MINE_ABSTAIN_LINE =
+  'mine: 0 candidates — no proposer model wired (abstain-by-design; facts are never fabricated)';
+
 /** Fold a `GenesisReport` to the CLI's process outcome. `renderVerdict` (render.ts) projects a handler
- *  `Verdict`, not a `GenesisReport`, so the fold is direct: a partial/interrupted run is a non-zero exit. */
-function foldVerdict(r: GenesisReport): CliVerdict {
+ *  `Verdict`, not a `GenesisReport`, so the fold is direct: a partial/interrupted run is a non-zero exit.
+ *  `modelWired` = a real proposer was injected; when false AND 0 candidates seeded, the empty result is the
+ *  model-gated abstain, so we render `MINE_ABSTAIN_LINE` to keep the 0-candidate outcome legible (WP-F6). */
+function foldVerdict(r: GenesisReport, modelWired: boolean): CliVerdict {
+  const abstainByDesign = r.seeded.length === 0 && !modelWired;
   const lines = [
     `genesis: seeded ${r.seeded.length} candidate fact(s); ratified ${r.ratified.length}`,
     `cost: llmCalls ${r.llmCalls} · budgetSpent ${r.budgetSpent}`,
+    ...(abstainByDesign ? [MINE_ABSTAIN_LINE] : []),
     ...(r.resumeToken ? [`partial: resume at rank ${r.resumeToken.lastCompletedRank}`] : []),
   ];
   return { exitCode: r.resumeToken ? 1 : 0, stdout: `${lines.join('\n')}\n` };
 }
 
-/** Run the one-time genesis bootstrap over a repo, projecting the outcome to a `CliVerdict` (CLI-4). */
+/** Run the one-time genesis bootstrap over a repo, projecting the outcome to a `CliVerdict` (CLI-4). A pass
+ *  with no proposer injected is model-gated (abstain-by-design) — `foldVerdict` renders that legibly. */
 export async function runMine(repoPath: string, deps?: Partial<MineDeps>): Promise<CliVerdict> {
-  return foldVerdict(driveMine(repoPath, deps));
+  const modelWired = deps?.proposer !== undefined; // a real S2 model was injected (else honest abstain)
+  return foldVerdict(driveMine(repoPath, deps), modelWired);
 }
