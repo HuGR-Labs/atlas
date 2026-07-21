@@ -14,6 +14,10 @@ export type { CasPath, DiskStore } from './store.js';
 export { createHistorySource } from './git-history.js';
 export { createDriftSource } from './git-drift.js';
 export { createForge } from './git-forge.js';
+// The cheap `headSha` freshness-watermark reader (N11, no worktree) — the ONLY member of the shared no-shell
+// git seam (#74, `run-git.ts`) that crosses the package boundary (the mine driver injects it). `runGit` + the
+// error classifier/backoff primitives stay module-internal, consumed intra-package via relative import.
+export { headSha } from './run-git.js';
 export { createSiteProposer } from './llm.js';
 export { createIndexAdapter } from './index-adapter.js';
 export type { IndexAdapterDeps } from './index-adapter.js';
@@ -30,6 +34,11 @@ export type { WireConfig, WiredHandler, WireSeams } from './wire.js';
 // The governed durable emit leg (COMPOSE-A) + the runtime composition root that supplies the real seams.
 export { createGovernedEmit } from './governed-emit.js';
 export type { GovernedEmitDeps } from './governed-emit.js';
+// The governed sameAs link leg (WP-SAMEAS) — the second governed write door (authz + ratifier). `LinkOut` is
+// re-exported FROM @atlas/tools (its owner) so consumers can pull the whole door surface from this barrel.
+export { createGovernedLink } from './governed-link.js';
+export type { GovernedLinkDeps } from './governed-link.js';
+export type { LinkOut } from '@atlas/tools';
 export { composeRuntime, buildHeuristic, buildGate } from './compose.js';
 export type { ComposedRuntime } from './compose.js';
 export { createDoctorSource, regroundTemplate, retireTemplate } from './doctor-source.js';

@@ -6,21 +6,24 @@
 
 import type { NodeKey, ToolSchema } from '@atlas/contracts';
 import type { GroundedFact } from '@atlas/knowledge';
-import type { EmitOut, Guidance, HandlerApi, Tool, ToolData, Transport, Verdict } from './types.js';
+import type { Guidance, HandlerApi, Tool, ToolData, Transport, Verdict } from './types.js';
 
-/** The CLOSED governance surface — EXACTLY four tools, no more (TOOLS-1). The order is fixed; membership is
- *  the load-bearing fact (surface count == 4). */
+/** The CLOSED governance surface (TOOLS-1) — the order is fixed; membership is the load-bearing fact.
+ *  [EXTENDED — WP-SAMEAS] `atlas-link` joins as a governed write tool (owner-authorized 2026-07-21), so the
+ *  surface count is now 5: the read/derive trio (init/query/reconcile) + the two write doors (emit/link). */
 export const GOVERNANCE_SURFACE: readonly Tool[] = [
   'atlas-init',
   'atlas-query',
   'atlas-emit',
   'atlas-reconcile',
+  'atlas-link',
 ];
 
-/** The write surface — EXACTLY one entry (`writePaths == 1`): `atlas-emit` is the ONLY write path (TOOLS-1).
- *  The other three governance tools read/derive; the read projections (diff / doctor / node) carry no write
+/** The write surface (TOOLS-1). [EXTENDED — WP-SAMEAS] TWO write doors now: `atlas-emit` (grounded fact
+ *  admission) + `atlas-link` (governed human sameAs assertion). Both are fail-closed governed mutations; the
+ *  other three governance tools read/derive, and the read projections (diff / doctor / node) carry no write
  *  authority (guarded structurally in `./guard.ts`). */
-export const WRITE_PATHS: readonly Tool[] = ['atlas-emit'];
+export const WRITE_PATHS: readonly Tool[] = ['atlas-emit', 'atlas-link'];
 
 /** A per-tool leg — the concrete tool computation the handler wraps. It MAY throw on a malformed argument;
  *  the wrapper converts that to a structured rejected `Verdict` (TOOLS-2 totality). */
@@ -64,6 +67,10 @@ const GUIDANCE: Record<Tool, Guidance> = {
     next: 'a semantic flip blocks the merge (exit 2) — re-author before merging',
     invariant: 'TOOLS-8: reviewable drift, block on any semantic flip',
   },
+  'atlas-link': {
+    next: 'a rejected link failed a governance gate (two distinct known nodes, authorized on both scopes, ratified) — fix and re-link',
+    invariant: 'WP-SAMEAS / KNOW-11: sameAs is a governed symmetric edge — authz on BOTH scopes + a non-empty ratifier (v1; T0→billy tier gate deferred, non-destructive) — never a merge',
+  },
 };
 
 /** Fallback guidance for an off-surface tool token — still non-empty (TOOLS-4 totality). */
@@ -76,11 +83,14 @@ const guidanceFor = (tool: Tool): Guidance => GUIDANCE[tool] ?? GUIDANCE_OFF_SUR
 
 const reason = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
-/** A leg return is a FAIL-CLOSED emit iff it carries `emitted:false` (only `EmitOut` does). A fail-closed
- *  emit is a GOVERNANCE refusal, NOT a success — it MUST surface as a rejected `Verdict`, legible on BOTH
- *  user doors (MCP `isError:true`, CLI exit 2), never a silent `ok:true` an agent reads as success (F2/F5). */
-const isFailClosedEmit = (data: ToolData): data is EmitOut =>
-  typeof data === 'object' && data !== null && (data as { emitted?: unknown }).emitted === false;
+/** A leg return is a FAIL-CLOSED governed write iff it carries `emitted:false` (`EmitOut`) OR `linked:false`
+ *  (`LinkOut`, WP-SAMEAS). A fail-closed write is a GOVERNANCE refusal, NOT a success — it MUST surface as a
+ *  rejected `Verdict`, legible on BOTH user doors (MCP `isError:true`, CLI exit 2), never a silent `ok:true`
+ *  an agent reads as success (F2/F5). Both write doors funnel through this one refusal-visibility guard. */
+const isFailClosedWrite = (data: ToolData): boolean =>
+  typeof data === 'object' &&
+  data !== null &&
+  ((data as { emitted?: unknown }).emitted === false || (data as { linked?: unknown }).linked === false);
 
 /** THE one published input schema per governance tool (TOOLS-3) — CLI and MCP share it byte-for-byte; the
  *  schema carries NO transport parameter, so the same bytes back every surface (the divergence this seam
@@ -134,6 +144,19 @@ const SCHEMAS: Record<Tool, ToolSchema> = {
       additionalProperties: false,
     },
   },
+  'atlas-link': {
+    name: 'atlas-link',
+    description: 'the governed sameAs write door — asserts two nodeKeys name the SAME fact (a symmetric, transitive, NON-destructive equivalence edge surfaced on read), fail-closed on authz/ratify (WP-SAMEAS)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        a: { type: 'string', description: 'the first nodeKey to equate' },
+        b: { type: 'string', description: 'the second nodeKey to equate' },
+      },
+      required: ['a', 'b'],
+      additionalProperties: false,
+    },
+  },
 };
 
 /** Fallback schema for an off-surface tool token — still a well-formed `ToolSchema` (totality). */
@@ -159,11 +182,14 @@ export function createHandler(legs: ToolLegs, nodes?: NodeSource): HandlerApi {
     }
     try {
       const data = leg(args);
-      if (isFailClosedEmit(data)) {
-        // F2/F5: a fail-closed emit is a governance REJECTION, not a silent ok. Surface it uniformly across
-        // doors as an `ok:false` verdict carrying the reason. The `EmitOut` rides `data` so the CLI can still
-        // classify it exit-2 (rejected) — distinct from the exit-1 error of a malformed/unwired call.
-        return { ok: false, data, rejected: data.rejected ?? 'emit failed closed (ungrounded)', guidance };
+      if (isFailClosedWrite(data)) {
+        // F2/F5: a fail-closed write (emit OR link) is a governance REJECTION, not a silent ok. Surface it
+        // uniformly across doors as an `ok:false` verdict carrying the reason. The record rides `data` so the
+        // CLI can still classify it exit-2 (rejected) — distinct from the exit-1 error of a malformed/unwired
+        // call. Fallback reason is write-kind-specific (emit vs link) — our doors always set `rejected`.
+        const d = data as { emitted?: unknown; rejected?: string };
+        const fallback = d.emitted === false ? 'emit failed closed (ungrounded)' : 'link failed closed';
+        return { ok: false, data, rejected: d.rejected ?? fallback, guidance };
       }
       return { ok: true, data, guidance };
     } catch (e) {

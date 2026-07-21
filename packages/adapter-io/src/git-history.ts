@@ -4,14 +4,13 @@
 // ranking only (GEN-6: it MINTS NO FACT — this file imports NO store/upsert seam). Every emitted LIST is
 // CANONICALLY SORTED (never git-output / Map-insertion order) so a fixed rev yields byte-identical signals.
 
-import { execFileSync } from 'node:child_process';
 import type { StructRef } from '@atlas/contracts';
 import type { HistorySource, MinedSignals } from '@atlas/genesis';
 import { asSubtreeHash, id } from '@atlas/kernel';
+import { runGit } from './run-git.js';
 
-/** All git I/O flows through this one seam (execFileSync — no shell). */
-const git = (repo: string, args: readonly string[]): string =>
-  execFileSync('git', args as string[], { cwd: repo, encoding: 'utf8' });
+/** All git I/O flows through the ONE shared no-shell seam (#74). */
+const git = (repo: string, args: readonly string[]): string => runGit(repo, args);
 
 /** Non-empty output lines (git pads a trailing newline; `--format=` emits blank separators). */
 const nonEmpty = (out: string): string[] => out.split('\n').filter((l) => l.length > 0);

@@ -41,21 +41,22 @@ const ungroundedRows = (medium: Map<string, { key: string; value: unknown }>): n
 // ── EPIC-26-a §1 — single governed write-door ─────────────────────────────────────────────────────
 
 describe('WP-7.26-a.TOOLS — the governance surface & the single write path', () => {
-  it('SCN-TOOLS-1a-1: the surface enumerates to exactly four', () => {
-    expect(GOVERNANCE_SURFACE.length).toBe(4); // surface count == 4, no more, no fewer
+  it('SCN-TOOLS-1a-1: the surface enumerates to exactly five (WP-SAMEAS added atlas-link)', () => {
+    expect(GOVERNANCE_SURFACE.length).toBe(5); // surface count == 5 (WP-SAMEAS: atlas-link is a governed tool)
     expect([...GOVERNANCE_SURFACE].sort()).toEqual([
       'atlas-emit',
       'atlas-init',
+      'atlas-link',
       'atlas-query',
       'atlas-reconcile',
     ]);
-    // teeth (breaks-on "a fifth governance tool is registered — count == 5"): no fifth member exists.
+    // teeth (breaks-on "a sixth governance tool is registered — count == 6"): no unauthorized member exists.
     expect(GOVERNANCE_SURFACE).not.toContain('atlas-delete');
   });
 
-  it('SCN-TOOLS-1b-1: exactly one write entry across the whole layer — writePaths == 1', () => {
-    expect(WRITE_PATHS.length).toBe(1); // writePaths == 1
-    expect(WRITE_PATHS[0]).toBe('atlas-emit'); // and it is atlas-emit
+  it('SCN-TOOLS-1b-1: exactly two write entries across the whole layer — writePaths == 2 (WP-SAMEAS)', () => {
+    expect(WRITE_PATHS.length).toBe(2); // writePaths == 2 (WP-SAMEAS added the governed atlas-link door)
+    expect([...WRITE_PATHS].sort()).toEqual(['atlas-emit', 'atlas-link']); // the two governed write doors
     // the governed store surfaces exactly one store-mutating door (the write-door atlas-emit routes to).
     const store = createGovernedStore();
     expect(typeof store.write).toBe('function');

@@ -3,11 +3,13 @@
 // Layer 7 PUBLIC tool / OKF data model: the tool result records + the `next+invariant` guidance envelope,
 // plus the co-located API interfaces no single impl owns — the handler union/oracle (ToolData / Transport /
 // HandlerApi, consumed by ≥2 src files) and the tri-transport NodeApi (which no src file re-exports). The
-// contracts-owned vocab (`Pack`/`Hash`/`NodeKey`/`Territory`/…) is IMPORTED, NEVER redefined. TOOLS-1: the
-// write surface is EXACTLY four (`atlas-init`/`-query`/`-emit`/`-reconcile`); diff/doctor/node are read-only.
+// contracts-owned vocab (`Pack`/`Hash`/`NodeKey`/`Territory`/…) is IMPORTED, NEVER redefined. TOOLS-1
+// (amended WP-SAMEAS): writes flow through GOVERNED doors — `atlas-emit` + `atlas-link` (WRITE_PATHS); the
+// other governance tools (`-init`/`-query`/`-reconcile`) + diff/doctor/node are read-only. See
+// docs/design/adr-tools1-governed-write-doors.md.
 
 import type { Hash, NodeKey, Pack, StructRef, Territory, ToolSchema } from '@atlas/contracts';
-import type { GroundedFact, Subsumes } from '@atlas/knowledge';
+import type { GroundedFact, SameAs, Subsumes } from '@atlas/knowledge';
 import type { VersionDelta } from '@atlas/persist';
 import type { OwnPack, OwnUnit, RelationSet } from '@atlas/retrieval';
 
@@ -16,13 +18,16 @@ import type { OwnPack, OwnUnit, RelationSet } from '@atlas/retrieval';
 export type { Hash, Pack, PackInvariant, Territory } from '@atlas/contracts';
 
 /**
- * The closed governance-tool vocabulary — EXACTLY four, no more (TOOLS-1). Transcribed EXACTLY from
- * atlas-tools:15 — `Tool = 'atlas-init' | 'atlas-query' | 'atlas-emit' | 'atlas-reconcile'`. The ONLY
- * write path is `atlas-emit`; the other three are the read/derive governance surface. `atlas-diff` /
- * `atlas doctor` / `atlas node` are deliberately NOT members — they are read-only projections, not a
- * fifth governance tool.
+ * The closed governance-tool vocabulary. Transcribed from atlas-tools:15 — `Tool = 'atlas-init' |
+ * 'atlas-query' | 'atlas-emit' | 'atlas-reconcile'` — then EXTENDED by WP-SAMEAS (owner-authorized
+ * 2026-07-21) with `atlas-link`, a SECOND governed write door. `atlas-diff` / `atlas doctor` / `atlas node`
+ * are deliberately NOT members — they are read-only projections, not a governance tool.
+ *
+ * [WRITE SURFACE — TOOLS-1, extended] the write doors are `atlas-emit` + `atlas-link` (`WRITE_PATHS`); the
+ * read/derive tools are `atlas-init` / `atlas-query` / `atlas-reconcile`. `atlas-link` records a symmetric
+ * human `sameAs` equivalence under the SAME authz+ratify governance as emit — NON-destructive (never a merge).
  */
-export type Tool = 'atlas-init' | 'atlas-query' | 'atlas-emit' | 'atlas-reconcile';
+export type Tool = 'atlas-init' | 'atlas-query' | 'atlas-emit' | 'atlas-reconcile' | 'atlas-link';
 
 /**
  * The guidance envelope shipped with EVERY result (TOOLS-4). Transcribed EXACTLY from atlas-tools:16 —
@@ -89,6 +94,22 @@ export interface EmitOut {
   readonly emitted: boolean;
   readonly id?: Hash; // [FLAG] CAS id of the persisted object — mirrors knowledge EmitApi.admit
   readonly rejected?: string; // structured fail-closed reason (TOOLS-7)
+}
+
+/**
+ * `atlas-link` result (WP-SAMEAS) — the governed sameAs write door's outcome. TOOLS-owned (like `EmitOut`)
+ * so the DAG stays one-way: adapter-io's `createGovernedLink` IMPORTS this from `@atlas/tools`, never the
+ * reverse. Fail-closed: a link that fails a governance gate (distinct / both-known / authorized / ratified)
+ * ⇒ `linked:false` + a structured `rejected`, nothing persisted. On success both `a`/`b` echo the equated
+ * nodeKeys. `linked:false` is surfaced as a rejected `Verdict` on both doors (mirrors `emitted:false`) so a
+ * refused governed write is never a silent `ok`. Under `exactOptionalPropertyTypes`, `rejected`/`a`/`b` are
+ * present-on-the-relevant-path only.
+ */
+export interface LinkOut {
+  readonly linked: boolean;
+  readonly rejected?: string; // structured fail-closed reason (distinct/unknown/unauthorized/unratified)
+  readonly a?: string; // the first equated nodeKey (present on linked:true)
+  readonly b?: string; // the second equated nodeKey (present on linked:true)
 }
 
 /**
@@ -204,12 +225,17 @@ export type DiffOut = VersionDelta;
 export interface QueryEnvelope {
   readonly pack: Pack;
   readonly subsumes: readonly Subsumes[];
+  // [WP-SAMEAS — ADDITIVE] the derived human `sameAs` equivalence edges (`deriveSameAs`), scoped to the pack
+  // exactly as `subsumes` is (both endpoints under the covering scope). Transitive (union-find), sorted,
+  // NON-destructive — rides ALONGSIDE the frozen `Pack`/`subsumes`, mutating neither. `SameAs` is the
+  // @atlas/knowledge-owned edge shape (`{a,b}`, canonical a<b) — imported, NOT redefined.
+  readonly sameAs: readonly SameAs[];
 }
 
-/** The per-tool result payload carried on a `Verdict.data` — the union of the four governance-tool result
- *  records (TOOLS-5/6/7/8), plus the `atlas-query` observability envelope (Seam-3). The handler is one
- *  oracle over all; the concrete leg is fixed by `tool`. */
-export type ToolData = InitOut | QueryOut | EmitOut | ReconcileOut | QueryEnvelope;
+/** The per-tool result payload carried on a `Verdict.data` — the union of the governance-tool result records
+ *  (TOOLS-5/6/7/8 + WP-SAMEAS `LinkOut`), plus the `atlas-query` observability envelope (Seam-3). The handler
+ *  is one oracle over all; the concrete leg is fixed by `tool`. */
+export type ToolData = InitOut | QueryOut | EmitOut | ReconcileOut | LinkOut | QueryEnvelope;
 
 /** The transport a call arrived on (TOOLS-3/10). Transcribed from the reference's "one contract, two
  *  transports" (CLI≡MCP) plus the tri-transport node reads (MCP tool | poke | CLI). Behaviour MUST NOT

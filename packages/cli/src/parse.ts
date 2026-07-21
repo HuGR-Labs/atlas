@@ -32,9 +32,10 @@ const ARITY: Record<Command, number> = {
   doctor: 1, // doctor <scope>
   mine: 1, // mine <repo>
   node: 1, // node <addr>
+  link: 2, // link <a> <b> — the two nodeKeys to equate (WP-SAMEAS)
 };
 
-const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine|node';
+const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine|node|link';
 
 function isCommand(s: string): s is Command {
   return Object.prototype.hasOwnProperty.call(COMMAND_LEG, s);

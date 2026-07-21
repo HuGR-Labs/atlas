@@ -29,6 +29,12 @@ interface SubRow {
   readonly narrower: string;
 }
 
+/** A `a ≡ b` human equivalence edge inside the query envelope (WP-SAMEAS). */
+interface SameRow {
+  readonly a: string;
+  readonly b: string;
+}
+
 /**
  * Render the DETERMINISTIC `data:` block for a known `ok` verdict data shape, or `''` when the shape is
  * unknown/absent (back-compat: no block ⇒ existing output byte-unchanged). PURE — every byte is a function
@@ -47,6 +53,7 @@ function renderData(data: unknown): string {
   if (pack && typeof pack === 'object' && Array.isArray(pack.invariants)) {
     const invs = pack.invariants as readonly InvRow[];
     const subs = Array.isArray(d.subsumes) ? (d.subsumes as readonly SubRow[]) : [];
+    const sames = Array.isArray(d.sameAs) ? (d.sameAs as readonly SameRow[]) : [];
     // N12 CLI/MCP parity: surface `tokenEstimate` (the advisory pack size) on the CLI too — MCP already ships
     // it in the pack JSON, so dropping it here was a real CLI-vs-MCP asymmetry. Deterministic (a number field).
     const tokenEstimate = typeof pack.tokenEstimate === 'number' ? pack.tokenEstimate : 0;
@@ -55,8 +62,18 @@ function renderData(data: unknown): string {
       `  stale: ${pack.stale === true}`,
       `  tokenEstimate: ${tokenEstimate}`,
       ...subs.map((s) => `  subsumes ${s.broader} ⊃ ${s.narrower}`),
+      // WP-SAMEAS: one line per (pre-sorted) human equivalence edge — surfaced like subsumes, never a merge.
+      ...sames.map((s) => `  sameAs ${s.a} ≡ ${s.b}`),
     ];
     return `data:\n${lines.join('\n')}\n`;
+  }
+
+  // link { linked, a, b } — the governed sameAs write door result (WP-SAMEAS). A SUCCESSFUL link renders a
+  // single `  linked: <a> ≡ <b>` line; a REJECTED link (linked:false) carries its `rejected` string through
+  // the handler's ok:false path → the `reason:` block (mirrors emit), so it is never shadowed here. Guarded
+  // on `linked === true` BEFORE the `{id}` shape below (a LinkOut has no `id`, so no cross-shadowing).
+  if (d.linked === true && typeof d.a === 'string' && typeof d.b === 'string') {
+    return `data:\n  linked: ${d.a} ≡ ${d.b}\n`;
   }
 
   // node — a resolved `GroundedFact` (the `atlas node <addr>` read door, N6). Recognised by its `kind`

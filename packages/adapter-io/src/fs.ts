@@ -3,10 +3,10 @@
 // The raw fs adapter: walk a repo path into the frozen `FileTree` (@atlas/index) along the spatial rail
 // repo→crate→module→file→item→block. SKELETON — signature frozen, body deferred to the ADAPT-FS WP.
 
-import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FileTree } from '@atlas/index';
+import { runGit } from './run-git.js';
 
 // A mutable directory node under construction: an ordered map from the next path segment to either a
 // nested directory builder or a materialized file leaf. Directories are keyed so siblings stay unique;
@@ -30,8 +30,8 @@ const newDir = (path: string): DirBuild => ({ path, dirs: new Map(), files: [] }
  */
 export function walkFileTree(repoPath: string): FileTree {
   // Fail CLOSED at the composition boot path (compose.ts `composeRuntime`, wire.ts `assembleHandler`):
-  // `git ls-files` exits 128 in a NON-git dir (and `execFileSync` THROWS on a non-zero exit / when git is
-  // absent). An unguarded throw would propagate uncaught out of both the `atlas`/`atlas-mcp` bins at boot
+  // `git ls-files` exits 128 in a NON-git dir (and the shared `runGit` seam THROWS on a non-zero exit / when
+  // git is absent). An unguarded throw would propagate uncaught out of both the `atlas`/`atlas-mcp` bins at boot
   // (raw stack trace). Degrade to the EMPTY tracked set — the SAME structural view as an empty repo — never
   // a throw. The valid-git-repo happy path is byte-identical (only the throwing paths are absorbed). Same
   // no-shell git seam + `try {} catch {}` idiom as `gitUserEmail`/`readScipOrEmpty`.
@@ -69,10 +69,7 @@ export function walkFileTree(repoPath: string): FileTree {
  */
 function gitLsFiles(repoPath: string): string[] {
   try {
-    const out = execFileSync('git', ['ls-files', '-z'], {
-      cwd: repoPath,
-      encoding: 'utf8',
-    });
+    const out = runGit(repoPath, ['ls-files', '-z']);
     return out.split('\0').filter((p) => p.length > 0);
   } catch {
     return [];

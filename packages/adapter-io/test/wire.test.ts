@@ -85,8 +85,8 @@ describe('WP-9.1.1-a.WIRE — one shared four-leg WiredHandler assembly', () => 
     it('TEETH — a split (two-handler) assembly flips: no single copy exposes all four legs', () => {
       const { cfg, cleanup } = makeConfig();
       try {
-        // the real shared assembly: one handler, surface == 4.
-        expect(surface(assembleHandler(cfg))).toBe(4);
+        // the real shared assembly: one handler, surface == 5 (WP-SAMEAS added the atlas-link leg).
+        expect(surface(assembleHandler(cfg))).toBe(5);
         // simulate "two separate handlers, one per entrypoint" (the mutant SCN-WIRE-1a names): each copy
         // holds a DISJOINT leg subset — so NEITHER single copy exposes the full four-leg surface.
         const echo = (args: unknown) => args as never;
@@ -112,9 +112,9 @@ describe('WP-9.1.1-a.WIRE — one shared four-leg WiredHandler assembly', () => 
         // is the shared SOURCE, not a shared instance the two-independent-call reality cannot yet produce.
         const reimport = await import('../src/wire.js');
         expect(reimport.assembleHandler).toBe(assembleHandler);
-        // a single call yields ONE handler whose four legs all dispatch through it.
+        // a single call yields ONE handler whose five legs all dispatch through it (WP-SAMEAS: +atlas-link).
         const handler = assembleHandler(cfg);
-        expect(surface(handler)).toBe(4);
+        expect(surface(handler)).toBe(5);
       } finally {
         cleanup();
       }

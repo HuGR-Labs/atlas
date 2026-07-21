@@ -35,8 +35,9 @@ type _Verdict = Verdict;
 const SERVER_INFO = { name: '@atlas/mcp-server', version: '0.0.0' } as const;
 
 /**
- * The advertised tool list (ListTools) — EXACTLY the four `GOVERNANCE_SURFACE` tools, no more, no less
- * (TOOLS-1). The MCP tool `name` is the `Tool` string; `description` + `inputSchema` are read from
+ * The advertised tool list (ListTools) — EXACTLY the `GOVERNANCE_SURFACE` tools, no more, no less (TOOLS-1;
+ * WP-SAMEAS extended the surface to five with the governed `atlas-link` write door). The MCP tool `name` is
+ * the `Tool` string; `description` + `inputSchema` are read from
  * `handler.schema(tool)` (the handler owns the published schema — CLI ≡ MCP, byte-identical, TOOLS-3). The
  * `inputSchema` is a JSON-Schema object structurally (`{type:'object',…}`), narrowed to the SDK's schema
  * shape at the transport boundary — the bytes are the handler's, unaltered.

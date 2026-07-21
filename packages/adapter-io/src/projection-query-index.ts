@@ -40,17 +40,34 @@ export function underScope(anchor: string, scope: string): boolean {
  * emitted fact whose `primaryAnchor` is under the covering `scope`:
  *   - `PackInvariant { nodeId: node.nodeKey, tier: fact.tier, claim: node.claims.join('; ') }`
  *   - `invariants` SORTED by `nodeId` ascending (deterministic);
- *   - `stale = true` iff ANY under-scope fact has `freshness === 'DRIFTED'`.
+ *   - `stale = true` iff ANY under-scope fact has `freshness === 'DRIFTED'` OR the view is BEHIND HEAD (N11).
  * A node with no `primaryAnchor`, or whose CAS bytes are absent (`store.get` ⇒ undefined), is SKIPPED. Pure
  * + total — the only throw is the one `structural.cover` itself raises on a malformed scope (fail-closed).
+ *
+ * N11 — the HONEST freshness watermark. `stale` (TOOLS-6: "MUST mean re-ground before trusting") previously
+ * fired ONLY on stored per-fact drift, which reconcile writes back — so between a code change at HEAD and the
+ * next reconcile the read silently claimed FRESH. `headSha` (OPTIONAL, injected by the composition root — a
+ * cheap `git rev-parse HEAD`, NO worktree, so it never touches the reconcile oracle's `.git/worktrees`
+ * contention surface) lets the reader compare the projection's persist-time `builtAt` to live HEAD: when BOTH
+ * are known AND differ, the view is BEHIND HEAD ⇒ its freshness is unverified ⇒ honestly `stale`. This is the
+ * read-model watermark pattern — NOT a live re-derivation on read (that would duplicate reconcile and put git
+ * I/O on every query); the authoritative drift oracle stays `atlas reconcile`/`doctor`. Conservative on the
+ * unknown: if `builtAt` or live HEAD is absent (old sidecar / non-git / mine-bootstrapped projection), the
+ * reader does NOT flag behind-HEAD — it only asserts staleness it can PROVE, never a false alarm.
  */
-export function createProjectionQueryIndex(structural: QueryIndex, store: DiskStore): QueryIndex {
+export function createProjectionQueryIndex(
+  structural: QueryIndex,
+  store: DiskStore,
+  headSha?: () => string | undefined,
+): QueryIndex {
   return {
     cover(scope: string) {
       const base = structural.cover(scope); // territory resolution STAYS in the pure @atlas/index adapter
       const proj = rehydrateProjection(store);
       const invariants: PackInvariant[] = [];
-      let stale = false;
+      // N11: the view is BEHIND HEAD iff both the persist-time watermark and live HEAD are known AND differ.
+      const head = headSha?.();
+      let stale = proj.builtAt !== undefined && head !== undefined && proj.builtAt !== head;
       for (const node of currentNodes(proj)) {
         if (node.primaryAnchor === undefined) continue; // anchorless ⇒ not locatable under a scope
         if (!underScope(node.primaryAnchor, scope)) continue; // out-of-scope facts never leak into the pack

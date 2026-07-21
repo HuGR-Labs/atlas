@@ -14,7 +14,7 @@ import type { ToolLegs, ToolLeg, NodeSource } from '@atlas/tools';
 import { id } from '@atlas/kernel';
 import { build, createResolve, createDepgraph } from '@atlas/index';
 import type { Axes } from '@atlas/index';
-import { currentNodes, deriveSubsumes } from '@atlas/knowledge';
+import { currentNodes, deriveSameAs, deriveSubsumes } from '@atlas/knowledge';
 import type { GroundedFact } from '@atlas/knowledge';
 import type { Hash } from '@atlas/contracts';
 import { retrievalPack } from './retrieval-model.js';
@@ -24,7 +24,9 @@ import { readScipOrEmpty } from './scip.js';
 import { createIndexAdapter } from './index-adapter.js';
 import { createProjectionQueryIndex, underScope } from './projection-query-index.js';
 import { createDriftSource } from './git-drift.js';
+import { headSha } from './run-git.js';
 import { createGovernedEmit } from './governed-emit.js';
+import { createGovernedLink } from './governed-link.js';
 import { loadPolicy } from './policy.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
 // DAG-pin imports — referenced (not wired as legs) to keep the frozen skeleton's dependency edges real.
@@ -138,7 +140,10 @@ export function assembleHandler(config: WireConfig): WiredHandler {
   // The ONE durable disk store this assembly rides — shared by the governed emit leg (the write side) AND
   // the projection query-readback (the read side), so `atlas query` reads back the very facts `atlas emit`
   // persists (WIRE-LOOP: emit→query is a closed loop over ONE store, never two divergent instances).
-  const store = createDiskStore(config.casPath);
+  // N11: inject the freshness-watermark seam — a cheap `git rev-parse HEAD` (no worktree). The store stamps
+  // `builtAt` at each persist; the query index (below) compares it to live HEAD to flag a behind-HEAD read.
+  const currentHead = (): string | undefined => headSha(config.repoPath);
+  const store = createDiskStore(config.casPath, currentHead);
 
   const governedEmit = createGovernedEmit({
     store,
@@ -150,9 +155,21 @@ export function assembleHandler(config: WireConfig): WiredHandler {
     ...(config.ratifyToken !== undefined ? { ratifyToken: config.ratifyToken } : {}),
   });
 
+  // GOVERNED sameAs LINK (WP-SAMEAS): the second governed write door — asserts a human `a ≡ b` equivalence
+  // over the SAME durable disk store + admin policy + env-sourced actor/ratifyToken channels as emit. Four
+  // fail-closed gates (distinct → both-known → authz-on-both → ratifier) before it persists a symmetric edge;
+  // NON-destructive (never a merge). The projection it mutates is the SAME `store` the query readback rides,
+  // so a linked edge surfaces on the very next `atlas query` (the WIRE-LOOP holds for link→query too).
+  const governedLink = createGovernedLink({
+    store,
+    policy: loadPolicy(config.repoPath),
+    actor: config.actor ?? '',
+    ...(config.ratifyToken !== undefined ? { ratifyToken: config.ratifyToken } : {}),
+  });
+
   // Seam-1: wrap the pure structural index-adapter with the durable projection readback, so a scope resolves
   // to its covering territory skeleton (from @atlas/index) FOLDED with the emitted facts under it (from CAS).
-  const queryIndex = createProjectionQueryIndex(index, store);
+  const queryIndex = createProjectionQueryIndex(index, store, currentHead);
 
   const legs: ToolLegs = {
     'atlas-init': ((args) =>
@@ -186,13 +203,22 @@ export function assembleHandler(config: WireConfig): WiredHandler {
       const subsumes = deriveSubsumes(proj).filter(
         (s) => underKeys.has(s.broader) && underKeys.has(s.narrower),
       );
-      return { pack, subsumes };
+      // WP-SAMEAS: the derived human equivalence edges, scoped EXACTLY like `subsumes` — both endpoints must
+      // be current nodes UNDER the covering scope. `deriveSameAs` is transitive (union-find) + pre-sorted.
+      const sameAs = deriveSameAs(proj).filter(
+        (e) => underKeys.has(e.a) && underKeys.has(e.b),
+      );
+      return { pack, subsumes, sameAs };
     }) satisfies ToolLeg,
     'atlas-emit': ((args) =>
       governedEmit.emit(
         (args as { node: import('@atlas/knowledge').GroundedFact }).node,
         (args as { at: import('@atlas/contracts').Hash }).at,
       )) satisfies ToolLeg,
+    // WP-SAMEAS: the governed sameAs link leg — routes through the ONE handler like every other tool. Reads
+    // the two nodeKeys off the marshalled `{a,b}` arg shape (CLI marshal.ts / MCP inputSchema both supply it).
+    'atlas-link': ((args) =>
+      governedLink.link((args as { a: string }).a, (args as { b: string }).b)) satisfies ToolLeg,
     'atlas-reconcile': ((args) =>
       createReconcile(
         createDriftSource({

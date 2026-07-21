@@ -31,7 +31,7 @@ import type {
   AdmitDeps,
   AdvisoryProposal,
 } from '@atlas/genesis';
-import { createDiskStore } from '@atlas/adapter-io';
+import { createDiskStore, headSha } from '@atlas/adapter-io';
 import type { DiskStore } from '@atlas/adapter-io';
 import { upsert as knowledgeUpsert, emptyStore, normalizeCheck, primaryAnchorId, nodeKey } from '@atlas/knowledge';
 import type { WriteRequest, StoreProjection, Candidate as KnowledgeCandidate } from '@atlas/knowledge';
@@ -139,7 +139,7 @@ function withDefaults(repoPath: string, deps?: Partial<MineDeps>): MineDeps {
     proposer: deps?.proposer ?? defaultProposer(),
     history: deps?.history ?? defaultHistory(),
     skeleton: deps?.skeleton ?? { skeleton: () => emptySkeleton() },
-    store: deps?.store ?? createDiskStore(join(repoPath, '.atlas', 'cas')),
+    store: deps?.store ?? createDiskStore(join(repoPath, '.atlas', 'cas'), () => headSha(repoPath)),
     gate: deps?.gate ?? defaultGate(),
     handoffTo: deps?.handoffTo ?? ((): void => {}),
     ...(deps?.budget !== undefined ? { budget: deps.budget } : {}),

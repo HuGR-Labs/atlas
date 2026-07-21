@@ -95,7 +95,7 @@ export function retrievalPack(
   mode: RetrievalMode,
   target: string,
   store: DiskStore,
-): { readonly pack: Pack; readonly subsumes: readonly never[] } {
+): { readonly pack: Pack; readonly subsumes: readonly never[]; readonly sameAs: readonly never[] } {
   const model = buildRetrievalModel(axes, store); // FRESH per query — reads the live projection
   const api = createRetrieval(model);
   const facts = (mode === 'dependency' ? api.byDependency(target) : api.byTrigger(target)) as readonly GroundedFact[];
@@ -113,5 +113,7 @@ export function retrievalPack(
   // the model's axis hash — the spatial axis root identity of the snapshot the pack was built from.
   const axisHash = model.forest.spatial.subtreeHash as unknown as Hash;
   const pack: Pack = { territory: target, axisHash, invariants, tokenEstimate, stale: false };
-  return { pack, subsumes: [] };
+  // `subsumes`/`sameAs` are `[]` here — both are scope-only derived relations; the non-scope dependency/
+  // trigger modes carry neither (WP-SAMEAS: parity with the pre-existing empty `subsumes`).
+  return { pack, subsumes: [], sameAs: [] };
 }

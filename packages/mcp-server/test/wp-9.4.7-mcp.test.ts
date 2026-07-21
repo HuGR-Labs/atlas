@@ -53,12 +53,12 @@ const REJECT_VERDICT: Verdict<ToolData> = {
 // ── SCN-MCP-1: the advertised surface is EXACTLY the four GOVERNANCE_SURFACE tools ───────────────────────
 
 describe('SCN-MCP-1 — ListTools advertises exactly the closed governance surface (TOOLS-1)', () => {
-  it('advertises the four GOVERNANCE_SURFACE tools by name, no more, no fewer', () => {
-    // TEETH: a mutant in advertisedTools that appends a 5th/off-surface tool, or drops one of the four,
+  it('advertises the five GOVERNANCE_SURFACE tools by name, no more, no fewer', () => {
+    // TEETH: a mutant in advertisedTools that appends a 6th/off-surface tool, or drops one of the five,
     // makes this set-equality RED (the closed-surface golden).
     const names = advertisedTools(fakeHandler(OK_VERDICT)).map((t) => t.name);
     expect(names).toEqual([...GOVERNANCE_SURFACE]);
-    expect(names).toHaveLength(4);
+    expect(names).toHaveLength(5); // WP-SAMEAS: the governed atlas-link door is the fifth advertised tool
   });
 
   it('surfaces each tool inputSchema + description from handler.schema (byte-identical, TOOLS-3)', () => {

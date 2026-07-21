@@ -50,9 +50,9 @@ afterEach(() => vi.restoreAllMocks());
 // ── REQ-CLI-1 — total command surface ─────────────────────────────────────────────────────────────
 
 describe('SCN-CLI-1a — every command maps to exactly one leg', () => {
-  it('is total (7 keys) and mutually-exclusive over the ratified table', () => {
+  it('is total (8 keys) and mutually-exclusive over the ratified table', () => {
     // totality: every command in the finite surface has exactly one leg.
-    expect(COMMANDS).toEqual(['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node']);
+    expect(COMMANDS).toEqual(['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link']);
     expect(Object.keys(COMMAND_LEG).sort()).toEqual([...COMMANDS].sort());
     expect(COMMAND_LEG).toEqual({
       init: 'atlas-init',
@@ -62,6 +62,7 @@ describe('SCN-CLI-1a — every command maps to exactly one leg', () => {
       doctor: 'atlas-query',
       mine: 'genesis run-controller',
       node: 'atlas-query', // READ authority oracle (like doctor) — intercepted before the handler, no write authority
+      link: 'atlas-link', // WRITE authority oracle (WP-SAMEAS governed sameAs door)
     });
     // teeth: a command bound to zero legs (totality) or two legs (uniqueness) — each key resolves to one string.
     for (const c of COMMANDS) {
@@ -127,11 +128,12 @@ describe('SCN-CLI-2a/2b/2c — command × authority partition', () => {
     }
   });
 
-  it('2b: emit is the SOLE write, funneling the single door atlas-emit (asserted vs WRITE_PATHS)', () => {
-    expect([...WRITE_PATHS]).toEqual(['atlas-emit']); // the frozen single-door constant
+  it('2b: the write doors are {emit, link}, funneling atlas-emit + atlas-link (asserted vs WRITE_PATHS)', () => {
+    expect([...WRITE_PATHS].sort()).toEqual(['atlas-emit', 'atlas-link']); // the two governed write doors (WP-SAMEAS)
     const writers = COMMANDS.filter((c) => authorityOf(c) === 'write');
-    expect(writers).toEqual(['emit']); // exactly one write door — no second door in the matrix
+    expect([...writers].sort()).toEqual(['emit', 'link']); // exactly the two governed write commands
     expect(COMMAND_LEG.emit).toBe('atlas-emit');
+    expect(COMMAND_LEG.link).toBe('atlas-link');
   });
 
   it('2c: read XOR write is total over the surface (every command classified, exactly one)', () => {
