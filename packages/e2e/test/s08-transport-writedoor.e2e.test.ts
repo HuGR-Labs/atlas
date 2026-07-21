@@ -4,7 +4,7 @@
 // STORY. Atlas exposes its whole read/write API over three transports (MCP tool | poke | CLI), yet the trust
 // boundary must not widen by even one door. This story drives the REAL @atlas/tools governed surface across
 // the package seam and proves the four load-bearing facts stay true no matter which transport a call rides:
-//   (1) the governance surface is EXACTLY four tools and there is EXACTLY one write path (`atlas-emit`),
+//   (1) the governance surface is EXACTLY five tools and every write flows through a governed door (`atlas-emit` grounded facts | `atlas-link` sameAs, ADR-0003),
 //   (2) THE ONE handler is pure + total — a missing/throwing leg fails CLOSED to a structured rejected
 //       Verdict (never a throw), with `next+invariant` guidance stamped on every path,
 //   (3) CLI ≡ MCP: the same node resolved at two different pull tiers is byte-identical, `atlas-diff`
@@ -145,7 +145,7 @@ describe('S8 · one governed write door, one contract across every transport', (
     const handler = createHandler({}, nodes);
     expect(handler.schema.length).toBe(1); // signature is schema(tool) — arity 1, no transport parameter
     // teeth (breaks-on "a governance tool's schema exposes a transport param — CLI and MCP would diverge at the schema"):
-    // sweep ALL four governance tools, not just one — NONE may carry a `transport` property.
+    // sweep ALL five governance tools, not just one — NONE may carry a `transport` property.
     for (const tool of GOVERNANCE_SURFACE) {
       const props = ((handler.schema(tool).inputSchema as { properties?: Record<string, unknown> }).properties) ?? {};
       expect(Object.keys(props), `${tool} schema must not expose a transport param`).not.toContain('transport');

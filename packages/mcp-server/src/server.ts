@@ -1,7 +1,7 @@
 // @atlas/mcp-server — src/server.ts  (MCP-1/2: the stdio MCP server over the one wired handler)
 //
 // Stand up a stdio MCP server whose every tool call routes through the one wired handler (@atlas/adapter-io),
-// returning the frozen `Verdict` (@atlas/tools) shape. The surface is the CLOSED four-tool
+// returning the frozen `Verdict` (@atlas/tools) shape. The surface is the CLOSED five-tool
 // `GOVERNANCE_SURFACE`; each tool's `inputSchema` + `description` come from `handler.schema(tool)` (the
 // handler OWNS the published schema, TOOLS-3 — never hand-authored here). A CallTool routes through
 // `handler.handle(tool, args)` and maps the total `Verdict` → `CallToolResult`: a rejected (fail-closed)

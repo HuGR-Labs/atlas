@@ -25,25 +25,25 @@
 epic: EPIC-1-a
 id: WP-9.1.1-a.WIRE
 content_hash: <filled-at-freeze>
-title: One shared wire module assembles the four-leg WiredHandler
+title: One shared wire module assembles the five-leg WiredHandler
 intent: >
-  A single shared `wire` module assembles the four-leg `WiredHandler` (`atlas-init/query/emit/reconcile` legs)
-  over the adapters, and both entrypoints consume THIS module — so CLI and MCP are contract-identical by
+  A single shared `wire` module assembles the five-leg `WiredHandler` (`atlas-init/query/emit/reconcile/link` legs;
+  the `atlas-link` leg added by WP-SAMEAS, ADR-0003) over the adapters, and both entrypoints consume THIS module — so CLI and MCP are contract-identical by
   construction, not by copy. WIRE owns the handler contract; CLI and MCP consume it. (Non-authoritative handle.)
 source_reqs:                                  # ptr+digest
   - source: ../requirements-adapters.md#REQ-WIRE-1a  # ptr+digest
   - source: ../requirements-adapters.md#REQ-WIRE-1b  # ptr+digest
 seam-freezes: [ "WiredHandler contract owned-by WIRE, consumed-by CLI and MCP" ]
-anchor: packages/adapter-io/src/wire.ts — the shared `createHandler(adapters)` assembling the four-leg WiredHandler (→ tools/handler.ts)
+anchor: packages/adapter-io/src/wire.ts — the shared `createHandler(adapters)` assembling the five-leg WiredHandler (→ tools/handler.ts)
 interface_contract:                           # ptr+digest
   - source: ../../reference/atlas-adapters.md#wire-1  # ptr+digest
   - source: ../method-tags-adapters.md#INV-WIRE-1     # ptr+digest
 exclusions: >
   No command parsing / render / exit codes (WP-9.1.1-a.CLI); no MCP transport (WP-9.4.7.MCP); no adapter
-  implementations (EPIC-1-b onward) — this assembles the four legs over the injected adapters, nothing more.
+  implementations (EPIC-1-b onward) — this assembles the five legs over the injected adapters, nothing more.
 inputs:                                        # ptr+digest
   - source: ../../reference/atlas-adapters.md#wire-1  # ptr+digest
-action: Implement the shared `wire` module that assembles exactly one four-leg `WiredHandler` over the adapters; verify a single instance exposes the four legs and that the module is the sole assembly point both entrypoints import.
+action: Implement the shared `wire` module that assembles exactly one five-leg `WiredHandler` over the adapters; verify a single instance exposes the five legs and that the module is the sole assembly point both entrypoints import.
 action_surface: [ read-repo, edit(packages/adapter-io/src/wire.ts), run(test:adapter-io), typecheck ]
 guardrails: >
   Edit only under packages/adapter-io/src/wire.ts. Assemble exactly ONE handler (no per-entrypoint copy). Do not
@@ -720,15 +720,15 @@ rationale:                                     # ptr
 
 ## CAMPAIGN-9.4 — serve + write-back (Phase 3: MCP + forge)
 
-### EPIC-7 — the MCP server exposes the four governed tools
+### EPIC-7 — the MCP server exposes the five governed tools
 
 ### WP-9.4.7.MCP — MCP slice of EPIC-7
 epic: EPIC-7
 id: WP-9.4.7.MCP
 content_hash: <filled-at-freeze>
-title: MCP stdio server — exactly the four governed tools, fail-closed, shared handler
+title: MCP stdio server — exactly the five governed tools, fail-closed, shared handler
 intent: >
-  The MCP stdio server publishes exactly the four governed tools with their input schemas and routes every call
+  The MCP stdio server publishes exactly the five governed tools with their input schemas and routes every call
   through the shared `WiredHandler`, so an MCP call and the equivalent CLI call return contract-identical
   verdicts; a tool error surfaces as a structured rejected `Verdict` and the server never crashes or drops the
   fail-closed verdict. Consumes the WiredHandler frozen upstream in WIRE. (Non-authoritative handle.)
@@ -740,7 +740,7 @@ source_reqs:                                  # ptr+digest
   - source: ../requirements-adapters.md#REQ-MCP-2b  # ptr+digest
   - source: ../requirements-adapters.md#REQ-MCP-2c  # ptr+digest
 seam-freezes: [ "WiredHandler consumed-from WIRE (frozen upstream, EPIC-1-a)" ]
-anchor: packages/mcp-server/src/ — the stdio server (four governed tools + schemas, fail-closed transport) over the shared WiredHandler
+anchor: packages/mcp-server/src/ — the stdio server (five governed tools + schemas, fail-closed transport) over the shared WiredHandler
 interface_contract:                           # ptr+digest
   - source: ../../reference/atlas-adapters.md#mcp-1    # ptr+digest
   - source: ../../reference/atlas-adapters.md#mcp-2    # ptr+digest
@@ -748,14 +748,14 @@ interface_contract:                           # ptr+digest
   - source: ../method-tags-adapters.md#INV-MCP-2       # ptr+digest
 exclusions: >
   No handler assembly (WP-9.1.1-a.WIRE, consumed as frozen); no CLI parser/render (WP-9.1.1-a.CLI); no adapter
-  implementations. Exactly the four tools — no fifth. Transport wiring + fail-closed only.
+  implementations. Exactly the five tools — no sixth. Transport wiring + fail-closed only.
 inputs:                                        # ptr+digest
   - source: ../../reference/atlas-adapters.md#mcp-1    # ptr+digest
   - source: ../../reference/atlas-adapters.md#mcp-2    # ptr+digest
-action: Implement the MCP stdio server over the shared WiredHandler; verify the published set equals exactly {atlas-init, atlas-query, atlas-emit, atlas-reconcile} with schemas (no fifth), every call routes through the shared handler with a verdict byte-identical to the CLI's, and a throwing tool surfaces a structured rejected Verdict without crashing or dropping it.
+action: Implement the MCP stdio server over the shared WiredHandler; verify the published set equals exactly {atlas-init, atlas-query, atlas-emit, atlas-reconcile, atlas-link} with schemas (no sixth, ADR-0003), every call routes through the shared handler with a verdict byte-identical to the CLI's, and a throwing tool surfaces a structured rejected Verdict without crashing or dropping it.
 action_surface: [ read-repo, edit(packages/mcp-server/src/**), run(test:mcp-server), typecheck ]
 guardrails: >
-  Edit only under packages/mcp-server/**. Publish EXACTLY the four governed tools (no fifth). Route every call
+  Edit only under packages/mcp-server/**. Publish EXACTLY the five governed tools (no sixth, ADR-0003). Route every call
   through the shared WiredHandler — do not copy-assemble a handler. On tool error surface a fail-closed rejected
   Verdict; never crash, never emit an empty/ok result. Do not touch adapter-io, cli, or any core package.
 repair_budget: N=3 · early-stop: { repeated-identical-failure, no-change-diff, semantic-dup-edit }
@@ -767,7 +767,7 @@ acceptance:                                    # ptr+digest = frozen goldens
   - source: ../goldens-adapters.md#SCN-MCP-2b-1  # ptr+digest
   - source: ../goldens-adapters.md#SCN-MCP-2c-1  # ptr+digest
 deps: [ WP-9.1.1-a.WIRE ]
-exit_predicate: all acceptance SCNs green ∧ published set == the closed four (cardinality 4, with schemas) ∧ MCP verdict == CLI verdict via shared handler ∧ tool error → fail-closed rejected Verdict, 0 crash/drop ∧ module gates pass ∧ all pointer digests resolve (no STALE)
+exit_predicate: all acceptance SCNs green ∧ published set == the closed five (cardinality 5, with schemas) ∧ MCP verdict == CLI verdict via shared handler ∧ tool error → fail-closed rejected Verdict, 0 crash/drop ∧ module gates pass ∧ all pointer digests resolve (no STALE)
 context_refs:                                  # closed list
   - source: ../../reference/atlas-adapters.md
   - source: ../requirements-adapters.md

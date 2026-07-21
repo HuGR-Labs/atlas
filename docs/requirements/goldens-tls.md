@@ -48,7 +48,7 @@ Governance surface (TOOLS-1) = exactly `{atlas-init, atlas-query, atlas-emit, at
 
 Each `gen: conformance` SCN carries a second, independent fixture the builder never sees; overfit ⇒ the held-out
 leg fails. These use **different concrete data hitting the same branch** — grounded siblings of the base universe,
-no new behaviour, TOOLS-1 preserved (no fifth governance/write tool in any fixture):
+no new behaviour, TOOLS-1 preserved (no fixture adds a governance tool beyond the five, nor a write door beyond the two governed doors `atlas-emit`/`atlas-link`, ADR-0003):
 
 | id | kind | concrete value |
 |---|---|---|
@@ -65,45 +65,45 @@ no new behaviour, TOOLS-1 preserved (no fifth governance/write tool in any fixtu
 
 ---
 
-## REQ-TOOLS-1 — single write-door governance surface
+## REQ-TOOLS-1 — governed write-door governance surface
 
-### REQ-TOOLS-1a — governance surface is exactly four tools   (happy)
+### REQ-TOOLS-1a — governance surface is exactly five tools   (happy)
 
-### SCN-TOOLS-1a-1 — the surface enumerates to exactly four   (happy)
+### SCN-TOOLS-1a-1 — the surface enumerates to exactly five   (happy)
 source: REQ-TOOLS-1a
 Given the tools layer wired against `tools/ref/store.ts`, with its governance surface enumerated
 When the surface set is listed
-Then it is exactly `{atlas-init, atlas-query, atlas-emit, atlas-reconcile}` — surface count `== 4`, no more, no fewer
-teeth: breaks-on "a fifth governance tool `atlas-delete` is registered on the surface — surface count `== 5`"
-gen: conformance   # differential vs `tools/ref/store.ts` 4-tool surface
+Then it is exactly `{atlas-init, atlas-query, atlas-emit, atlas-reconcile, atlas-link}` — surface count `== 5`, no more, no fewer (ADR-0003)
+teeth: breaks-on "a sixth governance tool `atlas-delete` is registered on the surface — surface count `== 6`"
+gen: conformance   # differential vs `tools/ref/store.ts` 5-tool surface
 
-### SCN-TOOLS-1a-2 — the surface still counts four with all read projections wired   (happy · held-out)
+### SCN-TOOLS-1a-2 — the surface still counts five with all read projections wired   (happy · held-out)
 source: REQ-TOOLS-1a
 held_out: true
 Given the tools layer wired against `tools/ref/store.ts` with the read projections (node-tools, `atlas doctor`, `atlas-diff`) ALSO present alongside the governance surface
 When the *governance* surface set is enumerated (read projections excluded by construction)
-Then it is still exactly `{atlas-init, atlas-query, atlas-emit, atlas-reconcile}` — surface count `== 4`; the co-present read projections do not swell the governance surface
-teeth: breaks-on "a fifth governance tool `atlas-purge` is registered on the surface — surface count `== 5`"
-gen: conformance   # held-out · different setup (read projections co-present), same 4-tool surface behaviour vs `tools/ref/store.ts`
+Then it is still exactly `{atlas-init, atlas-query, atlas-emit, atlas-reconcile, atlas-link}` — surface count `== 5`; the co-present read projections do not swell the governance surface
+teeth: breaks-on "a sixth governance tool `atlas-purge` is registered on the surface — surface count `== 6`"
+gen: conformance   # held-out · different setup (read projections co-present), same 5-tool surface behaviour vs `tools/ref/store.ts`
 
-### REQ-TOOLS-1b — atlas-emit is the only write path   (happy)
+### REQ-TOOLS-1b — every write flows through a governed door   (happy)
 
-### SCN-TOOLS-1b-1 — exactly one write entry across the whole layer   (happy)
+### SCN-TOOLS-1b-1 — the write surface is exactly the two governed doors   (happy)
 source: REQ-TOOLS-1b
-Given the tools layer after wiring all four tools plus the read projections
+Given the tools layer after wiring all five tools plus the read projections
 When every store-mutating entry point is enumerated
-Then exactly one exists and it is `atlas-emit` — `writePaths == 1`
-teeth: breaks-on "`atlas-reconcile` grows its own direct store-mutate call — `writePaths == 2`"
-gen: conformance   # `tools/ref/store.ts` asserts `writePaths==1`
+Then the write set is exactly `{atlas-emit, atlas-link}` — `WRITE_PATHS == {atlas-emit, atlas-link}` (`writePaths == 2`), each a governed door (KNOW-11 authz + ratifier + fail-closed-visible refusal); no other entry mutates the store (ADR-0003)
+teeth: breaks-on "`atlas-reconcile` grows its own direct store-mutate call — an ungoverned write path outside `{atlas-emit, atlas-link}` (`writePaths == 3`)"
+gen: conformance   # `tools/ref/store.ts` asserts `WRITE_PATHS == {atlas-emit, atlas-link}`
 
-### SCN-TOOLS-1b-2 — still one write entry after wave-close and auto-re-ground are wired   (happy · held-out)
+### SCN-TOOLS-1b-2 — still exactly the two governed doors after wave-close and auto-re-ground are wired   (happy · held-out)
 source: REQ-TOOLS-1b
 held_out: true
 Given the tools layer with the wave-close absorb path (TOOLS-9) and `--accept-reground` (TOOLS-13) both wired — each routing its write through `atlas-emit`
 When every store-mutating entry point is enumerated across the fully-wired layer
-Then exactly one exists and it is `atlas-emit` — `writePaths == 1`; the absorb and re-ground paths reuse it, they do not add a second entry
-teeth: breaks-on "`atlas-init` grows its own direct store-mutate call to persist move-in — `writePaths == 2`"
-gen: conformance   # held-out · different consumers wired (TOOLS-9/13), same `writePaths==1` behaviour vs `tools/ref/store.ts`
+Then the write set is still exactly `{atlas-emit, atlas-link}` — `writePaths == 2`; the absorb and re-ground paths reuse `atlas-emit`, they do not add a third entry
+teeth: breaks-on "`atlas-init` grows its own direct store-mutate call to persist move-in — an ungoverned write path outside `{atlas-emit, atlas-link}` (`writePaths == 3`)"
+gen: conformance   # held-out · different consumers wired (TOOLS-9/13), same `writePaths==2` behaviour vs `tools/ref/store.ts`
 
 ### REQ-TOOLS-1c — reject back-channel writes   (guard)
 
@@ -130,8 +130,8 @@ gen: conformance   # held-out · different row (N1′) via the back-channel, sam
 source: REQ-TOOLS-1d
 Given the per-node read projection `own_finance` (a RETR-5 / TOOLS-10 node-tool) resolving N1
 When the projection handle is inspected and a write is attempted through it
-Then the handle exposes **no** store-mutating method and the write attempt is refused — the projection is not a fifth write path (positive property: a projection opens NO write door)
-teeth: breaks-on "the read-projection handle grows a `.write()`/`.set()` method — a write via the projection lands, opening a fifth write path"
+Then the handle exposes **no** store-mutating method and the write attempt is refused — the projection opens no write door (positive property: a projection opens NO write door)
+teeth: breaks-on "the read-projection handle grows a `.write()`/`.set()` method — a write via the projection lands, opening an ungoverned write path outside the governed doors"
 gen: conformance   # reference-model property of the read handle (no store-mutating method); NOT a formal model
 
 ### SCN-TOOLS-1d-2 — a different node projection also exposes no write method   (happy · held-out)
@@ -139,8 +139,8 @@ source: REQ-TOOLS-1d
 held_out: true
 Given the per-node read projection `own_auth` (a RETR-5 / TOOLS-10 node-tool) resolving a node in the `auth/` territory
 When the projection handle is inspected and a write is attempted through it
-Then the handle exposes **no** store-mutating method and the write attempt is refused — this projection, like `own_finance`, is not a fifth write path
-teeth: breaks-on "the `own_auth` read-projection handle grows a `.put()` method — a write via the projection lands, opening a fifth write path"
+Then the handle exposes **no** store-mutating method and the write attempt is refused — this projection, like `own_finance`, opens no write door
+teeth: breaks-on "the `own_auth` read-projection handle grows a `.put()` method — a write via the projection lands, opening an ungoverned write path outside the governed doors"
 gen: conformance   # held-out · different node projection (`own_auth`), same no-write-authority property of the read handle
 
 ---
@@ -842,22 +842,22 @@ gen: conformance   # held-out · different proposed item (`dm₂`), same funnel-
 
 ### REQ-TOOLS-12c — doctor carries no write authority   (happy)
 
-### SCN-TOOLS-12c-1 — doctor is a diagnostic view, not a fifth governance tool   (happy)
+### SCN-TOOLS-12c-1 — doctor is a diagnostic view, not a governance tool   (happy)
 source: REQ-TOOLS-12c
 Given the governance surface with `atlas doctor` present
 When the surface is enumerated and the doctor handle inspected
-Then the surface stays exactly `4` governance tools and the doctor handle exposes **no** store-mutating method — no write authority
-teeth: breaks-on "doctor is registered as a fifth governance tool with a write method — surface count `== 5` and a write via doctor lands"
+Then the surface stays exactly `5` governance tools (`{atlas-init, atlas-query, atlas-emit, atlas-reconcile, atlas-link}`, ADR-0003) and the doctor handle exposes **no** store-mutating method — no write authority
+teeth: breaks-on "doctor is registered as a sixth governance tool with a write method — surface count `== 6` and a write via doctor lands"
 gen: conformance
 
-### SCN-TOOLS-12c-2 — doctor after a hot-set command is still not a fifth tool   (happy · held-out)
+### SCN-TOOLS-12c-2 — doctor after a hot-set command is still not a governance tool   (happy · held-out)
 source: REQ-TOOLS-12c
 held_out: true
 Given the governance surface with `atlas doctor` present, inspected after its `hot-set` sub-command has run
 When the surface is enumerated and the doctor handle inspected
-Then the surface stays exactly `4` governance tools and the doctor handle exposes **no** store-mutating method — no write authority
-teeth: breaks-on "doctor's `hot-set` path registers doctor as a fifth governance tool with a write method — surface count `== 5` and a write via doctor lands"
-gen: conformance   # held-out · different probe (post `hot-set`), same 4-surface + no-write-authority behaviour vs `tools/ref/doctor.ts`
+Then the surface stays exactly `5` governance tools and the doctor handle exposes **no** store-mutating method — no write authority
+teeth: breaks-on "doctor's `hot-set` path registers doctor as a sixth governance tool with a write method — surface count `== 6` and a write via doctor lands"
+gen: conformance   # held-out · different probe (post `hot-set`), same 5-surface + no-write-authority behaviour vs `tools/ref/doctor.ts`
 
 ---
 
@@ -1065,16 +1065,16 @@ gen: conformance   # held-out · different direct write (`claim:acme-ceo`), same
 
 ## REQ-TOOLS-16 — atlas-diff read-only version projection (reference-model · CLI≡MCP delegated to TOOLS-3)
 
-> **A read-only projection of the PERSIST-14 delta, NOT a fifth write tool.** `atlas-diff <shaA> <shaB>` surfaces
+> **A read-only projection of the PERSIST-14 delta, NOT a write tool.** `atlas-diff <shaA> <shaB>` surfaces
 > the frozen PERSIST-14 delta (`persist/ref/diff.ts`) — it opens **no** write path (like node TOOLS-10 / doctor
 > TOOLS-12). Its CLI≡MCP determinism arm is **delegated** to the TOOLS-3 cross-transport PBT over the one handler
 > (`tools/ref/handler.ts`); this block conformance-tests the projection surface (faithful delta, no write path,
-> write-surface stays 4).
+> write surface stays the two governed doors `{atlas-emit, atlas-link}`, ADR-0003).
 >
 > Diff fixture (the PERSIST-14 delta over two shas of the finance atlas):
 > `Δ = diff(shaA, shaB) = { added:[claim:acme-ceo], edited:[claim:acme-arr-2024], superseded:[pred:auth-token-ttl], decayed:[claim:acme-hq-2019] }`,
-> each entry carrying its `prov` (the WP/commit that produced it). Governance write surface (TOOLS-1) = exactly
-> `{atlas-init, atlas-query, atlas-emit, atlas-reconcile}` — `atlas-diff` is a **read** projection, not on it.
+> each entry carrying its `prov` (the WP/commit that produced it). Governance **write** surface (TOOLS-1, ADR-0003) =
+> exactly the two governed doors `{atlas-emit, atlas-link}` — `atlas-diff` is a **read** projection, not on it.
 
 ### REQ-TOOLS-16a — atlas-diff surfaces the version delta read-only   (happy)
 
@@ -1152,32 +1152,33 @@ Then it exposes **no** store-mutating method and the attempt is refused — atla
 teeth: breaks-on "the `atlas-diff shaB shaC` handle grows an `.applyInto()` method that lands a fact from one version into the other — a write path opens via the diff projection, bypassing `atlas-emit`"
 gen: conformance   # held-out · different sha-pair handle + attempted call, same no-write-authority property vs `tools/ref/diff.ts`
 
-### REQ-TOOLS-16e — atlas-diff is not a fifth write tool   (guard)
+### REQ-TOOLS-16e — atlas-diff is not a write tool   (guard)
 
 ### SCN-TOOLS-16e-1 — atlas-diff does not grow the governance write surface   (guard)
 source: REQ-TOOLS-16e
 Given the governance surface with `atlas-diff` available as a read projection
 When the governance **write** surface is enumerated and the `atlas-diff` handle inspected
-Then the write surface stays exactly `4` — `{atlas-init, atlas-query, atlas-emit, atlas-reconcile}` — and `atlas-diff` carries no write authority (a read projection like node TOOLS-10 / doctor TOOLS-12, consistent with TOOLS-1/15)
-teeth: breaks-on "`atlas-diff` is registered on the governance write surface as a fifth write tool — write-surface count `== 5` and a write via `atlas-diff` lands"
-gen: conformance   # write-surface count == 4 (atlas-diff is a read projection, not a write door)
+Then the write surface stays exactly the two governed doors `{atlas-emit, atlas-link}` — `WRITE_PATHS == {atlas-emit, atlas-link}` (`writePaths == 2`) — and `atlas-diff` carries no write authority (a read projection like node TOOLS-10 / doctor TOOLS-12, consistent with TOOLS-1/15, ADR-0003)
+teeth: breaks-on "`atlas-diff` is registered on the governance write surface as a third write door — write-surface count `== 3` and a write via `atlas-diff` lands"
+gen: conformance   # write surface == {atlas-emit, atlas-link} (atlas-diff is a read projection, not a write door)
 
-### SCN-TOOLS-16e-2 — the write surface stays four with diff and doctor both present   (guard · held-out)
+### SCN-TOOLS-16e-2 — the write surface stays the two governed doors with diff and doctor both present   (guard · held-out)
 source: REQ-TOOLS-16e
 held_out: true
 Given the governance surface with **both** `atlas-diff` and `atlas doctor` available as read projections
 When the governance **write** surface is enumerated and the `atlas-diff` handle inspected
-Then the write surface stays exactly `4` — `{atlas-init, atlas-query, atlas-emit, atlas-reconcile}` — and `atlas-diff` carries no write authority (a read projection like node TOOLS-10 / doctor TOOLS-12)
-teeth: breaks-on "`atlas-diff` is registered on the governance write surface as a fifth write tool — write-surface count `== 5` and a write via `atlas-diff` lands"
-gen: conformance   # held-out · both read projections co-present, same write-surface-count==4 behaviour vs `tools/ref/diff.ts`
+Then the write surface stays exactly the two governed doors `{atlas-emit, atlas-link}` — `writePaths == 2` — and `atlas-diff` carries no write authority (a read projection like node TOOLS-10 / doctor TOOLS-12)
+teeth: breaks-on "`atlas-diff` is registered on the governance write surface as a third write door — write-surface count `== 3` and a write via `atlas-diff` lands"
+gen: conformance   # held-out · both read projections co-present, same write surface == {atlas-emit, atlas-link} behaviour vs `tools/ref/diff.ts`
 
 ---
 
 ## Coverage ledger (S3 completeness facet)
 
 - **REQ coverage:** 57/57 REQ have ≥1 SCN (TOOLS-1a..1d, 2a/2b, 3a/3b, 4, 5a..5e, 6a..6c, 7a..7d, 8a..8d, 9a/9b, 10a..10d, 11-a..11-d, 11a-a..11a-d, 12a..12c, 13a..13d, 14a..14c, 15a..15c, **16a..16e**).
+- **REQ-TOOLS-1e (`atlas-link` governed door, ADR-0003) — coverage is split by design, NOT unmodeled here:** its *surface-membership* property (`atlas-link` ∈ the five-tool `GOVERNANCE_SURFACE` ∧ ∈ the two-door `WRITE_PATHS`) is carried by the amended **SCN-TOOLS-1a-1 / 1a-2 / 1b-1 / 1b-2** conformance SCNs above; its *four-gate door behaviour* (distinct → both-known → KNOW-11 authz on BOTH scopes → non-empty ratifier, each fail-closed-visible) is the black-box `s16-sameas` (T1–T5) + white-box `wp-sameas` union-find teeth, per ADR-0003 — a *behavioural* gate the reference-model `tools/ref/*.ts` layer does not model. This ledger's `57/57` is the TLS reference-model REQ set; 1e adds no reference-model conformance SCN (no fabricated golden), only the cross-referenced e2e/white-box teeth.
 - **Guard coverage:** 22/22 unwanted/If-then/MUST-NOT REQ have a guard SCN — 1c, 2b, 3b, 5c, 5d, 6c, 7b, 8b, 9b, 10b, 10c, 11-a, 11a-b, 11a-c, 12b, 13c, 14c, 15b, 15c, **16c, 16d, 16e**.
-- **Teeth (Gate 3):** 57/57 SCN name the exact mutant of their REQ they flip to BROKEN on; none vacuous. The PBT tri/dual-transport witnesses are interesting (a real re-serializing transport, a real contract fork, a real coercion-vs-reject divergence — no antecedent-failure passes); the reference-model conformance witnesses each drive a genuine divergence against the named `tools/ref/*.ts` mock. The **TOOLS-16** witnesses drive a dropped-partition render (16a), a write-method grown on the diff handle (16d), and a fifth-write-tool registration (16e) — genuine mutants, no vacuous pass.
+- **Teeth (Gate 3):** 57/57 SCN name the exact mutant of their REQ they flip to BROKEN on; none vacuous. The PBT tri/dual-transport witnesses are interesting (a real re-serializing transport, a real contract fork, a real coercion-vs-reject divergence — no antecedent-failure passes); the reference-model conformance witnesses each drive a genuine divergence against the named `tools/ref/*.ts` mock. The **TOOLS-16** witnesses drive a dropped-partition render (16a), a write-method grown on the diff handle (16d), and a third-write-door registration (16e) — genuine mutants, no vacuous pass.
 - **gen histogram:** PBT 6 (3a, 3b, 10a, 10b, 10c, 10d) · conformance 51 (all others, incl. 16a–16e) · residue 0 (every TLS INV has a pure oracle — no hand-written tail).
 - **Held-out second leg (Wave H re-freeze):** every `gen: conformance` SCN now carries an independent `held_out: true`
   fixture (`SCN-…-2`) — **51/51 conformance REQ covered**, the execution GATE's held-out leg is now AVAILABLE (FULL
@@ -1186,7 +1187,7 @@ gen: conformance   # held-out · both read projections co-present, same write-su
   `teeth: breaks-on` mutant — no renamed clones. The **6 PBT** SCNs (3a/3b/10a–10d) are **exempt** (cross-transport
   equivalence witnesses subsumed by `properties-tls.md`, not conformance). **residue** exempt (0 in TLS). Write-door
   *exploitability* stays deferred to billy / FR-12 (1c/15b/15c author only the functional refusal — including their
-  held-out legs). TOOLS-1 preserved: no held-out fixture surfaces a fifth governance/write tool.
-- **Positive read-only-projection goldens (write-attempt refused, NOT a formal model):** 1d, 10c, 12a, **16d, 16e** (atlas-diff opens no write door / is not a fifth write tool).
+  held-out legs). TOOLS-1 preserved: no held-out fixture surfaces a governance tool beyond the five or a write door beyond `atlas-emit`/`atlas-link`.
+- **Positive read-only-projection goldens (write-attempt refused, NOT a formal model):** 1d, 10c, 12a, **16d, 16e** (atlas-diff opens no write door / is not a write tool).
 - **Deferred to billy / FR-12 (functional refusal authored here; exploit NOT authored):** 1c, 15b, 15c.
 - **ID-scheme note honored:** TOOLS-11 family SCNs use `SCN-TOOLS-11-<c>-<k>` (hyphenated) vs the TOOLS-11a family `SCN-TOOLS-11a-<c>-<k>` — no prefix collision.

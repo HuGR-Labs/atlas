@@ -74,7 +74,7 @@ anchor: `tools/` — the atlas-emit templated-write surface
 interface_contract:                      # ptr+digest
   - source: ../method-tags-knw.md#KNOW-4  # ptr+digest
   - source: ../method-tags-tls.md#TOOLS-7  # ptr+digest
-exclusions: the write-decision routing itself (owned by WP-5.13-a.KNOW); nodeKey/anchor identity (WP-5.13-b.KNOW); the four-tool governance surface & write-door (out of CAMPAIGN-5, EPIC-26).
+exclusions: the write-decision routing itself (owned by WP-5.13-a.KNOW); nodeKey/anchor identity (WP-5.13-b.KNOW); the five-tool governance surface & write-doors (out of CAMPAIGN-5, EPIC-26).
 inputs:                                  # ptr+digest
   - source: ../req-tls.md#REQ-TOOLS-7c  # ptr+digest
   - source: ../req-tls.md#REQ-TOOLS-7d  # ptr+digest

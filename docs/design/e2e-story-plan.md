@@ -65,7 +65,7 @@ Narrative: emit a grounded fact; user commits a code change that moves the groun
 ### S5 — The agent journey over real MCP stdio (`s5-mcp-parity.blackbox`)
 Narrative: an agent connects to `atlas-mcp` over stdio → `listTools` → `callTool` query + emit → a
 fail-closed emit.
-- BEHAVIOR: exactly the 4 governance tools listed with input schemas; a query/emit callTool returns the
+- BEHAVIOR: exactly the 5 governance tools listed with input schemas; a query/emit callTool returns the
   same verdict the CLI produced for the same input; a fail-closed emit carries rejected+guidance in the
   CallToolResult (isError semantics preserved through the transport).
 - **SOTA**: **transport parity** — CLI verdict ≡ MCP verdict for identical input (the product is one

@@ -46,7 +46,7 @@ export interface GovernedLinkDeps {
    *  (`ATLAS_RATIFY_TOKEN`), threaded EXACTLY like `actor` — NEVER read from a payload. ABSENT ⇒ `''` ⇒ the
    *  link fails closed (unratified). v1 SCOPE: this is a NON-EMPTY check only — it does NOT run emit's
    *  tier-graded KNOW-8 ratification (a T0 fact's `by === 'billy'` requirement). Deferred deliberately because
-   *  `sameAs` is NON-DESTRUCTIVE (a derived read-side edge, never a fact merge — see adr-tools1-governed-write-doors.md). */
+   *  `sameAs` is NON-DESTRUCTIVE (a derived read-side edge, never a fact merge — see docs/adr/ADR-0003-governed-write-doors.md). */
   readonly ratifyToken?: string;
 }
 

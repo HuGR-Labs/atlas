@@ -2,7 +2,8 @@
 //
 // NARRATIVE: black-box coverage of `atlas link <a> <b>` — the SECOND governed write door (WP-SAMEAS). A
 // HUMAN asserts two grounded facts at unrelated code sites name the SAME fact; the assertion is a governed
-// shared-truth mutation (KNOW-11 authz on BOTH endpoints + a KNOW-8 ratifier), NON-destructive, and surfaces
+// shared-truth mutation (KNOW-11 authz on BOTH endpoints + a non-empty ratifier — v1: NOT the tier-graded
+// KNOW-8 gate emit runs; deferred, safe because sameAs is non-destructive, ADR-0003), NON-destructive, and surfaces
 // as a symmetric, TRANSITIVE observability edge on `atlas query` (like `subsumes`) — never a merge. Driven
 // ONLY through the real doors: the `atlas` CLI subprocess + the real `atlas-mcp` stdio server.
 //
@@ -56,7 +57,7 @@ beforeAll(() => {
   priorActor = process.env.ATLAS_ACTOR;
   priorRatify = process.env.ATLAS_RATIFY_TOKEN;
   process.env.ATLAS_ACTOR = ACTOR; //  KNOW-11 write actor authorized on `src`
-  process.env.ATLAS_RATIFY_TOKEN = RATIFIER; //  KNOW-8 ratifier — the emits (and the authorized links) commit
+  process.env.ATLAS_RATIFY_TOKEN = RATIFIER; //  ratifier: the KNOW-8 tier gate for emits, a non-empty check for links — both commit
 
   const files = { 'src/a.ts': A_SRC, 'src/b.ts': B_SRC };
   t1Repo = makeFixtureRepo({ files, policy: scopedPolicy('src') });

@@ -5,7 +5,7 @@
 // lead at SEAL):
 //   • ../src/diff.js — the read-only projection of the @atlas/persist PERSIST-14 delta over CLI ≡ MCP,
 //                      opening NO write path and carrying NO write authority (SCN-TOOLS-16a-1 / 16b-1 /
-//                      16c-1 / 16d-1 / 16e-1). The governance write surface stays EXACTLY four.
+//                      16c-1 / 16d-1 / 16e-1). The governance write surface is EXACTLY the two governed doors atlas-emit + atlas-link.
 //
 // The write surface is read STRUCTURALLY from ../src/handler.js (`GOVERNANCE_SURFACE` / `WRITE_PATHS`,
 // the 7.26-a constants, byte-intact) — `atlas-diff` is a read projection like node (TOOLS-10) / doctor
@@ -118,7 +118,7 @@ describe('WP-7.32.TOOLS — a write attempted through the diff projection is ref
   });
 });
 
-// ── REQ-TOOLS-16e — atlas-diff is not a fifth write tool (guard) ────────────────────────────────────
+// ── REQ-TOOLS-16e — atlas-diff is not a write tool (guard) ────────────────────────────────────
 
 describe('WP-7.32.TOOLS — atlas-diff does not grow the governance write surface', () => {
   it('SCN-TOOLS-16e-1: the governance surface is the five governed tools; atlas-diff carries no write authority', () => {

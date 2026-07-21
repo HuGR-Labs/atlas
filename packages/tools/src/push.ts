@@ -3,7 +3,7 @@
 // The phase-transition auto-inject hook — push-driven pre-phase discovery. At EVERY phase boundary it
 // materializes a FRESH `own_<unit>`/`atlas-query` pack from the injected @atlas/retrieval `FreshPackSource`
 // and delivers it grant-free (`grantsRequired == 0`, `pulled == false`) — correct even where native pull is
-// unavailable. Pull stays a non-load-bearing optimization; opens NO write path, no fifth tool (TOOLS-1).
+// unavailable. Pull stays a non-load-bearing optimization; opens NO write door, no additional governance tool (TOOLS-1).
 
 import type { Pack, Territory } from '@atlas/contracts';
 import type { OwnApi, OwnPack, OwnUnit, PackApi } from '@atlas/retrieval';

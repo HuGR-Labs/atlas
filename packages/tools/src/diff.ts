@@ -23,7 +23,7 @@ export interface DiffApi {
 export type DiffSource = DiffApi;
 
 /** The `next + invariant` guidance every atlas-diff result ships (TOOLS-4) — non-empty on the ok AND the
- *  fail-closed reject paths. The follow-up for any change is ALWAYS the single write door. */
+ *  fail-closed reject paths. The follow-up for any change is ALWAYS a governed write door (`atlas-emit` for facts). */
 export const DIFF_GUIDANCE: Guidance = {
   next: 'atlas-diff is a read-only version-delta projection — to change a version, emit through atlas-emit',
   invariant: 'TOOLS-16: read-only projection of the PERSIST-14 delta, no write path, write surface stays four',
@@ -41,7 +41,7 @@ const isHash = (v: unknown): v is Hash => typeof v === 'string';
  * The `atlas-diff` read-only projection handle. Conforms EXACTLY to the frozen `DiffApi` (`diff`) and adds
  * the transport-parametrized `render` — the byte-identical read across CLI ≡ MCP. It exposes ONLY read
  * methods (`diff` / `render`); it grows NO `write` / `apply` / `applyInto`, so it is structurally incapable
- * of mutating the store (TOOLS-16d) and is NOT a fifth write tool (TOOLS-16e / TOOLS-1).
+ * of mutating the store (TOOLS-16d) and is NOT a write tool (TOOLS-16e / TOOLS-1).
  */
 export interface AtlasDiff extends DiffApi {
   /** The read-only fold-diff between two commit states — surfaces the PERSIST-14 delta faithfully (frozen
@@ -76,7 +76,7 @@ export function createAtlasDiff(source: DiffSource): AtlasDiff {
 }
 
 // differential-vs-oracle (compile-time): the projection conforms to the co-located frozen `DiffApi` —
-// a read-only handle with NO write-returning method (the write surface stays exactly four, TOOLS-1/16).
+// a read-only handle with NO write-returning method (the write surface is the two governed doors atlas-emit + atlas-link, TOOLS-1/16).
 const _diffConforms: DiffApi = createAtlasDiff({
   diff: () => ({ added: [], edited: [], superseded: [], decayed: [] }),
 });

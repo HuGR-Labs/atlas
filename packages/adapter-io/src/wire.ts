@@ -1,11 +1,11 @@
 // @atlas/adapter-io — src/wire.ts  (WIRE-1: the ONE shared handler assembly)
 //
-// The single composition seam shared by every entrypoint (CLI, MCP): assemble the four governance legs
-// (atlas-init / atlas-query / atlas-emit / atlas-reconcile) over the raw adapters and hand them to the one
+// The single composition seam shared by every entrypoint (CLI, MCP): assemble the five governance legs
+// (atlas-init / atlas-query / atlas-emit / atlas-reconcile / atlas-link) over the raw adapters and hand them to the one
 // frozen `createHandler`. Co-located with the adapters it composes (D2: the shared `wire` module lives in
 // @atlas/adapter-io, not a separate package). This module is the SOLE assembly point — every entrypoint
 // imports THIS `assembleHandler`, so CLI and MCP are contract-identical by construction, not by copy
-// (WIRE-1). The four legs are built from the raw adapters; the seams that have NO adapter (the T0
+// (WIRE-1). The five legs are built from the raw adapters; the seams that have NO adapter (the T0
 // heuristic, the truth-gate, the KNOW-5 classifier, the drifted-fact set, and the anchor resolver) are
 // INJECTED via `WireConfig.seams`, so the assembly is testable with fakes/stubs.
 
@@ -45,7 +45,7 @@ type _Nodes = NodeSource;
 
 /**
  * The seams the assembler injects because NO adapter backs them at this WIRE slice — passed in via config
- * so the assembly is testable with fakes/stubs (the four legs are exercised for ASSEMBLY, not behaviour).
+ * so the assembly is testable with fakes/stubs (the five legs are exercised for ASSEMBLY, not behaviour).
  *
  * [SEAM-CORRECTION — the classifier type] the pre-decided design named `import('@atlas/tools').Know5Classifier`;
  * that symbol is NOT exported from @atlas/tools — it is a LOCAL alias inside tools/reconcile.ts of the
@@ -96,14 +96,14 @@ export interface WireConfig {
 }
 
 /**
- * Assemble THE one shared handler over the four legs built from the raw adapters (WIRE-1). ONE handler,
+ * Assemble THE one shared handler over the five legs built from the raw adapters (WIRE-1). ONE handler,
  * no per-entrypoint copy: every entrypoint imports THIS factory and calls it — the single assembly point.
  *
- * Each leg wraps the frozen leg-constructor's one method (`init`/`query`/`emit`/`reconcile`); a leg backed
+ * Each leg wraps the frozen leg-constructor's one method (`init`/`query`/`emit`/`reconcile`/`link`); a leg backed
  * by a still-stubbed adapter or a throwing seam is SAFE, because `handle` catches a missing OR throwing leg
  * and returns a rejected `Verdict`, never a throw (TOOLS-2). The `args:unknown` boundary is cast at each
  * leg — the frozen per-tool signatures name the fields (`init(path)`/`query(scope)`/`emit(node,at)`/
- * `reconcile(mergeBase, options)`).
+ * `reconcile(mergeBase, options)`/`link(a,b)`).
  */
 export function assembleHandler(config: WireConfig): WiredHandler {
   // The index-backing adapter (satisfies both frozen tools ports: MoveInIndex + QueryIndex) over the
@@ -245,7 +245,7 @@ export function assembleHandler(config: WireConfig): WiredHandler {
 
   // N6: the READ-ONLY per-node projection source (TOOLS-10). `resolveNode(addr)` reads the whole fact back
   // from CAS by its CONTENT ADDRESS — the SAME durable store the query readback + governed emit ride (the CAS
-  // bytes ARE the fact). READ-ONLY: it opens NO write path (writes still funnel through `atlas-emit`, TOOLS-1);
+  // bytes ARE the fact). READ-ONLY: it opens NO write path (writes funnel through the governed doors `atlas-emit`/`atlas-link`, TOOLS-1);
   // a miss ⇒ `undefined` (the handler renders a structured "no grounded node" rejection, never a throw).
   const nodes: NodeSource = {
     resolve: (nodeAddr) => {
@@ -259,6 +259,6 @@ export function assembleHandler(config: WireConfig): WiredHandler {
     },
   };
 
-  // ONE handler over the four legs + the read-only per-node source — no per-entrypoint copy (WIRE-1).
+  // ONE handler over the five legs + the read-only per-node source — no per-entrypoint copy (WIRE-1).
   return createHandler(legs, nodes);
 }

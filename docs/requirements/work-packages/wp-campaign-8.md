@@ -40,7 +40,7 @@ interface_contract:                      # ptr+digest
 exclusions: >
   no LLM call; no embedding/vector/ANN; does not set tier > T2; does not auto-promote a T0; does not
   write outside atlas-init's return object; not the genesis ranking (that is WP-8.27.GEN); not the
-  four-tool surface / write-door integrity (EPIC-26 / CAMPAIGN-7).
+  five-tool surface / write-door integrity (EPIC-26 / CAMPAIGN-7).
 inputs:                                  # ptr+digest
   - source: repo@rev  # ptr+digest
   - source: ../../reference/atlas-index.md  # ptr+digest

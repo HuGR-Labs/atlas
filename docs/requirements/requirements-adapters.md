@@ -179,8 +179,8 @@ normative-clause: "reconstructing state only, minting nothing."
 
 ### REQ-WIRE-1a — one shared handler assembly
 source: INV-WIRE-1 @ reference/atlas-adapters.md#wire-1
-A single shared `wire` module shall assemble the four-leg WiredHandler over the adapters.
-normative-clause: "A single shared `wire` module MUST assemble the four-leg `WiredHandler` (`atlas-init/query/emit/reconcile` legs over the adapters, `→ tools/handler.ts`)."
+A single shared `wire` module shall assemble the five-leg WiredHandler over the adapters.
+normative-clause: "A single shared `wire` module MUST assemble the five-leg `WiredHandler` (`atlas-init/query/emit/reconcile/link` legs over the adapters, `→ tools/handler.ts`; the `atlas-link` leg added by WP-SAMEAS, ADR-0003)."
 
 ### REQ-WIRE-1b — both entrypoints consume the shared module
 source: INV-WIRE-1 @ reference/atlas-adapters.md#wire-1
@@ -207,10 +207,10 @@ source: INV-CLI-2 @ reference/atlas-adapters.md#cli-2
 Reads (`query`/`reconcile`/`doctor`) shall resolve over the CLI directly.
 normative-clause: "Reads (`query`/`reconcile`/`doctor`) MUST resolve over the CLI directly"
 
-### REQ-CLI-2b — writes funnel through atlas-emit
+### REQ-CLI-2b — writes funnel through a governed write door
 source: INV-CLI-2 @ reference/atlas-adapters.md#cli-2
-If a command writes, then it shall funnel through the single write door `atlas-emit`.
-normative-clause: "every write MUST funnel through the single write door `atlas-emit` (TOOLS-1/TOOLS-11 CLI-floor)."
+If a command writes, then it shall funnel through a governed write door (`atlas-emit` / `atlas-link`).
+normative-clause: "every write MUST funnel through a governed write door (`atlas-emit` / `atlas-link`) (TOOLS-1/TOOLS-11 CLI-floor, ADR-0003)."
 
 ### REQ-CLI-2c — a read carries no write authority
 source: INV-CLI-2 @ reference/atlas-adapters.md#cli-2
@@ -252,15 +252,15 @@ source: INV-CLI-4 @ reference/atlas-adapters.md#cli-4
 If admission is required, then the `mine` driver shall rely on the frozen run-controller and add none of its own.
 normative-clause: "the `mine` driver wires the parts and **invents no admission of its own**."
 
-### REQ-MCP-1a — exactly the four governed tools
+### REQ-MCP-1a — exactly the five governed tools
 source: INV-MCP-1 @ reference/atlas-adapters.md#mcp-1
-The MCP stdio server shall publish exactly the four governed tools with their input schemas.
-normative-clause: "The MCP stdio server MUST publish exactly the four governed tools with their input schemas"
+The MCP stdio server shall publish exactly the five governed tools (`atlas-init`, `atlas-query`, `atlas-emit`, `atlas-reconcile`, `atlas-link` — ADR-0003) with their input schemas.
+normative-clause: "The MCP stdio server MUST publish exactly the five governed tools with their input schemas"
 
-### REQ-MCP-1b — no fifth tool
+### REQ-MCP-1b — no sixth tool
 source: INV-MCP-1 @ reference/atlas-adapters.md#mcp-1
-If a tool is published over MCP, then it shall be one of exactly the four governed tools.
-normative-clause: "publish exactly the four governed tools"
+If a tool is published over MCP, then it shall be one of exactly the five governed tools.
+normative-clause: "publish exactly the five governed tools"
 
 ### REQ-MCP-1c — MCP and CLI verdicts are identical
 source: INV-MCP-1 @ reference/atlas-adapters.md#mcp-1

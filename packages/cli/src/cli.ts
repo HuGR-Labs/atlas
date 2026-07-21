@@ -75,7 +75,7 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
     return emit(deps.handler.resolveNode(addr, 'cli'));
   }
 
-  // The remaining four governance commands each route to a `Tool` through the one wired handler.
+  // The remaining five governance commands each route to a `Tool` through the one wired handler.
   const tool = COMMAND_LEG[command] as Tool;
   // The handler is INJECTED (dependency-inverted). Building the real one needs a fully-composed
   // `WireConfig` — including the adapter-less `seams` (heuristic/gate/classifier/driftFacts/resolveAnchorAt)

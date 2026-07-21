@@ -5,7 +5,7 @@
 // (the barrel is wired by the lead at SEAL):
 //   • ../src/guard.js     — the store-level single-write-door + read-time content-address integrity
 //                           (SCN-TOOLS-1c-1 / 1d-1 / 15a-1 / 15b-1 / 15c-1)
-//   • ../src/handler.js    — the pure + total handler wrapper + the four-tool governance surface
+//   • ../src/handler.js    — the pure + total handler wrapper + the five-tool governance surface
 //                           (SCN-TOOLS-1a-1 / 1b-1 / 2a-1 / 2b-1)
 //
 // Content-addressing uses the SEALED @atlas/kernel `id` seam (never a hand-rolled digest): a GROUNDED row

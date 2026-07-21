@@ -33,7 +33,7 @@ safety / delivery) — each new FR gets its own subsystem DP, on-diagonal.
 | **DP-11** Propose→ratify governance | jimmy proposes → lead/wave-close ratifies; T0 human-only; fast-path auto-accept; lucy/bobby veto (the human-effort mechanism) | KNOW-8/18, A-6/A-7, GEN-5 | M-Lifecycle |
 | **DP-12** Per-seat Memory (scoping + derived turn-header + recall) | injection-scoping (not access-control) · consultable-not-injected · derived awareness/orientation · frecency recall · re-spawn push | MEM-1/3/4/5/6/8/11/12/13 | M-Memory |
 | **DP-13** Cred-scrub defense-in-depth | redact-at-source (primary) + ≥2-engine scan (client + server pre-receive), fail-closed before the immutable write | PERSIST-10a, MEM-9 | M-Kernel/Persistence (security) |
-| **DP-14** Delivery / projection layer | 4-tool governance surface · CLI↔MCP parity · node tri-transport · reach-ladder (push-default, zero-grant) · shipped guidance | TOOLS-2/3/4/11/11a | M-Tools |
+| **DP-14** Delivery / projection layer | 5-tool governance surface (two governed write doors, ADR-0003) · CLI↔MCP parity · node tri-transport · reach-ladder (push-default, zero-grant) · shipped guidance | TOOLS-2/3/4/11/11a | M-Tools |
 
 ## The design matrix (`A[i][j] = X` iff DP_j affects FR_i)
 
@@ -107,7 +107,7 @@ inherited-scope placeholder; after the S0 extension it is a first-class module �
 | **M-Retrieval** | DP-2, DP-3 | ranking algorithm, cap/drop policy | `own(unit)` / `atlas-query` → a curated pack |
 | **M-Grounding** | DP-4, DP-5 | anchor scheme, which check-engine, mechanical↔semantic split | a fact's `grounding leg` |
 | **M-Knowledge-lifecycle** | DP-6, DP-8, DP-9, DP-11 | write-routing, genesis strategy, decay ranking, **ratification policy** | `ResultCard.absorb` (via the write-door) |
-| **M-Tools / projection** | **DP-14** | transport (MCP/CLI/inject tri-transport), tool schema, **the single Knowledge write-door `atlas-emit`** | 4 governance tools; node-tool projection; TOOLS-15 |
+| **M-Tools / projection** | **DP-14** | transport (MCP/CLI/inject tri-transport), tool schema, **the governed Knowledge write-doors `atlas-emit` + `atlas-link`** | 5 governance tools; node-tool projection; TOOLS-15 (ADR-0003) |
 | **M-Memory** | **DP-12** (+ DP-9 Memory arm) | the 4 memory types, turn-header assembly, logbook, re-spawn recall, injection-scoping | `memory-recall`; the derived turn-header |
 | **K/M partition** | DP-10 | *(a cross-cutting law, not a module)* — grounded-Knowledge vs per-seat-Memory | two write-doors; injection-scoping |
 

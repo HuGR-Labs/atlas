@@ -13,13 +13,13 @@
 
 ### EPIC-1 — init/query over real adapters
 goal-trace: "an agent can't trust a hand-fed map → a real repo is indexed and addressable behind one wired door → the read floor (CLI + init read-path)"
-vertical: adapter-io (fs·scip·index-wire) → @atlas/index → wire (four-leg handler) → cli (surface·render·init) — demoable: `atlas init <ts-repo>` prints the true skeleton+blast-radius, `atlas query` answers
+vertical: adapter-io (fs·scip·index-wire) → @atlas/index → wire (five-leg handler) → cli (surface·render·init) — demoable: `atlas init <ts-repo>` prints the true skeleton+blast-radius, `atlas query` answers
 reqs: [ REQ-WIRE-1a, REQ-WIRE-1b, REQ-CLI-1a, REQ-CLI-1b, REQ-CLI-1c, REQ-CLI-2a, REQ-CLI-2b, REQ-CLI-2c, REQ-CLI-3a, REQ-CLI-3b, REQ-CLI-3c, REQ-CLI-3d, REQ-ADAPTER-1a, REQ-ADAPTER-1b, REQ-ADAPTER-1c, REQ-ADAPTER-1d, REQ-ADAPTER-2a, REQ-ADAPTER-2b, REQ-ADAPTER-2c, REQ-ADAPTER-5a, REQ-ADAPTER-5b ]
 campaign: CAMPAIGN-9.1
 
 ### EPIC-1-a — one wired handler behind a total CLI
 goal-trace: "CLI and MCP must never diverge → a single wired handler drives a total, fail-safe command surface with deterministic render → the shared entrypoint floor"
-vertical: wire (four-leg handler) → cli (command→leg map·authority·render·exit) — demoable (self-contained against Verdict + argv fixtures, no adapter): `atlas <cmd>` renders a Verdict deterministically and sets the exit code from it, a malformed invocation yields a structured error (never a crash), and both entrypoints prove they share one handler instance (`cliHandler === mcpHandler`). (Real per-leg output arrives with the adapters in EPIC-1-b / CAMPAIGN-9.2.)
+vertical: wire (five-leg handler) → cli (command→leg map·authority·render·exit) — demoable (self-contained against Verdict + argv fixtures, no adapter): `atlas <cmd>` renders a Verdict deterministically and sets the exit code from it, a malformed invocation yields a structured error (never a crash), and both entrypoints prove they share one handler instance (`cliHandler === mcpHandler`). (Real per-leg output arrives with the adapters in EPIC-1-b / CAMPAIGN-9.2.)
 reqs: [ REQ-WIRE-1a, REQ-WIRE-1b, REQ-CLI-1a, REQ-CLI-1b, REQ-CLI-1c, REQ-CLI-2a, REQ-CLI-2b, REQ-CLI-2c, REQ-CLI-3a, REQ-CLI-3b, REQ-CLI-3c, REQ-CLI-3d ]
 campaign: CAMPAIGN-9.1
 split: Interface (the shared entrypoint contract) from EPIC-1
@@ -75,9 +75,9 @@ reqs: [ REQ-ADAPTER-11a, REQ-ADAPTER-11b, REQ-ADAPTER-11c, REQ-CLI-4a, REQ-CLI-4
 campaign: CAMPAIGN-9.3
 split: Path (the LLM-extract + driver route) from EPIC-6
 
-### EPIC-7 — the MCP server exposes the four governed tools
-goal-trace: "an agent drives Atlas over MCP → the stdio server publishes exactly the four tools through the shared handler, fail-closed → the MCP entrypoint"
-vertical: wire (shared handler) → mcp-server (four tools·schemas·fail-closed transport) — demoable: an MCP client's `atlas-query` returns a verdict byte-identical to the CLI's; a tool error returns a structured rejected Verdict, no crash
+### EPIC-7 — the MCP server exposes the five governed tools
+goal-trace: "an agent drives Atlas over MCP → the stdio server publishes exactly the five tools through the shared handler, fail-closed → the MCP entrypoint"
+vertical: wire (shared handler) → mcp-server (five tools·schemas·fail-closed transport) — demoable: an MCP client's `atlas-query` returns a verdict byte-identical to the CLI's; a tool error returns a structured rejected Verdict, no crash
 reqs: [ REQ-MCP-1a, REQ-MCP-1b, REQ-MCP-1c, REQ-MCP-2a, REQ-MCP-2b, REQ-MCP-2c ]
 campaign: CAMPAIGN-9.4
 

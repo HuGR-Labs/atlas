@@ -4,7 +4,8 @@
 
 ## Purpose
 
-The four tools are the Atlas's whole read/write surface. Each is **pure + total** (a malformed arg fails
+The five tools are the Atlas's whole read/write surface (four since inception + `atlas-link`, the governed
+sameAs write door added by WP-SAMEAS, ADR-0003). Each is **pure + total** (a malformed arg fails
 closed to an honest empty verdict, never a throw) and each ships its own `next + invariant` guidance. Every
 tool is callable **identically over the CLI and over MCP**, with a published input schema — one contract,
 two transports.
@@ -12,13 +13,15 @@ two transports.
 ## Data model
 
 ```
-Tool        = 'atlas-init' | 'atlas-query' | 'atlas-emit' | 'atlas-reconcile'
+Tool        = 'atlas-init' | 'atlas-query' | 'atlas-emit' | 'atlas-reconcile' | 'atlas-link'
 Guidance    = { next: string, invariant: string }     // shipped with every result
 Verdict     = { ok: boolean, data?, rejected?: string, guidance: Guidance }
 
 InitOut      = { territories: Territory[], blastRadius, t0Candidates: string[] }
-QueryOut     = Pack                                    // ≤2K, tier≥T1, stale-flagged
+QueryOut     = Pack                                    // ≤2K, tier≥T1, stale-flagged (§6.1 watermark)
+QueryEnvelope= { pack: Pack, subsumes: Subsumes[], sameAs: SameAs[] }  // Verdict.data for atlas-query (derived, read-only)
 EmitOut      = { emitted: boolean, id?, rejected?: string }
+LinkOut      = { linked: boolean, a?, b?, rejected?: string }  // atlas-link (WP-SAMEAS); linked:false = fail-closed refusal
 ReconcileOut = { drift: DriftItem[], mechanical: string[], semantic: string[],
                  regroundedCount, reauthorCount, exitCode }   // exit 2 ONLY on semantic drift (TOOLS-8)
 DriftItem    = { fact: string, class: 'mechanical'|'semantic', anchorWas, anchorNow }  // reviewable set, not all-or-nothing
@@ -27,12 +30,17 @@ DoctorOut    = { archive?, whyBroken?, hotSet?: { size, budget, over: boolean },
 
 ## Invariants
 
-- **TOOLS-1 Four governance tools, no more.** The **governance** surface MUST be exactly `atlas-init`,
-  `atlas-query`, `atlas-emit`, `atlas-reconcile`; the **only write path** is `atlas-emit`, and no
-  back-channel write may bypass it. This single-write-door MUST be enforced **structurally** by the store,
-  not by tool convention alone (TOOLS-15) — a shell-armed seat cannot inject a row `atlas-emit` did not
-  ground. Per-node read projections (the node-tools of RETR-5 / TOOLS-10) are
-  **not** a fifth governance tool — they are read-only views of the same store and carry no write authority.
+- **TOOLS-1 Governed write doors (amended WP-SAMEAS, ADR-0003).** The **governance** surface is exactly
+  `atlas-init`, `atlas-query`, `atlas-emit`, `atlas-reconcile`, `atlas-link` (five). Writes MUST flow ONLY
+  through a **governed write door** — one enforcing owner-scoped authorization (KNOW-11) AND a ratifier, and
+  whose refusal is fail-closed-**visible** on both transports (never a silent ok — TOOLS-14/F2/F5). The closed
+  write set (`WRITE_PATHS`) is two: `atlas-emit` (grounded-fact write) and `atlas-link` (sameAs-equivalence
+  write). No back-channel write may bypass a governed door; this MUST be enforced **structurally** by the
+  store, not by tool convention alone (TOOLS-15) — a shell-armed seat cannot inject a row a governed door did
+  not admit. The read/derive tools (`-init`/`-query`/`-reconcile`) and per-node read projections (RETR-5 /
+  TOOLS-10, `diff`/`doctor`/`node`) carry NO write authority. *(This amends the former "single write door /
+  exactly four" wording; the property preserved is "every write is governed + fail-closed-visible," not the
+  count — see ADR-0003.)*
 - **TOOLS-2 Pure + total.** Every tool MUST be pure and total: a malformed argument fails closed to a
   structured empty/rejected verdict; none throws (acceptance §8.12).
 - **TOOLS-3 CLI + MCP parity.** Every tool MUST be callable identically over the CLI and over MCP, against
@@ -44,7 +52,13 @@ DoctorOut    = { archive?, whyBroken?, hotSet?: { size, budget, over: boolean },
   a `T0` automatically (A-5, A-6). Heuristics MAY only *flag* a T0 candidate.
 - **TOOLS-6 `atlas-query` returns a bounded pack.** It MUST accept any scope (file/folder/module/crate),
   resolve it through the index to the covering territory/-ies, and return a `≤ ~2K` pack of `tier≥T1`
-  invariants; `stale:true` MUST mean re-ground before trusting (§6.1).
+  invariants; `stale:true` MUST mean re-ground before trusting (§6.1). **Freshness is a read-model WATERMARK
+  (N11, ADR-0002):** `stale` is `true` when ANY under-scope fact's stored `freshness` is `DRIFTED` OR the
+  projection's persist-time `builtAt` HEAD differs from live HEAD (the view is behind HEAD ⇒ unverified). The
+  behind-HEAD check is a cheap `git rev-parse HEAD` (NO worktree); `atlas-query` is NOT a live drift oracle —
+  the authoritative per-fact re-derivation stays `atlas reconcile` / `atlas doctor`. The query envelope
+  (`Verdict.data`) additionally carries the derived, read-only `subsumes` (DP-2) and `sameAs` (WP-SAMEAS)
+  relations, scoped to the pack — never a stored merge.
 - **TOOLS-7 `atlas-emit` fails closed.** It MUST re-derive the citation at `source@sha`; a node whose
   grounding does not re-derive MUST be rejected (`emitted:false`, nothing persisted) (A-2). Writes MUST be
   templated (A-13) and upserts, not blind inserts (A-12).
@@ -56,7 +70,7 @@ DoctorOut    = { archive?, whyBroken?, hotSet?: { size, budget, over: boolean },
 - **TOOLS-9 Absorb-driven write.** The `atlas-emit` write path at wave-close MUST be driven by
   `ResultCard.absorb`, not a separate authoring ritual; a sealing wave MUST feed the Atlas or emit a
   grounded why-not (A-10).
-- **TOOLS-10 Every node is tri-transport, one contract.** Beyond the four governance tools, **every Atlas
+- **TOOLS-10 Every node is tri-transport, one contract.** Beyond the five governance tools, **every Atlas
   node** MUST be addressable by its **content address** over three transports against one handler: an
   **MCP tool** (model-callable), a **proactive injection** (the poke), and a **CLI command**
   (human/script-callable, composable in a shell like `curl`). The three MUST NOT diverge in contract; the
@@ -68,8 +82,9 @@ DoctorOut    = { archive?, whyBroken?, hotSet?: { size, budget, over: boolean },
   **read/advisory only** — archive inspection, drift-explain / `why-broken <fact>`, hot-set size report
   against a budget, and a **guided re-ground / retire** flow. It MUST NOT persist: any write it proposes
   MUST funnel through `atlas-emit` (the guided flow emits a plan a human/agent then runs, never a direct
-  store mutation). It is **not** a fifth governance tool (TOOLS-1 stays four) — it is a diagnostic view of
-  the same store, carrying no write authority, like the per-node read projections (TOOLS-10).
+  store mutation). It is **not** a governance tool at all (the surface stays exactly five — `atlas-init`,
+  `atlas-query`, `atlas-emit`, `atlas-reconcile`, `atlas-link`) — it is a diagnostic view of the same store,
+  carrying no write authority, like the per-node read projections (TOOLS-10).
 - **TOOLS-13 Mechanical drift auto-re-grounds, no human, no block.** `atlas-reconcile --accept-reground`
   MUST, in **one pass**, auto-re-ground every `mechanical` `DriftItem` (anchor moved but the claim still
   re-derives at the new `@sha`) — updating the anchor with no human and no merge block — and report
@@ -115,8 +130,8 @@ DoctorOut    = { archive?, whyBroken?, hotSet?: { size, budget, over: boolean },
   PERSIST-14 version-delta ({added, edited, superseded, decayed}, each with provenance) as a **read-only
   projection** — CLI≡MCP (0 divergence, one published schema) and **0 write path** (read/subscribe only;
   writes still funnel through `atlas-emit`). It is a read projection like the per-node `node` handler
-  (TOOLS-10) and `atlas doctor` (TOOLS-12), **NOT** a fifth write tool: the governance **write** surface stays
-  exactly four (TOOLS-1/15) and `atlas-diff` carries no write authority.
+  (TOOLS-10) and `atlas doctor` (TOOLS-12), **NOT** a write tool: the governed **write** surface is the two
+  governed doors `atlas-emit` + `atlas-link` (TOOLS-1/15, ADR-0003) and `atlas-diff` carries no write authority.
 
 ## Surface / API
 
@@ -126,6 +141,7 @@ atlas-query     <scope>                → QueryOut      // scope → covering p
 atlas-emit      <node> --at <sha>      → EmitOut       // fail-closed grounded write (A-2, A-12, A-13)
 atlas-reconcile <mergeBase>            → ReconcileOut  // classify drift; exit 2 ONLY on semantic (A-3, A-4, TOOLS-8)
 atlas-reconcile <mergeBase> --accept-reground → ReconcileOut  // auto-re-ground mechanical in one pass, no block (TOOLS-13)
+atlas-link      <nodeKeyA> <nodeKeyB>  → LinkOut       // governed sameAs write door: authz(both scopes)+ratifier, fail-closed (WP-SAMEAS, ADR-0003)
 
 # per-node read projections (TOOLS-10) — read-only, same handler over MCP tool | poke | CLI:
 atlas node      <nodeAddr>             → the node     // get by content address; unscoped over CLI, like `curl`
@@ -143,8 +159,12 @@ atlas doctor    reground <fact>        → DoctorOut    // guided re-ground/reti
   candidates without promoting them.
 - **`atlas-query`** — the discovery entry point; the same call backs the proactive poke/hook (see
   `atlas-retrieval`). A `stale` pack is a signal to re-ground, not a served truth.
-- **`atlas-emit`** — the only write. Re-derives the citation; upserts (idempotent on unchanged, supersedes
-  on changed); rejects ungrounded or non-templated facts fail-closed.
+- **`atlas-emit`** — the grounded-fact write door. Re-derives the citation; upserts (idempotent on unchanged,
+  supersedes on changed); rejects ungrounded or non-templated facts fail-closed.
+- **`atlas-link`** — the sameAs-equivalence write door (WP-SAMEAS): asserts two existing nodeKeys name the
+  SAME fact (H1). Fail-closed gates: distinct nodes → both exist → KNOW-11 authz on BOTH scopes → non-empty
+  ratifier. NON-destructive — the equivalence is a derived read-side edge (union-find, surfaced in the query
+  envelope), never a fact merge. v1: non-empty ratifier, not emit's tier-graded gate (ADR-0003).
 - **`atlas-reconcile`** — merge gate. Classifies drift (KNOW-5) into a reviewable set; **semantic** drift
   exits 2 (blocking), **mechanical** drift does not. `--accept-reground` auto-re-grounds the mechanical
   subset in one pass — no human, no block — leaving only genuine semantic drift for review.
@@ -179,13 +199,14 @@ reach the store, down a native-first ladder where the **CLI is the floor, not th
 
 - Read before you write: `atlas-query` a scope to learn its invariants before `atlas-emit`.
 - Treat `stale:true` and `emitted:false` as actionable — the `guidance.next` field names the fix.
-- Never route a write around `atlas-emit`; the fail-closed grounding check is the only thing keeping
-  ungrounded facts out of the store.
+- Never route a write around a **governed door** (`atlas-emit` / `atlas-link`); the fail-closed
+  authorization + grounding checks are the only thing keeping ungrounded/unauthorized writes out of the store.
 
 ## Acceptance
 
-1. **TOOLS-1/3** — Each tool resolves identically over CLI and MCP against one published schema; no fifth
-   write path exists.
+1. **TOOLS-1/3** — Each tool resolves identically over CLI and MCP against one published schema; the write
+   surface is exactly the two governed doors (`atlas-emit` + `atlas-link`), each authz+ratifier+fail-closed;
+   no back-channel write path exists.
 2. **TOOLS-2** — Malformed input to every tool returns a structured empty/rejection; none throws (§8.12).
 3. **TOOLS-4** — Every result carries non-empty `next + invariant` guidance.
 4. **TOOLS-5** — `atlas-init` on any tree ⇒ zero invariants, all territories `T2/advisory`; a T0-keyword
@@ -202,7 +223,7 @@ reach the store, down a native-first ladder where the **CLI is the floor, not th
 9. **TOOLS-10** — The same node resolves byte-identically over its MCP tool, its poke injection, and
    `atlas node <addr>` on the CLI; the CLI reaches a node **outside** the current scope (unscoped) while the
    MCP tool surface stays scope-local (RETR-5); none of the three exposes a write path — a write attempt
-   through them is rejected and only `atlas-emit` persists.
+   through them is rejected and only a governed door (`atlas-emit` / `atlas-link`) persists.
 10. **TOOLS-11** — A `Read`-only seat (no MCP grant, no shell) still receives its pack (push) and can still
     resolve a mid-task query (via poke-as-file or orchestrator relay) — it is never forced to the CLI; a seat
     landing on a lower ladder tier gets a result byte-identical to the native-MCP tier.
@@ -217,5 +238,6 @@ reach the store, down a native-first ladder where the **CLI is the floor, not th
     and is not served; only rows emitted through `atlas-emit`'s grounded path resolve.
 14. **TOOLS-12** — `atlas doctor why-broken <fact>` explains the drifted anchor and its class;
     `hot-set --budget n` flags over-budget; `reground <fact>` returns a plan and **persists nothing** — the
-    store changes only when that plan is run through `atlas-emit`; a write attempted directly via `doctor`
-    is rejected. TOOLS-1's governance surface stays exactly four.
+    store changes only when that plan is run through a governed door (`atlas-emit`); a write attempted
+    directly via `doctor` is rejected. TOOLS-1's governance surface is the five tools; its write surface is
+    the two governed doors `atlas-emit` + `atlas-link` (ADR-0003).

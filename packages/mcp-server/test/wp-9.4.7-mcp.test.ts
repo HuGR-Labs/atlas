@@ -3,7 +3,7 @@
 // RED→GREEN transcription of the pinned MCP-transport behaviour, exercised against a FAKE `WiredHandler`
 // (`{ handle, schema }` + a stub `resolveNode` the transport never touches) — NEVER the real assembly. The
 // mapping functions are pure + total, so we invoke them directly (deterministic; no stdio pipe):
-//   • advertisedTools / listTools — the CLOSED four-tool surface, schemas read from handler.schema (TOOLS-1/3)
+//   • advertisedTools / listTools — the CLOSED five-tool surface, schemas read from handler.schema (TOOLS-1/3)
 //   • verdictToResult / callTool  — Verdict → CallToolResult, incl. the fail-closed-visibility golden (MCP-2)
 // Each golden NAMES the exact mutant that flips it (mutation-scoped teeth).
 
@@ -50,7 +50,7 @@ const REJECT_VERDICT: Verdict<ToolData> = {
   guidance: GUIDANCE,
 };
 
-// ── SCN-MCP-1: the advertised surface is EXACTLY the four GOVERNANCE_SURFACE tools ───────────────────────
+// ── SCN-MCP-1: the advertised surface is EXACTLY the five GOVERNANCE_SURFACE tools ───────────────────────
 
 describe('SCN-MCP-1 — ListTools advertises exactly the closed governance surface (TOOLS-1)', () => {
   it('advertises the five GOVERNANCE_SURFACE tools by name, no more, no fewer', () => {

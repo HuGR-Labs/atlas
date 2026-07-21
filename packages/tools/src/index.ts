@@ -1,10 +1,12 @@
 // @atlas/tools — barrel
 //
-// Layer 7: the PUBLIC tool / OKF surface — the Atlas's whole read/write API. The GOVERNANCE (write)
-// surface is EXACTLY four tools — `atlas-init`, `atlas-query`, `atlas-emit`, `atlas-reconcile` — and the
-// ONLY write path is `atlas-emit` (TOOLS-1, structurally enforced by the single-write-door guard,
-// TOOLS-15). `atlas-diff` (TOOLS-16), `atlas doctor` (TOOLS-12), and the per-node projections (TOOLS-10)
-// are READ-ONLY views of the same store, carrying NO write authority — NOT a fifth governance tool.
+// Layer 7: the PUBLIC tool / OKF surface — the Atlas's whole read/write API. The GOVERNANCE surface is
+// EXACTLY five tools — `atlas-init`, `atlas-query`, `atlas-emit`, `atlas-reconcile`, `atlas-link` — and
+// every write flows through one of the TWO governed write doors, `atlas-emit` (grounded facts) or
+// `atlas-link` (sameAs edges) (TOOLS-1 / ADR-0003; grounded-row integrity structurally enforced by the
+// governed-store guard, TOOLS-15). `atlas-diff` (TOOLS-16), `atlas doctor` (TOOLS-12), and the per-node
+// projections (TOOLS-10) are READ-ONLY views of the same store, carrying NO write authority — NOT
+// governance tools.
 // Re-exports the package's FULL public surface so consumers import from the bare package root
 // (`import type { Verdict } from '@atlas/tools'`). Each frozen interface is co-located with its impl; the
 // shared (handler) and impl-less (node) ones live in types.ts.

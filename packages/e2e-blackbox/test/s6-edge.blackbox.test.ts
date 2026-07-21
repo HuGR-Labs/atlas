@@ -181,7 +181,7 @@ describe('S6 — edge / totality (WAVE-COV-4): every corner degrades, never cras
       };
       expect(String(body.rejected)).toContain('not wired');
       expect(body.guidance?.next).toBeTruthy();
-      expect(body.guidance?.invariant).toContain('TOOLS-1'); // the surface is exactly four tools
+      expect(body.guidance?.invariant).toContain('TOOLS-1'); // the surface is exactly five tools
     } finally {
       await session.close();
     }

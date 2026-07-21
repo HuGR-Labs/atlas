@@ -127,7 +127,7 @@ describe('WP-7.26-b.TOOLS — guidance rides every result', () => {
 // ── REQ-TOOLS-12 — read/advisory-only doctor ────────────────────────────────────────────────────────
 
 /** A read-only diagnostic source over a governed store: every leg READS, none writes. `plan` templates a
- *  candidate the single write door (atlas-emit) later consumes — doctor never persists it. */
+ *  candidate the governed atlas-emit write door later consumes — doctor never persists it. */
 const anchor = (h: string): StructRef => ({
   kind: 'block',
   qualifiedPath: 'src/finance/arr.rs#claim',
@@ -189,12 +189,12 @@ describe('WP-7.26-b.TOOLS — atlas doctor is read/advisory only', () => {
     expect(out.plan).toBeDefined();
     expect(out.plan?.fact).toBe('dm');
     expect(out.plan?.action).toBe('reground');
-    expect(out.plan?.emit).toBeDefined(); // the templated candidate the single write door consumes
+    expect(out.plan?.emit).toBeDefined(); // the templated candidate the governed atlas-emit write door consumes
     // teeth (breaks-on "doctor persists its proposed write directly"): the store is byte-identical.
     expect(JSON.stringify([...medium.entries()])).toBe(before);
   });
 
-  it('SCN-TOOLS-12c-1: doctor is a diagnostic view, not a fifth governance tool — no write authority', () => {
+  it('SCN-TOOLS-12c-1: doctor is a diagnostic view, not a governance tool — no write authority', () => {
     const medium = new Map<string, { key: string; value: unknown }>();
     const store = createGovernedStore(medium);
     const g1 = grounded({ kind: 'claim', claim: 'ACME ARR 2024 = $4.2M' });
@@ -206,7 +206,7 @@ describe('WP-7.26-b.TOOLS — atlas doctor is read/advisory only', () => {
     expect(GOVERNANCE_SURFACE.length).toBe(5);
     expect(GOVERNANCE_SURFACE).not.toContain('atlas-doctor');
 
-    // teeth (breaks-on "doctor is registered as a fifth tool with a write method"): NO store-mutating method.
+    // teeth (breaks-on "doctor is registered as a governance tool with a write method"): NO store-mutating method.
     const handle = doctor as unknown as Record<string, unknown>;
     expect(handle.write).toBeUndefined();
     expect(handle.set).toBeUndefined();

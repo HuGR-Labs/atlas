@@ -93,7 +93,7 @@ describe('SCN-DOCTOR-1 — the four legs route + render', () => {
     const s = out();
     expect(s).toContain('doctor: reground');
     expect(s).toContain('plan: action=reground fact=claimF');
-    expect(s).toContain('atlas-emit'); // the single write door is the advisory follow-up
+    expect(s).toContain('atlas-emit'); // the governed atlas-emit write door is the advisory follow-up
     expect(s).toContain(`invariant: ${DOCTOR_GUIDANCE.invariant}`);
   });
 

@@ -158,7 +158,7 @@ fuller treatment; the rest MSS + key extensions. *(The 4 grounding errors from v
 **MSS:** 1) assemble Awareness (mission/constitution/terrain/ontology/taste — **derived** from the atlas root rollup, memoized per facet source-hash) + Orientation (goal/last/current/state — **folded** from the event log) + Rules (top-12 by frecency). 2) inject once per turn, byte-identical across seats, capped (~Awareness 400 / Orientation 250 / Rules 500). **Ext:** 1a. an Awareness facet's source node moves → re-roll only that facet (`MEM-11/12`). 1b. injection sum > ~5K ceiling → drop droppable kinds by hit-rate; `constitution`(T0) + `safetyCritical` never drop (`RETR-6`). 1c. milestone → Orientation folds incrementally (`MEM-6`).
 
 ### UC-G28 — Steward diagnoses/repairs via `atlas doctor` *(NEW — the ops surface)*
-**MSS:** 1) STW runs `atlas doctor` (`why-broken` / `hot-set --budget` / guided `reground`). 2) read-only diagnosis; any write funnels through `atlas-emit` (`TOOLS-12/15`). **Ext:** 1a. direct store write bypassing emit → rejected structurally (single write-door). 1b. index corrupt → route to UC-G31.
+**MSS:** 1) STW runs `atlas doctor` (`why-broken` / `hot-set --budget` / guided `reground`). 2) read-only diagnosis; any write funnels through a governed door (`atlas-emit`/`atlas-link`) (`TOOLS-12/15`, ADR-0003). **Ext:** 1a. direct store write bypassing a governed door → rejected structurally (governed write-door). 1b. index corrupt → route to UC-G31.
 
 ### UC-G31 — Index rebuilds from versioned source *(NEW — FR-8 recovery)*
 **MSS:** 1) integrity check fails / BLAKE3 mismatch. 2) re-parse + re-resolve + re-rank from git-persisted source. 3) verify against last-good root hash. **Ext:** 1a. source unavailable → fail-closed, serve nothing rather than stale.
@@ -170,7 +170,7 @@ fuller treatment; the rest MSS + key extensions. *(The 4 grounding errors from v
 
 ### UC-G27 — Steward diffs the atlas across two versions *(NEW — audit/onboard)*
 **MSS:** 1) `atlas-diff <shaA> <shaB>`. 2) tree-diff over shards → added/edited/superseded/decayed facts with provenance. **Ext:** 1a. across a rebase → fold is set-based, diff is stable.
-*Realized by:* **PERSIST-14** (read-only fold-diff — the version-delta) / **TOOLS-16** (`atlas-diff` read-only projection, not a fifth write tool) → **EPIC-32** → **WP-7.32.PERSIST** (owns the delta) + **WP-7.32.TOOLS** (surfaces it).
+*Realized by:* **PERSIST-14** (read-only fold-diff — the version-delta) / **TOOLS-16** (`atlas-diff` read-only projection, not a write tool) → **EPIC-32** → **WP-7.32.PERSIST** (owns the delta) + **WP-7.32.TOOLS** (surfaces it).
 
 ### UC-G29 — Genesis deepens a scope via the 3 governed loops *(NEW)*
 **MSS:** REVIEW/ENRICH/EXPAND, each opt-in, budget-gated, diminishing-returns/fixpoint stop; reuses propose→verify+relate; never changes default cost (`GEN-14`). **Ext:** budget hit → stop; loop-until-dry/fixpoint reached → stop.
@@ -230,7 +230,7 @@ Sweep-order events → policies. Grounded to real invariant IDs (v1's invented `
 | reverse closure flagged under-approximate | auto-union the node's `coChanged` band, labeled correlational | INDEX-13 |
 | path matches no glob / T0-adjacent | flag `uncovered` (never silent pass); T0-adjacent defaults to **deny** until an owner assigns | INDEX-14 |
 | manifest drifts/empty | regenerate `owner` from graph + git-blame, reconcile, flag divergence; `tier` stays human | INDEX-15 |
-| direct store write bypassing `atlas-emit` | rejected (append-only/permissioned medium or content-address integrity check) — single write-door | TOOLS-15 |
+| direct store write bypassing a governed door | rejected (append-only/permissioned medium or content-address integrity check) — governed write-door | TOOLS-15 |
 | a fact's canonical preimage has a float / non-NFC string / key-order or escape divergence | **fail-closed reject** (a corpus failure, not a runtime surprise) — never round, never emit two CAS objects for one fact | KERNEL-1/2 |
 | Awareness source node moves | re-roll only that facet (memoized on its source hash), assembled once/root-state, shared byte-identically | MEM-11/12 |
 | milestone / event-log append | Orientation folds incrementally; every member's injected Orientation reflects new state, byte-identical, no manual write | MEM-6/12 |

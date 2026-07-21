@@ -1,7 +1,8 @@
 // @atlas/tools — src/handler.ts   (WP-7.26-a.TOOLS — TOOLS-1 / TOOLS-2 / TOOLS-4, INV-TOOLS-1 / -2 / -4)
 //
-// THE ONE handler behind EVERY transport — the spine facet. Owns the CLOSED four-tool `GOVERNANCE_SURFACE`
-// (count == 4) + the single `WRITE_PATHS` (`atlas-emit`, TOOLS-1), the published per-tool `SCHEMAS` (CLI≡MCP,
+// THE ONE handler behind EVERY transport — the spine facet. Owns the CLOSED five-tool `GOVERNANCE_SURFACE`
+// (count == 5) + the two governed `WRITE_PATHS` (`atlas-emit` + `atlas-link`, TOOLS-1 / ADR-0003), the
+// published per-tool `SCHEMAS` (CLI≡MCP,
 // TOOLS-3), and `handle`/`resolveNode` — PURE + TOTAL, malformed args fail CLOSED, guidance on every path.
 
 import type { NodeKey, ToolSchema } from '@atlas/contracts';
@@ -75,8 +76,8 @@ const GUIDANCE: Record<Tool, Guidance> = {
 
 /** Fallback guidance for an off-surface tool token — still non-empty (TOOLS-4 totality). */
 const GUIDANCE_OFF_SURFACE: Guidance = {
-  next: 'invoke one of the four governance tools: atlas-init | atlas-query | atlas-emit | atlas-reconcile',
-  invariant: 'TOOLS-1: the governance surface is exactly four tools',
+  next: 'invoke one of the five governance tools: atlas-init | atlas-query | atlas-emit | atlas-reconcile | atlas-link',
+  invariant: 'TOOLS-1: the governance surface is exactly five tools (two governed write doors: atlas-emit, atlas-link)',
 };
 
 const guidanceFor = (tool: Tool): Guidance => GUIDANCE[tool] ?? GUIDANCE_OFF_SURFACE;
@@ -162,7 +163,7 @@ const SCHEMAS: Record<Tool, ToolSchema> = {
 /** Fallback schema for an off-surface tool token — still a well-formed `ToolSchema` (totality). */
 const SCHEMA_OFF_SURFACE = (tool: Tool): ToolSchema => ({
   name: tool,
-  description: 'not one of the four governance tools (TOOLS-1)',
+  description: 'not one of the five governance tools (TOOLS-1)',
   inputSchema: { type: 'object', additionalProperties: false },
 });
 

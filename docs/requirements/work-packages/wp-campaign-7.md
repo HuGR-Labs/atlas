@@ -21,9 +21,10 @@
 epic: EPIC-26-a
 id: WP-7.26-a.TOOLS
 content_hash: <filled-at-freeze>
-title: single governed write-door + append-only/permissioned store integrity
+title: governed write-doors + append-only/permissioned store integrity
 intent: >
-  Wire the governance surface to exactly four tools with atlas-emit as the sole write path, refuse every
+  Wire the governance surface to exactly five tools with every write flowing through a governed door
+  (WRITE_PATHS = {atlas-emit, atlas-link}, ADR-0003), refuse every
   back-channel / direct / ungrounded write at write-or-read, keep read projections read-only, and make each
   tool pure+total (malformed fails closed). Human handle only — non-authoritative.
 source_reqs:                             # ptr+digest
@@ -38,9 +39,9 @@ source_reqs:                             # ptr+digest
   - source: ../req-tls.md#REQ-TOOLS-15c  # ptr+digest
 seam-freezes: [ ]
 anchor: # value
-  target: the TOOLS governance layer — the four-tool surface {atlas-init, atlas-query, atlas-emit,
-    atlas-reconcile} + the store medium; production tools differential-tested against the named reference
-    oracles tools/ref/guard.ts (writePaths/single-write-door; surface = the four-tool Tool union in types.ts;
+  target: the TOOLS governance layer — the five-tool surface {atlas-init, atlas-query, atlas-emit,
+    atlas-reconcile, atlas-link} + the store medium; production tools differential-tested against the named reference
+    oracles tools/ref/guard.ts (WRITE_PATHS/governed-write-doors {atlas-emit, atlas-link}; surface = the five-tool Tool union in types.ts;
     append-only store medium = @atlas/persist) · tools/ref/handler.ts (pure/total wrapper) ·
     tools/ref/emit.ts (fail-closed writer). Insertion site = the write-door + store-integrity entry points.
 interface_contract:                      # ptr+digest
@@ -60,9 +61,9 @@ inputs:                                  # ptr+digest
   - source: tools/ref/handler.ts  # ptr+digest
   - source: tools/ref/emit.ts  # ptr+digest
 action: # value (zero-decision recipe)
-  Implement the four-tool surface + store so each acceptance SCN passes as a differential/conformance run
-  against its named tools/ref/*.ts oracle; run the goldens harness; do not add a fifth governance tool or a
-  second write path.
+  Implement the five-tool surface + store so each acceptance SCN passes as a differential/conformance run
+  against its named tools/ref/*.ts oracle; run the goldens harness; do not add a sixth governance tool or an
+  ungoverned write path outside {atlas-emit, atlas-link}.
 action_surface: # value
   [ Read, Edit, Write (TOOLS package only), run goldens/conformance harness, run PBT-fuzz for 2b ]
 guardrails: # value
@@ -83,7 +84,7 @@ acceptance:                              # ptr+digest = frozen goldens
   - source: ../goldens-tls.md#SCN-TOOLS-15c-1  # ptr+digest
 deps: [ ]   parallel_group: —
 exit_predicate: # value
-  all 9 acceptance SCNs green ∧ conformance/PBT gates pass ∧ surface count == 4 ∧ writePaths == 1 ∧
+  all 9 acceptance SCNs green ∧ conformance/PBT gates pass ∧ surface count == 5 ∧ writePaths == 2 (WRITE_PATHS == {atlas-emit, atlas-link}) ∧
   ungroundedRowsServed == 0 ∧ no tool throws on malformed input
 context_refs:                            # closed list
   - source: ../../reference/atlas-tools.md#tools-1
@@ -148,7 +149,7 @@ guardrails: # value
   - edit only within the TOOLS package + its tests; the two transports MUST NOT diverge (no MCP-only envelope,
     no CLI-only coercion)
   - doctor must add no store-mutating method; directStoreMutations must stay == 0
-  - governance surface stays == 4 (doctor is not a fifth tool)
+  - governance surface stays == 5 (doctor is not a governance tool)
 repair_budget: # value
   N: 3 ; early-stop on { repeated-identical-failure, no-change-diff, semantic-duplicate-edit }
 acceptance:                              # ptr+digest = frozen goldens
@@ -161,7 +162,7 @@ acceptance:                              # ptr+digest = frozen goldens
 deps: [ WP-7.26-a.TOOLS ]   parallel_group: — (SEQUENTIAL before WP-7.26-c.TOOLS: shared src/handler.ts per wave-plan §Conflict-map)
 exit_predicate: # value
   all 6 acceptance SCNs green ∧ PBT equivalence (cli≡mcp incl. malformed) holds ∧ emptyGuidance == 0 ∧
-  directStoreMutations == 0 ∧ surface stays == 4
+  directStoreMutations == 0 ∧ surface stays == 5
 context_refs:                            # closed list
   - source: ../../reference/atlas-tools.md#tools-3
   - source: ../../reference/atlas-tools.md#tools-4
@@ -296,7 +297,7 @@ interface_contract:                      # ptr+digest
   - source: ../method-tags-pst.md#INV-PERSIST-14  # ptr+digest
   - source: ../../spec/fspec-merge.md#down  # ptr+digest   (the `fold` reducer consumed as oracle, frozen upstream)
 exclusions: # value
-  - The `atlas-diff` CLI/MCP surface (surfacing the delta, CLI≡MCP, no write path, surface stays 4) is the
+  - The `atlas-diff` CLI/MCP surface (surfacing the delta, CLI≡MCP, no write path, write surface stays {atlas-emit, atlas-link}) is the
     TOOLS slice WP-7.32.TOOLS — NOT authored here; this WP owns the delta computation only.
   - No new merge/fold model — the fold is consumed frozen from CAMPAIGN-1 (`FSPEC-merge`); a materialized/stored
     diff is explicitly out of scope (ADR-P14: read-only fold-diff over the log).
@@ -343,11 +344,11 @@ rationale:                               # ptr
 epic: EPIC-32
 id: WP-7.32.TOOLS
 content_hash: <filled-at-freeze>
-title: atlas-diff read-only version projection (CLI≡MCP · no write path · surface stays four)
+title: atlas-diff read-only version projection (CLI≡MCP · no write path · write surface stays the two governed doors)
 intent: >
   Surface the PERSIST-14 version-delta through `atlas-diff <shaA> <shaB>` as a read-only projection —
-  byte-identical over CLI and MCP against one schema, opening no write path, and NOT a fifth governance write
-  tool (a read projection like node TOOLS-10 / doctor TOOLS-12). Consumes the delta contract frozen upstream by
+  byte-identical over CLI and MCP against one schema, opening no write path, and NOT a governance write
+  door (a read projection like node TOOLS-10 / doctor TOOLS-12, ADR-0003). Consumes the delta contract frozen upstream by
   WP-7.32.PERSIST. Human handle only.
 source_reqs:                             # ptr+digest
   - source: ../req-tls.md#REQ-TOOLS-16a  # ptr+digest
@@ -367,7 +368,7 @@ interface_contract:                      # ptr+digest
 exclusions: # value
   - The delta computation (fold-diff / partition / provenance) is owned by WP-7.32.PERSIST — consumed here,
     never re-authored.
-  - The no-write-path arm (16d) + the not-a-fifth-write-tool arm (16e) are POSITIVE reference-model properties
+  - The no-write-path arm (16d) + the not-a-write-tool arm (16e) are POSITIVE reference-model properties
     of the read handle — NOT a formal model; formal verification is out of scope.
   - The write-door + store (EPIC-26-a), CLI/MCP parity + doctor (EPIC-26-b), tri-transport + ladder (EPIC-26-c)
     — out of scope here.
@@ -384,7 +385,7 @@ action_surface: # value
 guardrails: # value
   - edit only within the TOOLS package + its tests; never re-author the delta (consumed from PERSIST)
   - add NO write path over any transport (read/subscribe only; writes funnel through atlas-emit)
-  - the governance write surface stays == 4 (atlas-diff is a read projection, not a fifth write tool)
+  - the governance write surface stays {atlas-emit, atlas-link} (atlas-diff is a read projection, not a write door)
 repair_budget: # value
   N: 3 ; early-stop on { repeated-identical-failure, no-change-diff, semantic-duplicate-edit }
 acceptance:                              # ptr+digest = frozen goldens
@@ -396,7 +397,7 @@ acceptance:                              # ptr+digest = frozen goldens
 deps: [ WP-7.32.PERSIST ]   parallel_group: —
 exit_predicate: # value
   all 5 acceptance SCNs green ∧ cli(shaA,shaB) ≡ mcp(shaA,shaB) ∧ 0 write path on the diff surface ∧
-  governance write surface count == 4 ∧ all pointer digests resolve (no STALE)
+  governance write surface == {atlas-emit, atlas-link} ∧ all pointer digests resolve (no STALE)
 context_refs:                            # closed list
   - source: ../../reference/atlas-tools.md#tools-16
   - source: ../req-pst.md#REQ-PERSIST-14-a
@@ -426,5 +427,5 @@ rationale:                               # ptr
 - **Acceptance:** each WP's acceptance = its REQs' frozen SCN goldens by reference (ptr+digest), no prose copy.
 - **No new decisions:** every field transcribes frozen upstream; the security-exploitability of the write-door
   is explicitly excluded (billy / FR-12), matching the goldens-tls.md standing note; EPIC-32 adds no decision —
-  the delta contract (ADR-P14 read-only fold-diff, not a stored diff) and the read-projection surface (surface
-  stays 4) are fixed upstream in PERSIST-14 / TOOLS-16.
+  the delta contract (ADR-P14 read-only fold-diff, not a stored diff) and the read-projection surface (write
+  surface stays {atlas-emit, atlas-link}, ADR-0003) are fixed upstream in PERSIST-14 / TOOLS-16.

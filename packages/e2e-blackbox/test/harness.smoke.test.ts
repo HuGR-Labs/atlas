@@ -62,7 +62,7 @@ describe('runAtlas — drives the REAL atlas CLI as a subprocess', () => {
 });
 
 describe('mcpSession — drives the REAL atlas-mcp server over stdio', () => {
-  it('listTools() returns EXACTLY the 4 governance tools with input schemas; then close()', async () => {
+  it('listTools() returns EXACTLY the 5 governance tools with input schemas; then close()', async () => {
     const session = await mcpSession(repo.repoPath);
     try {
       const { tools } = await session.client.listTools();

@@ -15,7 +15,7 @@
 //     (the old bug: that made mechanical structurally unreachable — a detected drift was ALWAYS semantic).
 //   - `plan(fact)` — only when drifted: mechanical ⇒ a `reground` template (primary anchor swapped to
 //     `anchorNow`), semantic ⇒ a `retire` template (the fact tagged SUPERSEDED). The emitted candidate is
-//     a well-formed `GroundedFact` — the payload the doctor plan funnels through the single write door.
+//     a well-formed `GroundedFact` — the payload the doctor plan funnels through the governed `atlas-emit` write door.
 //
 // TOTAL + READ-ONLY: an unknown fact, an absent anchor, a missing HEAD resolution ⇒ `undefined`/empty,
 // NEVER a throw and NEVER a write. Every read rides the total store/revIndex seams (both fail-closed).
@@ -60,7 +60,7 @@ export function regroundTemplate(fact: GroundedFact, anchorNow: StructRef): Grou
 
 /**
  * The SEMANTIC retire candidate: the fact tagged for retire (`authoring: 'SUPERSEDED'`, valid on both
- * node families) — the claim no longer re-derives, so it is retired through the single write door, not
+ * node families) — the claim no longer re-derives, so it is retired through the governed `atlas-emit` write door, not
  * re-grounded. Pure + total; the claim body is otherwise unchanged.
  */
 export function retireTemplate(fact: GroundedFact): GroundedFact {
