@@ -18,7 +18,7 @@
 import { id } from '@atlas/kernel';
 import type { CasObject } from '@atlas/kernel';
 import type { Hash } from '@atlas/contracts';
-import { upsert, normalizeCheck, primaryAnchorId } from '@atlas/knowledge';
+import { upsert, normalizeCheck, primaryAnchorId, nodeKey } from '@atlas/knowledge';
 import type { Candidate, GroundedFact, WriteRequest } from '@atlas/knowledge';
 import type { EmitOut, TruthGate } from '@atlas/tools';
 import { actorInScope } from './policy.js';
@@ -65,9 +65,13 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
     }
 
     // 3. ROUTE + UPSERT — the KNOW-15 write-decision over the rehydrated projection (mine.ts parity).
+    //    IDENTITY IS MINTED, NEVER TRUSTED — the routing/dedup `nodeKey` is RECOMPUTED from the content
+    //    via the frozen `nodeKey(node)` formula (KNOW-15b: hash(primaryAnchorId ‖ slot[‖ check])), the same
+    //    seam that mints `contentHash`/`primaryAnchor` below. The author-supplied payload `node.id` is NEVER
+    //    used for routing — trusting it would let an author spoof/collide/dodge another node's identity.
     const contentHash = id(node as CasObject);
     const req: WriteRequest = {
-      nodeKey: node.id as unknown as string,
+      nodeKey: nodeKey(node as unknown as Candidate) as unknown as string,
       contentHash: contentHash as unknown as string,
       family: node.kind,
       claimNorm: claimNormOf(node),
