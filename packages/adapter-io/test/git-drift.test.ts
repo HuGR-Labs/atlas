@@ -187,18 +187,26 @@ describe('createDriftSource — drift over a git merge-base (ADAPT-GIT-2)', () =
     expect(preFix.driftAt(sbx.mb as Hash)).toHaveLength(0);
   });
 
-  it('SCN-N10-guard — an UNMOVED fact (content still at its path) does NOT over-emit under the widening', () => {
+  it('SCN-N10-guard — an UNMOVED fact whose content ALSO exists at a DUPLICATE (earlier-sorting) path emits ZERO pairs (no PHANTOM move)', () => {
     sbx = makeGitSbx();
     const APP = 'src/app.ts';
+    const DUP = 'src/aaa-copy.ts'; // sorts EARLIER than src/app.ts ⇒ findBySubtree (preorder) returns THIS
     const resolveAnchorAt = makeResolveAnchorAt(sbx.repoPath);
-    const appMb = resolveAnchorAt(sbx.mb, APP)!; // resolvable + byte-identical mb→topic (unchanged)
-    // A content resolver that would find the content STILL at its original path (qualifiedPath === qp).
+    const appMb = resolveAnchorAt(sbx.mb, APP)!; // resolvable + byte-identical mb→topic ⇒ fact intact in place
+    // The recorded content ALSO lives at a DUPLICATE path at HEAD — a byte-for-byte copy elsewhere. A content
+    // resolver keyed on `subtreeHash` returns the FIRST preorder node, i.e. the duplicate (earlier path),
+    // whose qualifiedPath !== qp — so the `!== qp` guard would NOT catch it. Only the narrowing (the recorded
+    // path STILL resolves ⇒ `continue` BEFORE the content lookup) suppresses the phantom rename.
     const resolveBySubtreeAt = (_rev: string, subtreeHash: string): StructRef | undefined =>
-      subtreeHash === String(appMb.subtreeHash) ? appMb : undefined;
+      subtreeHash === String(appMb.subtreeHash)
+        ? { kind: 'file', qualifiedPath: DUP, subtreeHash: appMb.subtreeHash }
+        : undefined;
 
     const fact = advisoryAt('F_app', APP, appMb.subtreeHash);
     const src = createDriftSource({ repoPath: sbx.repoPath, resolveAnchorAt, resolveBySubtreeAt, facts: [fact] });
-    // Content unmoved (relocated.qualifiedPath === qp) ⇒ the `!== qp` guard suppresses a phantom pair.
+    // TEETH (red→green): PRE-narrowing, `now` defined fell through to resolveBySubtreeAt → the DUP at an
+    // earlier path passed `!== qp` → a PHANTOM {app.ts → aaa-copy.ts} pair (len 1), diverging from doctor
+    // (reDerives FRESH ⇒ not drifted). The narrowing makes this ZERO — doctor≡reconcile restored.
     expect(src.driftAt(sbx.mb as Hash)).toHaveLength(0);
   });
 });

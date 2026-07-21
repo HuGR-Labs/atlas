@@ -124,8 +124,7 @@ function makeFix(): Fix {
 }
 
 // N10 — a content-PRESERVING rename fixture: commit A authors src/keep.ts (KEEP_BODY); commit B `git mv`s it
-// to src/moved.ts with an IDENTICAL body (old path DELETED at HEAD). One advisory fact grounded at the
-// keep.ts unit structure @A. At HEAD the recorded content lives ONLY at the new path — a moved-but-alive fact.
+// to src/moved.ts (IDENTICAL body, old path DELETED at HEAD) ⇒ a moved-but-alive fact grounded at keep.ts @A.
 interface RenameFix {
   readonly repoPath: string;
   readonly A: string; // sha where the unit lives at src/keep.ts
@@ -183,13 +182,63 @@ function makeRenameFix(): RenameFix {
   return { repoPath, A, B, factKeep: grounded, cleanup: () => rmSync(repoPath, { recursive: true, force: true }) };
 }
 
+// N10 phantom-move guard fixture — the recorded content DUPLICATED at an earlier-sorting path, the fact
+// UNCHANGED at its own path across A→HEAD. Proves doctor≡reconcile agree (the narrowing suppresses a phantom).
+interface DupFix {
+  readonly repoPath: string;
+  readonly A: string; // the sha the fact was grounded at; keep.ts stays byte-identical through HEAD
+  readonly factKeep: GroundedFact;
+  cleanup(): void;
+}
+
+function makeDupFix(): DupFix {
+  const repoPath = mkdtempSync(join(tmpdir(), 'recon-dup-'));
+  g(repoPath, ['init', '-q']);
+  g(repoPath, ['config', 'user.email', 't@t.t']);
+  g(repoPath, ['config', 'user.name', 'T']);
+  g(repoPath, ['config', 'commit.gpgsign', 'false']);
+  mkdirSync(join(repoPath, 'src'), { recursive: true });
+  // keep.ts + an EARLIER-sorting duplicate (aaa-dup.ts), byte-identical body ⇒ identical subtreeHash.
+  writeFileSync(join(repoPath, 'src', 'aaa-dup.ts'), KEEP_BODY);
+  writeFileSync(join(repoPath, KEEP_QP), KEEP_BODY);
+  g(repoPath, ['add', '-A']);
+  g(repoPath, ['commit', '-q', '-m', 'A: keep + duplicate']);
+  const A = g(repoPath, ['rev-parse', 'HEAD']);
+  // An UNRELATED second commit so HEAD != A while keep.ts stays byte-identical (the fact is intact in place).
+  writeFileSync(join(repoPath, 'README.md'), 'x\n');
+  g(repoPath, ['add', '-A']);
+  g(repoPath, ['commit', '-q', '-m', 'B: unrelated change']);
+
+  const scip = makeFixScip();
+  mkdirSync(join(repoPath, '.atlas'), { recursive: true });
+  copyFileSync(scip.scipPath, join(repoPath, '.atlas', 'index.scip'));
+  scip.cleanup();
+
+  const rev = createRevIndex(repoPath);
+  const sh = rev.resolveAnchorAt(A, KEEP_QP)!.subtreeHash;
+  const grounded: GroundedFact = {
+    ...advisoryAt('F_keep', sh),
+    grounding: { entries: [{ anchor: { kind: 'file', qualifiedPath: KEEP_QP, subtreeHash: sh }, path: KEEP_QP }] },
+  };
+  const store = createDiskStore(join(repoPath, CAS_REL));
+  const h = store.put(grounded as never) as string;
+  store.persistProjection({
+    current: new Map([[grounded.id as unknown as string, { nodeKey: grounded.id as unknown as string, family: 'advisory', contentHash: h, claims: [] } as CurrentNode]]),
+    cas: new Set([h]),
+  });
+  return { repoPath, A, factKeep: grounded, cleanup: () => rmSync(repoPath, { recursive: true, force: true }) };
+}
+
 let fix: Fix | undefined;
 let renameFix: RenameFix | undefined;
+let dupFix: DupFix | undefined;
 afterEach(() => {
   fix?.cleanup();
   fix = undefined;
   renameFix?.cleanup();
   renameFix = undefined;
+  dupFix?.cleanup();
+  dupFix = undefined;
 });
 
 // Reconstruct the EXACT leg compose.ts wires, with the two drift seams injectable (for TEETH).
@@ -328,5 +377,24 @@ describe('RECON-N10 — a content-preserving RENAME is MECHANICAL (content-addre
     expect(postFix.drift[0]!.anchorNow.qualifiedPath).toBe(MOVED_QP);
     expect(postFix.mechanical).toContain('F_keep');
     expect(postFix.exitCode).toBe(0);
+  });
+});
+
+describe('RECON-N10-guard — an UNMOVED fact with a DUPLICATE of its content ⇒ NO phantom move (doctor≡reconcile)', () => {
+  it('SCN-N10-dup — reconcile emits ZERO drift AND doctor reads not-drifted (single source of truth)', () => {
+    dupFix = makeDupFix();
+    const { handler, doctorSource } = composeRuntime(dupFix.repoPath);
+
+    // keep.ts is byte-identical A→HEAD ⇒ intact in place ⇒ the narrowing `continue`s BEFORE the content
+    // lookup ⇒ the duplicate at src/aaa-dup.ts is NEVER mistaken for a rename.
+    const out = handler.handle(RECONCILE, { mergeBase: dupFix.A as Hash }).data as ReconcileOut;
+    expect(out.drift).toHaveLength(0);
+    expect(out.mechanical).toHaveLength(0);
+    expect(out.semantic).toHaveLength(0);
+    expect(out.exitCode).toBe(0);
+
+    // doctor AGREES: the recorded grounding re-derives FRESH at HEAD ⇒ NOT drifted (`undefined`). The two
+    // drift-sets coincide — the single-source-of-truth invariant N10 rests on.
+    expect(doctorSource.drift(String(dupFix.factKeep.id))).toBeUndefined();
   });
 });

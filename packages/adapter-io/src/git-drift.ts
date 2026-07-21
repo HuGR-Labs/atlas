@@ -59,10 +59,16 @@ export function createDriftSource(deps: {
           });
           continue;
         }
-        // PURE-RENAME widening (N10): the path-keyed diff surfaced no in-place drift (the path is GONE at
-        // HEAD, or unchanged in place). If the fact's RECORDED content re-located to a NEW qualifiedPath at
-        // HEAD, the claim MOVED but survives ⇒ emit a pair anchored at that new location. The `qualifiedPath
-        // !== qp` guard keeps an unmoved fact (content still at the original path) from over-emitting.
+        // The recorded qualifiedPath STILL resolves at HEAD (and did not drift in place) ⇒ the fact is intact
+        // at its own path ⇒ NEVER a rename. Skip BEFORE the content lookup — otherwise a byte-identical
+        // DUPLICATE of the content at some other path would let `findBySubtree` (first-preorder) hand back the
+        // duplicate and fabricate a PHANTOM move, diverging from doctor (whose `reDerives` reads FRESH here).
+        // The pure-rename widening below fires ONLY when the recorded path is truly GONE at HEAD.
+        if (now !== undefined) continue;
+        // PURE-RENAME widening (N10): the recorded qualifiedPath is GONE at HEAD. If the fact's RECORDED
+        // content re-located to a DIFFERENT qualifiedPath at HEAD, the claim MOVED but survives ⇒ emit a pair
+        // anchored at that new location (mirrors doctor surfacing a moved anchor). The `!== qp` guard is a
+        // belt-and-braces totality check (the content cannot resolve at the now-absent qp, but never assume).
         const relocated = deps.resolveBySubtreeAt?.(topicSha, String(first.anchor.subtreeHash));
         if (relocated !== undefined && relocated.qualifiedPath !== qp) {
           pairs.push({
