@@ -44,6 +44,12 @@ abstains without a model wired (`genesis/extract.ts:118` "model abstained"); for
 fabricate ungrounded facts (violates the thesis). FIX: make the abstention LEGIBLE — a clear `mine` render
 line ("0 candidates: no proposer model wired — abstain-by-design, never fabricated") + a short doc/comment.
 Do NOT invent a fake miner. FILES: `packages/cli/src/mine.ts` (message) + a doc note. REVIEW: lucy.
+> RESOLVED (WP-F6): mining is MODEL-GATED and fails CLOSED by default. With no proposer wired the extractor
+> abstains at every site (`genesis/extract.ts:118`) rather than fabricate an ungrounded fact; a default pass
+> seeds 0 candidates BY DESIGN, not by error. `mine.ts` now renders `MINE_ABSTAIN_LINE`
+> (`mine: 0 candidates — no proposer model wired (abstain-by-design; facts are never fabricated)`) whenever a
+> 0-candidate run is caused by the absent model, so the abstention is legible. No fake miner was introduced —
+> facts still come solely from real gate verdicts (GEN-6).
 
 ## WP-F7 — `reconcile` stops leaking git worktree chatter to stderr
 FINDING: `rev-index.ts` `git worktree add` writes progress to stderr (stdout stays clean/deterministic).

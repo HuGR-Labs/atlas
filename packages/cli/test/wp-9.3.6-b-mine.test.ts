@@ -28,7 +28,7 @@ import type {
   AdmitDeps,
 } from '@atlas/genesis';
 import type { DiskStore } from '@atlas/adapter-io';
-import { runMine, driveMine, buildControllerDeps, makeAdmitGate } from '../src/mine.js';
+import { runMine, driveMine, buildControllerDeps, makeAdmitGate, MINE_ABSTAIN_LINE } from '../src/mine.js';
 import type { MineDeps } from '../src/mine.js';
 
 // ── the ranked-frontier skeleton fixture (mirrors s02's acme skeleton) ─────────────────────────────────
@@ -215,5 +215,34 @@ describe('runMine — folds the GenesisReport to a CliVerdict', () => {
     const v = await runMine(REPO); // honest fail-closed defaults ⇒ an empty, total pass (no model, no git)
     expect(v.exitCode).toBe(0);
     expect(v.stdout).toContain('seeded 0');
+  });
+});
+
+// ── WP-F6 — the abstain-by-design render is LEGIBLE (mining is model-gated, fails closed) ────────────────
+// FINDING: `atlas mine` writes 0 grounded candidates with no model wired. VERDICT: NOT a bug — the extractor
+// abstains fail-closed (genesis/extract.ts:118) rather than fabricate an ungrounded fact. FIX: make the
+// abstention LEGIBLE, do NOT invent a fake miner. This suite proves the 0-candidate render EXPLAINS itself.
+describe('WP-F6 — a default (no-model) mine render is a legible abstain, not a silent 0', () => {
+  it('a no-proposer pass seeds 0, exits clean (0), and renders the abstain-by-design line', async () => {
+    const v = await runMine(REPO); // no proposer injected ⇒ model-gated abstain-by-design
+    expect(v.exitCode).toBe(0); //             clean abstain — an empty pass is NOT an error
+    expect(v.stdout).toContain('seeded 0'); // still 0 candidates (no fabricated fact)
+    expect(v.stdout).toContain(MINE_ABSTAIN_LINE); // the WHY is legible on stdout
+    expect(v.stdout).toContain('no proposer model wired'); // names the model-gate cause
+    expect(v.stdout).toContain('never fabricated'); // states the honesty invariant
+  });
+
+  it('a real-model pass that DOES seed suppresses the abstain line (line means "no model", not "0 facts")', async () => {
+    const v = await runMine(REPO, depsOf({ budget: budget(FRONTIER.length) })); // recordingProposer wired
+    expect(v.stdout).not.toContain(MINE_ABSTAIN_LINE); // a wired model that seeded facts never claims abstain
+  });
+
+  it('MUTANT — a silent 0-candidate render (drops the abstain line) leaves the empty pass unexplained', async () => {
+    const v = await runMine(REPO); // the real driver: legible
+    // the mutant render — same seeded/cost lines, but the model-gate explanation stripped out.
+    const silent = v.stdout.split('\n').filter((l) => l !== MINE_ABSTAIN_LINE).join('\n');
+    expect(v.stdout).toContain(MINE_ABSTAIN_LINE); //  the real driver EXPLAINS the 0
+    expect(silent).not.toContain(MINE_ABSTAIN_LINE); // the mutant hides WHY it is 0 — the guard flips RED
+    expect(silent).toContain('seeded 0'); //           yet still reports 0: a silent, mysterious empty render
   });
 });
