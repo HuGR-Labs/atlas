@@ -10,7 +10,13 @@
 // composition root is a SEPARATE step (this file exports the capability only).
 //
 // All git I/O flows through one seam (`execFileSync` — NO shell), mirroring git-history.ts. `build`,
-// `walkFileTree`, and `driftDetect` are the FROZEN ingredients — consumed, never reimplemented.
+// `walkFileTree`, `foldAstUnits`, and `driftDetect` are the FROZEN ingredients — consumed, never
+// reimplemented. `foldAstUnits` is applied BEFORE `build` (the SAME transform composeRuntime/assembleHandler
+// apply at compose time), so the arbitrary-rev index carries the very `::` sub-file symbol nodes a grounded
+// fact is authored against — otherwise a symbol/file anchor's recorded (folded) `subtreeHash` could never
+// re-derive at a rev, and the drift oracle would diverge from the index the truth-gate accepted the fact on.
+// It is warmup-gated (a no-op until `initAst()` is awaited — the entrypoint bins do this once), so a caller
+// that never warms the grammar sees the identical file/dir-only snapshot as before.
 
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, rmSync } from 'node:fs';
@@ -21,6 +27,7 @@ import type { Axes, IndexNode } from '@atlas/index';
 import { driftDetect } from '@atlas/grounding';
 import type { Hash, StructRef } from '@atlas/contracts';
 import type { GroundedFact } from '@atlas/knowledge';
+import { foldAstUnits } from './ast.js';
 import { walkFileTree } from './fs.js';
 
 /** The arbitrary-rev code-index capability. `axesAt` builds (once, memoized) the index at a rev; the two
@@ -34,6 +41,12 @@ export interface RevIndex {
    *  is not a structural unit in that rev's tree. Mirrors grounding's `resolveCurrent` (drift.ts): a node
    *  is keyed by `IndexNode.key` (= the FileTree path). Total: never throws. */
   resolveAnchorAt(rev: string, qp: string): StructRef | undefined;
+  /** The `StructRef` of the FIRST unit in `axesAt(rev)` whose `subtreeHash` equals `subtreeHash`, or
+   *  `undefined` if that exact CONTENT no longer resolves ANYWHERE in the rev — the re-derivability oracle
+   *  keyed on the drift oracle (`subtreeHash`, GROUND-1), NOT on the anchor's `qualifiedPath`. A moved
+   *  anchor whose content survives at a NEW path re-derives here (⇒ mechanical, re-groundable to that path);
+   *  content that genuinely changed/vanished does not (⇒ semantic). Total: never throws. */
+  resolveBySubtreeAt(rev: string, subtreeHash: string): StructRef | undefined;
   /** Does `fact`'s grounding still hold at `newSha` — `driftDetect(fact.grounding, axesAt(newSha))` is
    *  `FRESH`. `false` on any drift, an absent unit, or a bad `newSha` (fail-closed, never throws). */
   reDerives(fact: GroundedFact, newSha: Hash): boolean;
@@ -70,6 +83,17 @@ function findNode(node: IndexNode, key: string): IndexNode | undefined {
   if (node.key === key) return node;
   for (const child of node.children) {
     const hit = findNode(child, key);
+    if (hit !== undefined) return hit;
+  }
+  return undefined;
+}
+
+/** Resolve the FIRST `IndexNode` (preorder) whose `subtreeHash` equals `hash` — the content-addressed dual
+ *  of `findNode` (keys on the drift oracle, not the path). Total: an absent content returns `undefined`. */
+function findBySubtree(node: IndexNode, hash: string): IndexNode | undefined {
+  if (String(node.subtreeHash) === hash) return node;
+  for (const child of node.children) {
+    const hit = findBySubtree(child, hash);
     if (hit !== undefined) return hit;
   }
   return undefined;
@@ -113,7 +137,9 @@ export function createRevIndex(repoPath: string, deps: RevIndexDeps = {}): RevIn
     try {
       // Detach the rev into the throwaway worktree; a bad/unknown rev makes this throw → caught below.
       runGit(repoPath, ['worktree', 'add', '--detach', dir, rev]);
-      const axes = build(walkFileTree(dir), { documents: [] });
+      // Fold sub-file AST units BEFORE `build` — the SAME transform compose-time uses (compose.ts) — so this
+      // rev's index carries the `::` symbol nodes a fact is grounded against. Warmup-gated no-op otherwise.
+      const axes = build(foldAstUnits(walkFileTree(dir)), { documents: [] });
       cache.set(rev, axes); // memoize the immutable rev's Axes (NOT the worktree)
       return axes;
     } catch {
@@ -149,9 +175,20 @@ export function createRevIndex(repoPath: string, deps: RevIndexDeps = {}): RevIn
     return undefined;
   }
 
+  function resolveBySubtreeAt(rev: string, subtreeHash: string): StructRef | undefined {
+    const axes = axesAt(rev);
+    for (const root of [axes.spatial, axes.territory, axes.dependency]) {
+      const node = findBySubtree(root, subtreeHash);
+      if (node !== undefined) {
+        return { kind: kindOf(node), qualifiedPath: node.key, subtreeHash: node.subtreeHash };
+      }
+    }
+    return undefined;
+  }
+
   function reDerives(fact: GroundedFact, newSha: Hash): boolean {
     return driftDetect(fact.grounding, axesAt(String(newSha))) === 'FRESH';
   }
 
-  return { axesAt, resolveAnchorAt, reDerives };
+  return { axesAt, resolveAnchorAt, resolveBySubtreeAt, reDerives };
 }
