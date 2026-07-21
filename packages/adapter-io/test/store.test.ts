@@ -163,6 +163,40 @@ describe('rehydrateProjection — ADAPT-STORE-3 cross-process rehydrate, minting
     expect(node.slot).toBeUndefined();
   });
 
+  it('loadProjection over corrupt (non-JSON) sidecar bytes is total — emptyStore rehydrate, never throws', () => {
+    const dir = freshCasDir();
+    const s = createDiskStore(dir);
+    // persist a genuine projection, then corrupt the sidecar to NON-JSON (truncated write on disk).
+    s.persistProjection(upsert(emptyStore(), reqF()).store);
+    writeFileSync(join(tmp!, 'projection.json'), '{ "current": [ truncated', 'utf8');
+    let out: unknown = 'sentinel';
+    // MUTANT: the unwrapped `JSON.parse(raw) as WireProjection` in loadProjection (store.ts) — a corrupt
+    // sidecar throws there, and since composeRuntime rehydrates at boot, that throw crashes BOTH bins.
+    expect(() => {
+      out = createDiskStore(dir).loadProjection();
+    }).not.toThrow();
+    expect(out).toBeUndefined();
+    // and rehydrate degrades to the empty projection — no boot crash, no minting.
+    const p = rehydrateProjection(createDiskStore(dir));
+    expect([...p.current.keys()]).toEqual([]);
+    expect([...p.cas]).toEqual([]);
+  });
+
+  it('loadProjection over valid-JSON-but-wrong-shape sidecar is total — emptyStore, never throws', () => {
+    const dir = freshCasDir();
+    createDiskStore(dir).persistProjection(upsert(emptyStore(), reqF()).store);
+    // valid JSON whose `current` is NOT the [k,v] entry-array — `new Map(5)` / `new Map({})` would throw.
+    writeFileSync(join(tmp!, 'projection.json'), JSON.stringify({ current: 5, cas: {} }), 'utf8');
+    let p: ReturnType<typeof rehydrateProjection> | undefined;
+    // MUTANT: dropping the Array.isArray shape guard (and its try/catch) — the wrong-shape wire reaches
+    // `new Map(wire.current)` and throws, again crashing rehydrate at boot.
+    expect(() => {
+      p = rehydrateProjection(createDiskStore(dir));
+    }).not.toThrow();
+    expect([...p!.current.keys()]).toEqual([]);
+    expect([...p!.cas]).toEqual([]);
+  });
+
   it('SCN-ADAPTER-12b-1 — rehydrate reconstructs state only, minting nothing (guard)', () => {
     const dir = freshCasDir();
     const { store: projection } = upsert(emptyStore(), reqF());

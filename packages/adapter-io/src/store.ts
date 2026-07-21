@@ -121,16 +121,31 @@ export function createDiskStore(casPath: CasPath): DiskStore {
     },
 
     loadProjection(): StoreProjection | undefined {
+      // total (mirrors `get` above): a missing OR corrupt/unparseable/shape-invalid sidecar reads as
+      // "none persisted" (`undefined`) — NEVER a throw. A throw here would crash `rehydrateProjection`
+      // (and thus BOTH bins) at boot, since composeRuntime rehydrates at startup.
       const path = projectionPath(casPath);
       let raw: string;
       try {
         raw = readFileSync(path, 'utf8');
       } catch {
-        return undefined; // none persisted yet
+        return undefined; // ENOENT / none persisted yet
       }
-      const wire = JSON.parse(raw) as WireProjection;
-      // deserialize back: entry-array → Map, array → Set.
-      return { current: new Map(wire.current), cas: new Set(wire.cas) };
+      let wire: WireProjection;
+      try {
+        wire = JSON.parse(raw) as WireProjection;
+      } catch {
+        return undefined; // corrupt / truncated bytes
+      }
+      // shape guard: the entry-array and value-array must be arrays before Map/Set construction, else a
+      // valid-JSON-but-wrong-shape sidecar (e.g. `{}`, `[]`, `{current:5}`) throws in `new Map(...)`.
+      if (!wire || !Array.isArray(wire.current) || !Array.isArray(wire.cas)) return undefined;
+      // deserialize back: entry-array → Map, array → Set — defended in case an entry itself is non-iterable.
+      try {
+        return { current: new Map(wire.current), cas: new Set(wire.cas) };
+      } catch {
+        return undefined; // malformed entries (e.g. a non-[k,v] element)
+      }
     },
   };
 }
