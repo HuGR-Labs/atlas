@@ -71,10 +71,10 @@ describe('SCN-CLI-1a — every command maps to exactly one leg', () => {
 });
 
 describe('SCN-CLI-1b — a malformed invocation yields a structured error', () => {
-  it('atlas query --depth=notanumber → non-zero exit + guidance, no throw', async () => {
-    const code = await main(['query', '--depth=notanumber'], { handler: fakeHandler() });
+  it('atlas query (missing scope positional) → non-zero exit + guidance, no throw', async () => {
+    const code = await main(['query'], { handler: fakeHandler() });
     expect(code).not.toBe(0);
-    // teeth: the parser must NOT pass NaN through — guidance is present, not a stack trace.
+    // teeth: a missing positional fails CLOSED to a structured error — guidance is present, not a stack trace.
     const out = writes.join('');
     expect(out).toMatch(/next:/);
     expect(out).toMatch(/invariant:/);

@@ -41,8 +41,8 @@ function isCommand(s: string): s is Command {
 
 /**
  * Flags that carry a VALUE token, accepting both the joined `--flag=v` and the space `--flag v` forms.
- * `--at` (the emit anchor rev) is valued; everything else stays a bare boolean. `--depth` is deliberately
- * NOT here — it keeps its `--depth=<int>` typed-flag behavior (a bare `--depth` folds to the invalid `'true'`).
+ * `--at` (the emit anchor rev) is valued; everything else stays a bare boolean. Any unknown flag simply
+ * folds into the bag (a bare `--x` becomes `'true'`) — it is never a parse error, preserving totality.
  */
 const VALUED_FLAGS = new Set(['at']);
 
@@ -70,9 +70,9 @@ function foldFlag(tok: string, next: string | undefined, flags: Record<string, s
 }
 
 /**
- * Parse `argv` TOTALLY. Failures: empty argv, a flag where the command belongs, an unknown command, a
- * malformed typed flag (`--depth` must be an integer), or a missing positional. Every failure is a
- * `ParseError` — never a throw, never `process.exit`.
+ * Parse `argv` TOTALLY. Failures: empty argv, a flag where the command belongs, an unknown command, or a
+ * missing positional. Every failure is a `ParseError` — never a throw, never `process.exit`. Unknown flags
+ * are never a failure — they fold into the flag bag and are ignored by the marshallers that do not read them.
  */
 export function parse(argv: readonly string[]): ParseResult {
   if (argv.length === 0) {
@@ -94,14 +94,6 @@ export function parse(argv: readonly string[]): ParseResult {
     if (tok === undefined) continue;
     if (tok.startsWith('-')) i += foldFlag(tok, rest[i + 1], flags);
     else positionals.push(tok);
-  }
-
-  // bad flag: a typed flag with a malformed value is a parse error (CLI-1b — the `--depth=notanumber` case).
-  if (Object.prototype.hasOwnProperty.call(flags, 'depth')) {
-    const raw = flags['depth'];
-    if (raw === undefined || raw === 'true' || !Number.isInteger(Number(raw))) {
-      return { ok: false, error: `bad flag: --depth must be an integer, got '${raw ?? ''}'` };
-    }
   }
 
   // missing positional
