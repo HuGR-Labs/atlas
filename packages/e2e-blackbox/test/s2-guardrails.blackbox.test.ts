@@ -45,6 +45,10 @@ describe('S2a — an UNGROUNDED emit is rejected fail-closed, nothing persisted'
     // the guidance NAMES the ground failure (a re-derivation failure at source), not a generic error.
     expect(r.stdout).toContain('did not re-derive');
     expect(r.stdout).toContain('TOOLS-1/7'); // the single-write-door invariant
+    // F5 (FLIPPED): the CLI now RENDERS the rejection REASON — the governed refusal is legible at the user
+    // door, not just the follow-up guidance (was invisible before remediation — the finding this documented).
+    expect(r.stdout).toMatch(/^reason: .+$/m);
+    expect(r.stdout).toContain('reason: ungrounded'); // the fail-closed reason surfaces verbatim
     // NOT an empty success: no `id:` was rendered (nothing was persisted to CAS).
     expect(r.stdout).not.toContain('id:');
   });
@@ -65,6 +69,9 @@ describe('S2b — an UNAUTHORIZED (out-of-scope) emit is rejected fail-closed, n
     expect(r.stdout).toContain('status: rejected');
     expect(r.stdout).toMatch(/^next: .+$/m);
     expect(r.stdout).toMatch(/^invariant: .+$/m);
+    // F5 (FLIPPED): the KNOW-11 authz refusal reason is rendered too — every fail-closed door is legible.
+    expect(r.stdout).toMatch(/^reason: .+$/m);
+    expect(r.stdout).toContain('reason: unauthorized');
     expect(r.stdout).not.toContain('id:'); // never a silent empty success
   });
 

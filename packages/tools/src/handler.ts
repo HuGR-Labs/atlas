@@ -6,7 +6,7 @@
 
 import type { NodeKey, ToolSchema } from '@atlas/contracts';
 import type { GroundedFact } from '@atlas/knowledge';
-import type { Guidance, HandlerApi, Tool, ToolData, Transport, Verdict } from './types.js';
+import type { EmitOut, Guidance, HandlerApi, Tool, ToolData, Transport, Verdict } from './types.js';
 
 /** The CLOSED governance surface — EXACTLY four tools, no more (TOOLS-1). The order is fixed; membership is
  *  the load-bearing fact (surface count == 4). */
@@ -75,6 +75,12 @@ const GUIDANCE_OFF_SURFACE: Guidance = {
 const guidanceFor = (tool: Tool): Guidance => GUIDANCE[tool] ?? GUIDANCE_OFF_SURFACE;
 
 const reason = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+/** A leg return is a FAIL-CLOSED emit iff it carries `emitted:false` (only `EmitOut` does). A fail-closed
+ *  emit is a GOVERNANCE refusal, NOT a success — it MUST surface as a rejected `Verdict`, legible on BOTH
+ *  user doors (MCP `isError:true`, CLI exit 2), never a silent `ok:true` an agent reads as success (F2/F5). */
+const isFailClosedEmit = (data: ToolData): data is EmitOut =>
+  typeof data === 'object' && data !== null && (data as { emitted?: unknown }).emitted === false;
 
 /** THE one published input schema per governance tool (TOOLS-3) — CLI and MCP share it byte-for-byte; the
  *  schema carries NO transport parameter, so the same bytes back every surface (the divergence this seam
@@ -153,6 +159,12 @@ export function createHandler(legs: ToolLegs, nodes?: NodeSource): HandlerApi {
     }
     try {
       const data = leg(args);
+      if (isFailClosedEmit(data)) {
+        // F2/F5: a fail-closed emit is a governance REJECTION, not a silent ok. Surface it uniformly across
+        // doors as an `ok:false` verdict carrying the reason. The `EmitOut` rides `data` so the CLI can still
+        // classify it exit-2 (rejected) — distinct from the exit-1 error of a malformed/unwired call.
+        return { ok: false, data, rejected: data.rejected ?? 'emit failed closed (ungrounded)', guidance };
+      }
       return { ok: true, data, guidance };
     } catch (e) {
       // TOOLS-2: fail CLOSED on a malformed argument — a structured rejected verdict, never a throw.

@@ -83,10 +83,16 @@ function renderData(data: unknown): string {
 export function renderVerdict(v: Verdict): CliVerdict {
   const status = deriveStatus(v);
   const dataBlock = v.ok && v.data !== undefined ? renderData(v.data) : '';
+  // F5: on a fail-closed / rejected verdict (`ok:false` with a reason), render the REASON so the CLI door is
+  // as legible as the MCP `isError` door — the governed refusal is never silent. DETERMINISTIC: a pure
+  // function of `v.rejected`, appended after the status/guidance lines (mutually exclusive with `dataBlock`,
+  // which renders only on `ok`). An `ok` verdict carries no reason ⇒ pre-existing output stays byte-identical.
+  const reasonBlock = !v.ok && v.rejected ? `reason: ${v.rejected}\n` : '';
   const stdout =
     `status: ${status}\n` +
     `next: ${v.guidance.next}\n` +
     `invariant: ${v.guidance.invariant}\n` +
+    reasonBlock +
     dataBlock;
   return { exitCode: EXIT[status], stdout };
 }
