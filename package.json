@@ -12,7 +12,8 @@
     "typecheck": "tsc -b",
     "test": "vitest run",
     "godfile-guard": "node harness/gates/godfile-guard.mjs",
-    "postinstall": "node scripts/fix-scip-types.mjs"
+    "postinstall": "node scripts/fix-scip-types.mjs",
+    "spec-conformance-guard": "node harness/gates/spec-conformance-guard.mjs"
   },
   "engines": {
     "node": ">=20"
