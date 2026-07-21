@@ -8,10 +8,10 @@
 // SEMANTICALLY identical to the CLI's for the same input), and FAIL-CLOSED SURVIVES stdio (a rejected emit
 // carries `emitted:false` + the rejection reason + guidance through the transport — never a silent success).
 //
-// FINDING #2 (documented in the fail-closed test): a rejected `atlas-emit` over MCP does NOT set
-// `isError:true` — the handler wraps the `EmitOut{emitted:false}` in an `ok:true` verdict, so the SDK result
-// carries the rejection ONLY in `data.emitted:false` + `data.rejected` (the CLI maps the SAME verdict to exit
-// 2). The governed VERDICT is faithfully transported (parity holds); the error-CHANNEL semantics diverge.
+// F2 (REMEDIATED): a rejected `atlas-emit` over MCP now sets `isError:true` — the handler maps a fail-closed
+// `EmitOut{emitted:false}` to an `ok:false` verdict, which the server renders as an error result carrying
+// `rejected` + `guidance`. A naive agent can no longer read the fail-closed emit as success. Uniform with the
+// CLI's exit 2 for the SAME verdict: the governed refusal is legible on BOTH doors, never a silent success.
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, mcpSession, runAtlas } from '../src/harness.js';
@@ -83,23 +83,22 @@ describe('S5 — MCP stdio parity with the CLI over the one governed core', () =
     }
   });
 
-  it('SOTA fail-closed survives stdio: a rejected MCP `atlas-emit` carries emitted:false + reason + guidance', { timeout: 20000 }, async () => {
+  it('SOTA fail-closed survives stdio: a rejected MCP `atlas-emit` sets isError:true + carries the reason + guidance', { timeout: 20000 }, async () => {
     const session = await mcpSession(repo.repoPath);
     try {
       const res = await session.client.callTool({
         name: 'atlas-emit',
         arguments: { node: ungroundedFact('bad over mcp'), at: repo.sha() },
       });
+      // F2 (FLIPPED): a fail-closed emit is now an ERROR result over MCP — a naive agent CANNOT read it as a
+      // success. `isError:true` is the governed-refusal signal, uniform with the CLI's exit 2 for the SAME
+      // verdict (was a silent non-error before remediation — the finding this story documented).
+      expect(res.isError).toBe(true);
       const body = textOf(res as { content: Array<{ text?: string }> });
-      const data = body.data as { emitted?: unknown; rejected?: unknown };
-      // the fail-closed signal survives the transport: the write did NOT land, and the reason is carried.
-      expect(data.emitted).toBe(false);
-      expect(String(data.rejected)).toContain('ungrounded');
+      // the reason + guidance ride the error channel (the server maps an ok:false verdict → {rejected, guidance}).
+      expect(String(body.rejected)).toContain('ungrounded');
       expect(body.guidance?.next).toBeTruthy();
       expect(body.guidance?.invariant).toContain('TOOLS-1/7');
-      // FINDING #2: `isError` is NOT set for this fail-closed emit (rejection rides `data`, not the error
-      // channel) — the CLI maps the identical verdict to exit 2. Asserted to PIN the current behavior.
-      expect(res.isError).toBeFalsy();
     } finally {
       await session.close();
     }
