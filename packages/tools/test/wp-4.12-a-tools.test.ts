@@ -124,7 +124,50 @@ describe('WP-4.12-a.TOOLS — atlas-reconcile classifies drift, exit 2 only on s
     expect(out.semantic).toEqual(['nk:arr']);
     // teeth (breaks-on "re-authors the whole store (all N rows) instead of just the 1 semantic item").
     expect(out.reauthorCount).not.toBe(out.drift.length);
-    // this facet performs NO auto-re-ground write (TOOLS-13 owned by WP-4.12-b.TOOLS): nothing re-grounded.
+    // no `--accept-reground` here (options absent) ⇒ report-only, nothing accepted for re-grounding.
     expect(out.regroundedCount).toBe(0);
+  });
+});
+
+// ── TOOLS-13 `--accept-reground` — the mechanical subset is ACCEPTED for one-pass re-grounding ────────────
+// MUTANT (the finding N1): `reconcile.ts` VOIDED `options` and hard-pinned `regroundedCount = 0`, so the
+// `--accept-reground` / `acceptReground` flag was a NO-OP — regroundedCount was 0 on EVERY path regardless of
+// the flag or the mechanical subset. Guard: the flag now drives `regroundedCount == |mechanical|` (count of
+// facts accepted for re-grounding — the WRITE is applied downstream via adapter-io regroundTemplate→atlas-emit),
+// while SEMANTIC drift is NEVER re-grounded (still exit 2), and the default (flag absent/false) is UNCHANGED.
+describe('WP-4.12-a.TOOLS — --accept-reground accepts the mechanical subset, never the semantic (N1 guard)', () => {
+  it('acceptReground=true + a MECHANICAL drift → regroundedCount>0 (accepted), exit 0', () => {
+    // D = {dm} entirely mechanical (anchor moved but the claim re-derives at HEAD).
+    const pairs = [pair('ceo', 'st-ceo-old', 'st-ceo-new')];
+    const out = createReconcile(driftSourceOf(pairs), classifierWith(new Set(['nk:ceo']))).reconcile(MERGE, {
+      acceptReground: true,
+    });
+    // teeth (breaks-on the mutant "regroundedCount hard-pinned 0"): the mechanical item is accepted/re-grounded.
+    expect(out.regroundedCount).toBe(1);
+    expect(out.regroundedCount).toBe(out.mechanical.length);
+    expect(out.exitCode).toBe(0); // no semantic flip ⇒ success
+  });
+
+  it('acceptReground=true + a SEMANTIC drift → still blocks (exit 2), the broken claim is NOT re-grounded', () => {
+    // D = {dm, ds}: |mechanical|=1 (nk:ceo), |semantic|=1 (nk:arr — BROKEN, does not re-derive).
+    const pairs = [pair('ceo', 'st-ceo-old', 'st-ceo-new'), pair('arr', 'st-arr-old', 'st-arr-new')];
+    const out = createReconcile(driftSourceOf(pairs), classifierWith(new Set(['nk:ceo']))).reconcile(MERGE, {
+      acceptReground: true,
+    });
+    // teeth: the flag NEVER launders a broken claim — semantic still blocks, only the mechanical arm is accepted.
+    expect(out.exitCode).toBe(2); // semantic flip still blocks the merge
+    expect(out.semantic).toEqual(['nk:arr']);
+    expect(out.regroundedCount).toBe(1); // == |mechanical| — the semantic item is EXCLUDED
+    expect(out.regroundedCount).not.toBe(out.drift.length); // never the whole drifted store
+  });
+
+  it('acceptReground=false → UNCHANGED (report-only, regroundedCount=0)', () => {
+    const pairs = [pair('ceo', 'st-ceo-old', 'st-ceo-new')];
+    const out = createReconcile(driftSourceOf(pairs), classifierWith(new Set(['nk:ceo']))).reconcile(MERGE, {
+      acceptReground: false,
+    });
+    // teeth: with the flag OFF the surface stays report-only — nothing is accepted for re-grounding.
+    expect(out.regroundedCount).toBe(0);
+    expect(out.mechanical).toContain('nk:ceo'); // still SURFACED as regroundable, just not accepted
   });
 });
