@@ -1,7 +1,7 @@
 // @atlas/adapter-io — src/fs.ts  (ADAPT-FS-1: the faithful filesystem walk)
 //
 // The raw fs adapter: walk a repo path into the frozen `FileTree` (@atlas/index) along the spatial rail
-// repo→crate→module→file→item→block. SKELETON — signature frozen, body deferred to the ADAPT-FS WP.
+// repo→crate→module→file→item→block. Implemented — WP-9.1.1-b.FS (tests: fs.test.ts).
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';

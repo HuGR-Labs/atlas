@@ -1,7 +1,7 @@
 // @atlas/adapter-io — src/scip.ts  (ADAPT-SCIP-1/2: read a SCIP dump + plan the per-language indexers)
 //
 // The raw scip adapter: read an external `scip.proto` dump into the frozen `ScipOutput` projection
-// (@atlas/index) and plan which indexer to run per language. SKELETON — signatures frozen, bodies deferred.
+// (@atlas/index) and plan which indexer to run per language. Implemented — WP-9.1.1-b.SCIP (tests: scip.test.ts).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { deserializeSCIP, SymbolRole } from '@c4312/scip';
