@@ -18,7 +18,7 @@ import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
 import { groundedAdvisoryFact, groundedSymbolFact } from './author.js';
 import type { GroundedFact } from '@atlas/knowledge';
-import { ACTOR, emitFact, invLines, scopedPolicy, subsumesLines } from './support.js';
+import { ACTOR, RATIFIER, emitFact, invLines, scopedPolicy, subsumesLines } from './support.js';
 
 const FILES = { 'src/foo.ts': 'export const foo = 1;\n', 'src/bar.ts': 'export const bar = 2;\n' };
 const idOf = (s: string): string | undefined => s.match(/^ {2}id: ([0-9a-f]{64})$/m)?.[1];
@@ -30,10 +30,13 @@ let Frew: GroundedFact; //        claim C1-reworded at the SAME (anchor,slot) �
 let Gbar: GroundedFact; //        claim C1 at src/bar.ts::invariant ⇒ a DISTINCT nodeKey
 let Sfoo: GroundedFact; //        claim C1 at the SYMBOL src/foo.ts::foo ⇒ a `::` descendant of F's anchor
 let priorActor: string | undefined;
+let priorRatify: string | undefined;
 
 beforeAll(() => {
   priorActor = process.env.ATLAS_ACTOR;
+  priorRatify = process.env.ATLAS_RATIFY_TOKEN;
   process.env.ATLAS_ACTOR = ACTOR;
+  process.env.ATLAS_RATIFY_TOKEN = RATIFIER; // KNOW-8 ratifier — T1 facts route to full-ratify
   repo = makeFixtureRepo({ files: FILES, policy: scopedPolicy('src') });
   const at = (filePath: string, claim: string): GroundedFact =>
     groundedAdvisoryFact({ repoPath: repo.repoPath, filePath, slot: 'invariant', claim });
@@ -48,6 +51,8 @@ afterAll(() => {
   repo?.cleanup();
   if (priorActor === undefined) delete process.env.ATLAS_ACTOR;
   else process.env.ATLAS_ACTOR = priorActor;
+  if (priorRatify === undefined) delete process.env.ATLAS_RATIFY_TOKEN;
+  else process.env.ATLAS_RATIFY_TOKEN = priorRatify;
 });
 
 describe('S3 — dedup / update / non-destructive identity (ordered — durable store accretes)', () => {

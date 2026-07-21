@@ -70,6 +70,10 @@ export interface WireConfig {
   /** The KNOW-11 write actor (owner-scoped authz). Resolved by the composition root from the environment /
    *  local machine ONLY (never from a fact/payload); ABSENT ⇒ `''` ⇒ fail-closed (every write denied). */
   readonly actor?: string;
+  /** The KNOW-8 ratify token (`by`) for a full-ratify (T0/predicate/contested) commit. Resolved by the
+   *  composition root from the environment ONLY (`ATLAS_RATIFY_TOKEN`, never a fact/payload); ABSENT ⇒ a
+   *  full-ratify fact fails closed, a T0 fact needs `billy`. Fast-pathed (auto-accept) facts ignore it. */
+  readonly ratifyToken?: string;
 }
 
 /**
@@ -124,6 +128,9 @@ export function assembleHandler(config: WireConfig): WiredHandler {
     gate: config.seams.gate,
     policy: loadPolicy(config.repoPath),
     actor: config.actor ?? '',
+    // The ratify token rides the SAME env-sourced, payload-free channel as the actor. Conditional spread
+    // keeps it ABSENT (not `undefined`) when unset — `exactOptionalPropertyTypes`, so the door defaults to ''.
+    ...(config.ratifyToken !== undefined ? { ratifyToken: config.ratifyToken } : {}),
   });
 
   // Seam-1: wrap the pure structural index-adapter with the durable projection readback, so a scope resolves

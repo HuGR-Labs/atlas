@@ -78,6 +78,9 @@ export interface FactSpec {
  *  and whose identity is the REAL `nodeKey(anchor‖slot)` — so byte-identical re-emit DEDUPs, a reworded
  *  claim at the same (anchor,slot) UPDATEs (same nodeKey), and a different file CREATEs a distinct node. */
 export function groundedAdvisoryFact(spec: FactSpec): GroundedFact {
+  // Default T1 — the fact must be `tier≥T1` to be VISIBLE in the bounded read pack (TOOLS-6 bounds T2 OUT,
+  // tools/query.ts). A T1 fact routes to KNOW-18 full-ratify, so these stories drive `atlas emit` under a
+  // ratifier token (ATLAS_RATIFY_TOKEN, set alongside ATLAS_ACTOR in each story) — a lead-ratified emit.
   const tier: Tier = spec.tier ?? 'T1';
   const subtreeHash = asSubtree(subtreeHashOf(spec.repoPath, spec.filePath));
   const grounding: GroundedFact['grounding'] = {
@@ -141,6 +144,7 @@ export interface SymbolFactSpec {
  * so the emit truth-gate re-derives it FRESH. Throws if the named symbol is not a real folded index unit.
  */
 export function groundedSymbolFact(spec: SymbolFactSpec): GroundedFact {
+  // Default T1 — visible in the bounded read pack (tier≥T1); routes to full-ratify, driven under a token.
   const tier: Tier = spec.tier ?? 'T1';
   const axes = axesOf(spec.repoPath);
   const fileNode = findNode(axes.spatial, spec.filePath);
