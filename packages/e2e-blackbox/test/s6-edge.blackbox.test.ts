@@ -8,12 +8,11 @@
 // now FIXED on master — cells 1 & 2 pin the graceful degradation (files-only, empty projection). Driven ONLY
 // through the built bins (subprocess / stdio) — highest user/agent fidelity.
 //
-// NEW FINDING (N8) surfaced by this story — cell 3: a NON-GIT repo BOOT-CRASHES both bins. `walkFileTree`
-// (adapter-io/src/fs.ts:32) runs `git ls-files -z` via an UNGUARDED `execFileSync` inside `composeRuntime`;
-// on a tree with no `.git` it throws (git exit 128) and the throw propagates uncaught out of the bin's async
-// entrypoint — a raw stack trace on stderr, not the fail-closed empty-actor deny the matrix expected. This is
-// a THIRD unguarded boot read the N3/N4 sidecar guards do NOT cover (the git-tracked file walk). Cell 3 pins
-// this reality HONESTLY (it asserts the crash IS happening) rather than asserting-around it — see the it below.
+// N8 was a THIRD boot-crasher this story surfaced (now FIXED on master): a NON-GIT repo (or a tracked-but-
+// deleted file) crashed both bins because `walkFileTree` (adapter-io/src/fs.ts) ran `git ls-files -z` via an
+// UNGUARDED `execFileSync` inside `composeRuntime` — git exit 128 threw uncaught out of the bin. WP-N8 made
+// `walkFileTree` fail closed to an empty FileTree; cell 3 now pins the graceful degradation (structured
+// verdict over the empty index, no stack trace) — the honest red→green close of a finding this story found.
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
@@ -87,11 +86,12 @@ describe('S6 — edge / totality (WAVE-COV-4): every corner degrades, never cras
   });
 
   // 3 ─────────────────────────────────────────────────────────────────────────────────────────────────────
-  it('FINDING N8 (NEW — not N3/N4): a NON-GIT repo BOOT-CRASHES both bins (walkFileTree runs unguarded `git ls-files`)', () => {
+  it('N8 (FIXED): a NON-GIT repo degrades to an empty index — a structured verdict, NO boot crash', () => {
     // A raw temp dir that was NEVER `git init`'d (makeFixtureRepo git-inits, so we build one inline). `.atlas`
     // + a source file present, but no `.git`. `composeRuntime`→`walkFileTree` runs `git ls-files -z`, which
-    // exits 128 ("not a git repository"); the throw is UNCAUGHT and crashes the bin. This is the honest,
-    // documented reality — NOT a graceful empty-actor deny. Flagged as a new finding; do NOT assert-around.
+    // exits 128 ("not a git repository"). PRE-N8 the throw was uncaught and crashed the bin; POST-N8
+    // `walkFileTree` fails closed to an EMPTY FileTree, so the bin REACHES the render path and returns a
+    // structured verdict (no covering territory over the empty index) — total, never a raw stack trace.
     const raw = mkdtempSync(join(tmpdir(), 'atlas-nongit-'));
     scratch.push({ cleanup: () => rmSync(raw, { recursive: true, force: true }) });
     mkdirSync(join(raw, '.atlas'), { recursive: true });
@@ -100,11 +100,11 @@ describe('S6 — edge / totality (WAVE-COV-4): every corner degrades, never cras
     writeFileSync(join(raw, 'src', 'a.ts'), SRC);
 
     const r = runAtlas(raw, ['query', 'src']);
-    // The observed NON-graceful signature: a non-zero exit AND a raw crash trace + the git fatal on stderr.
-    expect(r.exitCode).not.toBe(0);
-    expect(hasCrashTrace(r.stderr)).toBe(true); // <-- the finding: a stack trace escaped, not a structured verdict
-    expect(r.stderr).toContain('not a git repository');
-    expect(r.stdout).not.toContain('status:'); // it never reached the render path — it died at compose/boot
+    // The graceful signature: a clean small exit, a rendered `status:` (reached the render path — did NOT die
+    // at compose/boot), and NO raw crash trace on stderr. Teeth: reverting the N8 guard flips L106/L107.
+    expect([0, 1, 2]).toContain(r.exitCode); // a valid CLI exit code, not a signal-kill / uncaught crash
+    expect(hasCrashTrace(r.stderr)).toBe(false); // the fix: no stack trace escapes — it fails closed to empty
+    expect(r.stdout).toContain('status:'); // it reached the render path over the empty index (no boot crash)
   });
 
   // 4 ─────────────────────────────────────────────────────────────────────────────────────────────────────
