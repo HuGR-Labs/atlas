@@ -116,6 +116,11 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
   // email is a better default than a bare env var. NEVER sourced from untrusted input; passed EXPLICITLY
   // to the assembler below (no global env write).
   const actor = process.env.ATLAS_ACTOR ?? gitUserEmail(repoPath) ?? '';
+  // The KNOW-8 ratify token for a full-ratify (T0/predicate/contested) commit. Env-sourced ONLY
+  // (`ATLAS_RATIFY_TOKEN`) — the SAME payload-free channel as the actor; there is NO git/machine fallback (a
+  // ratifier signature is deliberate, not a local default). ABSENT ⇒ passed as absent below ⇒ the door fails
+  // closed on a full-ratify fact (a T0 fact requires the `billy` token). NEVER sourced from an emitted fact.
+  const ratifyToken = process.env.ATLAS_RATIFY_TOKEN;
 
   const policy = loadPolicy(repoPath);
   const scipPath = join(repoPath, SCIP_REL);
@@ -152,6 +157,8 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     scipPath,
     seams,
     actor,
+    // Conditional spread keeps `ratifyToken` ABSENT (not `undefined`) when unset — exactOptionalPropertyTypes.
+    ...(ratifyToken !== undefined ? { ratifyToken } : {}),
   };
 
   // The real read-only diagnostic port — built over the SAME durable store + revIndex the governed emit

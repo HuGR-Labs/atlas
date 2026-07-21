@@ -17,7 +17,7 @@ import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
 import { groundedAdvisoryFact } from './author.js';
 import type { FactSpec } from './author.js';
-import { ACTOR, emitFact, invLines, scopedPolicy } from './support.js';
+import { ACTOR, RATIFIER, emitFact, invLines, scopedPolicy } from './support.js';
 import type { GroundedFact } from '@atlas/knowledge';
 
 const SRC = 'export const foo = (): number => 1;\n';
@@ -26,10 +26,13 @@ const CLAIM = 'foo returns the constant 1';
 let repo: FixtureRepo;
 let fact: GroundedFact;
 let priorActor: string | undefined;
+let priorRatify: string | undefined;
 
 beforeAll(() => {
   priorActor = process.env.ATLAS_ACTOR;
+  priorRatify = process.env.ATLAS_RATIFY_TOKEN;
   process.env.ATLAS_ACTOR = ACTOR; // KNOW-11 write actor — matches the scoped policy below
+  process.env.ATLAS_RATIFY_TOKEN = RATIFIER; // KNOW-8 ratifier — the T1 fact routes to full-ratify (visible in reads)
   repo = makeFixtureRepo({ files: { 'src/foo.ts': SRC }, policy: scopedPolicy('src') });
   const spec: FactSpec = { repoPath: repo.repoPath, filePath: 'src/foo.ts', slot: 'invariant', claim: CLAIM };
   fact = groundedAdvisoryFact(spec);
@@ -39,6 +42,8 @@ afterAll(() => {
   repo?.cleanup();
   if (priorActor === undefined) delete process.env.ATLAS_ACTOR;
   else process.env.ATLAS_ACTOR = priorActor;
+  if (priorRatify === undefined) delete process.env.ATLAS_RATIFY_TOKEN;
+  else process.env.ATLAS_RATIFY_TOKEN = priorRatify;
 });
 
 describe('S1 — genesis: init → grounded emit → query sees it', () => {

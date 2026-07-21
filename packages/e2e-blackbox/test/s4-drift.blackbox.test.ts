@@ -16,7 +16,7 @@ import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
 import { groundedAdvisoryFact } from './author.js';
 import type { GroundedFact } from '@atlas/knowledge';
-import { ACTOR, emitFact, scopedPolicy } from './support.js';
+import { ACTOR, RATIFIER, emitFact, scopedPolicy } from './support.js';
 
 /** A stable, order-independent snapshot of every byte under `.atlas/cas` (proves doctor mutates nothing). */
 function casSnapshot(repoPath: string): string {
@@ -44,10 +44,13 @@ let fact: GroundedFact;
 let genesis: string; // the sha the fact was grounded at (the merge-base WITH drift)
 let head: string; //    the sha after the grounding-moving commit (a merge-base with NO drift vs itself)
 let priorActor: string | undefined;
+let priorRatify: string | undefined;
 
 beforeAll(() => {
   priorActor = process.env.ATLAS_ACTOR;
+  priorRatify = process.env.ATLAS_RATIFY_TOKEN;
   process.env.ATLAS_ACTOR = ACTOR;
+  process.env.ATLAS_RATIFY_TOKEN = RATIFIER; // KNOW-8 ratifier — T1 fact routes to full-ratify
   repo = makeFixtureRepo({ files: { 'src/foo.ts': 'export const foo = 1;\n' }, policy: scopedPolicy('src') });
   fact = groundedAdvisoryFact({ repoPath: repo.repoPath, filePath: 'src/foo.ts', slot: 'invariant', claim: 'foo is 1' });
   genesis = repo.sha();
@@ -61,6 +64,8 @@ afterAll(() => {
   repo?.cleanup();
   if (priorActor === undefined) delete process.env.ATLAS_ACTOR;
   else process.env.ATLAS_ACTOR = priorActor;
+  if (priorRatify === undefined) delete process.env.ATLAS_RATIFY_TOKEN;
+  else process.env.ATLAS_RATIFY_TOKEN = priorRatify;
 });
 
 describe('S4 — reconcile detects + classifies drift; doctor is read-only', () => {
