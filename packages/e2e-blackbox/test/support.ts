@@ -22,6 +22,11 @@ export const ACTOR = 'e2e@atlas.local';
  *  as a lead would. Any non-empty ratifier commits a NON-T0 fact; a T0 fact would still require `billy`. */
 export const RATIFIER = 'lead';
 
+/** The KNOW-8 security ratifier a `T0` commit REQUIRES (the `billy` gate — @atlas/knowledge ratify.ts). Set
+ *  as `ATLAS_RATIFY_TOKEN`, it commits a T0 fact; ANY other token (incl. {@link RATIFIER}) leaves T0 refused.
+ *  A non-T0 full-ratify fact (T1) commits under any non-empty token, so this also commits a T1. */
+export const BILLY = 'billy';
+
 /** An admin policy that AUTHORIZES {@link ACTOR} to write `scope` (KNOW-11). Empty near-dup τ=1 + no T0
  *  keywords (the conservative floor). Absent this, every scoped write is fail-closed denied. */
 export function scopedPolicy(scope = 'src'): string {
