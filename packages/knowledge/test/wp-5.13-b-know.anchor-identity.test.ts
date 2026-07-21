@@ -8,7 +8,6 @@
 //   15d-1 (primaryAnchorId is the COMPUTED tightest structural unit over the referenced symbols),
 //   15e-1 (an LLM-proposed anchor never enters identity — the compute is a pure fn of grounding),
 //   15g-1 (a secondary citation feeds DRIFT only, never the nodeKey),
-//   15h-1 (a claimNorm collision is reported by the deterministic near-dup probe ⇒ forced MERGE),
 //   15i-1 (a slot outside the closed 12-member vocabulary is rejected),
 //   15j-1 (no LLM/clock/seq in the identity path — observable as pure determinism).
 //
@@ -32,8 +31,7 @@ import {
   // guardrail — 5.13-a's SEALED surface must remain importable + intact
   routeWrite,
 } from '../src/write/router.js';
-import { nearDuplicateProbe } from '../src/write/near-dup.js';
-import type { NearDupConfig, Candidate, Check, PredicateSlot } from '@atlas/knowledge';
+import type { Candidate, Check, PredicateSlot } from '@atlas/knowledge';
 import type { StructRef } from '@atlas/contracts';
 import { asSubtreeHash } from '@atlas/kernel';
 
@@ -129,21 +127,7 @@ describe('WP-5.13-b.KNOW — primaryAnchorId is the computed tightest unit (KNOW
   });
 });
 
-describe('WP-5.13-b.KNOW — near-dup probe + closed slot vocabulary (KNOW-15h/15i)', () => {
-  const cfg: NearDupConfig = { claimNormThreshold: 1 };
-
-  it('SCN-KNOW-15h-1: a claimNorm collision is reported by the deterministic probe (⇒ forced MERGE)', () => {
-    const existing = ['cn-alpha', 'cn-beta'];
-    const colliding = cand({ claimNorm: 'cn-alpha', anchors: XY });
-    // exact normalized collision ⇒ probe reports a collision (the router forces MERGE, not a parallel CREATE)
-    expect(nearDuplicateProbe(colliding, existing, cfg)).toBe(true);
-    // teeth: a genuinely novel claimNorm is NOT a collision (CREATE allowed)
-    const novel = cand({ claimNorm: 'cn-brand-new', anchors: XY });
-    expect(nearDuplicateProbe(novel, existing, cfg)).toBe(false);
-    // deterministic
-    expect(nearDuplicateProbe(colliding, existing, cfg)).toBe(true);
-  });
-
+describe('WP-5.13-b.KNOW — closed slot vocabulary (KNOW-15i)', () => {
   it('SCN-KNOW-15i-1: a slot outside the closed 12-member vocabulary is rejected', () => {
     expect(PREDICATE_SLOTS).toHaveLength(12); // the closed set is exactly 12 (adding one is a `cv` bump)
     for (const s of PREDICATE_SLOTS) expect(isKnownSlot(s)).toBe(true);

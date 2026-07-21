@@ -16,9 +16,10 @@
 > `formal` footprint stays 1 (KRN), so no fspec law is transcribed here — nothing to copy verbatim into KNW.
 >
 > **Coverage:** 18 behavioural INV → 18 PROP (1:1, total). All 62 property-flavored KNW goldens are linked as
-> `witness`; the 2 DEFINE-parametric residue goldens (SCN-KNOW-15f-2 / SCN-KNOW-15h-2) are carried as a `[NEEDS
+> `witness`; the DEFINE-parametric residue golden (SCN-KNOW-15f-2, move+edit θ) is carried as a `[NEEDS
 > RECONCILIATION]` note under PROP-KNOW-15, not rendered as a passing property (no verification invented for an
-> unpinned threshold).
+> unpinned threshold). *(SCN-KNOW-15h-2's old near-dup τ is RESOLVED to exact NFC+trim equality — no fuzzy
+> threshold — per `docs/design/dedup-identity.md`, so it is now a plain exact-equality boundary, not a residue.)*
 
 ---
 
@@ -156,7 +157,7 @@ arbitrary:   the finite hash-state product {contentHash∈(in-CAS,new) × nodeKe
 covers_reqs: [ REQ-KNOW-15a, REQ-KNOW-15b, REQ-KNOW-15c, REQ-KNOW-15d, REQ-KNOW-15e, REQ-KNOW-15f, REQ-KNOW-15g, REQ-KNOW-15h, REQ-KNOW-15i, REQ-KNOW-15j ]   # ptr+digest
 witness:     [ SCN-KNOW-15a-1, SCN-KNOW-15b-1, SCN-KNOW-15c-1, SCN-KNOW-15d-1, SCN-KNOW-15e-1, SCN-KNOW-15f-1, SCN-KNOW-15g-1, SCN-KNOW-15h-1, SCN-KNOW-15i-1, SCN-KNOW-15j-1 ]
 teeth:       breaks-on "the drift leg is conflated into create/update (a re-hash re-mints the node), OR a routing step reads seq/clock/LLM to disambiguate a nodeKey — quantified over the hash-state product it kills every non-deterministic / drift-conflating route the enumerated witness cells only sample"
-[NEEDS RECONCILIATION: the **move-aware `primaryAnchorId` matcher** (rename/move+edit ⇒ same nodeKey, similarity threshold **θ**) and the **near-dup `claimNorm` probe threshold τ** are an OPEN DEFINE dependency (req-knw §NEEDS RECONCILIATION INV-KNOW-15; method-tags-knw §note + §Refuse-to-model). They live **upstream** of the enumerated inputs — they fix the *value* of the nodeKey/collision inputs, not the routing over them — so the routing law above is airtight NOW (SCN-KNOW-15f-1 / 15h-1 as witnesses). The θ/τ *precision boundary* (SCN-KNOW-15f-2 / SCN-KNOW-15h-2, `gen: residue`) **cannot be rendered as a passing property until DEFINE pins the threshold**; no verification is invented for an unpinned threshold. The breaking mutant (θ=τ=1.0, exact-match-only ⇒ every move+edit / near-synonym orphans) is real, but its pass boundary is deferred.]
+[NEEDS RECONCILIATION: the **move-aware `primaryAnchorId` matcher** (rename/move+edit ⇒ same nodeKey, similarity threshold **θ**) is an OPEN DEFINE dependency (req-knw §NEEDS RECONCILIATION INV-KNOW-15; method-tags-knw §note + §Refuse-to-model). It lives **upstream** of the enumerated inputs — it fixes the *value* of the nodeKey inputs, not the routing over them — so the routing law above is airtight NOW (SCN-KNOW-15f-1 / 15h-1 as witnesses). The θ *precision boundary* (SCN-KNOW-15f-2, `gen: residue`) **cannot be rendered as a passing property until DEFINE pins the threshold**; no verification is invented for an unpinned threshold. The breaking mutant (θ=1.0, exact-match-only ⇒ every move+edit orphans) is real, but its pass boundary is deferred. *(The old near-dup `claimNorm` probe threshold τ is RESOLVED, not DEFINE-open: per `docs/design/dedup-identity.md` a collision is **reported** under exact NFC+trim equality — no fuzzy τ — and **never merges** at write time; structural near-dup is the derived-on-read `subsumes` relation. SCN-KNOW-15h-2 is now a plain exact-equality boundary; a near-synonymous-but-distinct claim minting its own node is correct, not an orphan.)*]
 
 ### PROP-KNOW-16 — predicate check = pure deterministic index-query
 inv:         INV-KNOW-16
@@ -193,5 +194,5 @@ teeth:       breaks-on "the fast-path drops the `advisory` (or `T2`, or `lowRisk
 - [x] every behavioural INV → ≥1 PROP: **18/18** (KNOW-1..18, all behavioural, 0 `n/a`) — mechanical 1:1.
 - [x] every PROP's `source` is a `# ptr+digest` to a real `### INV-KNOW-<n>` (no invented law; no prose copy of code).
 - [x] every `law` in the `∀ … . predicate` runnable idiom; no `formal`-cluster law in KNW (KRN owns FSPEC-merge; nothing to transcribe verbatim here).
-- [x] every property-flavored golden's law present as a PROP; no PROP contradicts its `witness`. The 2 DEFINE-parametric residue goldens (15f-2 / 15h-2) are carried as a `[NEEDS RECONCILIATION]` note under PROP-KNOW-15, not a passing property.
+- [x] every property-flavored golden's law present as a PROP; no PROP contradicts its `witness`. The DEFINE-parametric residue golden (15f-2, move+edit θ) is carried as a `[NEEDS RECONCILIATION]` note under PROP-KNOW-15, not a passing property. (15h-2's near-dup τ is RESOLVED to exact equality per `docs/design/dedup-identity.md` — now a plain boundary, no longer a residue.)
 - [x] every `teeth` states a mutant the property kills **beyond** the single witness (the ∀-quantification over the generated space is the added assurance).

@@ -19,8 +19,9 @@
 //  • The `RouterApi.writeDecision` FRONT DOOR is now WIRED here (owner-RATIFIED un-park, reversing the
 //    s05 PARK — govern writes now). It is COMPOSED, not reimplemented: it consumes a `Candidate`, mints
 //    the contentHash through the SEALED kernel seam (`id` = `defaultEncoder.hash(canonicalForm(·))`,
-//    atlas-knowledge:110), reuses `nodeKey` (5.13-b) for the WHICH leg + `nearDuplicateProbe` for the
-//    door-2 leg, and routes through the existing pure `routeWrite`. The store is passed as DATA
+//    atlas-knowledge:110), reuses `nodeKey` (5.13-b) for the WHICH leg, and routes through the existing
+//    pure `routeWrite`. The ADJACENCY-B door-2 always-merge is REMOVED (WP-DEDUP-1) — adjacency is now a
+//    derived-on-read `subsumes` relation (WP-DEDUP-2), never a write-time merge. The store is passed as DATA
 //    (widened signature `writeDecision(candidate, store, cfg)`): the `StoreProjection` is held
 //    caller-side / session-internal (cf. index/src/fold.ts `createDriftFold`, and the `upsert(store, req)`
 //    idiom), never an invented frozen `StoreApi` field — so no OWNER-DEFINE composed store is invented.
@@ -30,7 +31,6 @@
 import { asNodeKey, canonicalForm, defaultEncoder, id } from '@atlas/kernel';
 import type { NodeKey } from '@atlas/contracts';
 import type { Candidate, Check, PredicateSlot } from '../types.js';
-import { adjacencyNearDup } from './near-dup.js';
 
 // ── frozen RouterApi surface, co-located here (was ref/router.ts) ─────────────────────────────────────
 
@@ -61,9 +61,11 @@ export interface NearDupConfig {
 export interface RouterApi {
   /** The pure write-decision (KNOW-4/15). Routes a candidate to exactly one `WriteDecision` from its
    *  three orthogonal hashes; the drift leg (`subtreeHash`) NEVER changes the create/update leg
-   *  (atlas-knowledge:153). Before any CREATE a deterministic near-duplicate probe runs — a `claimNorm`
-   *  collision at adjacent granularity forces UPDATE/MERGE (atlas-knowledge:128-132). No LLM call enters
-   *  the decision (method-tags-knw:121). Pure + total.
+   *  (atlas-knowledge:153). No LLM call enters the decision (method-tags-knw:121). Pure + total.
+   *
+   *  [UN-MERGED — WP-DEDUP-1] the ADJACENCY-B door-2 always-merge is REMOVED: a routed CREATE at an
+   *  adjacent anchor stays a CREATE (its own node, own grounding — A2). Adjacency is now a derived-on-read
+   *  `subsumes` relation (WP-DEDUP-2), never a write-time merge.
    *
    *  [PARAMETRIC — see `NearDupConfig`] the near-dup matcher threshold is an EXPLICIT parameter, not a
    *  constant (the threshold is an OPEN DEFINE, method-tags-knw:122).
@@ -173,10 +175,11 @@ export interface UpsertResult {
  * the prior); SUPERSEDE mints a new predicate node at the SAME key with a `supersededBy` pointer
  * while the prior bytes remain in CAS.
  *
- * ADJACENCY FOLD (WP-ADJACENCY-B): a routed CREATE carrying a `primaryAnchor` runs the STRUCTURAL adjacency
- * probe first — an EXACT `claimNorm` collision at an ANCESTOR/DESCENDANT anchor across ANY sibling slot
- * MERGES (set-union) into the NEAREST neighbor rather than minting a parallel node (⇒ `'UPDATE'`). `cfg` is
- * OPTIONAL (default exact-match τ=1) so 2-arg callers are unchanged; NO `primaryAnchor` ⇒ adjacency DORMANT.
+ * ADJACENCY (WP-DEDUP-1 un-merge): the ADJACENCY-B door-2 always-merge is REMOVED. A routed CREATE at an
+ * adjacent anchor now mints its OWN node (each keeps its own grounding — A2), never folding into a neighbor.
+ * Adjacency is no longer a merge; it is a derived-on-read `subsumes` relation (WP-DEDUP-2, `deriveSubsumes`),
+ * so the destructive fold is gone. The `primaryAnchor`/`slot` carriers on `CurrentNode` STAY — DP-2 reads
+ * them off the projection. `cfg` remains in the signature (default τ=1) for callers + the forthcoming DP-2 use.
  */
 export function upsert(
   store: StoreProjection,
@@ -193,19 +196,6 @@ export function upsert(
   const decision = routeWrite(inputs);
   const cas = new Set(store.cas);
   const current = new Map(store.current);
-
-  // ADJACENCY door-2: a CREATE with an anchor + a claim already carried by an adjacent-granularity neighbor
-  // MERGES (set-union) into that NEAREST neighbor instead of minting a parallel node (always-merge, v1).
-  if (decision === 'CREATE' && req.primaryAnchor !== undefined) {
-    const { mergeTarget } = adjacencyNearDup(req.primaryAnchor, req.claimNorm, store, cfg);
-    if (mergeTarget !== undefined) {
-      const target = current.get(mergeTarget)!; // adjacencyNearDup only returns a live nodeKey
-      const claims = target.claims.includes(req.claimNorm) ? target.claims : [...target.claims, req.claimNorm];
-      cas.add(req.contentHash); // merged bytes stay addressable; the neighbor's anchor/slot are preserved
-      current.set(mergeTarget, { ...target, contentHash: req.contentHash, claims });
-      return { decision: 'UPDATE', store: { current, cas } };
-    }
-  }
 
   switch (decision) {
     case 'DEDUP':
@@ -373,14 +363,13 @@ export function nodeKey(node: Candidate): NodeKey {
  *   3. family/checkSame — `candidate.check ? 'predicate' : 'advisory'`, and (mirroring `upsert` at the
  *      derivation above) `checkSame = family==='predicate' && nodeKeyHit` (a predicate nodeKey folds in
  *      normalize(check), so a hit ⟺ the same check re-evidenced).
- * These feed the existing pure `routeWrite`. PRECEDENCE: DEDUP short-circuits; else, before a CREATE, the
- * deterministic near-duplicate probe (door-2, atlas-knowledge:128-132) may force UPDATE/MERGE; else
- * `routeWrite`'s cell stands. Pure + total + deterministic — no LLM/clock/seq enters.
+ * These feed the existing pure `routeWrite`. PRECEDENCE: DEDUP short-circuits; else `routeWrite`'s cell
+ * stands and is returned directly. Pure + total + deterministic — no LLM/clock/seq enters.
  *
- * [WIRED — WP-ADJACENCY-B] door-2 is now the ANCHOR-SCOPED structural adjacency scan: a `CurrentNode` now
- * CARRIES its `primaryAnchor`, so `adjacencyNearDup` matches an EXACT `claimNorm` collision at an ANCESTOR/
- * DESCENDANT anchor across every `(primaryAnchor, *)` sibling slot and forces the CREATE to MERGE/UPDATE.
- * The near-SYNONYM τ (0<sim<1) stays OPEN-DEFINE upstream (`claimSimilarity` is 0|1); the EXACT leg is airtight.
+ * [UN-MERGED — WP-DEDUP-1] the ADJACENCY-B door-2 always-merge is REMOVED. `writeDecision` no longer runs an
+ * adjacency probe over the route: a routed CREATE at an adjacent anchor stays a CREATE and mints its own node
+ * (each keeps its own grounding — A2). Adjacency is now a DERIVED-ON-READ `subsumes` relation (WP-DEDUP-2,
+ * `deriveSubsumes`), never a write-time merge. `cfg` is retained in the signature for the DP-2 successor.
  */
 export function writeDecision(candidate: Candidate, store: StoreProjection, cfg: NearDupConfig): WriteDecision {
   const contentHashHit = store.cas.has(id(candidate) as string); // leg 1 — WHAT (sealed seam)
@@ -389,11 +378,5 @@ export function writeDecision(candidate: Candidate, store: StoreProjection, cfg:
   const nodeKeyHit = store.current.has(nodeKey(candidate) as string); // leg 2 — WHICH
   const family: NodeFamily = candidate.check ? 'predicate' : 'advisory';
   const checkSame = family === 'predicate' && nodeKeyHit; // mirror upsert: predicate hit ⟺ same check
-  const route = routeWrite({ contentHashHit: false, nodeKeyHit, family, checkSame });
-
-  // door-2: an EXACT claimNorm collision at an ADJACENT-granularity anchor forces the CREATE to MERGE/UPDATE.
-  if (route === 'CREATE' && adjacencyNearDup(primaryAnchorId(candidate) as string, candidate.claimNorm, store, cfg).collision) {
-    return 'UPDATE';
-  }
-  return route;
+  return routeWrite({ contentHashHit: false, nodeKeyHit, family, checkSame });
 }

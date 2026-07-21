@@ -17,13 +17,16 @@
 > - **KNOW-1 / 2 / 3 / 5 / 6 / 7 / 8 / 9 / 11 / 12 / 13 / 14 / 16 / 17 / 18** are `reference-model` →
 >   **conformance / differential** against the named build-language mock (`knowledge/ref/*.ts`, reused as the
 >   unit-test mock; anti-rot) — `gen: conformance`.
-> - **KNOW-15's move-aware similarity matcher** (rename/**move+edit** ⇒ same nodeKey; the near-dup probe's
->   `claimNorm`-collision threshold) is an **OPEN DEFINE reconciliation** (req-knw §NEEDS RECONCILIATION;
->   method-tags-knw §Refuse-to-model). It lives **upstream** of the enumerated inputs — it fixes the *value*
->   of the `nodeKey` / collision inputs, not the routing over them. So the **routing goldens are written fully
->   and are airtight NOW** (the three hashes are oracle inputs); only the golden that would pin the matcher's
->   **precision threshold** is **parametric** — `gen: residue` with a DEFINE-dependency note, no verification
->   invented for an unpinned threshold (**SCN-KNOW-15f-2**, **SCN-KNOW-15h-2**).
+> - **KNOW-15's move-aware similarity matcher** (rename/**move+edit** ⇒ same nodeKey) is an **OPEN DEFINE
+>   reconciliation** (req-knw §NEEDS RECONCILIATION; method-tags-knw §Refuse-to-model). It lives **upstream**
+>   of the enumerated inputs — it fixes the *value* of the `nodeKey` inputs, not the routing over them. So the
+>   **routing goldens are written fully and are airtight NOW** (the three hashes are oracle inputs); only the
+>   golden that would pin the matcher's **precision threshold θ** is **parametric** — `gen: residue` with a
+>   DEFINE-dependency note, no verification invented for an unpinned threshold (**SCN-KNOW-15f-2**).
+>   *(The old near-dup `claimNorm`-collision **threshold τ** is now RESOLVED, not DEFINE-open: per the frozen
+>   dedup/identity model — `docs/design/dedup-identity.md` — a collision is **reported** under exact NFC+trim
+>   equality (no fuzzy τ) and **never merges** at write time; structural near-dup is the derived-on-read
+>   `subsumes` relation. SCN-KNOW-15h-2 is accordingly a non-parametric exact-equality boundary now.)*
 > - **KNOW-10b guard source:** the missing-field / over-cap triggers are lifted from **reference Acceptance #9**
 >   (`atlas-knowledge.md` §Acceptance:9) — the KNOW-10 Invariants clause states only "No free prose, ever." and
 >   delegates the concrete reject-triggers to spec **A-13**; Acceptance #9 is the authoritative guard source
@@ -792,21 +795,21 @@ Then it is still `k-9a10` (unchanged) — the secondary citation feeds DRIFT (gr
 teeth: breaks-on "a secondary citation enters the nodeKey — adding a second citation to an existing fact re-mints it as a new node"
 gen: exhaustive   # nodeKey identity leg — secondary excluded
 
-### SCN-KNOW-15h-1 — a claimNorm collision forces MERGE before CREATE   (happy)
+### SCN-KNOW-15h-1 — a claimNorm collision is reported, not merged   (happy)
 source: REQ-KNOW-15h
-Given a CREATE candidate whose `claimNorm` collides (probe result = collision) with an existing `(anc-hdr, *)` sibling-slot node
-When the near-duplicate probe result is consumed by the router (collision taken as oracle input)
-Then the router forces **MERGE/UPDATE**, not a parallel CREATE — a claim colliding with an existing `claimNorm` is not novel (door-2)
-teeth: breaks-on "the router ignores the near-dup probe result — a colliding-claimNorm candidate CREATEs a parallel node (proliferation past door-2)"
-gen: exhaustive   # routing over the (collision ⇒ MERGE) oracle input — airtight now
+Given a CREATE candidate whose `claimNorm` collides (exact NFC+trim, `claimSimilarity === 1`) with an existing `(anc-hdr, *)` sibling-slot node
+When the write-decision routes the candidate (D0 `contentHash` / D1 `nodeKey` only — no collision-driven merge leg)
+Then the collision is **reported** as a deterministic signal and the candidate **CREATEs its own node** (each keeps its own grounding — A2); it is **not** merged at write time — structural coverage is instead the derived-on-read `subsumes` relation (`docs/design/dedup-identity.md`)
+teeth: breaks-on "the router merges on the claimNorm collision — a colliding-claimNorm candidate is folded into the neighbor instead of minting its own node (the REMOVED write-time MERGE, which de-grounds one fact past A2)"
+gen: exhaustive   # routing over the three hashes (D0/D1); the collision is a reported signal, not a merge-route input
 
-### SCN-KNOW-15h-2 — near-dup claimNorm collision threshold   (happy · DEFINE-parametric)
+### SCN-KNOW-15h-2 — no fuzzy near-dup threshold; near-synonyms route to ratification   (happy)
 source: REQ-KNOW-15h
-Given two claims whose normalized forms are near-synonymous at similarity `sim`
-When the probe decides collision vs distinct at the near-dup **threshold τ**
-Then for `sim ≥ τ` it must report a collision (⇒ forced MERGE) and for `sim < τ` distinct (⇒ CREATE allowed) — **τ is an OPEN DEFINE dependency** (req-knw §NEEDS RECONCILIATION INV-KNOW-15); the route *over* the probe output is airtight (SCN-KNOW-15h-1), only the τ boundary is unpinned
-teeth: breaks-on "τ is set to 1.0 (identical-only) — every near-synonymous claim reports distinct and proliferates a parallel node" — the breaking mutant is real; the *pass* boundary awaits DEFINE
-gen: residue   # DEFINE-dependency: near-dup similarity threshold τ unpinned (method-tags-knw §Refuse-to-model)
+Given two claims whose normalized forms are near-synonymous but not exactly equal (`claimSimilarity < 1` under NFC+trim)
+When the write-decision routes them
+Then neither a collision report nor any write-time merge fires on the near-synonymy — there is **no fuzzy threshold τ** (`claimSimilarity∈{0,1}`); the cross-location near-synonym residue is the **H1 `sameAs`** case, routed to **human ratification only** (DEFERRED, Wave 2 — `docs/design/dedup-identity.md`), never an automatic merge
+teeth: breaks-on "a fuzzy τ<1 is reintroduced so near-synonymous-but-distinct claims auto-collide/merge — de-grounding one fact and resurrecting the removed write-time MERGE"
+gen: exhaustive   # exact-equality boundary; the fuzzy/cross-location residue is honestly routed to human ratification (A1), not a threshold
 
 ### SCN-KNOW-15i-1 — a slot outside the closed vocabulary is rejected   (guard)
 source: REQ-KNOW-15i
@@ -1032,10 +1035,10 @@ gen: conformance
 
 - **REQ coverage:** 61/61 REQ have ≥1 SCN.
 - **Guard coverage:** 19/19 unwanted/If-then REQ-clauses have a guard SCN — 1, 2, 5c, 7a, 8a, 8c, 10a, 10b(×2), 11c, 13a, 13b, 14b, 14c, 15e, 15i, 15j, 16b, 16c, 18b. (KNOW-10b's guard source = reference Acceptance #9, cited inline.)
-- **Teeth (Gate 3):** 64/64 SCN name the exact mutant of their REQ they flip to BROKEN on; none vacuous. The exhaustive cells are interesting witnesses (real 2-node collisions W3/W5, a real DEDUP W1, a real cross-family SUPERSEDE W4, a real drift-orthogonality pair W3/W3′ — no antecedent-failure passes). The 2 DEFINE-parametric SCNs still carry a **real breaking mutant** (θ/τ set to exact-match ⇒ every move+edit / near-synonym orphans); only their *pass* boundary awaits DEFINE.
+- **Teeth (Gate 3):** 64/64 SCN name the exact mutant of their REQ they flip to BROKEN on; none vacuous. The exhaustive cells are interesting witnesses (real 2-node collisions W3/W5, a real DEDUP W1, a real cross-family SUPERSEDE W4, a real drift-orthogonality pair W3/W3′ — no antecedent-failure passes). The 1 DEFINE-parametric SCN (SCN-KNOW-15f-2, move+edit θ) still carries a **real breaking mutant** (θ set to exact-match ⇒ every move+edit orphans); only its *pass* boundary awaits DEFINE.
 - **toothless dropped:** 0.
-- **gen histogram:** exhaustive 17 (KNOW-4: 4a/4b/4c/4d/4e/4f/4g · KNOW-10: 10a/10b-1/10b-2 · KNOW-15 routing: 15a/15b/15c/15f-1/15g/15h-1/15i) · conformance 45 (all reference-model REQ + KNOW-15d/15e/15j) · residue 2 (15f-2, 15h-2, both DEFINE-parametric).
-- **DEFINE-parametric SCN count:** 2 (SCN-KNOW-15f-2 move+edit threshold θ; SCN-KNOW-15h-2 near-dup threshold τ) — the routing *over* the matcher/probe output is airtight now (SCN-KNOW-15f-1 / 15h-1); only the precision boundary is unpinned.
+- **gen histogram:** exhaustive 18 (KNOW-4: 4a/4b/4c/4d/4e/4f/4g · KNOW-10: 10a/10b-1/10b-2 · KNOW-15 routing: 15a/15b/15c/15f-1/15g/15h-1/15h-2/15i) · conformance 45 (all reference-model REQ + KNOW-15d/15e/15j) · residue 1 (15f-2, DEFINE-parametric).
+- **DEFINE-parametric SCN count:** 1 (SCN-KNOW-15f-2 move+edit threshold θ) — the routing *over* the matcher output is airtight now (SCN-KNOW-15f-1); the near-dup τ is now RESOLVED to exact equality (SCN-KNOW-15h-1 / 15h-2, no fuzzy threshold); only the θ precision boundary is unpinned.
 
 ---
 
@@ -1052,8 +1055,8 @@ gen: conformance
 
 - **conformance REQs:** 45 (all reference-model REQ + KNOW-15d / 15e / 15j).
 - **held-out fixtures added:** 45 (one per conformance SCN) — every conformance REQ's held-out leg is now **AVAILABLE** (FULL assurance): 1 · 2 · 3a · 3b · 3c · 5a · 5b · 5c · 5d · 6a · 6b · 7a · 7b · 8a · 8b · 8c · 9a · 9b · 11a · 11b · 11c · 12a · 12b · 12c · 12d · 12e · 13a · 13b · 14a · 14b · 14c · 15d · 15e · 15j · 16a · 16b · 16c · 16d · 16e · 17a · 17b · 17c · 17d · 18a · 18b.
-- **skipped — exhaustive (17):** KNOW-4 (4a/4b/4c/4d/4e/4f/4g) · KNOW-10 (10a/10b-1/10b-2) · KNOW-15 routing (15a/15b/15c/15f-1/15g/15h-1/15i). A held-out leg is **moot** for an `exhaustive` SCN — the enumeration already covers every cell of the finite input space (universe A / universe B); there is nothing to hold out of a complete enumeration.
-- **skipped — residue / DEFINE-parametric (2):** SCN-KNOW-15f-2 (move+edit θ) · SCN-KNOW-15h-2 (near-dup τ) — **exempt + flagged**: no verification is invented for an unpinned threshold (method-tags-knw §Refuse-to-model; req-knw §NEEDS RECONCILIATION INV-KNOW-15). No held-out.
+- **skipped — exhaustive (18):** KNOW-4 (4a/4b/4c/4d/4e/4f/4g) · KNOW-10 (10a/10b-1/10b-2) · KNOW-15 routing (15a/15b/15c/15f-1/15g/15h-1/15h-2/15i). A held-out leg is **moot** for an `exhaustive` SCN — the enumeration already covers every cell of the finite input space (universe A / universe B); there is nothing to hold out of a complete enumeration.
+- **skipped — residue / DEFINE-parametric (1):** SCN-KNOW-15f-2 (move+edit θ) — **exempt + flagged**: no verification is invented for an unpinned threshold (method-tags-knw §Refuse-to-model; req-knw §NEEDS RECONCILIATION INV-KNOW-15). No held-out.
 - **skipped — delegated acceptance:** none in KNW.
 - **grounding check:** every `-2` reuses a grounded reference-model branch with different concrete data; **0** new behaviour introduced → **no [NEEDS RECONCILIATION]**.
 - **spot-check (5 differ from fixture-1):** 1-2 (declared BROKEN⇒recomputed HOLDS vs declared HOLDS⇒NA) · 5a-2 (k=9/s=4/mech=5 vs k=5/s=2/mech=3) · 7a-2 (`payments/` vs `auth/`) · 11b-2 (scope D reads C vs B reads A) · 16a-2 (dependency-axis BROKEN vs structural HOLDS→NA path). All independent, none a rename-clone.

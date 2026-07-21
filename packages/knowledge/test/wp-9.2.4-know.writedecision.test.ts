@@ -3,8 +3,9 @@
 // The un-parked composed write-decision FRONT DOOR `writeDecision(candidate, store, cfg)`: the
 // owner-RATIFIED reversal of the s05 PARK. This drives the COMPOSED front door across a store
 // projection to hit each route — DEDUP / CREATE / UPDATE / SUPERSEDE — proving it COMPOSES the sealed
-// legs (contentHash via the kernel `id` seam · nodeKey · routeWrite · nearDuplicateProbe) rather than
-// reimplementing routing. Every golden NAMES the mutant that flips it (no vacuous goldens).
+// legs (contentHash via the kernel `id` seam · nodeKey · routeWrite — write-time dedup is D0 contentHash /
+// D1 nodeKey only; a `claimNorm` collision is reported, not merged) rather than reimplementing routing.
+// Every golden NAMES the mutant that flips it (no vacuous goldens).
 //
 // SEAM: identity is minted through the SEALED @atlas/kernel seam — the projection is seeded from the
 // SAME `nodeKey(candidate)` / `id(candidate)` the front door computes, so hits/misses are real, not faked.
@@ -44,7 +45,8 @@ function cand(o: CandOpts = {}): Candidate {
 const CFG: NearDupConfig = { claimNormThreshold: 1 }; // exact-match leg fires at τ ≤ 1
 
 /** Seed one current node at `key` (a real computed nodeKey), family + claims as given, with an OPTIONAL
- *  `primaryAnchor` so the anchor-scoped door-2 (adjacencyNearDup) has a structural neighbor to collide with. */
+ *  `primaryAnchor` so the anchor-scoped `claimNorm`-collision report has a structural neighbor to reference
+ *  (structural near-dup is the derived-on-read `subsumes` relation, not a write-time merge). */
 function nodeAt(
   key: string,
   family: 'advisory' | 'predicate',
@@ -81,15 +83,15 @@ describe('WP-9.2.4.KNOWLEDGE — writeDecision composed front door (un-parked)',
     // guard and always override) → this clean CREATE would flip to UPDATE.
   });
 
-  it('CREATE→UPDATE (door-2) — a claimNorm collision at an ADJACENT-anchor node forces the CREATE to UPDATE', () => {
+  it('CREATE (WP-DEDUP-1 un-merge) — a claimNorm collision at an ADJACENT-anchor node stays a CREATE', () => {
     const c = cand({ claimNorm: 'cn-dup', path: 'pkg/mod::fn' }); // nodeKey MISS; primaryAnchor = pkg/mod::fn
     // a node at the ANCESTOR unit `pkg/mod` (a structural prefix of `pkg/mod::fn`) already carries this exact
-    // claimNorm — the anchor-scoped door-2 (adjacencyNearDup) treats it as an adjacent-granularity neighbor.
+    // claimNorm. Under ADJACENCY-B this forced door-2 UPDATE; the always-merge is REMOVED (WP-DEDUP-1), so a
+    // routed CREATE stays a CREATE — the adjacent fact keeps its own grounding (A2). Adjacency is now a
+    // derived-on-read `subsumes` relation (WP-DEDUP-2), not a write-time merge.
     const store = projection([nodeAt('sibling-key', 'advisory', ['cn-dup'], 'pkg/mod')], []);
-    expect(writeDecision(c, store, CFG)).toBe('UPDATE');
-    // teeth (MUTANT: drop the near-dup override leg) → the route stays CREATE (nodeKey miss), flipping
-    // this golden off UPDATE. STRUCTURAL teeth (MUTANT: seed the neighbor at an UNRELATED anchor, e.g.
-    // `x/y::z`) → adjacencyNearDup finds no prefix-adjacent neighbor ⇒ no collision ⇒ stays CREATE.
+    expect(writeDecision(c, store, CFG)).toBe('CREATE');
+    // teeth (MUTANT: re-introduce a door-2 near-dup override) → this would flip back to UPDATE.
   });
 
   it('UPDATE — an advisory whose nodeKey is present set-unions in place', () => {

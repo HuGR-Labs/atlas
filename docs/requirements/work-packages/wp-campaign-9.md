@@ -464,7 +464,7 @@ content_hash: <filled-at-freeze>
 title: Bind the parked writeDecision front-door — governed durable dedup/supersede (CORE BINDING)
 intent: >
   To land one governed dedup/supersede write durably, the parked `writeDecision(candidate,cfg)` front-door is
-  bound: compute `nodeKey(candidate)`, probe the durable store for the two hits + `nearDuplicateProbe`, call the
+  bound: compute `nodeKey(candidate)`, probe the durable store for the contentHash (D0) and nodeKey (D1) hits, call the
   existing `routeWrite`, apply `upsert`, and flush the projection through the store — idempotent
   (`write∘write ≡ write`) and order-independent under supersede, inventing no new routing. This is the ONLY
   core-touching WP: it edits a core package (`packages/knowledge`) and is sequenced + reviewed as a core

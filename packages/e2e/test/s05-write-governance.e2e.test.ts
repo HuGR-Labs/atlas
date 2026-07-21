@@ -16,7 +16,8 @@
 // UN-PARK BOUNDARY (owner-RATIFIED, WP-9.2.4.KNOWLEDGE — govern writes now). The composed-store FRONT
 // DOOR `RouterApi.writeDecision(candidate, store, cfg)` — formerly PARKED — is now WIRED. It is COMPOSED,
 // not invented: it mints the contentHash through the SEALED kernel `id` seam (atlas-knowledge:110), reuses
-// WP-5.13-b's `nodeKey` VALUE + the pure `routeWrite` + the `nearDuplicateProbe` door-2 leg, and takes the
+// WP-5.13-b's `nodeKey` VALUE + the pure `routeWrite` (write-time dedup is D0 contentHash / D1 nodeKey only;
+// a `claimNorm` collision is reported, not merged), and takes the
 // `StoreProjection` as DATA (the `upsert(store, req)` idiom / caller-side session-internal projection) — so
 // NO OWNER-DEFINE composed store is fabricated. The runtime still ALSO routes via `routeWrite(RouteInputs)`
 // + `upsert(store, req)` over already-resolved identity (the primitives the front door composes). This
@@ -216,8 +217,8 @@ describe('S5 · write governance — authorization + the human-in-the-loop T0 ba
           }
   });
 
-  // ── 6a-adjacency. STRUCTURAL ADJACENCY MERGE — a child-unit dup folds into the parent (one node) ────
-  it('merges a child-unit fact whose claim duplicates a parent node into the parent — one node, not two', () => {
+  // ── 6a-adjacency. UN-MERGE (WP-DEDUP-1) — a child-unit dup mints its OWN node (two nodes, not one) ────
+  it('mints a distinct node for a child-unit fact whose claim duplicates a parent — two nodes, not one', () => {
     // a parent-unit advisory at `payments::charge` carries the idempotency claim.
     let s: StoreProjection = emptyStore();
     s = upsert(s, {
@@ -227,18 +228,20 @@ describe('S5 · write governance — authorization + the human-in-the-loop T0 ba
     const before = currentNodes(s).length;
 
     // a NEW fact is CREATE'd at the CHILD unit `payments::charge::retry` with the SAME claimNorm — a fresh
-    // nodeKey (would mint a parallel node), but its anchor is a DESCENDANT of the parent's ⇒ it MERGES.
+    // nodeKey. The ADJACENCY-B always-merge is REMOVED (WP-DEDUP-1): each grounding stays distinct (A2), so
+    // the child mints its OWN node. Adjacency is now a derived-on-read `subsumes` relation (WP-DEDUP-2).
     const r = upsert(s, {
       nodeKey: 'nk-child', contentHash: 'ch-child', family: 'advisory',
       claimNorm: 'cn-idem', primaryAnchor: 'payments::charge::retry', slot: 'gotcha',
     });
 
-    expect(r.decision).toBe('UPDATE'); // re-routed by structural adjacency, not a parallel CREATE
-    // teeth (breaks-on "an adjacent-anchor duplicate mints a second parallel node"):
-    expect(currentNodes(r.store).length).toBe(before); // still ONE node — the child never lands
-    expect(r.store.current.has('nk-child')).toBe(false); // the child key is not in the territory
-    expect(r.store.current.get('nk-parent')!.primaryAnchor).toBe('payments::charge'); // merged INTO the parent
-    // a NON-adjacent fact with the same claim is NOT swallowed — a distinct subtree is a distinct node.
+    expect(r.decision).toBe('CREATE'); // a routed CREATE stays a CREATE — no write-time merge
+    // teeth (breaks-on "an adjacent-anchor duplicate is silently folded into the parent"):
+    expect(currentNodes(r.store).length).toBe(before + 1); // TWO nodes now — the child lands
+    expect(r.store.current.has('nk-parent')).toBe(true); // BOTH nodeKeys present
+    expect(r.store.current.has('nk-child')).toBe(true);
+    expect(r.store.current.get('nk-parent')!.claims).toEqual(['cn-idem']); // the parent's claims unchanged
+    // a NON-adjacent fact with the same claim is likewise its own node — a distinct subtree is a distinct node.
     const far = upsert(s, {
       nodeKey: 'nk-far', contentHash: 'ch-far', family: 'advisory',
       claimNorm: 'cn-idem', primaryAnchor: 'refunds::issue', slot: 'invariant',
@@ -267,7 +270,7 @@ describe('S5 · write governance — authorization + the human-in-the-loop T0 ba
   // ── UN-PARK — the composed-store front-door is now WIRED (owner-RATIFIED reversal of the PARK) ──────
   it('the writeDecision front-door IS exported and governs a candidate — DEDUP/CREATE/UPDATE/SUPERSEDE', () => {
     // RATIFIED UN-PARK (WP-9.2.4.KNOWLEDGE): the front door is COMPOSED, not invented — it mints the
-    // contentHash through the SEALED kernel `id` seam, reuses `nodeKey` + `routeWrite` + `nearDuplicateProbe`,
+    // contentHash through the SEALED kernel `id` seam, reuses `nodeKey` + `routeWrite` (D0 contentHash / D1 nodeKey dedup only),
     // and takes the `StoreProjection` as DATA (the `upsert(store, req)` idiom), so no OWNER-DEFINE composed
     // store is fabricated. The barrel `export *` surfaces it — the presence assertion is now TRUE.
     expect('writeDecision' in knowledge).toBe(true);

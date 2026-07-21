@@ -57,8 +57,8 @@ method-tag:
 ### INV-ADAPTER-7
 behavioural: true
 anchor: reference/atlas-adapters.md#adapt-store-2
-text: "to make one governed dedup/supersede write land durably, writeDecision MUST be bound as: compute nodeKey(candidate), probe the durable store for the two hits + nearDuplicateProbe, call the existing routeWrite, apply upsert, and flush the projection through the store; it invents no new routing"
-clauses: [ "bind the parked writeDecision(candidate,cfg) front-door", "compute nodeKey(candidate), probe the store for the two hits + nearDuplicateProbe, call routeWrite, apply upsert, flush the projection through the store", "invent no new routing (compose existing pieces only)" ]
+text: "to make one governed dedup/supersede write land durably, writeDecision MUST be bound as: compute nodeKey(candidate), probe the durable store for the contentHash (D0) and nodeKey (D1) hits, call the existing routeWrite, apply upsert, and flush the projection through the store; it invents no new routing"
+clauses: [ "bind the parked writeDecision(candidate,cfg) front-door", "compute nodeKey(candidate), probe the store for the contentHash (D0) and nodeKey (D1) hits, call routeWrite, apply upsert, flush the projection through the store", "invent no new routing (compose existing pieces only)" ]
 unwanted: [ "a governed dedup write of the same fact lands twice", "the binding introduces routing logic not already in routeWrite/upsert" ]
 method-tag:
 
