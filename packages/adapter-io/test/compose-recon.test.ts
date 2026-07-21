@@ -37,6 +37,12 @@ const UNIT_B = 'export function foo(name: string): string {\n  return `hello the
 const RECONCILE = 'atlas-reconcile' as Tool;
 const CAS_REL = join('.atlas', 'cas');
 
+// N10 rename fixture — content-PRESERVING move: KEEP_BODY authored at src/keep.ts, `git mv`-d to
+// src/moved.ts at HEAD with a byte-identical body (mirrors doctor-source.test.ts's KEEP_BODY pattern).
+const KEEP_QP = 'src/keep.ts';
+const MOVED_QP = 'src/moved.ts';
+const KEEP_BODY = 'export function keep(x: number): number {\n  return x + 1;\n}\n';
+
 const g = (repo: string, args: readonly string[]): string =>
   execFileSync('git', args as string[], { cwd: repo, encoding: 'utf8' }).trim();
 
@@ -117,10 +123,73 @@ function makeFix(): Fix {
   return { repoPath, A, B, factA, factB, cleanup: () => rmSync(repoPath, { recursive: true, force: true }) };
 }
 
+// N10 — a content-PRESERVING rename fixture: commit A authors src/keep.ts (KEEP_BODY); commit B `git mv`s it
+// to src/moved.ts with an IDENTICAL body (old path DELETED at HEAD). One advisory fact grounded at the
+// keep.ts unit structure @A. At HEAD the recorded content lives ONLY at the new path — a moved-but-alive fact.
+interface RenameFix {
+  readonly repoPath: string;
+  readonly A: string; // sha where the unit lives at src/keep.ts
+  readonly B: string; // HEAD: the unit lives at src/moved.ts (same body)
+  readonly factKeep: GroundedFact; // grounded at the keep.ts unit structure @A
+  cleanup(): void;
+}
+
+function makeRenameFix(): RenameFix {
+  const repoPath = mkdtempSync(join(tmpdir(), 'recon-rename-'));
+  g(repoPath, ['init', '-q']);
+  g(repoPath, ['config', 'user.email', 't@t.t']);
+  g(repoPath, ['config', 'user.name', 'T']);
+  g(repoPath, ['config', 'commit.gpgsign', 'false']);
+  mkdirSync(join(repoPath, 'src'), { recursive: true });
+
+  writeFileSync(join(repoPath, KEEP_QP), KEEP_BODY);
+  g(repoPath, ['add', '-A']);
+  g(repoPath, ['commit', '-q', '-m', 'A: author keep']);
+  const A = g(repoPath, ['rev-parse', 'HEAD']);
+
+  // Pure rename: move the file, body byte-identical. The old path is gone at HEAD; the content survives.
+  g(repoPath, ['mv', KEEP_QP, MOVED_QP]);
+  g(repoPath, ['commit', '-q', '-m', 'B: rename keep -> moved (identical body)']);
+  const B = g(repoPath, ['rev-parse', 'HEAD']);
+
+  const scip = makeFixScip();
+  mkdirSync(join(repoPath, '.atlas'), { recursive: true });
+  copyFileSync(scip.scipPath, join(repoPath, '.atlas', 'index.scip'));
+  scip.cleanup();
+
+  // Ground the fact at the ACTUAL keep.ts unit structure @A (content-addressed subtreeHash).
+  const rev = createRevIndex(repoPath);
+  const factKeep = advisoryAt('F_keep', rev.resolveAnchorAt(A, KEEP_QP)!.subtreeHash);
+  // Re-anchor the recorded grounding at src/keep.ts (advisoryAt hard-codes QP=src/unit.ts).
+  const grounded: GroundedFact = {
+    ...factKeep,
+    grounding: {
+      entries: [
+        { anchor: { kind: 'file', qualifiedPath: KEEP_QP, subtreeHash: factKeep.grounding.entries[0]!.anchor.subtreeHash }, path: KEEP_QP },
+      ],
+    },
+  };
+
+  const store = createDiskStore(join(repoPath, CAS_REL));
+  const h = store.put(grounded as never) as string;
+  const projection: StoreProjection = {
+    current: new Map([
+      [grounded.id as unknown as string, { nodeKey: grounded.id as unknown as string, family: 'advisory', contentHash: h, claims: [] } as CurrentNode],
+    ]),
+    cas: new Set([h]),
+  };
+  store.persistProjection(projection);
+
+  return { repoPath, A, B, factKeep: grounded, cleanup: () => rmSync(repoPath, { recursive: true, force: true }) };
+}
+
 let fix: Fix | undefined;
+let renameFix: RenameFix | undefined;
 afterEach(() => {
   fix?.cleanup();
   fix = undefined;
+  renameFix?.cleanup();
+  renameFix = undefined;
 });
 
 // Reconstruct the EXACT leg compose.ts wires, with the two drift seams injectable (for TEETH).
@@ -200,5 +269,64 @@ describe('RECON-SEAMS — composeRuntime wires the REAL reconcile drift seams (C
     const mutant = runLeg(fix, { resolveAnchorAt: rev.resolveAnchorAt, reDerives: () => false }, fix.A);
     expect(mutant.mechanical).toHaveLength(0);
     expect(mutant.semantic).toContain('F_B');
+  });
+});
+
+describe('RECON-N10 — a content-preserving RENAME is MECHANICAL (content-addressed classifier + detection)', () => {
+  it('SCN-N10-1 — moved-but-alive fact ⇒ mechanical, anchorNow=src/moved.ts, NOT semantic, exitCode 0', () => {
+    renameFix = makeRenameFix();
+    const { handler } = composeRuntime(renameFix.repoPath);
+
+    // Drive reconcile at mergeBase=A (unit @ src/keep.ts) vs topic=HEAD=B (unit @ src/moved.ts, same body).
+    const v = handler.handle(RECONCILE, { mergeBase: renameFix.A as Hash });
+    expect(v.ok).toBe(true);
+    const out = v.data as ReconcileOut;
+
+    // The rename is DETECTED (secondary fix) and classified MECHANICAL (primary content-addressed fix).
+    expect(out.drift).toHaveLength(1);
+    expect(out.drift[0]!.anchorNow.qualifiedPath).toBe(MOVED_QP); // relocated to the new path
+    expect(out.mechanical).toContain('F_keep'); // moved-but-alive ⇒ auto-re-groundable
+    expect(out.semantic).not.toContain('F_keep'); // NOT a semantic rot
+    expect(out.semantic).toHaveLength(0);
+    expect(out.exitCode).toBe(0); // a rename must NOT block (exit 0), the sole drift is mechanical
+    expect(out.reauthorCount).toBe(0);
+  });
+
+  it('TEETH-N10 — the PRE-FIX seams (path-keyed reDerives + no content resolver) DROP the moved fact (RED)', () => {
+    renameFix = makeRenameFix();
+    const rev = createRevIndex(renameFix.repoPath);
+
+    // PRE-FIX detection: createDriftSource WITHOUT the content resolver — the old path is gone at HEAD, so
+    // `now` is undefined and NO pair is emitted ⇒ the moved fact is silently dropped (drift empty, exit 0
+    // but for the WRONG reason: it was never seen, never surfaced as mechanical or semantic).
+    const preFixSource = createDriftSource({
+      repoPath: renameFix.repoPath,
+      resolveAnchorAt: rev.resolveAnchorAt,
+      facts: [renameFix.factKeep],
+    });
+    const preFix = createReconcile(preFixSource, {
+      reconcile: bindReconcile(rev.reDerives), // path-keyed predicate (the pre-fix classifier)
+    }).reconcile(renameFix.A as Hash);
+    expect(preFix.drift).toHaveLength(0); // DROPPED — the bug: a rename never even reaches the classifier
+    expect(preFix.mechanical).toHaveLength(0);
+
+    // POST-FIX detection: wire the content resolver ⇒ the rename IS surfaced with anchorNow=src/moved.ts,
+    // and the content-addressed classifier (resolveBySubtreeAt) makes it MECHANICAL.
+    const postFixSource = createDriftSource({
+      repoPath: renameFix.repoPath,
+      resolveAnchorAt: rev.resolveAnchorAt,
+      resolveBySubtreeAt: rev.resolveBySubtreeAt,
+      facts: [renameFix.factKeep],
+    });
+    const postFix = createReconcile(postFixSource, {
+      reconcile: bindReconcile((fact, newSha) => {
+        const a = fact.grounding.entries[0]?.anchor;
+        return a !== undefined && rev.resolveBySubtreeAt(String(newSha), String(a.subtreeHash)) !== undefined;
+      }),
+    }).reconcile(renameFix.A as Hash);
+    expect(postFix.drift).toHaveLength(1);
+    expect(postFix.drift[0]!.anchorNow.qualifiedPath).toBe(MOVED_QP);
+    expect(postFix.mechanical).toContain('F_keep');
+    expect(postFix.exitCode).toBe(0);
   });
 });

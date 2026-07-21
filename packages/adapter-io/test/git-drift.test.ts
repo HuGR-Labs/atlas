@@ -152,4 +152,53 @@ describe('createDriftSource — drift over a git merge-base (ADAPT-GIT-2)', () =
     const greetAtHead = resolveAnchorAt(sbx.topicTip, 'src/util.ts')!;
     expect(greetAtWindow.subtreeHash).toBe(greetAtHead.subtreeHash);
   });
+
+  // ── N10 · pure-rename detection (the widening half) ───────────────────────────────────────────────────
+  // A pure rename DELETES the recorded qualifiedPath at HEAD ⇒ the path-keyed `now` is undefined ⇒ the OLD
+  // logic emitted NO pair (the moved-but-alive fact was silently dropped). With the content resolver wired,
+  // `driftAt` surfaces it with `anchorNow` = the RELOCATED path. `resolveAnchorAt`/`resolveBySubtreeAt` are
+  // the TEST's job (GROUND owns resolution); the real `makeGitSbx` repo supplies the live HEAD (topicSha).
+  it('SCN-N10-detect — a pure rename (old path gone) emits a pair with the RELOCATED anchorNow', () => {
+    sbx = makeGitSbx();
+    const KEEP = 'src/keep.ts';
+    const MOVED = 'src/moved.ts';
+    const SUB = 'sh-keep' as StructRef['subtreeHash']; // the recorded content hash (moves path, not bytes)
+
+    // The fact recorded its grounding at src/keep.ts@mb; at HEAD the path is gone but the content relocated.
+    const fact = advisoryAt('F_moved', KEEP, SUB);
+    const resolveAnchorAt = (rev: string, qp: string): StructRef | undefined =>
+      rev === sbx!.mb && qp === KEEP ? { kind: 'file', qualifiedPath: KEEP, subtreeHash: SUB } : undefined;
+    const resolveBySubtreeAt = (rev: string, subtreeHash: string): StructRef | undefined =>
+      rev === sbx!.topicTip && subtreeHash === String(SUB)
+        ? { kind: 'file', qualifiedPath: MOVED, subtreeHash: SUB }
+        : undefined;
+
+    // WITH the content resolver ⇒ the rename is surfaced, anchored at the new location.
+    const src = createDriftSource({ repoPath: sbx.repoPath, resolveAnchorAt, resolveBySubtreeAt, facts: [fact] });
+    const pairs = src.driftAt(sbx.mb as Hash);
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0]!.anchorWas.qualifiedPath).toBe(KEEP);
+    expect(pairs[0]!.anchorNow.qualifiedPath).toBe(MOVED); // relocated (re-groundable to the new path)
+    expect(String(pairs[0]!.drifted.newSha)).toBe(sbx.topicTip);
+
+    // TEETH — drop the content resolver (the PRE-FIX detection) ⇒ path-keyed `now` is undefined ⇒ NO pair;
+    // the moved fact is silently dropped. The widening is load-bearing.
+    const preFix = createDriftSource({ repoPath: sbx.repoPath, resolveAnchorAt, facts: [fact] });
+    expect(preFix.driftAt(sbx.mb as Hash)).toHaveLength(0);
+  });
+
+  it('SCN-N10-guard — an UNMOVED fact (content still at its path) does NOT over-emit under the widening', () => {
+    sbx = makeGitSbx();
+    const APP = 'src/app.ts';
+    const resolveAnchorAt = makeResolveAnchorAt(sbx.repoPath);
+    const appMb = resolveAnchorAt(sbx.mb, APP)!; // resolvable + byte-identical mb→topic (unchanged)
+    // A content resolver that would find the content STILL at its original path (qualifiedPath === qp).
+    const resolveBySubtreeAt = (_rev: string, subtreeHash: string): StructRef | undefined =>
+      subtreeHash === String(appMb.subtreeHash) ? appMb : undefined;
+
+    const fact = advisoryAt('F_app', APP, appMb.subtreeHash);
+    const src = createDriftSource({ repoPath: sbx.repoPath, resolveAnchorAt, resolveBySubtreeAt, facts: [fact] });
+    // Content unmoved (relocated.qualifiedPath === qp) ⇒ the `!== qp` guard suppresses a phantom pair.
+    expect(src.driftAt(sbx.mb as Hash)).toHaveLength(0);
+  });
 });

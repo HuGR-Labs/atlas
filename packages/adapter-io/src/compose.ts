@@ -32,7 +32,7 @@ import { readScipOrEmpty } from './scip.js';
 import { loadPolicy } from './policy.js';
 import type { AtlasPolicy } from './policy.js';
 import { createRevIndex } from './rev-index.js';
-import { createDoctorSource } from './doctor-source.js';
+import { createDoctorSource, primaryAnchor } from './doctor-source.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
 import { assembleHandler } from './wire.js';
 import type { WireConfig, WireSeams, WiredHandler } from './wire.js';
@@ -146,9 +146,30 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
   const seams: WireSeams = {
     heuristic: buildHeuristic(policy),
     gate: buildGate(axes),
-    classifier: { reconcile: bindReconcile(revIndex.reDerives) },
+    // N10 — the reconcile classifier is CONTENT-ADDRESSED (mirrors the shipped N9 doctor fix,
+    // doctor-source.ts:106-108): a drifted fact is MECHANICAL iff its RECORDED primary-anchor content
+    // re-derives SOMEWHERE at the new sha (`resolveBySubtreeAt`), not just at the SAME qualifiedPath. The
+    // former `reDerives` predicate was PATH-KEYED — it asked "does the recorded content re-derive at the
+    // recorded PATH", so a genuinely moved-but-alive fact (its content now at a NEW path) read `false` ⇒
+    // was ALWAYS classified `semantic`, making `mechanical` structurally unreachable for real drift (the
+    // exact self-compare N9 killed for doctor). Keying on `subtreeHash` (GROUND-1) instead: a rename ⇒
+    // mechanical (re-groundable to its new location, exit 0); a content rewrite (content truly gone) ⇒ still
+    // `undefined` ⇒ semantic (exit 2). `primaryAnchor` is the SHARED pick doctor uses (never a second copy).
+    classifier: {
+      reconcile: bindReconcile((fact, newSha) => {
+        const a = primaryAnchor(fact);
+        return (
+          a !== undefined &&
+          revIndex.resolveBySubtreeAt(String(newSha), String(a.subtreeHash)) !== undefined
+        );
+      }),
+    },
     driftFacts,
     resolveAnchorAt: revIndex.resolveAnchorAt,
+    // N10 secondary — the DETECTION half needs the content-addressed resolver too, so `driftAt` can surface a
+    // PURE RENAME (old path deleted at HEAD ⇒ path-keyed `now` undefined ⇒ no pair under the old logic ⇒ the
+    // moved fact was silently dropped before the classifier ever saw it). Same frozen revIndex method N9 uses.
+    resolveBySubtreeAt: revIndex.resolveBySubtreeAt,
   };
 
   const config: WireConfig = {

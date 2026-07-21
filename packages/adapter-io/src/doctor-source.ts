@@ -35,8 +35,10 @@ const HEAD: Hash = asHash('HEAD');
 
 /** The RECORDED primary grounding anchor — the first entry's `StructRef` (entries sorted by anchor). The
  *  broader/secondary citations feed drift too, but the primary is the identity anchor `drift` keys on
- *  (KNOW-15g). `undefined` when the grounding carries no entries (fail-closed — never a throw). */
-function primaryAnchor(fact: GroundedFact): StructRef | undefined {
+ *  (KNOW-15g). `undefined` when the grounding carries no entries (fail-closed — never a throw). EXPORTED so
+ *  the reconcile classifier (compose.ts) keys its content-addressed re-derivation on the SAME primary anchor
+ *  `drift` does — one shared pick, never two divergent copies of the "which anchor" decision (N10). */
+export function primaryAnchor(fact: GroundedFact): StructRef | undefined {
   return fact.grounding.entries[0]?.anchor;
 }
 
