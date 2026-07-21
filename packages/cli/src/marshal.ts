@@ -33,8 +33,16 @@ export function marshalArgs(
       // `atlas init [path]` — parse enforces arity 1, so positionals[0] is present via the normal flow; the
       // `?? '.'` honors the card's documented default when marshalled directly (defensive totality).
       return { ok: true, args: { path: positionals[0] ?? '.' } };
-    case 'query':
-      return { ok: true, args: { scope: positionals[0] } };
+    case 'query': {
+      // `atlas query <scope> [--by scope|dependency|trigger]` — the leg reads `.scope` (back-compat) + `.by`
+      // (the retrieval mode). `--by` defaults to `scope` (the pre-existing behavior). VALIDATE fail-CLOSED:
+      // an unknown mode yields a structured marshal error, mirroring the emit missing-`--at` guard below.
+      const by = (flags['by'] as string | undefined) ?? 'scope';
+      if (by !== 'scope' && by !== 'dependency' && by !== 'trigger') {
+        return { ok: false, error: `query --by must be one of scope|dependency|trigger` };
+      }
+      return { ok: true, args: { scope: positionals[0], by } };
+    }
     case 'reconcile':
       // `atlas reconcile <mergeBase>` — the leg reads `mergeBase` + `options?: {acceptReground?}`. There is NO
       // `topic` in the leg's shape, so nothing else is marshalled; `--accept-reground` drives the one option.

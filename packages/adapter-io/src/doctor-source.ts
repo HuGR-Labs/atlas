@@ -5,9 +5,14 @@
 //   - `hotSetSize()` — the current-node count of the rehydrated durable projection (@atlas/knowledge).
 //   - `lineage(scope?)` — the monotone CAS supersede-chain of the current nodes: each node's `contentHash`
 //     plus its `supersededBy` pointer, canonically ordered, optionally filtered by the fact's `scope`.
-//   - `drift(fact)` — the RECORDED grounding anchor (`anchorWas`) vs the anchor re-resolved at HEAD
-//     (`anchorNow = resolveAnchorAt('HEAD', anchorWas.qualifiedPath)`). Unchanged/absent ⇒ NOT drifted.
-//     `class` = mechanical iff the whole claim still re-derives at HEAD (`reDerives` FRESH), else semantic.
+//   - `drift(fact)` — DETECT: the RECORDED grounding no longer holds at HEAD (`reDerives(fact,HEAD)` is NOT
+//     FRESH — the recorded anchor's `qualifiedPath` is gone OR now carries different content). CLASSIFY (the
+//     KNOW-5 split, mirroring `bindReconcile`): does the recorded anchor's CONTENT (`subtreeHash`) still
+//     re-derive SOMEWHERE at HEAD (`resolveBySubtreeAt('HEAD', anchorWas.subtreeHash)`)? If YES the claim
+//     MOVED but survives ⇒ `mechanical`, `anchorNow` = that new location (re-groundable). If NO the claim
+//     rotted ⇒ `semantic`, `anchorNow` names what the recorded path holds now (or the recorded anchor when
+//     the path too is gone). Crucially it does NOT re-compare the recorded hash to itself on the SAME anchor
+//     (the old bug: that made mechanical structurally unreachable — a detected drift was ALWAYS semantic).
 //   - `plan(fact)` — only when drifted: mechanical ⇒ a `reground` template (primary anchor swapped to
 //     `anchorNow`), semantic ⇒ a `retire` template (the fact tagged SUPERSEDED). The emitted candidate is
 //     a well-formed `GroundedFact` — the payload the doctor plan funnels through the single write door.
@@ -30,8 +35,10 @@ const HEAD: Hash = asHash('HEAD');
 
 /** The RECORDED primary grounding anchor — the first entry's `StructRef` (entries sorted by anchor). The
  *  broader/secondary citations feed drift too, but the primary is the identity anchor `drift` keys on
- *  (KNOW-15g). `undefined` when the grounding carries no entries (fail-closed — never a throw). */
-function primaryAnchor(fact: GroundedFact): StructRef | undefined {
+ *  (KNOW-15g). `undefined` when the grounding carries no entries (fail-closed — never a throw). EXPORTED so
+ *  the reconcile classifier (compose.ts) keys its content-addressed re-derivation on the SAME primary anchor
+ *  `drift` does — one shared pick, never two divergent copies of the "which anchor" decision (N10). */
+export function primaryAnchor(fact: GroundedFact): StructRef | undefined {
   return fact.grounding.entries[0]?.anchor;
 }
 
@@ -94,12 +101,20 @@ export function createDoctorSource(store: DiskStore, revIndex: RevIndex): Doctor
     if (!grounded) return undefined; // unknown fact / missing bytes — fail-closed
     const anchorWas = primaryAnchor(grounded);
     if (anchorWas === undefined) return undefined; // no anchor to diff
-    const anchorNow = revIndex.resolveAnchorAt(String(HEAD), anchorWas.qualifiedPath);
-    if (anchorNow === undefined) return undefined; // unit gone at HEAD — not a drift item here
-    if (anchorNow.subtreeHash === anchorWas.subtreeHash) return undefined; // unchanged ⇒ NOT drifted
-    // mechanical iff the claim still re-derives at HEAD (driftDetect FRESH); else the claim rotted ⇒ semantic.
-    const cls = revIndex.reDerives(grounded, HEAD) ? 'mechanical' : 'semantic';
-    return { fact, class: cls, anchorWas, anchorNow };
+    // DETECT: the recorded grounding still holds at HEAD (every anchor re-derives FRESH) ⇒ NOT drifted. This
+    // fires on BOTH a moved anchor (recorded qualifiedPath gone at HEAD) AND a changed unit (same path, new
+    // subtreeHash) — never a self-compare of the recorded hash against itself.
+    if (revIndex.reDerives(grounded, HEAD)) return undefined;
+    // CLASSIFY (KNOW-5, mirrors bindReconcile): does the recorded CONTENT re-derive somewhere at HEAD?
+    const reAnchor = revIndex.resolveBySubtreeAt(String(HEAD), String(anchorWas.subtreeHash));
+    if (reAnchor !== undefined) {
+      // Mechanical: the claim MOVED but survives — re-groundable to its new location.
+      return { fact, class: 'mechanical', anchorWas, anchorNow: reAnchor };
+    }
+    // Semantic: the content rotted away. `anchorNow` names what the recorded path holds now, or — when the
+    // path itself is gone — the recorded anchor (a total, honest pointer; never a throw).
+    const anchorNow = revIndex.resolveAnchorAt(String(HEAD), anchorWas.qualifiedPath) ?? anchorWas;
+    return { fact, class: 'semantic', anchorWas, anchorNow };
   };
 
   const plan = (fact: string): { readonly action: 'reground' | 'retire'; readonly emit: GroundedFact } | undefined => {

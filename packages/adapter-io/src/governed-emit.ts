@@ -7,6 +7,13 @@
 //   2. AUTHZ        — the KNOW-11 owner-scoped write gate (`actorInScope`): an actor not in the fact's
 //                     scope is rejected, nothing persisted. An empty/unset actor is in NO scope ⇒ every
 //                     write is denied (fail-closed v1 — correct behavior).
+//   2.5 RATIFY      — the KNOW-8/KNOW-18 tier-ratification gate, composed BETWEEN authz and upsert. The
+//                     KNOW-18 fast-path `route(candidate, ctx)` decides: a grounded ∧ lowRisk ∧ T2 ∧
+//                     advisory ∧ ¬contested fact AUTO-ACCEPTS (the common case — no human); a T0 / predicate
+//                     / contested fact routes to FULL ratification and commits ONLY with a valid KNOW-8
+//                     ratify token (a T0 fact requires the billy token). The token is env-sourced by the
+//                     composition root (`ATLAS_RATIFY_TOKEN`, threaded like the actor) — NEVER read off the
+//                     fact payload. Absent/invalid ⇒ REJECTED fail-closed, nothing persisted (KNOW-8).
 //   3. UPSERT+PUT   — route the write through the proven KNOW-15 `upsert(WriteRequest)` decision (mirrors
 //                     the CLI `mine.ts` durable-write path), persist the projection sidecar durably, AND
 //                     `store.put(node)` the WHOLE GroundedFact into CAS so the content-addressed bytes ARE
@@ -18,17 +25,29 @@
 import { id } from '@atlas/kernel';
 import type { CasObject } from '@atlas/kernel';
 import type { Hash } from '@atlas/contracts';
-import { upsert, normalizeCheck, primaryAnchorId } from '@atlas/knowledge';
-import type { Candidate, GroundedFact, WriteRequest } from '@atlas/knowledge';
+import { upsert, normalizeCheck, primaryAnchorId, nodeKey, route, stage, ratify } from '@atlas/knowledge';
+import type { Candidate, GroundedFact, WriteRequest, RatifyContext, RatifyToken } from '@atlas/knowledge';
 import type { EmitOut, TruthGate } from '@atlas/tools';
 import { actorInScope } from './policy.js';
 import type { AtlasPolicy } from './policy.js';
 import { rehydrateProjection } from './store.js';
 import type { DiskStore } from './store.js';
 
-/** The structured fail-closed reasons (TOOLS-7b / KNOW-11) — an ungrounded OR unauthorized write never lands. */
+/** The structured fail-closed reasons (TOOLS-7b / KNOW-11 / KNOW-8) — an ungrounded, unauthorized, OR
+ *  unratified write never lands. */
 const REJECTED_UNGROUNDED = 'ungrounded: citation does not re-derive FRESH at source (TOOLS-7b / GROUND-6)';
 const REJECTED_UNAUTHORIZED = 'unauthorized: actor not in fact scope (KNOW-11)';
+const REJECTED_UNRATIFIED = 'unratified: T0/contested fact requires human+billy ratification (KNOW-8)';
+
+/** The KNOW-18 fast-path CONTEXT the door hands to `route`. `lowRisk` (the KNOW-17 door-2 threshold verdict)
+ *  and `contested` (the KNOW-18b store-veto) are BOTH store/threshold-derived UPSTREAM and are NOT wired
+ *  into this write door in v1 — defaulted CONSERVATIVELY to preserve the common T2-advisory auto-accept:
+ *  `contested:false` (no reviewer veto asserted at the door) and `lowRisk:true` (a grounded fact that already
+ *  passed the truth-door is treated as low-risk). This matches s05's intended `route(clean,{lowRisk:true,
+ *  contested:false}) === 'auto-accept'`; wiring the real hits-ledger/veto verdicts here is a later WP. The
+ *  T0/predicate governance teeth do NOT depend on these defaults — they route to full-ratify by their
+ *  candidate-intrinsic tier/check, independent of `lowRisk`/`contested`. */
+const DOOR_RATIFY_CTX: RatifyContext = { contested: false, lowRisk: true };
 
 /** What the governed emit leg is composed over: the durable CAS store, the truth-gate seam, the admin
  *  policy (authz scopes), and the actor identity resolved from the environment. */
@@ -37,6 +56,11 @@ export interface GovernedEmitDeps {
   readonly gate: TruthGate;
   readonly policy: AtlasPolicy;
   readonly actor: string;
+  /** The KNOW-8 ratify token (`by`) authorizing a full-ratify (T0/predicate/contested) commit. Env-sourced
+   *  by the composition root (`ATLAS_RATIFY_TOKEN`), threaded EXACTLY like `actor` — NEVER read from the fact
+   *  payload (the spoof-guard). ABSENT ⇒ `''` ⇒ a full-ratify fact fails closed; a T0 fact commits ONLY with
+   *  the `billy` token. A fast-pathed (auto-accept) fact ignores it entirely. */
+  readonly ratifyToken?: string;
 }
 
 /** The advisory claim body a write carries (the KNOW-4c set-union element); a predicate carries its
@@ -64,17 +88,41 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
       return { emitted: false, rejected: REJECTED_UNAUTHORIZED };
     }
 
+    // A GroundedFact carries its slot as `predicateSlot`; the `Candidate` identity/route fns
+    // (`nodeKey`/`primaryAnchorId`/`route`/`stage`) read `.slot`/`.tier`/`.check`/`.grounding`. Map the slot
+    // onto a candidate VIEW ONCE — else a later `nodeKey` cast is LOSSY (`.slot` undefined) and the nodeKey is
+    // computed slot-free, diverging from the true `hash(primaryAnchorId ‖ predicateSlot)` identity (the E2E
+    // emit→query readback exposed this). The route reads the fact's REAL `tier`/`check`/`grounding` — no guess.
+    const candidateView = { ...node, slot: node.predicateSlot } as unknown as Candidate;
+
+    // 2.5 RATIFY — the KNOW-8/KNOW-18 tier-ratification gate, BETWEEN authz and upsert. The fast-path
+    //    `route` auto-accepts a grounded ∧ lowRisk ∧ T2 ∧ advisory ∧ ¬contested fact (the common case —
+    //    straight to upsert, unchanged behavior). A T0 / predicate / contested fact routes to FULL
+    //    ratification: it commits ONLY with a valid KNOW-8 token, and a T0 fact requires the `billy` token.
+    //    The token is env-sourced by the composition root (never the payload). Absent/invalid ⇒ REJECTED
+    //    fail-closed, nothing persisted — this is the door that was previously bypassing the human+billy gate.
+    if (route(candidateView, DOOR_RATIFY_CTX) === 'full-ratify') {
+      const token: RatifyToken = { by: deps.ratifyToken ?? '' };
+      if (!ratify(stage(candidateView), token).committed) {
+        return { emitted: false, rejected: REJECTED_UNRATIFIED };
+      }
+    }
+
     // 3. ROUTE + UPSERT — the KNOW-15 write-decision over the rehydrated projection (mine.ts parity).
+    //    IDENTITY IS MINTED, NEVER TRUSTED — the routing/dedup `nodeKey` is RECOMPUTED from the content
+    //    via the frozen `nodeKey(node)` formula (KNOW-15b: hash(primaryAnchorId ‖ slot[‖ check])), the same
+    //    seam that mints `contentHash`/`primaryAnchor` below. The author-supplied payload `node.id` is NEVER
+    //    used for routing — trusting it would let an author spoof/collide/dodge another node's identity.
     const contentHash = id(node as CasObject);
     const req: WriteRequest = {
-      nodeKey: node.id as unknown as string,
+      nodeKey: nodeKey(candidateView) as unknown as string,
       contentHash: contentHash as unknown as string,
       family: node.kind,
       claimNorm: claimNormOf(node),
       // ── ADJACENCY carrier (ADDITIVE) — carry the computed primary anchor + the R3-optional slot onto
       //    the node so a later sibling-adjacency scan reads them off the projection (WP-B); NOT read here.
       //    `predicateSlot` is R3-optional; conditional spread keeps `slot` ABSENT (exactOptionalPropertyTypes).
-      primaryAnchor: primaryAnchorId(node as unknown as Candidate) as unknown as string,
+      primaryAnchor: primaryAnchorId(candidateView) as unknown as string,
       ...(node.predicateSlot !== undefined ? { slot: node.predicateSlot } : {}),
     };
     const projection = upsert(rehydrateProjection(deps.store), req).store;

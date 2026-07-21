@@ -7,7 +7,7 @@
 // write surface is EXACTLY four (`atlas-init`/`-query`/`-emit`/`-reconcile`); diff/doctor/node are read-only.
 
 import type { Hash, NodeKey, Pack, StructRef, Territory, ToolSchema } from '@atlas/contracts';
-import type { GroundedFact } from '@atlas/knowledge';
+import type { GroundedFact, Subsumes } from '@atlas/knowledge';
 import type { VersionDelta } from '@atlas/persist';
 import type { OwnPack, OwnUnit, RelationSet } from '@atlas/retrieval';
 
@@ -194,9 +194,22 @@ export type DiffOut = VersionDelta;
 // model because each is consumed by ≥2 src files (housing them here keeps the impl files free of
 // impl→impl type imports). Transcribed from atlas-tools:6-11, 187-190 + method-tags-tls:26-45, 82-87.
 
+/**
+ * The `atlas-query` observability ENVELOPE (WIRE-LOOP Seam-3) — the handler-level `data` shape the query
+ * leg now carries so the derived `subsumes` coverage relation (DP-2, the FIRST production call site of
+ * `deriveSubsumes`) rides ALONGSIDE the `Pack` without mutating the FROZEN `Pack`/`PackInvariant` contracts.
+ * A handler-level widening of `Verdict.data`, NOT a `@atlas/contracts` change: `pack` stays the transcribed
+ * `QueryOut`; `subsumes` is the deterministically-sorted `broader ⊃ narrower` edge set, scoped to the pack.
+ */
+export interface QueryEnvelope {
+  readonly pack: Pack;
+  readonly subsumes: readonly Subsumes[];
+}
+
 /** The per-tool result payload carried on a `Verdict.data` — the union of the four governance-tool result
- *  records (TOOLS-5/6/7/8). The handler is one oracle over all four; the concrete leg is fixed by `tool`. */
-export type ToolData = InitOut | QueryOut | EmitOut | ReconcileOut;
+ *  records (TOOLS-5/6/7/8), plus the `atlas-query` observability envelope (Seam-3). The handler is one
+ *  oracle over all; the concrete leg is fixed by `tool`. */
+export type ToolData = InitOut | QueryOut | EmitOut | ReconcileOut | QueryEnvelope;
 
 /** The transport a call arrived on (TOOLS-3/10). Transcribed from the reference's "one contract, two
  *  transports" (CLI≡MCP) plus the tri-transport node reads (MCP tool | poke | CLI). Behaviour MUST NOT

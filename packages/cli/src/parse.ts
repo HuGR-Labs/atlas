@@ -31,26 +31,49 @@ const ARITY: Record<Command, number> = {
   reconcile: 1, // reconcile <mergeBase>
   doctor: 1, // doctor <scope>
   mine: 1, // mine <repo>
+  node: 1, // node <addr>
 };
 
-const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine';
+const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine|node';
 
 function isCommand(s: string): s is Command {
   return Object.prototype.hasOwnProperty.call(COMMAND_LEG, s);
 }
 
-/** Fold one `-x`/`--x`/`--x=y` token into the flag bag — a bare flag is `'true'`. Never throws. */
-function foldFlag(tok: string, flags: Record<string, string>): void {
+/**
+ * Flags that carry a VALUE token, accepting both the joined `--flag=v` and the space `--flag v` forms.
+ * `--at` (the emit anchor rev) is valued; everything else stays a bare boolean. Any unknown flag simply
+ * folds into the bag (a bare `--x` becomes `'true'`) — it is never a parse error, preserving totality.
+ */
+const VALUED_FLAGS = new Set(['at', 'by']);
+
+/**
+ * Fold one `-x`/`--x`/`--x=y`/`--x y` token into the flag bag — a bare flag is `'true'`. For a VALUED flag in
+ * the space form (`--at <v>`), the following token `next` is consumed as the value; the return is the number of
+ * EXTRA tokens consumed (0, or 1 when a valued flag swallowed its value). Never throws. The value is only
+ * consumed when `next` is a real value token (not another flag / not absent) — so a following positional that
+ * belongs to a non-valued flag is never swallowed and totality is preserved (a valueless `--at` folds to
+ * `'true'`, which the emit marshaller rejects as a missing `--at`).
+ */
+function foldFlag(tok: string, next: string | undefined, flags: Record<string, string>): number {
   const body = tok.replace(/^-+/, '');
   const eq = body.indexOf('=');
-  if (eq >= 0) flags[body.slice(0, eq)] = body.slice(eq + 1);
-  else flags[body] = 'true';
+  if (eq >= 0) {
+    flags[body.slice(0, eq)] = body.slice(eq + 1);
+    return 0;
+  }
+  if (VALUED_FLAGS.has(body) && next !== undefined && !next.startsWith('-')) {
+    flags[body] = next;
+    return 1;
+  }
+  flags[body] = 'true';
+  return 0;
 }
 
 /**
- * Parse `argv` TOTALLY. Failures: empty argv, a flag where the command belongs, an unknown command, a
- * malformed typed flag (`--depth` must be an integer), or a missing positional. Every failure is a
- * `ParseError` — never a throw, never `process.exit`.
+ * Parse `argv` TOTALLY. Failures: empty argv, a flag where the command belongs, an unknown command, or a
+ * missing positional. Every failure is a `ParseError` — never a throw, never `process.exit`. Unknown flags
+ * are never a failure — they fold into the flag bag and are ignored by the marshallers that do not read them.
  */
 export function parse(argv: readonly string[]): ParseResult {
   if (argv.length === 0) {
@@ -66,17 +89,12 @@ export function parse(argv: readonly string[]): ParseResult {
 
   const positionals: string[] = [];
   const flags: Record<string, string> = {};
-  for (const tok of argv.slice(1)) {
-    if (tok.startsWith('-')) foldFlag(tok, flags);
+  const rest = argv.slice(1);
+  for (let i = 0; i < rest.length; i++) {
+    const tok = rest[i];
+    if (tok === undefined) continue;
+    if (tok.startsWith('-')) i += foldFlag(tok, rest[i + 1], flags);
     else positionals.push(tok);
-  }
-
-  // bad flag: a typed flag with a malformed value is a parse error (CLI-1b — the `--depth=notanumber` case).
-  if (Object.prototype.hasOwnProperty.call(flags, 'depth')) {
-    const raw = flags['depth'];
-    if (raw === undefined || raw === 'true' || !Number.isInteger(Number(raw))) {
-      return { ok: false, error: `bad flag: --depth must be an integer, got '${raw ?? ''}'` };
-    }
   }
 
   // missing positional

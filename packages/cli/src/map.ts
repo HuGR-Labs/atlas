@@ -6,8 +6,8 @@
 import { WRITE_PATHS } from '@atlas/tools';
 import type { Tool, Verdict } from '@atlas/tools';
 
-/** The finite command surface — EXACTLY these six, no more (CLI-1a). Order fixed; membership load-bearing. */
-export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine'] as const;
+/** The finite command surface — EXACTLY these seven, no more (CLI-1a). Order fixed; membership load-bearing. */
+export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node'] as const;
 export type Command = (typeof COMMANDS)[number];
 
 /** The leg a command routes to — a governance `Tool`, or the genesis entry (data-only; NOT executed here —
@@ -28,6 +28,8 @@ export const COMMAND_LEG: Record<Command, Leg> = {
   reconcile: 'atlas-reconcile',
   doctor: 'atlas-query', // READ authority oracle (TOOLS-6 projection); runtime sub-dispatches to DoctorApi
   mine: 'genesis run-controller', // data-only entry; not driven at this seam
+  node: 'atlas-query', // READ authority oracle (TOOLS-10 per-node read); intercepted before the handler (cli.ts),
+  //                      resolves via handler.resolveNode over the read-only NodeSource — carries NO write authority
 };
 
 export type Authority = 'read' | 'write';
@@ -50,15 +52,17 @@ export const EXIT: Record<Status, number> = { ok: 0, error: 1, rejected: 2 };
 
 /**
  * CLI-3b: the ratified status derivation `f` — a PURE function of ONE verdict (no tool tag, no clock). A
- * `false` verdict is an `error`; a truthy verdict whose `data` reports a non-zero `exitCode` (reconcile) OR
- * `emitted:false` (emit) is `rejected`; otherwise `ok`. The `exitCode`/`emitted` probes duck-type the two
- * carrier records structurally — only `ReconcileOut` carries `exitCode`, only `EmitOut` carries `emitted` —
- * so this stays a pure function of the verdict while implementing the tool-qualified rule.
+ * GOVERNANCE rejection is `rejected` (exit 2): a `data` reporting a non-zero `exitCode` (reconcile semantic
+ * flip) OR `emitted:false` (a fail-closed emit — now an `ok:false` verdict that carries its `EmitOut` on
+ * `data`, F2/F5). Any OTHER `ok:false` (malformed args, unwired tool) is a usage/wiring `error` (exit 1).
+ * Otherwise `ok`. The `exitCode`/`emitted` probes duck-type the two carrier records structurally — only
+ * `ReconcileOut` carries `exitCode`, only `EmitOut` carries `emitted` — so the governance-refusal classes are
+ * distinguished from a bare error BEFORE the `ok:false` fallback, keeping this a pure function of the verdict.
  */
 export function deriveStatus(v: Verdict): Status {
-  if (v.ok === false) return 'error';
   const data = v.data as { readonly exitCode?: unknown; readonly emitted?: unknown } | undefined;
-  if (data && typeof data.exitCode === 'number' && data.exitCode !== 0) return 'rejected';
-  if (data && data.emitted === false) return 'rejected';
+  if (data && data.emitted === false) return 'rejected'; // fail-closed emit — a governed refusal (F2/F5)
+  if (data && typeof data.exitCode === 'number' && data.exitCode !== 0) return 'rejected'; // reconcile flip
+  if (v.ok === false) return 'error'; // malformed args / unwired tool — a usage/wiring error
   return 'ok';
 }

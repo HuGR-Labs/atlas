@@ -13,14 +13,20 @@ import { createHandler, createInit, createQuery, createReconcile } from '@atlas/
 import type { ToolLegs, ToolLeg, NodeSource } from '@atlas/tools';
 import { id } from '@atlas/kernel';
 import { build, createResolve, createDepgraph } from '@atlas/index';
+import type { Axes } from '@atlas/index';
+import { currentNodes, deriveSubsumes } from '@atlas/knowledge';
+import type { GroundedFact } from '@atlas/knowledge';
+import type { Hash } from '@atlas/contracts';
+import { retrievalPack } from './retrieval-model.js';
 import type { CasPath } from './store.js';
 import { walkFileTree } from './fs.js';
 import { readScipOrEmpty } from './scip.js';
 import { createIndexAdapter } from './index-adapter.js';
+import { createProjectionQueryIndex, underScope } from './projection-query-index.js';
 import { createDriftSource } from './git-drift.js';
 import { createGovernedEmit } from './governed-emit.js';
 import { loadPolicy } from './policy.js';
-import { createDiskStore } from './store.js';
+import { createDiskStore, rehydrateProjection } from './store.js';
 // DAG-pin imports — referenced (not wired as legs) to keep the frozen skeleton's dependency edges real.
 import { foldAstUnits } from './ast.js';
 import { createForge } from './git-forge.js';
@@ -55,6 +61,13 @@ export interface WireSeams {
   readonly driftFacts: readonly import('@atlas/knowledge').GroundedFact[];
   /** GROUND-owned anchor resolution at a rev (createDriftSource dep, git-drift.ts:24). */
   readonly resolveAnchorAt: (rev: string, qp: string) => import('@atlas/contracts').StructRef | undefined;
+  /** N10 — GROUND-owned CONTENT-addressed resolution at a rev: the recorded `subtreeHash` re-located to its
+   *  new qualifiedPath (or `undefined` if the content is gone). Feeds `createDriftSource`'s pure-rename
+   *  widening (git-drift.ts). OPTIONAL — a bare WIRE fake that omits it simply never surfaces a rename. */
+  readonly resolveBySubtreeAt?: (
+    rev: string,
+    subtreeHash: string,
+  ) => import('@atlas/contracts').StructRef | undefined;
 }
 
 /** What the assembler needs to stand up the runtime (ring shape). */
@@ -68,6 +81,16 @@ export interface WireConfig {
   /** The KNOW-11 write actor (owner-scoped authz). Resolved by the composition root from the environment /
    *  local machine ONLY (never from a fact/payload); ABSENT ⇒ `''` ⇒ fail-closed (every write denied). */
   readonly actor?: string;
+  /** The KNOW-8 ratify token (`by`) for a full-ratify (T0/predicate/contested) commit. Resolved by the
+   *  composition root from the environment ONLY (`ATLAS_RATIFY_TOKEN`, never a fact/payload); ABSENT ⇒ a
+   *  full-ratify fact fails closed, a T0 fact needs `billy`. Fast-pathed (auto-accept) facts ignore it. */
+  readonly ratifyToken?: string;
+  /** The built structural axes the CLOSED three-mode retrieval surface reads (N2 — `atlas query --by
+   *  dependency|trigger`). Supplied by the composition root (`composeRuntime` builds the SAME axes the index
+   *  adapter rides); the fact-dependent read model is rebuilt PER QUERY from the live store over these axes,
+   *  so dependency/trigger are as fresh as scope. ABSENT for the bare WIRE assembly (wire-only fake tests
+   *  exercise `--by scope` only), where the non-scope modes fail closed. */
+  readonly axes?: Axes;
 }
 
 /**
@@ -84,7 +107,14 @@ export function assembleHandler(config: WireConfig): WiredHandler {
   // The index-backing adapter (satisfies both frozen tools ports: MoveInIndex + QueryIndex) over the
   // frozen FS + SCIP outputs, driving @atlas/index. `nodeHashOfPath` is the sealed-kernel path→node keying
   // (= build's keying, `id({file})`) — the exact IndexAdapterDeps shape (cf s01 / index-adapter.test).
-  const fileTree = walkFileTree(config.repoPath);
+  // Fold sub-file AST item/block units onto the spatial FileTree BEFORE `build` (F1): `build` keys every
+  // index node by `node.path` (build.ts `key: node.path`), so the folded `::`-chained unit paths become
+  // resolvable index node keys — a symbol grounding re-derives FRESH and its `::` primaryAnchor lets
+  // `deriveSubsumes` fire (module ⊃ function). `foldAstUnits` is SYNC and reads the module-level grammar
+  // singletons; when the composition root has awaited `initAst()` (the bins do, before composeRuntime) it
+  // folds real units, otherwise it is a safe additive NO-OP (file/dir nodes only) — so wire tests that never
+  // warm up keep their exact prior behavior.
+  const fileTree = foldAstUnits(walkFileTree(config.repoPath));
   // DEGRADE gracefully on a fresh repo: a MISSING `.scip` dump (no `.atlas/index.scip` yet) is an empty
   // files-only index, never a throw. `readScipOrEmpty` is the ONE shared missing-file guard (scip.ts) — the
   // twin of the one `compose.ts` applies for the Axes build (COMPOSE-B).
@@ -105,18 +135,59 @@ export function assembleHandler(config: WireConfig): WiredHandler {
   // not a throwaway in-memory map. This closes the former store-bridge TODO: the durable store is the real
   // one now. The actor is passed in via `config.actor` (resolved from env/git-config by compose.ts) — this
   // module NEVER reads `process.env` or a fact/payload for the actor (the spoof-guard boundary).
+  // The ONE durable disk store this assembly rides — shared by the governed emit leg (the write side) AND
+  // the projection query-readback (the read side), so `atlas query` reads back the very facts `atlas emit`
+  // persists (WIRE-LOOP: emit→query is a closed loop over ONE store, never two divergent instances).
+  const store = createDiskStore(config.casPath);
+
   const governedEmit = createGovernedEmit({
-    store: createDiskStore(config.casPath),
+    store,
     gate: config.seams.gate,
     policy: loadPolicy(config.repoPath),
     actor: config.actor ?? '',
+    // The ratify token rides the SAME env-sourced, payload-free channel as the actor. Conditional spread
+    // keeps it ABSENT (not `undefined`) when unset — `exactOptionalPropertyTypes`, so the door defaults to ''.
+    ...(config.ratifyToken !== undefined ? { ratifyToken: config.ratifyToken } : {}),
   });
+
+  // Seam-1: wrap the pure structural index-adapter with the durable projection readback, so a scope resolves
+  // to its covering territory skeleton (from @atlas/index) FOLDED with the emitted facts under it (from CAS).
+  const queryIndex = createProjectionQueryIndex(index, store);
 
   const legs: ToolLegs = {
     'atlas-init': ((args) =>
       createInit(index, config.seams.heuristic).init((args as { path: string }).path)) satisfies ToolLeg,
-    'atlas-query': ((args) =>
-      createQuery(index).query((args as { scope: string }).scope)) satisfies ToolLeg,
+    // Seam-3: the query leg's `Verdict.data` is the `{ pack, subsumes }` observability envelope. `subsumes`
+    // is `deriveSubsumes` (its FIRST production call site — DP-2 resolution-at-read) filtered to the edges
+    // whose BOTH endpoints are current nodes UNDER the covering scope, already deterministically sorted.
+    'atlas-query': ((args) => {
+      const a = args as { scope: string; by?: string };
+      // N2: `--by dependency|trigger` routes THROUGH the designed three-mode `createRetrieval` surface (INDEX-6),
+      // NOT re-implemented here. `scope` (the default, and every MCP/wire-fake call) stays the byte-identical
+      // pre-existing projection path below. The mode is marshal-validated ∈ {scope,dependency,trigger} (CLI).
+      const by = a.by;
+      if (by === 'dependency' || by === 'trigger') {
+        if (config.axes === undefined) {
+          // No structural axes wired at this seam (bare WIRE fake assembly) — fail closed; the handler wraps
+          // this throw into a structured rejected Verdict (TOOLS-2), never a raw throw at the user door.
+          throw new Error('atlas query --by dependency|trigger needs the composition-root axes');
+        }
+        // retrievalPack rebuilds the read model FRESH from the live store each call — freshness parity w/ scope.
+        return retrievalPack(config.axes, by, a.scope, store);
+      }
+      const scope = a.scope;
+      const pack = createQuery(queryIndex).query(scope);
+      const proj = rehydrateProjection(store);
+      const underKeys = new Set(
+        currentNodes(proj)
+          .filter((n) => n.primaryAnchor !== undefined && underScope(n.primaryAnchor, scope))
+          .map((n) => n.nodeKey),
+      );
+      const subsumes = deriveSubsumes(proj).filter(
+        (s) => underKeys.has(s.broader) && underKeys.has(s.narrower),
+      );
+      return { pack, subsumes };
+    }) satisfies ToolLeg,
     'atlas-emit': ((args) =>
       governedEmit.emit(
         (args as { node: import('@atlas/knowledge').GroundedFact }).node,
@@ -127,6 +198,11 @@ export function assembleHandler(config: WireConfig): WiredHandler {
         createDriftSource({
           repoPath: config.repoPath,
           resolveAnchorAt: config.seams.resolveAnchorAt,
+          // N10 — thread the content-addressed resolver so `driftAt` surfaces a pure rename (spread keeps it
+          // ABSENT, not `undefined`, when a fake omits it — exactOptionalPropertyTypes).
+          ...(config.seams.resolveBySubtreeAt !== undefined
+            ? { resolveBySubtreeAt: config.seams.resolveBySubtreeAt }
+            : {}),
           facts: config.seams.driftFacts,
         }),
         config.seams.classifier,
@@ -136,10 +212,27 @@ export function assembleHandler(config: WireConfig): WiredHandler {
       )) satisfies ToolLeg,
   };
 
-  // The DAG-pin references NOT wired as handler legs (frozen skeleton edges): the AST fold and the
-  // git-forge / history / site-proposer seams. (The durable disk store is now REALLY wired — the emit leg.)
-  void [foldAstUnits, createForge, createHistorySource, createSiteProposer];
+  // The DAG-pin references NOT wired as handler legs (frozen skeleton edges): the git-forge / history /
+  // site-proposer seams. (The AST fold is now REALLY wired — the index FileTree pipeline above; the durable
+  // disk store is REALLY wired — the emit leg.)
+  void [createForge, createHistorySource, createSiteProposer];
 
-  // ONE handler over the four legs — no per-entrypoint copy (WIRE-1).
-  return createHandler(legs);
+  // N6: the READ-ONLY per-node projection source (TOOLS-10). `resolveNode(addr)` reads the whole fact back
+  // from CAS by its CONTENT ADDRESS — the SAME durable store the query readback + governed emit ride (the CAS
+  // bytes ARE the fact). READ-ONLY: it opens NO write path (writes still funnel through `atlas-emit`, TOOLS-1);
+  // a miss ⇒ `undefined` (the handler renders a structured "no grounded node" rejection, never a throw).
+  const nodes: NodeSource = {
+    resolve: (nodeAddr) => {
+      // SECURITY (billy PoC): `nodeAddr` is attacker-controllable over MCP/poke. A CAS content address is
+      // EXACTLY 64 lowercase hex; anything else (a `../` traversal to an unbounded file like /dev/zero) is a
+      // MISS — rejected BEFORE any filesystem read, so it can never hang/OOM. Defense-in-depth: `store.get`
+      // re-applies the same charset + sandbox guard (store.ts). READ-ONLY: no write path (TOOLS-1).
+      const addr = String(nodeAddr);
+      if (!/^[0-9a-f]{64}$/.test(addr)) return undefined;
+      return store.get(addr as unknown as Hash) as GroundedFact | undefined;
+    },
+  };
+
+  // ONE handler over the four legs + the read-only per-node source — no per-entrypoint copy (WIRE-1).
+  return createHandler(legs, nodes);
 }

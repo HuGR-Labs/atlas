@@ -50,9 +50,9 @@ afterEach(() => vi.restoreAllMocks());
 // ── REQ-CLI-1 — total command surface ─────────────────────────────────────────────────────────────
 
 describe('SCN-CLI-1a — every command maps to exactly one leg', () => {
-  it('is total (6 keys) and mutually-exclusive over the ratified table', () => {
+  it('is total (7 keys) and mutually-exclusive over the ratified table', () => {
     // totality: every command in the finite surface has exactly one leg.
-    expect(COMMANDS).toEqual(['init', 'query', 'emit', 'reconcile', 'doctor', 'mine']);
+    expect(COMMANDS).toEqual(['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node']);
     expect(Object.keys(COMMAND_LEG).sort()).toEqual([...COMMANDS].sort());
     expect(COMMAND_LEG).toEqual({
       init: 'atlas-init',
@@ -61,6 +61,7 @@ describe('SCN-CLI-1a — every command maps to exactly one leg', () => {
       reconcile: 'atlas-reconcile',
       doctor: 'atlas-query',
       mine: 'genesis run-controller',
+      node: 'atlas-query', // READ authority oracle (like doctor) — intercepted before the handler, no write authority
     });
     // teeth: a command bound to zero legs (totality) or two legs (uniqueness) — each key resolves to one string.
     for (const c of COMMANDS) {
@@ -71,10 +72,10 @@ describe('SCN-CLI-1a — every command maps to exactly one leg', () => {
 });
 
 describe('SCN-CLI-1b — a malformed invocation yields a structured error', () => {
-  it('atlas query --depth=notanumber → non-zero exit + guidance, no throw', async () => {
-    const code = await main(['query', '--depth=notanumber'], { handler: fakeHandler() });
+  it('atlas query (missing scope positional) → non-zero exit + guidance, no throw', async () => {
+    const code = await main(['query'], { handler: fakeHandler() });
     expect(code).not.toBe(0);
-    // teeth: the parser must NOT pass NaN through — guidance is present, not a stack trace.
+    // teeth: a missing positional fails CLOSED to a structured error — guidance is present, not a stack trace.
     const out = writes.join('');
     expect(out).toMatch(/next:/);
     expect(out).toMatch(/invariant:/);

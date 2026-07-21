@@ -27,11 +27,12 @@ import { bindReconcile, currentNodes } from '@atlas/knowledge';
 import type { GroundedFact } from '@atlas/knowledge';
 import type { DoctorSource, T0Heuristic, TruthGate } from '@atlas/tools';
 import { walkFileTree } from './fs.js';
+import { foldAstUnits } from './ast.js';
 import { readScipOrEmpty } from './scip.js';
 import { loadPolicy } from './policy.js';
 import type { AtlasPolicy } from './policy.js';
 import { createRevIndex } from './rev-index.js';
-import { createDoctorSource } from './doctor-source.js';
+import { createDoctorSource, primaryAnchor } from './doctor-source.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
 import { assembleHandler } from './wire.js';
 import type { WireConfig, WireSeams, WiredHandler } from './wire.js';
@@ -115,10 +116,21 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
   // email is a better default than a bare env var. NEVER sourced from untrusted input; passed EXPLICITLY
   // to the assembler below (no global env write).
   const actor = process.env.ATLAS_ACTOR ?? gitUserEmail(repoPath) ?? '';
+  // The KNOW-8 ratify token for a full-ratify (T0/predicate/contested) commit. Env-sourced ONLY
+  // (`ATLAS_RATIFY_TOKEN`) — the SAME payload-free channel as the actor; there is NO git/machine fallback (a
+  // ratifier signature is deliberate, not a local default). ABSENT ⇒ passed as absent below ⇒ the door fails
+  // closed on a full-ratify fact (a T0 fact requires the `billy` token). NEVER sourced from an emitted fact.
+  const ratifyToken = process.env.ATLAS_RATIFY_TOKEN;
 
   const policy = loadPolicy(repoPath);
   const scipPath = join(repoPath, SCIP_REL);
-  const axes = build(walkFileTree(repoPath), readScipOrEmpty(scipPath));
+  // Fold sub-file AST units BEFORE `build` (F1), the SAME transform `assembleHandler` applies to its index
+  // FileTree, so the truth-gate re-derives freshness against an index that carries `::` symbol nodes. A
+  // symbol-grounded fact therefore resolves FRESH and its `::` primaryAnchor lets `deriveSubsumes` fire.
+  // `foldAstUnits` is a no-op until `initAst()` has been awaited (the entrypoint bins do this once, before
+  // composeRuntime); this keeps composeRuntime SYNC for its many direct callers while the production doors
+  // (which spawn these bins) get real sub-file granularity.
+  const axes = build(foldAstUnits(walkFileTree(repoPath)), readScipOrEmpty(scipPath));
 
   // The REAL reconcile drift seams (COMPOSE-C). `revIndex` builds the code index at an arbitrary rev:
   //   - `reDerives`         — a fact re-derives iff its grounding is still FRESH at the topic sha.
@@ -134,9 +146,30 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
   const seams: WireSeams = {
     heuristic: buildHeuristic(policy),
     gate: buildGate(axes),
-    classifier: { reconcile: bindReconcile(revIndex.reDerives) },
+    // N10 — the reconcile classifier is CONTENT-ADDRESSED (mirrors the shipped N9 doctor fix,
+    // doctor-source.ts:106-108): a drifted fact is MECHANICAL iff its RECORDED primary-anchor content
+    // re-derives SOMEWHERE at the new sha (`resolveBySubtreeAt`), not just at the SAME qualifiedPath. The
+    // former `reDerives` predicate was PATH-KEYED — it asked "does the recorded content re-derive at the
+    // recorded PATH", so a genuinely moved-but-alive fact (its content now at a NEW path) read `false` ⇒
+    // was ALWAYS classified `semantic`, making `mechanical` structurally unreachable for real drift (the
+    // exact self-compare N9 killed for doctor). Keying on `subtreeHash` (GROUND-1) instead: a rename ⇒
+    // mechanical (re-groundable to its new location, exit 0); a content rewrite (content truly gone) ⇒ still
+    // `undefined` ⇒ semantic (exit 2). `primaryAnchor` is the SHARED pick doctor uses (never a second copy).
+    classifier: {
+      reconcile: bindReconcile((fact, newSha) => {
+        const a = primaryAnchor(fact);
+        return (
+          a !== undefined &&
+          revIndex.resolveBySubtreeAt(String(newSha), String(a.subtreeHash)) !== undefined
+        );
+      }),
+    },
     driftFacts,
     resolveAnchorAt: revIndex.resolveAnchorAt,
+    // N10 secondary — the DETECTION half needs the content-addressed resolver too, so `driftAt` can surface a
+    // PURE RENAME (old path deleted at HEAD ⇒ path-keyed `now` undefined ⇒ no pair under the old logic ⇒ the
+    // moved fact was silently dropped before the classifier ever saw it). Same frozen revIndex method N9 uses.
+    resolveBySubtreeAt: revIndex.resolveBySubtreeAt,
   };
 
   const config: WireConfig = {
@@ -145,6 +178,14 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     scipPath,
     seams,
     actor,
+    // N2: the STRUCTURAL axes the CLOSED three-mode retrieval surface reads (`edges` drive the dependency blast
+    // radius). Only the axes are threaded — the fact-dependent read model is rebuilt PER QUERY from the live
+    // durable store inside the query leg (retrieval-model.ts), so `--by dependency|trigger` reflects an
+    // in-session `atlas-emit` EXACTLY as `--by scope` does (no frozen startup snapshot). `byTrigger` stays a
+    // documented dormant mode (no trigger producer exists).
+    axes,
+    // Conditional spread keeps `ratifyToken` ABSENT (not `undefined`) when unset — exactOptionalPropertyTypes.
+    ...(ratifyToken !== undefined ? { ratifyToken } : {}),
   };
 
   // The real read-only diagnostic port — built over the SAME durable store + revIndex the governed emit

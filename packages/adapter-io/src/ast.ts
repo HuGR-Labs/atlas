@@ -121,30 +121,36 @@ function collectBlocks(node: SyntaxNode, out: SyntaxNode[]): void {
   }
 }
 
-/** A stable, unique refinement path: the file path + the unit's byte start (unique among all units of one
- *  file) + kind + name. Deterministic and collision-free without any counter. */
-function unitPath(filePath: string, node: SyntaxNode, name: string): string {
-  return `${filePath}#${node.startIndex}:${node.type}:${name}`;
+/** A stable, unique refinement path: the PARENT unit's path + `::` + the unit's byte start (unique among all
+ *  units of one file) + kind + name. The `::` join makes the refinement path the sanctioned structural
+ *  ancestry chain (`file::item::block`, dedup-identity.md DP-2): a segment-wise prefix on `::` is real
+ *  containment, so the index node key `build` mints (`key: node.path`) resolves to a groundable `::` anchor
+ *  and `deriveSubsumes` can fire (module ⊃ function). The leading `startIndex` keeps it collision-free
+ *  without a counter (byte start is unique within one file); kind + name stay for legibility. */
+function unitPath(parentPath: string, node: SyntaxNode, name: string): string {
+  return `${parentPath}::${node.startIndex}:${node.type}:${name}`;
 }
 
-/** Build the FileTree node for one `block` unit — a leaf carrying its exact source slice as `content`. */
-function blockNode(filePath: string, src: string, node: SyntaxNode): FileTree {
+/** Build the FileTree node for one `block` unit — a leaf carrying its exact source slice as `content`,
+ *  nested under its `item`'s path so the `::` chain is `file::item::block`. */
+function blockNode(parentPath: string, src: string, node: SyntaxNode): FileTree {
   return {
-    path: unitPath(filePath, node, nameOf(node)),
+    path: unitPath(parentPath, node, nameOf(node)),
     children: [],
     content: src.slice(node.startIndex, node.endIndex),
   };
 }
 
 /** Build the FileTree node for one `item` unit — its source slice as `content`, its blocks as children
- *  (canonical source order). */
+ *  (canonical source order), each block nested under THIS item's path (`file::item::block`). */
 function itemNode(filePath: string, src: string, decl: SyntaxNode): FileTree {
   const blocks: SyntaxNode[] = [];
   collectBlocks(decl, blocks);
   blocks.sort((a, b) => a.startIndex - b.startIndex);
+  const itemPath = unitPath(filePath, decl, nameOf(decl));
   return {
-    path: unitPath(filePath, decl, nameOf(decl)),
-    children: blocks.map((b) => blockNode(filePath, src, b)),
+    path: itemPath,
+    children: blocks.map((b) => blockNode(itemPath, src, b)),
     content: src.slice(decl.startIndex, decl.endIndex),
   };
 }

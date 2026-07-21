@@ -11,7 +11,8 @@
 import { describe, it, expect } from 'vitest';
 import { id, asNodeKey, asSubtreeHash, asHash } from '@atlas/kernel';
 import type { CasObject } from '@atlas/kernel';
-import type { GroundedFact, StoreProjection } from '@atlas/knowledge';
+import { nodeKey } from '@atlas/knowledge';
+import type { GroundedFact, StoreProjection, Candidate } from '@atlas/knowledge';
 import type { TruthGate } from '@atlas/tools';
 import { createGovernedEmit } from '../src/governed-emit.js';
 import type { DiskStore } from '../src/store.js';
@@ -60,12 +61,13 @@ const POLICY: AtlasPolicy = {
   authz: { scopes: { core: ['alice'] } },
 };
 
-/** A grounded advisory fact; `scope` present only when supplied (exactOptionalPropertyTypes-safe). */
-function advisory(scope?: string): GroundedFact {
+/** A grounded advisory fact; `scope` present only when supplied (exactOptionalPropertyTypes-safe). `tier`
+ *  defaults to the auto-accept `T2` — a `T0` fact exercises the KNOW-8 full-ratify gate. */
+function advisory(scope?: string, tier: GroundedFact['tier'] = 'T2'): GroundedFact {
   const base = {
     kind: 'advisory' as const,
     id: asNodeKey('nk-governed-1'),
-    tier: 'T2' as const,
+    tier,
     claimNorm: 'a governed claim body',
     grounding: {
       entries: [
@@ -78,6 +80,48 @@ function advisory(scope?: string): GroundedFact {
   };
   return scope === undefined ? base : { ...base, scope };
 }
+
+/** A grounded advisory with an OVERRIDABLE payload `id`, primary anchor, and claim body — so a test can
+ *  hold the REAL identity (anchor+slot) fixed while VARYING the author-declared `id`, or spoof one. */
+function mkAdvisory(opts: { id: string; anchor: string; claimNorm: string; scope?: string }): GroundedFact {
+  const base = {
+    kind: 'advisory' as const,
+    id: asNodeKey(opts.id),
+    tier: 'T2' as const,
+    claimNorm: opts.claimNorm,
+    grounding: {
+      entries: [
+        { anchor: { kind: 'symbol' as const, qualifiedPath: opts.anchor, subtreeHash: asSubtreeHash('sh-x') }, path: 'x' },
+      ],
+    },
+    freshness: 'FRESH' as const,
+    claims: [],
+    authoring: 'ADVISORY' as const,
+  };
+  return opts.scope === undefined ? base : { ...base, scope: opts.scope };
+}
+
+/** A grounded PREDICATE fact (carries a `check`) — `route` sends ANY predicate to full-ratify (KNOW-18). */
+function predicate(scope: string, tier: GroundedFact['tier'] = 'T2'): GroundedFact {
+  return {
+    kind: 'predicate',
+    id: asNodeKey('nk-governed-pred'),
+    tier,
+    check: { kind: 'assertion', expr: 'balance >= 0' },
+    grounding: {
+      entries: [
+        { anchor: { kind: 'symbol', qualifiedPath: 'src/util.ts::guard', subtreeHash: asSubtreeHash('sh-guard') }, path: 'src/util.ts' },
+      ],
+    },
+    status: 'HOLDS',
+    freshness: 'FRESH',
+    claims: [],
+    authoring: 'PREDICATED',
+    scope,
+  };
+}
+
+const realKey = (f: GroundedFact): string => nodeKey(f as unknown as Candidate) as unknown as string;
 
 const AT = asHash('deadbeef');
 
@@ -158,5 +202,120 @@ describe('COMPOSE-A — createGovernedEmit (truth-door · authz · upsert · dur
     // TEETH — reverse the order (persistProjection before put) and this flips RED: the sidecar would be
     // persisted referencing a contentHash whose bytes never landed in CAS (a dangling reference).
     expect(persists).toHaveLength(0);
+  });
+
+  // ── INTEGRITY: the write door MINTS routing identity, it NEVER trusts the author payload `node.id` ──────
+  // The dedup/routing `nodeKey` is recomputed from CONTENT (frozen `nodeKey(node)` = anchor+slot[+check]).
+  // Both teeth kill the SAME mutant — `nodeKey: node.id` (trusting the author-supplied payload id for
+  // routing): with that mutant, two payloads with different `id`s can never collide (SCN-GE-6 goes RED), and
+  // a spoofed `id` hijacks an unrelated node (SCN-GE-7 goes RED).
+
+  it('SCN-GE-6 — DIFFERENT payload `id`, SAME real identity ⇒ ONE node, claims set-union (minted, not trusted)', () => {
+    const spy = makeStoreSpy();
+    const { emit } = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice' });
+    // Same anchor (⇒ same real advisory nodeKey), DIFFERENT author-declared payload `id`, different claim body.
+    const f1 = mkAdvisory({ id: 'author-picked-AAAA', anchor: 'src/util.ts::greet', claimNorm: 'claim one', scope: 'core' });
+    const f2 = mkAdvisory({ id: 'author-picked-BBBB', anchor: 'src/util.ts::greet', claimNorm: 'claim two', scope: 'core' });
+    // PREMISE: distinct payload ids, but the REAL minted identity collides.
+    expect(f1.id).not.toBe(f2.id);
+    expect(realKey(f1)).toBe(realKey(f2));
+
+    expect(emit(f1, AT).emitted).toBe(true);
+    expect(emit(f2, AT).emitted).toBe(true);
+
+    const projection = spy.persists()[spy.persists().length - 1]!; // the final durable projection
+    // TEETH (kills `nodeKey: node.id`): identity is minted ⇒ f2 UPDATES f1's ONE node, not a second node.
+    expect(projection.current.size).toBe(1);
+    const node = projection.current.get(realKey(f1))!;
+    expect(node.claims).toContain('claim one');
+    expect(node.claims).toContain('claim two'); // set-union in place ⇒ a real collision, not a DEDUP no-op
+  });
+
+  it('SCN-GE-7 — payload `id` spoofing an unrelated node does NOT hijack it (identity minted from content)', () => {
+    const spy = makeStoreSpy();
+    const { emit } = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice' });
+    // 1) An honest node X lands at its real identity.
+    const nodeX = mkAdvisory({ id: 'x-declared', anchor: 'src/util.ts::greet', claimNorm: 'honest X claim', scope: 'core' });
+    expect(emit(nodeX, AT).emitted).toBe(true);
+    const keyX = realKey(nodeX);
+
+    // 2) An attacker fact at a DIFFERENT anchor sets its payload `id` = X's real nodeKey to try to hijack X.
+    const attacker = mkAdvisory({ id: keyX, anchor: 'src/evil.ts::pwn', claimNorm: 'HIJACKED', scope: 'core' });
+    expect(attacker.id as unknown as string).toBe(keyX); // the spoof is armed
+    expect(realKey(attacker)).not.toBe(keyX); // but its MINTED identity is its own, not X's
+    expect(emit(attacker, AT).emitted).toBe(true);
+
+    const projection = spy.persists()[spy.persists().length - 1]!;
+    // TEETH (kills `nodeKey: node.id`): routing on the minted key ⇒ the attacker gets its OWN node; X untouched.
+    expect(projection.current.size).toBe(2);
+    expect(projection.current.get(keyX)!.claims).toEqual(['honest X claim']); // X NOT hijacked
+    expect(projection.current.get(keyX)!.claims).not.toContain('HIJACKED');
+  });
+
+  // ── RATIFY GATE (KNOW-8 / KNOW-18): the tier-ratification machinery composed BETWEEN authz and upsert ─────
+  // MUTANT (N7 — the finding): the door was truth-gate → authz → upsert ONLY; the `route`/`ratify` block was
+  // NEVER composed, so a T0 fact bypassed the human+billy gate at the write door. DELETE the `route(...)===
+  // 'full-ratify' ⇒ ratify(...)` block (restore the pre-N7 door) and SCN-GE-R2/R4/R5 all go RED: a T0 (or a
+  // non-billy-ratified) fact would PERSIST. SCN-GE-R1/R3 pin that the fix does NOT over-block the common path.
+
+  it('SCN-GE-R1 — a grounded T2 ADVISORY fast-paths (auto-accept): emits with NO ratify token (common path unbroken)', () => {
+    const spy = makeStoreSpy();
+    // No `ratifyToken` supplied at all — the fast-path (grounded ∧ lowRisk ∧ T2 ∧ advisory ∧ ¬contested)
+    // never consults it. This is the existing common case; wiring ratify MUST NOT break it.
+    const { emit } = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice' });
+    const out = emit(advisory('core'), AT); // tier defaults T2
+    expect(out.emitted).toBe(true);
+    expect(spy.puts()).toHaveLength(1);
+    expect(spy.persists()).toHaveLength(1);
+  });
+
+  it('SCN-GE-R2 — a T0 fact with NO ratify token ⇒ REJECTED fail-closed, NOTHING persisted (KNOW-8)', () => {
+    const spy = makeStoreSpy();
+    // Grounded + authorized, but T0 ⇒ route=full-ratify; absent token ⇒ ratify refuses. Kills the missing-
+    // ratify-composition mutant: pre-N7 this T0 fact would have persisted through the authz→upsert door.
+    const { emit } = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice' });
+    const out = emit(advisory('core', 'T0'), AT);
+    expect(out.emitted).toBe(false);
+    expect(out.rejected ?? '').toContain('unratified');
+    expect(spy.puts()).toHaveLength(0);
+    expect(spy.persists()).toHaveLength(0);
+  });
+
+  it('SCN-GE-R3 — a T0 fact WITH the billy token ⇒ emits (the human/security gate signs)', () => {
+    const spy = makeStoreSpy();
+    const { emit } = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice', ratifyToken: 'billy' });
+    const node = advisory('core', 'T0');
+    const out = emit(node, AT);
+    expect(out.emitted).toBe(true);
+    expect(spy.persists()).toHaveLength(1);
+    expect(spy.puts()).toHaveLength(1);
+    expect(spy.store.get(out.id!)).toEqual(node); // read-back invariant holds through the ratified path
+  });
+
+  it('SCN-GE-R4 — a T0 fact with a NON-billy token ⇒ REJECTED (T0 requires billy, KNOW-8), NOTHING persisted', () => {
+    const spy = makeStoreSpy();
+    // A generic ratifier ('lead') commits a NON-T0 full-ratify fact, but a T0 fact needs billy specifically.
+    const { emit } = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice', ratifyToken: 'lead' });
+    const out = emit(advisory('core', 'T0'), AT);
+    expect(out.emitted).toBe(false);
+    expect(out.rejected ?? '').toContain('unratified');
+    expect(spy.puts()).toHaveLength(0);
+    expect(spy.persists()).toHaveLength(0);
+  });
+
+  it('SCN-GE-R5 — a PREDICATE fact routes to full-ratify: rejected with NO token, emits WITH any ratifier', () => {
+    // route sends ANY predicate (even T2) to full-ratify. No token ⇒ rejected; a generic 'lead' token (not
+    // T0) ⇒ commits. Extra teeth on the same missing-composition mutant across the predicate family.
+    const denySpy = makeStoreSpy();
+    const denied = createGovernedEmit({ store: denySpy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice' });
+    const noTok = denied.emit(predicate('core'), AT);
+    expect(noTok.emitted).toBe(false);
+    expect(noTok.rejected ?? '').toContain('unratified');
+    expect(denySpy.persists()).toHaveLength(0);
+
+    const okSpy = makeStoreSpy();
+    const allowed = createGovernedEmit({ store: okSpy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice', ratifyToken: 'lead' });
+    expect(allowed.emit(predicate('core'), AT).emitted).toBe(true);
+    expect(okSpy.persists()).toHaveLength(1);
   });
 });

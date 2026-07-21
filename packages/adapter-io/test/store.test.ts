@@ -12,11 +12,12 @@
 // ROOT — value files land at `<casPath>/<H[0:2]>/<H>` and the projection sidecar beside it (outside cas/).
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { id } from '@atlas/kernel';
+import { asHash, id } from '@atlas/kernel';
 import { upsert, emptyStore } from '@atlas/knowledge';
 import type { WriteRequest } from '@atlas/knowledge';
 import { createDiskStore, rehydrateProjection } from '../src/store.js';
@@ -109,6 +110,90 @@ describe('createDiskStore — ADAPT-STORE-1 durable, tamper-safe disk CAS', () =
     }).not.toThrow();
     expect(out).toBeUndefined();
   });
+
+  it('N13 — a symlink planted in CAS pointing OUTSIDE the root reads as absent (escape guard; red→green)', () => {
+    const dir = freshCasDir();
+    const s = createDiskStore(dir);
+    // C is a genuine CasObject; its JSON is written to a file OUTSIDE the CAS root. A symlink is planted at the
+    // content-addressed path `<cas>/<xx>/<H>` (H = id(C), so the filename passes the 64-hex charset gate AND the
+    // bytes re-hash to H). PRE-N13 the read-before-verify FOLLOWS the symlink, reads the out-of-cas file, and —
+    // id matches — SERVES it: a successful escape (get(H) === C). The realpath sandbox now rejects it.
+    const C = { kind: 'advisory', tier: 'T1', freshness: 'FRESH', body: 'ESCAPED-OUT-OF-CAS' };
+    const H = id(C) as string;
+    const outside = join(tmp!, 'outside.json');
+    writeFileSync(outside, JSON.stringify(C), 'utf8');
+    const shardDir = join(dir, H.slice(0, 2));
+    mkdirSync(shardDir, { recursive: true });
+    symlinkSync(outside, join(shardDir, H));
+    // teeth: pre-N13 this returned `C` (the escape succeeded); the realpath-resolved cas-root sandbox is a miss.
+    expect(s.get(asHash(H))).toBeUndefined();
+  });
+
+  it('N13 — a symlink in CAS to a NON-REGULAR target is a total miss (portable smoke of the isFile() branch)', () => {
+    const dir = freshCasDir();
+    const s = createDiskStore(dir);
+    // HONEST teeth note: this DIRECTORY case is NOT a red→green for the DoS — a directory read throws EISDIR
+    // pre-N13 too, so it is a total miss on BOTH sides. It is a portable, CI-safe smoke check that a non-regular
+    // target is rejected fast by `statSync` → `isFile()` false BEFORE any read handle opens. The genuine OOM
+    // closure — a symlink → /dev/zero (unbounded read) or → a FIFO (blocking read) — is un-CI-able (it would
+    // hang/OOM the PRE-fix code) and is verified out-of-band by an adversarial harness, not by this suite.
+    // The real red→green tooth for N13 is the ESCAPE case above (pre-fix SERVED the out-of-cas object).
+    const H = 'a'.repeat(64);
+    const targetDir = join(tmp!, 'a-directory');
+    mkdirSync(targetDir, { recursive: true });
+    const shardDir = join(dir, H.slice(0, 2));
+    mkdirSync(shardDir, { recursive: true });
+    symlinkSync(targetDir, join(shardDir, H));
+    const t0 = Date.now();
+    expect(s.get(asHash(H))).toBeUndefined();
+    expect(Date.now() - t0).toBeLessThan(2000); // fast — non-regular target rejected without an unbounded read
+  });
+
+  it('N14 — a symlink at the CAS final component to an IN-CAS object that re-hashes to the addr is a MISS (fd O_NOFOLLOW; red→green)', () => {
+    const dir = freshCasDir();
+    const s = createDiskStore(dir);
+    // The residual TOCTOU that N13 did NOT close: N13 only rejected symlinks whose target escapes cas. A
+    // symlink whose target is a REGULAR file INSIDE cas whose bytes re-hash to the addr passed EVERY N13 gate
+    // (statSync→isFile true, realpathSync→inside cas, readFileSync→bytes re-hash to H) and was SERVED — the
+    // exact primitive a race-attacker uses to slip a swapped inode past the path-based checks. N14 opens the
+    // final component with O_NOFOLLOW, so the symlink ITSELF fails to open (ELOOP) ⇒ MISS, regardless of where
+    // it points. Genuine red→green vs the pre-fix statSync/realpath code: pre-N14 this returned `C`.
+    const C = { kind: 'advisory', tier: 'T1', freshness: 'FRESH', body: 'IN-CAS-SYMLINK-TARGET' };
+    const H = id(C) as string;
+    // the symlink TARGET: a regular file that lives INSIDE the cas root (so N13's realpath sandbox passes).
+    const inCasTarget = join(dir, 'target.json');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(inCasTarget, JSON.stringify(C), 'utf8');
+    // plant the symlink AT the content-addressed final component `<cas>/<xx>/<H>` (filename passes charset).
+    const shardDir = join(dir, H.slice(0, 2));
+    mkdirSync(shardDir, { recursive: true });
+    symlinkSync(inCasTarget, join(shardDir, H));
+    // teeth: pre-N14 the path-based statSync/realpath/readFileSync chain SERVED `C` (all three gates passed);
+    // the fd O_NOFOLLOW open refuses the final-component symlink itself ⇒ a plain miss.
+    expect(s.get(asHash(H))).toBeUndefined();
+  });
+
+  it('N14 — a FIFO AT the CAS final component is a FAST fd-based miss (O_NONBLOCK non-block + fstat-on-fd non-regular)', () => {
+    const dir = freshCasDir();
+    const s = createDiskStore(dir);
+    // A FIFO planted directly at `<cas>/<xx>/<H>` (NOT a symlink — a named pipe at the final component). This
+    // is the un-CI-able OOM/hang vector made CI-safe: without O_NONBLOCK, openSync(read) of a FIFO BLOCKS
+    // until a writer appears (the test would hang forever); with O_NONBLOCK the open returns immediately, then
+    // fstatSync on the OPEN fd sees isFIFO() (isFile() false) and rejects — proving the reject is decided by
+    // fstat-on-fd on the pinned inode, not a path stat. Skip only if `mkfifo` is unavailable.
+    const H = 'b'.repeat(64);
+    const shardDir = join(dir, H.slice(0, 2));
+    mkdirSync(shardDir, { recursive: true });
+    const fifoPath = join(shardDir, H);
+    try {
+      execFileSync('mkfifo', [fifoPath]);
+    } catch {
+      return; // no mkfifo on this host (both CI targets have it) — skip rather than false-fail
+    }
+    const t0 = Date.now();
+    expect(s.get(asHash(H))).toBeUndefined(); // if O_NONBLOCK were missing this line would never return
+    expect(Date.now() - t0).toBeLessThan(2000); // fast — the FIFO open did not block, fstat rejected it
+  });
 });
 
 describe('rehydrateProjection — ADAPT-STORE-3 cross-process rehydrate, minting nothing', () => {
@@ -161,6 +246,40 @@ describe('rehydrateProjection — ADAPT-STORE-3 cross-process rehydrate, minting
     // the absent optionals stay absent — no explicit undefined injected by the round-trip.
     expect(node.primaryAnchor).toBeUndefined();
     expect(node.slot).toBeUndefined();
+  });
+
+  it('loadProjection over corrupt (non-JSON) sidecar bytes is total — emptyStore rehydrate, never throws', () => {
+    const dir = freshCasDir();
+    const s = createDiskStore(dir);
+    // persist a genuine projection, then corrupt the sidecar to NON-JSON (truncated write on disk).
+    s.persistProjection(upsert(emptyStore(), reqF()).store);
+    writeFileSync(join(tmp!, 'projection.json'), '{ "current": [ truncated', 'utf8');
+    let out: unknown = 'sentinel';
+    // MUTANT: the unwrapped `JSON.parse(raw) as WireProjection` in loadProjection (store.ts) — a corrupt
+    // sidecar throws there, and since composeRuntime rehydrates at boot, that throw crashes BOTH bins.
+    expect(() => {
+      out = createDiskStore(dir).loadProjection();
+    }).not.toThrow();
+    expect(out).toBeUndefined();
+    // and rehydrate degrades to the empty projection — no boot crash, no minting.
+    const p = rehydrateProjection(createDiskStore(dir));
+    expect([...p.current.keys()]).toEqual([]);
+    expect([...p.cas]).toEqual([]);
+  });
+
+  it('loadProjection over valid-JSON-but-wrong-shape sidecar is total — emptyStore, never throws', () => {
+    const dir = freshCasDir();
+    createDiskStore(dir).persistProjection(upsert(emptyStore(), reqF()).store);
+    // valid JSON whose `current` is NOT the [k,v] entry-array — `new Map(5)` / `new Map({})` would throw.
+    writeFileSync(join(tmp!, 'projection.json'), JSON.stringify({ current: 5, cas: {} }), 'utf8');
+    let p: ReturnType<typeof rehydrateProjection> | undefined;
+    // MUTANT: dropping the Array.isArray shape guard (and its try/catch) — the wrong-shape wire reaches
+    // `new Map(wire.current)` and throws, again crashing rehydrate at boot.
+    expect(() => {
+      p = rehydrateProjection(createDiskStore(dir));
+    }).not.toThrow();
+    expect([...p!.current.keys()]).toEqual([]);
+    expect([...p!.cas]).toEqual([]);
   });
 
   it('SCN-ADAPTER-12b-1 — rehydrate reconstructs state only, minting nothing (guard)', () => {

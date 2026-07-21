@@ -55,13 +55,14 @@ afterEach(() => vi.restoreAllMocks());
 // ── the routed marshalling: each command's leg receives its EXACT named shape ─────────────────────────────
 
 describe('ARG-MARSHALLING — main(argv,{handler}) hands each leg its named arg shape', () => {
-  it('query <scope> → the query leg gets { scope } and RESOLVES ok:true (not malformed args)', async () => {
-    // SMOKE: main(['query','src'],{handler}) → query leg gets {scope:'src'} → ok:true.
+  it('query <scope> → the query leg gets { scope, by } and RESOLVES ok:true (not malformed args)', async () => {
+    // SMOKE: main(['query','src'],{handler}) → query leg gets {scope:'src', by:'scope'} → ok:true. `by`
+    // defaults to 'scope' (N2 three-mode retrieval) — the scope path is behavior-identical (proven black-box).
     // TEETH (mutant: query→{path}) — asserting the args by value flips RED if the field is renamed.
     const sink: Sink = {};
     const code = await main(['query', 'src'], { handler: capturingHandler(sink) });
     expect(sink.tool).toBe('atlas-query');
-    expect(sink.args).toEqual({ scope: 'src' });
+    expect(sink.args).toEqual({ scope: 'src', by: 'scope' });
     expect(code).toBe(0);
     expect(writes.join('')).toContain('status: ok');
   });
@@ -151,11 +152,22 @@ describe('ARG-MARSHALLING — marshalArgs (pure) shapes + defaults', () => {
     expect(marshalArgs('init', [], {})).toEqual({ ok: true, args: { path: '.' } });
   });
 
-  it('query maps to {scope} — NOT {path} (mutant tell)', () => {
+  it('query maps to {scope, by} — NOT {path} (mutant tell); `by` defaults to scope', () => {
     const r = marshalArgs('query', ['src'], {});
-    expect(r).toEqual({ ok: true, args: { scope: 'src' } });
+    expect(r).toEqual({ ok: true, args: { scope: 'src', by: 'scope' } });
     // teeth: a mutant emitting {path:'src'} would not carry a `scope` field.
     if (r.ok) expect((r.args as Record<string, unknown>).path).toBeUndefined();
+  });
+
+  it('query --by validates fail-closed: a known mode passes, an unknown mode is a structured error', () => {
+    // the three CLOSED modes marshal through (INDEX-6); the `by` rides onto the leg's named arg shape.
+    expect(marshalArgs('query', ['src'], { by: 'dependency' })).toEqual({ ok: true, args: { scope: 'src', by: 'dependency' } });
+    expect(marshalArgs('query', ['tag'], { by: 'trigger' })).toEqual({ ok: true, args: { scope: 'tag', by: 'trigger' } });
+    // a bogus mode fails CLOSED (mirrors the emit missing-`--at` guard) — never routed blind.
+    expect(marshalArgs('query', ['src'], { by: 'bogus' })).toEqual({
+      ok: false,
+      error: 'query --by must be one of scope|dependency|trigger',
+    });
   });
 
   it('emit success carries the PARSED node object, never the path string (mutant tell)', () => {

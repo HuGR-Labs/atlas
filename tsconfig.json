@@ -42,6 +42,9 @@
     },
     {
       "path": "packages/mcp-server"
+    },
+    {
+      "path": "packages/e2e-blackbox"
     }
   ]
 }
