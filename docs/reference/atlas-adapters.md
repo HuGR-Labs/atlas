@@ -9,7 +9,7 @@
 The layer-0 core (Campaigns 1–8) is a pure hexagon: every external system is a **frozen injected port**
 satisfied by a fake in tests. This document is the **constitution of the outer ring** — the real **adapters**
 that fill those ports over real backends (a code indexer, a durable store, git, an LLM) and the **entrypoints**
-(`atlas` CLI + an MCP server) that drive the four governed tools on a real repository. It authors **no new core
+(`atlas` CLI + an MCP server) that drive the five governed tools on a real repository. It authors **no new core
 behaviour**: every adapter clause is bounded by the port it realizes; the core stays untouched and pure.
 
 ## Boundary (what this ring is, and is NOT)
@@ -31,7 +31,7 @@ LangId       = 'ts' | 'py' | 'go' | 'java' | 'rust' | …        // a language t
 IndexerPlan  = { lang: LangId, tool: string, args: string[] }  // which SCIP indexer runs for a language
 CasPath      = string                                          // on-disk CAS location (Decisions §D2)
 CliVerdict   = { exitCode: number, stdout: string }            // deterministic render of a tool Verdict
-WiredHandler = ReturnType<createHandler>                       // the ONE 4-leg handler both entrypoints share
+WiredHandler = ReturnType<createHandler>                       // the ONE 5-leg handler both entrypoints share
 ```
 
 ## Invariants
@@ -72,6 +72,25 @@ WiredHandler = ReturnType<createHandler>                       // the ONE 4-leg 
   obligations**. On a fresh process the store adapter MUST reconstruct the `StoreProjection` current-node map
   from the durable store such that a fact written and flushed in an earlier run is present, byte-identical, in
   the rehydrated projection — reconstructing state only, minting nothing.
+- **ADAPT-STORE-4 Freshness watermark seam (N11, DI).** `createDiskStore(casPath, headSha?)`
+  (`→ packages/adapter-io/src/store.ts`) MUST take the freshness-watermark as an **injected**
+  `() => headSha | undefined` seam — the store stays **git-ignorant**. When present, `persistProjection` MUST
+  **stamp** `builtAt = headSha()` (the git HEAD the projection's stored per-fact freshness reflects) onto the
+  wire projection; absent or resolving `undefined` (tests / non-git) ⇒ **no stamp** — `builtAt` stays absent
+  and the reader treats the watermark as "unknown" (never a false `stale`). Both persist sites (governed emit
+  + the mine driver) stamp uniformly by construction — no change to their code. The JSON-dropped `undefined`
+  round-trips `deepEqual`-identically to a pre-N11 sidecar (additive, back-compat).
+- **ADAPT-LINK-1 The second governed write door (WP-SAMEAS).** `createGovernedLink`
+  (`→ packages/adapter-io/src/governed-link.ts`) MUST be the **sibling** of `createGovernedEmit`
+  (`governed-emit.ts` — the door realizing ADAPT-STORE-2): the composition-root door for `atlas-link`, which
+  asserts a human `sameAs` equivalence (the `linkSameAs` reducer — a non-destructive symmetric edge). Before a
+  byte is written it MUST pass **four fail-closed gates, in order**: (1) DISTINCT — `a === b` refused; (2) BOTH
+  KNOWN — both endpoints MUST be current nodes in the rehydrated projection; (3) AUTHZ — the KNOW-11
+  owner-scoped gate (`actorInScope`) on **both** endpoints' fact scopes (each fact read back from CAS by its
+  content address), reusing emit's authz seam verbatim; (4) RATIFY — a **non-empty** env-sourced ratifier
+  (`ATLAS_RATIFY_TOKEN`, never a payload field; v1 = non-empty only, **not** emit's tier-graded KNOW-8/18 gate
+  — deferred because `sameAs` is non-destructive). Only after all four does it `linkSameAs` + `persistProjection`;
+  any gate failure returns `{linked:false, rejected}` and persists **nothing**.
 
 ### Git adapters (realize `HistorySource`, `DriftSource`, `Forge` over real git)
 
@@ -85,6 +104,17 @@ WiredHandler = ReturnType<createHandler>                       // the ONE 4-leg 
   provenance trailer + a `refs/notes/orchestra` note + the PR projection onto a real host; a history rewrite
   MUST keep trailer data and orphan note-carried data exactly as PERSIST-* specifies — the adapter changes
   none of that semantics, only executes it.
+- **ADAPT-GIT-4 One no-shell git seam (#74).** Every adapter git call MUST route through `run-git.ts`
+  (`→ packages/adapter-io/src/run-git.ts`): `runGit(repo, args, opts)` — `execFileSync('git', …)`, **NO shell**
+  (args are never shell-interpolated), stdin closed or `input`-piped, stdout+stderr **captured** (a failure
+  throws, carrying `.stderr`); the deterministic-failure classifier `isDeterministicGitError` (bad-rev /
+  non-git / `ENOENT` git-absent ⇒ retrying only wastes latency); the **clock-free** `gitYieldMs` backoff
+  (`Atomics.wait` on a never-signaled `SharedArrayBuffer`, fixed `GIT_BACKOFF_MS` — no `Date.now`/`Math.random`
+  enters any value); and `headSha(repo)` (a cheap `rev-parse HEAD`, **no worktree lock**, total → `undefined`
+  on any failure — the N11 watermark reader). All 6 adapter git call-sites route through it; `rev-index` keeps
+  its **structural** fresh-worktree retry, reusing the shared classifier + backoff (a command-level retry
+  cannot re-create a wedged half-worktree). No generic `runGitRetrying` is shipped — `rev-index` is the only
+  contended caller, so the wrapper would be dead speculative surface.
 
 ### LLM adapter (realizes `SiteProposer` — the single model entry)
 
@@ -96,21 +126,23 @@ WiredHandler = ReturnType<createHandler>                       // the ONE 4-leg 
 
 ### Entrypoints (CLI + MCP — one wired handler, two transports)
 
-- **WIRE-1 One handler, assembled once.** A single shared `wire` module MUST assemble the four-leg
-  `WiredHandler` (`atlas-init/query/emit/reconcile` legs over the adapters, `→ tools/handler.ts`). Both
+- **WIRE-1 One handler, assembled once.** A single shared `wire` module MUST assemble the five-leg
+  `WiredHandler` (`atlas-init/query/emit/reconcile/link` legs over the adapters, `→ tools/handler.ts`). Both
   entrypoints MUST consume THIS module, so CLI and MCP are contract-identical **by construction**, not by copy
   (discharges TOOLS-3 at the entrypoint).
 - **CLI-1 Total command surface.** `atlas <cmd>` MUST map each command to exactly one wired tool leg (plus
   `mine` driving genesis). Argument parsing MUST be total: a malformed invocation yields a structured error +
   guidance and a non-zero exit, never a crash (mirrors TOOLS-2).
 - **CLI-2 The CLI is the floor.** Reads (`query`/`reconcile`/`doctor`) MUST resolve over the CLI directly;
-  every write MUST funnel through the single write door `atlas-emit` (TOOLS-1/TOOLS-11 CLI-floor). A read
-  command MUST carry no write authority.
+  every write MUST funnel through a governed write door — `atlas-emit` for a grounded fact, `atlas-link` for a
+  `sameAs` equivalence (WP-SAMEAS; both are composition-root doors, ADAPT-LINK-1) — never ad-hoc
+  (TOOLS-1/TOOLS-11 CLI-floor). A read command MUST carry no write authority.
 - **CLI-3 Deterministic render.** The CLI MUST render a tool `Verdict` to stdout deterministically and set the
   exit code from the verdict (`0` ok, non-zero on rejected/error), carrying the tool's `guidance` (TOOLS-4).
-- **MCP-1 The server exposes exactly the four tools.** The MCP stdio server MUST publish exactly the four
-  governed tools with their input schemas and route every call through the shared `WiredHandler` (WIRE-1) — so
-  an MCP call and the equivalent CLI call return contract-identical verdicts (TOOLS-3, by construction).
+- **MCP-1 The server exposes exactly the five tools.** The MCP stdio server MUST publish exactly the five
+  governed tools (`atlas-init`, `atlas-query`, `atlas-emit`, `atlas-reconcile`, `atlas-link` — ADR-0003) with
+  their input schemas and route every call through the shared `WiredHandler` (WIRE-1) — so an MCP call and the
+  equivalent CLI call return contract-identical verdicts (TOOLS-3, by construction).
 - **MCP-2 Fail-closed transport.** A tool error MUST surface as a structured rejected `Verdict` carried in the
   MCP result; the server MUST NOT crash or drop the fail-closed verdict (TOOLS-2 across the transport).
 - **CLI-4 The `mine` driver composes, it does not admit.** `atlas mine` MUST drive the **already-frozen**
@@ -135,6 +167,14 @@ WiredHandler = ReturnType<createHandler>                       // the ONE 4-leg 
 6. The same tool called over the CLI and over the MCP server returns a byte-identical `Verdict` (WIRE-1/MCP-1).
 7. `atlas mine <fixture>` with a **recorded** proposer yields candidate facts with deterministic ranking, and
    makes exactly one proposer call per site (ADAPT-LLM-1, contract-tested — no live model in CI).
+8. Every adapter git call goes through `runGit` (no `child_process` shell); a deterministic failure (bad rev /
+   non-git / git absent) is not retried; a contended `rev-index` read retries with a clock-free backoff; and
+   `headSha` off-repo returns `undefined`, never a throw (ADAPT-GIT-4).
+9. A projection persisted by a store built **with** a `headSha` seam carries `builtAt == HEAD`; one built
+   **without** the seam carries no `builtAt` and round-trips identically to a pre-N11 sidecar (ADAPT-STORE-4).
+10. `atlas link a b` lands the symmetric edge **only** when `a≠b`, both nodes exist, the actor is in **both**
+    scopes, and a non-empty ratifier is present; any gate failing ⇒ `linked:false`, nothing persisted
+    (ADAPT-LINK-1).
 
 ## Decisions (ratified / DEFINE-pending — the S0 [NEEDS RECONCILIATION] queue)
 

@@ -106,7 +106,7 @@ out. Reads (recall / query / node / diff / doctor) resolve over CLI directly; wr
 write-door (`atlas-emit`), which is itself a CLI tool (TOOLS-3) — so writes are CLI too, via the one door, never
 a second path.
 
-**Where it's already airtight:** knowledge nodes + the four governance tools — `TOOLS-3` (CLI≡MCP parity),
+**Where it's already airtight:** knowledge nodes + the five governance tools — `TOOLS-3` (CLI≡MCP parity),
 `TOOLS-10` (one handler behind MCP / poke / CLI), `TOOLS-11` ("the CLI is the floor, not the fallback";
 a `Read`-only no-grant seat still reaches everything).
 

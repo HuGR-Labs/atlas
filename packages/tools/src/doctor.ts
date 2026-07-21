@@ -41,7 +41,7 @@ export interface DoctorSource {
 }
 
 /** The `next + invariant` guidance the doctor surface ships on its advisory result envelope (INV-TOOLS-4).
- *  Diagnosis is read-only: the follow-up for any proposed write is ALWAYS the single write door. */
+ *  Diagnosis is read-only: the follow-up for any proposed write is ALWAYS the governed `atlas-emit` write door. */
 export const DOCTOR_GUIDANCE: Guidance = {
   next: 'doctor is read-only — run any proposed RegroundPlan through atlas-emit to persist it',
   invariant: 'TOOLS-12: read/advisory-only diagnosis, persists nothing, carries no write authority',
@@ -79,7 +79,7 @@ export function createDoctor(source: DoctorSource): DoctorApi {
 }
 
 // differential-vs-oracle (compile-time): the impl conforms to the co-located frozen `DoctorApi` —
-// a read/advisory projection with NO write-returning method (the write surface stays exactly four, TOOLS-1).
+// a read/advisory projection with NO write-returning method (the write surface is the two governed doors atlas-emit + atlas-link, TOOLS-1).
 const _doctorConforms: DoctorApi = createDoctor({
   lineage: () => [],
   drift: () => undefined,

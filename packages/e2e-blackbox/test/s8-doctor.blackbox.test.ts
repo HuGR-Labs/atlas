@@ -183,7 +183,7 @@ describe('S8 — atlas doctor: four read/advisory legs + CLI totality (read-only
       `plan: action=retire fact=${semFact.id} — PROPOSAL only; persists nothing. Run through atlas-emit to persist.`,
     );
 
-    // The single write door stays shut across BOTH proposals: doctor carries no write authority (TOOLS-12).
+    // The write doors stay shut across BOTH proposals: doctor carries no write authority (TOOLS-12).
     expect(casSnapshot(repo.repoPath)).toBe(casBefore); //     CAS byte-identical
     expect(projectionStamp(repo.repoPath)).toBe(projBefore); // projection bytes AND mtime unchanged
   });

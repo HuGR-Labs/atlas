@@ -105,8 +105,8 @@ method-tag:
 ### INV-WIRE-1
 behavioural: true
 anchor: reference/atlas-adapters.md#wire-1
-text: "a single shared wire module MUST assemble the four-leg WiredHandler; both entrypoints MUST consume THIS module, so CLI and MCP are contract-identical by construction, not by copy"
-clauses: [ "one shared wire module assembles the four-leg handler over the adapters", "both CLI and MCP consume that same module", "CLI and MCP are contract-identical by construction, not by copy" ]
+text: "a single shared wire module MUST assemble the five-leg WiredHandler (incl. the atlas-link leg, WP-SAMEAS/ADR-0003); both entrypoints MUST consume THIS module, so CLI and MCP are contract-identical by construction, not by copy"
+clauses: [ "one shared wire module assembles the five-leg handler over the adapters", "both CLI and MCP consume that same module", "CLI and MCP are contract-identical by construction, not by copy" ]
 unwanted: [ "the CLI and the MCP server assemble the handler separately (risking divergence)" ]
 method-tag:
 
@@ -121,9 +121,9 @@ method-tag:
 ### INV-CLI-2
 behavioural: true
 anchor: reference/atlas-adapters.md#cli-2
-text: "reads (query/reconcile/doctor) MUST resolve over the CLI directly; every write MUST funnel through the single write door atlas-emit; a read command MUST carry no write authority"
-clauses: [ "reads (query/reconcile/doctor) resolve over the CLI directly", "every write funnels through the single write door atlas-emit (CLI-floor)", "a read command carries no write authority" ]
-unwanted: [ "a read command carries write authority", "a write bypasses atlas-emit" ]
+text: "reads (query/reconcile/doctor) MUST resolve over the CLI directly; every write MUST funnel through a governed write door (atlas-emit / atlas-link, ADR-0003); a read command MUST carry no write authority"
+clauses: [ "reads (query/reconcile/doctor) resolve over the CLI directly", "every write funnels through a governed write door (atlas-emit / atlas-link, CLI-floor)", "a read command carries no write authority" ]
+unwanted: [ "a read command carries write authority", "a write bypasses a governed door" ]
 method-tag:
 
 ### INV-CLI-3
@@ -137,9 +137,9 @@ method-tag:
 ### INV-MCP-1
 behavioural: true
 anchor: reference/atlas-adapters.md#mcp-1
-text: "the MCP stdio server MUST publish exactly the four governed tools with their input schemas and route every call through the shared WiredHandler, so an MCP call and the equivalent CLI call return contract-identical verdicts"
-clauses: [ "publish exactly the four governed tools with their input schemas", "route every call through the shared WiredHandler (WIRE-1)", "an MCP call and the equivalent CLI call return contract-identical verdicts (TOOLS-3)" ]
-unwanted: [ "a fifth tool is exposed over MCP", "an MCP call diverges from the equivalent CLI call" ]
+text: "the MCP stdio server MUST publish exactly the five governed tools (incl. atlas-link, ADR-0003) with their input schemas and route every call through the shared WiredHandler, so an MCP call and the equivalent CLI call return contract-identical verdicts"
+clauses: [ "publish exactly the five governed tools with their input schemas", "route every call through the shared WiredHandler (WIRE-1)", "an MCP call and the equivalent CLI call return contract-identical verdicts (TOOLS-3)" ]
+unwanted: [ "a sixth tool is exposed over MCP", "an MCP call diverges from the equivalent CLI call" ]
 method-tag:
 
 ### INV-MCP-2

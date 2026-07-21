@@ -6,7 +6,7 @@
 // contracts-owned vocab (`Pack`/`Hash`/`NodeKey`/`Territory`/…) is IMPORTED, NEVER redefined. TOOLS-1
 // (amended WP-SAMEAS): writes flow through GOVERNED doors — `atlas-emit` + `atlas-link` (WRITE_PATHS); the
 // other governance tools (`-init`/`-query`/`-reconcile`) + diff/doctor/node are read-only. See
-// docs/design/adr-tools1-governed-write-doors.md.
+// docs/adr/ADR-0003-governed-write-doors.md.
 
 import type { Hash, NodeKey, Pack, StructRef, Territory, ToolSchema } from '@atlas/contracts';
 import type { GroundedFact, SameAs, Subsumes } from '@atlas/knowledge';
@@ -167,12 +167,12 @@ export interface HotSet {
 /**
  * A guided re-ground / retire PLAN (TOOLS-12). `atlas doctor reground <fact>` returns a plan a human/agent
  * then runs through `atlas-emit` — it PERSISTS NOTHING itself (the store changes only when the plan is run
- * through the single write door). Carries NO write authority.
+ * through the governed `atlas-emit` write door). Carries NO write authority.
  *
  * [PINNED — `emit` payload] atlas-tools names the guided re-ground/retire flow that emits via `atlas-emit`,
  * never a direct store mutation. `fact` + `action` are transcribed from the reference's "re-ground /
  * retire" wording (TOOLS-12, surface :139); the emittable payload is the templated candidate fact the
- * single write door consumes — the @atlas/knowledge `GroundedFact` (mirrors `EmitApi.emit(node:
+ * governed `atlas-emit` write door consumes — the @atlas/knowledge `GroundedFact` (mirrors `EmitApi.emit(node:
  * GroundedFact)`), imported, NOT redefined.
  */
 export interface RegroundPlan {
@@ -185,8 +185,9 @@ export interface RegroundPlan {
  * `atlas doctor` result (TOOLS-12). Transcribed EXACTLY from atlas-tools:25 —
  *   `DoctorOut = { archive?, whyBroken?, hotSet?: { size, budget, over }, plan?: RegroundPlan }`.
  * READ-ONLY + advisory: archive browse / drift-explain / hot-set report / guided re-ground plan. It
- * persists nothing; any proposed write funnels through `atlas-emit`. NOT a fifth governance tool (the
- * write surface stays exactly four — TOOLS-1).
+ * persists nothing; any proposed write funnels through `atlas-emit`. NOT a governance tool at all (the
+ * governance surface stays exactly five, and the write surface is the two governed doors `atlas-emit` +
+ * `atlas-link` — TOOLS-1 / ADR-0003).
  *
  * [PINNED — `archive` / `whyBroken` types] atlas-tools:25 names both. `archive` = the monotone
  * supersede-lineage view; nothing dies and the archive grows monotone (atlas-tools:136), so the honest
@@ -206,7 +207,8 @@ export interface DoctorOut {
  * `{added, edited, superseded, decayed}`, each entry carrying its provenance. `VersionDelta` is the
  * @atlas/persist-owned shape (`ref/diff.ts`) — IMPORTED, NEVER redefined here. `atlas-diff` is a READ
  * projection like the per-node handler (TOOLS-10) / `atlas doctor` (TOOLS-12): 0 write path, carries NO
- * write authority; the governance write surface stays exactly four (TOOLS-1/16).
+ * write authority; the governance write surface is exactly the two governed doors `atlas-emit` + `atlas-link`
+ * (TOOLS-1/16, ADR-0003).
  */
 export type DiffOut = VersionDelta;
 

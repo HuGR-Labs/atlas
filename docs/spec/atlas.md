@@ -227,8 +227,9 @@ author_on_miss → (index_T0) → author_predicate → merge_recheck → drift_d
 
 ## 6. Tool surface (read/write API — CLI + MCP parity)
 
-Four tools, each **pure + total** (a malformed arg fails closed to an honest empty verdict), each shipping
-its own `next + invariant` guidance:
+Five tools, each **pure + total** (a malformed arg fails closed to an honest empty verdict), each shipping
+its own `next + invariant` guidance. Two of the five are governed write doors (`atlas-emit`, `atlas-link`);
+the rest read/derive (ADR-0003):
 
 | Tool | Does | Contract |
 |---|---|---|
@@ -236,6 +237,7 @@ its own `next + invariant` guidance:
 | `atlas-query` | a territory's pack | returns a `≤2K` pack of `tier≥T1` invariants; `stale:true` ⇒ re-ground before trusting (§3.4 pack/stale rule; A-1 truth-gate). |
 | `atlas-emit` | fail-closed grounded write | re-derives the citation `@sha`; ungrounded ⇒ rejected, not persisted (A-2). |
 | `atlas-reconcile` | merge-time drift → BROKEN | flips the `DRIFTED` subset `BROKEN`; exits 2 to block the merge on any flip (A-3). |
+| `atlas-link` | governed sameAs assertion | links two existing nodeKeys as the same fact after authz-on-both + a ratifier; a non-destructive read-side equivalence edge, never a merge (ADR-0003). |
 
 - Every tool MUST be callable identically over the CLI and over MCP, with a published input schema.
 - **[Δ Orchestra]** the write path (`atlas-emit` at wave-close) is driven by `ResultCard.absorb`, not a

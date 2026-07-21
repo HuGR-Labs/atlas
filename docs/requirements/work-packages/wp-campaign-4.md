@@ -291,7 +291,7 @@ anchor: packages/tools/src/ — `atlas-emit` re-derivation + fail-closed reject 
 interface_contract:                      # ptr+digest
   - source: ../../reference/atlas-tools.md#tools-7  # ptr+digest
   - source: ../../reference/atlas-grounding.md#ground-6  # ptr+digest
-exclusions: templated/upsert write semantics TOOLS-7c/7d (EPIC-13, CAMPAIGN-5); the four-tool governance surface (EPIC-26, CAMPAIGN-7); defining `gateHolds` (owned by WP-4.11-a.GROUND).
+exclusions: templated/upsert write semantics TOOLS-7c/7d (EPIC-13, CAMPAIGN-5); the five-tool governance surface (EPIC-26, CAMPAIGN-7); defining `gateHolds` (owned by WP-4.11-a.GROUND).
 inputs:                                  # ptr+digest
   - source: ../req-grd.md#REQ-GROUND-6  # ptr+digest
 action: implement the atlas-emit re-derive-at-source@sha check and reject-non-rederiving path (`emitted:false`, persist nothing); verify against the referenced goldens.

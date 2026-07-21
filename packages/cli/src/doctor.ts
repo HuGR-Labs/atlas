@@ -51,7 +51,7 @@ function renderPayload(sub: DoctorSub, out: DoctorOut): string {
 }
 
 /** Render a `DoctorOut` to a process outcome. READ-ONLY ⇒ exit 0; carries the doctor guidance on every
- *  path (the reground follow-up is ALWAYS the single write door, atlas-emit). */
+ *  path (the reground follow-up is ALWAYS the governed write door atlas-emit). */
 function renderDoctorOut(sub: DoctorSub, out: DoctorOut): CliVerdict {
   const stdout =
     `status: ok\n` +

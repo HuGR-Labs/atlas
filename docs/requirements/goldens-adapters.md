@@ -14,7 +14,7 @@
 >   transport, and the shared `WiredHandler` parity oracle. The named mock is the anti-rot; the SCN's teeth are
 >   the exact mutant that diverges from it.
 > - **3 `exhaustive` INVs** (CLI-1, CLI-2, MCP-1) → **`gen: exhaustive`**: the finite space is enumerated — the
->   `command → wired-leg` map, the `command × authority` matrix, and the closed four-tool set — plus (CLI-1) the
+>   `command → wired-leg` map, the `command × authority` matrix, and the closed five-tool set — plus (CLI-1) the
 >   PBT-fuzz malformed-`argv` totality arm the enumeration cannot reach.
 > - **1 `PBT` INV** (ADAPTER-7, the one algebraic law the ring itself composes — durable dedup/supersede
 >   idempotence) → **`gen: PBT`**: concrete witness instances of the idempotence law (`write∘write ≡ write` over
@@ -73,8 +73,8 @@ Reference tree `T_ref` = the deterministic sorted walk of the 5 tracked paths wi
 
 ### entrypoint fixtures (CLI / MCP / wire)
 
-- command set = `{ init, query, emit, reconcile, doctor, mine }`; the four governed tools =
-  `{ atlas-init, atlas-query, atlas-emit, atlas-reconcile }`; `mine` drives the `genesis` run-controller.
+- command set = `{ init, query, emit, reconcile, link, doctor, mine }`; the five governed tools =
+  `{ atlas-init, atlas-query, atlas-emit, atlas-reconcile, atlas-link }`; `mine` drives the `genesis` run-controller.
 - `Verdict` fixture set: `V_ok = {status:'ok', exitCode:0, guidance:'index built'}`,
   `V_rej = {status:'rejected', exitCode:2, guidance:'drift needs review'}`,
   `V_err = {status:'error', exitCode:1, guidance:'malformed input: expected a repo path'}`.
@@ -414,11 +414,11 @@ gen: conformance
 
 ## REQ-WIRE-1 — one shared handler assembly
 
-### SCN-WIRE-1a-1 — the wire module assembles one four-leg handler   (happy)
+### SCN-WIRE-1a-1 — the wire module assembles one five-leg handler   (happy)
 source: REQ-WIRE-1a
 Given the shared `wire` module and the adapters
 When `createHandler(adapters)` is called
-Then a single `WiredHandler` exposes exactly the four legs (`atlas-init`/`query`/`emit`/`reconcile`) over the adapters
+Then a single `WiredHandler` exposes exactly the five legs (`atlas-init`/`query`/`emit`/`reconcile`/`link`, the `atlas-link` leg added by WP-SAMEAS, ADR-0003) over the adapters
 teeth: breaks-on "the `wire` module assembles two separate handlers (one per entrypoint) instead of one shared assembly — two `WiredHandler` instances exist"
 gen: conformance
 
@@ -470,12 +470,12 @@ Then each resolves over the CLI directly (a read path), classified as a read
 teeth: breaks-on "`reconcile` is routed through the `atlas-emit` write-door instead of resolving as a direct read — a read is misclassified in the matrix"
 gen: exhaustive
 
-### SCN-CLI-2b-1 — every write funnels through atlas-emit   (guard)
+### SCN-CLI-2b-1 — every write funnels through a governed door   (guard)
 source: REQ-CLI-2b
-Given the write command `emit`
+Given the write commands `emit` and `link`
 When the `command × authority` matrix is enumerated
-Then every write funnels through the single door `atlas-emit` — no other command carries a write path
-teeth: breaks-on "`init` is granted a direct write path to the store bypassing `atlas-emit` — a second write door appears in the matrix (the single-door partition breaks)"
+Then every write funnels through a governed door — `atlas-emit` (grounded facts) or `atlas-link` (sameAs) — no command carries an ungoverned write path (ADR-0003)
+teeth: breaks-on "`init` is granted a direct write path to the store bypassing the governed doors — an ungoverned write path appears in the matrix (the governed-door partition breaks)"
 gen: exhaustive
 
 ### SCN-CLI-2c-1 — a read carries no write authority   (guard)
@@ -552,22 +552,22 @@ gen: conformance
 
 ---
 
-## REQ-MCP-1 — exactly the four governed tools
+## REQ-MCP-1 — exactly the five governed tools
 
-### SCN-MCP-1a-1 — the published set is exactly the four tools with schemas   (happy)
+### SCN-MCP-1a-1 — the published set is exactly the five tools with schemas   (happy)
 source: REQ-MCP-1a
 Given the MCP stdio server
 When the published tool set is enumerated
-Then it equals exactly `{ atlas-init, atlas-query, atlas-emit, atlas-reconcile }`, each with its input schema
-teeth: breaks-on "the server publishes `atlas-init` without its input schema — the enumerated set does not match the four-with-schemas oracle"
+Then it equals exactly `{ atlas-init, atlas-query, atlas-emit, atlas-reconcile, atlas-link }` (ADR-0003), each with its input schema
+teeth: breaks-on "the server publishes `atlas-init` without its input schema — the enumerated set does not match the five-with-schemas oracle"
 gen: exhaustive
 
-### SCN-MCP-1b-1 — no fifth tool is published   (guard)
+### SCN-MCP-1b-1 — no sixth tool is published   (guard)
 source: REQ-MCP-1b
 Given the published tool set
-When a set-equality assertion runs against the closed four
-Then no fifth tool is registered (cardinality == 4)
-teeth: breaks-on "a debug tool `atlas-dump` is registered as a fifth tool — the published set has cardinality 5 ≠ the closed four"
+When a set-equality assertion runs against the closed five
+Then no sixth tool is registered (cardinality == 5)
+teeth: breaks-on "a debug tool `atlas-dump` is registered as a sixth tool — the published set has cardinality 6 ≠ the closed five"
 gen: exhaustive
 
 ### SCN-MCP-1c-1 — every MCP call routes through the shared handler and matches the CLI verdict   (happy)

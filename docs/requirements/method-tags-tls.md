@@ -19,9 +19,9 @@
 ### INV-TOOLS-1
 method-tag: reference-model
 fspec: —
-up-property: "single-write-door totality: the governance surface is exactly 4 tools (`atlas-init/query/emit/reconcile`), `atlas-emit` is the *only* write path, and a back-channel write is refused (0 fifth write path); per-node read projections carry 0 write authority"
-down-model: "the reference tools layer exposes exactly one `write(node)` entry (→ `atlas-emit`) over an append-only store (`tools/ref/store.ts`); a unit test enumerates the 4-tool surface, asserts `writePaths==1`, and asserts every read-projection handle returns a Verdict with no store-mutating method"
-anti-rot: `tools/ref/store.ts` (the single-write-door reference store) is imported as the mock in the tools-surface unit tests; a code path that opens a second write door fails the `writePaths==1` assertion. *(Security-exploitability of the door — a shell-armed seat red-teaming the permission model — is FR-12/billy, not this functional property; see Refuse-to-model.)*
+up-property: "governed-write-door totality: the governance surface is exactly 5 tools (`atlas-init/query/emit/reconcile/link`), every write flows through a governed door (`WRITE_PATHS = {atlas-emit, atlas-link}`, each KNOW-11 authz + ratifier + fail-closed-visible refusal), and a back-channel write is refused (0 ungoverned write path); per-node read projections carry 0 write authority (ADR-0003)"
+down-model: "the reference tools layer exposes exactly two governed write entries (`atlas-emit` grounded-fact write, `atlas-link` sameAs write) over an append-only store (`tools/ref/store.ts`); a unit test enumerates the 5-tool surface, asserts `WRITE_PATHS == {atlas-emit, atlas-link}`, and asserts every read-projection handle returns a Verdict with no store-mutating method"
+anti-rot: `tools/ref/store.ts` (the governed-write-door reference store) is imported as the mock in the tools-surface unit tests; a code path that opens an ungoverned write door outside `{atlas-emit, atlas-link}` fails the `WRITE_PATHS` assertion. *(Security-exploitability of the door — a shell-armed seat red-teaming the permission model — is FR-12/billy, not this functional property; see Refuse-to-model.)*
 
 ### INV-TOOLS-2
 method-tag: reference-model
@@ -103,7 +103,7 @@ anti-rot: shares `tools/ref/ladder.ts` — the harness-aware resolver is the moc
 ### INV-TOOLS-12
 method-tag: reference-model
 fspec: —
-up-property: "read/advisory-only doctor: `atlas doctor` is read/advisory only — it persists nothing (0 direct store mutations); any write it proposes is a plan that funnels through `atlas-emit`; it carries no write authority and is not a fifth governance tool (surface stays 4)"
+up-property: "read/advisory-only doctor: `atlas doctor` is read/advisory only — it persists nothing (0 direct store mutations); any write it proposes is a plan that funnels through `atlas-emit`; it carries no write authority and is not a governance tool (surface stays 5)"
 down-model: "the reference `doctor(cmd)` returns `DoctorOut` (archive/why-broken/hot-set/plan) with no store-mutating method; a test asserts every doctor sub-command leaves the store byte-identical, and that `reground` returns a `RegroundPlan` that only mutates when run through `emit`"
 anti-rot: `tools/ref/doctor.ts` (the no-write-authority projection) is the mock; a doctor code path that mutates the store directly diverges from it and fails the store-unchanged assertion. *(This is the explicit refusal made positive: a read-only projection opens NO write path — verified here as a reference-model property, NOT a formal one.)*
 
@@ -131,9 +131,9 @@ anti-rot: `tools/ref/store.ts` (append-only + read-time integrity check, shared 
 ### INV-TOOLS-16
 method-tag: reference-model
 fspec: —
-up-property: "read-only version-diff projection: `atlas-diff <shaA> <shaB>` surfaces the PERSIST-14 delta (added/edited/superseded/decayed, each with provenance) as a **read-only projection** — 0 write path (read/subscribe only; writes still funnel through `atlas-emit`), **CLI≡MCP** parity against one schema (0 divergence), and the governance **write** surface stays exactly **4** tools (atlas-diff is a read projection like node TOOLS-10 / doctor TOOLS-12, **NOT** a fifth write tool, consistent with TOOLS-1/15)"
-down-model: "the reference `atlasDiff(shaA,shaB)` reads the PERSIST-14 delta (from `persist/ref/diff.ts`) and renders it; a unit test asserts the diff handle carries **no** store-mutating method (0 write path), that the governance write-surface count stays `== 4`, and that the delta is surfaced faithfully; the CLI≡MCP determinism arm is **delegated** to the TOOLS-3 cross-transport PBT over the one handler `tools/ref/handler.ts` (every surface is the one handler)"
-anti-rot: `tools/ref/diff.ts` (the read-only diff projection over `persist/ref/diff.ts`, reused as the mock) is the mock; a code path that grows a write method on the diff surface, registers it as a fifth write tool, or forks CLI/MCP behaviour diverges from it and breaks the build. *(Tag is `reference-model` — a read-only projection opening **NO** write path is a reference-model property, **not** a `formal` one (no combinatorial interleaving); the cross-transport determinism arm reuses TOOLS-3's PBT, exactly the TOOLS-11 delegation pattern.)*
+up-property: "read-only version-diff projection: `atlas-diff <shaA> <shaB>` surfaces the PERSIST-14 delta (added/edited/superseded/decayed, each with provenance) as a **read-only projection** — 0 write path (read/subscribe only; writes funnel through a governed door `atlas-emit`/`atlas-link`), **CLI≡MCP** parity against one schema (0 divergence), and the governance **write** surface stays the two governed doors `{atlas-emit, atlas-link}` (atlas-diff is a read projection like node TOOLS-10 / doctor TOOLS-12, **NOT** a write tool, consistent with TOOLS-1/15, ADR-0003)"
+down-model: "the reference `atlasDiff(shaA,shaB)` reads the PERSIST-14 delta (from `persist/ref/diff.ts`) and renders it; a unit test asserts the diff handle carries **no** store-mutating method (0 write path), that the governance write surface stays `{atlas-emit, atlas-link}`, and that the delta is surfaced faithfully; the CLI≡MCP determinism arm is **delegated** to the TOOLS-3 cross-transport PBT over the one handler `tools/ref/handler.ts` (every surface is the one handler)"
+anti-rot: `tools/ref/diff.ts` (the read-only diff projection over `persist/ref/diff.ts`, reused as the mock) is the mock; a code path that grows a write method on the diff surface, registers it as a third write door, or forks CLI/MCP behaviour diverges from it and breaks the build. *(Tag is `reference-model` — a read-only projection opening **NO** write path is a reference-model property, **not** a `formal` one (no combinatorial interleaving); the cross-transport determinism arm reuses TOOLS-3's PBT, exactly the TOOLS-11 delegation pattern.)*
 
 ---
 

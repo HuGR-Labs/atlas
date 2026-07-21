@@ -108,7 +108,7 @@ anti-rot: the StoreProjection reference (kernel) + the write-spy are the mock; a
 ### INV-WIRE-1
 method-tag: reference-model
 fspec: —
-up-property: "by-construction parity: a single wire module assembles the four-leg WiredHandler once; both entrypoints consume THAT module, so for every tool call the CLI verdict and the MCP verdict are byte-identical — 0 divergence, by construction not by copy"
+up-property: "by-construction parity: a single wire module assembles the five-leg WiredHandler once; both entrypoints consume THAT module, so for every tool call the CLI verdict and the MCP verdict are byte-identical — 0 divergence, by construction not by copy"
 down-model: "the shared WiredHandler is the oracle; a parity test drives a fixture set of tool calls through both the CLI adapter and the MCP adapter and asserts deepEqual(cliVerdict, mcpVerdict) for each"
 anti-rot: the shared wire module is the mock both entrypoints import; a second, separately-assembled handler in either entrypoint diverges under the parity fixture set.
 
@@ -143,9 +143,9 @@ anti-rot: the frozen run-controller + recorded proposer is the mock; a mine driv
 ### INV-MCP-1
 method-tag: exhaustive
 fspec: —
-up-property: "exactly the four governed tools: the MCP server publishes the four tools with their input schemas and no fifth; every call routes through the shared WiredHandler so an MCP verdict equals the equivalent CLI verdict — existence + uniqueness over a closed set of four"
-down-model: "enumerate the published tool set and assert it equals exactly {atlas-init, atlas-query, atlas-emit, atlas-reconcile} with schemas; assert each call dispatches through the shared WiredHandler (WIRE-1 parity oracle), no fifth tool registered"
-anti-rot: the closed four-tool set + the shared handler is the enumerated oracle; a fifth published tool or a call bypassing the WiredHandler fails the set-equality/routing assertions.
+up-property: "exactly the five governed tools: the MCP server publishes the five tools with their input schemas and no sixth; every call routes through the shared WiredHandler so an MCP verdict equals the equivalent CLI verdict — existence + uniqueness over a closed set of five (ADR-0003)"
+down-model: "enumerate the published tool set and assert it equals exactly {atlas-init, atlas-query, atlas-emit, atlas-reconcile, atlas-link} with schemas; assert each call dispatches through the shared WiredHandler (WIRE-1 parity oracle), no sixth tool registered"
+anti-rot: the closed five-tool set + the shared handler is the enumerated oracle; a sixth published tool or a call bypassing the WiredHandler fails the set-equality/routing assertions.
 
 ### INV-MCP-2
 method-tag: reference-model

@@ -42,6 +42,20 @@ reference). A `Grounding` is real iff it has ≥1 entry, each with a non-empty `
 **Structure.** `Territory = { path, owner, tier, files[], regions?, blastRadius }`; `Pack` is a territory's
 `≤~2K`-token retrieval unit of its `tier≥T1` invariants (see [spec §3.3–3.4](../spec/atlas.md)).
 
+**Store projection & the read-side `sameAs` relation.** The committed store rehydrates to a
+`StoreProjection = { current: nodeKey→CurrentNode, cas, builtAt? }` (`packages/knowledge/src/write/router.ts`)
+— one current node per `nodeKey` (KNOW-4g). Two **additive, optional** carriers ride it: `CurrentNode.sameAs`
+— the **sorted, de-duped** nodeKeys a human asserted name the SAME fact at an unrelated code site, stored
+**symmetrically** on both endpoints (WP-SAMEAS); and `StoreProjection.builtAt` — the git HEAD sha the stored
+per-fact freshness was computed against (the **freshness watermark**, N11; stamped at persist by the store
+adapter — [ADAPT-STORE-4](./atlas-adapters.md)). Both absent on pre-feature / non-git projections (back-compat).
+Like `subsumes` (WP-DEDUP-2), `sameAs` is **derived on read** and **non-destructive** — never a merge:
+`deriveSameAs(projection) → SameAs[]` (`packages/knowledge/src/read/sameas.ts`) is a **union-find TRANSITIVE**
+equivalence fold over the stored edges into sorted canonical pairs (`a<b`; `A≡B, B≡C ⇒ A≡C`; a dangling peer not
+in `current` is ignored, never a throw). Its write side is the pure symmetric reducer
+`linkSameAs(projection, a, b) → StoreProjection` (`packages/knowledge/src/write/link.ts`) — **total** (no-op on
+`a===b` or an absent endpoint), sorted + de-duped, idempotent.
+
 ## Invariants
 
 Each is falsifiable and maps to a spec axiom. `MUST` / `MUST NOT` are normative.

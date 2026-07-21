@@ -77,11 +77,15 @@ to human ratification** (A1-honest).
   dropped. **Ordering:** the result is sorted by `(broader, narrower)` `nodeKey` lexicographic ascending —
   total, self-pair-free, each pair once (direction is inherent, so no `(a,b)`+`(b,a)` duplication).
 
-- **DP-3 — `sameAs` is the only new persisted state, and it is human-ratified.** *(Wave 2, model-gated.)*
-  A cross-location sameness a human asserts. It rides existing rails: the projection sidecar already
-  hosts directed edges (`supersededBy`), and ratification already has the T0→billy human gate
-  (`ratify.ts:66-68`, `fastpath.ts:63`). `sameAs` links two **distinct** `nodeKey`s and is presented as
-  a **read-fold**, never a second current-node — so the "one node per nodeKey" invariant is intact.
+- **DP-3 — `sameAs` is the only new persisted state, and it is a governed human assertion.** *(BUILT —
+  WP-DEDUP-3, `d290bd2`; owner un-deferred 2026-07-21.)* A cross-location sameness a human asserts. Shipped
+  shape: a SYMMETRIC `sameAs?: readonly string[]` carrier on `CurrentNode` (sorted/de-duped, both endpoints
+  carry the peer — `write/link.ts` `linkSameAs`), written ONLY through the governed `atlas-link` door
+  (`adapter-io/src/governed-link.ts`: distinct → both-known → KNOW-11 authz on BOTH scopes → non-empty
+  ratifier). `sameAs` links two **distinct** `nodeKey`s and is presented as a **read-fold**
+  (`read/sameas.ts` `deriveSameAs`, union-find equivalence surfaced in the query envelope), never a second
+  current-node — so the "one node per nodeKey" invariant is intact. *(v1 ratifier is a non-empty check, not
+  the tier-graded T0→billy gate — deferred, sameAs is non-destructive; see ADR-0003.)*
 
 - **DP-4 — resolution is at read, not write.** `subsumes` = coverage on read (never folds/deletes).
   Ratified `sameAs` = union-find equivalence-fold at the **knowledge** read layer over `StoreProjection`
@@ -118,13 +122,14 @@ and the full-set (transitive) 3-deep chain.
 
 - **Wave 1 (now):** WP-DEDUP-1 (un-merge) → WP-DEDUP-2 (subsumes derive-on-read). Sequential (same files).
   Kills the live debt + lands the structural relation. No frozen-model mutation.
-- **Wave 2 (DEFERRED — owner decision 2026-07-20):** WP-DEDUP-3 (`sameAs` persist + ratify-promote +
-  read-fold). Touches `StoreProjection` + `store.ts` sidecar + `ratify/*`. **Not built.** It covers the
-  H1 case only — a human linking two facts at *unrelated* code sites that mean the same thing (no
-  structural signal can detect it). This is the biggest lift (mutates the frozen model) for the rarest
-  case, and the common "same fact in many places" is already served by multi-citation `grounding.entries`.
-  **This is a deliberate deferral, NOT debt** — the model is complete and correct without it (D0/D1 merge,
-  R1 subsumes relate; the fuzzy/cross-location residue is honestly routed to human ratification per A1).
+- **Wave 2 (BUILT — owner un-deferred 2026-07-21, `d290bd2`):** WP-DEDUP-3 (`sameAs` symmetric edge on
+  `CurrentNode` + governed `atlas-link` write door + union-find `deriveSameAs` read-fold + CLI/MCP surface).
+  It covers the H1 case only — a human linking two facts at *unrelated* code sites that mean the same thing
+  (no structural signal can detect it). Deferred 2026-07-20 as the biggest lift for the rarest case (the
+  common "same fact in many places" is already served by multi-citation `grounding.entries`); un-deferred
+  and built when the owner elected to. It amends INV-TOOLS-1 to two governed write doors (ADR-0003) and is
+  cold-reviewed clean (billy authz / bobby architecture / lucy correctness). Teeth: `s16-sameas.blackbox` +
+  `wp-sameas.test`.
   Revisit only if a real need for machine-assisted cross-location linking appears; the insertion points
   are known (sidecar edge like `supersededBy`; the native `ratify.ts` billy gate; a knowledge-side
   union-find fold).

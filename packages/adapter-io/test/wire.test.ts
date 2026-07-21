@@ -1,7 +1,7 @@
 // @atlas/adapter-io — test/wire.test.ts   (WP-9.1.1-a.WIRE — REQ-WIRE-1a / REQ-WIRE-1b)
 //
-// The shared `wire` module assembles ONE four-leg `WiredHandler` (atlas-init/query/emit/reconcile) over the
-// raw adapters + injected seams. These cases test the ASSEMBLY (one handler, four legs reachable, the sole
+// The shared `wire` module assembles ONE five-leg `WiredHandler` (atlas-init/query/emit/reconcile/link) over the
+// raw adapters + injected seams. These cases test the ASSEMBLY (one handler, five legs reachable, the sole
 // assembly point) — NOT leg behaviour: the legs run over real adapters (fix-repo + fix.scip) with stubbed
 // seams, so a leg may return a rejected Verdict; what matters is that each leg is WIRED (reachable), never
 // the frozen "tool '…' not wired at this seam" fail-closed. A missing/throwing leg is caught by `handle`
@@ -12,7 +12,7 @@
 // INDEPENDENTLY (two separate `assembleHandler(cfg)` calls yield two instances by construction). What is
 // assertable NOW is the load-bearing precondition: `assembleHandler` is the SOLE shared-module assembly
 // point both entrypoints will import (module-symbol identity), and a single call yields ONE handler whose
-// four legs all dispatch through it. The teeth pin the discriminator a copy-assembly would flip.
+// five legs all dispatch through it. The teeth pin the discriminator a copy-assembly would flip.
 
 import { describe, it, expect } from 'vitest';
 import { createHandler, GOVERNANCE_SURFACE } from '@atlas/tools';
@@ -55,17 +55,17 @@ function makeConfig(): { cfg: WireConfig; cleanup: () => void } {
 const legWired = (h: WiredHandler, tool: Tool): boolean =>
   !(h.handle(tool, {}).rejected ?? '').includes('not wired at this seam');
 
-/** The wired-leg surface of a handler over the closed four-tool governance set. */
+/** The wired-leg surface of a handler over the closed five-tool governance set. */
 const surface = (h: WiredHandler): number => GOVERNANCE_SURFACE.filter((t) => legWired(h, t)).length;
 
-describe('WP-9.1.1-a.WIRE — one shared four-leg WiredHandler assembly', () => {
-  // ── SCN-WIRE-1a-1 — the wire module assembles ONE four-leg handler (happy) ──────────────────────────
-  describe('SCN-WIRE-1a-1 — one handler exposes exactly the four legs', () => {
-    it('assembleHandler yields a single WiredHandler with all four governance legs reachable', () => {
+describe('WP-9.1.1-a.WIRE — one shared five-leg WiredHandler assembly', () => {
+  // ── SCN-WIRE-1a-1 — the wire module assembles ONE five-leg handler (happy) ──────────────────────────
+  describe('SCN-WIRE-1a-1 — one handler exposes exactly the five legs', () => {
+    it('assembleHandler yields a single WiredHandler with all five governance legs reachable', () => {
       const { cfg, cleanup } = makeConfig();
       try {
         const handler = assembleHandler(cfg);
-        // exactly the four governance legs dispatch through THIS one handler (none is "not wired").
+        // exactly the five governance legs dispatch through THIS one handler (none is "not wired").
         for (const tool of GOVERNANCE_SURFACE) {
           expect(legWired(handler, tool)).toBe(true);
         }
@@ -73,7 +73,7 @@ describe('WP-9.1.1-a.WIRE — one shared four-leg WiredHandler assembly', () => 
         expect(typeof handler.handle).toBe('function');
         expect(typeof handler.resolveNode).toBe('function');
         expect(typeof handler.schema).toBe('function');
-        // a 5th (off-surface) tool → fail closed, NEVER a wired leg (the surface is exactly four, TOOLS-1).
+        // an off-surface tool (atlas-diff, a read projection) → fail closed, NEVER a wired leg (the governance surface is exactly five, TOOLS-1).
         const fifth = handler.handle('atlas-diff' as unknown as Tool, {});
         expect(fifth.ok).toBe(false);
         expect(fifth.rejected ?? '').toContain('not wired at this seam');
@@ -82,13 +82,13 @@ describe('WP-9.1.1-a.WIRE — one shared four-leg WiredHandler assembly', () => 
       }
     });
 
-    it('TEETH — a split (two-handler) assembly flips: no single copy exposes all four legs', () => {
+    it('TEETH — a split (two-handler) assembly flips: no single copy exposes all five legs', () => {
       const { cfg, cleanup } = makeConfig();
       try {
         // the real shared assembly: one handler, surface == 5 (WP-SAMEAS added the atlas-link leg).
         expect(surface(assembleHandler(cfg))).toBe(5);
         // simulate "two separate handlers, one per entrypoint" (the mutant SCN-WIRE-1a names): each copy
-        // holds a DISJOINT leg subset — so NEITHER single copy exposes the full four-leg surface.
+        // holds a DISJOINT leg subset — so NEITHER single copy exposes the full five-leg surface.
         const echo = (args: unknown) => args as never;
         const copyA = createHandler({ 'atlas-init': echo, 'atlas-query': echo });
         const copyB = createHandler({ 'atlas-emit': echo, 'atlas-reconcile': echo });
@@ -102,7 +102,7 @@ describe('WP-9.1.1-a.WIRE — one shared four-leg WiredHandler assembly', () => 
 
   // ── SCN-WIRE-1b-1 — the SOLE assembly point (module-identity), softened at WIRE scope ────────────────
   describe('SCN-WIRE-1b-1 — assembleHandler is the sole shared-module assembly point (softened)', () => {
-    it('every entrypoint imports THIS one factory (module-symbol identity) — one handler, four legs', async () => {
+    it('every entrypoint imports THIS one factory (module-symbol identity) — one handler, five legs', async () => {
       const { cfg, cleanup } = makeConfig();
       try {
         // module-identity: a re-import of the wire module yields the SAME `assembleHandler` reference — the
@@ -129,8 +129,8 @@ describe('WP-9.1.1-a.WIRE — one shared four-leg WiredHandler assembly', () => 
         const echo = (args: unknown) => args as never;
         const copy = createHandler({ 'atlas-init': echo }) as WiredHandler;
         expect(copy).not.toBe(shared);
-        // and it is NOT the full four-leg surface (a partial copy flips the surface assertion).
-        expect(surface(copy)).toBeLessThan(4);
+        // and it is NOT the full five-leg surface (a partial copy flips the surface assertion).
+        expect(surface(copy)).toBeLessThan(5);
       } finally {
         cleanup();
       }

@@ -1,7 +1,7 @@
 // @atlas/adapter-io — src/store.ts  (ADAPT-STORE-1/3: disk-backed CAS + projection rehydration)
 //
 // The raw store adapter: a disk-backed realization of the frozen `StoreApi` (@atlas/kernel) and the
-// rehydration of a `StoreProjection` (@atlas/knowledge) from it. SKELETON — signatures frozen, bodies deferred.
+// rehydration of a `StoreProjection` (@atlas/knowledge) from it. Implemented — WP-9.2.3.STORE (tests: store.test.ts).
 //
 // NOTE (scaffold widening, lead-decided at exec): the kernel `StoreApi` (put/get by content-hash) has no
 // enumerate/list and cannot LOCATE a content-addressed projection, so it cannot alone discharge ADAPT-STORE-3

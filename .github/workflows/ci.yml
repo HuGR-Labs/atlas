@@ -13,5 +13,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run godfile-guard  # ≤400-LOC ceiling per source file (harness/gates)
-      - run: npm run typecheck       # tsc -b — strict, downward-only layers
+      - run: npm run typecheck       # tsc -b — strict, downward-only layers (also builds dist/)
+      - run: npm run spec-conformance-guard  # shipped surface == specs; no governance-count drift; property pins fresh
       - run: npm test                # vitest run — own-suite + held-out GATE + totality fences

@@ -74,16 +74,19 @@ export function createGuard(): GuardApi {
 }
 
 /** A read-only projection handle over one node (RETR-5 / TOOLS-10). It exposes `read` and NOTHING that
- *  mutates the store — it is NOT a fifth write path (TOOLS-1d). */
+ *  mutates the store — it opens NO write door, governed or otherwise (TOOLS-1d). */
 export interface ReadProjection {
   readonly key: string;
   /** Resolve this node through the read-time integrity check (ungrounded ⇒ `undefined`). */
   read(): StoreRow | undefined;
 }
 
-/** The append-only / permissioned store medium fronted by the single write-door (TOOLS-1 / TOOLS-15). */
+/** The append-only / permissioned store medium for grounded-fact rows, fronted by the governed `atlas-emit`
+ *  write door (TOOLS-1 / TOOLS-15). */
 export interface GovernedStore {
-  /** THE single write-door — the ONLY store-mutating entry point (`atlas-emit` routes here, `writePaths==1`).
+  /** THE grounded-fact-row write door — the ONLY entry that mutates this row medium (`atlas-emit` routes here).
+   *  The governance surface's SECOND governed door, `atlas-link` (sameAs, ADR-0003), writes equivalence edges
+   *  to the projection sidecar — a different persist surface, NOT this row medium.
    *  Append-only: a grounded row for a fresh key is appended; an existing key is never overwritten in place;
    *  an ungrounded / forged-key row is refused (nothing lands). Returns the guard verdict. */
   write(row: StoreRow): GuardVerdict;
