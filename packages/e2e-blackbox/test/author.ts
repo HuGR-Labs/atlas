@@ -17,10 +17,26 @@
 
 import { build } from '@atlas/index';
 import type { Axes, IndexNode } from '@atlas/index';
-import { walkFileTree } from '@atlas/adapter-io';
+import { foldAstUnits, initAst, walkFileTree } from '@atlas/adapter-io';
 import { nodeKey } from '@atlas/knowledge';
 import type { Candidate, GroundedFact, PredicateSlot } from '@atlas/knowledge';
 import type { SubtreeHash, Tier } from '@atlas/contracts';
+
+// WARM UP the opt-in AST grammar at MODULE LOAD (top-level await) so this in-process authoring helper folds
+// the SAME `::` sub-file units the runtime does (F1). `composeRuntime` (driven by the spawned `atlas` bin,
+// which awaits `initAst()`) now folds AST units into the index BEFORE `build`, which changes every parseable
+// file node from a content-hash LEAF into a children-hash BRANCH. To author a fact whose grounding still
+// re-derives FRESH against that folded index, `axesOf` below MUST fold identically — hence the warmup here.
+// Because ESM finishes a module's top-level await before its importers evaluate, every story that imports
+// this helper gets warm grammars before its `beforeAll` runs, with NO change to the story files themselves.
+await initAst();
+
+/** Build the SAME folded `Axes` the runtime composes over a repo (the fixture's SCIP is empty documents):
+ *  `foldAstUnits(walkFileTree(repo))` → `build`, so a file node is a BRANCH over its `::` item/block units
+ *  and a symbol path resolves. This is the identical transform `composeRuntime`/`assembleHandler` apply. */
+function axesOf(repoPath: string): Axes {
+  return build(foldAstUnits(walkFileTree(repoPath)), { documents: [] });
+}
 
 /** Brand a raw digest string as the drift-oracle `SubtreeHash` (runtime no-op — the brand is erased in
  *  JSON; the value written to the fact file is a plain string the emit gate re-derives against). */
@@ -40,7 +56,7 @@ function findByKey(node: IndexNode, key: string): string | undefined {
  *  SAME `Axes` the runtime composes over the fixture repo. Throws if the path is not a real index unit
  *  (a genuine ceiling: only file/dir paths resolve — the index has no `::` symbol nodes). */
 export function subtreeHashOf(repoPath: string, qualifiedPath: string): string {
-  const axes: Axes = build(walkFileTree(repoPath), { documents: [] });
+  const axes = axesOf(repoPath);
   for (const root of [axes.spatial, axes.territory, axes.dependency]) {
     const hit = findByKey(root, qualifiedPath);
     if (hit !== undefined) return hit;
@@ -66,6 +82,80 @@ export function groundedAdvisoryFact(spec: FactSpec): GroundedFact {
   const subtreeHash = asSubtree(subtreeHashOf(spec.repoPath, spec.filePath));
   const grounding: GroundedFact['grounding'] = {
     entries: [{ anchor: { kind: 'file', qualifiedPath: spec.filePath, subtreeHash }, path: spec.filePath }],
+  };
+  const candidate: Candidate = {
+    claimText: spec.claim,
+    claimNorm: spec.claim,
+    slot: spec.slot,
+    grounding,
+    provenance: { source: 'e2e-blackbox', trusted: true },
+    tier,
+  };
+  return {
+    kind: 'advisory',
+    id: nodeKey(candidate),
+    tier,
+    claimNorm: spec.claim,
+    grounding,
+    freshness: 'FRESH',
+    claims: [],
+    authoring: 'ADVISORY',
+    scope: spec.scope ?? 'src',
+    predicateSlot: spec.slot,
+  };
+}
+
+/** DFS for the `IndexNode` whose `key` equals `key` (a file path OR a `::` sub-file unit key). */
+function findNode(node: IndexNode, key: string): IndexNode | undefined {
+  if (node.key === key) return node;
+  for (const child of node.children) {
+    const hit = findNode(child, key);
+    if (hit !== undefined) return hit;
+  }
+  return undefined;
+}
+
+/** The declared NAME of a folded unit key — the trailing `:`-field of its last `::` segment
+ *  (`file::<start>:<kind>:<name>` ⇒ `<name>`, cf. adapter-io/src/ast.ts `unitPath`). */
+function unitLeafName(key: string): string {
+  const seg = key.split('::').at(-1) ?? '';
+  return seg.slice(seg.lastIndexOf(':') + 1);
+}
+
+/** The recipe for one grounded advisory fact anchored at a SUB-FILE symbol inside `filePath`. */
+export interface SymbolFactSpec {
+  readonly repoPath: string;
+  readonly filePath: string; // the file the symbol lives in (a real fixture file)
+  readonly symbolName: string; // the declared name of a top-level item in that file (e.g. `foo`)
+  readonly slot: PredicateSlot;
+  readonly claim: string;
+  readonly tier?: Tier; // default 'T1'
+  readonly scope?: string; // default 'src'
+}
+
+/**
+ * A serializable advisory `GroundedFact` grounded at a `::` SUB-FILE SYMBOL anchor (`kind: 'symbol'`). Its
+ * computed `primaryAnchor` is the folded `::` unit path — a PROPER structural DESCENDANT of the file node —
+ * so paired with a FILE-anchored fact sharing the same slot + exact claim, `deriveSubsumes` fires
+ * `file ⊃ symbol` on read (F1). The cited `subtreeHash` is the REAL folded-index hash of the symbol unit,
+ * so the emit truth-gate re-derives it FRESH. Throws if the named symbol is not a real folded index unit.
+ */
+export function groundedSymbolFact(spec: SymbolFactSpec): GroundedFact {
+  const tier: Tier = spec.tier ?? 'T1';
+  const axes = axesOf(spec.repoPath);
+  const fileNode = findNode(axes.spatial, spec.filePath);
+  if (fileNode === undefined) throw new Error(`author: no file node '${spec.filePath}'`);
+  const unit = fileNode.children.find((c) => unitLeafName(c.key) === spec.symbolName);
+  if (unit === undefined) {
+    throw new Error(`author: no symbol unit '${spec.symbolName}' under '${spec.filePath}' (index has no such AST node)`);
+  }
+  const grounding: GroundedFact['grounding'] = {
+    entries: [
+      {
+        anchor: { kind: 'symbol', qualifiedPath: unit.key, subtreeHash: asSubtree(String(unit.subtreeHash)) },
+        path: spec.filePath,
+      },
+    ],
   };
   const candidate: Candidate = {
     claimText: spec.claim,

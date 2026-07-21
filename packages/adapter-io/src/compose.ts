@@ -27,6 +27,7 @@ import { bindReconcile, currentNodes } from '@atlas/knowledge';
 import type { GroundedFact } from '@atlas/knowledge';
 import type { DoctorSource, T0Heuristic, TruthGate } from '@atlas/tools';
 import { walkFileTree } from './fs.js';
+import { foldAstUnits } from './ast.js';
 import { readScipOrEmpty } from './scip.js';
 import { loadPolicy } from './policy.js';
 import type { AtlasPolicy } from './policy.js';
@@ -118,7 +119,13 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
 
   const policy = loadPolicy(repoPath);
   const scipPath = join(repoPath, SCIP_REL);
-  const axes = build(walkFileTree(repoPath), readScipOrEmpty(scipPath));
+  // Fold sub-file AST units BEFORE `build` (F1), the SAME transform `assembleHandler` applies to its index
+  // FileTree, so the truth-gate re-derives freshness against an index that carries `::` symbol nodes. A
+  // symbol-grounded fact therefore resolves FRESH and its `::` primaryAnchor lets `deriveSubsumes` fire.
+  // `foldAstUnits` is a no-op until `initAst()` has been awaited (the entrypoint bins do this once, before
+  // composeRuntime); this keeps composeRuntime SYNC for its many direct callers while the production doors
+  // (which spawn these bins) get real sub-file granularity.
+  const axes = build(foldAstUnits(walkFileTree(repoPath)), readScipOrEmpty(scipPath));
 
   // The REAL reconcile drift seams (COMPOSE-C). `revIndex` builds the code index at an arbitrary rev:
   //   - `reDerives`         — a fact re-derives iff its grounding is still FRESH at the topic sha.

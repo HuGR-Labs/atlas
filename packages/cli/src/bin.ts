@@ -5,10 +5,15 @@
 // one governed durable `WiredHandler`; `main` parses argv, routes through it, and returns a process exit
 // code. The handler rides the existing `CliDeps.handler` seam (frozen `main(argv, deps?)` shape unchanged),
 // so prod and tests share ONE surface — prod composes the real handler, tests inject a fake (WIRE-1).
-import { composeRuntime } from '@atlas/adapter-io';
+import { composeRuntime, initAst } from '@atlas/adapter-io';
 import { main } from './cli.js';
 
-const { handler, doctorSource } = composeRuntime(process.cwd());
-void main(process.argv.slice(2), { handler, doctorSource }).then((code) => {
-  process.exitCode = code;
-});
+// Warm up the opt-in AST grammar ONCE at the composition driver (F1): `foldAstUnits` — the sync FileTree
+// refinement `composeRuntime` folds before every `build` — reads module-level grammar singletons and is a
+// no-op until `initAst()` resolves. Awaiting it HERE (the entrypoint) is why `composeRuntime` can stay sync
+// yet still index `::` sub-file symbol nodes, so a symbol grounding is groundable and `subsumes` fires.
+void (async () => {
+  await initAst();
+  const { handler, doctorSource } = composeRuntime(process.cwd());
+  process.exitCode = await main(process.argv.slice(2), { handler, doctorSource });
+})();

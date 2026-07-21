@@ -86,7 +86,14 @@ export function assembleHandler(config: WireConfig): WiredHandler {
   // The index-backing adapter (satisfies both frozen tools ports: MoveInIndex + QueryIndex) over the
   // frozen FS + SCIP outputs, driving @atlas/index. `nodeHashOfPath` is the sealed-kernel path→node keying
   // (= build's keying, `id({file})`) — the exact IndexAdapterDeps shape (cf s01 / index-adapter.test).
-  const fileTree = walkFileTree(config.repoPath);
+  // Fold sub-file AST item/block units onto the spatial FileTree BEFORE `build` (F1): `build` keys every
+  // index node by `node.path` (build.ts `key: node.path`), so the folded `::`-chained unit paths become
+  // resolvable index node keys — a symbol grounding re-derives FRESH and its `::` primaryAnchor lets
+  // `deriveSubsumes` fire (module ⊃ function). `foldAstUnits` is SYNC and reads the module-level grammar
+  // singletons; when the composition root has awaited `initAst()` (the bins do, before composeRuntime) it
+  // folds real units, otherwise it is a safe additive NO-OP (file/dir nodes only) — so wire tests that never
+  // warm up keep their exact prior behavior.
+  const fileTree = foldAstUnits(walkFileTree(config.repoPath));
   // DEGRADE gracefully on a fresh repo: a MISSING `.scip` dump (no `.atlas/index.scip` yet) is an empty
   // files-only index, never a throw. `readScipOrEmpty` is the ONE shared missing-file guard (scip.ts) — the
   // twin of the one `compose.ts` applies for the Axes build (COMPOSE-B).
@@ -162,9 +169,10 @@ export function assembleHandler(config: WireConfig): WiredHandler {
       )) satisfies ToolLeg,
   };
 
-  // The DAG-pin references NOT wired as handler legs (frozen skeleton edges): the AST fold and the
-  // git-forge / history / site-proposer seams. (The durable disk store is now REALLY wired — the emit leg.)
-  void [foldAstUnits, createForge, createHistorySource, createSiteProposer];
+  // The DAG-pin references NOT wired as handler legs (frozen skeleton edges): the git-forge / history /
+  // site-proposer seams. (The AST fold is now REALLY wired — the index FileTree pipeline above; the durable
+  // disk store is REALLY wired — the emit leg.)
+  void [createForge, createHistorySource, createSiteProposer];
 
   // ONE handler over the four legs — no per-entrypoint copy (WIRE-1).
   return createHandler(legs);
