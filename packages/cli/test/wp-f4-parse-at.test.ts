@@ -3,7 +3,7 @@
 // E2E finding: `parse.ts` treated `--at` as a bare boolean, so `atlas emit <fact> --at <sha>` dropped `<sha>`
 // into a positional and the emit lost its anchor rev — only the joined `--at=<sha>` form worked. These teeth
 // pin the fix: `--at` is a VALUED flag accepting BOTH forms, the space form only swallows a real value (never
-// a following flag), and NON-valued flags (`--depth`, `--accept-reground`) keep their bare-boolean behavior so
+// a following flag), and NON-valued flags (e.g. `--accept-reground`) keep their bare-boolean behavior so
 // an unrelated following positional is never wrongly consumed. The parser stays TOTAL (never throws).
 
 import { describe, expect, it } from 'vitest';
@@ -40,11 +40,11 @@ describe('WP-F4 — `--at` is a valued flag (both `--at=<sha>` and `--at <sha>`)
   });
 
   it('a valueless `--at` (followed by another flag) does NOT swallow the flag — folds to the invalid `true`', () => {
-    const r = ok(['emit', 'fact.json', '--at', '--depth=1']);
-    // MUTANT KILLED: a lookahead that consumes `next` UNCONDITIONALLY would set `at === '--depth=1'` and drop
-    // the depth flag. The guard `!next.startsWith('-')` keeps `--depth` intact and leaves `at` valueless.
+    const r = ok(['emit', 'fact.json', '--at', '--force=1']);
+    // MUTANT KILLED: a lookahead that consumes `next` UNCONDITIONALLY would set `at === '--force=1'` and drop
+    // the following flag. The guard `!next.startsWith('-')` keeps `--force` intact and leaves `at` valueless.
     expect(r.flags['at']).toBe('true');
-    expect(r.flags['depth']).toBe('1');
+    expect(r.flags['force']).toBe('1');
   });
 
   it('a trailing bare `--at` at end-of-argv folds to `true` (no throw, no undefined consume)', () => {
@@ -54,16 +54,18 @@ describe('WP-F4 — `--at` is a valued flag (both `--at=<sha>` and `--at <sha>`)
 });
 
 describe('WP-F4 — non-valued flags stay bare booleans (no over-consuming)', () => {
-  it('`--depth` keeps its typed-flag behavior: `--depth <n>` does NOT consume the next token as a value', () => {
-    // `--depth` is NOT in VALUED_FLAGS, so `--depth 3` leaves depth bare (`'true'`, which the depth check
-    // rejects) and `3` stays a positional — the pre-existing `--depth=<int>` contract is preserved.
-    const r = parse(['query', '--depth', '3']);
-    // depth bare → int-check fails closed (matches the frozen `--depth=notanumber` totality behavior).
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toMatch(/--depth must be an integer/);
+  it('an unknown flag (`--depth`, formerly typed) folds via the normal path — NEVER a parse error', () => {
+    // `--depth` used to be a validated typed flag; it is now DEAD (no leg/marshaller reads it). It must fold
+    // like any other unknown flag: bare `--depth <n>` leaves `depth='true'` and `n` stays a positional, and a
+    // once-"malformed" value like `--depth=notanumber` no longer fails — totality (never throws) is preserved.
+    const bare = ok(['query', '--depth', '3']);
+    expect(bare.flags['depth']).toBe('true');
+    expect(bare.positionals).toEqual(['3']); // `3` satisfies query's arity as a normal positional
+    const notanumber = ok(['query', 'scope', '--depth=notanumber']);
+    expect(notanumber.flags['depth']).toBe('notanumber'); // folds as a value, no int-check, no throw
   });
 
-  it('`--depth=<int>` joined form still parses (regression)', () => {
+  it('`--depth=<int>` joined form still just folds (unknown-flag regression)', () => {
     const r = ok(['query', 'scope', '--depth=2']);
     expect(r.flags['depth']).toBe('2');
     expect(r.positionals).toEqual(['scope']);
