@@ -11,7 +11,8 @@
 import { describe, it, expect } from 'vitest';
 import { id, asNodeKey, asSubtreeHash, asHash } from '@atlas/kernel';
 import type { CasObject } from '@atlas/kernel';
-import type { GroundedFact, StoreProjection } from '@atlas/knowledge';
+import { nodeKey } from '@atlas/knowledge';
+import type { GroundedFact, StoreProjection, Candidate } from '@atlas/knowledge';
 import type { TruthGate } from '@atlas/tools';
 import { createGovernedEmit } from '../src/governed-emit.js';
 import type { DiskStore } from '../src/store.js';
@@ -78,6 +79,28 @@ function advisory(scope?: string): GroundedFact {
   };
   return scope === undefined ? base : { ...base, scope };
 }
+
+/** A grounded advisory with an OVERRIDABLE payload `id`, primary anchor, and claim body — so a test can
+ *  hold the REAL identity (anchor+slot) fixed while VARYING the author-declared `id`, or spoof one. */
+function mkAdvisory(opts: { id: string; anchor: string; claimNorm: string; scope?: string }): GroundedFact {
+  const base = {
+    kind: 'advisory' as const,
+    id: asNodeKey(opts.id),
+    tier: 'T2' as const,
+    claimNorm: opts.claimNorm,
+    grounding: {
+      entries: [
+        { anchor: { kind: 'symbol' as const, qualifiedPath: opts.anchor, subtreeHash: asSubtreeHash('sh-x') }, path: 'x' },
+      ],
+    },
+    freshness: 'FRESH' as const,
+    claims: [],
+    authoring: 'ADVISORY' as const,
+  };
+  return opts.scope === undefined ? base : { ...base, scope: opts.scope };
+}
+
+const realKey = (f: GroundedFact): string => nodeKey(f as unknown as Candidate) as unknown as string;
 
 const AT = asHash('deadbeef');
 
@@ -158,5 +181,53 @@ describe('COMPOSE-A — createGovernedEmit (truth-door · authz · upsert · dur
     // TEETH — reverse the order (persistProjection before put) and this flips RED: the sidecar would be
     // persisted referencing a contentHash whose bytes never landed in CAS (a dangling reference).
     expect(persists).toHaveLength(0);
+  });
+
+  // ── INTEGRITY: the write door MINTS routing identity, it NEVER trusts the author payload `node.id` ──────
+  // The dedup/routing `nodeKey` is recomputed from CONTENT (frozen `nodeKey(node)` = anchor+slot[+check]).
+  // Both teeth kill the SAME mutant — `nodeKey: node.id` (trusting the author-supplied payload id for
+  // routing): with that mutant, two payloads with different `id`s can never collide (SCN-GE-6 goes RED), and
+  // a spoofed `id` hijacks an unrelated node (SCN-GE-7 goes RED).
+
+  it('SCN-GE-6 — DIFFERENT payload `id`, SAME real identity ⇒ ONE node, claims set-union (minted, not trusted)', () => {
+    const spy = makeStoreSpy();
+    const { emit } = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice' });
+    // Same anchor (⇒ same real advisory nodeKey), DIFFERENT author-declared payload `id`, different claim body.
+    const f1 = mkAdvisory({ id: 'author-picked-AAAA', anchor: 'src/util.ts::greet', claimNorm: 'claim one', scope: 'core' });
+    const f2 = mkAdvisory({ id: 'author-picked-BBBB', anchor: 'src/util.ts::greet', claimNorm: 'claim two', scope: 'core' });
+    // PREMISE: distinct payload ids, but the REAL minted identity collides.
+    expect(f1.id).not.toBe(f2.id);
+    expect(realKey(f1)).toBe(realKey(f2));
+
+    expect(emit(f1, AT).emitted).toBe(true);
+    expect(emit(f2, AT).emitted).toBe(true);
+
+    const projection = spy.persists()[spy.persists().length - 1]!; // the final durable projection
+    // TEETH (kills `nodeKey: node.id`): identity is minted ⇒ f2 UPDATES f1's ONE node, not a second node.
+    expect(projection.current.size).toBe(1);
+    const node = projection.current.get(realKey(f1))!;
+    expect(node.claims).toContain('claim one');
+    expect(node.claims).toContain('claim two'); // set-union in place ⇒ a real collision, not a DEDUP no-op
+  });
+
+  it('SCN-GE-7 — payload `id` spoofing an unrelated node does NOT hijack it (identity minted from content)', () => {
+    const spy = makeStoreSpy();
+    const { emit } = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice' });
+    // 1) An honest node X lands at its real identity.
+    const nodeX = mkAdvisory({ id: 'x-declared', anchor: 'src/util.ts::greet', claimNorm: 'honest X claim', scope: 'core' });
+    expect(emit(nodeX, AT).emitted).toBe(true);
+    const keyX = realKey(nodeX);
+
+    // 2) An attacker fact at a DIFFERENT anchor sets its payload `id` = X's real nodeKey to try to hijack X.
+    const attacker = mkAdvisory({ id: keyX, anchor: 'src/evil.ts::pwn', claimNorm: 'HIJACKED', scope: 'core' });
+    expect(attacker.id as unknown as string).toBe(keyX); // the spoof is armed
+    expect(realKey(attacker)).not.toBe(keyX); // but its MINTED identity is its own, not X's
+    expect(emit(attacker, AT).emitted).toBe(true);
+
+    const projection = spy.persists()[spy.persists().length - 1]!;
+    // TEETH (kills `nodeKey: node.id`): routing on the minted key ⇒ the attacker gets its OWN node; X untouched.
+    expect(projection.current.size).toBe(2);
+    expect(projection.current.get(keyX)!.claims).toEqual(['honest X claim']); // X NOT hijacked
+    expect(projection.current.get(keyX)!.claims).not.toContain('HIJACKED');
   });
 });

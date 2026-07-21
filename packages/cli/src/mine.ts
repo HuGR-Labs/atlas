@@ -33,7 +33,7 @@ import type {
 } from '@atlas/genesis';
 import { createDiskStore } from '@atlas/adapter-io';
 import type { DiskStore } from '@atlas/adapter-io';
-import { upsert as knowledgeUpsert, emptyStore, normalizeCheck, primaryAnchorId } from '@atlas/knowledge';
+import { upsert as knowledgeUpsert, emptyStore, normalizeCheck, primaryAnchorId, nodeKey } from '@atlas/knowledge';
 import type { WriteRequest, StoreProjection, Candidate as KnowledgeCandidate } from '@atlas/knowledge';
 import { id, asNodeKey, asSubtreeHash } from '@atlas/kernel';
 import { join } from 'node:path';
@@ -160,15 +160,20 @@ export function buildControllerDeps(repoPath: string, d: MineDeps): ControllerDe
   const mine = createMine({ skeleton: d.skeleton, history: d.history });
   const scan = createScan(d.skeleton);
   let projection: StoreProjection = emptyStore();
-  const grounded = new Map<string, Fact>(); // KNOW-15 idempotent grounded set, keyed by fact id (0 duplicates)
+  const grounded = new Map<string, Fact>(); // KNOW-15 idempotent grounded set, keyed by the MINTED nodeKey (0 duplicates)
 
   return {
     plan: (repo, rev, _scope): Plan => ({ malformed: false, skeleton: scan.scan(repo, rev), sites: mine.mine(repo, rev) }),
     visit: (cand): readonly Fact[] => runExtract([cand], SINGLE_SITE, { proposer: d.proposer, gate: d.gate }).facts,
     upsert: (incoming): readonly Fact[] => {
       for (const f of incoming) {
+        // IDENTITY IS MINTED, NEVER TRUSTED — the routing/dedup `nodeKey` is RECOMPUTED from the content
+        // via the frozen `nodeKey(f)` formula (KNOW-15b), the SAME seam that mints contentHash/primaryAnchor.
+        // The author-supplied payload `f.id` is NEVER used for routing or the grounded-set key — trusting it
+        // would let an author spoof/collide/dodge another node's identity (governed-emit.ts parity, WP-F3).
+        const key = nodeKey(f as unknown as KnowledgeCandidate) as unknown as string;
         const req: WriteRequest = {
-          nodeKey: f.id as unknown as string,
+          nodeKey: key,
           contentHash: id(f) as unknown as string,
           family: f.kind,
           claimNorm: claimNormOf(f),
@@ -179,7 +184,7 @@ export function buildControllerDeps(repoPath: string, d: MineDeps): ControllerDe
           ...(f.predicateSlot !== undefined ? { slot: f.predicateSlot } : {}),
         };
         projection = knowledgeUpsert(projection, req).store; // route the write-decision (NOT store.put)
-        grounded.set(f.id as unknown as string, f);
+        grounded.set(key, f);
       }
       d.store.persistProjection(projection); // durable — the mutable KNOW-15 projection sidecar
       return [...grounded.values()];
