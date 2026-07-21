@@ -201,8 +201,9 @@ describe('WP-7.26-b.TOOLS — atlas doctor is read/advisory only', () => {
     store.write(g1);
     const doctor = createDoctor(readOnlySource(store, g1.key));
 
-    // the governance surface stays exactly four with `atlas doctor` co-present.
-    expect(GOVERNANCE_SURFACE.length).toBe(4);
+    // the governance surface is the five governed tools (WP-SAMEAS added atlas-link) with `atlas doctor`
+    // co-present as a READ-ONLY projection — doctor is NEVER a registered governance tool.
+    expect(GOVERNANCE_SURFACE.length).toBe(5);
     expect(GOVERNANCE_SURFACE).not.toContain('atlas-doctor');
 
     // teeth (breaks-on "doctor is registered as a fifth tool with a write method"): NO store-mutating method.

@@ -75,15 +75,15 @@ const diffSource: DiffSource = { diff: (a, b) => (a === shaA && b === shaB ? Δ 
 const grounded = (value: unknown): StoreRow => ({ key: id(value as CasObject), value });
 
 describe('S8 · one governed write door, one contract across every transport', () => {
-  // ── (1) SURFACE == 4, WRITE == 1 ──────────────────────────────────────────────────────────────────
-  it('exposes EXACTLY four governance tools and EXACTLY one write path (single write authority)', () => {
-    expect(GOVERNANCE_SURFACE.length).toBe(4);
-    expect([...GOVERNANCE_SURFACE].sort()).toEqual(['atlas-emit', 'atlas-init', 'atlas-query', 'atlas-reconcile']);
-    expect(WRITE_PATHS.length).toBe(1);
-    expect(WRITE_PATHS[0]).toBe('atlas-emit');
-    // teeth (breaks-on "a 5th governance tool or a 2nd write path appears"): the surface/write cardinality is fixed.
+  // ── (1) SURFACE == 5, WRITE == 2 (WP-SAMEAS) ────────────────────────────────────────────────────────
+  it('exposes EXACTLY five governance tools and EXACTLY two governed write paths', () => {
+    expect(GOVERNANCE_SURFACE.length).toBe(5);
+    expect([...GOVERNANCE_SURFACE].sort()).toEqual(['atlas-emit', 'atlas-init', 'atlas-link', 'atlas-query', 'atlas-reconcile']);
+    expect(WRITE_PATHS.length).toBe(2);
+    expect([...WRITE_PATHS].sort()).toEqual(['atlas-emit', 'atlas-link']); // the two governed write doors (WP-SAMEAS)
+    // teeth (breaks-on "an unauthorized governance tool or a third write path appears"): the cardinality is fixed.
     expect(GOVERNANCE_SURFACE).not.toContain('atlas-delete');
-    expect(WRITE_PATHS).not.toContain('atlas-diff'); // a read projection is never a second write path
+    expect(WRITE_PATHS).not.toContain('atlas-diff'); // a read projection is never a write path
   });
 
   // ── (2) THE ONE handler is PURE + TOTAL ─────────────────────────────────────────────────────────────

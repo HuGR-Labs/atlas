@@ -149,6 +149,12 @@ export interface CurrentNode {
   // ── ADJACENCY carrier (ADDITIVE, OPTIONAL) — carried from the req for WP-B; store.ts WireProjection round-trips them free. NOT read here.
   readonly primaryAnchor?: string; // the primaryAnchorId VALUE (qualifiedPath-prefix), string form
   readonly slot?: PredicateSlot; //  the closed-vocabulary predicate slot the node lives at (R3-optional)
+  // ── sameAs carrier (ADDITIVE, OPTIONAL — WP-SAMEAS) — the SORTED, de-duped nodeKeys a HUMAN asserted name
+  //    the SAME fact at an unrelated code site (H1). Stored SYMMETRICALLY on both endpoints, so the read-side
+  //    union-find fold (`deriveSameAs`) is local from either end; absent ⇒ no asserted equivalence. It round-
+  //    trips inside the CurrentNode entry (store.ts WireProjection serializes the whole node — no change there).
+  //    ADDITIVE/OPTIONAL, back-compat: a node minted before this WP simply has no `sameAs` and is a singleton.
+  readonly sameAs?: readonly string[];
 }
 
 /** The territory store projection: the one-current-node map + the append-only CAS retention set. */

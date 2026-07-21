@@ -21,7 +21,8 @@ export type MarshalResult =
  *   query     → `{ scope }`                       (leg: `(args as { scope }).scope`)
  *   reconcile → `{ mergeBase, options }`          (leg: `.mergeBase` + `.options?: {acceptReground?}`)
  *   emit      → `{ node, at }`                    (leg: `.node: GroundedFact` + `.at: Hash`)
- * `doctor` / `mine` are dispatched BEFORE the handler (cli.ts) and never reach here — the default fails closed.
+ *   link      → `{ a, b }`                         (leg: `.a` + `.b` — the two nodeKeys to equate, WP-SAMEAS)
+ * `doctor` / `mine` / `node` are dispatched BEFORE the handler (cli.ts) and never reach here — the default fails closed.
  */
 export function marshalArgs(
   command: Command,
@@ -52,6 +53,10 @@ export function marshalArgs(
       };
     case 'emit':
       return marshalEmit(positionals, flags);
+    case 'link':
+      // `atlas link <a> <b>` — the governed sameAs door (WP-SAMEAS). The leg reads `{a,b}` (wire.ts). `parse`
+      // enforces arity 2, so both positionals are present via the normal flow.
+      return { ok: true, args: { a: positionals[0], b: positionals[1] } };
     default:
       // doctor/mine are intercepted before routing; a stray command here fails closed rather than routing blind.
       return { ok: false, error: `command '${command}' has no argument marshaller` };

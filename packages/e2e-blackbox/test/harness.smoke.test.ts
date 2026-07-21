@@ -11,8 +11,9 @@ import { join } from 'node:path';
 import { CLI_BIN, MCP_BIN, makeFixtureRepo, mcpSession, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
 
-/** The CLOSED governance surface — EXACTLY these four tools, in this order (mirrors GOVERNANCE_SURFACE). */
-const GOVERNANCE_TOOLS = ['atlas-init', 'atlas-query', 'atlas-emit', 'atlas-reconcile'];
+/** The CLOSED governance surface — these tools, in this order (mirrors GOVERNANCE_SURFACE; WP-SAMEAS added
+ *  the governed `atlas-link` write door as the fifth). */
+const GOVERNANCE_TOOLS = ['atlas-init', 'atlas-query', 'atlas-emit', 'atlas-reconcile', 'atlas-link'];
 
 let repo: FixtureRepo;
 

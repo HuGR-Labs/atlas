@@ -6,8 +6,9 @@
 import { WRITE_PATHS } from '@atlas/tools';
 import type { Tool, Verdict } from '@atlas/tools';
 
-/** The finite command surface — EXACTLY these seven, no more (CLI-1a). Order fixed; membership load-bearing. */
-export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node'] as const;
+/** The finite command surface — EXACTLY these eight, no more (CLI-1a). Order fixed; membership load-bearing.
+ *  [EXTENDED — WP-SAMEAS] `link` joins as the CLI door of the governed sameAs write (routes to `atlas-link`). */
+export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link'] as const;
 export type Command = (typeof COMMANDS)[number];
 
 /** The leg a command routes to — a governance `Tool`, or the genesis entry (data-only; NOT executed here —
@@ -30,6 +31,7 @@ export const COMMAND_LEG: Record<Command, Leg> = {
   mine: 'genesis run-controller', // data-only entry; not driven at this seam
   node: 'atlas-query', // READ authority oracle (TOOLS-10 per-node read); intercepted before the handler (cli.ts),
   //                      resolves via handler.resolveNode over the read-only NodeSource — carries NO write authority
+  link: 'atlas-link', // WRITE authority oracle (WP-SAMEAS governed sameAs door); routes through the one handler
 };
 
 export type Authority = 'read' | 'write';
@@ -53,15 +55,19 @@ export const EXIT: Record<Status, number> = { ok: 0, error: 1, rejected: 2 };
 /**
  * CLI-3b: the ratified status derivation `f` — a PURE function of ONE verdict (no tool tag, no clock). A
  * GOVERNANCE rejection is `rejected` (exit 2): a `data` reporting a non-zero `exitCode` (reconcile semantic
- * flip) OR `emitted:false` (a fail-closed emit — now an `ok:false` verdict that carries its `EmitOut` on
- * `data`, F2/F5). Any OTHER `ok:false` (malformed args, unwired tool) is a usage/wiring `error` (exit 1).
+ * flip), `emitted:false` (a fail-closed emit), OR `linked:false` (a fail-closed sameAs link, WP-SAMEAS) —
+ * each an `ok:false` verdict carrying its record on `data` (F2/F5). Any OTHER `ok:false` (malformed args,
+ * unwired tool) is a usage/wiring `error` (exit 1).
  * Otherwise `ok`. The `exitCode`/`emitted` probes duck-type the two carrier records structurally — only
  * `ReconcileOut` carries `exitCode`, only `EmitOut` carries `emitted` — so the governance-refusal classes are
  * distinguished from a bare error BEFORE the `ok:false` fallback, keeping this a pure function of the verdict.
  */
 export function deriveStatus(v: Verdict): Status {
-  const data = v.data as { readonly exitCode?: unknown; readonly emitted?: unknown } | undefined;
+  const data = v.data as
+    | { readonly exitCode?: unknown; readonly emitted?: unknown; readonly linked?: unknown }
+    | undefined;
   if (data && data.emitted === false) return 'rejected'; // fail-closed emit — a governed refusal (F2/F5)
+  if (data && data.linked === false) return 'rejected'; // fail-closed link — a governed refusal (WP-SAMEAS)
   if (data && typeof data.exitCode === 'number' && data.exitCode !== 0) return 'rejected'; // reconcile flip
   if (v.ok === false) return 'error'; // malformed args / unwired tool — a usage/wiring error
   return 'ok';

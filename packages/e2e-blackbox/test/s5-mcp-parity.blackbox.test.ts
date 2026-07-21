@@ -20,12 +20,13 @@ import { groundedAdvisoryFact, ungroundedFact } from './author.js';
 import type { GroundedFact } from '@atlas/knowledge';
 import { ACTOR, RATIFIER, emitFact, invLines, scopedPolicy } from './support.js';
 
-const GOVERNANCE_TOOLS = ['atlas-init', 'atlas-query', 'atlas-emit', 'atlas-reconcile'];
+const GOVERNANCE_TOOLS = ['atlas-init', 'atlas-query', 'atlas-emit', 'atlas-reconcile', 'atlas-link'];
 const REQUIRED: Record<string, string[]> = {
   'atlas-init': ['path'],
   'atlas-query': ['scope'],
   'atlas-emit': ['node', 'at'],
   'atlas-reconcile': ['mergeBase'],
+  'atlas-link': ['a', 'b'], // WP-SAMEAS — the governed sameAs door's two nodeKeys
 };
 
 interface McpText { data?: unknown; rejected?: unknown; guidance?: { next?: string; invariant?: string } }
@@ -56,7 +57,7 @@ afterAll(() => {
 });
 
 describe('S5 — MCP stdio parity with the CLI over the one governed core', () => {
-  it('listTools() advertises EXACTLY the 4 governance tools, each with an object input schema + required args', { timeout: 20000 }, async () => {
+  it('listTools() advertises EXACTLY the 5 governance tools, each with an object input schema + required args', { timeout: 20000 }, async () => {
     const session = await mcpSession(repo.repoPath);
     try {
       const { tools } = await session.client.listTools();
