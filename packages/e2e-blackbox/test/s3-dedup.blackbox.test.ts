@@ -8,15 +8,15 @@
 // nodes), CONTENT-ADDRESSED idempotency (KERNEL-1 — identical bytes DEDUP to the same id), and D1 union
 // (a reworded claim at the same (anchor,slot) collides on the REAL nodeKey and set-unions in place).
 //
-// FINDING (subsumes unreachable end-to-end) — see the last test: the manifest's "module⊃function ⇒ subsumes"
-// case CANNOT be authored through the black-box grounding surface, because the index build produces ONLY
-// file/dir nodes (no sub-file `::` symbol granularity), so no GROUNDED fact can carry a `::` primaryAnchor,
-// and `deriveSubsumes` (wired at read) requires `::` proper-containment. This is flagged, not asserted-around.
+// PAYOFF (subsumes fires end-to-end, F1) — see the last test: with sub-file `::` AST granularity now folded
+// into the index (adapter-io wires `foldAstUnits` before `build`), a fact grounded at a SYMBOL inside a file
+// carries a `::` primaryAnchor. The SAME claim emitted at the FILE anchor AND at a symbol inside it makes
+// `deriveSubsumes` (wired at read) emit `file ⊃ symbol` — rendered as a `subsumes` line by `atlas query`.
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedAdvisoryFact } from './author.js';
+import { groundedAdvisoryFact, groundedSymbolFact } from './author.js';
 import type { GroundedFact } from '@atlas/knowledge';
 import { ACTOR, emitFact, invLines, scopedPolicy, subsumesLines } from './support.js';
 
@@ -25,9 +25,10 @@ const idOf = (s: string): string | undefined => s.match(/^ {2}id: ([0-9a-f]{64})
 const query = (repo: FixtureRepo): string => runAtlas(repo.repoPath, ['query', 'src']).stdout;
 
 let repo: FixtureRepo;
-let F: GroundedFact; //           claim C1 at src/foo.ts::invariant
+let F: GroundedFact; //           claim C1 at src/foo.ts::invariant (FILE anchor)
 let Frew: GroundedFact; //        claim C1-reworded at the SAME (anchor,slot) ⇒ same nodeKey
 let Gbar: GroundedFact; //        claim C1 at src/bar.ts::invariant ⇒ a DISTINCT nodeKey
+let Sfoo: GroundedFact; //        claim C1 at the SYMBOL src/foo.ts::foo ⇒ a `::` descendant of F's anchor
 let priorActor: string | undefined;
 
 beforeAll(() => {
@@ -39,6 +40,8 @@ beforeAll(() => {
   F = at('src/foo.ts', 'C1');
   Frew = at('src/foo.ts', 'C1-reworded');
   Gbar = at('src/bar.ts', 'C1');
+  // The SAME claim C1, same slot, grounded at the SYMBOL `foo` INSIDE src/foo.ts — a proper `::` descendant.
+  Sfoo = groundedSymbolFact({ repoPath: repo.repoPath, filePath: 'src/foo.ts', symbolName: 'foo', slot: 'invariant', claim: 'C1' });
 });
 
 afterAll(() => {
@@ -80,15 +83,18 @@ describe('S3 — dedup / update / non-destructive identity (ordered — durable 
     expect(query(repo)).toBe(query(repo)); // deterministic projection over the durable store
   });
 
-  it('FINDING — subsumes module⊃function is UNREACHABLE end-to-end (no sub-file index granularity)', () => {
-    // Two nodes share slot+family+the exact claim `C1`, but their anchors are SIBLINGS (src/foo.ts,
-    // src/bar.ts) — never ancestor/descendant. A genuine module⊃function pair (`src/foo.ts` ⊃
-    // `src/foo.ts::bar`) CANNOT be authored: the `::bar` symbol anchor does not resolve in the index (build
-    // makes only file/dir nodes), so such a fact is rejected as ungrounded. Hence `deriveSubsumes` (wired at
-    // read) can never fire on grounded input. We assert the HONEST current state (no subsumes line) and flag
-    // the gap — never faking a subsumes edge.
+  it('PAYOFF — subsumes file⊃symbol FIRES end-to-end (sub-file `::` index granularity is now real)', () => {
+    // Emit the SAME claim `C1` (same slot, same family) grounded at the SYMBOL `foo` INSIDE src/foo.ts. Its
+    // computed primaryAnchor is the folded `::` unit path — a PROPER structural descendant of src/foo.ts.
+    // `deriveSubsumes` (wired at read in the query leg) therefore emits `broader ⊃ narrower` with broader =
+    // the FILE-anchored node F (fewer `::` segments = the ancestor) and narrower = the symbol node Sfoo.
+    expect(Sfoo.id).not.toBe(F.id); // a distinct node at the symbol anchor (its own grounding — A2)
+    const r = emitFact(repo, Sfoo);
+    expect(r.exitCode).toBe(0); // the symbol anchor RESOLVES in the folded index ⇒ grounded, not rejected
+
     const out = query(repo);
-    expect(invLines(out).length).toBe(2); // the two nodes ARE both present (A2 holds)
-    expect(subsumesLines(out)).toEqual([]); // subsumes structurally unreachable — FINDING #1
+    expect(invLines(out).length).toBe(3); // src/bar.ts, src/foo.ts (file), src/foo.ts::foo (symbol)
+    // THE keystone assertion: a real `subsumes <broader> ⊃ <narrower>` line, F (file) ⊃ Sfoo (symbol).
+    expect(subsumesLines(out)).toEqual([`  subsumes ${F.id} ⊃ ${Sfoo.id}`]);
   });
 });
