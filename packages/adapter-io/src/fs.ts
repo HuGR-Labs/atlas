@@ -29,12 +29,13 @@ const newDir = (path: string): DirBuild => ({ path, dirs: new Map(), files: [] }
  * bytes — no wall-clock, nonce, or counter on any node, so two walks are byte-identical.
  */
 export function walkFileTree(repoPath: string): FileTree {
-  const out = execFileSync('git', ['ls-files', '-z'], {
-    cwd: repoPath,
-    encoding: 'utf8',
-  });
-  // NUL-delimited so paths with spaces/newlines survive; drop the trailing empty segment.
-  const tracked = out.split('\0').filter((p) => p.length > 0);
+  // Fail CLOSED at the composition boot path (compose.ts `composeRuntime`, wire.ts `assembleHandler`):
+  // `git ls-files` exits 128 in a NON-git dir (and `execFileSync` THROWS on a non-zero exit / when git is
+  // absent). An unguarded throw would propagate uncaught out of both the `atlas`/`atlas-mcp` bins at boot
+  // (raw stack trace). Degrade to the EMPTY tracked set — the SAME structural view as an empty repo — never
+  // a throw. The valid-git-repo happy path is byte-identical (only the throwing paths are absorbed). Same
+  // no-shell git seam + `try {} catch {}` idiom as `gitUserEmail`/`readScipOrEmpty`.
+  const tracked = gitLsFiles(repoPath);
 
   const root = newDir('.');
   for (const rel of tracked) {
@@ -50,12 +51,41 @@ export function walkFileTree(repoPath: string): FileTree {
       }
       node = next;
     }
-    // The final segment is the file leaf; `rel` (POSIX) is already the repo-relative path.
-    const content = readFileSync(join(repoPath, rel), 'utf8');
+    // The final segment is the file leaf; `rel` (POSIX) is already the repo-relative path. A path listed by
+    // `git ls-files` but UNREADABLE in the working tree (tracked-but-deleted ⇒ ENOENT, or permission) must
+    // NOT crash boot: SKIP it so the walk stays TOTAL. A readable tracked file is byte-identical.
+    const content = readFileOrSkip(join(repoPath, rel));
+    if (content === undefined) continue;
     node.files.push({ path: rel, children: [], content });
   }
 
   return freeze(root);
+}
+
+/**
+ * The NUL-delimited git-tracked path set at `repoPath`, or `[]`. TOTAL — never throws: a non-git dir (git
+ * exit 128), git absent, or ANY `execFileSync` failure ⇒ `[]` (fail-closed to the empty index). NUL-delimited
+ * so paths with spaces/newlines survive; the trailing empty segment is dropped.
+ */
+function gitLsFiles(repoPath: string): string[] {
+  try {
+    const out = execFileSync('git', ['ls-files', '-z'], {
+      cwd: repoPath,
+      encoding: 'utf8',
+    });
+    return out.split('\0').filter((p) => p.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+/** The working-tree bytes at `abs`, or `undefined` when unreadable (deleted/permission) — never throws. */
+function readFileOrSkip(abs: string): string | undefined {
+  try {
+    return readFileSync(abs, 'utf8');
+  } catch {
+    return undefined;
+  }
 }
 
 /** Materialize a `DirBuild` into an immutable `FileTree`, with siblings ASCII-sorted by `path`. */
