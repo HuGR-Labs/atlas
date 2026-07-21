@@ -79,17 +79,28 @@ for (const f of files) {
   });
 }
 
-// ── (3) DIGEST TRIPWIRE (properties-tls ↔ method-tags-tls) ────────────────────────────────────────
-const methodTags = join(REPO, 'docs/requirements/method-tags-tls.md');
-const propsTls = join(REPO, 'docs/requirements/properties-tls.md');
-const digest8 = createHash('sha256').update(readFileSync(methodTags)).digest('hex').slice(0, 8);
-const pins = [...readFileSync(propsTls, 'utf8').matchAll(/@sha256:([0-9a-f]{8})\b/g)].map((m) => m[1]);
-const stalePins = [...new Set(pins)].filter((p) => p !== digest8);
-if (pins.length === 0) {
-  problems.push('DIGEST: no @sha256 pins found in properties-tls.md (expected the frozen source pins).');
-} else if (stalePins.length) {
-  problems.push(`DIGEST: properties-tls.md pins [${stalePins}] ≠ current method-tags-tls.md digest ${digest8}. ` +
-    `Re-freeze the pins (reconcile the properties against the amended method-tags) or revert the method-tags edit.`);
+// ── (3) DIGEST TRIPWIRE (whole-file scheme: properties-<m> ↔ method-tags-<m>) ─────────────────────
+// Only WHOLE-FILE-pinned modules are gated here (short 8-hex digest of the entire method-tags file, as the
+// TLS + MEM headers document). Both were verified consistent before wiring (pins == current whole-file digest).
+// NOT covered, on purpose:
+//   • IDX pins are per-`### INV-INDEX-n`-BLOCK digests (`sha256(block)[:12]`). The recipe is reconstructable to
+//     16/16 ONLY with a non-uniform last-block boundary — i.e. reverse-FITTED, not the true generator. Gating
+//     on a fitted hash recipe would disagree with the real S2→S3 render on a future edit (false failures), so
+//     IDX must be gated by its ORIGINAL generator, not by this guess. Left out honestly.
+//   • gen/grd/knw/krn/pst/ret carry NO @sha256 pins — nothing to check.
+const WHOLE_FILE_PINNED = ['tls', 'mem'];
+for (const mod of WHOLE_FILE_PINNED) {
+  const mt = join(REPO, `docs/requirements/method-tags-${mod}.md`);
+  const props = join(REPO, `docs/requirements/properties-${mod}.md`);
+  const digest8 = createHash('sha256').update(readFileSync(mt)).digest('hex').slice(0, 8);
+  const pins = [...readFileSync(props, 'utf8').matchAll(/@sha256:([0-9a-f]{8})\b/g)].map((m) => m[1]);
+  const stalePins = [...new Set(pins)].filter((p) => p !== digest8);
+  if (pins.length === 0) {
+    problems.push(`DIGEST: no 8-hex @sha256 pins found in properties-${mod}.md (expected the frozen source pins).`);
+  } else if (stalePins.length) {
+    problems.push(`DIGEST: properties-${mod}.md pins [${stalePins}] ≠ current method-tags-${mod}.md digest ${digest8}. ` +
+      `Re-freeze the pins (reconcile the properties against the amended method-tags) or revert the method-tags edit.`);
+  }
 }
 
 // ── report ────────────────────────────────────────────────────────────────────────────────────────
@@ -98,4 +109,4 @@ if (problems.length) {
   for (const p of problems) console.error('  ✗ ' + p);
   process.exit(1);
 }
-console.log(`spec-conformance-guard: OK — surface pinned (5 tools / 2 governed doors), ${files.length} files drift-free, digest ${digest8} fresh.`);
+console.log(`spec-conformance-guard: OK — surface pinned (5 tools / 2 governed doors), ${files.length} files drift-free, whole-file digest pins fresh (${WHOLE_FILE_PINNED.join(', ')}).`);
