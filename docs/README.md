@@ -26,14 +26,25 @@ grounded (the docs dogfood the Atlas: reference is pinned to `source@sha` and dr
 - [reference/atlas-memory.md](./reference/atlas-memory.md) — task/pr/project/logbook + Orientation
 - [reference/atlas-retrieval.md](./reference/atlas-retrieval.md) — packs · poke · tool projection · caps
 - [reference/atlas-persist.md](./reference/atlas-persist.md) — git-native · commits+PRs · archive · re-spawn
-- [reference/atlas-tools.md](./reference/atlas-tools.md) — init/query/emit/reconcile (CLI+MCP)
+- [reference/atlas-tools.md](./reference/atlas-tools.md) — init/query/emit/reconcile/link (CLI+MCP)
+- [reference/atlas-adapters.md](./reference/atlas-adapters.md) — the productization ring (adapters + entrypoints)
+- [reference/atlas-authoring.md](./reference/atlas-authoring.md) — the authoring surface: anchors · slots · draft · check (planners, zero write authority)
 
 ### How-to — *tasks*
 - [how-to/write-a-project-rule.md](./how-to/write-a-project-rule.md)
 - [how-to/query-the-atlas.md](./how-to/query-the-atlas.md)
 
+## Decisions (ADRs — immutable, superseded never edited)
+- [adr/ADR-0001](./adr/ADR-0001-r3-data-model-reconciliation.md) — R3 data-model reconciliation
+- [adr/ADR-0002](./adr/ADR-0002-freshness-watermark.md) — the CQRS freshness watermark
+- [adr/ADR-0003](./adr/ADR-0003-governed-write-doors.md) — INV-TOOLS-1: single write door → governed write doors
+- [adr/ADR-0004](./adr/ADR-0004-authoring-planner-doors.md) — the authoring surface is planners, not write doors
+- [adr/ADR-0005](./adr/ADR-0005-mcp-read-surface.md) — the advertised MCP surface is governance ∪ read
+
 ## Product design (prose) & legacy specs
 - [design/atlas.md](./design/atlas.md) — the product design (working-backwards prose)
+- [design/authoring.md](./design/authoring.md) — the authoring surface: Define · Frame · Structure · Ratify
+- [design/authoring-surface-study.md](./design/authoring-surface-study.md) — the functional-surface catalog behind it (L0–L3 + the six lenses)
 - [spec/atlas.md](./spec/atlas.md) · [spec/memory.md](./spec/memory.md) — the **transitional normative
   source** the `reference/` files currently ground to (completeness verified; content-complete in
   `reference/`). Retires when the atlas **code** lands and reference re-grounds to `source@sha`.

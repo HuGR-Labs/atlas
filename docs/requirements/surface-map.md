@@ -29,6 +29,22 @@ P), write-decision = exhaustive enumeration, drop-order = PBT — **not** formal
 reference-model + PBT. (Authority: the S2 decision table in
 [`../DECOMPOSITION-PROTOCOL.md`](../DECOMPOSITION-PROTOCOL.md).)
 
+## Surfaces added after the core (disjoint ID families, own artifact sets)
+
+The 132 above are the **layer-0 core**. Two surfaces were decomposed on top of it; each owns a disjoint ID
+family and its own S0→S4 artifact set, so the core's counts are unchanged by either.
+
+| surface | campaign | modules (ID families) | invariants | block tier | S2 method-tags | artifact set |
+|---|---|---|---:|---|---|---|
+| **the productization ring** | CAMPAIGN-9 | ADAPTER · WIRE · CLI · MCP | 19 | standard | 0 formal · reference-model / exhaustive / PBT | `*-adapters.md` |
+| **the authoring surface** | CAMPAIGN-10 | **AUTH** (new) · CLI (ext.) · MCP (ext.) | 18 | **elevated** (agreement laws: planner≡gate, check≡door, CLI≡MCP) | 0 formal · **PBT 5 · exhaustive 8 · reference-model 5** | `*-authoring.md` + `properties-auth.md` |
+
+**Formal footprint is still 1 model total.** Neither surface authors an `FSPEC`; both consume
+`FSPEC-merge` through frozen seams. The authoring surface's `elevated` tier reflects its unusual density of
+**agreement** properties — three of its invariants assert that two independently-runnable things must
+produce the same answer — which a witness pair cannot close and a `∀` can. (Authority:
+[`method-tags-authoring.md`](./method-tags-authoring.md) §tag distribution.)
+
 ## Ordering — pilot first, then the core, then fan out
 
 1. **Freeze the design (Phase 1) first.** Requirements derive from a *frozen* design. Several invariants are
