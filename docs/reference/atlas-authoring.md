@@ -1,0 +1,191 @@
+# atlas-authoring — Reference (the authoring surface)
+
+> owner: orchestrator · grounding: every clause cites an outcome statement (FR-A*), a job-map step, or a
+> risk it retires — per [`design/authoring.md`](../design/authoring.md); the architectural decisions are
+> recorded in [`ADR-0004`](../adr/ADR-0004-authoring-planner-doors.md) +
+> [`ADR-0005`](../adr/ADR-0005-mcp-read-surface.md) · status: **draft — S0 design-freeze candidate for
+> CAMPAIGN-10** (DEFINE seat = owner ratifies)
+
+## Purpose
+
+Atlas governs *writes* completely: two fail-closed doors, authz, ratification, re-derived grounding. What
+it does not have is a way for a **human or an agent to produce a fact the doors will accept**. Every fact
+Atlas has held to date was constructed by a test helper that imports the product's own libraries.
+
+This document is the **constitution of the authoring surface**: the doors that let an author *prepare* and
+*confirm* a fact. It authors **no new write behaviour** — every door here computes a payload and persists
+nothing. The governed write surface (`atlas-emit`, `atlas-link`) is unchanged, and INV-TOOLS-1 is untouched.
+
+## Boundary (what this surface is, and is NOT)
+
+- **It is a set of PLANNERS.** A planner reads the repo and the projection, computes a payload, and
+  returns it. It opens **no write path** and carries **no write authority**. The already-ratified
+  precedent is `atlas doctor reground`, which returns a `RegroundPlan{ emit: GroundedFact }` documented as
+  *"a PROPOSAL only; persists nothing. Run through atlas-emit to persist."* (TOOLS-12).
+- **It is NOT a governance extension.** `GOVERNANCE_SURFACE` stays exactly five
+  (`atlas-init`/`-query`/`-emit`/`-reconcile`/`-link`) and `WRITE_PATHS` stays exactly two
+  (`atlas-emit`, `atlas-link`). See ADR-0003, unamended.
+- **It is NOT a second index.** Every anchor and every grounding this surface computes is derived through
+  the *same* seam the emit truth-gate re-derives against. A second computer would manufacture the exact
+  drift Atlas exists to detect (AUTHOR-1).
+- **It is NOT a staging area.** Nothing here is held, queued, or retried. A planner's output is a value the
+  author holds; the store changes only when that value goes through `atlas-emit`.
+- **Transports.** Every door is exposed on **both** the CLI and MCP (owner directive). MCP advertises them
+  as a `READ_SURFACE` that is disjoint from `GOVERNANCE_SURFACE` — see ENTRY-MCP-3.
+
+## Data model (this surface's own shapes; core shapes imported, never redefined)
+
+```
+AnchorUnit  = { qualifiedPath: string, kind: 'file'|'dir'|'symbol', subtreeHash: string, path: string }
+AnchorsOut  = { rev: string, units: AnchorUnit[], holes: LanguageHole[] }
+LanguageHole= { ext: string, fileCount: number, reason: string }   // AUTHOR-4 — an honest structural hole
+SlotInfo    = { slot: PredicateSlot, meaning: string }             // PredicateSlot imported from @atlas/knowledge
+SlotsOut    = { slots: SlotInfo[] }                                // exactly the closed union, in order
+DraftOut    = { fact: GroundedFact, rev: string, operation: 'CREATE'|'UPDATE',
+                route: 'auto-accept'|'full-ratify', requires?: string }
+GateName    = 'shape' | 'truth' | 'authz' | 'ratify'
+CheckOut    = { wouldEmit: boolean, gates: { gate: GateName, pass: boolean, reason?: string,
+                                             remedy?: string }[] }
+```
+`GroundedFact`, `PredicateSlot` are `@atlas/knowledge`-owned — **imported, never redefined**. `Verdict`,
+`Guidance` are `@atlas/tools`-owned. No shape here duplicates a core shape.
+
+## Invariants
+
+### The grounding computer (the shared seam every planner stands on)
+
+- <a id="author-1"></a>**AUTHOR-1 One grounding computer.** Every anchor set and every grounding this
+  surface computes MUST be derived through the **same composition seam** the `atlas-emit` truth-gate
+  re-derives against — the built `Axes` over `foldAstUnits(walkFileTree(repo))` plus the SCIP projection.
+  There MUST NOT be a second derivation, a cached digest table, or a per-caller re-implementation. A caller
+  MUST NOT be required to perform its own set-up (e.g. an AST-grammar warm-up) for its fold to match the
+  runtime's — the seam owns that. *(retires the Feasibility risk; cites FR-A1/A2/A6)*
+- <a id="author-2"></a>**AUTHOR-2 Planners carry zero write authority.** No door defined in this document
+  MUST write, mutate, stage, or queue any byte — not to the CAS, not to the projection sidecar, not to any
+  cache. The governed write surface remains exactly `{atlas-emit, atlas-link}`, and no member of this
+  surface MUST appear in `WRITE_PATHS` or `GOVERNANCE_SURFACE`. *(cites FR-A4)*
+
+### Discovery (Prepare — "where can I ground, and what can I say?")
+
+- <a id="author-3"></a>**AUTHOR-3 Anchors are faithful and total.** `anchors <path>` MUST return exactly
+  the groundable units the built index carries under `path` — each with its `qualifiedPath`, `kind`, and
+  the **current** `subtreeHash` — and MUST NOT invent, omit, or reorder a unit. It MUST report the `rev`
+  the set was computed at. A path outside the tracked set, a non-git directory, or an unreadable path MUST
+  yield the honest empty set with its reason — **never a throw**. *(cites FR-A1)*
+- <a id="author-4"></a>**AUTHOR-4 Language holes are declared, not hidden.** Symbol-level anchoring exists
+  only for languages with a configured grammar. For a file in a language with **no** configured grammar,
+  `anchors` MUST return the file-level unit **and** MUST declare the hole explicitly (`holes[]`: the
+  extension, the file count, the reason). A silent file-level fallback — indistinguishable from a language
+  that genuinely has no sub-file structure — is a violation. *(cites FR-A1; retires the Value risk of
+  overclaiming coverage)*
+- <a id="author-5"></a>**AUTHOR-5 Slots are the closed vocabulary, exactly.** `slots` MUST return exactly
+  the members of the closed `PredicateSlot` union — all of them, none besides — each with its meaning. The
+  set MUST be derived from the union, not transcribed, so a spec revision that adds a slot cannot leave the
+  door stale. *(cites FR-A2)*
+
+### Composition (Prepare — "give me a payload the door will accept")
+
+- <a id="author-6"></a>**AUTHOR-6 A draft is structurally complete.** `draft` MUST return a `GroundedFact`
+  in which **every field the governed emit door reads** is present and well-formed. Identity MUST be minted
+  by the product's own `nodeKey` formula over the candidate view; the grounding's `subtreeHash` MUST be the
+  value the computer (AUTHOR-1) currently derives for the cited anchor. The author supplies the **anchor,
+  the slot, and the claim**; every other field MUST be computed or defaulted, never demanded. *(cites FR-A2)*
+- <a id="author-7"></a>**AUTHOR-7 A draft is rev-stamped.** A draft MUST record the `rev` its grounding was
+  computed at. If a draft is emitted at a different rev than the one it carries, the refusal MUST name the
+  rev mismatch rather than attributing the failure to the claim. *(cites FR-A6, FR-A3)*
+- <a id="author-8"></a>**AUTHOR-8 Draft→emit round-trips.** A fact drafted at rev `R` and emitted with
+  `--at R` against an unchanged repository MUST be accepted by the truth door. This is the **acceptance
+  property of the whole surface**: if it fails, the surface has not delivered its outcome. *(cites FR-A6 —
+  the campaign's exit criterion)*
+- <a id="author-9"></a>**AUTHOR-9 The ratification route is stated up front.** A draft MUST state which
+  route it will take at the governed door — auto-accept, or full ratification — and, when full
+  ratification is required, MUST name the channel that authorizes it. An author MUST NOT have to discover
+  the requirement by having a write refused. *(cites FR-A3)*
+- <a id="author-10"></a>**AUTHOR-10 CREATE and UPDATE are distinguishable.** When a current node already
+  exists at the drafted `(anchor, slot)` identity, the draft MUST report the operation as an UPDATE of that
+  node; otherwise as a CREATE. A draft MUST NOT silently overwrite the author's mental model of what will
+  happen. *(cites FR-A2, FR-A3)*
+- <a id="author-13"></a>**AUTHOR-13 Retire is a draft, not a door.** Retiring or superseding an existing
+  fact MUST be expressed as a draft variant that carries the superseded authoring state, and MUST be
+  persisted through `atlas-emit` under its full set of gates. No retire/delete write door MUST exist.
+  *(cites FR-A4)*
+
+### Confirmation (Confirm — "will this be accepted, and if not, why?")
+
+- <a id="author-11"></a>**AUTHOR-11 The dry-run agrees with the door.** `check` MUST evaluate the same
+  gates, in the same order, as the governed write door, and its verdict MUST agree with the door's verdict
+  for the same fact at the same rev under the same actor and token. A divergence between `check` and the
+  door is a defect in `check`, never a tolerated approximation. *(cites FR-A3, FR-A11 parity)*
+- <a id="author-12"></a>**AUTHOR-12 Every refusal is legible.** Any refusal on this surface, and any
+  refusal on the governed write doors caused by a malformed payload, MUST name **which gate refused** and
+  **what would fix it**. A raw runtime error message (a type error, a stack trace, an undefined-property
+  read) MUST NEVER reach a user as the reason. *(cites FR-A3; the dogfood's observed failure)*
+
+### Monitoring (Monitor — "what did I just write, and how do I address it?")
+
+- <a id="author-14"></a>**AUTHOR-14 The receipt closes the loop.** The value the governed emit door returns
+  on success MUST include the identity the read doors (`atlas node`) and the link door (`atlas-link`)
+  consume. An author MUST be able to address the fact they just wrote without performing a separate query
+  to discover its handle. *(cites FR-A3; the F4 finding)*
+
+### Entrypoints (the two transports)
+
+- <a id="entry-cli-5"></a>**ENTRY-CLI-5 The CLI publishes a help surface.** The CLI MUST expose a help
+  door that names every command, its positional arguments and flags, and the environment channels that
+  govern a write (the actor identity and the ratifier token). A user MUST NOT need to read source to
+  discover the command surface. *(cites FR-A3, and the Usability risk)*
+- <a id="entry-cli-6"></a>**ENTRY-CLI-6 The CLI renders the whole record.** For every leg, the CLI render
+  MUST surface every field of the leg's result record. A field present in the result and absent from the
+  render is a silent drop and a violation. *(cites FR-A3; the F5 finding — two of three `InitOut` fields
+  are dropped today)*
+- <a id="entry-mcp-3"></a>**ENTRY-MCP-3 The advertised MCP surface is the governance surface UNION the
+  read surface.** The MCP server MUST advertise `GOVERNANCE_SURFACE ∪ READ_SURFACE`, where `READ_SURFACE`
+  is a disjoint set every member of which carries **zero** write authority. `GOVERNANCE_SURFACE` MUST
+  remain exactly five and `WRITE_PATHS` exactly two; membership of `READ_SURFACE` MUST NOT confer, imply,
+  or route to a write. *(cites FR-A5, FR-A4; ADR-0005; owner directive)*
+- <a id="entry-mcp-4"></a>**ENTRY-MCP-4 Parity covers every authoring door.** For identical input, every
+  door in this document MUST produce a byte-identical `Verdict` over the CLI and over MCP. The two
+  transports MUST NOT diverge in coercion, defaulting, error shape, or field set. *(cites FR-A5; extends
+  the existing TOOLS-3 CLI≡MCP property to the new doors)*
+
+## Acceptance (this surface's falsifiable checks — S3 lifts goldens from these)
+
+1. A planner run against a read-only store completes and writes **0** bytes. *(AUTHOR-2)*
+2. Mutating the planner's fold makes a subsequently drafted fact **rejected** by the emit truth-gate — i.e.
+   the two derivations are provably the same seam. *(AUTHOR-1)*
+3. `anchors` over the committed fixture repo deep-equals the built index's unit set for that path; a
+   second run is byte-identical; a non-git path yields `units: []` with a reason and no throw. *(AUTHOR-3)*
+4. `anchors` over a fixture containing a file in a grammar-less language returns that file at file level
+   **and** a `holes[]` entry naming the extension and count. *(AUTHOR-4)*
+5. `slots` deep-equals the closed `PredicateSlot` union; adding a member to the union without updating the
+   door is impossible by construction. *(AUTHOR-5)*
+6. A fact drafted from `anchors` output at rev `R`, emitted `--at R` on an unchanged repo, is **accepted**;
+   the same draft emitted after an edit to the anchored unit is refused with the drift reason. *(AUTHOR-8,
+   AUTHOR-7)*
+7. A draft at a `(anchor, slot)` already occupied reports `UPDATE`; at a fresh one, `CREATE`. *(AUTHOR-10)*
+8. A T0 draft reports `full-ratify` and names its authorizing channel **before** any emit is attempted; a
+   T2 advisory draft reports `auto-accept`. *(AUTHOR-9)*
+9. For a corpus spanning accepted and refused facts, `check`'s verdict equals the governed door's verdict
+   on every member. *(AUTHOR-11)*
+10. For every refusal in that corpus, the reason names a gate from the closed `GateName` set and carries a
+    remedy; **no** reason matches a runtime-error shape. *(AUTHOR-12)*
+11. The identity returned by a successful emit resolves through the per-node read door. *(AUTHOR-14)*
+12. `help` names every command in the parser's command list, with its arity and the two environment
+    channels. *(ENTRY-CLI-5)*
+13. For every leg, the set of keys in the rendered output ⊇ the set of fields in the result record.
+    *(ENTRY-CLI-6)*
+14. The advertised MCP tool list equals `GOVERNANCE_SURFACE ∪ READ_SURFACE`; `GOVERNANCE_SURFACE` is
+    unchanged at five; `WRITE_PATHS` is unchanged at two; every `READ_SURFACE` member writes 0 bytes.
+    *(ENTRY-MCP-3)*
+15. For a corpus of inputs, the `Verdict` from the CLI and from MCP are byte-identical for every door.
+    *(ENTRY-MCP-4)*
+
+## Decisions (ratified / DEFINE-pending — the S0 `[NEEDS RECONCILIATION]` queue)
+
+| # | decision | status |
+|---|---|---|
+| **A-D1** | The authoring doors are planners, not write doors; `GOVERNANCE_SURFACE`/`WRITE_PATHS` unchanged | **proposed** — ADR-0004 |
+| **A-D2** | MCP advertises `GOVERNANCE_SURFACE ∪ READ_SURFACE`; the already-built read doors (`doctor`, `node`, `diff`) join it | **proposed** — ADR-0005; owner-directed |
+| **A-D3** | `sameAs` has no retraction door; a wrong link is permanent and transitively contagious | **OPEN — DEFINE required.** Out of appetite for CAMPAIGN-10; must not stay open indefinitely |
+| **A-D4** | KNOW-8 describes staging as "the explorer's ONLY write path", but `stage()` persists nothing and an unratified write is discarded | **OPEN — DEFINE required.** Either the runtime or the constitutional prose is wrong |
+| **A-D5** | Symbol anchoring stays TypeScript-only for CAMPAIGN-10 | **ratified as scope** — the hole is declared (AUTHOR-4), not closed |

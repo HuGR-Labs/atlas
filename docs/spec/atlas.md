@@ -243,6 +243,33 @@ the rest read/derive (ADR-0003):
 - **[Δ Orchestra]** the write path (`atlas-emit` at wave-close) is driven by `ResultCard.absorb`, not a
   separate authoring ritual (A-10).
 
+**Governance surface ≠ advertised surface.** The five tools above are the *governance* surface, of which
+exactly two are write doors. Alongside them the product exposes a **`READ_SURFACE`** — a disjoint set that
+carries **zero write authority** (the authoring planners `atlas-anchors`/`-slots`/`-draft`/`-check`, plus
+the read projections `doctor`/`node`/`diff`). Both sets are advertised over MCP and reachable from the CLI;
+neither `GOVERNANCE_SURFACE` (5) nor `WRITE_PATHS` (2) grows as a result. See
+[ADR-0005](../adr/ADR-0005-mcp-read-surface.md).
+
+### 6.0 Authoring — how a fact is prepared before it reaches a write door
+
+The truth gate re-derives every grounding at emit time, which makes a valid fact **mechanically expensive
+and semantically cheap** to produce: its `subtreeHash` and identity can only be computed by running the
+index. The authoring surface closes that gap without adding write authority — every door below computes a
+payload and persists nothing, exactly as `atlas doctor reground` already does.
+
+| Door | Does | Contract |
+|---|---|---|
+| `atlas-anchors` | list where a fact can be grounded | returns the built index's units under a path (`qualifiedPath` · kind · current `subtreeHash`) + the rev, and **declares** any language it has no grammar for rather than silently degrading (AUTHOR-3/4). |
+| `atlas-slots` | the claim vocabulary | returns the closed `PredicateSlot` union, derived from the union itself so it cannot go stale (AUTHOR-5). |
+| `atlas-draft` | compose a fact the door will accept | the author supplies anchor + slot + claim; identity, grounding, and rev-stamp are computed; the draft states whether it will auto-accept or need full ratification, and whether it is a CREATE or an UPDATE (AUTHOR-6/7/9/10). Retire is a draft variant — **not** a new door (AUTHOR-13). |
+| `atlas-check` | dry-run the write | evaluates the *same gates in the same order* as the governed door and names which one would refuse and what would fix it; persists nothing (AUTHOR-11/12). |
+
+Two properties bind the surface to the rest of the product: **one grounding computer** — planners and the
+truth gate derive through a single seam, never two (AUTHOR-1) — and **round-trip acceptance** — a fact
+drafted at rev `R` and emitted `--at R` on an unchanged repo is accepted (AUTHOR-8). Full normative text:
+[`reference/atlas-authoring.md`](../reference/atlas-authoring.md); rationale:
+[ADR-0004](../adr/ADR-0004-authoring-planner-doors.md).
+
 ### 6.1 Discovery — path-addressed, tool + hook `[Δ Orchestra]`
 
 Knowledge for the code someone is touching MUST surface *without being asked* — the "magically available"
