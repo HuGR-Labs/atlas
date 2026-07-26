@@ -562,12 +562,20 @@ Then it equals exactly `{ atlas-init, atlas-query, atlas-emit, atlas-reconcile, 
 teeth: breaks-on "the server publishes `atlas-init` without its input schema — the enumerated set does not match the five-with-schemas oracle"
 gen: exhaustive
 
-### SCN-MCP-1b-1 — no sixth tool is published   (guard)
+### SCN-MCP-1b-1 — no tool outside the closed union is published   (guard, amended ADR-0006)
 source: REQ-MCP-1b
 Given the published tool set
-When a set-equality assertion runs against the closed five
-Then no sixth tool is registered (cardinality == 5)
-teeth: breaks-on "a debug tool `atlas-dump` is registered as a sixth tool — the published set has cardinality 6 ≠ the closed five"
+When a set-equality assertion runs against the closed `Tool` union
+Then every published tool is a member of the union and no non-member is registered
+teeth: breaks-on "a debug tool `atlas-dump` is registered — it is in neither GOVERNANCE_SURFACE nor READ_SURFACE, so it is outside the closed union"
+gen: exhaustive
+
+### SCN-MCP-1d-1 — advertised equals invocable   (happy, added ADR-0006)
+source: REQ-MCP-1d
+Given the advertised tool list and the set of tokens the handler will actually dispatch
+When the two are compared as sets
+Then they are equal, and both equal the closed `Tool` union
+teeth: breaks-on "a leg bound at the composition root for a token absent from the advertised list — it is invocable over MCP, unadvertised, and invisible to every surface pin (the pre-ADR-0006 state, where callTool dispatched on legs[tool] with no membership check)"
 gen: exhaustive
 
 ### SCN-MCP-1c-1 — every MCP call routes through the shared handler and matches the CLI verdict   (happy)

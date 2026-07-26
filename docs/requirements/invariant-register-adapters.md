@@ -137,9 +137,9 @@ method-tag:
 ### INV-MCP-1
 behavioural: true
 anchor: reference/atlas-adapters.md#mcp-1
-text: "the MCP stdio server MUST publish exactly the five governed tools (incl. atlas-link, ADR-0003) with their input schemas and route every call through the shared WiredHandler, so an MCP call and the equivalent CLI call return contract-identical verdicts"
-clauses: [ "publish exactly the five governed tools with their input schemas", "route every call through the shared WiredHandler (WIRE-1)", "an MCP call and the equivalent CLI call return contract-identical verdicts (TOOLS-3)" ]
-unwanted: [ "a sixth tool is exposed over MCP", "an MCP call diverges from the equivalent CLI call" ]
+text: "the MCP stdio server MUST publish exactly the members of the closed Tool union (GOVERNANCE_SURFACE ∪ READ_SURFACE) with their input schemas, MUST route every call through the shared WiredHandler so an MCP call and the equivalent CLI call return contract-identical verdicts, and MUST derive the advertised and invocable sets from that one union such that they are equal (AMENDED ADR-0006 — was 'exactly the five governed tools'; the count was the mechanism, the parity is the property)"
+clauses: [ "publish exactly the members of the closed Tool union with their input schemas", "route every call through the shared WiredHandler (WIRE-1)", "an MCP call and the equivalent CLI call return contract-identical verdicts (TOOLS-3)", "advertised and invocable are both DERIVED from the one union and are equal (ARCH-5)" ]
+unwanted: [ "a tool outside the closed union is exposed over MCP", "an MCP call diverges from the equivalent CLI call", "the advertised set and the invocable set are maintained independently and drift apart" ]
 method-tag:
 
 ### INV-MCP-2

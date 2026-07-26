@@ -139,10 +139,19 @@ WiredHandler = ReturnType<createHandler>                       // the ONE 5-leg 
   (TOOLS-1/TOOLS-11 CLI-floor). A read command MUST carry no write authority.
 - **CLI-3 Deterministic render.** The CLI MUST render a tool `Verdict` to stdout deterministically and set the
   exit code from the verdict (`0` ok, non-zero on rejected/error), carrying the tool's `guidance` (TOOLS-4).
-- **MCP-1 The server exposes exactly the five tools.** The MCP stdio server MUST publish exactly the five
-  governed tools (`atlas-init`, `atlas-query`, `atlas-emit`, `atlas-reconcile`, `atlas-link` — ADR-0003) with
-  their input schemas and route every call through the shared `WiredHandler` (WIRE-1) — so an MCP call and the
-  equivalent CLI call return contract-identical verdicts (TOOLS-3, by construction).
+- **MCP-1 The server exposes the derived tool surface (amended ADR-0006).** The MCP stdio server MUST publish
+  exactly the members of the closed `Tool` union — `GOVERNANCE_SURFACE ∪ READ_SURFACE`, of which
+  `GOVERNANCE_SURFACE` is the five governed tools (`atlas-init`, `atlas-query`, `atlas-emit`,
+  `atlas-reconcile`, `atlas-link` — ADR-0003) — each with its input schema, and MUST route every call through
+  the shared `WiredHandler` (WIRE-1) — so an MCP call and the equivalent CLI call return contract-identical
+  verdicts (TOOLS-3, by construction). The advertised set and the invocable set MUST both be DERIVED from
+  that one union and MUST be equal; neither may be assembled independently (ARCH-5). No tool outside the
+  union may be published or invocable.
+  *(AMENDED — the original clause read "publishes exactly the five governed tools", with a "no sixth tool"
+  guard. The five was the mechanism available when there were five legs, not the property: MCP-1's own stated
+  purpose is CLI≡MCP contract identity via the one shared handler, which is preserved and, via ARCH-5,
+  strengthened. Owner-ratified 2026-07-25 — see ADR-0006; the same surgery ADR-0003 performed on TOOLS-1's
+  own count claim. The static surface is bounded by a measured budget instead of a fixed count — ARCH-7.)*
 - **MCP-2 Fail-closed transport.** A tool error MUST surface as a structured rejected `Verdict` carried in the
   MCP result; the server MUST NOT crash or drop the fail-closed verdict (TOOLS-2 across the transport).
 - **CLI-4 The `mine` driver composes, it does not admit.** `atlas mine` MUST drive the **already-frozen**
