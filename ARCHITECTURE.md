@@ -6,7 +6,7 @@ map: the module graph, where things live, and the invariants that hold across th
 
 ## The package graph (dependencies point downward only)
 
-Ten packages, one domain each, in a strict layered DAG. A package may import only from packages **below**
+Fifteen packages (nine core layers + the productization ring), one domain each, in a strict layered DAG. A package may import only from packages **below**
 it; nothing ever imports upward. `@atlas/e2e` sits above everything as a pure consumer.
 
 ```
@@ -24,7 +24,7 @@ it; nothing ever imports upward. `@atlas/e2e` sits above everything as a pure co
                               │
                            memory            L6  per-seat scoped memory (≠ knowledge)
                               │
-                            tools            L7  the governed public surface (4 tools · 1 write door)
+                            tools            L7  the governed public surface (5 governed tools · 2 write doors — ADR-0003)
                               │
                           genesis            L8  cold-start miner ($0-LLM seed → grounded proposals)
 
@@ -43,7 +43,7 @@ it; nothing ever imports upward. `@atlas/e2e` sits above everything as a pure co
 | **knowledge** | The fact **lifecycle** (see sub-domains below): grounded emit, status recompute, drift reconcile, write-routing (every write an upsert), template/authz gates, tier + T0 ratification, fastpath, hits ledger. |
 | **retrieval** | **Bounded context assembly**: deterministic `relate()` over the axes, the ~2K-token bounded pack (T0-then-T1 by rank), `own_<unit>`, the injection-ceiling drop-order (two pins never drop, stale-not-trusted), hits-tuned caps. |
 | **memory** | Per-seat **scoped** memory, held distinct from Knowledge by a fail-closed partition; inject-only-own, the Rules slab (top-12 by frecency, evict-never-delete), templated writes, the orchestrator logbook, Awareness/Orientation slabs. |
-| **tools** | The **governed public surface**: one pure+total handler over exactly four tools (`atlas-init/query/emit/reconcile`), a single write door (`atlas-emit`), tri-transport addressability (MCP · poke · CLI, byte-identical, CLI-floor), read-only doctor/diff projections. |
+| **tools** | The **governed public surface**: one pure+total handler over the governed surface (`atlas-init/query/emit/reconcile/link`) with two governed write doors (`atlas-emit`, `atlas-link` — ADR-0003), tri-transport addressability (MCP · poke · CLI, byte-identical, CLI-floor), read-only doctor/diff projections. |
 | **genesis** | The one-time **cold-start miner**: deterministic `$0-LLM` S0/S1 (scan + integer fixed-point PPR rank), budgeted grounded proposal (2-door + WhyNot), mechanical admission (teeth / vacuous-drop), candidate-only writes + one batched ratification pass, seed, resume/checkpoint, governed deepening loops. |
 
 `knowledge` is the one package large enough to group internally, by domain:
@@ -84,7 +84,7 @@ packages/<name>/
   imports one above it.
 - **Hashing only through `@atlas/kernel`.** No package rolls its own digest; identity is always the sealed
   `id` / `canonicalForm` seam.
-- **One governed write door.** Every write flows through `atlas-emit`; reads carry no write authority.
+- **Governed write doors.** Every write flows through a governed door — `atlas-emit` (grounded facts) or `atlas-link` (sameAs), each enforcing authz + a ratifier and failing closed visibly (ADR-0003); reads carry no write authority.
 - **Grounded or nothing.** A fact is served as truth only while *grounded ∧ FRESH*; the gate fails closed.
 - **Knowledge ≠ Memory.** Knowledge is shared and project-level (edited/superseded, never blind-append);
   Memory is per-seat and scoped. A conflation between them fails closed.

@@ -36,7 +36,7 @@ const fakeSource = (): DoctorSource => ({
   plan: (fact: string) => (fact === 'nofix' ? undefined : { action: 'reground', emit: FAKE_EMIT }),
 });
 
-/** A wired handler SPY — the ONLY write door (atlas-emit funnels through it). Doctor must NEVER call it. */
+/** A wired handler SPY — the governed write path (atlas-emit funnels through it). Doctor must NEVER call it. */
 function spyHandler(): { handler: WiredHandler; handle: ReturnType<typeof vi.fn> } {
   const handle = vi.fn((): Verdict => ({ ok: true, data: {}, guidance: { next: 'x', invariant: 'y' } }));
   const handler = { handle, resolveNode: () => ({ ok: false, guidance: { next: 'n/a', invariant: 'n/a' } }), schema: () => ({ name: 'x', description: '', inputSchema: {} }) } as unknown as WiredHandler;

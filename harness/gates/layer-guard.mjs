@@ -23,7 +23,10 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+// The repo root, OVERRIDABLE so the gate's own test can point it at a fixture tree. Without this the gate
+// could only ever be mutation-tested by hand against the live repo — which is precisely the 'trust me' the
+// gate exists to abolish.
+const ROOT = process.env.LAYER_GUARD_ROOT ?? join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const PKGS = join(ROOT, 'packages');
 
 /**
@@ -260,7 +263,7 @@ function boundLegs() {
   return new Set([...block.matchAll(/^\s*['"](atlas-[a-z-]+)['"]\s*:/gm)].map((m) => m[1]));
 }
 
-async function checkSurface() {
+async function checkSurface(legs) {
   let mod;
   try {
     mod = await import(join(PKGS, 'tools', 'dist', 'src', 'index.js'));
@@ -286,8 +289,8 @@ async function checkSurface() {
     if (!governance.includes(t)) note(`ARCH-6 authority violated: write path '${t}' is not in GOVERNANCE_SURFACE`);
   }
 
-  // ARCH-5 — advertised ≡ invocable. The bound legs ARE the invocable set.
-  const legs = boundLegs();
+  // ARCH-5 — the surface constants vs the bound legs (legs are resolved by the caller so ARCH-3 runs
+  // even when dist is absent — an earlier revision nested it here, so a missing build silently skipped it).
   if (legs !== null) {
     for (const t of union) {
       if (!legs.has(t)) note(`ARCH-3/5 '${t}' is declared in the tool surface but has NO bound leg at the composition root — a typed-but-unbound door is a hole`);
@@ -328,7 +331,8 @@ for (const o of opaque) {
   }
 }
 
-const surface = await checkSurface();
+const legs = boundLegs();
+const surface = await checkSurface(legs);
 
 if (fail.length > 0) {
   console.error('layer-guard: FAIL\n');

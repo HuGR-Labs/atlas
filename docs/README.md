@@ -28,6 +28,7 @@ grounded (the docs dogfood the Atlas: reference is pinned to `source@sha` and dr
 - [reference/atlas-persist.md](./reference/atlas-persist.md) — git-native · commits+PRs · archive · re-spawn
 - [reference/atlas-tools.md](./reference/atlas-tools.md) — init/query/emit/reconcile/link (CLI+MCP)
 - [reference/atlas-adapters.md](./reference/atlas-adapters.md) — the productization ring (adapters + entrypoints)
+- [reference/atlas-architecture.md](./reference/atlas-architecture.md) — hierarquia de camadas · modelo de exposição de tools · modelo de autoridade (ARCH-1..12)
 - [reference/atlas-authoring.md](./reference/atlas-authoring.md) — the authoring surface: anchors · slots · draft · check (planners, zero write authority)
 
 ### How-to — *tasks*

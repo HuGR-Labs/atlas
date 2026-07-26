@@ -1,4 +1,4 @@
-// @atlas/e2e — S8 · One governed write door, one contract across every transport
+// @atlas/e2e — S8 · Governed write doors, one contract across every transport
 // AXIS: SECURITY (single write authority) + behaviour (transport-invariance / the CLI-floor).
 //
 // STORY. Atlas exposes its whole read/write API over three transports (MCP tool | poke | CLI), yet the trust
@@ -9,7 +9,7 @@
 //       Verdict (never a throw), with `next+invariant` guidance stamped on every path,
 //   (3) CLI ≡ MCP: the same node resolved at two different pull tiers is byte-identical, `atlas-diff`
 //       renders identically across transports, and the published schema carries NO transport parameter,
-//   (4) the governed store is the SINGLE write door — an ungrounded/forged row is refused, an existing key
+//   (4) the governed store admits writes ONLY through a governed door — an ungrounded/forged row is refused, an existing key
 //       is never overwritten (append-only), a tampered row is never served, and the read/advisory surfaces
 //       (doctor / diff) carry NO write authority (`doctor.reground` returns a PLAN and persists nothing),
 //   (5) the pull ladder is native-first with the CLI as the FLOOR, and a push holds with ZERO tool grant.
@@ -74,7 +74,7 @@ const diffSource: DiffSource = { diff: (a, b) => (a === shaA && b === shaB ? Δ 
 /** A GROUNDED store row — exactly what `atlas-emit`'s content-addressed path produces: key == id(value). */
 const grounded = (value: unknown): StoreRow => ({ key: id(value as CasObject), value });
 
-describe('S8 · one governed write door, one contract across every transport', () => {
+describe('S8 · governed write doors, one contract across every transport', () => {
   // ── (1) SURFACE == 5, WRITE == 2 (WP-SAMEAS) ────────────────────────────────────────────────────────
   it('exposes EXACTLY five governance tools and EXACTLY two governed write paths', () => {
     expect(GOVERNANCE_SURFACE.length).toBe(5);
@@ -152,7 +152,7 @@ describe('S8 · one governed write door, one contract across every transport', (
     }
   });
 
-  // ── (4) SINGLE WRITE DOOR ───────────────────────────────────────────────────────────────────────────
+  // ── (4) GOVERNED WRITE DOOR ───────────────────────────────────────────────────────────────────────────
   it('admits only content-addressed rows through the one door — refuses forged, is append-only, never serves tampered', () => {
     const medium = new Map<string, StoreRow>();
     const store = createGovernedStore(medium);

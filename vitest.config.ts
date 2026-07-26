@@ -8,7 +8,7 @@ import { defineConfig } from 'vitest/config';
 // a source of truth beyond the frozen oracle surface.
 export default defineConfig({
   test: {
-    include: ['packages/*/test/**/*.test.ts', 'packages/*/src/**/*.test.ts'],
+    include: ['packages/*/test/**/*.test.ts', 'packages/*/src/**/*.test.ts', 'harness/**/*.test.mjs'],
     exclude: ['**/node_modules/**', '**/dist/**'],
     // deterministic: no clock/network in the identity path (KERNEL guardrail)
     environment: 'node',

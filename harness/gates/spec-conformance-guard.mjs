@@ -46,6 +46,13 @@ const STALE = [
   /\bno fifth\b/i, /\bfifth (governance|write) tool\b/i,
   /writePaths ?== ?1\b/i, /write-?[sS]urface ?== ?4\b/i, /cardinality ?== ?4\b/i,
   /\bthe closed four\b/i, /\bthe four governed tools\b/i, /\bexactly four\b/i,
+  // The SINGULAR-write-door form. Previously unmatched by ANY pattern — which is how
+  // `handler.ts` shipped "the single fail-closed write door" as the MCP-published description of
+  // `atlas-emit`, telling every agent seat there is one write door, for four days after the amendment.
+  // Matched on the CONCEPT (an optional qualifier may sit between the words) rather than a literal
+  // phrase: a literal `/single[ -]write[ -]door/` misses "single **fail-closed** write door".
+  /\bsingle\b[^.\n]{0,24}\bwrite door\b/i, /\bone\b[^.\n]{0,16}\bwrite door\b/i,
+  /\bthe only write door\b/i, /\bwritePaths ?== ?1\b/i,
 ];
 // A line matching any of these is a LEGITIMATE use, not drift.
 const ALLOW = [
@@ -64,11 +71,22 @@ function walk(dir, exts, out = []) {
   }
   return out;
 }
+/** The repo-root markdown — the FRONT DOOR of the project, and previously outside the sweep entirely.
+ *  `ARCHITECTURE.md` consequently carried the pre-ADR-0003 constitution ("4 tools · 1 write door") for days
+ *  after a 54-file formalization wave: its lines WOULD have matched the existing patterns; the file was
+ *  simply never read. A drift guard that skips the document a newcomer reads first is not a drift guard. */
+function rootDocs() {
+  return readdirSync(REPO, { withFileTypes: true })
+    .filter((e) => e.isFile() && e.name.endsWith('.md'))
+    .map((e) => join(REPO, e.name));
+}
+
 const files = [
   // ADRs are historical decision records — they legitimately narrate the pre-amendment state, so they
   // are excluded from the current-state drift sweep.
   ...walk(join(REPO, 'docs'), ['.md']).filter((f) => !f.includes('/docs/adr/')),
   ...walk(join(REPO, 'packages'), ['.ts']),
+  ...rootDocs(),
 ];
 for (const f of files) {
   const lines = readFileSync(f, 'utf8').split('\n');
@@ -83,7 +101,7 @@ for (const f of files) {
 // Only WHOLE-FILE-pinned modules are gated here (short 8-hex digest of the entire method-tags file, as the
 // TLS + MEM headers document). Both were verified consistent before wiring (pins == current whole-file digest).
 //   • gen/grd/knw/krn/pst/ret carry NO @sha256 pins — nothing to check.
-const WHOLE_FILE_PINNED = ['tls', 'mem'];
+const WHOLE_FILE_PINNED = ['tls', 'mem', 'authoring'];
 for (const mod of WHOLE_FILE_PINNED) {
   const mt = join(REPO, `docs/requirements/method-tags-${mod}.md`);
   const props = join(REPO, `docs/requirements/properties-${mod}.md`);
