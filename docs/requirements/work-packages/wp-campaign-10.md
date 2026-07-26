@@ -88,7 +88,7 @@ acceptance:                                    # ptr+digest
   - source: ../goldens-authoring.md#SCN-AUTH-4b-1  # ptr+digest
   - source: ../goldens-authoring.md#SCN-AUTH-4c-1  # ptr+digest
   - source: ../goldens-authoring.md#SCN-AUTH-4d-1  # ptr+digest
-  - source: ../properties-auth.md#PROP-AUTH-1      # ptr+digest
+  - source: ../properties-authoring.md#PROP-AUTH-1      # ptr+digest
 deps: [ ] · parallel_group: —
 exit_predicate: all acceptance goldens green ∧ PROP-AUTH-1 green ∧ derivation sites == 1 ∧ the pre-existing emit/reconcile suites are byte-unchanged
 context_refs: [ reference/atlas-authoring.md, method-tags-authoring.md#INV-AUTH-1/3/4, adr/ADR-0004 ]
@@ -169,7 +169,7 @@ repair_budget: 3 — early-stop on a totality regression or a changed existing r
 acceptance:                                    # ptr+digest
   - source: ../goldens-authoring.md#SCN-AUTH-2a-1  # ptr+digest
   - source: ../goldens-authoring.md#SCN-AUTH-2d-1  # ptr+digest
-  - source: ../properties-auth.md#PROP-AUTH-2      # ptr+digest
+  - source: ../properties-authoring.md#PROP-AUTH-2      # ptr+digest
 deps: [ WP-10.A1.TOOLS ] · parallel_group: —
 exit_predicate: all acceptance goldens green ∧ PROP-AUTH-2 green ∧ every pre-existing CLI golden byte-unchanged
 context_refs: [ reference/atlas-authoring.md#author-2, goldens-authoring.md ]
@@ -287,7 +287,7 @@ source_reqs:                                   # ptr+digest
 seam-freezes: [ ]
 anchor: packages/e2e-blackbox/test/ — a new story driving the subprocess CLI only; plus the `fix-author` two-commit fixture
 interface_contract:                            # ptr+digest
-  - source: ../properties-auth.md#PROP-AUTH-8      # ptr+digest
+  - source: ../properties-authoring.md#PROP-AUTH-8      # ptr+digest
 exclusions: >
   No product-library imports in any assertion (the harness stays black-box). No MCP arm (EPIC-A5). No
   authoring helper — the story must use ONLY product doors.
@@ -302,10 +302,10 @@ repair_budget: 3 — early-stop if closing the story would require importing a p
 acceptance:                                    # ptr+digest
   - source: ../goldens-authoring.md#SCN-AUTH-8a-1  # ptr+digest
   - source: ../goldens-authoring.md#SCN-AUTH-8b-1  # ptr+digest
-  - source: ../properties-auth.md#PROP-AUTH-8      # ptr+digest
+  - source: ../properties-authoring.md#PROP-AUTH-8      # ptr+digest
 deps: [ WP-10.A2-a.CLI ] · parallel_group: —
 exit_predicate: PROP-AUTH-8 green over the fixture's full unit set ∧ zero @atlas/* imports in the story
-context_refs: [ properties-auth.md#PROP-AUTH-8, goldens-authoring.md#fixture-universe ]
+context_refs: [ properties-authoring.md#PROP-AUTH-8, goldens-authoring.md#fixture-universe ]
 owner: charlie (FORGE)
 outputs: [ ] · provenance: [ ] · trace_ref: —
 rationale: ../../adr/ADR-0004-authoring-planner-doors.md   # ptr
@@ -439,7 +439,7 @@ acceptance:                                    # ptr+digest
   - source: ../goldens-authoring.md#SCN-AUTH-12a-1  # ptr+digest
   - source: ../goldens-authoring.md#SCN-AUTH-12c-1  # ptr+digest
   - source: ../goldens-authoring.md#SCN-AUTH-12d-1  # ptr+digest
-  - source: ../properties-auth.md#PROP-AUTH-12      # ptr+digest
+  - source: ../properties-authoring.md#PROP-AUTH-12      # ptr+digest
 deps: [ WP-10.A1.ADAPTER ] · parallel_group: —
 exit_predicate: all acceptance goldens green ∧ PROP-AUTH-12 green ∧ **every pre-existing governance golden byte-unchanged**
 context_refs: [ reference/atlas-authoring.md#author-11/12, adr/ADR-0003 ]
@@ -467,7 +467,7 @@ interface_contract:                            # ptr+digest
 exclusions: >
   No gate re-implementation — fold the frozen chain. No store handle of any kind (AUTHOR-2). No CLI.
 inputs:                                        # ptr+digest
-  - source: ../properties-auth.md#PROP-AUTH-11           # ptr+digest
+  - source: ../properties-authoring.md#PROP-AUTH-11           # ptr+digest
 action: Implement `check` as a fold of the frozen GateChain with no store handle; ensure every gate result carries a non-empty remedy; run the parity property against the real door over a boundary-straddling corpus including multi-gate failures.
 action_surface: [ read-repo, edit(packages/tools/src/**), run(test:tools), typecheck ]
 guardrails: >
@@ -477,10 +477,10 @@ acceptance:                                    # ptr+digest
   - source: ../goldens-authoring.md#SCN-AUTH-11b-1  # ptr+digest
   - source: ../goldens-authoring.md#SCN-AUTH-11c-1  # ptr+digest
   - source: ../goldens-authoring.md#SCN-AUTH-12b-1  # ptr+digest
-  - source: ../properties-auth.md#PROP-AUTH-11      # ptr+digest
+  - source: ../properties-authoring.md#PROP-AUTH-11      # ptr+digest
 deps: [ WP-10.A3.ADAPTER ] · parallel_group: —
 exit_predicate: PROP-AUTH-11 green including the multi-gate-failure arm (verdict AND first-refusing-gate agree)
-context_refs: [ properties-auth.md#PROP-AUTH-11 ]
+context_refs: [ properties-authoring.md#PROP-AUTH-11 ]
 owner: charlie (FORGE)
 outputs: [ ] · provenance: [ ] · trace_ref: —
 rationale: ../../reference/atlas-authoring.md#author-11   # ptr
@@ -624,26 +624,26 @@ seam-freezes: [ "READ_SURFACE owned-by A5.TOOLS, consumed-by A5.MCP and harness/
 anchor: packages/tools/src/handler.ts — `READ_SURFACE` beside the two existing constants; harness/gates/spec-conformance-guard.mjs — the new pins
 interface_contract:                            # ptr+digest
   - source: ../../reference/atlas-authoring.md#entry-mcp-3   # ptr+digest
-  - source: ../properties-auth.md#PROP-MCP-3                 # ptr+digest
+  - source: ../properties-authoring.md#PROP-MCP-3                 # ptr+digest
 exclusions: >
   GOVERNANCE_SURFACE and WRITE_PATHS stay byte-unchanged. No MCP advertisement (A5.MCP). No new door.
 inputs:                                        # ptr+digest
   - source: ../../adr/ADR-0005-mcp-read-surface.md       # ptr+digest
-action: Add `READ_SURFACE`; assert both disjointness predicates and both cardinalities; run every member under the write-spy; extend the spec-conformance guard's CODE-SURFACE PIN with the new constant and the two disjointness checks; correct the stale `server.ts` "no more, no less" comment and the two remaining "single fail-closed write door" strings, and CLOSE the anti-drift regex hole that let them pass.
+action: Add `READ_SURFACE`; assert both disjointness predicates and both cardinalities; run every member under the write-spy; extend the spec-conformance guard's CODE-SURFACE PIN with the new constant and the two disjointness checks; correct the stale `server.ts` "no more, no less" comment. (The two stale singular-write-door strings in handler.ts, the unscanned repo root, and the missing anti-drift pattern were closed standalone — they had no dependency on this campaign.)
 action_surface: [ read-repo, edit(packages/tools/src/**), edit(harness/gates/spec-conformance-guard.mjs), run(test:tools), run(spec-conformance-guard), typecheck ]
 guardrails: >
   The two governed constants are READ-ONLY. The anti-drift regex must match the CONCEPT, not a literal phrase
-  (the current `/single[ -]write[ -]door/` misses "single **fail-closed** write door" — that hole is in scope).
+  (the singular-form pattern and the repo-root sweep were added standalone; this card no longer owns them).
 repair_budget: 3
 acceptance:                                    # ptr+digest
   - source: ../goldens-authoring.md#SCN-MCP-3b-1  # ptr+digest
   - source: ../goldens-authoring.md#SCN-MCP-3c-1  # ptr+digest
   - source: ../goldens-authoring.md#SCN-MCP-3d-1  # ptr+digest
   - source: ../goldens-authoring.md#SCN-MCP-3g-1  # ptr+digest
-  - source: ../properties-auth.md#PROP-MCP-3      # ptr+digest
+  - source: ../properties-authoring.md#PROP-MCP-3      # ptr+digest
 deps: [ WP-10.A3.TOOLS, WP-10.A4.CLI ] · parallel_group: —
-exit_predicate: PROP-MCP-3 green ∧ the guard fails on a planted "single fail-closed write door" string ∧ both governed constants byte-unchanged
-context_refs: [ adr/ADR-0005-mcp-read-surface.md, properties-auth.md#PROP-MCP-3 ]
+exit_predicate: PROP-MCP-3 green ∧ both governed constants byte-unchanged
+context_refs: [ adr/ADR-0005-mcp-read-surface.md, properties-authoring.md#PROP-MCP-3 ]
 owner: charlie (FORGE); billy (FORTRESS) reviews the surface pin
 outputs: [ ] · provenance: [ ] · trace_ref: —
 rationale: ../../adr/ADR-0005-mcp-read-surface.md   # ptr
@@ -703,11 +703,11 @@ source_reqs:                                   # ptr+digest
 seam-freezes: [ ]
 anchor: packages/e2e-blackbox/test/ — a parity story over both transports; **`packages/e2e-blackbox/test/author.ts` is removed** and every story that imported it re-pointed at the product doors
 interface_contract:                            # ptr+digest
-  - source: ../properties-auth.md#PROP-MCP-4      # ptr+digest
+  - source: ../properties-authoring.md#PROP-MCP-4      # ptr+digest
 exclusions: >
   No product-library imports in any assertion. No new product behaviour — this WP proves and deletes.
 inputs:                                        # ptr+digest
-  - source: ../properties-auth.md#PROP-MCP-4             # ptr+digest
+  - source: ../properties-authoring.md#PROP-MCP-4             # ptr+digest
 action: Drive every authoring door over the subprocess CLI and the stdio MCP harness with valid, malformed, and PARTIALLY-POPULATED inputs, asserting byte-identical Verdicts; author and emit a fact over MCP alone; delete `author.ts` and re-point every dependent story at the product doors.
 action_surface: [ read-repo, edit(packages/e2e-blackbox/**), run(test:e2e-blackbox) ]
 guardrails: >
@@ -719,10 +719,10 @@ acceptance:                                    # ptr+digest
   - source: ../goldens-authoring.md#SCN-MCP-4a-1  # ptr+digest
   - source: ../goldens-authoring.md#SCN-MCP-4b-1  # ptr+digest
   - source: ../goldens-authoring.md#SCN-MCP-4c-1  # ptr+digest
-  - source: ../properties-auth.md#PROP-MCP-4      # ptr+digest
+  - source: ../properties-authoring.md#PROP-MCP-4      # ptr+digest
 deps: [ WP-10.A5.MCP, WP-10.A2-a.E2E ] · parallel_group: —
 exit_predicate: PROP-MCP-4 green (including the partially-populated arm) ∧ **`author.ts` deleted** ∧ zero `@atlas/*` imports across `packages/e2e-blackbox/test/**` ∧ the full black-box suite green
-context_refs: [ properties-auth.md#PROP-MCP-4, adr/ADR-0004 §Consequences ]
+context_refs: [ properties-authoring.md#PROP-MCP-4, adr/ADR-0004 §Consequences ]
 owner: charlie (FORGE); lucy (MICROSCOPE) cold-reviews the deletion
 outputs: [ ] · provenance: [ ] · trace_ref: —
 rationale: ../../adr/ADR-0004-authoring-planner-doors.md   # ptr

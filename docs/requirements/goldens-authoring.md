@@ -8,7 +8,7 @@
 > **Derivation (generated from the method-tag, not hand-authored where a generator exists):**
 > - **5 `PBT` INVs** (AUTH-1, AUTH-8, AUTH-11, AUTH-12, MCP-4) → **`gen: PBT`** — the agreement laws.
 >   Each SCN is a concrete witness instancing a `∀` law whose full statement lives in
->   [`properties-auth.md`](./properties-auth.md); the witness is the entry point, the property is the
+>   [`properties-authoring.md`](./properties-authoring.md); the witness is the entry point, the property is the
 >   coverage.
 > - **8 `exhaustive` INVs** (AUTH-2, AUTH-5, AUTH-9, AUTH-10, AUTH-13, CLI-5, CLI-6, MCP-3) →
 >   **`gen: exhaustive`** — the input space is a finite closed set (the door set, the 12-slot union, the

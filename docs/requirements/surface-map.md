@@ -37,7 +37,7 @@ family and its own S0→S4 artifact set, so the core's counts are unchanged by e
 | surface | campaign | modules (ID families) | invariants | block tier | S2 method-tags | artifact set |
 |---|---|---|---:|---|---|---|
 | **the productization ring** | CAMPAIGN-9 | ADAPTER · WIRE · CLI · MCP | 19 | standard | 0 formal · reference-model / exhaustive / PBT | `*-adapters.md` |
-| **the authoring surface** | CAMPAIGN-10 | **AUTH** (new) · CLI (ext.) · MCP (ext.) | 18 | **elevated** (agreement laws: planner≡gate, check≡door, CLI≡MCP) | 0 formal · **PBT 5 · exhaustive 8 · reference-model 5** | `*-authoring.md` + `properties-auth.md` |
+| **the authoring surface** | CAMPAIGN-10 | **AUTH** (new) · CLI (ext.) · MCP (ext.) | 18 | **elevated** (agreement laws: planner≡gate, check≡door, CLI≡MCP) | 0 formal · **PBT 5 · exhaustive 8 · reference-model 5** | `*-authoring.md` + `properties-authoring.md` |
 
 **Formal footprint is still 1 model total.** Neither surface authors an `FSPEC`; both consume
 `FSPEC-merge` through frozen seams. The authoring surface's `elevated` tier reflects its unusual density of

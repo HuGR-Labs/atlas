@@ -62,7 +62,7 @@ const GUIDANCE: Record<Tool, Guidance> = {
   },
   'atlas-emit': {
     next: 'a rejected write did not re-derive at source@sha — fix the citation and re-emit',
-    invariant: 'TOOLS-1/7: atlas-emit is the single fail-closed write door',
+    invariant: 'TOOLS-1/7: atlas-emit is a governed fail-closed write door (WRITE_PATHS: atlas-emit, atlas-link — ADR-0003)',
   },
   'atlas-reconcile': {
     next: 'a semantic flip blocks the merge (exit 2) — re-author before merging',
@@ -121,7 +121,7 @@ const SCHEMAS: Record<Tool, ToolSchema> = {
   },
   'atlas-emit': {
     name: 'atlas-emit',
-    description: 'the single fail-closed write door — re-derives the citation at source@sha, rejects a node that does not re-derive (TOOLS-1/7)',
+    description: 'a governed fail-closed write door (one of WRITE_PATHS: atlas-emit, atlas-link) — re-derives the citation at source@sha, rejects a node that does not re-derive (TOOLS-1/7, ADR-0003)',
     inputSchema: {
       type: 'object',
       properties: {
