@@ -252,15 +252,25 @@ source: INV-CLI-4 @ reference/atlas-adapters.md#cli-4
 If admission is required, then the `mine` driver shall rely on the frozen run-controller and add none of its own.
 normative-clause: "the `mine` driver wires the parts and **invents no admission of its own**."
 
-### REQ-MCP-1a — exactly the five governed tools
+### REQ-MCP-1a — the published set is the closed tool union   (amended ADR-0006)
 source: INV-MCP-1 @ reference/atlas-adapters.md#mcp-1
-The MCP stdio server shall publish exactly the five governed tools (`atlas-init`, `atlas-query`, `atlas-emit`, `atlas-reconcile`, `atlas-link` — ADR-0003) with their input schemas.
-normative-clause: "The MCP stdio server MUST publish exactly the five governed tools with their input schemas"
+The MCP stdio server shall publish exactly the members of the closed `Tool` union (`GOVERNANCE_SURFACE ∪ READ_SURFACE`) with their input schemas.
+normative-clause: "The MCP stdio server MUST publish exactly the members of the closed `Tool` union — `GOVERNANCE_SURFACE ∪ READ_SURFACE`"
 
-### REQ-MCP-1b — no sixth tool
+### REQ-MCP-1b — no tool outside the union   (amended ADR-0006)
 source: INV-MCP-1 @ reference/atlas-adapters.md#mcp-1
-If a tool is published over MCP, then it shall be one of exactly the five governed tools.
-normative-clause: "publish exactly the five governed tools"
+If a tool is published over MCP, then it shall be a member of the closed `Tool` union.
+normative-clause: "No tool outside the union may be published or invocable."
+
+### REQ-MCP-1d — advertised and invocable are derived and equal   (added ADR-0006)
+source: INV-MCP-1 @ reference/atlas-adapters.md#mcp-1
+The advertised set and the invocable set shall both be derived from the one closed `Tool` union and shall be equal.
+normative-clause: "The advertised set and the invocable set MUST both be DERIVED from that one union and MUST be equal; neither may be assembled independently (ARCH-5)."
+
+### REQ-MCP-1e — no independent drift   (added ADR-0006)
+source: INV-MCP-1 @ reference/atlas-adapters.md#mcp-1
+If the advertised set and the invocable set are computed separately, then the surface conformance gate shall fail.
+normative-clause: "neither may be assembled independently (ARCH-5)"
 
 ### REQ-MCP-1c — MCP and CLI verdicts are identical
 source: INV-MCP-1 @ reference/atlas-adapters.md#mcp-1

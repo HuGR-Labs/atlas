@@ -4,10 +4,22 @@
 > **owner-ratified 2026-07-25**; the rest awaits the DEFINE seat.
 >
 > **Why this document exists.** Three independent cold reviews of CAMPAIGN-10 found the same disease by three
-> different routes: the layer hierarchy was never written down (so a campaign was cut with the dependency
-> direction inverted), the tool-exposure rule lived in two places and contradicted itself, and "advertised"
-> and "invocable" were independent sets nobody bound together. None of that is a detail — it is a **missing
-> constitution**. This is that constitution, and every clause here is enforced by a gate, not by prose.
+> different routes: the layer hierarchy **was written down and never enforced** (`ARCHITECTURE.md` §graph, plus
+> a `// Layer N` header on every core barrel) so a campaign was cut with the dependency direction inverted and
+> nobody consulted it; the tool-exposure rule lived in two places and contradicted itself; and "advertised" and
+> "invocable" were independent sets nobody bound together. None of that is a detail — it is a **constitution
+> that existed only as prose**.
+>
+> **Enforcement status — stated per clause, not claimed globally.** A second review round found that an earlier
+> version of this header claimed *"every clause here is enforced by a gate"* while five clauses had no gate at
+> all. That was exactly the overclaim this document was written to end. The honest position:
+>
+> | clauses | enforcement |
+> |---|---|
+> | **ARCH-1..3, 5..7** | **gated** — `harness/gates/layer-guard.mjs`, in CI, mutation-tested (§1.4) |
+> | **ARCH-4** | self-referential (it *is* the requirement to gate) |
+> | **ARCH-8** (growth path) | **prose** — no gate; triggered by ARCH-7 failing |
+> | **ARCH-9..12** (the whole AUTHORITY model) | **prose only, and NOT YET IMPLEMENTED.** These describe a live governance hole on `master` (§3.1). They are proposed remediation, not shipped behaviour. Tracked as ARCH-D3/D4. |
 >
 > **The bar.** Each of the three models below is grounded in named prior art and, where the state of the art
 > gives a *measured* threshold, the measurement is cited rather than a number being invented.
@@ -118,8 +130,12 @@ one:
 > dynamic projection (§2.3), and the gate MUST fail so the decision is taken deliberately rather than drifted
 > into.
 
-Current surface: 5 governance + 7 read = **12**. Comfortably inside the budget, which is why the amendment
-is safe — and the budget is what makes the *next* addition an explicit decision instead of a slide.
+**Current advertised surface: 5.** That is what exists and what the gate measures. **Projected after
+CAMPAIGN-10: 12** (5 governance + the 4 planners of ADR-0004, which are Proposed and unbuilt, + the 3
+already-built read doors of ADR-0005). Both numbers sit inside the budget, which is why the amendment is
+safe — and the budget is what makes the *next* addition an explicit decision instead of a slide.
+*(An earlier revision stated the current surface as 12. It was 5, and the gate said so on the same day —
+a document whose stated bar is that numbers are cited rather than invented had exactly one invented number.)*
 
 ### 2.3 Growth path — progressive disclosure, which this product already specified
 
@@ -164,23 +180,41 @@ field.
 
 ### 3.2 The rules
 
-> <a id="arch-9"></a>**ARCH-9 A gate-selecting field is not author-supplied.** Any field whose value
-> determines **which** governance gate runs MUST either (a) be inside the integrity envelope that identity is
-> computed over, or (b) be derived by the door rather than read from the payload. It MUST NOT be both
-> author-supplied and gate-selecting. Today `tier` is both; `scope` is the same shape (authz gates on the
-> author-supplied `node.scope` while the read projection scopes on the *derived* `primaryAnchor`, with
-> nothing binding the two).
+> <a id="arch-9"></a>**ARCH-9 A gate-selecting field is derived, never chosen.** Any field whose value
+> determines **which** governance gate runs MUST be **derived by the door from a value the author cannot
+> choose**. The derivation MUST be *sound* — a constant that pins the gate open does not satisfy this clause.
+> In scope by name: `tier` and `kind` (which select the ratification route), `scope` (which selects the authz
+> check), and the door-local `contested` / `lowRisk` context, **two conjuncts of the fast-path predicate that
+> `governed-emit.ts` currently hardcodes to their permissive values**.
+>
+> *Two earlier formulations are rejected and recorded so they are not re-proposed.* **(i) "inside the identity
+> envelope"** — ambiguous and already vacuously true: this codebase has two identities, and `contentHash`
+> covers the whole fact including `tier`, so the clause would certify the reproduced bypass as compliant. Only
+> `nodeKey` routes, and `nodeKey` is the one that omits `tier`. **(ii) a disjunction offering identity-inclusion
+> *or* door-derivation** — unsound for `scope`: putting `scope` in the identity changes nothing, because authz
+> is `actor === scope` on an author-supplied string while the read projection scopes on the derived
+> `primaryAnchor`, with nothing binding them. Only derivation closes it. The clause is therefore a single
+> requirement, not a choice.
 >
 > <a id="arch-10"></a>**ARCH-10 An UPDATE may not lower the authority of what it replaces.** A write that
 > replaces a current node MUST NOT reduce the ratification class of that node without passing the gate the
 > existing node required. Displacement is a supersede, and a supersede of a ratified fact is itself a
 > ratified act.
 >
-> <a id="arch-11"></a>**ARCH-11 Read-only means no handle, not a promise.** A leg with no write authority
-> MUST NOT be *given* a write handle. Write-freedom MUST be a property of what the leg receives — an
-> unforgeable read-only capability — not of a reviewer noticing, and not of a runtime spy. This is the
-> object-capability discipline (Miller; KeyKOS/EROS/Capsicum/CHERI): authority travels as an unforgeable
-> reference, and a component cannot exercise authority it was never handed.
+> <a id="arch-11"></a>**ARCH-11 Read-only means the write handle is not REACHABLE.** A leg with no write
+> authority MUST NOT be able to *reach* a mutator — not through its parameters and **not through its
+> enclosing scope**. Legs MUST therefore be built by a per-leg factory in a module where the wide store
+> handle is never in scope, receiving only a narrow read port. Write-freedom MUST be a property of what the
+> leg can reach, not of a reviewer noticing and not of a runtime spy.
+>
+> *Stated precisely, because the obvious wording is satisfied by the exact defect it targets:* "must not be
+> **given** a handle" is already true today — `wire.ts` builds every leg as an arrow closure in the same
+> lexical scope as `const store = createDiskStore(…)`, so the legs receive only `args` and can still call
+> `store.put`. **Closure capture is the leak; parameter typing does not close it.** And in TypeScript the
+> narrow port is **not unforgeable** — structural types are erased at runtime, so the attenuation must be a
+> real wrapper object (`{ read: (k) => store.read(k) }`), never a cast. The ocap literature
+> (Miller; KeyKOS/EROS/Capsicum/CHERI) is the *source of the discipline*, not a claim that this codebase
+> achieves kernel-grade unforgeability: here the guarantee is compile-time narrowing plus a runtime wrapper.
 
 The repo already has the correct idiom to copy: `packages/tools/src/guard.ts` declares `ReadProjection`
 (`read()` and nothing that mutates), and `NodeSource` is resolve-only. Planner legs MUST be constructed over
@@ -202,6 +236,13 @@ dry-run door (`check`) discloses nothing an attacker could not already read.
 ---
 
 ## 4. Acceptance (falsifiable checks — S3 lifts goldens from these)
+
+> **Enforcement column, not a uniform claim.** ✅ = shipped and mutation-tested in `layer-guard.mjs`;
+> ⬜ = specified, no checker yet. A second review round found four of these presented as uniformly
+> falsifiable when they were not — #4 was false as written (the gate read manifests only, so a planted
+> *import* passed), #8 was satisfiable with no code change, #9 conflicted with ARCH-10's own wording, and
+> #10 was satisfied by the code it targets. #4 is now true (checks 1–7 below are gated); #8–#10 are ⬜ and
+> belong to the unimplemented AUTHORITY model.
 
 1. The package dependency graph is acyclic, and no inner layer imports an outer one. *(ARCH-1, ARCH-2)*
 2. `@atlas/tools` has zero import edges to `adapter-io` / `cli` / `mcp-server`. *(ARCH-2)*
