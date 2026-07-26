@@ -13,7 +13,8 @@
     "test": "vitest run",
     "godfile-guard": "node harness/gates/godfile-guard.mjs",
     "postinstall": "node scripts/fix-scip-types.mjs",
-    "spec-conformance-guard": "node harness/gates/spec-conformance-guard.mjs"
+    "spec-conformance-guard": "node harness/gates/spec-conformance-guard.mjs",
+    "layer-guard": "node harness/gates/layer-guard.mjs"
   },
   "engines": {
     "node": ">=20"
