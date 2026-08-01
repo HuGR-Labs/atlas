@@ -192,6 +192,11 @@ export interface UpsertResult {
  * Adjacency is no longer a merge; it is a derived-on-read `subsumes` relation (WP-DEDUP-2, `deriveSubsumes`),
  * so the destructive fold is gone. The `primaryAnchor`/`slot` carriers on `CurrentNode` STAY — DP-2 reads
  * them off the projection. `cfg` remains in the signature (default τ=1) for callers + the forthcoming DP-2 use.
+ *
+ * CARRY-FORWARD IS THE DEFAULT (ADR-0009): UPDATE and SUPERSEDE both SPREAD the prior node and re-mint only the
+ * fields named inline, so a field added to `CurrentNode` later is carried with no edit here and DROPPING one has
+ * to be spelled out (only `claims`, at SUPERSEDE). `sameAs` is why — a SIGNED act established it (`atlas-link`'s
+ * authz + ratifier over the whole class), and a class that SHRINKS under-charges every gate `sameAsClassOf` prices.
  */
 export function upsert(
   store: StoreProjection,
@@ -239,19 +244,18 @@ export function upsert(
       });
       break;
     }
-    case 'SUPERSEDE': { // ADJACENCY: anchor/slot = req ?? prior (below)
+    case 'SUPERSEDE': {
       const prior = current.get(req.nodeKey)!; // nodeKeyHit ⇒ present
-      const anchor = req.primaryAnchor ?? prior.primaryAnchor; // ADJACENCY: req wins, else preserve prior
-      const slot = req.slot ?? prior.slot;
       cas.add(req.contentHash); // prior.contentHash stays in `cas` (append-only) — old bytes addressable
       current.set(req.nodeKey, {
+        ...prior, // CARRY-FORWARD (ADR-0009, see above): `sameAs` + every future field survive; only ↓ is re-minted
         nodeKey: req.nodeKey,
         family: req.family,
         contentHash: req.contentHash,
-        claims: [req.claimNorm],
+        claims: [req.claimNorm], // the ONE deliberate drop: a predicate version REPLACES its body (prior in CAS)
         supersededBy: prior.contentHash,
-        ...(anchor !== undefined ? { primaryAnchor: anchor } : {}), // ADJACENCY: spread avoids explicit undefined
-        ...(slot !== undefined ? { slot } : {}),
+        ...(req.primaryAnchor !== undefined ? { primaryAnchor: req.primaryAnchor } : {}), // req wins, else `...prior`
+        ...(req.slot !== undefined ? { slot: req.slot } : {}),
       });
       break;
     }

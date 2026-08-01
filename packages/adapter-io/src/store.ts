@@ -117,12 +117,48 @@ function writeSidecar(path: string, projection: StoreProjection, builtAt: string
 }
 
 /**
+ * Is `e` a well-formed `[nodeKey, CurrentNode]` entry — one whose MAP KEY IS the row's OWN `nodeKey`?
+ *
+ * THE representation invariant of `StoreProjection.current` ("nodeKey → the ONE current node", KNOW-4g). Every
+ * in-process producer holds it by construction: `upsert` only ever `current.set(req.nodeKey, {nodeKey:
+ * req.nodeKey, …})`, and `linkSameAs` re-sets rows at the key it fetched them by. NOTHING re-established it
+ * across the disk round-trip, and `new Map(wire.current)` accepts any entry array whatsoever — so a row
+ * written at key `M` declaring `nodeKey: B` rehydrated into a typed `StoreProjection` that no producer could
+ * have made, and every consumer downstream reads one of the two identities without knowing the other exists.
+ * Measured consequence: `sameAsClassOf` SEEDS on the map key but EXPANDED on `nodeKey`, so `classOf(M)`
+ * collapsed to the singleton `[M]` and `governed-link.ts:147` resolved ZERO class members — pricing its authz
+ * and its ratify gates over nothing. Class SHRINKAGE is the bypass direction.
+ *
+ * This is IN the threat model, not out of it: `@atlas/knowledge` `ratify/tier.ts` names this very file as
+ * untrusted input ("a CAS blob out of a COMMITTED `.atlas/` directory … none of those is trusted and none was
+ * validated"). `isTier` exists because of that sentence; the same reasoning covers every other field the
+ * projection carries, `nodeKey` included.
+ */
+function isKeyedEntry(e: unknown): e is readonly [string, CurrentNode] {
+  if (!Array.isArray(e) || e.length !== 2) return false;
+  const [key, row] = e as readonly unknown[];
+  if (typeof key !== 'string' || row === null || typeof row !== 'object') return false;
+  // `nodeKey === key` also settles its TYPE (`key` is a string) — no separate typeof needed, and no coercion:
+  // `===` is byte-exact, so no case-folding, no trimming, no Unicode normalization can smuggle a mismatch.
+  return (row as { readonly nodeKey?: unknown }).nodeKey === key;
+}
+
+/**
  * Read ONE mutable sidecar file back. Shared verbatim by the projection and the staging door (ADR-0008).
  *
  * TOTAL (mirrors `get` below): a missing OR corrupt/unparseable/shape-invalid sidecar reads as "none
  * persisted" (`undefined`) — NEVER a throw. A throw here would crash `rehydrateProjection` (and thus BOTH
  * bins) at boot, since composeRuntime rehydrates at startup. The staging door inherits that discipline by
  * CONSTRUCTION rather than by a promise: it is the same code.
+ *
+ * ALL-OR-NOTHING, deliberately: one invariant-violating row rejects the WHOLE sidecar, exactly as one corrupt
+ * byte or one wrong-shaped `current` already does. Dropping only the offending ROW would be the strictly worse
+ * design — it hands an attacker who can write this file a SELECTIVE "make this node non-current" primitive,
+ * and `governed-link.ts` deliberately SKIPS a class member that is not a current node (a retired key is
+ * nobody's authority), so a targeted drop is exactly the under-pricing this guard exists to stop. Rejecting
+ * the file routes a NEW corruption class into the EXISTING failure mode — `rehydrateProjection` degrades to
+ * `emptyStore()`, under which every write door fails closed on `unknown node` and no gate is priced over a
+ * partial class — so the blast radius is unchanged and no new degradation path is introduced.
  */
 function readSidecar(path: string): StoreProjection | undefined {
   let raw: string;
@@ -143,6 +179,12 @@ function readSidecar(path: string): StoreProjection | undefined {
   // try/catch below also catches the `new Map(5)` TypeError. It stays as the cheap, explicit rejection
   // (and it is the reason the catch is a narrow last resort rather than the only shape check).
   if (!wire || !Array.isArray(wire.current) || !Array.isArray(wire.cas)) return undefined;
+  // INTEGRITY guard (unlike the line above, this one is a TOOTH, not defence-in-depth): every entry must be a
+  // `[key, row]` pair whose key IS `row.nodeKey`. `new Map(wire.current)` accepts ANY entry array, so without
+  // this the disk round-trip is the one producer in the system that can mint a `StoreProjection` violating its
+  // own representation invariant. See `isKeyedEntry` for the measured bypass and for why one bad row rejects
+  // the whole file rather than just itself.
+  if (!wire.current.every(isKeyedEntry)) return undefined;
   // deserialize back: entry-array → Map, array → Set — defended in case an entry itself is non-iterable.
   // N11: carry the watermark back only when a string was persisted (a non-string wire value ⇒ omit ⇒
   // "unknown", the conservative reader default) — keeps the projection shape honest, never a bad type.

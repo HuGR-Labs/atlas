@@ -107,16 +107,28 @@ describe('S7a — owner-scoped authz (KNOW-11): allow in-scope, deny everyone el
     expect(invLines(q.stdout)).toEqual([]); // nothing persisted
   });
 
-  it('DENY (absent scope): a fact whose OWN scope is empty ⇒ no ownership anchor ⇒ exit 2, unauthorized', () => {
+  it('DENY (absent scope): a fact whose OWN scope is empty ⇒ refused at gate 0 ⇒ exit 2, malformed scope', () => {
     const r = repo(scopedPolicy('src'));
-    // A grounded fact carrying an EMPTY scope: `actorInScope` fails closed on `scope.length === 0` even for
-    // the otherwise-authorized ACTOR (there is no scope to be a member of).
+    // A grounded fact carrying an EMPTY scope. This used to be refused DOWNSTREAM as `unauthorized`, because
+    // `actorInScope` fails closed on `scope.length === 0` even for the otherwise-authorized ACTOR (there is no
+    // scope to be a member of). It is now refused EARLIER, at gate 0, as `malformed scope` — `scope` is a
+    // type-only string with no runtime validator upstream, and an unvalidated scope that survives gate 0 can
+    // pass authz by property-key coercion and then brick the node against the relocation gate forever.
+    //
+    // The assertion moved with the code, deliberately, rather than the code being bent to keep the assertion:
+    // the PROPERTY this story protects is unchanged and still checked below in full — refused, exit 2, no id,
+    // nothing persisted. Only the STAGE that refuses it (and so the reason it reports) is different, and
+    // earlier-and-more-specific is the direction we want. Carving `''` back out of gate 0 to preserve the old
+    // string is what caused the `governance-relocation` brick in the first place.
     const spec: FactSpec = { repoPath: r.repoPath, filePath: 'src/foo.ts', slot: 'invariant', claim: 'no-scope fact', tier: 'T1', scope: '' };
     setEnv(ACTOR, RATIFIER);
     const out = emitFact(r, groundedAdvisoryFact(spec));
     expect(out.exitCode).toBe(2);
-    expect(out.stdout).toContain('reason: unauthorized');
+    expect(out.stdout).toContain('reason: malformed scope');
+    expect(out.stdout).not.toContain('reason: unauthorized'); // refused BEFORE authz, not by it
     expect(out.stdout).not.toContain('id:');
+    const q = runAtlas(r.repoPath, ['query', 'src']);
+    expect(invLines(q.stdout)).toEqual([]); // nothing persisted (was unchecked before)
   });
 });
 

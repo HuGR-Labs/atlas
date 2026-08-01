@@ -92,8 +92,18 @@ the target rather than of the write:
 - **Class** — is the declared `tier` weaker than the stored one? Failing this is `governance-downgrade`.
 
 **3. An unreadable incumbent fails closed.** If the projection names a node whose CAS bytes are absent
-(pruned store, partial restore), the class it requires is unknowable, so the write is refused
-`unverifiable target` — never gated on the write's own claim, which is exactly the hole.
+(pruned store, partial restore), the class it requires is unknowable, so the write is refused — never gated
+on the write's own claim, which is exactly the hole.
+
+> **Amended (F1, task #84 follow-up) — `atlas-emit` no longer reports this as a DISTINCT reason.** A separate
+> `unverifiable target` string, returned *before* the authority check, let an actor authorized only in
+> `public` distinguish a healthy `core` node from one whose CAS bytes had been pruned, at an identity anyone
+> can pre-compute from public code structure — a storage-health oracle over another scope's nodes, and a
+> direct contradiction of this ADR's own increasing-disclosure ordering. Reordering does not fix it: with the
+> bytes gone there is no scope left to check, so no caller can be *shown* to have authority and any distinct
+> string IS the oracle. The two are now ONE gate returning `unauthorized for target`, whose text names both
+> causes. `atlas-link` keeps its distinct `unverifiable endpoint` (different door, different disclosure
+> profile — see SCN-GL-7); this amendment is about `atlas-emit` only.
 
 **4. `atlas-link` runs the same KNOW-8 law, over the JOIN of every class the link MERGES.** A link touching a
 `T0` node is a `T0` act and needs `billy`. `sameAs` being non-destructive was the reason the tier gate was
@@ -154,9 +164,13 @@ Recorded because the first draft's own §Decision asserted things a cold review 
 
 ## Consequences
 
-- Four new fail-closed reasons on `atlas-emit`: `malformed tier`, `unauthorized for target`,
-  `governance-downgrade` and `unverifiable target`. All are legible on the CLI and MCP surfaces via the
-  existing rejection channel (WP-F2F5).
+- New fail-closed reasons on `atlas-emit`: `malformed tier`, `unauthorized for target` and
+  `governance-downgrade` — plus, from the F1 follow-up, `malformed scope` (the other half of the
+  `(scope, tier)` pair: unvalidated, it passed authz by key COERCION and then failed the relocation gate
+  forever, bricking the node) and `malformed family` (`kind` cross-checked against `check` presence, the
+  single discriminant `nodeKey`/`route` already use). An unreadable incumbent is reported as
+  `unauthorized for target`, per the amendment above, NOT as its own reason. All are legible on the CLI and
+  MCP surfaces via the existing rejection channel (WP-F2F5).
 - `atlas-link` gains `unverifiable endpoint`, and its `unratified` reason now names the `billy` condition.
   Previously an unreadable fact degraded to an absent scope and was reported merely `unauthorized` — which
   reads as a policy problem an admin would try to fix by *granting a scope*.

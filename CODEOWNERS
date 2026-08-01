@@ -4,6 +4,9 @@
 
 # The INTENDED owner of the governance policy. NOT IN FORCE: @HuGR-Labs/atlas-admins does not exist
 # (`gh api orgs/HuGR-Labs/teams` -> [], same in the former HumanGuardrail org), so GitHub rejects this
-# line -- `gh api repos/HuGR-Labs/atlas/codeowners/errors` reports "Unknown owner on line 7". No review
-# is requested for this path today. Create the team (visible, with write access) to make it real.
+# entry -- `gh api repos/HuGR-Labs/atlas/codeowners/errors` reports "Unknown owner" for the
+# /.atlas/policy.json rule below. (That endpoint reads the DEFAULT BRANCH, so until this branch merges it
+# still quotes the pre-move `@HumanGuardrail/atlas-admins` string; the verdict is the same either way --
+# neither team exists.) No review is requested for this path today. Create the team (visible, with write
+# access) to make it real.
 /.atlas/policy.json @HuGR-Labs/atlas-admins

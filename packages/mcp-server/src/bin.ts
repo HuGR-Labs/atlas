@@ -4,7 +4,9 @@
 // The thin production entrypoint: `composeRuntime(process.cwd())` reads the repo at the cwd (policy, index
 // axes, durable CAS) and returns THE one governed durable `WiredHandler`; `createMcpServer` serves it over
 // the SDK stdio transport. No per-entrypoint governance is constructed here — the composition root
-// (@atlas/adapter-io) owns the seams (COMPOSE-A), this bin owns nothing but the wiring (WIRE-1: CLI ≡ MCP).
+// (@atlas/adapter-io) owns the seams (COMPOSE-A), this bin owns nothing but the wiring (WIRE-1: CLI ≡ MCP
+// — the SAME composed handler behind both entrypoints, which is NOT the same as the same exposed surface;
+// three CLI commands have no MCP tool, see the parity note in server.ts).
 import { composeRuntime, initAst } from '@atlas/adapter-io';
 import { createMcpServer } from './server.js';
 

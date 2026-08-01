@@ -11,7 +11,9 @@ one. **Neither lock mechanism below is in force today** — see the status note 
 1. **Ownership — CODEOWNERS.** The repo-root `CODEOWNERS` assigns `/.atlas/policy.json` to
    `@HuGR-Labs/atlas-admins`. **NOT IN FORCE:** that team does not exist. `gh api orgs/HuGR-Labs/teams`
    returns `[]` (as does the former `HumanGuardrail` org), and `gh api repos/HuGR-Labs/atlas/codeowners/errors`
-   reports `Unknown owner on line 7`. GitHub cannot request review from a team that is not there, so the
+   reports `Unknown owner` for the `/.atlas/policy.json` rule. (That endpoint reads the **default branch**,
+   so it still quotes the pre-move `@HumanGuardrail/atlas-admins` string until the rename lands on `master`;
+   neither team exists, so the verdict is identical.) GitHub cannot request review from a team that is not there, so the
    entry protects nothing. It starts binding only once the team exists, is visible, has write access — and
    only together with mechanism 2.
 2. **Enforcement — branch protection.** CODEOWNERS is only advisory until branch protection makes the

@@ -26,11 +26,31 @@ export interface AuthzApi {
   authz(op: AuthzOp, actor: string, fact: GroundedFact): boolean;
 }
 
+/**
+ * Is `v` a WELL-FORMED ownership anchor — a non-empty string? THE runtime guard for the other half of the
+ * `(scope, tier)` pair, and the exact counterpart of `isTier` (ratify/tier.ts): `scope` is declared
+ * `string | undefined` on the frozen `GroundedFact`, a TYPE that evaporates at runtime, and every value
+ * that reaches a door arrives from `JSON.parse` (the CLI wire), an SDK-parsed MCP argument (`node` is a
+ * bare `object` there), a CAS blob, or an in-process embedder — none of them validated.
+ *
+ * Byte-exact and TOTAL over `unknown`, by the same discipline as `isTier`: `typeof v === 'string'` FIRST,
+ * so nothing reaches a comparison by coercion — no `String` object, no `Symbol`, no array, no object whose
+ * `toString`/`valueOf` renders a legitimate scope name. That last shape is not hypothetical: a scope is
+ * used as a property KEY (`hasOwnProperty(scopes, scope)`), and a property key coerces, so `["core"]` and
+ * `{toString:() => 'core'}` both READ as the scope `core` in an authorization lookup while remaining
+ * `!==`-unequal to the string `'core'` — and to every other copy of themselves — at every later comparison.
+ * No case-folding, no trimming, no Unicode normalization: the value that is checked is the value stored.
+ */
+export function isScope(v: unknown): v is string {
+  return typeof v === 'string' && v.length > 0;
+}
+
 /** In-scope predicate (KNOW-11): `true` iff `actor` is in `scope`. Nominal territory-scope match — the
- *  honest reference model (method-tags-knw INV-KNOW-11 down-model). FAIL-CLOSED: an absent/empty scope has
- *  no anchor ⇒ `false` (no write authorized). */
+ *  honest reference model (method-tags-knw INV-KNOW-11 down-model). FAIL-CLOSED: an absent/empty (or
+ *  otherwise malformed) scope has no anchor ⇒ `false` (no write authorized) — the emptiness test IS
+ *  {@link isScope}, read from the one guard rather than re-encoded here. */
 export function inScope(actor: string, scope: string | undefined): boolean {
-  if (scope === undefined || scope.length === 0) return false; // no ownership anchor ⇒ fail closed
+  if (!isScope(scope)) return false; // no ownership anchor ⇒ fail closed
   return actor === scope;
 }
 

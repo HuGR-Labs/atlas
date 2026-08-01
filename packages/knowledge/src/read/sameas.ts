@@ -28,11 +28,14 @@ function cmp(x: string, y: string): number {
 
 /**
  * Derive the FULL transitive equivalence relation over the projection's current nodes (WP-SAMEAS). Union-find
- * over `projection.current` keys: for each node, `union(node.nodeKey, peer)` for every `peer` in its stored
- * `sameAs` ONLY IF `peer` is ALSO a current node (a dangling edge to a retired/absent nodeKey is ignored,
- * never a throw). Then group by root; for every class of size ≥2 emit ALL canonical intra-class pairs
- * `{a,b}` with `a<b`. Result is SORTED by `(a,b)` ascending — total, self-pair-free, each pair once. Pure +
- * total, no clock/LLM. A node with no `sameAs` is a singleton (contributes nothing).
+ * over `projection.current` keys: for each entry, `union(key, peer)` for every `peer` in its stored `sameAs`
+ * ONLY IF `peer` is ALSO a current node (a dangling edge to a retired/absent nodeKey is ignored, never a
+ * throw), plus `union(key, node.nodeKey)` — a no-op under KNOW-4g's `key === nodeKey` invariant, and the
+ * conservative reading of a row that violates it. Then group by root; for every class of size ≥2 emit ALL
+ * canonical intra-class pairs `{a,b}` with `a<b`. Result is SORTED by `(a,b)` ascending — total,
+ * self-pair-free, each pair once. Pure + total, no clock/LLM. A node with no `sameAs` is a singleton
+ * (contributes nothing). `find` is TOTAL over off-domain keys — see the comment on it; the partial version
+ * spliced unrelated classes through a shared `undefined` parent slot.
  */
 export function deriveSameAs(projection: StoreProjection): readonly SameAs[] {
   const keys = [...projection.current.keys()];
@@ -40,25 +43,48 @@ export function deriveSameAs(projection: StoreProjection): readonly SameAs[] {
   const parent = new Map<string, string>();
   for (const k of keys) parent.set(k, k);
 
+  // TOTAL `find` — a key with NO entry in `parent` is its OWN root, and NOTHING is written for it.
+  // The previous `while (parent.get(r) !== r) r = parent.get(r) as string` was PARTIAL: for an off-domain key
+  // the first `parent.get` returned `undefined`, `undefined !== undefined` is false, so the walk STOPPED on
+  // `undefined` and returned it as a root. `union` then stored that root as a KEY (`parent.set(undefined, …)`),
+  // and the NEXT off-domain `find` walked into that one shared `undefined` slot and came back with a root from
+  // a COMPLETELY UNRELATED class — splicing two classes together on an edge nobody stored. Measured: it also
+  // broke PROP-SAMEAS-1 (the spliced pair is derived-equal yet outside the door class), the one direction the
+  // link gate may never lose.
   const find = (x: string): string => {
     let r = x;
-    while (parent.get(r) !== r) r = parent.get(r) as string;
-    return r;
+    for (;;) {
+      const p = parent.get(r);
+      if (p === undefined || p === r) return r; // absent ⇒ its own root (total); self-parent ⇒ the root
+      r = p;
+    }
   };
   const union = (x: string, y: string): void => {
     const rx = find(x);
     const ry = find(y);
     if (rx === ry) return;
-    // Attach the LARGER root under the SMALLER — the class root is deterministic (the min key), independent
-    // of edge/iteration order, so the fold is a pure function of the stored relation.
+    // Attach the LARGER root under the SMALLER — the class root is deterministically the MIN member of the
+    // class, independent of edge/iteration order, so the fold is a pure function of the stored relation.
+    // (MEMBER, not "current key": a divergent row's declared `nodeKey` below may be off-domain and may be that
+    // minimum. It never reaches the OUTPUT — the grouping pass below enumerates `keys` only — it merely roots
+    // the bucket, and it is chosen by the same min rule, so determinism is unchanged.)
     if (rx < ry) parent.set(ry, rx);
     else parent.set(rx, ry);
   };
 
-  for (const node of projection.current.values()) {
+  for (const [key, node] of projection.current) {
+    // A row has TWO identities: the ADDRESS it is stored at (`key` — what every reader and every write door
+    // looks it up by) and the identity it declares about ITSELF (`node.nodeKey`). KNOW-4g makes them the same
+    // string, and `readSidecar` (adapter-io) now REFUSES a whole sidecar in which any row diverges — but this
+    // fold is a pure library function over ANY `StoreProjection`, so it relates BOTH identities instead of
+    // silently trusting one. Under the invariant `key === node.nodeKey` and this union is a no-op, so nothing
+    // about a well-formed projection changes; under a divergent row the class only ever WIDENS (the
+    // conservative direction), and in particular the edges stored AT `key` are never lost — losing them is
+    // class SHRINKAGE, which is the bypass direction the door is priced against.
+    union(key, node.nodeKey);
     if (node.sameAs === undefined) continue;
     for (const peer of node.sameAs) {
-      if (present.has(peer)) union(node.nodeKey, peer); // dangling peer (not current) ⇒ ignored (total)
+      if (present.has(peer)) union(key, peer); // dangling peer (not current) ⇒ ignored (total)
     }
   }
 
@@ -96,6 +122,14 @@ export function deriveSameAs(projection: StoreProjection): readonly SameAs[] {
  * links B to their own node M, and the derived relation contains `{A, M}` — the attacker's node is inside the
  * `T0` node's class, and every read fold walks it, without billy ever signing that.
  *
+ * The class is expanded on ALL THREE of a row's identities — the map key it is STORED at, the `nodeKey` it
+ * DECLARES, and its stored peers. Seeding on the key while expanding only on `nodeKey` was a live class
+ * SHRINKAGE: for a row written at key `M` declaring `nodeKey: B, sameAs: [A]`, `classOf(M)` came back the
+ * singleton `[M]`, so `governed-link.ts` resolved ZERO members and priced its authz and ratify gates over
+ * nothing. That row shape needs write access to `.atlas/projection.json`, which is squarely IN the threat
+ * model (see `ratify/tier.ts` on the projection as untrusted input) — `readSidecar` now refuses such a
+ * sidecar outright, and this fold degrades conservatively if one ever arrives by another route.
+ *
  * Pure + total, no clock/LLM. NOT the same fold as `deriveSameAs`: that one is a union-find that SKIPS
  * non-current peers, this one is a fixed-point expansion that follows them. So the two DO disagree — a
  * retired peer bridging two live nodes merges them here and not there. The divergence is a deliberate,
@@ -111,12 +145,19 @@ export function sameAsClassOf(projection: StoreProjection, key: string): readonl
   let grew = true;
   while (grew) {
     grew = false;
-    for (const node of projection.current.values()) {
-      const peers = node.sameAs;
-      if (peers === undefined) continue;
-      const touches = members.has(node.nodeKey) || peers.some((p) => members.has(p));
+    for (const [rowKey, node] of projection.current) {
+      // THREE identities per row, all of them followed: the ADDRESS the row is stored at (`rowKey` — what
+      // this query is SEEDED with, and what the door then looks members up by), the identity the row DECLARES
+      // (`node.nodeKey` — what the expansion used to run on, exclusively), and its stored peers. KNOW-4g makes
+      // the first two the same string, so under a well-formed projection this is exactly the old fold. When
+      // they DIVERGE, seeding on one and expanding on the other made the endpoint's own edges invisible and
+      // COLLAPSED the class to a singleton — `classOf(M) = [M]` for a row at `M` declaring `B ~ A` — which is
+      // class shrinkage, i.e. the gate prices its authz and ratify checks over nothing. Following all three
+      // can only ever WIDEN, and a wider class merely asks a link for a stronger signature.
+      const peers = node.sameAs ?? [];
+      const touches = members.has(rowKey) || members.has(node.nodeKey) || peers.some((p) => members.has(p));
       if (!touches) continue;
-      for (const k of [node.nodeKey, ...peers]) {
+      for (const k of [rowKey, node.nodeKey, ...peers]) {
         if (!members.has(k)) {
           members.add(k);
           grew = true;

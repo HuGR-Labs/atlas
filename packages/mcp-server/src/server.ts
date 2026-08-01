@@ -3,9 +3,17 @@
 // Stand up a stdio MCP server whose every tool call routes through the one wired handler (@atlas/adapter-io),
 // returning the frozen `Verdict` (@atlas/tools) shape. The advertised surface is `GOVERNANCE_SURFACE ∪
 // READ_SURFACE` (ADR-0006 superseded the older "publishes exactly five" rule); it enumerates to the five
-// governance tools TODAY only because `READ_SURFACE` is still empty. Each tool's `inputSchema` +
-// `description` come from `handler.schema(tool)` (the
-// handler OWNS the published schema, TOOLS-3 — never hand-authored here). A CallTool routes through
+// governance tools TODAY only because `READ_SURFACE` is still empty — the constant has NO export site
+// anywhere in `packages/**` (CAMPAIGN-10.3 / WP-10.A5.TOOLS is not built), which `npm run layer-guard`
+// reports as DECLARED UNCOVERED on every run.
+//
+// PARITY — precisely which one holds. SCHEMA + VERDICT parity HOLDS: `inputSchema`/`description` are read
+// from `handler.schema(tool)` verbatim and every call routes through the ONE wired handler, so identical
+// input yields a byte-identical `Verdict` on CLI and MCP (TOOLS-3). SURFACE parity does NOT hold: the CLI
+// exposes EIGHT commands (`@atlas/cli` `COMMANDS`), and `doctor`, `mine` and `node` are absent from
+// `GOVERNANCE_SURFACE`, so they are CLI-only and unreachable over MCP. Do not read "CLI ≡ MCP" below as a
+// claim that the two transports reach the same set of operations — it is a claim about the schema bytes.
+// A CallTool routes through
 // `handler.handle(tool, args)` and maps the total `Verdict` → `CallToolResult`: a rejected (fail-closed)
 // verdict is rendered as an `isError` result whose text CARRIES `rejected` + `guidance` (never an empty
 // error — the known past bug). Pure + total: no clock, no random, and the transport never throws to the SDK.
@@ -40,7 +48,8 @@ const SERVER_INFO = { name: '@atlas/mcp-server', version: '0.0.0' } as const;
  * The advertised tool list (ListTools) — EXACTLY the `GOVERNANCE_SURFACE` tools, no more, no less (TOOLS-1;
  * WP-SAMEAS extended the surface to five with the governed `atlas-link` write door). The MCP tool `name` is
  * the `Tool` string; `description` + `inputSchema` are read from
- * `handler.schema(tool)` (the handler owns the published schema — CLI ≡ MCP, byte-identical, TOOLS-3). The
+ * `handler.schema(tool)` (the handler owns the published schema — CLI ≡ MCP in SCHEMA and VERDICT bytes,
+ * TOOLS-3; NOT in exposed surface — see the file header for the three CLI-only commands). The
  * `inputSchema` is a JSON-Schema object structurally (`{type:'object',…}`), narrowed to the SDK's schema
  * shape at the transport boundary — the bytes are the handler's, unaltered.
  */

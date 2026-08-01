@@ -12,7 +12,8 @@ export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine',
 export type Command = (typeof COMMANDS)[number];
 
 /** The leg a command routes to — a governance `Tool`, or the genesis entry (data-only; NOT executed here —
- *  the `mine` driver is a SEPARATE WP, WP-9.3.6-b.CLI). Present only so the map is total over all six. */
+ *  the `mine` driver is a SEPARATE WP, WP-9.3.6-b.CLI). Present only so the map is total over all EIGHT
+ *  commands (this said "all six" until `node` and `link` were added — `COMMANDS.length` is the oracle). */
 export type Leg = Tool | 'genesis run-controller';
 
 /**
@@ -38,8 +39,10 @@ export type Authority = 'read' | 'write';
 
 /**
  * CLI-2: a command carries WRITE authority IFF its leg is a `WRITE_PATHS` door. Asserted against the frozen
- * `WRITE_PATHS` constant (@atlas/tools) — NOT a re-typed list — so the single-door partition (`atlas-emit`
- * only) cannot drift here. Read XOR write, total over the whole surface.
+ * `WRITE_PATHS` constant (@atlas/tools) — NOT a re-typed list — so the read/write partition cannot drift
+ * here. Today that is `emit` and `link` (ADR-0003 ratified the second governed door); this comment used to
+ * say "the single-door partition (`atlas-emit` only)", which the constant it points at already contradicted.
+ * Read XOR write, total over the whole surface.
  */
 export function authorityOf(command: Command): Authority {
   const leg = COMMAND_LEG[command];

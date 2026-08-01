@@ -20,10 +20,13 @@ export type * from './types.js';
 export * from './emit.js';        // WP-4.11-a.TOOLS — atlas-emit re-derives citation at source@sha, fail-closed reject
 export * from './reconcile.js';   // WP-4.12-a.TOOLS — atlas-reconcile: classify drift into a reviewable DriftItem[] (exit 2 on semantic)
 export * from './init.js';        // WP-8.27.TOOLS — atlas-init move-in: $0-LLM structural skeleton + blast radius + T0-candidate flags
-export * from './guard.js';       // WP-7.26-a.TOOLS — single governed write-door + append-only/permissioned store
-export * from './handler.js';     // WP-7.26-a/-b/-c.TOOLS — one pure+total handler (surface==4, write==atlas-emit) + schema + resolveNode
+export * from './guard.js';       // WP-7.26-a.TOOLS — INV-TOOLS-15 single-write-door structural store guard (store-row medium: emit-only, append-only/permissioned)
+export * from './handler.js';     // WP-7.26-a/-b/-c.TOOLS — one pure+total handler (GOVERNANCE_SURFACE.length === 5, WRITE_PATHS === ['atlas-emit','atlas-link']) + schema + resolveNode
 export * from './query.js';       // WP-7.26-b.TOOLS — atlas-query read projection
 export * from './doctor.js';      // WP-7.26-b.TOOLS — read/advisory-only doctor (persists nothing; reground → plan via atlas-emit)
 export * from './transport.js';   // WP-7.26-c.TOOLS — tri-transport addressability + spawn ladder (one contract across MCP/poke/CLI, CLI-floor)
-export * from './diff.js';        // WP-7.32.TOOLS — atlas-diff read-only version-delta projection (CLI≡MCP, not a 5th tool)
+export * from './diff.js';        // WP-7.32.TOOLS — atlas-diff read-only version-delta projection; NOT a member of GOVERNANCE_SURFACE
+//                                   (the barrel used to call it "not a 5th tool" — pre-ADR-0003 wording; the surface is 5, so it would
+//                                   be a sixth — and it is wired to NEITHER transport today: no `atlas diff` CLI command, and MCP
+//                                   advertises GOVERNANCE_SURFACE only, so `handle('atlas-diff')` fails closed as off-surface)
 export * from './push.js';        // WP-6.22.TOOLS — TOOLS-14 phase-transition auto-inject (push-no-grant, mid-task pull non-load-bearing)
