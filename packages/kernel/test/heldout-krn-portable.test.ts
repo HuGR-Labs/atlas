@@ -91,6 +91,49 @@ describe('GATE held-out — SCN-KERNEL-6b-2: no env/binary leak + malformed-enve
     // objects missing entirely
     expect(() => importCas(JSON.stringify({ format: 'atlas-okf', version: 1 }))).toThrow();
     // a WELL-FORMED envelope still imports (fail-closed, not fail-always)
+    //
+    // AMENDMENT (declared, not silent). This case previously filed `e1` under the hand-written key
+    // `asHash('abcd')`. The PROPERTY it exists to protect — "the fail-closed guard must not degenerate into
+    // fail-always; a valid bundle still imports" — is real and is preserved verbatim below. Only the FIXTURE
+    // changed, for three reasons, none of which is "to make a source change pass":
+    //   (a) it contradicted this file's own stated method (see the header: "content keys are minted through
+    //       the sealed `id` seam") — `'abcd'` is a hand-written key, the one thing the header forbids;
+    //   (b) it asserted the construction of a `Cas` that KERNEL-3 forbids ("Every Atlas object MUST be keyed
+    //       by its hash in the single CAS"), so the state it pinned is not a legal store; and
+    //   (c) the ratified scenario it descends from, SCN-KERNEL-6b-2, says nothing about off-address keys —
+    //       its subject is env-relative references and proprietary binary encodings. The assertion was the
+    //       transcriber's own elaboration, not ratified text.
+    // For the record: `asHash('abcd')` is NOT hash-shaped, so it still imports under the shipped guard —
+    // the original line would still PASS. This amendment adds teeth; it does not rescue the change.
+    const good = JSON.stringify({ format: 'atlas-okf', version: 1, objects: { [id(e1)]: e1 } });
+    expect(() => importCas(good)).not.toThrow();
+    expect(importCas(good).get(id(e1))).toEqual(e1);
+  });
+
+  it('import FAILS CLOSED on a body that is not addressed by the key it is filed under', () => {
+    // The teeth the original fixture could not grow: a bundle is ordinary text in a PR or on disk, so the
+    // realistic attack is not a malformed envelope — it is a PERFECTLY well-formed one whose body was edited
+    // while its key was left alone. Without a re-derivation on import, the forged body is served under the
+    // honest fact's content address and every reader that trusts the key inherits it.
+    const honest = { kind: 'Claim', nodeKey: 'claim:acme-arr-2024', content: 'ARR is $10M', fresh: true };
+    const key = id(honest);
+    const forged = { ...honest, content: 'ARR is $99M' };
+    expect(id(forged)).not.toBe(key); // the edit really does move the address
+
+    const tampered = JSON.stringify({ format: 'atlas-okf', version: 1, objects: { [key]: forged } });
+    expect(() => importCas(tampered)).toThrow(/not addressed by its content/);
+    // and the honest bundle at the same key still imports (fail-closed, not fail-always)
+    const clean = JSON.stringify({ format: 'atlas-okf', version: 1, objects: { [key]: honest } });
+    expect(importCas(clean).get(key)).toEqual(honest);
+  });
+
+  it('SCOPE — an entry under a NON-address key is carried verbatim (it can impersonate nothing)', () => {
+    // The original held-out assertion, kept VERBATIM and relabelled rather than deleted: it is a true and
+    // useful statement about the door's scope. `'abcd'` is not hash-shaped, so no `cas.get(<digest>)` can
+    // ever resolve it and it cannot be served in place of a real fact; it is therefore carried through
+    // rather than re-derived. Recorded so the boundary of the integrity check is explicit and testable —
+    // if a future change tightens this to "every key must be a content address", THIS test is the one that
+    // must be argued down, and the ratified symbolic-handle fixture convention re-decided with it.
     const good = JSON.stringify({ format: 'atlas-okf', version: 1, objects: { [asHash('abcd')]: e1 } });
     expect(() => importCas(good)).not.toThrow();
     expect(importCas(good).get(asHash('abcd'))).toEqual(e1);

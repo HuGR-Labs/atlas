@@ -115,6 +115,61 @@ describe('PROP-KERNEL-8 — identity stability (∀-law)', () => {
   });
 });
 
+// ── KERNEL-1 · the NFC key-collision fail-closed (regression) ───────────────────────────────────────
+//
+// NFC is applied to KEYS as well as values (ratified: REQ-KERNEL-1a, held-out SCN-KERNEL-1a-2). NFC is not
+// injective, so two DISTINCT JavaScript keys can normalize to one. Before the guard those two keys both
+// survived into the sorted entry list, the comparator returned 0 for the pair, and V8's stable sort
+// therefore preserved their INSERTION order — emitting a duplicate-key preimage whose bytes depend on how
+// the object happened to be built. MEASURED on base 80318d0: the SAME mapping
+// {"cafe\u00e9" -> 1, "cafe\u0301" -> 2} hashed bcee1c10… when the composed key was assigned first and
+// a065e84a… when the decomposed key was assigned first. Two digests for one logical value is a
+// canonicalizer that is not canonical — the "two CAS objects for one fact" fork KERNEL-1 forbids, reached
+// from the opposite direction to the float/escape splits, and the disposition the design surface mandates
+// for such a divergence is fail-closed reject.
+//
+// Escapes (not literal characters) on purpose: the byte identity of these two keys IS the test, and a
+// literal would be at the mercy of any editor or transport that silently re-normalizes the file.
+const NFC_E = 'caf\u00e9'; // "café" — precomposed é (U+00E9), 4 code units
+const NFD_E = 'cafe\u0301'; // "café" — e + combining acute (U+0301), 5 code units
+
+describe('KERNEL-1 — an NFC key collision is a fail-closed canonical-form violation', () => {
+  it('the two presentations really are distinct JS keys that NFC-collide (the premise)', () => {
+    expect(NFC_E).not.toBe(NFD_E);
+    expect(NFD_E.normalize('NFC')).toBe(NFC_E);
+    const o: Record<string, number> = {};
+    o[NFC_E] = 1;
+    o[NFD_E] = 2;
+    expect(Object.keys(o)).toHaveLength(2); // two distinct properties, one canonical key
+  });
+
+  it('rejects the collision instead of emitting an insertion-order-dependent preimage', () => {
+    const composedFirst: Record<string, number> = {};
+    composedFirst[NFC_E] = 1;
+    composedFirst[NFD_E] = 2;
+    const decomposedFirst: Record<string, number> = {};
+    decomposedFirst[NFD_E] = 2;
+    decomposedFirst[NFC_E] = 1; // the SAME mapping, built in the other order
+
+    // teeth (breaks-on "the canonicalizer normalizes keys without checking for a collision"): before the
+    // guard BOTH of these returned a digest, and the two digests DIFFERED.
+    expect(() => canonicalForm(composedFirst)).toThrow(/NFC key collision/);
+    expect(() => canonicalForm(decomposedFirst)).toThrow(/NFC key collision/);
+    expect(() => id(composedFirst)).toThrow(/canonical-form violation/);
+    expect(() => id(decomposedFirst)).toThrow(/canonical-form violation/);
+  });
+
+  it('fires at every nesting level, and only on a genuine collision', () => {
+    const nested = { a: 1, deep: { x: { [NFC_E]: 1, [NFD_E]: 2 } } };
+    expect(() => id(nested)).toThrow(/NFC key collision/);
+    // a single non-ASCII key in either presentation is NOT a collision — it still canonicalizes, and the
+    // two presentations still agree (the ratified SCN-KERNEL-1a-2 behaviour is untouched by this guard).
+    expect(id({ [NFC_E]: 1 })).toBe(id({ [NFD_E]: 1 }));
+    // a key dropped BEFORE the preimage cannot collide in it: side-indexes (KERNEL-8) and undefined values.
+    expect(() => id({ grounding: 1, a: 2 })).not.toThrow();
+  });
+});
+
 // Module-graph anchor for SCN-KERNEL-2a-1 lives in encoder.test.ts; the source scan below keeps the
 // canonicalizer itself off-seam (it must reach the digest only through the encoder, never import blake3).
 describe('KERNEL-2a — canonicalForm holds no direct digest import', () => {
