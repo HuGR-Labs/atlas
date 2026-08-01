@@ -395,7 +395,7 @@ gen: conformance
 
 ### SCN-RETR-9a-1 — a malformed scope yields empty pack / empty tools / no poke   (guard)
 source: REQ-RETR-9a
-Given a malformed scope input `scope = " ///not-a-path"` (no covering territory)
+Given a malformed scope input `scope = "\0///not-a-path"` (no covering territory)
 When `pack` / `projectTools` / `poke` are each invoked on it
 Then `pack.invariants = []`, `projectTools = []`, and `poke = null` — empty structures, never a nearest-match fallback
 teeth: breaks-on "a malformed scope returns a nearest-match non-empty pack (a partial guess) instead of an empty pack"

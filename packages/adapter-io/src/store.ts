@@ -9,6 +9,14 @@
 // durable projection format + the `persistProjection`/`loadProjection` primitives (the format the later
 // KNOWLEDGE flush CALLS and rehydrate READS back), and `rehydrateProjection` takes the widened `DiskStore`.
 // The kernel `StoreApi` stays frozen — this widening is additive and lives only in this adapter package.
+//
+// STAGING (ADR-0008 / KNOW-8): the store owns a SECOND sidecar of the same shape at a DIFFERENT path — the
+// CANDIDATE store the explorer (`atlas mine`) writes. KNOW-8 says the explorer may write only candidates and
+// never self-commits; what was missing is that staging had nowhere to live, so the explorer wrote the only
+// durable place there was — the knowledge projection. `persistStaging`/`loadStaging` give it that place. The
+// two sidecars share ONE implementation (`writeSidecar`/`readSidecar`) so their totality discipline cannot
+// drift apart; they differ ONLY in the file they name. A candidate is promoted into knowledge solely by
+// passing a governed door, so nothing in this file reads staging back into the projection.
 
 import {
   closeSync,
@@ -38,6 +46,11 @@ const EMPTY: Hash = asHash('');
 /** The mutable projection sidecar filename — NOT content-addressed; lives beside the CAS root (D4). */
 const PROJECTION_FILE = 'projection.json';
 
+/** The mutable STAGING sidecar filename — the explorer's CANDIDATE store (ADR-0008). Same shape as the
+ *  projection, DELIBERATELY a different file: a candidate is not a fact, and keeping the two in one place is
+ *  exactly what let an ungoverned mine pass destroy, then mutate, governed knowledge. */
+const STAGING_FILE = 'staging.json';
+
 /** The upper bound on a single CAS object read (N13 DoS guard): a CAS object is a small JSON fact/skeleton
  *  (KB-scale). A value whose on-disk size exceeds this is rejected as a miss BEFORE it is read — belt for a
  *  planted oversized regular file. Generous (64 MiB) so it never trips a legitimate object, far below OOM. */
@@ -62,6 +75,13 @@ function projectionPath(casPath: CasPath): string {
   return join(dirname(casPath), PROJECTION_FILE);
 }
 
+/** The STAGING sidecar path: `<dirname(casPath)>/staging.json` — beside the projection, never the same file.
+ *  This ONE line is what makes mining structurally unable to reach knowledge (ADR-0008): point it back at
+ *  `PROJECTION_FILE` and the whole guarantee is gone, which is precisely the mutant the suites kill. */
+function stagingPath(casPath: CasPath): string {
+  return join(dirname(casPath), STAGING_FILE);
+}
+
 /**
  * The durable wire shape of a `StoreProjection`: the `current` Map as entry-array, the `cas` Set as array
  * — the single source of truth (no dir-walk). "Byte-identical" is asserted as `deepEqual` after the JSON
@@ -75,9 +95,71 @@ interface WireProjection {
 }
 
 /**
- * The widened disk store: the frozen kernel `StoreApi` (durable put/get, ADAPT-STORE-1) PLUS the two
- * durable-projection primitives STORE owns (ADAPT-STORE-3). `persistProjection` is the primitive the later
- * KNOWLEDGE flush calls; `loadProjection` is the read side `rehydrateProjection` composes over. Kernel
+ * Write a `StoreProjection` to ONE mutable sidecar file. Shared verbatim by the projection and the staging
+ * door (ADR-0008) so the two can differ only in WHICH file they name — a second hand-copied implementation
+ * would be free to drift in its stamping or its atomicity.
+ *
+ * N11: STAMP the freshness watermark at persist — `builtAt` = the HEAD this projection's stored per-fact
+ * freshness reflects. The injected `headSha` seam is authoritative (git lives in the composition root), so
+ * the store re-derives it on every persist rather than trusting a caller-set field; when the seam is absent
+ * (tests / non-git) or resolves undefined, no stamp is written (the reader then treats the watermark as
+ * "unknown"). JSON drops an undefined key, so an unstamped projection round-trips to `undefined` exactly as
+ * before this field existed (deepEqual-preserving).
+ */
+function writeSidecar(path: string, projection: StoreProjection, builtAt: string | undefined): void {
+  const wire: WireProjection = {
+    current: [...projection.current.entries()],
+    cas: [...projection.cas],
+    ...(builtAt !== undefined ? { builtAt } : {}),
+  };
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, JSON.stringify(wire), 'utf8');
+}
+
+/**
+ * Read ONE mutable sidecar file back. Shared verbatim by the projection and the staging door (ADR-0008).
+ *
+ * TOTAL (mirrors `get` below): a missing OR corrupt/unparseable/shape-invalid sidecar reads as "none
+ * persisted" (`undefined`) — NEVER a throw. A throw here would crash `rehydrateProjection` (and thus BOTH
+ * bins) at boot, since composeRuntime rehydrates at startup. The staging door inherits that discipline by
+ * CONSTRUCTION rather than by a promise: it is the same code.
+ */
+function readSidecar(path: string): StoreProjection | undefined {
+  let raw: string;
+  try {
+    raw = readFileSync(path, 'utf8');
+  } catch {
+    return undefined; // ENOENT / none persisted yet
+  }
+  let wire: WireProjection;
+  try {
+    wire = JSON.parse(raw) as WireProjection;
+  } catch {
+    return undefined; // corrupt / truncated bytes
+  }
+  // shape guard: the entry-array and value-array must be arrays before Map/Set construction, else a
+  // valid-JSON-but-wrong-shape sidecar (e.g. `{}`, `[]`, `{current:5}`) throws in `new Map(...)`.
+  // MEASURED: this line alone is defence-in-depth — deleting it keeps the suite GREEN, because the
+  // try/catch below also catches the `new Map(5)` TypeError. It stays as the cheap, explicit rejection
+  // (and it is the reason the catch is a narrow last resort rather than the only shape check).
+  if (!wire || !Array.isArray(wire.current) || !Array.isArray(wire.cas)) return undefined;
+  // deserialize back: entry-array → Map, array → Set — defended in case an entry itself is non-iterable.
+  // N11: carry the watermark back only when a string was persisted (a non-string wire value ⇒ omit ⇒
+  // "unknown", the conservative reader default) — keeps the projection shape honest, never a bad type.
+  try {
+    const builtAt = typeof wire.builtAt === 'string' ? { builtAt: wire.builtAt } : {};
+    return { current: new Map(wire.current), cas: new Set(wire.cas), ...builtAt };
+  } catch {
+    return undefined; // malformed entries (e.g. a non-[k,v] element)
+  }
+}
+
+/**
+ * The widened disk store: the frozen kernel `StoreApi` (durable put/get, ADAPT-STORE-1) PLUS the durable
+ * sidecar primitives STORE owns (ADAPT-STORE-3). `persistProjection` is the primitive the later KNOWLEDGE
+ * flush calls; `loadProjection` is the read side `rehydrateProjection` composes over. `persistStaging`/
+ * `loadStaging` are the SAME pair over the candidate sidecar (ADR-0008) — same shape, different file, so the
+ * explorer has a durable place of its own and no longer has to borrow the knowledge projection. Kernel
  * `StoreApi` is unchanged (this only ADDS methods in the adapter layer).
  */
 export interface DiskStore extends StoreApi {
@@ -85,6 +167,10 @@ export interface DiskStore extends StoreApi {
   persistProjection(projection: StoreProjection): void;
   /** Read the durable `StoreProjection` back; `undefined` when none has been persisted yet. */
   loadProjection(): StoreProjection | undefined;
+  /** Persist the CANDIDATE projection to the staging sidecar — never the knowledge projection (ADR-0008). */
+  persistStaging(projection: StoreProjection): void;
+  /** Read the staged candidates back; `undefined` when nothing has been staged yet. Total, like `loadProjection`. */
+  loadStaging(): StoreProjection | undefined;
 }
 
 /**
@@ -95,8 +181,8 @@ export interface DiskStore extends StoreApi {
  * `persistProjection` STAMPS the projection with the HEAD its stored per-fact freshness reflects, so a later
  * query can cheaply detect a behind-HEAD (⇒ unverified ⇒ honestly `stale`) read. Absent (tests / non-git) ⇒
  * no stamp ⇒ `builtAt` stays `undefined` and the reader treats the watermark as "unknown" (never a false
- * flag). Injected here (not at each write door) so BOTH persist sites — governed emit + the mine driver —
- * stamp uniformly with zero change to their code.
+ * flag). Injected here (not at each write door) so EVERY persist site — governed emit onto the projection,
+ * the mine driver onto staging — stamps uniformly with zero change to their code.
  */
 export function createDiskStore(casPath: CasPath, headSha?: () => string | undefined): DiskStore {
   return {
@@ -183,52 +269,24 @@ export function createDiskStore(casPath: CasPath, headSha?: () => string | undef
     },
 
     persistProjection(projection: StoreProjection): void {
-      // N11: STAMP the freshness watermark at persist — `builtAt` = the HEAD this projection's stored per-fact
-      // freshness reflects. The injected `headSha` seam is authoritative (git lives in the composition root),
-      // so the store re-derives it here on every persist rather than trusting a caller-set field; when the
-      // seam is absent (tests / non-git) or resolves undefined, no stamp is written (the reader then treats
-      // the watermark as "unknown"). JSON drops an undefined key, so an unstamped projection round-trips to
-      // `undefined` exactly as before this field existed (deepEqual-preserving).
-      const builtAt = headSha?.();
-      const wire: WireProjection = {
-        current: [...projection.current.entries()],
-        cas: [...projection.cas],
-        ...(builtAt !== undefined ? { builtAt } : {}),
-      };
-      const path = projectionPath(casPath);
-      mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, JSON.stringify(wire), 'utf8');
+      writeSidecar(projectionPath(casPath), projection, headSha?.());
     },
 
     loadProjection(): StoreProjection | undefined {
-      // total (mirrors `get` above): a missing OR corrupt/unparseable/shape-invalid sidecar reads as
-      // "none persisted" (`undefined`) — NEVER a throw. A throw here would crash `rehydrateProjection`
-      // (and thus BOTH bins) at boot, since composeRuntime rehydrates at startup.
-      const path = projectionPath(casPath);
-      let raw: string;
-      try {
-        raw = readFileSync(path, 'utf8');
-      } catch {
-        return undefined; // ENOENT / none persisted yet
-      }
-      let wire: WireProjection;
-      try {
-        wire = JSON.parse(raw) as WireProjection;
-      } catch {
-        return undefined; // corrupt / truncated bytes
-      }
-      // shape guard: the entry-array and value-array must be arrays before Map/Set construction, else a
-      // valid-JSON-but-wrong-shape sidecar (e.g. `{}`, `[]`, `{current:5}`) throws in `new Map(...)`.
-      if (!wire || !Array.isArray(wire.current) || !Array.isArray(wire.cas)) return undefined;
-      // deserialize back: entry-array → Map, array → Set — defended in case an entry itself is non-iterable.
-      // N11: carry the watermark back only when a string was persisted (a non-string wire value ⇒ omit ⇒
-      // "unknown", the conservative reader default) — keeps the projection shape honest, never a bad type.
-      try {
-        const builtAt = typeof wire.builtAt === 'string' ? { builtAt: wire.builtAt } : {};
-        return { current: new Map(wire.current), cas: new Set(wire.cas), ...builtAt };
-      } catch {
-        return undefined; // malformed entries (e.g. a non-[k,v] element)
-      }
+      return readSidecar(projectionPath(casPath));
+    },
+
+    persistStaging(projection: StoreProjection): void {
+      // The candidate sidecar. Identical machinery, identical stamping (a staged candidate's freshness is
+      // read at the HEAD it was mined at) — the ONLY difference from `persistProjection` is the file.
+      writeSidecar(stagingPath(casPath), projection, headSha?.());
+    },
+
+    loadStaging(): StoreProjection | undefined {
+      // Total on exactly the same branches as `loadProjection` — it IS `loadProjection`'s reader. A missing,
+      // corrupt or shape-invalid staging sidecar reads back as "nothing staged", never a throw: `mine`
+      // rehydrates staging at pass start, so a throw here would abort the pass on a half-written file.
+      return readSidecar(stagingPath(casPath));
     },
   };
 }

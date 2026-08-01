@@ -8,11 +8,12 @@
 // those reproductions is now a case below, so the same attack cannot come back silently.
 
 import { describe, it, expect } from 'vitest';
-import { id } from '@atlas/kernel';
+import { asHash, id } from '@atlas/kernel';
 import type { CasObject } from '@atlas/kernel';
 import type { GroundedFact } from '@atlas/knowledge';
 import { createGovernedEmit } from '../src/governed-emit.js';
 import type { DiskStore } from '../src/store.js';
+import type { AtlasPolicy } from '../src/policy.js';
 import { makeStoreSpy, HOLDS_GATE, POLICY, advisory, mkAdvisory, realKey, AT } from './harness/governed-fixtures.js';
 
 describe('COMPOSE-A — the incumbent guard (a write\'s gate comes from its target)', () => {
@@ -213,6 +214,95 @@ describe('COMPOSE-A — the incumbent guard (a write\'s gate comes from its targ
     const out = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice' }).emit(shifty as GroundedFact, AT);
     expect(out.emitted).toBe(false); // gate 0 saw T0 ⇒ every later gate must ALSO see T0 ⇒ needs billy
     expect(spy.persists()[spy.persists().length - 1]!.current.get(realKey(t0))!.claims).toEqual(['the T0 invariant']);
+  });
+
+  // ── SCOPE MONOTONICITY — the half the membership fix deleted ──────────────────────────────────────────
+  //
+  // SCN-GE-I2 covers DISJOINT membership (mallory is in no scope of the node's). The DUAL-membership case had
+  // no test, and it is the one that matters: after the equality test was replaced by `actorInScope(policy,
+  // actor, stored.scope)`, BOTH scope gates asked "is the actor in SOME scope" and NEITHER asked whether the
+  // scope the write DECLARES is a legitimate destination. So an actor in two scopes moved a node between them
+  // and permanently evicted every co-owner — reproduced end-to-end before this gate existed:
+  //   alice creates a T1 in `shared` ⇒ emitted; bob re-emits it declaring `bob-priv` ⇒ emitted, node moved;
+  //   alice re-writes HER OWN served T1 invariant ⇒ `unauthorized for target`.
+  // A T1 needs only a non-empty ratifier (only T0 requires billy), and T1 is INSIDE the pack bound.
+  //
+  // MUTANT: delete the `node.scope !== stored.scope` gate and SCN-GE-I10 goes RED.
+
+  it('SCN-GE-I10 — an actor in TWO scopes cannot MOVE a node between them (relocation is re-classification)', () => {
+    const spy = makeStoreSpy();
+    const ANCHOR = 'src/auth.ts::verify';
+    // bob is legitimately in BOTH scopes; alice is a co-owner of `shared` only.
+    const DUAL: AtlasPolicy = { ...POLICY, authz: { scopes: { shared: ['alice', 'bob'], 'bob-priv': ['bob'] } } };
+    const alice = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: DUAL, actor: 'alice', ratifyToken: 'lead' });
+    const bob = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: DUAL, actor: 'bob', ratifyToken: 'lead' });
+
+    const t1 = mkAdvisory({ id: 'nk-shared', anchor: ANCHOR, claimNorm: 'the T1 invariant', scope: 'shared', tier: 'T1' });
+    expect(alice.emit(t1, AT).emitted).toBe(true);
+
+    // The attack: bob declares `bob-priv`. Gate 2 passes (he owns it) and the target-authority gate passes
+    // (he owns `shared` too) — the membership rule alone has nothing left to refuse with.
+    const moved = mkAdvisory({ id: 'nk-priv', anchor: ANCHOR, claimNorm: 'bob addendum', scope: 'bob-priv', tier: 'T1' });
+    expect(realKey(moved)).toBe(realKey(t1)); // PREMISE: scope is not in the nodeKey
+    const out = bob.emit(moved, AT);
+    expect(out.emitted).toBe(false);
+    expect(out.rejected ?? '').toContain('governance-relocation');
+
+    // TEETH 1 — the node did not move: its stored scope is still the one it was created in.
+    const storedScope = (): string | undefined => {
+      const cur = spy.persists()[spy.persists().length - 1]!.current.get(realKey(t1))!;
+      return (spy.store.get(asHash(cur.contentHash)) as GroundedFact).scope;
+    };
+    expect(storedScope()).toBe('shared');
+    // TEETH 2 — the author is NOT locked out of her own served invariant (the eviction the move caused).
+    expect(alice.emit(mkAdvisory({ id: 'nk-a2', anchor: ANCHOR, claimNorm: 'alice update', scope: 'shared', tier: 'T1' }), AT).emitted).toBe(true);
+    // TEETH 3 — and the gate refuses RELOCATION, not co-ownership: bob still writes it at its real scope.
+    expect(bob.emit(mkAdvisory({ id: 'nk-b2', anchor: ANCHOR, claimNorm: 'bob addendum', scope: 'shared', tier: 'T1' }), AT).emitted).toBe(true);
+    expect(storedScope()).toBe('shared');
+  });
+
+  // ── GATE PRECEDENCE — a hidden invariant no `emitted` assertion can see ────────────────────────────────
+  //
+  // No pair of these gates changes `emitted` when swapped: every one of them refuses. What the order decides
+  // is the `rejected` string — which is the door's user-visible contract AND a disclosure channel about a
+  // node the caller may have no authority over. `unauthorized for target` therefore runs BEFORE both
+  // re-classification gates, so a refusal never tells a stranger the incumbent's scope or its governance
+  // class. Swap those lines and the door leaks with the WHOLE SUITE GREEN — hence this case.
+  //
+  // MUTANT: move the `unauthorizedForTarget` check below the tier check ⇒ leg 1 goes RED (`governance-
+  // downgrade` leaks the incumbent's class to mallory). Move it below the relocation check ⇒ leg 1 goes RED
+  // on `governance-relocation`. Move the relocation gate below the tier gate ⇒ leg 2 goes RED.
+
+  it('SCN-GE-I11 — a DOUBLY-violating write is refused by the LEAST-disclosing gate (precedence is pinned)', () => {
+    const spy = makeStoreSpy();
+    const ANCHOR = 'src/auth.ts::verify';
+    const THREE: AtlasPolicy = {
+      ...POLICY,
+      authz: { scopes: { shared: ['alice', 'bob'], 'bob-priv': ['bob'], mallory: ['mallory'] } },
+    };
+    const alice = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: THREE, actor: 'alice', ratifyToken: 'lead' });
+    const t1 = mkAdvisory({ id: 'nk-shared', anchor: ANCHOR, claimNorm: 'the T1 invariant', scope: 'shared', tier: 'T1' });
+    expect(alice.emit(t1, AT).emitted).toBe(true);
+
+    // LEG 1 — mallory violates ALL THREE: no authority over `shared`, a different declared scope, AND a
+    // weaker class (T2 < T1). She must learn only that she has no authority over the target.
+    const mallory = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: THREE, actor: 'mallory', ratifyToken: 'lead' });
+    const triple = mkAdvisory({ id: 'nk-m', anchor: ANCHOR, claimNorm: 'INJECTED', scope: 'mallory', tier: 'T2' });
+    const leaky = mallory.emit(triple, AT);
+    expect(leaky.emitted).toBe(false);
+    expect(leaky.rejected ?? '').toContain('unauthorized for target');
+    expect(leaky.rejected ?? '').not.toContain('governance-downgrade'); // would disclose the incumbent's tier
+    expect(leaky.rejected ?? '').not.toContain('governance-relocation'); // would disclose its scope
+
+    // LEG 2 — bob HAS authority over the target, and violates the other two at once. Between the two
+    // re-classification gates the SCOPE one wins: it answers whether this write belongs to this node at all.
+    const bob = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: THREE, actor: 'bob', ratifyToken: 'lead' });
+    const both = mkAdvisory({ id: 'nk-b', anchor: ANCHOR, claimNorm: 'moved AND lowered', scope: 'bob-priv', tier: 'T2' });
+    const out = bob.emit(both, AT);
+    expect(out.emitted).toBe(false);
+    expect(out.rejected ?? '').toContain('governance-relocation');
+    expect(out.rejected ?? '').not.toContain('governance-downgrade');
+    expect(spy.puts()).toHaveLength(1); // only alice's original fact ever landed
   });
 
   it('SCN-GE-I5 — an incumbent whose stored fact is NOT readable from CAS fails closed (never written blind)', () => {

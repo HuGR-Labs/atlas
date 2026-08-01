@@ -6,3 +6,18 @@ dist/
 
 # agent worktrees (ephemeral, created by the Agent tool isolation)
 .claude/worktrees/
+
+# ── the durable store is DATA, never source (task #90) ─────────────────────────────────────────────
+# `.atlas/projection.json` IS the governed knowledge and `.atlas/cas/**` are its bytes. Committing them
+# ships rows with any `nodeKey`, any `scope`, any `contentHash` and blobs with any `tier` — past every
+# governed door, because no door is involved in a `git add`. `.atlas/staging.json` (ADR-0008) is worse in
+# kind, not better: unratified LLM-proposed candidates.
+# Deny-by-default, then re-include: `.atlas/*` ignores EVERY child (so a sidecar added later is ignored
+# the day it appears, not the day someone remembers), and the negation below re-admits the one file that
+# is genuinely source. Order matters — the negation must come AFTER the pattern it overrides. Note that
+# `.atlas/` itself is deliberately NOT ignored: git cannot re-include a path under an excluded directory,
+# so ignoring the directory would make the negation unreachable and silently drop `policy.json`.
+.atlas/*
+# …except the admin-owned policy: it is the ratified config the doors READ, and it must stay in git so a
+# change to who may write what is reviewable in the same place as the code.
+!.atlas/policy.json

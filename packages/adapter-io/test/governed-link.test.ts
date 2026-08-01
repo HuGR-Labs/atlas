@@ -268,6 +268,96 @@ describe('WP-SAMEAS — createGovernedLink (distinct · both-known · class read
     expect(fx.persists()).toHaveLength(1);
   });
 
+  // ── THE SAME TRANSITIVITY, ONE GATE OVER — authz was still endpoint-only ──────────────────────────────
+  //
+  // SCN-GL-8 fixed the RATIFY gate to join over the whole merged class. The AUTHZ gate two lines above it
+  // still read `factA.scope`/`factB.scope` only — the identical defect, and live. Reproduced against the
+  // fixed ratify gate, so the tier join did not catch it:
+  //   policy {secure:[alice], shared:[alice,mallory], mallory:[mallory]}
+  //   1 alice links A~B   ⇒ linked   (A is T1 in `secure`, B is T2 in `shared`)
+  //   2 mallory links B~M ⇒ linked   (mallory is NOT in `secure`)
+  //   3 deriveSameAs      ⇒ [{A,B},{A,M},{B,M}] — mallory's node is inside alice's `secure` class
+  // The tier join stayed quiet because nothing here is T0: a plain `lead` ratifier signs a T1 class. Scope,
+  // not tier, was the boundary being crossed.
+  //
+  // MUTANT: revert the class-wide authz check to the two endpoints and SCN-GL-12 goes RED.
+
+  it('SCN-GL-12 — an actor cannot link INTO a class whose scope it has no authority over (transitive authz)', () => {
+    const CLASS_POLICY: AtlasPolicy = {
+      ...POLICY,
+      authz: { scopes: { secure: ['alice'], shared: ['alice', 'mallory'], mallory: ['mallory'] } },
+    };
+    const A = fact({ claim: 'A', scope: 'secure', tier: 'T1' });
+    const B = fact({ claim: 'B', scope: 'shared', tier: 'T2' });
+    const M = fact({ claim: 'M', scope: 'mallory', tier: 'T2' });
+    const fx = fixture([A, B, M]); // n0 = A, n1 = B, n2 = mallory's own node
+
+    // 1) alice legitimately equates her `secure` node with the `shared` one. She owns both scopes.
+    const alice = createGovernedLink({ store: fx.store, policy: CLASS_POLICY, actor: 'alice', ratifyToken: 'lead' });
+    expect(alice.link('n0', 'n1').linked).toBe(true);
+
+    // 2) the attack: mallory links the `shared` node to her own. BOTH ENDPOINTS are scopes she holds — but
+    //    n1 is now in n0's class, so the link puts her node inside `secure`, where she has no authority.
+    const mallory = createGovernedLink({ store: fx.store, policy: CLASS_POLICY, actor: 'mallory', ratifyToken: 'lead' });
+    const out = mallory.link('n1', 'n2');
+    expect(out.linked).toBe(false);
+    expect(out.rejected ?? '').toContain('unauthorized');
+    expect(fx.persists()).toHaveLength(1); // only alice's link ever landed
+    expect(fx.persists()[0]!.current.get('n2')?.sameAs).toBeUndefined(); // her node never joined the class
+
+    // …and the gate is MEMBERSHIP, not a blanket ban: the moment an admin grants mallory `secure`, the very
+    // same link is hers to make. (An over-blocking gate is a gate that gets routed around.)
+    const GRANTED: AtlasPolicy = {
+      ...CLASS_POLICY,
+      authz: { scopes: { ...CLASS_POLICY.authz.scopes, secure: ['alice', 'mallory'] } },
+    };
+    expect(createGovernedLink({ store: fx.store, policy: GRANTED, actor: 'mallory', ratifyToken: 'lead' }).link('n1', 'n2').linked).toBe(true);
+  });
+
+  it('SCN-GL-13 — a CLASS MEMBER whose bytes are unreadable fails closed, even for billy', () => {
+    // The read-back gate covered the two ENDPOINTS only. Once authz spans the class, a member whose scope
+    // cannot be READ cannot be shown to authorize anyone — so it is refused, and refused as `unverifiable`
+    // (a pruned CAS is not a policy gap an admin should try to fix by granting a scope: the SCN-GL-7
+    // distinction). This is strictly stronger than the old tier-only treatment, which merely priced an
+    // unreadable member at T0 and let billy through.
+    //
+    // MUTANT: skip unreadable members in the class walk (treat them as contributing nothing) ⇒ RED.
+    const T2_E = fact({ claim: 'epsilon', scope: 'core', tier: 'T2' });
+    const fx = fixture([T2_A, T2_B, T2_E]);
+    const alice = createGovernedLink({ store: fx.store, policy: POLICY, actor: 'alice', ratifyToken: 'billy' });
+    expect(alice.link('n0', 'n2').linked).toBe(true); // n0 and n2 are now one class
+
+    // Now n2's bytes are gone. n0/n1 are both perfectly readable, so the ENDPOINT gate cannot see this.
+    const hE = id(T2_E as CasObject) as unknown as string;
+    const halfBlind: DiskStore = { ...fx.store, get: (h) => ((h as unknown as string) === hE ? undefined : fx.store.get(h)) };
+    const blindLink = createGovernedLink({ store: halfBlind, policy: POLICY, actor: 'alice', ratifyToken: 'billy' });
+    expect(() => blindLink.link('n0', 'n1')).not.toThrow();
+    const out = blindLink.link('n0', 'n1');
+    expect(out.linked).toBe(false);
+    expect(out.rejected ?? '').toContain('unverifiable');
+    expect(fx.persists()).toHaveLength(1); // still only the first, legitimate link
+  });
+
+  it('SCN-GL-14 — a DOUBLY-violating link is refused by the ENDPOINT gate (precedence is pinned)', () => {
+    // No pair of these gates changes `linked` when swapped — the order fixes the `rejected` string, which is
+    // the door's contract and a disclosure channel. An actor with no authority over the two nodes it NAMED
+    // must learn `unauthorized` and nothing about the class behind them (its size, membership, or CAS
+    // health). MUTANT: move the class walk above the endpoint authz check and this goes RED — mallory,
+    // who may not touch either endpoint, is told that a node she cannot even name has lost its bytes.
+    const T2_E = fact({ claim: 'epsilon', scope: 'core', tier: 'T2' });
+    const fx = fixture([T2_A, T2_B, T2_E]);
+    const alice = createGovernedLink({ store: fx.store, policy: POLICY, actor: 'alice', ratifyToken: 'billy' });
+    expect(alice.link('n0', 'n2').linked).toBe(true);
+
+    const hE = id(T2_E as CasObject) as unknown as string;
+    const halfBlind: DiskStore = { ...fx.store, get: (h) => ((h as unknown as string) === hE ? undefined : fx.store.get(h)) };
+    // mallory owns `other`; both endpoints live in `core`, AND the class member n2 is unreadable.
+    const out = createGovernedLink({ store: halfBlind, policy: POLICY, actor: 'mallory', ratifyToken: 'billy' }).link('n0', 'n1');
+    expect(out.linked).toBe(false);
+    expect(out.rejected ?? '').toContain('unauthorized');
+    expect(out.rejected ?? '').not.toContain('unverifiable');
+  });
+
   it('SCN-GL-9c — …while a LIVE T0 member reached THROUGH that retired peer still forces billy', () => {
     // The control that keeps SCN-GL-9b from being a licence to under-price: the retired key BRIDGES n0 to
     // the T0 node n2, so n2 is in the merged class, is a current node, and is priced off its OWN stored

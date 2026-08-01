@@ -12,6 +12,12 @@
 // conformance test supplies a recorded proposer + an injected frontier + a gate double and never touches a
 // live model (mirrors packages/e2e/test/s02-genesis-mining.e2e.test.ts). `upsert` routes through the KNOW-15
 // write-decision (`@atlas/knowledge` `upsert`/`routeWrite`), NEVER a bare `store.put`.
+//
+// DESTINATION (ADR-0008): every write this driver makes lands in the STAGING sidecar. `mine` is the explorer
+// and KNOW-8 lets the explorer write only CANDIDATES; it holds no truth gate, no authz and no ratifier, so it
+// must not — and now structurally CANNOT — write the knowledge projection. No CALL to `loadProjection` or
+// `persistProjection` occurs anywhere in this file (they are named only in prose), and that absence is the
+// guarantee: the test fixtures make both methods THROW, so a re-introduced call fails the suite loudly.
 
 import { makeRunController, createScan, createMine, runExtract, admit } from '@atlas/genesis';
 import type {
@@ -31,9 +37,9 @@ import type {
   AdmitDeps,
   AdvisoryProposal,
 } from '@atlas/genesis';
-import { createDiskStore, headSha, rehydrateProjection } from '@atlas/adapter-io';
+import { createDiskStore, headSha } from '@atlas/adapter-io';
 import type { DiskStore } from '@atlas/adapter-io';
-import { upsert as knowledgeUpsert, normalizeCheck, primaryAnchorId, nodeKey } from '@atlas/knowledge';
+import { upsert as knowledgeUpsert, normalizeCheck, primaryAnchorId, nodeKey, emptyStore } from '@atlas/knowledge';
 import type { WriteRequest, StoreProjection, Candidate as KnowledgeCandidate } from '@atlas/knowledge';
 import { id, asNodeKey, asSubtreeHash } from '@atlas/kernel';
 import { join } from 'node:path';
@@ -50,7 +56,7 @@ export interface MineDeps {
   readonly proposer: SiteProposer; //     S2 — the ONE bounded LLM entry (GEN-2); default abstains (no model wired)
   readonly history: HistorySource; //     S1 — mined ranking signals + frontier (GEN-6)
   readonly skeleton: SkeletonSource; //   S0 — the structural skeleton source (GEN-1)
-  readonly store: DiskStore; //           the durable CAS the KNOW-15 projection persists to
+  readonly store: DiskStore; //           the durable CAS + the STAGING sidecar candidates persist to (ADR-0008)
   readonly gate: EmitGate; //             the 2-door admission gate — forwards the frozen `admit` verbatim
   readonly handoffTo: () => void; //      S4 — the born-from-work terminator (a no-op for a mine pass)
   readonly budget?: GenesisBudget; //     the hard site ceiling; omitted ⇒ the controller's defaultBudget
@@ -119,12 +125,14 @@ function defaultProposer(): SiteProposer {
 }
 
 /**
- * The reserved scope every MINED node carries. Mining has no actor, so a mined node has no owner — and an
- * unowned node is not writable by "anyone", it is writable by NOBODY until an admin says otherwise. No actor
- * is a member of this scope unless `.atlas/policy.json` declares it, so `actorInScope` denies by default
- * (KNOW-11a) and the emit door's scope check refuses any fact declaring a different scope onto a mined row.
- * Granting it is the deliberate act of appointing a curator for mined candidates. Deliberate, but NOT
- * protected: the grant lives in `.atlas/policy.json`, which no live mechanism gates (see policy.ts).
+ * The reserved scope every MINED node carries — now PROVENANCE plus a fail-closed default, not the boundary
+ * itself (ADR-0008 moved these rows out of the governed projection entirely). Mining has no actor, so a mined
+ * node has no owner — and an unowned node is not writable by "anyone", it is writable by NOBODY until an
+ * admin says otherwise. No actor is a member of this scope unless `.atlas/policy.json` declares it, so
+ * `actorInScope` denies by default (KNOW-11a) and, should a candidate ever be promoted, the emit door's scope
+ * check refuses any fact declaring a different scope onto a mined row. Granting it is the deliberate act of
+ * appointing a curator for mined candidates. Deliberate, but NOT protected: the grant lives in
+ * `.atlas/policy.json`, which no live mechanism gates (see policy.ts).
  */
 export const MINED_SCOPE = 'atlas:mined';
 
@@ -162,27 +170,33 @@ function withDefaults(repoPath: string, deps?: Partial<MineDeps>): MineDeps {
  * have no genesis-side factory; this composition IS the driver):
  *   - `plan`      — S0 `createScan` (the canonical skeleton) + S1 `createMine` (rank the frontier), in order.
  *   - `visit`     — per-site `runExtract([cand], …, { proposer, gate })` → the gate's admitted `.facts`.
- *   - `upsert`    — the KNOW-15 write-decision (`@atlas/knowledge` `upsert`), dedup-by-id, persisted durably.
+ *   - `upsert`    — the KNOW-15 write-decision (`@atlas/knowledge` `upsert`), dedup-by-id, persisted durably
+ *                   to STAGING (ADR-0008) — the candidate sidecar, never the knowledge projection.
  *   - `changed`   — the INDEX-12 delta seam (unused by a single `genesis()` pass; supplied for the surface).
  *   - `handoffTo` — the S4 terminator (a no-op for a mine pass).
  */
 export function buildControllerDeps(repoPath: string, d: MineDeps): ControllerDeps {
   const mine = createMine({ skeleton: d.skeleton, history: d.history });
   const scan = createScan(d.skeleton);
-  // REHYDRATE, never start empty. This driver persists to the SAME `<repo>/.atlas/cas` sidecar the governed
-  // emit door writes, through the SAME `persistProjection` — which REPLACES the file wholesale. Seeding from
-  // `emptyStore()` therefore did not "start a fresh pass": it made every mine run overwrite the durable
-  // projection with only what that run mined, silently dropping every previously emitted node. The facts' CAS
-  // bytes survived (content-addressed, append-only), but the projection is the index every read goes through,
-  // so the knowledge was gone as far as `query`/`doctor` were concerned. Rehydrating makes the pass ADDITIVE,
-  // which is also what `upsert` already assumes — it routes CREATE-vs-UPDATE against the projection it is
-  // handed, so an empty one reports a CREATE for a node that in truth already exists. (SCN-CLI-4d)
-  let projection: StoreProjection = rehydrateProjection(d.store);
-  // The set of nodes that ALREADY EXISTED when this pass began — the governed knowledge a mined candidate
-  // must not re-author. Snapshotted, NOT re-read off `projection`: the running projection also contains the
-  // rows this very pass just created, so testing against it made a pass drop its OWN second claim about the
-  // same symbol (two mined claims at one anchor ⇒ the second silently vanished). "Never re-author what was
-  // already established" is a statement about the pass-start state, not about the accumulating one.
+  // STAGING, NOT KNOWLEDGE (ADR-0008 / KNOW-8). `mine` is the explorer: it passes no truth gate, no KNOW-11
+  // authz and no KNOW-8 ratification, so it may write only CANDIDATES. Every read and every write below goes
+  // through the STAGING sidecar — a store of the same shape at a different path — and this driver never CALLS
+  // the projection doors at all. That is what closes #87: mining cannot mutate governed
+  // knowledge because it cannot REACH it, rather than because a check says no. A staged candidate becomes
+  // knowledge only by passing a governed door, like anything else.
+  //
+  // REHYDRATE, never start empty. `persistStaging` REPLACES the file wholesale, so seeding from `emptyStore()`
+  // would not "start a fresh pass": it would make every run overwrite staging with only what that run mined,
+  // dropping every earlier candidate. (That is exactly how mine once destroyed the governed projection it was
+  // then sharing — SCN-CLI-4d.) Rehydrating makes the pass ADDITIVE, which is also what `upsert` assumes: it
+  // routes CREATE-vs-UPDATE against the projection it is handed, so an empty one reports a CREATE for a node
+  // that already exists.
+  let projection: StoreProjection = d.store.loadStaging() ?? emptyStore();
+  // The set of nodes ALREADY STAGED when this pass began — what a mined candidate must not re-author.
+  // Snapshotted, NOT re-read off `projection`: the running projection also contains the rows this very pass
+  // just created, so testing against it made a pass drop its OWN second claim about the same symbol (two
+  // mined claims at one anchor ⇒ the second silently vanished). "Never re-author what was already
+  // established" is a statement about the pass-start state, not about the accumulating one.
   const established = new Set(projection.current.keys());
   const grounded = new Map<string, Fact>(); // KNOW-15 idempotent grounded set, keyed by the MINTED nodeKey (0 duplicates)
 
@@ -198,14 +212,16 @@ export function buildControllerDeps(repoPath: string, d: MineDeps): ControllerDe
         // Map `predicateSlot` → the Candidate's `.slot` before minting — the cast is otherwise LOSSY
         // (identity fns read `.slot`, a GroundedFact carries `predicateSlot`), producing a slot-free nodeKey
         // that diverges from the true `hash(primaryAnchorId ‖ predicateSlot)` (governed-emit.ts parity).
-        // STAMP THE CANDIDATE SCOPE. A mined fact arrives with no `scope` — there is no actor behind it, so
-        // there was nobody to own it. But an unowned node in the governed projection is not neutral: the
-        // emit door's incumbent guard has nothing to compare against, so ANY actor holding ANY scope could
-        // adopt a mined node with no ratify token and then promote it to `T1`, which is INSIDE the pack
-        // bound — an injected served invariant. Reproduced. `MINED_SCOPE` is a reserved name no actor is a
-        // member of unless an admin deliberately grants it in `.atlas/policy.json`, so mined rows are
-        // fail-closed by default AND a curator can still be given the authority to adopt them. It is
-        // stamped BEFORE the content hash so the bytes and the row agree.
+        // STAMP THE CANDIDATE SCOPE — BELT-AND-BRACES since ADR-0008, kept as PROVENANCE. A mined fact
+        // arrives with no `scope`: there is no actor behind it, so nobody owns it. While mine wrote the
+        // governed projection that was load-bearing — an unowned node there is not neutral, because the emit
+        // door's incumbent guard has nothing to compare against, so ANY actor holding ANY scope could adopt a
+        // mined node with no ratify token and promote it to `T1`, inside the pack bound (reproduced). Mined
+        // rows now live in staging, where no door reads them, so that path is closed structurally. The stamp
+        // STAYS: it marks these bytes as mined-not-authored for whoever later curates them, and it keeps the
+        // fail-closed default if a candidate is ever promoted — `MINED_SCOPE` is a reserved name no actor
+        // belongs to unless an admin deliberately grants it in `.atlas/policy.json`. Stamped BEFORE the
+        // content hash so the bytes and the row agree.
         const f = { ...raw, scope: MINED_SCOPE } as Fact;
         const view = { ...f, slot: f.predicateSlot } as unknown as KnowledgeCandidate;
         const key = nodeKey(view) as unknown as string;
@@ -220,28 +236,29 @@ export function buildControllerDeps(repoPath: string, d: MineDeps): ControllerDe
           primaryAnchor: primaryAnchorId(view) as unknown as string,
           ...(f.predicateSlot !== undefined ? { slot: f.predicateSlot } : {}),
         };
-        // A MINED CANDIDATE NEVER MUTATES AN EXISTING NODE. This driver has NO truth gate, NO authz and NO
-        // ratification — it is the explorer, and KNOW-8 says the explorer may write only CANDIDATES. Because
-        // the projection is now rehydrated, an LLM-proposed claim whose minted nodeKey happens to collide
-        // with an already-governed node used to route as an UPDATE and set-union straight into it; on a
-        // billy-ratified T0 node that is a governed-knowledge mutation authored by whatever text was sitting
-        // in a source file, i.e. prompt-injectable. Reproduced. A collision therefore SKIPS: mining may
-        // discover new nodes, never re-author established ones.
-        //   SCOPE, stated honestly: this closes MUTATION of governed nodes. Mining still CREATES nodes
-        //   without passing the governed doors at all — that remaining gap is task #87 (mine should stage a
-        //   candidate for ratification rather than write the projection directly), and it is not closed here.
+        // A MINED CANDIDATE NEVER RE-AUTHORS AN ESTABLISHED ONE — BELT-AND-BRACES since ADR-0008. This check
+        // was the load-bearing defence when mine wrote the governed projection: with the real projection
+        // rehydrated, an LLM-proposed claim whose minted nodeKey collided with a governed node routed as an
+        // UPDATE and set-unioned straight into it; on a billy-ratified T0 node that is a governed-knowledge
+        // mutation authored by whatever text was sitting in a source file, i.e. prompt-injectable
+        // (reproduced). ADR-0008 removed the boundary crossing itself — the governed projection is now
+        // unreachable from here — so this skip no longer defends it. It STAYS because it is still correct
+        // WITHIN staging: a later pass must not silently rewrite a candidate an earlier one proposed (the
+        // set-union is just as unreviewable between two candidates as it was against a fact).
         if (established.has(key)) continue;
-        // PUT THE BYTES FIRST, exactly as the governed door does. Persisting a projection row that names a
-        // contentHash absent from CAS creates a node whose stored fact can never be read back — and the
-        // governed doors now (correctly) refuse to write a node whose class they cannot read, so such a row
-        // is permanently unwritable by ANYONE, billy included. Reproduced: a recoverable corruption became an
-        // unrecoverable denial of service. The write order also matters: `put` before the sidecar, so a
-        // failed put leaves no dangling reference.
+        // PUT THE BYTES FIRST, exactly as the governed door does. Persisting a row that names a contentHash
+        // absent from CAS creates a node whose stored fact can never be read back — and the governed doors
+        // now (correctly) refuse to write a node whose class they cannot read, so such a row is permanently
+        // unwritable by ANYONE, billy included. Reproduced: a recoverable corruption became an unrecoverable
+        // denial of service, and it survives the move to staging because a candidate is promoted THROUGH
+        // those same doors — an unreadable candidate is one no curator could ever ratify. The write order
+        // also matters: `put` before the sidecar, so a failed put leaves no dangling reference. (The CAS is
+        // shared and append-only by design; a blob is inert until some row names it.)
         d.store.put(f as unknown as Parameters<DiskStore['put']>[0]);
         projection = knowledgeUpsert(projection, req).store; // route the write-decision
         grounded.set(key, f);
       }
-      d.store.persistProjection(projection); // durable — the mutable KNOW-15 projection sidecar
+      d.store.persistStaging(projection); // durable — the CANDIDATE sidecar, NEVER the knowledge projection
       return [...grounded.values()];
     },
     changed: (_prior, _rev) => ({ idChanged: false, stateChanged: false, changedBuckets: [] }),

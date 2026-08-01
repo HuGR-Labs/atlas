@@ -9,8 +9,12 @@
 //         pre-filter before the controller diverges.
 // The LLM is the INJECTED `SiteProposer.propose` seam (a recorded call-counter, never a model); the emit
 // verdict is the INJECTED `EmitGate` (a double, or `makeAdmitGate` forwarding the FROZEN `admit` verbatim).
+// Plus 4d/4e/4f/4g — the destination: every write lands in the ADR-0008 STAGING sidecar, never in knowledge.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
+import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { asSubtreeHash, asHash, asNodeKey, id } from '@atlas/kernel';
 import type { StructRef, Hash } from '@atlas/contracts';
 import type { Axes, DepEdge, IndexNode, Manifest } from '@atlas/index';
@@ -27,6 +31,7 @@ import type {
   GenesisBudget,
   AdmitDeps,
 } from '@atlas/genesis';
+import { createDiskStore } from '@atlas/adapter-io';
 import type { DiskStore } from '@atlas/adapter-io';
 import type { StoreProjection, CurrentNode } from '@atlas/knowledge';
 import { runMine, driveMine, buildControllerDeps, makeAdmitGate, MINE_ABSTAIN_LINE } from '../src/mine.js';
@@ -101,7 +106,31 @@ const gateEmitFor = (ids: ReadonlySet<string>): EmitGate => ({
   emit: (seed, c) => (ids.has(idOf(c)) ? { emitted: true, fact: factFor(c, seed.claim) } : { emitted: false, whyNot: { site: c.site, reason: 'not in admitted set' } }),
 });
 
-const fakeStore = (): DiskStore => ({ put: () => asHash('x'), get: () => undefined, persistProjection: () => {}, loadProjection: () => undefined });
+/** The knowledge-projection doors are TRAPS in every mine fixture (ADR-0008): `mine` writes CANDIDATES to
+ *  staging and must never so much as READ the governed projection, so any call is a test failure, not a
+ *  mismatch to assert on later. Spread into each fake store below. */
+const projectionTrap = {
+  persistProjection: (): never => { throw new Error('ADR-0008: mine must never write the knowledge projection'); },
+  loadProjection: (): never => { throw new Error('ADR-0008: mine must never read the knowledge projection'); },
+};
+
+const fakeStore = (): DiskStore => ({ put: () => asHash('x'), get: () => undefined, ...projectionTrap, persistStaging: () => {}, loadStaging: () => undefined });
+
+/** A recording fake over the STAGING sidecar: `persistStaging` appends to `staged`, `loadStaging` reads the
+ *  last staged projection (or `seed`, standing in for what an earlier pass left behind), `put` records the
+ *  CAS keys. The projection doors trap. */
+const stagingFake = (seed?: StoreProjection): { store: DiskStore; staged: StoreProjection[]; cas: Set<string> } => {
+  const staged: StoreProjection[] = [];
+  const cas = new Set<string>();
+  const store: DiskStore = {
+    put: (obj) => { const h = id(obj); cas.add(h as unknown as string); return h; },
+    get: () => undefined,
+    ...projectionTrap,
+    persistStaging: (p) => void staged.push(p),
+    loadStaging: () => (staged.length > 0 ? staged[staged.length - 1]! : seed),
+  };
+  return { store, staged, cas };
+};
 
 const OFF = { enabled: false, maxDepth: 0, epsilon: 0 } as const;
 const budget = (ceiling: number): GenesisBudget => ({ ceiling, deepening: { review: OFF, enrich: OFF, expand: OFF } });
@@ -248,110 +277,119 @@ describe('WP-F6 — a default (no-model) mine render is a legible abstain, not a
   });
 });
 
-// ── SCN-CLI-4d — mine must not DESTROY the governed projection it shares a store with ──────────────────
+// ── ADR-0008 — mine writes STAGING, never knowledge ────────────────────────────────────────────────────
 //
-// `atlas mine` writes to the SAME durable store the governed emit door writes to
-// (`createDiskStore(<repo>/.atlas/cas)`), through the SAME `persistProjection` sidecar. But the driver seeds
-// its projection from `emptyStore()` and never rehydrates, then persists unconditionally — so a mine pass
-// overwrites the sidecar with ONLY what that pass mined, silently dropping every previously emitted node.
-// The facts' CAS bytes survive (put is content-addressed and append-only), but the projection is the index
-// every read goes through, so the knowledge is gone as far as `query`/`doctor` are concerned.
-//
-// TEETH: revert `buildControllerDeps` to `let projection = emptyStore()` and this goes RED.
-describe('CLI-4d — a mine pass PRESERVES the governed projection (it shares the store with the emit door)', () => {
-  it('an already-emitted node survives a mine pass that mines nothing', () => {
-    const persisted: StoreProjection[] = [];
-    const existing: CurrentNode = { nodeKey: 'nk-already-emitted', family: 'advisory', contentHash: 'ch-1', claims: ['a governed claim'] };
-    const store: DiskStore = {
-      put: () => asHash('x'),
-      get: () => undefined,
-      persistProjection: (p) => void persisted.push(p),
-      // the durable sidecar the governed emit door already wrote
-      loadProjection: () => (persisted.length > 0 ? persisted[persisted.length - 1]! : { current: new Map([[existing.nodeKey, existing]]), cas: new Set(['ch-1']) }),
-    };
-    const cd = buildControllerDeps(REPO, depsOf({ store }));
-    cd.upsert([]); // a site that yielded no fact — the abstain case, and the common one
+// 4d/4e/4f were written against the era in which `mine` wrote the governed projection through the SAME
+// `persistProjection` the emit door uses. Each pinned a fix for a defect that era produced, and each fix
+// exposed the next: (4d) unconditional persist DESTROYED previously emitted nodes; (4e) rehydrating fixed
+// that and let a mined nodeKey collision set-union into a billy-ratified T0 node; (4f) rows named a
+// contentHash never `put`, which ADR-0007 turned into a permanently unwritable node. ADR-0008 removes the
+// boundary crossing instead of checking it. The cases are RETARGETED, not retired — each is still a live
+// property of the CANDIDATE store (do not destroy earlier candidates, do not silently rewrite one, do not
+// stage a row whose bytes no curator could read back). The STRUCTURAL claim moves to `CLI-4g` below.
+describe('CLI-4d — a mine pass PRESERVES what is already staged (its persist replaces the file wholesale)', () => {
+  const existing: CurrentNode = { nodeKey: 'nk-staged-earlier', family: 'advisory', contentHash: 'ch-1', claims: ['an earlier candidate'] };
+  const seeded = (): StoreProjection => ({ current: new Map([[existing.nodeKey, existing]]), cas: new Set(['ch-1']) });
 
-    expect(persisted).toHaveLength(1);
-    expect(persisted[0]!.current.get('nk-already-emitted')).toEqual(existing);
-    expect(persisted[0]!.cas.has('ch-1')).toBe(true);
+  // TEETH: revert `buildControllerDeps` to `let projection = emptyStore()` and both cases go RED.
+  it('an already-staged candidate survives a mine pass that mines nothing', () => {
+    const fx = stagingFake(seeded());
+    buildControllerDeps(REPO, depsOf({ store: fx.store })).upsert([]); // the abstain case, and the common one
+
+    expect(fx.staged).toHaveLength(1);
+    expect(fx.staged[0]!.current.get('nk-staged-earlier')).toEqual(existing);
+    expect(fx.staged[0]!.cas.has('ch-1')).toBe(true);
   });
 
-  it('a mine pass ADDS to the existing projection rather than replacing it', () => {
-    const persisted: StoreProjection[] = [];
-    const existing: CurrentNode = { nodeKey: 'nk-already-emitted', family: 'advisory', contentHash: 'ch-1', claims: ['a governed claim'] };
-    const store: DiskStore = {
-      put: () => asHash('x'),
-      get: () => undefined,
-      persistProjection: (p) => void persisted.push(p),
-      loadProjection: () => (persisted.length > 0 ? persisted[persisted.length - 1]! : { current: new Map([[existing.nodeKey, existing]]), cas: new Set(['ch-1']) }),
-    };
-    const deps = depsOf({ store, budget: budget(FRONTIER.length) });
-    driveMine(REPO, deps);
+  it('a mine pass ADDS to the staged set rather than replacing it', () => {
+    const fx = stagingFake(seeded());
+    driveMine(REPO, depsOf({ store: fx.store, budget: budget(FRONTIER.length) }));
 
-    const last = persisted[persisted.length - 1]!;
-    expect(last.current.get('nk-already-emitted')).toEqual(existing); // the emitted node is still there…
+    const last = fx.staged[fx.staged.length - 1]!;
+    expect(last.current.get('nk-staged-earlier')).toEqual(existing); // the earlier candidate is still there…
     expect(last.current.size).toBeGreaterThan(1); // …alongside what this pass mined
   });
 
-  // ── SCN-CLI-4e — rehydrating made mine ABLE to mutate governed nodes; it must not (billy F2) ───────────
+  // ── SCN-CLI-4e — a later pass never re-authors an established node (belt-and-braces since ADR-0008) ────
   //
-  // Rehydrating (4d) fixed the destruction but opened the converse: with the real projection in hand, a mined
-  // fact whose minted nodeKey collides with an already-governed node routes as an UPDATE and set-unions into
-  // it. This driver has NO truth gate, NO authz and NO ratification, so on a billy-ratified T0 node that is a
-  // governed-knowledge mutation authored by whatever text happened to be in a source file — prompt-injectable,
-  // and reproduced by a cold review. KNOW-8 is explicit that the explorer writes only CANDIDATES.
+  // Pre-ADR-0008 this was THE defence: with the governed projection rehydrated, a mined fact whose minted
+  // nodeKey collided with a governed node routed as an UPDATE and set-unioned into it — on a billy-ratified
+  // T0 node, a knowledge mutation authored by whatever text happened to sit in a source file. Reproduced by a
+  // cold review. Staging closes that structurally (CLI-4g). The skip stays because it is still correct WITHIN
+  // staging: an unreviewed set-union between two candidates is no more legible than one onto a fact.
   //
-  // TEETH: delete the `if (projection.current.has(key)) continue;` skip and this goes RED.
-  it('a mined fact NEVER mutates a node that already exists in the governed projection', () => {
-    const persisted: StoreProjection[] = [];
-    // Pre-seed the projection at the EXACT nodeKey this pass will mint, so the collision is guaranteed
-    // rather than hoped for: run the driver once against an empty store to learn the key it mints.
-    const learn: StoreProjection[] = [];
-    const learnStore: DiskStore = {
-      put: () => asHash('x'), get: () => undefined,
-      persistProjection: (p) => void learn.push(p),
-      loadProjection: () => (learn.length > 0 ? learn[learn.length - 1]! : undefined),
-    };
-    driveMine(REPO, depsOf({ store: learnStore, budget: budget(FRONTIER.length) }));
-    const minedKey = [...learn[learn.length - 1]!.current.keys()][0]!;
+  // TEETH: delete the `if (established.has(key)) continue;` skip and this goes RED.
+  it('a mined fact NEVER rewrites a node already present at pass start (here: an earlier candidate)', () => {
+    // Pre-seed at the EXACT nodeKey this pass will mint, so the collision is guaranteed rather than hoped
+    // for: run the driver once against an empty staging store to learn the key it mints.
+    const learn = stagingFake();
+    driveMine(REPO, depsOf({ store: learn.store, budget: budget(FRONTIER.length) }));
+    const minedKey = [...learn.staged[learn.staged.length - 1]!.current.keys()][0]!;
 
-    const governed: CurrentNode = { nodeKey: minedKey, family: 'advisory', contentHash: 'ch-governed', claims: ['the billy-ratified T0 claim'] };
-    const store: DiskStore = {
-      put: () => asHash('x'), get: () => undefined,
-      persistProjection: (p) => void persisted.push(p),
-      loadProjection: () => (persisted.length > 0 ? persisted[persisted.length - 1]! : { current: new Map([[minedKey, governed]]), cas: new Set(['ch-governed']) }),
-    };
-    driveMine(REPO, depsOf({ store, budget: budget(FRONTIER.length) }));
+    const incumbent: CurrentNode = { nodeKey: minedKey, family: 'advisory', contentHash: 'ch-incumbent', claims: ['the incumbent claim'] };
+    const fx = stagingFake({ current: new Map([[minedKey, incumbent]]), cas: new Set(['ch-incumbent']) });
+    driveMine(REPO, depsOf({ store: fx.store, budget: budget(FRONTIER.length) }));
 
-    const node = persisted[persisted.length - 1]!.current.get(minedKey)!;
-    expect(node).toEqual(governed); // untouched: same contentHash, same claim set, no set-union
-    expect(node.claims).toEqual(['the billy-ratified T0 claim']);
+    const node = fx.staged[fx.staged.length - 1]!.current.get(minedKey)!;
+    expect(node).toEqual(incumbent); // untouched: same contentHash, same claim set, no set-union
+    expect(node.claims).toEqual(['the incumbent claim']);
   });
 
-  // ── SCN-CLI-4f — every projection row mine writes must have its BYTES in CAS (billy F2, second leg) ────
+  // ── SCN-CLI-4f — every staged row must have its BYTES in CAS (billy F2, second leg) ────────────────────
   //
   // mine persisted a row naming `id(f)` but never called `store.put(f)`, so the node's stored fact was
-  // unreadable. Harmless while nothing read it back — but the governed doors now (correctly) REFUSE to write
-  // a node whose governance class they cannot read, so such a row became permanently unwritable by anyone,
-  // billy included: a recoverable corruption turned into an unrecoverable denial of service.
+  // unreadable. The governed doors (correctly) REFUSE to write a node whose governance class they cannot
+  // read, so such a row was permanently unwritable by anyone, billy included. Staging does not retire this:
+  // a candidate is promoted THROUGH those doors, so a candidate whose bytes are absent is one no curator
+  // could ever ratify — the same denial of service, one step later.
   //
   // TEETH: delete the `d.store.put(f)` line and this goes RED.
-  it('puts the fact BYTES for every node it writes (no row may name a contentHash absent from CAS)', () => {
-    const persisted: StoreProjection[] = [];
-    const cas = new Set<string>();
-    const store: DiskStore = {
-      put: (obj) => { const h = id(obj); cas.add(h as unknown as string); return h; },
-      get: () => undefined,
-      persistProjection: (p) => void persisted.push(p),
-      loadProjection: () => (persisted.length > 0 ? persisted[persisted.length - 1]! : undefined),
-    };
-    driveMine(REPO, depsOf({ store, budget: budget(FRONTIER.length) }));
+  it('puts the fact BYTES for every node it stages (no row may name a contentHash absent from CAS)', () => {
+    const fx = stagingFake();
+    driveMine(REPO, depsOf({ store: fx.store, budget: budget(FRONTIER.length) }));
 
-    const last = persisted[persisted.length - 1]!;
-    expect(last.current.size).toBeGreaterThan(0); // premise: this pass actually wrote rows
+    const last = fx.staged[fx.staged.length - 1]!;
+    expect(last.current.size).toBeGreaterThan(0); // premise: this pass actually staged rows
     for (const node of last.current.values()) {
-      expect(cas.has(node.contentHash), `row ${node.nodeKey} names contentHash ${node.contentHash}, absent from CAS`).toBe(true);
+      expect(fx.cas.has(node.contentHash), `row ${node.nodeKey} names contentHash ${node.contentHash}, absent from CAS`).toBe(true);
     }
+  });
+});
+
+// ── SCN-CLI-4g — the STRUCTURAL property: a mine pass cannot reach the knowledge projection (#87) ───────
+//
+// The suites above run on fakes whose `persistProjection`/`loadProjection` THROW, which proves the driver
+// never names those methods. That is necessary but not sufficient: it says nothing about WHERE the staging
+// door writes. Point `stagingPath` back at `PROJECTION_FILE` and every fake-store case above still passes
+// while the real product silently resumes overwriting governed knowledge. So this case runs the real
+// `createDiskStore` on a real temp repo and compares the projection sidecar's BYTES across a mine pass.
+describe('CLI-4g — a real mine pass leaves `projection.json` byte-identical (ADR-0008, #87)', () => {
+  let dir: string | undefined;
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+    dir = undefined;
+  });
+
+  it('MUTANT (stagingPath → PROJECTION_FILE): governed bytes untouched; the candidates land in staging.json', () => {
+    dir = mkdtempSync(join(tmpdir(), 'atlas-mine-'));
+    const casPath = join(dir, '.atlas', 'cas');
+    const store = createDiskStore(casPath);
+    // ARRANGE: a governed projection already on disk — the state every real mine pass runs against.
+    const governed: CurrentNode = { nodeKey: 'nk-governed', family: 'advisory', contentHash: 'ch-gov', claims: ['the billy-ratified T0 claim'] };
+    store.persistProjection({ current: new Map([[governed.nodeKey, governed]]), cas: new Set(['ch-gov']) });
+    const before = readFileSync(join(dir, '.atlas', 'projection.json'), 'utf8');
+
+    // ACT: a full pass that really does mine (gate-emit-all over the whole frontier).
+    const report = driveMine(REPO, depsOf({ store, budget: budget(FRONTIER.length) }));
+    expect(report.seeded.length).toBe(FRONTIER.length); // premise: this pass wrote something SOMEWHERE
+
+    // teeth: with staging pointed at the projection path, `before` is replaced by the mined rows ⇒ RED.
+    expect(readFileSync(join(dir, '.atlas', 'projection.json'), 'utf8')).toBe(before);
+    expect(store.loadProjection()!.current.get('nk-governed')).toEqual(governed); // still exactly one node…
+    expect([...store.loadProjection()!.current.keys()]).toEqual(['nk-governed']);
+    // …and the candidates are in the staging sidecar, where a curator — not a query — can find them.
+    expect(existsSync(join(dir, '.atlas', 'staging.json'))).toBe(true);
+    expect(store.loadStaging()!.current.size).toBe(FRONTIER.length);
+    expect([...store.loadStaging()!.current.keys()]).not.toContain('nk-governed');
   });
 });

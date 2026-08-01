@@ -14,12 +14,12 @@
 
 import { id } from '@atlas/kernel';
 import type { CasObject } from '@atlas/kernel';
-import type { Hash, Pack, PackInvariant } from '@atlas/contracts';
+import type { Hash, Pack } from '@atlas/contracts';
 import { createDepgraph, createRetrieval } from '@atlas/index';
 import type { Axes, AxisForest, Fact, RetrievalModel } from '@atlas/index';
 import { currentNodes } from '@atlas/knowledge';
-import type { GroundedFact } from '@atlas/knowledge';
-import { factToInvariant } from './pack-shape.js';
+import type { CurrentNode, GroundedFact } from '@atlas/knowledge';
+import { mintPack } from './pack-shape.js';
 import { rehydrateProjection } from './store.js';
 import type { DiskStore } from './store.js';
 
@@ -81,38 +81,61 @@ export function buildRetrievalModel(axes: Axes, store: DiskStore): RetrievalMode
   return { forest, store: factStore, triggers: new Map<string, readonly Hash[]>(), blastRadius };
 }
 
+/** The envelope both non-scope modes return — the shape the CLI renderer already understands. */
+export type RetrievalEnvelope = {
+  readonly pack: Pack;
+  readonly subsumes: readonly never[];
+  readonly sameAs: readonly never[];
+};
+
 /**
  * Drive a NON-scope mode through the designed `createRetrieval(model)` surface and shape the returned
  * `readonly Fact[]` into the `{ pack, subsumes }` envelope the CLI renderer understands. The model is built
- * FRESH from the live `store` on every call (freshness parity with the scope path). Each fact is shaped into a
- * `PackInvariant` via the shared `factToInvariant` — recovering the projection `CurrentNode` for a returned
- * fact by its CAS contentHash (`id(fact)`), so the trusted (recomputed) nodeKey + claim set are used, not the
- * untrusted author payload. Invariants sorted by `nodeId`; `subsumes` is `[]` (a scope-only coverage
- * relation); `stale: false` (the non-scope modes carry no drift flag). Pure + total.
+ * FRESH from the live `store` on every call (freshness parity with the scope path).
  */
 export function retrievalPack(
   axes: Axes,
   mode: RetrievalMode,
   target: string,
   store: DiskStore,
-): { readonly pack: Pack; readonly subsumes: readonly never[]; readonly sameAs: readonly never[] } {
-  const model = buildRetrievalModel(axes, store); // FRESH per query — reads the live projection
+): RetrievalEnvelope {
+  return packFromModel(buildRetrievalModel(axes, store), mode, target, store); // FRESH per query
+}
+
+/**
+ * The mode→pack half of `retrievalPack`, over an ALREADY-BUILT read model. Split out from the model build
+ * for one reason beyond symmetry: `buildRetrievalModel` hardcodes `triggers: new Map()` (no trigger-axis
+ * producer exists anywhere in the monorepo), so the `trigger` leg is unreachable through `retrievalPack` and
+ * a mode nobody can exercise is a mode whose governance nobody can test. Taking the model as a parameter
+ * lets the trigger leg be driven with a populated `triggers` map through the REAL code path.
+ *
+ * Each returned fact is shaped + BOUNDED + minted by the shared `mintPack` (pack-shape.ts): the projection
+ * `CurrentNode` is recovered for a fact by its CAS contentHash (`id(fact)`), so the trusted (recomputed)
+ * nodeKey + claim set are used, not the untrusted author payload; `mintPack` then applies the TOOLS-6
+ * `tier≥T1` bound (a `T2`, or an off-lattice `T3` from a committed projection, is bounded OUT — it is NOT
+ * pack-eligible on ANY mode) and the deterministic `nodeId` sort. `subsumes`/`sameAs` are `[]` (scope-only
+ * derived relations); `stale: false` (the non-scope modes carry no drift flag). Pure + total.
+ */
+export function packFromModel(
+  model: RetrievalModel,
+  mode: RetrievalMode,
+  target: string,
+  store: DiskStore,
+): RetrievalEnvelope {
   const api = createRetrieval(model);
   const facts = (mode === 'dependency' ? api.byDependency(target) : api.byTrigger(target)) as readonly GroundedFact[];
 
   const nodeByContentHash = new Map(currentNodes(rehydrateProjection(store)).map((n) => [n.contentHash, n] as const));
-  const invariants: PackInvariant[] = [];
+  const pairs: (readonly [CurrentNode, GroundedFact])[] = [];
   for (const fact of facts) {
     const node = nodeByContentHash.get(String(id(fact as unknown as CasObject)));
     if (node === undefined) continue; // a fact with no current-node projection is not locatable — skip (total)
-    invariants.push(factToInvariant(node, fact));
+    pairs.push([node, fact] as const);
   }
-  invariants.sort((a, b) => (a.nodeId < b.nodeId ? -1 : a.nodeId > b.nodeId ? 1 : 0));
 
-  const tokenEstimate = invariants.reduce((sum, i) => sum + i.claim.length, 0);
   // the model's axis hash — the spatial axis root identity of the snapshot the pack was built from.
   const axisHash = model.forest.spatial.subtreeHash as unknown as Hash;
-  const pack: Pack = { territory: target, axisHash, invariants, tokenEstimate, stale: false };
+  const pack = mintPack({ territory: target, axisHash, stale: false }, pairs);
   // `subsumes`/`sameAs` are `[]` here — both are scope-only derived relations; the non-scope dependency/
   // trigger modes carry neither (WP-SAMEAS: parity with the pre-existing empty `subsumes`).
   return { pack, subsumes: [], sameAs: [] };

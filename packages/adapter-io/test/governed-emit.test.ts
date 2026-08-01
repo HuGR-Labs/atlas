@@ -86,6 +86,11 @@ describe('COMPOSE-A — createGovernedEmit (truth-door · authz · upsert · dur
       loadProjection() {
         return persists.length > 0 ? persists[persists.length - 1] : undefined;
       },
+      // ADR-0008 widened `DiskStore` with the STAGING doors — see the note in harness/governed-fixtures.ts.
+      persistStaging() {},
+      loadStaging() {
+        return undefined;
+      },
     };
     const { emit } = createGovernedEmit({ store: throwingStore, gate: HOLDS_GATE, policy: POLICY, actor: 'alice' });
     // `put` runs BEFORE `persistProjection`, so a CAS-write failure throws before the sidecar is written.
