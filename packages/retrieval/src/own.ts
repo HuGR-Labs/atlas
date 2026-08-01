@@ -7,7 +7,7 @@
 // reachable surfaces (pointers + how-to-pull, never content), under the same `OWN_CAP` budget. The result
 // `OwnPackPlus` extends the frozen `OwnPack` with additive exec-observable receipts (assignable to it).
 
-import { tierRank } from '@atlas/contracts';
+import { tierRank } from '@atlas/knowledge';
 import type { NodeKey, Pack, PackInvariant, Tier } from '@atlas/contracts';
 import type { GroundedFact } from '@atlas/knowledge';
 import type { OwnLevel, OwnPack, OwnUnit, RelatedFact, RelationSet } from './types.js';
@@ -37,7 +37,7 @@ export const MANIFEST_CAP = 12;
 /** Criticality → ordinal (T0 first). */
 // The lattice is NOT rebuilt here. A private `Record<Tier, number>` yields `undefined` for an off-lattice
 // value, so `tierRank(a) - tierRank(b)` was `NaN` and the sort order became undefined around a
-// poisoned row. `tierRank` (@atlas/contracts) is total: an unrecognized class ranks LAST, so it sinks.
+// poisoned row. `tierRank` (@atlas/knowledge) is total: an unrecognized class ranks LAST, so it sinks.
 
 // ── facet-local input records (the sized index candidates the composer ranks/caps) ──────────────────────
 /** One `tier≥T1` invariant candidate + its ranking keys + its pinned token cost (index-supplied). */
