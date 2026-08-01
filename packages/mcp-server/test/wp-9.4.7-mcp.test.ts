@@ -3,7 +3,7 @@
 // RED→GREEN transcription of the pinned MCP-transport behaviour, exercised against a FAKE `WiredHandler`
 // (`{ handle, schema }` + a stub `resolveNode` the transport never touches) — NEVER the real assembly. The
 // mapping functions are pure + total, so we invoke them directly (deterministic; no stdio pipe):
-//   • advertisedTools / listTools — the CLOSED five-tool surface, schemas read from handler.schema (TOOLS-1/3)
+//   • advertisedTools / listTools — GOVERNANCE_SURFACE ∪ READ_SURFACE, schemas read from handler.schema (TOOLS-1/3)
 //   • verdictToResult / callTool  — Verdict → CallToolResult, incl. the fail-closed-visibility golden (MCP-2)
 // Each golden NAMES the exact mutant that flips it (mutation-scoped teeth).
 

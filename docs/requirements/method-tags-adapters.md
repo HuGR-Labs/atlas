@@ -143,9 +143,9 @@ anti-rot: the frozen run-controller + recorded proposer is the mock; a mine driv
 ### INV-MCP-1
 method-tag: exhaustive
 fspec: —
-up-property: "exactly the five governed tools: the MCP server publishes the five tools with their input schemas and no sixth; every call routes through the shared WiredHandler so an MCP verdict equals the equivalent CLI verdict — existence + uniqueness over a closed set of five (ADR-0003)"
-down-model: "enumerate the published tool set and assert it equals exactly {atlas-init, atlas-query, atlas-emit, atlas-reconcile, atlas-link} with schemas; assert each call dispatches through the shared WiredHandler (WIRE-1 parity oracle), no sixth tool registered"
-anti-rot: the closed five-tool set + the shared handler is the enumerated oracle; a sixth published tool or a call bypassing the WiredHandler fails the set-equality/routing assertions.
+up-property: "the published set is the closed Tool union (amended ADR-0006): the MCP server publishes exactly the members of GOVERNANCE_SURFACE ∪ READ_SURFACE with their input schemas and nothing outside that union; the advertised set and the invocable set are both DERIVED from the one union and are equal; every call routes through the shared WiredHandler so an MCP verdict equals the equivalent CLI verdict — existence + uniqueness over the closed union (the count was the mechanism available when there were five legs; the CLI≡MCP parity through the one handler is the property)"
+down-model: "enumerate the published tool set and assert set-equality with the closed Tool union (GOVERNANCE_SURFACE ∪ READ_SURFACE — which enumerates to {atlas-init, atlas-query, atlas-emit, atlas-reconcile, atlas-link} today, ADR-0003, READ_SURFACE being empty until CAMPAIGN-10.3) with schemas; assert the advertised set equals the set of tokens the handler will dispatch; assert each call dispatches through the shared WiredHandler (WIRE-1 parity oracle); no tool outside the union registered or invocable"
+anti-rot: the closed Tool union + the shared handler is the enumerated oracle; a published tool outside the union, an advertised-vs-invocable divergence, or a call bypassing the WiredHandler fails the set-equality/routing assertions.
 
 ### INV-MCP-2
 method-tag: reference-model

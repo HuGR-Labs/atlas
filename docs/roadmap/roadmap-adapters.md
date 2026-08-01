@@ -76,7 +76,7 @@ campaign: CAMPAIGN-9.3
 split: Path (the LLM-extract + driver route) from EPIC-6
 
 ### EPIC-7 — the MCP server exposes the five governed tools
-goal-trace: "an agent drives Atlas over MCP → the stdio server publishes exactly the five tools through the shared handler, fail-closed → the MCP entrypoint"
+goal-trace: "an agent drives Atlas over MCP → the stdio server publishes GOVERNANCE_SURFACE ∪ READ_SURFACE through the shared handler, fail-closed → the MCP entrypoint"
 vertical: wire (shared handler) → mcp-server (five tools·schemas·fail-closed transport) — demoable: an MCP client's `atlas-query` returns a verdict byte-identical to the CLI's; a tool error returns a structured rejected Verdict, no crash
 reqs: [ REQ-MCP-1a, REQ-MCP-1b, REQ-MCP-1c, REQ-MCP-2a, REQ-MCP-2b, REQ-MCP-2c ]
 campaign: CAMPAIGN-9.4

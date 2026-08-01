@@ -14,7 +14,8 @@
 >   transport, and the shared `WiredHandler` parity oracle. The named mock is the anti-rot; the SCN's teeth are
 >   the exact mutant that diverges from it.
 > - **3 `exhaustive` INVs** (CLI-1, CLI-2, MCP-1) → **`gen: exhaustive`**: the finite space is enumerated — the
->   `command → wired-leg` map, the `command × authority` matrix, and the closed five-tool set — plus (CLI-1) the
+>   `command → wired-leg` map, the `command × authority` matrix, and the closed `Tool` union (MCP-1, amended
+>   ADR-0006 — was "the closed five-tool set") — plus (CLI-1) the
 >   PBT-fuzz malformed-`argv` totality arm the enumeration cannot reach.
 > - **1 `PBT` INV** (ADAPTER-7, the one algebraic law the ring itself composes — durable dedup/supersede
 >   idempotence) → **`gen: PBT`**: concrete witness instances of the idempotence law (`write∘write ≡ write` over
@@ -552,14 +553,14 @@ gen: conformance
 
 ---
 
-## REQ-MCP-1 — exactly the five governed tools
+## REQ-MCP-1 — the published set is the closed tool union   (amended ADR-0006)
 
-### SCN-MCP-1a-1 — the published set is exactly the five tools with schemas   (happy)
+### SCN-MCP-1a-1 — the published set is exactly the closed `Tool` union, with schemas   (happy, amended ADR-0006)
 source: REQ-MCP-1a
 Given the MCP stdio server
 When the published tool set is enumerated
-Then it equals exactly `{ atlas-init, atlas-query, atlas-emit, atlas-reconcile, atlas-link }` (ADR-0003), each with its input schema
-teeth: breaks-on "the server publishes `atlas-init` without its input schema — the enumerated set does not match the five-with-schemas oracle"
+Then it equals exactly the closed `Tool` union — `GOVERNANCE_SURFACE ∪ READ_SURFACE`, which enumerates to `{ atlas-init, atlas-query, atlas-emit, atlas-reconcile, atlas-link }` today (ADR-0003; `READ_SURFACE` empty until CAMPAIGN-10.3) — each with its input schema
+teeth: breaks-on "the server publishes `atlas-init` without its input schema — the enumerated set does not match the union-with-schemas oracle"
 gen: exhaustive
 
 ### SCN-MCP-1b-1 — no tool outside the closed union is published   (guard, amended ADR-0006)

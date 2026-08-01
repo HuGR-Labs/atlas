@@ -87,4 +87,36 @@ describe('anti-drift vocabulary — it does NOT cry wolf', () => {
       expect(isStaleGovernanceClaim(line), line).toBe(false);
     }
   });
+
+  // ── the FIVE→UNION amendment (ADR-0006) ─────────────────────────────────────────────────────────────
+  // Third amendment, third residue hunt. It ran through S0, S1, the reference and the S3 goldens and STOPPED
+  // ONE SPEC LAYER SHORT — `method-tags-adapters.md` kept the pre-amendment text verbatim for days, plus four
+  // more sites in the roadmap, a goldens summary, a WP card and the MCP server's own header. Every one was
+  // invisible because this module had a pattern for four→five and none for five→union.
+  it('catches a claim that the PUBLISHED surface is exactly five', () => {
+    for (const line of [
+      'the stdio server publishes exactly the five tools through the shared handler',
+      'The MCP stdio server publishes exactly the five governed tools with their input schemas',
+      'the advertised set is exactly the five tools',
+      'assert no sixth tool registered',
+      'the CLOSED five-tool surface, schemas read from handler.schema',
+    ]) {
+      expect(isStaleGovernanceClaim(line), line).toBe(true);
+    }
+  });
+
+  // The near-miss that matters more than the catch: the first draft matched `exactly five` outright and
+  // flagged TWELVE true statements. `GOVERNANCE_SURFACE` really is closed at five (INV-TOOLS-1 / ADR-0003,
+  // pinned by check (1) of the guard). A gate broad enough to force a correct invariant to be softened makes
+  // the codebase less honest, which is the opposite of the job.
+  it('does NOT fire on the GOVERNED set, which IS closed at five', () => {
+    for (const line of [
+      'Owns the CLOSED five-tool `GOVERNANCE_SURFACE` and the two governed write doors',
+      '`GOVERNANCE_SURFACE` shall remain exactly five and `WRITE_PATHS` exactly two.',
+      'REQ-TOOLS-1a — governance surface is exactly five tools',
+      'The old rule — "the MCP server publishes exactly the five governed tools" — is superseded by ADR-0006',
+    ]) {
+      expect(isStaleGovernanceClaim(line), line).toBe(false);
+    }
+  });
 });

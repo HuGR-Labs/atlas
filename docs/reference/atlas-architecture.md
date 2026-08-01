@@ -19,7 +19,8 @@
 > | **ARCH-1..3, 5..7** | **gated** — `harness/gates/layer-guard.mjs`, in CI, mutation-tested (§1.4) |
 > | **ARCH-4** | self-referential (it *is* the requirement to gate) |
 > | **ARCH-8** (growth path) | **prose** — no gate; triggered by ARCH-7 failing |
-> | **ARCH-9..12** (the whole AUTHORITY model) | **prose only, and NOT YET IMPLEMENTED.** These describe a live governance hole on `master` (§3.1). They are proposed remediation, not shipped behaviour. Tracked as ARCH-D3/D4. |
+> | **ARCH-10** | **IMPLEMENTED and mutation-tested** — the incumbent guard, `packages/adapter-io/src/governed-emit.ts` §2.25, ratified by `ADR-0007`. Its checker is a **test**, not `layer-guard.mjs`: `SCN-GE-I1`/`I2`/`I5` in `packages/adapter-io/test/governed-emit-incumbent.test.ts` (deleting the guard block turns all three red). |
+> | **ARCH-9, ARCH-11, ARCH-12** (the rest of the AUTHORITY model) | **prose only, and NOT YET IMPLEMENTED.** ARCH-9 in particular is still open on a CREATE, where the author-supplied `tier` alone selects the route (`packages/knowledge/src/ratify/fastpath.ts:64`) — see §3.1. They are proposed remediation, not shipped behaviour. Tracked as ARCH-D3b/D4. |
 >
 > **The bar.** Each of the three models below is grounded in named prior art and, where the state of the art
 > gives a *measured* threshold, the measurement is cited rather than a number being invented.
@@ -159,7 +160,11 @@ The product invented the right pattern and did not apply it to itself. §2.3 app
 
 ### 3.1 The failure this prevents (reproduced, not hypothesized)
 
-Verified against the built packages on `master`:
+**Reproduced against the built packages on `master` @ `5de122e`, before the ADR-0007 incumbent guard existed.**
+This transcript is the *historical evidence* that motivated ARCH-9 and ARCH-10; it is not a description of the
+door as it stands. Its last line no longer reproduces — the emit door now refuses that write
+`governance-downgrade` (ARCH-10; `SCN-GE-I1`). The first three lines still hold on both sides of the fix, which
+is why ARCH-9 is still open.
 
 ```
 nodeKey(T0) == nodeKey(T2)     → identity does NOT include tier
@@ -168,15 +173,18 @@ route(T2) = auto-accept        → the ratify gate is SKIPPED
 emit T0 → CREATE ; emit T2 → UPDATE ; node now points at the T2 bytes ; supersededBy: (none)
 ```
 
-A `T0` fact admitted only with the billy token can be **displaced by a `T2` advisory carrying no token at
+A `T0` fact admitted only with the billy token **could be displaced by a `T2` advisory carrying no token at
 all**, at the same `(anchor, slot)`. And because `atlas-query` bounds `T2` out of reads, the T0 invariant
-then silently stops appearing for its scope, with no refusal on any transport.
+then silently stopped appearing for its scope, with no refusal on any transport.
 
 The mechanism has a name: **`tier` is an author-supplied argument that selects which gate runs.** In the
 literature this is the confused deputy, and the current framing of it for agent systems is precise —
 *capability gating* answers which tools are exposed; *per-call authorization* answers whether a concrete
-call with specific argument values is allowed. Atlas has the first and is missing the second at exactly this
-field.
+call with specific argument values is allowed. Atlas has the first and, at this field, now has the second
+**only where there is an incumbent to derive it from**: a write landing on an EXISTING node is gated by that
+node's own stored class (ARCH-10 / ADR-0007). On a CREATE there is no incumbent, `route` still reads the
+declared `tier` (`packages/knowledge/src/ratify/fastpath.ts:64`), and gate 0 checks only that the class is on
+the lattice — not that the author may claim it. That half is ARCH-9, and it is unclosed.
 
 ### 3.2 The rules
 
@@ -237,12 +245,13 @@ dry-run door (`check`) discloses nothing an attacker could not already read.
 
 ## 4. Acceptance (falsifiable checks — S3 lifts goldens from these)
 
-> **Enforcement column, not a uniform claim.** ✅ = shipped and mutation-tested in `layer-guard.mjs`;
-> ⬜ = specified, no checker yet. A second review round found four of these presented as uniformly
-> falsifiable when they were not — #4 was false as written (the gate read manifests only, so a planted
-> *import* passed), #8 was satisfiable with no code change, #9 conflicted with ARCH-10's own wording, and
-> #10 was satisfied by the code it targets. #4 is now true (checks 1–7 below are gated); #8–#10 are ⬜ and
-> belong to the unimplemented AUTHORITY model.
+> **Enforcement column, not a uniform claim.** ✅ = shipped and mutation-tested — in `layer-guard.mjs` for
+> checks 1–7, and in the test suite for check 9; ⬜ = specified, no checker yet. A second review round found
+> four of these presented as uniformly falsifiable when they were not — #4 was false as written (the gate read
+> manifests only, so a planted *import* passed), #8 was satisfiable with no code change, #9 conflicted with
+> ARCH-10's own wording, and #10 was satisfied by the code it targets. #4 is now true (checks 1–7 below are
+> gated by `layer-guard.mjs`); **#9 is now shipped and mutation-tested too, by a test rather than by the gate**
+> (ADR-0007); #8 and #10 remain ⬜ and belong to the still-unimplemented remainder of the AUTHORITY model.
 
 1. The package dependency graph is acyclic, and no inner layer imports an outer one. *(ARCH-1, ARCH-2)*
 2. `@atlas/tools` has zero import edges to `adapter-io` / `cli` / `mcp-server`. *(ARCH-2)*
@@ -256,7 +265,9 @@ dry-run door (`check`) discloses nothing an attacker could not already read.
 8. No field that selects a governance gate is both author-supplied and outside the identity envelope.
    *(ARCH-9)*
 9. Emitting a `T2` advisory at the `(anchor, slot)` of a ratified `T0` fact is **refused**, not silently
-   applied as an UPDATE. *(ARCH-10 — the reproduction in §3.1 becomes a red test)*
+   applied as an UPDATE. *(ARCH-10 — the §3.1 reproduction, now a GREEN test: `SCN-GE-I1`,
+   `packages/adapter-io/test/governed-emit-incumbent.test.ts`; mutation-verified, deleting the incumbent-guard
+   block in `governed-emit.ts` turns it red. ADR-0007.)*
 10. A planner leg cannot be constructed over a store handle that exposes a mutator — enforced by the type,
     demonstrated by a compile failure, not by a spy. *(ARCH-11)*
 
@@ -268,7 +279,8 @@ dry-run door (`check`) discloses nothing an attacker could not already read.
 |---|---|---|
 | **ARCH-D1** | Ports declared inward, adapters outward; `tools` never depends on `adapter-io` | **proposed** — ADR-0006 §hierarchy |
 | **ARCH-D2** | INV-MCP-1's "exactly five tools" is superseded by the derived-surface property + a measured budget | **OWNER-RATIFIED 2026-07-25** — ADR-0006 |
-| **ARCH-D3** | `tier` (and `scope`) must stop being author-supplied gate selectors | **OPEN — DEFINE required.** This is a live governance hole on `master`, reproduced in §3.1; it is not CAMPAIGN-10 debt |
+| **ARCH-D3a** (UPDATE leg) | On a write that lands on an EXISTING node, `tier` and `scope` stop being author-supplied gate selectors: the required class and the authorized scope are read off the incumbent's own stored fact | **CLOSED 2026-07-25 — ADR-0007.** `governed-emit.ts` §2.25 refuses `governance-downgrade` / `unauthorized for target` / `unverifiable target`; pinned by `SCN-GE-I1`/`I2`/`I5` |
+| **ARCH-D3b** (CREATE leg) | The same for a write that mints a node, where there is no incumbent to derive from | **OPEN — DEFINE required.** `route` still selects on the declared `tier` (`packages/knowledge/src/ratify/fastpath.ts:64`), and gate 0 only checks the class is on the lattice. Still a live governance hole; it is not CAMPAIGN-10 debt |
 | **ARCH-D4** | Planner legs take an unforgeable read-only port (ocap), replacing the write-spy as the guarantee | **proposed** — supersedes ADR-0004's "property of the type" claim, which is currently overstated |
 
 ## Sources

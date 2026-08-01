@@ -48,6 +48,27 @@ export const STALE = [
   /\badmin-locked\b/i,
   /\bonly\b[^.\n]{0,20}\badmins?\b[^.\n]{0,12}\bratif/i,
   /\brequires? a review from\b/i,
+
+  // ── the FIVE→UNION amendment (ADR-0006) ───────────────────────────────────────────────────────────
+  // A THIRD amendment, and the third time the same meta-lesson landed: ADR-0006 killed "the MCP server
+  // publishes EXACTLY five tools" (the surface is now the closed `Tool` union, and it grows by progressive
+  // disclosure). The amendment ran through S0, S1, the reference and the S3 goldens — and stopped one spec
+  // layer short. `method-tags-adapters.md` kept the pre-amendment text verbatim for days, and a sweep found
+  // four further residues in the roadmap, the goldens summary and a WP card.
+  //
+  // Every one of them was invisible HERE, because this file had a pattern for `four`→`five` and a pattern
+  // for unenforced controls, and none for `five`→union. THE RULE THIS ENCODES: an amendment that is not
+  // given its own drift pattern will leave residue, every time — three for three so far. `GOVERNANCE_SURFACE`
+  // really is 5 today; what was killed is the claim that it is exactly and PERMANENTLY five.
+  // NARROWED, and the near-miss is worth recording: the first draft matched `exactly five` outright and
+  // flagged twelve sites that are TRUE. `GOVERNANCE_SURFACE` IS exactly five (INV-TOOLS-1 / ADR-0003, pinned
+  // by check (1) of this guard) — what ADR-0006 killed is the claim about the set the MCP server PUBLISHES,
+  // which is now `GOVERNANCE_SURFACE ∪ READ_SURFACE`. A guard broad enough to force true statements to be
+  // weakened is worse than no guard, so these match the PUBLISHED/ADVERTISED/REGISTERED surface only.
+  /\b(?:publishe?s?|advertis\w+|registers?|registered)\b[^.\n]{0,60}\bexactly (?:the )?five\b/i,
+  /\bexactly (?:the )?five\b[^.\n]{0,60}\b(?:publishe?d|advertised|registered)\b/i,
+  /\bno sixth tool\b[^.\n]{0,30}\b(?:registered|published|advertised)\b/i,
+  /\bclosed five-tool\b/i,
 ];
 
 /** A line matching any of these is a LEGITIMATE use of the words above, not drift. */
@@ -65,6 +86,16 @@ export const ALLOW = [
   /\bNOT IN FORCE\b/i, /\bnever in force\b/i, /\bnot enforced\b/i, /\bby intent\b/i,
   /\bused to claim\b/i, /\bis NOT\b/, /\bwould require\b/i, /\bunavailable\b/i,
   /\baspirational\b/i, /\bonce the team exists\b/i, /\bUpgrade to GitHub\b/i, /\bunknown owner\b/i,
+  // five→union narrative. NARROW on purpose — `ADR-0006` specifically, exactly as `ADR-0003` is handled
+  // above: a general `ADR-\d+` would let any future doc re-assert a retired claim just by citing an ADR.
+  /ADR-0006/, /\bprogressive disclosure\b/i, /\bpermanent(ly)?\b/i, /\bretired\b/i,
+  /\bsuperseded\b/i, /\bold rule\b/i,
+  // `GOVERNANCE_SURFACE` on the line is the tell that "five" qualifies the GOVERNED set — which IS closed at
+  // five (INV-TOOLS-1 / ADR-0003) and is pinned by check (1) of this guard. ADR-0006 killed the claim about
+  // the set the MCP server ADVERTISES (now `GOVERNANCE_SURFACE ∪ READ_SURFACE`), not this one. Without this
+  // allow the guard flags a dozen true statements and pressures a correct invariant into being softened —
+  // the failure mode where a gate makes the codebase LESS honest.
+  /GOVERNANCE_SURFACE/,
 ];
 
 /** Is this line a stale governance-count claim? Pure + total — the guard's per-line verdict, verbatim. */

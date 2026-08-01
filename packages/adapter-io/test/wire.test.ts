@@ -55,7 +55,7 @@ function makeConfig(): { cfg: WireConfig; cleanup: () => void } {
 const legWired = (h: WiredHandler, tool: Tool): boolean =>
   !(h.handle(tool, {}).rejected ?? '').includes('not wired at this seam');
 
-/** The wired-leg surface of a handler over the closed five-tool governance set. */
+/** The wired-leg surface of a handler over the closed GOVERNANCE_SURFACE set. */
 const surface = (h: WiredHandler): number => GOVERNANCE_SURFACE.filter((t) => legWired(h, t)).length;
 
 describe('WP-9.1.1-a.WIRE — one shared five-leg WiredHandler assembly', () => {

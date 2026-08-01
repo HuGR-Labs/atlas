@@ -728,7 +728,7 @@ id: WP-9.4.7.MCP
 content_hash: <filled-at-freeze>
 title: MCP stdio server — exactly the five governed tools, fail-closed, shared handler
 intent: >
-  The MCP stdio server publishes exactly the five governed tools with their input schemas and routes every call
+  The MCP stdio server publishes GOVERNANCE_SURFACE ∪ READ_SURFACE with their input schemas and routes every call
   through the shared `WiredHandler`, so an MCP call and the equivalent CLI call return contract-identical
   verdicts; a tool error surfaces as a structured rejected `Verdict` and the server never crashes or drops the
   fail-closed verdict. Consumes the WiredHandler frozen upstream in WIRE. (Non-authoritative handle.)
