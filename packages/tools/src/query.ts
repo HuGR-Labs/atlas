@@ -4,7 +4,7 @@
 // injected index port to the MERGED covering bounded `Pack` — `tier≥T1` only, stale-flagged (a stale pack
 // is a re-ground SIGNAL, not served truth). Pure + total; the concrete index resolution is @atlas/index.
 
-import { isTier } from '@atlas/contracts';
+import { isTier } from '@atlas/knowledge';
 import type { Hash, Pack, PackInvariant } from '@atlas/contracts';
 import type { Guidance, QueryOut } from './types.js';
 

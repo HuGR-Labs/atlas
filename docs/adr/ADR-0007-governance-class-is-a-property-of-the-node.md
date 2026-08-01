@@ -9,8 +9,8 @@
 - **Amends:** nothing frozen. `GOVERNANCE_SURFACE` stays 5, `WRITE_PATHS` stays `['atlas-emit','atlas-link']`
   (INV-TOOLS-1 / ADR-0003 untouched). The `StoreProjection` / `CurrentNode` seam is **unchanged** — see
   §"What this deliberately does not do".
-- **Introduces:** the tier lattice at L0 (`isTier` / `tierRank` / `isWeakerTier` / `strictestTier`,
-  `@atlas/contracts`, re-exported by `@atlas/knowledge`), the emit door's gate-0 class validator and its
+- **Introduces:** the tier lattice at L4 (`isTier` / `tierRank` / `isWeakerTier` / `strictestTier`,
+  `@atlas/knowledge/src/ratify/tier.ts`), the emit door's gate-0 class validator and its
   INCUMBENT GUARD, the link door's class-wide tier gate, and `sameAsClassOf` (`@atlas/knowledge`).
 - **Revised after review (2026-07-25).** The first draft of this decision was reviewed by two independent
   seats and **rejected**: its guard was bypassable by declaring an off-lattice `tier`, and its link gate
@@ -59,11 +59,15 @@ identity collide, and lie about the **class** instead.
 
 **1. A write may re-state or RAISE the governance class of the node it targets. It may never lower it.**
 
-`Tier` is an ordered lattice (`T0` ≻ `T1` ≻ `T2`), written down for the first time — at **L0, beside the type
-it orders** (`@atlas/contracts/tier.ts`). Before this the ordering existed only as scattered `=== 'T0'` /
-`=== 'T2'` equality checks plus three private `Record<Tier, number>` copies in `@atlas/retrieval`, so no code
-could ask the one question a write door has to ask, and every private copy produced `undefined` on a value
-outside the union.
+`Tier` is an ordered lattice (`T0` ≻ `T1` ≻ `T2`), written down for the first time — at **L4, beside the
+ratification facet that owns the question** (`@atlas/knowledge/src/ratify/tier.ts`), NOT beside the type it
+orders. `@atlas/contracts` is L0 vocabulary with **zero runtime** (ARCHITECTURE.md), and an ORDER is policy,
+not vocabulary; every consumer of the lattice (`retrieval` L5, `tools` L7, the `adapter-io` ring) already sits
+at or above L4 and already depends on `@atlas/knowledge`, so nothing about this inverts the DAG. Before this
+the ordering existed only as scattered `=== 'T0'` / `=== 'T2'` equality checks plus three private
+`Record<Tier, number>` copies in `@atlas/retrieval`, so no code could ask the one question a write door has to
+ask, and every private copy produced `undefined` on a value outside the union. The defect was the DUPLICATION,
+not the layer.
 
 **1b. The lattice is TOTAL over `unknown` and fails closed.** `Tier` is a type-only union: it does not exist
 at runtime, and nothing upstream validates it — the CLI wire is `JSON.parse` + a cast and the MCP `node`

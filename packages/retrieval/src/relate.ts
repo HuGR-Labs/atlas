@@ -5,8 +5,8 @@
 // job is presentation only (partition → rank → cap). `coChanged` is opt-in, labeled, and disjoint from the
 // structural bands. Total (RETR-9): a malformed/missing unit ⇒ empty `RelationSet`, never a throw.
 
-import { tierRank } from '@atlas/contracts';
-import type { Tier, PackInvariant } from '@atlas/contracts';
+import { tierRank } from '@atlas/knowledge';
+import type { PackInvariant } from '@atlas/contracts';
 import type { ReverseClosure } from '@atlas/index';
 import type { BoundMeta, Path, RelatedFact, RelationSet } from './types.js';
 
@@ -33,7 +33,7 @@ export const RELATE_RANK = 'tier-desc,ppr-desc,distance-asc,nodeKey-asc' as cons
 /** Criticality → sort ordinal (T0 highest ⇒ smallest ordinal ⇒ first under ascending). `tier-desc`. */
 // The lattice is NOT rebuilt here. A private `Record<Tier, number>` yields `undefined` for an off-lattice
 // value, so `tierRank(a) - tierRank(b)` was `NaN` and the sort order became undefined around a
-// poisoned row. `tierRank` (@atlas/contracts) is total: an unrecognized class ranks LAST, so it sinks.
+// poisoned row. `tierRank` (@atlas/knowledge) is total: an unrecognized class ranks LAST, so it sinks.
 
 // ── the deterministic total-rank comparator (RETR-11b) ──────────────────────────────────────────────────
 /**

@@ -7,7 +7,6 @@
 // consumer: candidates arrive with index-supplied `tokenEstimate`/`axisHash` — NEVER tokenizes/hashes.
 // [FLAG] the truncation marker + tail have no frozen `Pack` field — carried on facet-local `BoundedPack`.
 
-import { tierRank } from '@atlas/contracts';
 import type { Hash, InjectionKind, NodeKey, Pack, PackInvariant, Territory, Tier } from '@atlas/contracts';
 import { asHash } from '@atlas/kernel';
 import type { CapsApi } from './types.js';
@@ -65,10 +64,11 @@ const CAP_TABLE: Readonly<Record<InjectionKind, number>> = {
   poke: 150,
 };
 
-/** Criticality → sort ordinal (T0 highest ⇒ smallest ordinal). Only T0/T1 are pack-eligible (tier≥T1). */
-// The lattice is NOT rebuilt here. A private `Record<Tier, number>` yields `undefined` for an off-lattice
-// value, so `tierRank(a) - tierRank(b)` was `NaN` and the sort order became undefined around a
-// poisoned row. `tierRank` (@atlas/contracts) is total: an unrecognized class ranks LAST, so it sinks.
+// No tier ORDINAL is needed here, and none is built: the packer never SORTS by criticality. It PARTITIONS
+// (`assemble` below) — the `T0` band in full first, then the `T1` band — and each band is ordered by the
+// shared within-tier comparator `(hits-desc, ppr-desc, nodeKey-asc)`. `T2` is below the `tier≥T1` floor and
+// is never pack-eligible. The comparators that DO rank across classes (`own.ts`, `relate.ts`) use the one
+// lattice, `tierRank` from `@atlas/knowledge`.
 
 /**
  * A pack candidate — one territory node the index resolved, carrying the three sort keys `(hits, ppr,
