@@ -58,7 +58,11 @@ function fixture(facts: readonly GroundedFact[], edges: Readonly<Record<string, 
     cas.set(h, f as CasObject);
     const key = `n${i}`;
     const sameAs = edges[key];
-    current.set(key, { nodeKey: key, family: 'advisory', contentHash: h, claims: [f.claimNorm], ...(sameAs ? { sameAs } : {}) });
+    // The row carries the node's `(scope, tier)` (ADR-0007 carrier) exactly as `upsert` stamps it, so the
+    // authz gates can resolve authority off the projection without reading CAS. Mirrored FROM the fact, not
+    // invented: the door corroborates the two against each other, and a fixture that disagreed with its own
+    // bytes would be testing the tamper path rather than the ordinary one.
+    current.set(key, { nodeKey: key, family: 'advisory', contentHash: h, claims: [f.claimNorm], scope: f.scope!, tier: f.tier, ...(sameAs ? { sameAs } : {}) });
   });
   const persists: StoreProjection[] = [];
   const projection: StoreProjection = { current, cas: new Set(cas.keys()) };

@@ -11,6 +11,7 @@
 // carry-forward semantics are byte-identical to their pre-split form. `router.ts` re-exports this module, so
 // the package surface (and every `../src/write/router.js` import in the existing tests) is unchanged.
 
+import type { Tier } from '@atlas/contracts';
 import type { PredicateSlot } from '../types.js';
 import type { NearDupConfig, NodeFamily, RouteInputs, WriteDecision } from './router.js';
 import { routeWrite } from './router.js';
@@ -31,6 +32,13 @@ export interface WriteRequest {
   // ── ADJACENCY carrier (ADDITIVE, OPTIONAL) — anchor+slot for WP-B's sibling-adjacency scan; NOT routed.
   readonly primaryAnchor?: string; // the computed primaryAnchorId VALUE (qualifiedPath-prefix), string form
   readonly slot?: PredicateSlot; //  the closed-vocabulary predicate slot the node lives at (R3-optional)
+  // ── GOVERNANCE carrier (ADDITIVE, OPTIONAL — ADR-0007) — the `(scope, tier)` pair this write DECLARES,
+  //    forwarded so `upsert` can stamp it onto the ROW. NOT ROUTED: neither field enters `RouteInputs`, and
+  //    a governance value never changes which cell of the KNOW-4 table a write lands in. Supplied by a
+  //    GOVERNED door only, and only AFTER that door has validated both halves (`isTier`/`isScope`) and
+  //    refused any relocation or downgrade — so what is stamped here is already monotone.
+  readonly scope?: string;
+  readonly tier?: Tier;
 }
 
 /** A current node in the territory projection. Exactly one lives per `nodeKey` (KNOW-4g). */
@@ -49,6 +57,27 @@ export interface CurrentNode {
   //    trips inside the CurrentNode entry (store.ts WireProjection serializes the whole node — no change there).
   //    ADDITIVE/OPTIONAL, back-compat: a node minted before this WP simply has no `sameAs` and is a singleton.
   readonly sameAs?: readonly string[];
+  // ── GOVERNANCE carrier (ADDITIVE, OPTIONAL — ADR-0007) — the `(scope, tier)` the node ITSELF lives under.
+  //
+  //    THIS IS THE HALF ADR-0007 SHIPPED WITHOUT. That ADR decided authority is derived from the RESOURCE,
+  //    never asserted by the request — but the resource's governance class was reachable only by reading the
+  //    incumbent's CAS bytes, because the row did not carry it. A read that can FAIL made the refusal depend
+  //    on storage health, so a caller with no authority over the node could tell a healthy node from a pruned
+  //    one at an identity anyone can pre-compute. Merging both into one refusal closed the oracle but sent the
+  //    node's OWN author an authorization error for a storage fault. Carried HERE, target authority is decided
+  //    off the projection — the same answer in both byte-states — and the honest storage answer is reserved
+  //    for the caller who has already been shown to hold authority.
+  //
+  //    ADDITIVE/OPTIONAL, back-compat, exactly the `builtAt`/`sameAs` discipline: a row minted before this WP
+  //    simply has neither field, old sidecars round-trip unrewritten, and ABSENT means authority is
+  //    UNCONFIRMABLE ⇒ the door fails closed. Absent is never "authority granted" and never a crash — the
+  //    consuming door applies `isScope`/the tier lattice, both of which are TOTAL over `unknown`.
+  //
+  //    NEITHER FIELD ENTERS `nodeKey`. Identity stays `hash(primaryAnchorId ‖ slot[‖ check])`; folding a
+  //    governance value into it would silently re-address every stored fact and split a node from its own
+  //    history the first time its class was raised.
+  readonly scope?: string;
+  readonly tier?: Tier;
 }
 
 /** The territory store projection: the one-current-node map + the append-only CAS retention set. */
@@ -74,6 +103,13 @@ export interface UpsertResult {
   readonly store: StoreProjection;
 }
 
+/** The ADDITIVE governance carrier a write contributes to the row it lands on (ADR-0007). A conditional
+ *  spread, so an omitted half stays ABSENT rather than becoming an explicit `undefined` — the same shape
+ *  `primaryAnchor`/`slot` use, and what keeps `exactOptionalPropertyTypes` and the JSON round-trip honest. */
+function governanceOf(req: WriteRequest): { scope?: string; tier?: Tier } {
+  return { ...(req.scope !== undefined ? { scope: req.scope } : {}), ...(req.tier !== undefined ? { tier: req.tier } : {}) };
+}
+
 /**
  * Apply one write as an upsert: resolve the routing inputs against the current projection, route
  * with {@link routeWrite}, then reduce the projection per the route. DEDUP is a no-op; CREATE mints
@@ -90,7 +126,13 @@ export interface UpsertResult {
  * CARRY-FORWARD IS THE DEFAULT (ADR-0009): UPDATE and SUPERSEDE both SPREAD the prior node and re-mint only the
  * fields named inline, so a field added to `CurrentNode` later is carried with no edit here and DROPPING one has
  * to be spelled out (only `claims`, at SUPERSEDE). `sameAs` is why — a SIGNED act established it (`atlas-link`'s
- * authz + ratifier over the whole class), and a class that SHRINKS under-charges every gate `sameAsClassOf` prices.
+ * authz + ratifier over the whole class), and a class that SHRINKS under-charges every gate `sameAsClassOf` prices. *
+ * GOVERNANCE (ADR-0007 carrier): the req's `(scope, tier)` is stamped onto the row and, on UPDATE/SUPERSEDE,
+ * WINS over the prior's — safe in exactly one direction and only because the governed door already decided it.
+ * That door refuses a relocation, so a surviving write's `scope` RE-STATES the incumbent's; and it refuses a
+ * downgrade, so its `tier` re-states or RAISES. A write that OMITS the pair leaves the prior row's intact
+ * (`...prior`) rather than erasing it: this reducer is also reachable from ungoverned callers, and a carrier
+ * that could be CLEARED by omission would be a way to demote a node to "unconfirmable" and brick it.
  */
 export function upsert(
   store: StoreProjection,
@@ -121,6 +163,7 @@ export function upsert(
         // ADJACENCY carrier (additive) — spread keeps the field ABSENT when omitted (never explicit undefined).
         ...(req.primaryAnchor !== undefined ? { primaryAnchor: req.primaryAnchor } : {}),
         ...(req.slot !== undefined ? { slot: req.slot } : {}),
+        ...governanceOf(req), // GOVERNANCE carrier (ADR-0007) — absent when the caller declares neither half
       });
       break;
     case 'UPDATE': {
@@ -135,6 +178,7 @@ export function upsert(
         claims, // in place, no supersededBy
         ...(req.primaryAnchor !== undefined ? { primaryAnchor: req.primaryAnchor } : {}),
         ...(req.slot !== undefined ? { slot: req.slot } : {}),
+        ...governanceOf(req), // re-states scope / re-states-or-RAISES tier; omitted ⇒ `...prior` stands
       });
       break;
     }
@@ -150,6 +194,7 @@ export function upsert(
         supersededBy: prior.contentHash,
         ...(req.primaryAnchor !== undefined ? { primaryAnchor: req.primaryAnchor } : {}), // req wins, else `...prior`
         ...(req.slot !== undefined ? { slot: req.slot } : {}),
+        ...governanceOf(req), // a new VERSION of a node keeps the node's governance — never a re-classification
       });
       break;
     }

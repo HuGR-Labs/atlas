@@ -1,7 +1,7 @@
 // @atlas/adapter-io — src/governed-emit.ts  (COMPOSE-A: the governed durable emit leg)
 //
 // The runtime composition-root's governed write door. `atlas-emit` persists DURABLY only THROUGH the
-// governed path — NINE fail-closed refusals across five stages, in order, before a single byte is written.
+// governed path — TEN fail-closed refusals across five stages, in order, before a single byte is written.
 // The count is stated because it drifted: this header said "three" and listed four items while the body had
 // seven refusal points, and a header that under-counts the gates is how a gate gets deleted unnoticed.
 //   0. WELL-FORMED  — the three payload fields the LATER gates route on are type-only and reach this door
@@ -14,11 +14,12 @@
 //   2. AUTHZ        — the KNOW-11 owner-scoped write gate (`actorInScope`): an actor not in the fact's
 //                     scope is rejected, nothing persisted. An empty/unset actor is in NO scope ⇒ every
 //                     write is denied (fail-closed v1 — correct behavior) (`unauthorized`).
-//   2.25 INCUMBENT  — THREE gates derived from the node the write TARGETS, never from the write itself:
-//                     the actor must hold authority in the scope the target's OWN stored fact declares
-//                     (`unauthorized for target` — the same refusal covers a target whose stored fact is
-//                     unreadable, see the constant), the write must not RELOCATE the node to another scope
-//                     (`governance-relocation`), and it must not declare a WEAKER class than the node
+//   2.25 INCUMBENT  — FOUR gates derived from the node the write TARGETS, never from the write itself:
+//                     the actor must hold authority in the scope the target's OWN PROJECTION ROW declares
+//                     (`unauthorized for target`; a row carrying no confirmable scope authorizes nobody and
+//                     gets the same refusal), the target's stored bytes must be readable AND corroborate
+//                     that row (`unverifiable target`), the write must not RELOCATE the node to another
+//                     scope (`governance-relocation`), and it must not declare a WEAKER class than the node
 //                     carries (`governance-downgrade`).
 //   2.5 RATIFY      — the KNOW-8/KNOW-18 tier-ratification gate, composed BETWEEN authz and upsert. The
 //                     KNOW-18 fast-path `route(candidate, ctx)` decides: a grounded ∧ lowRisk ∧ T2 ∧
@@ -47,14 +48,23 @@
 // stranger's governance class on every refusal — with the entire suite still green. That is why SCN-GE-I11
 // pins the order with a DOUBLY-violating input instead of trusting the line order to stay put.
 //
-// The rule USED TO BE STATED HERE AND BROKEN ONE GATE ABOVE: an `unverifiable target` refusal — is the
-// incumbent's stored fact readable from CAS? — answers a question about the stored fact just as squarely,
-// and it ran FIRST, so an actor authorized only in `public` could tell a healthy `core` node from one whose
-// CAS bytes were pruned, at an identity anyone can pre-compute from public code structure. That is a
-// storage-health oracle over another scope's nodes. It is not fixed by reordering: once the bytes are gone
-// there is NO scope left to check, so no caller can be shown to have authority and any distinct reason IS
-// the oracle. The two are therefore ONE gate with ONE reason (see REJECTED_UNAUTHORIZED_TARGET), which
-// names both causes — the legibility available to an authorized operator without re-opening the channel.
+// THE RULE WAS STATED HERE AND BROKEN ONE GATE ABOVE, AND THE FIRST REPAIR OVERSHOT. An `unverifiable
+// target` refusal — is the incumbent's stored fact readable from CAS? — answers a question about the stored
+// fact just as squarely, and it ran FIRST, so an actor authorized only in `public` could tell a healthy
+// `core` node from one whose CAS bytes were pruned, at an identity anyone can pre-compute from public code
+// structure: a storage-health oracle over another scope's nodes. Reordering alone could not fix it, because
+// the scope that decides authority was itself INSIDE the bytes — once they were gone there was no scope
+// left to check, so no caller could be shown to have authority and any distinct reason WAS the oracle. So
+// the two were merged into one refusal. That closed the leak and overshot: the node's OWN AUTHOR then got
+// `unauthorized for target` for a pruned disk, which sends an admin to grant a scope to fix storage and
+// erases the SCN-GL-7 distinction this codebase makes deliberately at the other governed door.
+//
+// THE ACTUAL FIX IS THE CARRIER, NOT THE MERGE (ADR-0007, completed). `CurrentNode` now carries the node's
+// `(scope, tier)` on the PROJECTION ROW, so authority is resolved from a source that does not depend on the
+// bytes surviving. The two reasons are separate again and neither leaks, because the split is now on
+// AUTHORITY rather than on storage state: a caller who cannot be shown to hold authority in the row's scope
+// gets `unauthorized for target` in BOTH byte-states — byte-identical, no bit disclosed — and only a caller
+// already shown to hold it can ever see `unverifiable target`, which is a fault it can actually act on.
 //
 // Pure of clock/random: no wall-clock, no nonce, no counter enters the decision. This composes OVER the
 // frozen core (`@atlas/tools` emit, `@atlas/knowledge` upsert, the GROUND gate) — it re-implements none.
@@ -62,51 +72,20 @@
 import { id } from '@atlas/kernel';
 import type { CasObject } from '@atlas/kernel';
 import type { Hash } from '@atlas/contracts';
-import { upsert, normalizeCheck, primaryAnchorId, nodeKey, route, stage, ratify, isWeakerTier, isTier, isScope } from '@atlas/knowledge';
+import { upsert, normalizeCheck, primaryAnchorId, nodeKey, route, stage, ratify, isWeakerTier, strictestTier, isTier, isScope } from '@atlas/knowledge';
 import type { Candidate, Check, CurrentNode, GroundedFact, NodeFamily, WriteRequest, RatifyContext, RatifyToken } from '@atlas/knowledge';
 import type { EmitOut, TruthGate } from '@atlas/tools';
 import { actorInScope } from './policy.js';
 import type { AtlasPolicy } from './policy.js';
 import { rehydrateProjection } from './store.js';
 import type { DiskStore } from './store.js';
-
-/** The structured fail-closed reasons (TOOLS-7b / KNOW-11 / KNOW-8) — an ungrounded, unauthorized, OR
- *  unratified write never lands. */
-const REJECTED_UNGROUNDED = 'ungrounded: citation does not re-derive FRESH at source (TOOLS-7b / GROUND-6)';
-const REJECTED_UNAUTHORIZED = 'unauthorized: actor not in fact scope (KNOW-11)';
-const REJECTED_UNRATIFIED = 'unratified: T0/contested fact requires human+billy ratification (KNOW-8)';
-const REJECTED_DOWNGRADE =
-  'governance-downgrade: this write declares a weaker tier than the node it targets — re-classification is ' +
-  'a separate governed act, never a side effect of emitting a fact (KNOW-8: a T0 class is human-ratified)';
-const REJECTED_UNAUTHORIZED_TARGET =
-  'unauthorized for target: the actor is not in the scope the node it targets already lives in (KNOW-11) — ' +
-  'being authorized for the scope this write DECLARES is not authority over the node it lands on. The SAME ' +
-  'refusal, byte for byte, covers a target whose stored fact is unverifiable (its CAS bytes are unreadable, ' +
-  'so the scope that would authorize anyone cannot be confirmed): the two are reported identically ON ' +
-  'PURPOSE, because a distinct reason would let a caller with no authority over the node use this door as a ' +
-  'storage-health oracle over someone else\'s scope, at an identity anyone can pre-compute';
-const REJECTED_MALFORMED_TIER =
-  'malformed tier: a fact must declare one of the three governance classes (T0 | T1 | T2). `Tier` is a ' +
-  'type-only union with no runtime validator upstream, so an off-lattice value is refused HERE or nowhere';
-const REJECTED_MALFORMED_SCOPE =
-  'malformed scope: a fact must declare its owning scope as a NON-EMPTY STRING — the other half of the ' +
-  '`(scope, tier)` pair a reader trusts, and just as type-only. A scope is used as a property KEY by the ' +
-  'authz lookup, and property keys COERCE: `["core"]` and `{toString:…}` read as the scope `core` there ' +
-  'while staying `!==`-unequal to every string AND to every later copy of themselves — so an unvalidated ' +
-  'scope passes authz and then fails the relocation gate forever, bricking the node for everyone';
-const REJECTED_MALFORMED_FAMILY =
-  'malformed family: `kind` disagrees with `check`. The node family is discriminated by check PRESENCE — ' +
-  '`nodeKey` folds a check into the identity and `route` sends any check-bearing candidate to full ' +
-  'ratification — while `upsert` was handed the declared `kind`, and both are author-supplied. So a ' +
-  '`predicate` MUST carry a well-formed `check` (index-query | assertion, with a string body) and an ' +
-  '`advisory` MUST carry none: keeping the check while declaring `kind:"advisory"` routed an UPDATE onto a ' +
-  'predicate node (free text on a checked fact, one generation of supersede lineage dropped), and declaring ' +
-  '`kind:"predicate"` with no check threw a raw TypeError out of the door instead of refusing';
-const REJECTED_RELOCATION =
-  'governance-relocation: this write declares a DIFFERENT scope than the node it targets — moving a node ' +
-  'between scopes is a re-classification, an explicit out-of-band signed act, never a side effect of ' +
-  'emitting a claim (ADR-0009). That act has NO DOOR YET (task #88), so a node cannot be migrated at all ' +
-  'today; a renamed scope is recovered by the admin declaring both names in the policy';
+// The structured fail-closed reasons (TOOLS-7b / KNOW-11 / KNOW-8) — the door's user-visible contract AND
+// its disclosure surface, extracted to their own module at the LOC ceiling. See that file's header.
+import {
+  REJECTED_DOWNGRADE, REJECTED_MALFORMED_FAMILY, REJECTED_MALFORMED_SCOPE, REJECTED_MALFORMED_TIER,
+  REJECTED_RELOCATION, REJECTED_UNAUTHORIZED, REJECTED_UNAUTHORIZED_TARGET, REJECTED_UNGROUNDED,
+  REJECTED_UNRATIFIED, REJECTED_UNVERIFIABLE_TARGET,
+} from './governed-emit-reasons.js';
 
 /** The KNOW-18 fast-path CONTEXT the door hands to `route`. `lowRisk` (the KNOW-17 door-2 threshold verdict)
  *  and `contested` (the KNOW-18b store-veto) are BOTH store/threshold-derived UPSTREAM and are NOT wired
@@ -277,7 +256,6 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
     const targetKey = nodeKey(candidateView) as unknown as string;
     const incumbent: CurrentNode | undefined = projection.current.get(targetKey);
     if (incumbent !== undefined) {
-      const stored = deps.store.get(incumbent.contentHash as unknown as Hash) as GroundedFact | undefined;
       // AUTHORITY OVER THE TARGET, not equality of names. Gate 2 above asked "is the actor in the scope this
       // write DECLARES" — the attacker picks that. The question that actually protects the node is "is the
       // actor in the scope the NODE ALREADY LIVES IN", so it is asked here, against the incumbent's own
@@ -301,18 +279,38 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
       // mined candidates. No special cases — but, as the gate directly below records, membership is only
       // HALF the rule, and the first version of this fix shipped it as the whole one.
       //
-      // AN UNREADABLE STORED FACT IS THE SAME REFUSAL, not a neighbouring one. The bytes being gone (pruned
-      // CAS / partial restore) — or carrying a malformed `scope`, which a pre-guard write could still have
-      // put there — means the scope that authorizes anyone CANNOT BE CONFIRMED, so nobody has authority over
-      // this node and the write is refused by this gate rather than by a second one that would announce, to
-      // a caller with no authority at all, which of the two happened. `isScope(stored.scope)` is the same
-      // guard gate 0 applies to the write, now applied to what was stored: `actorInScope` would otherwise
-      // coerce a malformed stored scope into a legitimate-looking key exactly as it did on the way in.
-      const storedScope = stored?.scope;
-      if (stored === undefined || !isScope(storedScope) || !actorInScope(deps.policy, deps.actor, storedScope)) {
+      // AUTHORITY IS RESOLVED FROM THE ROW, BEFORE A SINGLE BYTE IS READ — the carrier half ADR-0007 decided
+      // and did not ship (the file header has the full narrative). The row answers "who has authority here"
+      // identically whether or not the bytes survive, so a stranger's refusal is BYTE-IDENTICAL in both
+      // states, and the honest storage answer below is reserved for a caller already shown to hold authority.
+      //
+      // `isScope` is the same guard gate 0 applies to the write, now applied to what was STORED — without it
+      // `actorInScope` would coerce a malformed row scope into a legitimate-looking property key exactly as
+      // it would have on the way in. ABSENT is treated identically to malformed: a row minted before this
+      // carrier existed names no scope, so no scope can authorize ANYONE, and the write fails closed. That is
+      // a REFUSAL, never a grant — but it is also unrecoverable through this door for such a row (task #88;
+      // recorded as a stated gap in ADR-0007 §Consequences).
+      const rowScope = incumbent.scope;
+      if (!isScope(rowScope) || !actorInScope(deps.policy, deps.actor, rowScope)) {
         return { emitted: false, rejected: REJECTED_UNAUTHORIZED_TARGET };
       }
-      const weakerTier = isWeakerTier(tier, stored.tier);
+
+      // THE STORED FACT — read only now, and reported honestly, because authority is already established.
+      // CORROBORATION, not mere presence: the projection sidecar is UNAUTHENTICATED mutable state while the
+      // CAS bytes are content-addressed and re-hashed on read (`get` misses when `id(bytes) !== key`). So the
+      // row may decide WHO IS HEARD — that is what closes the oracle — but not what the node IS: the bytes
+      // must AGREE with the governance it advertises, else whoever edits the sidecar names themselves the
+      // node's scope. Refused AFTER the authority gate, so a forged row buys its author only this refusal.
+      const stored = deps.store.get(incumbent.contentHash as unknown as Hash) as GroundedFact | undefined;
+      if (stored === undefined || stored.scope !== rowScope) {
+        return { emitted: false, rejected: REJECTED_UNVERIFIABLE_TARGET };
+      }
+
+      // The class to clear is the STRICTEST of the two carriers, same reason: a row disagreeing with its own
+      // bytes may only make this gate HARDER. `strictestTier` is total and joins garbage to `T0`, so a row
+      // with no `tier` (pre-carrier) or an off-lattice one demands the strictest class instead of weakening
+      // the comparison — the `0 < undefined` shape ADR-0007 was written about.
+      const weakerTier = isWeakerTier(tier, strictestTier(incumbent.tier, stored.tier));
 
       // SCOPE MONOTONICITY — authority over the target is NOT the whole rule, and the membership fix above
       // silently dropped the other half. Both gates now ask "is the actor in SOME scope"; NEITHER asks
@@ -376,6 +374,13 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
       //    `predicateSlot` is R3-optional; conditional spread keeps `slot` ABSENT (exactOptionalPropertyTypes).
       primaryAnchor: primaryAnchorId(candidateView) as unknown as string,
       ...(node.predicateSlot !== undefined ? { slot: node.predicateSlot } : {}),
+      // ── GOVERNANCE carrier (ADDITIVE — ADR-0007) — stamp the `(scope, tier)` pair onto the ROW so the
+      //    incumbent guard above can resolve target authority off the projection instead of off the CAS
+      //    bytes. These are the GATE-0 SNAPSHOT values, not `raw.*`: what was validated is what is stored,
+      //    and it is the same snapshot `put` writes into CAS below — so the row and its bytes agree by
+      //    construction, which is exactly what the corroboration check above requires.
+      scope, // the gate-0 narrowed const (`isScope` proved it a non-empty string), never the raw field
+      tier,
     };
     const next = upsert(projection, req).store;
 

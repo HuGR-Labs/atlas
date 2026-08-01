@@ -94,6 +94,22 @@ interface WireProjection {
   readonly builtAt?: string; // N11 freshness watermark (HEAD sha at persist); absent ⇒ unknown (old sidecars)
 }
 
+// THE GOVERNANCE CARRIER (ADR-0007: `CurrentNode.scope` / `.tier`) NEEDS NO LINE HERE, and that is worth
+// stating rather than leaving as an absence a later reader has to re-derive. `current` serializes the WHOLE
+// `CurrentNode`, so the two fields round-trip by construction — the same way `sameAs` did, with no edit to
+// this format — and an OLD sidecar that carries neither round-trips UNREWRITTEN: JSON simply has no key,
+// which reads back as `undefined`, which is the ABSENT the doors treat as "authority unconfirmable".
+//
+// NOR IS THERE A READ-SIDE VALIDATOR FOR THEM, DELIBERATELY. `isKeyedEntry` below rejects the WHOLE file on
+// a bad row, which is right for the representation invariant (a row whose key is not its own `nodeKey` is a
+// shape no producer can make). Governance is different on both counts: ABSENT is legitimate and must not
+// reject anything, and MALFORMED must not be a way to make a whole store unloadable — that would hand anyone
+// who can write one byte of this file a total-denial primitive, where today the worst case is one node that
+// fails closed. So the guard lives at the CONSUMPTION point instead, where both doors apply `isScope` and
+// the total tier lattice to the row before trusting it (see `governed-emit.ts`'s incumbent guard). The rule:
+// this file decides whether the sidecar is STRUCTURALLY a projection; the doors decide whether a given row
+// can authorize a given actor.
+
 /**
  * Write a `StoreProjection` to ONE mutable sidecar file. Shared verbatim by the projection and the staging
  * door (ADR-0008) so the two can differ only in WHICH file they name — a second hand-copied implementation

@@ -7,8 +7,13 @@
   of a **governed** path, which the escalation rule would otherwise route to the owner.
 - **Spec author:** lead, grounded against `master` @ `5de122e`.
 - **Amends:** nothing frozen. `GOVERNANCE_SURFACE` stays 5, `WRITE_PATHS` stays `['atlas-emit','atlas-link']`
-  (INV-TOOLS-1 / ADR-0003 untouched). The `StoreProjection` / `CurrentNode` seam is **unchanged** — see
-  §"What this deliberately does not do".
+  (INV-TOOLS-1 / ADR-0003 untouched). The `StoreProjection` / `CurrentNode` seam is **extended ADDITIVELY** —
+  see §"The carrier, and the fact that this ADR shipped without it".
+- **COMPLETED (carrier WP).** The branch named for this decision — `governance-class-is-a-node-property` —
+  shipped the GATE and not the NODE PROPERTY its own name promises. `CurrentNode` did not carry `scope` or
+  `tier`, so the doors read the target's governance out of the CAS bytes, and everything below that followed
+  from a read that can fail. This is recorded plainly because the gap was invisible to review for the whole
+  branch and was found only by a cold test written against the pre-fix code. See the new section below.
 - **Introduces:** the tier lattice at L4 (`isTier` / `tierRank` / `isWeakerTier` / `strictestTier`,
   `@atlas/knowledge/src/ratify/tier.ts`), the emit door's gate-0 class validator and its
   INCUMBENT GUARD, the link door's class-wide tier gate, and `sameAsClassOf` (`@atlas/knowledge`).
@@ -131,13 +136,55 @@ Refusing outright keeps the stored `tier` **monotone**, so no later reader has t
 carrier is needed to remember what the class used to be. Re-classification remains possible — it is simply
 not an emit. It is a separate governed act, and it does not exist yet (see below).
 
-## What this deliberately does not do
+## The carrier, and the fact that this ADR shipped without it
 
-- **It does not extend the frozen `StoreProjection` / `CurrentNode` seam.** An earlier draft carried `tier`
-  and `scope` on the projection node. That is unnecessary once downgrades are refused: the stored fact is
-  already monotone, so it is a sound source of truth, and `pack-shape.ts` reading `fact.tier` stays correct.
-  Amending a frozen seam to hold a value that is already derivable would have been the expensive way to get
-  the same guarantee.
+Everything above decides that **authority is derived from the resource**. It did not give the resource
+anywhere to keep that authority. `CurrentNode` carried `nodeKey`, `family`, `contentHash`, `claims`,
+`supersededBy`, `primaryAnchor`, `slot`, `sameAs` — and neither `scope` nor `tier`. So "read the target's
+governance off the target" could only be implemented as **read the target's CAS bytes**, and that single
+substitution is where the rest of the damage came from:
+
+1. The authority question became **contingent on storage health.** When the bytes were pruned there was no
+   scope to check, so no caller could be *shown* to have authority — and a caller with none could tell the
+   two states apart by which refusal came back. That is the storage-health oracle the F1 amendment above
+   describes, and the amendment's own reasoning ("reordering does not fix it") is correct *given the missing
+   carrier* and only given it.
+2. The F1 repair — merge both causes into one `unauthorized for target` — closed the leak and **overshot**.
+   The incumbent's OWN AUTHOR then received an authorization error for a pruned disk, which sends an admin to
+   grant a scope in order to fix storage, and erases the `SCN-GL-7` distinction this codebase makes
+   deliberately at the other door. A cold test built specifically to forbid *that* remedy caught it: its two
+   legs are in tension on purpose, the equality leg forbidding the oracle and the inequality leg forbidding
+   the over-broad fix. Seven of its eight assertions passed against the shipped branch; the eighth did not.
+
+**Decision (5).** `CurrentNode` and `WriteRequest` carry the node's `(scope, tier)` as ADDITIVE, OPTIONAL
+fields, `upsert` stamps them from the governed door, and both write doors resolve target authority **from the
+row, before reading a single byte**. The two refusals then split on AUTHORITY rather than on storage state:
+
+- caller **is** in the row's scope, bytes unreadable ⇒ `unverifiable target` — honest and actionable.
+- caller **is not** in the row's scope ⇒ `unauthorized for target`, **byte-identical in both byte-states**.
+- row's scope absent or malformed ⇒ fail closed; nobody has authority. `isScope` is the same guard gate 0
+  applies to a write, now applied to what was stored — `actorInScope` uses a scope as a property KEY, and
+  property keys coerce, so an unvalidated stored scope would read as a legitimate one exactly as it would
+  have on the way in.
+
+**Corroboration.** The row may decide *who is heard*; it may not be the last word on *what the node is*. The
+projection sidecar is unauthenticated mutable state, while CAS bytes are content-addressed and re-hashed on
+read. So after authority is established the bytes must AGREE with the row (`stored.scope === row.scope`, and
+the tier gate takes `strictestTier(row, stored)`, so a disagreeing row can only ever make the gate harder).
+A forged row buys its author one refusal and no write.
+
+**`atlas-link` had the same defect and it was unpinned.** `SCN-GL-14` pinned this precedence for the CLASS
+walk; it could not pin it for the ENDPOINTS, because the endpoint authz gate physically could not run before
+the read-back it depended on. So naming two nodes you have no authority over still reported whether their
+bytes were intact. Both doors now run authz from the rows first. The 16 existing link cases stay green under
+a mutant that restores the old order — the leak was genuinely untested — so `CARRIER-5` pins it.
+
+**Identity is untouched.** `nodeKey` does not fold `scope` or `tier`; folding either would silently re-address
+every stored fact and split a node from its own history the first time its class was raised. Verified by
+executing the identity formula in a clean worktree at the pre-change commit and comparing LITERAL digests,
+because the suite is otherwise blind to a hash change (every assertion recomputes both sides).
+
+## What this deliberately does not do
 - **It does not implement re-classification.** Lowering a node's tier, or moving it between scopes, has no
   door. This is a stated gap, not a hidden one: the refusal message names re-classification as a separate
   governed act. Nothing in the product needs it yet.
@@ -176,6 +223,17 @@ Recorded because the first draft's own §Decision asserted things a cold review 
   reads as a policy problem an admin would try to fix by *granting a scope*.
 - **A pre-existing node emitted at `T2` can still be raised to `T0` by anyone holding `billy`.** That is
   intended: strictness ratchets up freely, because raising a class cannot be an attack.
+- **`atlas-emit` regains `unverifiable target` as a distinct reason** — reachable only by a caller already
+  shown to hold authority in the row's scope, which is what makes it safe to say out loud this time.
+- **A node whose row predates the carrier is UNWRITABLE through the emit door, and unlinkable through the
+  link door, until it is re-classified.** This is the one real cost of the decision and it is a REGRESSION in
+  availability for any store written before this WP: such a row names no scope, no scope authorizes anyone,
+  and the door fails closed. It is the correct reading of "authority unconfirmable" — the alternative,
+  falling back to the CAS bytes when the row is silent, is *also* oracle-free (the fallback only ever runs
+  where authority has not yet been established, so an unauthorized caller still sees one string in both
+  byte-states) and was rejected here only because it makes the carrier bypassable by deleting a field.
+  **The migration door is task #88 and does not exist**, so today the recovery is an admin rewriting the
+  sidecar. Flagged as the item most likely to need an owner decision.
 
 ## Evidence
 
@@ -205,3 +263,19 @@ Recorded because the first draft's own §Decision asserted things a cold review 
   the two the lead re-ran personally are `SCN-TIER-4` and the `sameAsClassOf` dangling-peer leg.
 - Two independent cold-review seats returned **REJECT** and **FIX-FIRST** on the first draft. Every finding
   they reproduced is either fixed above or recorded as an open task (#87, #88).
+- **Carrier WP.** `packages/adapter-io/test/door-regression-reject-disclosure.test.ts` is the cold test that
+  found the over-correction — written against the pre-fix branch by a seat that never saw the fixes, held out
+  of the branch so it could go in red. `packages/adapter-io/test/governance-carrier-controls.test.ts` holds
+  the controls: `CARRIER-1` the real-disk round-trip, `CARRIER-2` an OLD-SHAPE sidecar authored by hand
+  (loads, refuses, never grants, never throws, and is byte-identical across both storage states),
+  `CARRIER-3` the literal identity digests, `CARRIER-4` the emit-door oracle asserted with `Buffer.compare`,
+  `CARRIER-5` the link-door twin. Mutation-verified, each mutant killed by a DIFFERENT case:
+  collapsing `unverifiable target` back into `unauthorized for target` → the held test's anti-vacuity leg;
+  letting an absent row scope fall back to the CAS bytes → `CARRIER-2`; restoring the disclosure-first
+  ordering in `governed-emit.ts` → the held test's equality leg AND `CARRIER-4`; restoring it in
+  `governed-link.ts` → `CARRIER-5` alone, with all 16 pre-existing link cases still green.
+- `router.ts` was split at the seam its own banner already declared — the WP-5.13-a routing table and upsert
+  reducer moved to `packages/knowledge/src/write/projection.ts`, re-exported so no import site changed, and
+  the emit door's refusal vocabulary moved to `governed-emit-reasons.ts`. Both files had run out of room
+  under the 400-LOC ceiling. Verified behaviour-preserving: the whole suite was green after the move and
+  before any semantic change.
