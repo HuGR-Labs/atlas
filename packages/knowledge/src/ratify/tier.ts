@@ -73,13 +73,43 @@ const TIER_STRICTNESS: Readonly<Record<Tier, number>> = { T2: 0, T1: 1, T0: 2 };
 export const TIER_ORDER: readonly Tier[] = ['T0', 'T1', 'T2'];
 
 /**
+ * Is `v` one of the three real governance classes? `Tier` is a TYPE-ONLY union — it vanishes at runtime, and
+ * NOTHING in this repo validates it: `atlas emit` is `JSON.parse` + a cast, and the MCP `node` input schema
+ * declares a bare `object`. So the value reaching a write door is arbitrary attacker JSON, and a door that
+ * indexes a lattice with it is comparing `undefined`. This is the guard that makes the lattice total; use it
+ * BEFORE trusting any `tier` that came off a payload or out of CAS.
+ */
+export function isTier(v: unknown): v is Tier {
+  return typeof v === 'string' && Object.prototype.hasOwnProperty.call(TIER_STRICTNESS, v);
+}
+
+/**
+ * Rank an UNTRUSTED class. An unrecognized value is not "somewhere in the middle" — it is unknown, and the
+ * only safe reading of an unknown class is the one that lets nothing through. `undefined` is returned so the
+ * caller must decide explicitly, rather than silently landing on a number.
+ */
+function rankOf(v: unknown): number | undefined {
+  return isTier(v) ? TIER_STRICTNESS[v] : undefined;
+}
+
+/**
  * Is `declared` a WEAKER governance class than `incumbent`? This is the predicate a write door gates on:
  * a write may re-state or RAISE the class of the node it targets, never lower it. Lowering the class of a
  * ratified node is a re-classification — a separate governed act, never a side effect of emitting a fact.
- * Pure + total.
+ *
+ * TOTAL over `unknown`, and FAIL-CLOSED on anything off the lattice. Typing the parameters `Tier` was the
+ * whole vulnerability: `TIER_STRICTNESS['T3']` is `undefined`, `0 < undefined` is `false`, so declaring
+ * `tier:'T3'` (or `null`, `0`, `'t0'`, `' T0'`, `'toString'`) read as "not a downgrade" and walked straight
+ * past the guard onto a billy-ratified `T0` node — then a second hop re-declared it `T2`, which a pack bounds
+ * OUT, erasing the invariant from every read. Reproduced end-to-end through the CLI with no billy token.
+ * Hence: an unrecognized DECLARED class is always weaker (nothing off-lattice may write anything), and an
+ * unrecognized INCUMBENT class is always strictest (a node whose class we cannot read is never written).
  */
-export function isWeakerTier(declared: Tier, incumbent: Tier): boolean {
-  return TIER_STRICTNESS[declared] < TIER_STRICTNESS[incumbent];
+export function isWeakerTier(declared: unknown, incumbent: unknown): boolean {
+  const d = rankOf(declared);
+  const i = rankOf(incumbent);
+  if (d === undefined || i === undefined) return true; // off-lattice on either side ⇒ refuse
+  return d < i;
 }
 
 /**
@@ -87,6 +117,10 @@ export function isWeakerTier(declared: Tier, incumbent: Tier): boolean {
  * spans two) must clear the strictest class among them: linking a `T0` node to a `T2` one is a `T0` act,
  * because the weaker endpoint would otherwise be a side door onto the stronger. Pure + total.
  */
-export function strictestTier(a: Tier, b: Tier): Tier {
+export function strictestTier(a: unknown, b: unknown): Tier {
+  // TOTAL + FAIL-CLOSED, for the same reason `isWeakerTier` is: these arguments come off stored facts, which
+  // are attacker-authored JSON. An off-lattice class is treated as the STRICTEST, so a garbage `tier` can
+  // never DILUTE the join and make a governed multi-node act (a `sameAs` link) cheaper to sign.
+  if (!isTier(a) || !isTier(b)) return 'T0';
   return isWeakerTier(a, b) ? b : a;
 }

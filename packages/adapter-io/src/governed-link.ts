@@ -22,8 +22,8 @@
 // core (`@atlas/knowledge` linkSameAs, the `@atlas/tools` `LinkOut` result, the authz seam) — re-implements
 // none. DAG: adapter-io depends on knowledge + tools; `LinkOut` is imported FROM tools (never the reverse).
 
-import type { Hash } from '@atlas/contracts';
-import { linkSameAs, ratify, stage, strictestTier } from '@atlas/knowledge';
+import type { Hash, Tier } from '@atlas/contracts';
+import { linkSameAs, ratify, sameAsClassOf, stage, strictestTier } from '@atlas/knowledge';
 import type { Candidate, CurrentNode, GroundedFact } from '@atlas/knowledge';
 import type { LinkOut } from '@atlas/tools';
 import { actorInScope } from './policy.js';
@@ -94,11 +94,21 @@ export function createGovernedLink(deps: GovernedLinkDeps): { readonly link: (a:
       return { linked: false, rejected: REJECTED_UNAUTHORIZED };
     }
 
-    // 4. RATIFY (KNOW-8) — the SAME law emit runs, over the JOIN of the two endpoints' tiers. Composed, not
-    //    re-implemented: `ratify` refuses an empty token and refuses a non-`billy` ratifier on a `T0` class.
-    //    The join is what closes the side door — linking a T2 node to a T0 node is a T0 act, so it cannot be
-    //    signed by a ratifier who could not have written the T0 node directly.
-    const linkClass = strictestTier(factA.tier, factB.tier);
+    // 4. RATIFY (KNOW-8) — the SAME law emit runs, over the JOIN of every class this link MERGES.
+    //
+    //    Not over the two endpoints: the relation is TRANSITIVE (`deriveSameAs` is a union-find), so linking
+    //    a~b merges the WHOLE of a's class with the WHOLE of b's. Joining only `factA.tier` and `factB.tier`
+    //    gated one edge of a graph whose reachability it was extending, and that was a live two-hop bypass —
+    //    billy equates a T0 node A with a T2 node B, then anyone links B to their own node M and lands inside
+    //    A's class with no billy signature. So: take both endpoints' full classes, read the class of every
+    //    member off its own stored fact, and join. A member whose bytes are unreadable is treated as T0 by
+    //    `strictestTier` (fail-closed), which is the conservative reading for a gate.
+    const merged = [...new Set([...sameAsClassOf(proj, a), ...sameAsClassOf(proj, b)])];
+    const linkClass = merged.reduce<Tier>((acc, key) => {
+      const member = proj.current.get(key);
+      if (member === undefined) return acc; // not a current node ⇒ contributes nothing (deriveSameAs ignores it too)
+      return strictestTier(acc, storedFact(deps, member)?.tier);
+    }, strictestTier(factA.tier, factB.tier));
     const staged = stage({ tier: linkClass } as unknown as Candidate);
     if (!ratify(staged, { by: deps.ratifyToken ?? '' }).committed) {
       return { linked: false, rejected: REJECTED_UNRATIFIED };

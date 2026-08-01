@@ -195,7 +195,25 @@ export function buildControllerDeps(repoPath: string, d: MineDeps): ControllerDe
           primaryAnchor: primaryAnchorId(view) as unknown as string,
           ...(f.predicateSlot !== undefined ? { slot: f.predicateSlot } : {}),
         };
-        projection = knowledgeUpsert(projection, req).store; // route the write-decision (NOT store.put)
+        // A MINED CANDIDATE NEVER MUTATES AN EXISTING NODE. This driver has NO truth gate, NO authz and NO
+        // ratification — it is the explorer, and KNOW-8 says the explorer may write only CANDIDATES. Because
+        // the projection is now rehydrated, an LLM-proposed claim whose minted nodeKey happens to collide
+        // with an already-governed node used to route as an UPDATE and set-union straight into it; on a
+        // billy-ratified T0 node that is a governed-knowledge mutation authored by whatever text was sitting
+        // in a source file, i.e. prompt-injectable. Reproduced. A collision therefore SKIPS: mining may
+        // discover new nodes, never re-author established ones.
+        //   SCOPE, stated honestly: this closes MUTATION of governed nodes. Mining still CREATES nodes
+        //   without passing the governed doors at all — that remaining gap is task #87 (mine should stage a
+        //   candidate for ratification rather than write the projection directly), and it is not closed here.
+        if (projection.current.has(key)) continue;
+        // PUT THE BYTES FIRST, exactly as the governed door does. Persisting a projection row that names a
+        // contentHash absent from CAS creates a node whose stored fact can never be read back — and the
+        // governed doors now (correctly) refuse to write a node whose class they cannot read, so such a row
+        // is permanently unwritable by ANYONE, billy included. Reproduced: a recoverable corruption became an
+        // unrecoverable denial of service. The write order also matters: `put` before the sidecar, so a
+        // failed put leaves no dangling reference.
+        d.store.put(f as unknown as Parameters<DiskStore['put']>[0]);
+        projection = knowledgeUpsert(projection, req).store; // route the write-decision
         grounded.set(key, f);
       }
       d.store.persistProjection(projection); // durable — the mutable KNOW-15 projection sidecar

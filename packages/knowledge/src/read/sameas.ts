@@ -84,3 +84,40 @@ export function deriveSameAs(projection: StoreProjection): readonly SameAs[] {
   edges.sort((x, y) => cmp(String(x.a), String(y.a)) || cmp(String(x.b), String(y.b)));
   return edges;
 }
+
+/**
+ * The members of `key`'s equivalence class — `key` itself plus every node TRANSITIVELY equated to it by the
+ * stored relation. `key` need not be a current node; an unknown key is its own singleton.
+ *
+ * Why a write door needs this: the relation this module folds is TRANSITIVE, so the security boundary is the
+ * CLASS, not the edge. A door that gates a new `a~b` link on the classes of `a` and `b` ALONE is gating on
+ * one edge of a graph whose reachability it just extended. That was a live two-hop bypass: billy legitimately
+ * equates a `T0` node A with a `T2` node B; afterwards ANY in-scope actor holding ANY non-empty ratifier
+ * links B to their own node M, and the derived relation contains `{A, M}` — the attacker's node is inside the
+ * `T0` node's class, and every read fold walks it, without billy ever signing that.
+ *
+ * Pure + total, no clock/LLM — the same union-find `deriveSameAs` folds, so the two can never disagree.
+ */
+export function sameAsClassOf(projection: StoreProjection, key: string): readonly string[] {
+  const members = new Set<string>([key]);
+  // Transitive closure by repeated expansion over the SYMMETRIC stored edges. The relation is stored on both
+  // endpoints (the link door writes it symmetrically), but a peer is followed from EITHER direction here so a
+  // half-written edge still widens the class — the conservative reading for a gate.
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const node of projection.current.values()) {
+      const peers = node.sameAs;
+      if (peers === undefined) continue;
+      const touches = members.has(node.nodeKey) || peers.some((p) => members.has(p));
+      if (!touches) continue;
+      for (const k of [node.nodeKey, ...peers]) {
+        if (!members.has(k)) {
+          members.add(k);
+          grew = true;
+        }
+      }
+    }
+  }
+  return [...members].sort(cmp);
+}

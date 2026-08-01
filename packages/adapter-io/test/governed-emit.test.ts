@@ -301,6 +301,53 @@ describe('COMPOSE-A — createGovernedEmit (truth-door · authz · upsert · dur
     expect(signed.emit(escalate, AT).emitted).toBe(true);
   });
 
+  // ── THE OFF-LATTICE CLASS (billy F1) — the guard above, defeated by one character ──────────────────────
+  //
+  // `Tier` is a TYPE-ONLY union. Nothing validates it at runtime: `atlas emit` is JSON.parse + a cast, and the
+  // MCP `node` schema is a bare `object`. So `TIER_STRICTNESS['T3']` is `undefined`, `0 < undefined` is
+  // `false`, and the downgrade guard read "not a downgrade" — the SCN-GE-I1 attack, re-armed by typing one
+  // extra character. A cold review reproduced the full erasure end-to-end through the real CLI with no billy
+  // token: T0 → T3 (guard passes) → T2 (guard passes), and T2 is bounded OUT of every pack, so the ratified
+  // invariant vanished from every read as surely as if it had been deleted.
+  //
+  // MUTANT: type `isWeakerTier(declared: Tier, incumbent: Tier)` again, or drop the gate-0 `isTier` check,
+  // and these go RED.
+
+  it('SCN-GE-I6 — an OFF-LATTICE tier cannot walk past the downgrade guard onto a T0 node', () => {
+    const ANCHOR = 'src/auth.ts::verify';
+    // Every shape a payload can carry that is not one of the three real classes. `'t0'`/`' T0'` are the
+    // near-misses; `'toString'`/`'__proto__'` probe the prototype chain; `null`/`0`/absent probe the
+    // JSON-shaped holes. NONE of them may be treated as "not weaker than T0".
+    const OFF_LATTICE = ['T3', 't0', ' T0', 'toString', '__proto__', 'valueOf', null, 0, undefined, ''];
+    for (const bogus of OFF_LATTICE) {
+      const spy = makeStoreSpy();
+      const billy = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice', ratifyToken: 'billy' });
+      const t0 = mkAdvisory({ id: 'nk-t0', anchor: ANCHOR, claimNorm: 'billy-ratified T0 claim', scope: 'core', tier: 'T0' });
+      expect(billy.emit(t0, AT).emitted).toBe(true);
+
+      const attacker = { ...mkAdvisory({ id: 'nk-x', anchor: ANCHOR, claimNorm: 'EVIL', scope: 'core' }), tier: bogus } as unknown as GroundedFact;
+      const out = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice', ratifyToken: 'lead' }).emit(attacker, AT);
+
+      expect(out.emitted, `tier=${JSON.stringify(bogus)} must not be emittable`).toBe(false);
+      expect(spy.persists()[spy.persists().length - 1]!.current.get(realKey(t0))!.claims).toEqual(['billy-ratified T0 claim']);
+    }
+  });
+
+  it('SCN-GE-I7 — an OFF-LATTICE tier cannot be MINTED either (no incumbent ⇒ no lattice guard runs)', () => {
+    // The CREATE leg is the other half of the same hole and it is NOT covered by the downgrade comparison:
+    // with no incumbent there is nothing to compare against, yet the read side bounds a pack with
+    // `inv.tier !== 'T2'` — so a node minted at `'T3'` would be SERVED as though it were ratified T1-or-
+    // stricter. Garbage in the class field is the same defect one step earlier.
+    const spy = makeStoreSpy();
+    const { emit } = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice', ratifyToken: 'billy' });
+    const bogus = { ...mkAdvisory({ id: 'nk-new', anchor: 'src/fresh.ts::f', claimNorm: 'minted', scope: 'core' }), tier: 'T3' } as unknown as GroundedFact;
+    const out = emit(bogus, AT);
+    expect(out.emitted).toBe(false);
+    expect(out.rejected ?? '').toContain('malformed tier');
+    expect(spy.puts()).toHaveLength(0);
+    expect(spy.persists()).toHaveLength(0);
+  });
+
   it('SCN-GE-I5 — an incumbent whose stored fact is NOT readable from CAS fails closed (never written blind)', () => {
     const spy = makeStoreSpy();
     const ANCHOR = 'src/util.ts::greet';

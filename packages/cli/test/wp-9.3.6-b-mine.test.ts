@@ -11,7 +11,7 @@
 // verdict is the INJECTED `EmitGate` (a double, or `makeAdmitGate` forwarding the FROZEN `admit` verbatim).
 
 import { describe, it, expect } from 'vitest';
-import { asSubtreeHash, asHash, asNodeKey } from '@atlas/kernel';
+import { asSubtreeHash, asHash, asNodeKey, id } from '@atlas/kernel';
 import type { StructRef, Hash } from '@atlas/contracts';
 import type { Axes, DepEdge, IndexNode, Manifest } from '@atlas/index';
 import { makeRunController } from '@atlas/genesis';
@@ -292,5 +292,66 @@ describe('CLI-4d — a mine pass PRESERVES the governed projection (it shares th
     const last = persisted[persisted.length - 1]!;
     expect(last.current.get('nk-already-emitted')).toEqual(existing); // the emitted node is still there…
     expect(last.current.size).toBeGreaterThan(1); // …alongside what this pass mined
+  });
+
+  // ── SCN-CLI-4e — rehydrating made mine ABLE to mutate governed nodes; it must not (billy F2) ───────────
+  //
+  // Rehydrating (4d) fixed the destruction but opened the converse: with the real projection in hand, a mined
+  // fact whose minted nodeKey collides with an already-governed node routes as an UPDATE and set-unions into
+  // it. This driver has NO truth gate, NO authz and NO ratification, so on a billy-ratified T0 node that is a
+  // governed-knowledge mutation authored by whatever text happened to be in a source file — prompt-injectable,
+  // and reproduced by a cold review. KNOW-8 is explicit that the explorer writes only CANDIDATES.
+  //
+  // TEETH: delete the `if (projection.current.has(key)) continue;` skip and this goes RED.
+  it('a mined fact NEVER mutates a node that already exists in the governed projection', () => {
+    const persisted: StoreProjection[] = [];
+    // Pre-seed the projection at the EXACT nodeKey this pass will mint, so the collision is guaranteed
+    // rather than hoped for: run the driver once against an empty store to learn the key it mints.
+    const learn: StoreProjection[] = [];
+    const learnStore: DiskStore = {
+      put: () => asHash('x'), get: () => undefined,
+      persistProjection: (p) => void learn.push(p),
+      loadProjection: () => (learn.length > 0 ? learn[learn.length - 1]! : undefined),
+    };
+    driveMine(REPO, depsOf({ store: learnStore, budget: budget(FRONTIER.length) }));
+    const minedKey = [...learn[learn.length - 1]!.current.keys()][0]!;
+
+    const governed: CurrentNode = { nodeKey: minedKey, family: 'advisory', contentHash: 'ch-governed', claims: ['the billy-ratified T0 claim'] };
+    const store: DiskStore = {
+      put: () => asHash('x'), get: () => undefined,
+      persistProjection: (p) => void persisted.push(p),
+      loadProjection: () => (persisted.length > 0 ? persisted[persisted.length - 1]! : { current: new Map([[minedKey, governed]]), cas: new Set(['ch-governed']) }),
+    };
+    driveMine(REPO, depsOf({ store, budget: budget(FRONTIER.length) }));
+
+    const node = persisted[persisted.length - 1]!.current.get(minedKey)!;
+    expect(node).toEqual(governed); // untouched: same contentHash, same claim set, no set-union
+    expect(node.claims).toEqual(['the billy-ratified T0 claim']);
+  });
+
+  // ── SCN-CLI-4f — every projection row mine writes must have its BYTES in CAS (billy F2, second leg) ────
+  //
+  // mine persisted a row naming `id(f)` but never called `store.put(f)`, so the node's stored fact was
+  // unreadable. Harmless while nothing read it back — but the governed doors now (correctly) REFUSE to write
+  // a node whose governance class they cannot read, so such a row became permanently unwritable by anyone,
+  // billy included: a recoverable corruption turned into an unrecoverable denial of service.
+  //
+  // TEETH: delete the `d.store.put(f)` line and this goes RED.
+  it('puts the fact BYTES for every node it writes (no row may name a contentHash absent from CAS)', () => {
+    const persisted: StoreProjection[] = [];
+    const cas = new Set<string>();
+    const store: DiskStore = {
+      put: (obj) => { const h = id(obj); cas.add(h as unknown as string); return h; },
+      get: () => undefined,
+      persistProjection: (p) => void persisted.push(p),
+      loadProjection: () => (persisted.length > 0 ? persisted[persisted.length - 1]! : undefined),
+    };
+    driveMine(REPO, depsOf({ store, budget: budget(FRONTIER.length) }));
+
+    const last = persisted[persisted.length - 1]!;
+    expect(last.current.size).toBeGreaterThan(0); // premise: this pass actually wrote rows
+    for (const node of last.current.values()) {
+      expect(cas.has(node.contentHash), `row ${node.nodeKey} names contentHash ${node.contentHash}, absent from CAS`).toBe(true);
+    }
   });
 });

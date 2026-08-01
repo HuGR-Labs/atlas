@@ -153,6 +153,43 @@ describe('WP-SAMEAS — createGovernedLink (distinct · both-known · class read
     expect(fx.persists()).toHaveLength(1);
   });
 
+  // ── THE TRANSITIVE CLASS (billy F3) — gating the EDGE is not gating the BOUNDARY ──────────────────────
+  //
+  // `deriveSameAs` folds the relation with a union-find, so it is TRANSITIVE. Joining only the two endpoints'
+  // tiers gated one edge of a graph whose reachability the link was extending: billy legitimately equates a
+  // T0 node with a T2 node, and afterwards ANY in-scope actor with ANY non-empty ratifier links that T2 node
+  // to their own — landing inside the T0 node's equivalence class with no billy signature. Reproduced.
+  //
+  // MUTANT: revert the join to `strictestTier(factA.tier, factB.tier)` over the two endpoints and this
+  // goes RED while every other case here stays green.
+
+  it('SCN-GL-8 — the T0 class cannot be joined via a TWO-HOP link through a T2 node', () => {
+    const fx = fixture([T2_A, T0_C, T2_B]); // n0 = T2, n1 = T0, n2 = the attacker's own T2 node
+    // 1) billy legitimately equates the T2 node n0 with the T0 node n1. This link is correct and allowed.
+    const billy = createGovernedLink({ store: fx.store, policy: POLICY, actor: 'alice', ratifyToken: 'billy' });
+    expect(billy.link('n0', 'n1').linked).toBe(true);
+
+    // 2) the attack: link n2 to n0. Both ENDPOINTS are T2, so an endpoint-only join reads this as a T2 act —
+    //    but n0 is now in n1's class, so the link puts n2 inside the T0 class.
+    const lead = createGovernedLink({ store: fx.store, policy: POLICY, actor: 'alice', ratifyToken: 'lead' });
+    const out = lead.link('n2', 'n0');
+    expect(out.linked).toBe(false);
+    expect(out.rejected ?? '').toContain('unratified');
+
+    // …and billy CAN sign it, because the act is honestly a T0 act, not because it is forbidden.
+    expect(billy.link('n2', 'n0').linked).toBe(true);
+  });
+
+  it('SCN-GL-9 — an OFF-LATTICE tier on an endpoint cannot DILUTE the join (fails closed to T0)', () => {
+    // billy F1 reaches this door too: `strictestTier` returning the *other* argument on garbage would let a
+    // node declassified with `tier:'T3'` be linked by anyone. An unreadable-or-bogus class must read T0.
+    const bogus = { ...fact({ claim: 'delta', scope: 'core', tier: 'T2' }), tier: 'T3' } as unknown as GroundedFact;
+    const fx = fixture([T2_A, bogus]);
+    const lead = createGovernedLink({ store: fx.store, policy: POLICY, actor: 'alice', ratifyToken: 'lead' });
+    expect(lead.link('n0', 'n1').linked).toBe(false);
+    expect(createGovernedLink({ store: fx.store, policy: POLICY, actor: 'alice', ratifyToken: 'billy' }).link('n0', 'n1').linked).toBe(true);
+  });
+
   it('SCN-GL-7 — an endpoint whose stored fact is unreadable fails closed (class never assumed)', () => {
     const fx = fixture([T2_A, T2_B]);
     const blind: DiskStore = { ...fx.store, get: () => undefined };

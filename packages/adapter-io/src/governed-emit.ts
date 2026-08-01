@@ -25,7 +25,7 @@
 import { id } from '@atlas/kernel';
 import type { CasObject } from '@atlas/kernel';
 import type { Hash } from '@atlas/contracts';
-import { upsert, normalizeCheck, primaryAnchorId, nodeKey, route, stage, ratify, isWeakerTier } from '@atlas/knowledge';
+import { upsert, normalizeCheck, primaryAnchorId, nodeKey, route, stage, ratify, isWeakerTier, isTier } from '@atlas/knowledge';
 import type { Candidate, CurrentNode, GroundedFact, WriteRequest, RatifyContext, RatifyToken } from '@atlas/knowledge';
 import type { EmitOut, TruthGate } from '@atlas/tools';
 import { actorInScope } from './policy.js';
@@ -41,6 +41,9 @@ const REJECTED_UNRATIFIED = 'unratified: T0/contested fact requires human+billy 
 const REJECTED_DOWNGRADE =
   'governance-downgrade: this write declares a weaker class (tier/scope) than the node it targets — ' +
   're-classification is a separate governed act, never a side effect of emitting a fact (KNOW-7 / KNOW-11)';
+const REJECTED_MALFORMED_TIER =
+  'malformed tier: a fact must declare one of the three governance classes (T0 | T1 | T2). `Tier` is a ' +
+  'type-only union with no runtime validator upstream, so an off-lattice value is refused HERE or nowhere';
 const REJECTED_UNVERIFIABLE =
   'unverifiable target: the stored fact of the node this write targets is not readable from CAS, so its ' +
   'governance class cannot be confirmed — refused fail-closed rather than gated on the write\'s own claim';
@@ -83,6 +86,22 @@ function claimNormOf(node: GroundedFact): string {
  */
 export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (node: GroundedFact, at: Hash) => EmitOut } {
   const emit = (node: GroundedFact, at: Hash): EmitOut => {
+    // 0. WELL-FORMED CLASS — the `tier` must be one of the three real governance classes.
+    //
+    //    `Tier` is a TYPE-ONLY union: it does not exist at runtime, and nothing upstream validates it —
+    //    `atlas emit` is `JSON.parse` + a cast, and the MCP `node` schema declares a bare `object`. So this
+    //    is the FIRST place an arbitrary payload value can be refused, and it must be, for two separate
+    //    reasons that a lattice-level guard alone does not cover:
+    //      · on an UPDATE, an off-lattice class made the downgrade comparison meaningless (`0 < undefined`
+    //        is `false`), which is the reproduced T0→T3→T2 erasure;
+    //      · on a CREATE there is no incumbent at all, so no lattice guard ever runs — yet the read side
+    //        bounds a pack with `inv.tier !== 'T2'` (TOOLS-6), so a node minted at `'T3'` would be served
+    //        as though it were ratified `T1`-or-stricter. Garbage in the class field is not a lesser
+    //        problem than a downgrade; it is the same problem one step earlier.
+    if (!isTier(node.tier)) {
+      return { emitted: false, rejected: REJECTED_MALFORMED_TIER };
+    }
+
     // 1. TRUTH DOOR — re-derive the citation; a non-HOLDS verdict fails closed, nothing persisted.
     if (deps.gate.gateHolds(node, at) !== 'HOLDS') {
       return { emitted: false, rejected: REJECTED_UNGROUNDED };
