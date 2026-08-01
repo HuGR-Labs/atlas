@@ -31,9 +31,9 @@ import type {
   AdmitDeps,
   AdvisoryProposal,
 } from '@atlas/genesis';
-import { createDiskStore, headSha } from '@atlas/adapter-io';
+import { createDiskStore, headSha, rehydrateProjection } from '@atlas/adapter-io';
 import type { DiskStore } from '@atlas/adapter-io';
-import { upsert as knowledgeUpsert, emptyStore, normalizeCheck, primaryAnchorId, nodeKey } from '@atlas/knowledge';
+import { upsert as knowledgeUpsert, normalizeCheck, primaryAnchorId, nodeKey } from '@atlas/knowledge';
 import type { WriteRequest, StoreProjection, Candidate as KnowledgeCandidate } from '@atlas/knowledge';
 import { id, asNodeKey, asSubtreeHash } from '@atlas/kernel';
 import { join } from 'node:path';
@@ -159,7 +159,15 @@ function withDefaults(repoPath: string, deps?: Partial<MineDeps>): MineDeps {
 export function buildControllerDeps(repoPath: string, d: MineDeps): ControllerDeps {
   const mine = createMine({ skeleton: d.skeleton, history: d.history });
   const scan = createScan(d.skeleton);
-  let projection: StoreProjection = emptyStore();
+  // REHYDRATE, never start empty. This driver persists to the SAME `<repo>/.atlas/cas` sidecar the governed
+  // emit door writes, through the SAME `persistProjection` — which REPLACES the file wholesale. Seeding from
+  // `emptyStore()` therefore did not "start a fresh pass": it made every mine run overwrite the durable
+  // projection with only what that run mined, silently dropping every previously emitted node. The facts' CAS
+  // bytes survived (content-addressed, append-only), but the projection is the index every read goes through,
+  // so the knowledge was gone as far as `query`/`doctor` were concerned. Rehydrating makes the pass ADDITIVE,
+  // which is also what `upsert` already assumes — it routes CREATE-vs-UPDATE against the projection it is
+  // handed, so an empty one reports a CREATE for a node that in truth already exists. (SCN-CLI-4d)
+  let projection: StoreProjection = rehydrateProjection(d.store);
   const grounded = new Map<string, Fact>(); // KNOW-15 idempotent grounded set, keyed by the MINTED nodeKey (0 duplicates)
 
   return {

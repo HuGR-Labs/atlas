@@ -9,121 +9,12 @@
 //   - drop `persistProjection`  → the durability golden RED (no projection persisted).
 
 import { describe, it, expect } from 'vitest';
-import { id, asNodeKey, asSubtreeHash, asHash } from '@atlas/kernel';
+import { id } from '@atlas/kernel';
 import type { CasObject } from '@atlas/kernel';
-import { nodeKey } from '@atlas/knowledge';
-import type { GroundedFact, StoreProjection, Candidate } from '@atlas/knowledge';
-import type { TruthGate } from '@atlas/tools';
+import type { GroundedFact, StoreProjection } from '@atlas/knowledge';
 import { createGovernedEmit } from '../src/governed-emit.js';
 import type { DiskStore } from '../src/store.js';
-import type { AtlasPolicy } from '../src/policy.js';
-
-// ── fakes ────────────────────────────────────────────────────────────────────────────────────────────
-
-/** A fake DiskStore over an in-memory CAS that RECORDS every `put`/`persistProjection` so the teeth can
- *  assert exactly what the governed path persisted (or, on a denied write, that NOTHING was persisted). */
-interface StoreSpy {
-  readonly store: DiskStore;
-  readonly puts: () => readonly CasObject[];
-  readonly persists: () => readonly StoreProjection[];
-}
-function makeStoreSpy(): StoreSpy {
-  const cas = new Map<string, CasObject>();
-  const puts: CasObject[] = [];
-  const persists: StoreProjection[] = [];
-  const store: DiskStore = {
-    put(obj) {
-      puts.push(obj);
-      const h = id(obj);
-      cas.set(h as unknown as string, obj);
-      return h;
-    },
-    get(h) {
-      return cas.get(h as unknown as string);
-    },
-    persistProjection(p) {
-      persists.push(p);
-    },
-    loadProjection() {
-      return persists.length > 0 ? persists[persists.length - 1] : undefined;
-    },
-  };
-  return { store, puts: () => puts, persists: () => persists };
-}
-
-const HOLDS_GATE: TruthGate = { gateHolds: () => 'HOLDS' };
-const NA_GATE: TruthGate = { gateHolds: () => 'NA' };
-
-/** A policy granting actor `alice` write access to scope `core` — everyone else / every other scope denies. */
-const POLICY: AtlasPolicy = {
-  nearDup: { claimNormThreshold: 1 },
-  t0Heuristic: { keywords: [] },
-  authz: { scopes: { core: ['alice'] } },
-};
-
-/** A grounded advisory fact; `scope` present only when supplied (exactOptionalPropertyTypes-safe). `tier`
- *  defaults to the auto-accept `T2` — a `T0` fact exercises the KNOW-8 full-ratify gate. */
-function advisory(scope?: string, tier: GroundedFact['tier'] = 'T2'): GroundedFact {
-  const base = {
-    kind: 'advisory' as const,
-    id: asNodeKey('nk-governed-1'),
-    tier,
-    claimNorm: 'a governed claim body',
-    grounding: {
-      entries: [
-        { anchor: { kind: 'symbol' as const, qualifiedPath: 'src/util.ts::greet', subtreeHash: asSubtreeHash('sh-greet') }, path: 'src/util.ts' },
-      ],
-    },
-    freshness: 'FRESH' as const,
-    claims: [],
-    authoring: 'ADVISORY' as const,
-  };
-  return scope === undefined ? base : { ...base, scope };
-}
-
-/** A grounded advisory with an OVERRIDABLE payload `id`, primary anchor, and claim body — so a test can
- *  hold the REAL identity (anchor+slot) fixed while VARYING the author-declared `id`, or spoof one. */
-function mkAdvisory(opts: { id: string; anchor: string; claimNorm: string; scope?: string }): GroundedFact {
-  const base = {
-    kind: 'advisory' as const,
-    id: asNodeKey(opts.id),
-    tier: 'T2' as const,
-    claimNorm: opts.claimNorm,
-    grounding: {
-      entries: [
-        { anchor: { kind: 'symbol' as const, qualifiedPath: opts.anchor, subtreeHash: asSubtreeHash('sh-x') }, path: 'x' },
-      ],
-    },
-    freshness: 'FRESH' as const,
-    claims: [],
-    authoring: 'ADVISORY' as const,
-  };
-  return opts.scope === undefined ? base : { ...base, scope: opts.scope };
-}
-
-/** A grounded PREDICATE fact (carries a `check`) — `route` sends ANY predicate to full-ratify (KNOW-18). */
-function predicate(scope: string, tier: GroundedFact['tier'] = 'T2'): GroundedFact {
-  return {
-    kind: 'predicate',
-    id: asNodeKey('nk-governed-pred'),
-    tier,
-    check: { kind: 'assertion', expr: 'balance >= 0' },
-    grounding: {
-      entries: [
-        { anchor: { kind: 'symbol', qualifiedPath: 'src/util.ts::guard', subtreeHash: asSubtreeHash('sh-guard') }, path: 'src/util.ts' },
-      ],
-    },
-    status: 'HOLDS',
-    freshness: 'FRESH',
-    claims: [],
-    authoring: 'PREDICATED',
-    scope,
-  };
-}
-
-const realKey = (f: GroundedFact): string => nodeKey(f as unknown as Candidate) as unknown as string;
-
-const AT = asHash('deadbeef');
+import { makeStoreSpy, HOLDS_GATE, NA_GATE, POLICY, advisory, mkAdvisory, predicate, realKey, AT } from './harness/governed-fixtures.js';
 
 // ── cases ──────────────────────────────────────────────────────────────────────────────────────────
 
@@ -317,5 +208,112 @@ describe('COMPOSE-A — createGovernedEmit (truth-door · authz · upsert · dur
     const allowed = createGovernedEmit({ store: okSpy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice', ratifyToken: 'lead' });
     expect(allowed.emit(predicate('core'), AT).emitted).toBe(true);
     expect(okSpy.persists()).toHaveLength(1);
+  });
+
+  // ── INCUMBENT GUARD (task #84) — the CONFUSED DEPUTY the ratify gate alone does NOT close ────────────
+  //
+  // THE HOLE (reproduced on master before this guard existed): the gate a write must clear was chosen from
+  // the write's OWN self-declared `tier`/`scope`, while WHICH NODE it lands on is the recomputed
+  // `nodeKey = hash(primaryAnchorId ‖ slot[‖ check])` — which contains NEITHER. So the two disagree, and the
+  // author picks the side that suits them: declare `T2`+advisory ⇒ `route` says auto-accept ⇒ NO token is
+  // consulted ⇒ `upsert` set-unions the claim straight into a billy-ratified T0 node. Capability gating
+  // ("which gate applies") is not authorization ("may THIS write touch THAT node") — the literature name is
+  // a confused deputy; the fix is to derive the required gate from the RESOURCE, never from the request.
+  //
+  // MUTANT: delete the incumbent-guard block in governed-emit.ts and SCN-GE-I1/I2/I5 all go RED (a tokenless
+  // T2 write mutates a T0 node / an out-of-scope actor writes another scope's node / a node whose stored
+  // fact is unreadable is written blind). SCN-GE-I3/I4 pin that the guard does NOT over-block: re-emitting
+  // at the SAME class still works, and RAISING strictness is always allowed.
+
+  it('SCN-GE-I1 — a tokenless T2 write CANNOT touch a billy-ratified T0 node at the same identity', () => {
+    const spy = makeStoreSpy();
+    const ANCHOR = 'src/auth.ts::verify';
+
+    // 1) billy ratifies a T0 fact — the node now carries the strictest governance class.
+    const ratified = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice', ratifyToken: 'billy' });
+    const t0 = mkAdvisory({ id: 'nk-t0', anchor: ANCHOR, claimNorm: 'billy-ratified T0 claim', scope: 'core', tier: 'T0' });
+    expect(ratified.emit(t0, AT).emitted).toBe(true);
+
+    // 2) the attack: SAME anchor ⇒ SAME minted nodeKey, but the payload DECLARES T2 so `route` fast-paths
+    //    and never consults a token. No ratify token is supplied at all.
+    const attacker = mkAdvisory({ id: 'nk-t2', anchor: ANCHOR, claimNorm: 'UNRATIFIED injected claim', scope: 'core', tier: 'T2' });
+    expect(realKey(attacker)).toBe(realKey(t0)); // PREMISE: the identity collides — tier is not in the nodeKey
+    const noToken = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice' });
+    const out = noToken.emit(attacker, AT);
+
+    // TEETH: the write must be refused because the NODE IT TARGETS requires billy — not because of anything
+    // the payload says about itself.
+    expect(out.emitted).toBe(false);
+    expect(out.rejected ?? '').toContain('governance-downgrade');
+    expect(spy.puts()).toHaveLength(1); // only the ratified T0 fact ever landed
+    expect(spy.persists()).toHaveLength(1);
+    const node = spy.persists()[0]!.current.get(realKey(t0))!;
+    expect(node.claims).toEqual(['billy-ratified T0 claim']);
+    expect(node.claims).not.toContain('UNRATIFIED injected claim');
+  });
+
+  it('SCN-GE-I2 — an actor authorized in its OWN scope cannot re-scope and write ANOTHER scope\'s node', () => {
+    const spy = makeStoreSpy();
+    const ANCHOR = 'src/auth.ts::secret';
+    // alice owns `core`; mallory owns `public`. Neither is in the other's scope.
+    const TWO_SCOPE: AtlasPolicy = { ...POLICY, authz: { scopes: { core: ['alice'], public: ['mallory'] } } };
+
+    const alice = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: TWO_SCOPE, actor: 'alice' });
+    const owned = mkAdvisory({ id: 'nk-core', anchor: ANCHOR, claimNorm: 'core-scoped claim', scope: 'core' });
+    expect(alice.emit(owned, AT).emitted).toBe(true);
+
+    // The attack: mallory declares the scope SHE is authorized for. Authz on the DECLARED scope passes —
+    // but the node the write lands on lives in `core`, which mallory may not write.
+    const mallory = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: TWO_SCOPE, actor: 'mallory' });
+    const reScoped = mkAdvisory({ id: 'nk-pub', anchor: ANCHOR, claimNorm: 'INJECTED by mallory', scope: 'public' });
+    expect(realKey(reScoped)).toBe(realKey(owned)); // PREMISE: scope is not in the nodeKey either
+    const out = mallory.emit(reScoped, AT);
+
+    expect(out.emitted).toBe(false);
+    expect(out.rejected ?? '').toContain('governance-downgrade');
+    expect(spy.puts()).toHaveLength(1);
+    expect(spy.persists()[0]!.current.get(realKey(owned))!.claims).toEqual(['core-scoped claim']);
+  });
+
+  it('SCN-GE-I3 — re-emitting at the SAME class still set-unions (the guard does NOT over-block)', () => {
+    const spy = makeStoreSpy();
+    const ANCHOR = 'src/util.ts::greet';
+    const { emit } = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice' });
+    expect(emit(mkAdvisory({ id: 'a', anchor: ANCHOR, claimNorm: 'claim one', scope: 'core' }), AT).emitted).toBe(true);
+    expect(emit(mkAdvisory({ id: 'b', anchor: ANCHOR, claimNorm: 'claim two', scope: 'core' }), AT).emitted).toBe(true);
+    const node = spy.persists()[spy.persists().length - 1]!.current.get(realKey(mkAdvisory({ id: 'a', anchor: ANCHOR, claimNorm: 'x', scope: 'core' })))!;
+    expect(node.claims).toEqual(['claim one', 'claim two']);
+  });
+
+  it('SCN-GE-I4 — RAISING strictness (T2 node ← a T0 write) is allowed, and still requires billy', () => {
+    const spy = makeStoreSpy();
+    const ANCHOR = 'src/util.ts::greet';
+    const open = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice' });
+    expect(open.emit(mkAdvisory({ id: 'a', anchor: ANCHOR, claimNorm: 'the T2 claim', scope: 'core' }), AT).emitted).toBe(true);
+
+    const escalate = mkAdvisory({ id: 'b', anchor: ANCHOR, claimNorm: 'now security-critical', scope: 'core', tier: 'T0' });
+    // no token ⇒ the T0 write is refused by the EXISTING ratify gate (not the downgrade guard)…
+    const refused = open.emit(escalate, AT);
+    expect(refused.emitted).toBe(false);
+    expect(refused.rejected ?? '').toContain('unratified');
+    // …and with billy it lands: strictness only ever ratchets UP.
+    const signed = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice', ratifyToken: 'billy' });
+    expect(signed.emit(escalate, AT).emitted).toBe(true);
+  });
+
+  it('SCN-GE-I5 — an incumbent whose stored fact is NOT readable from CAS fails closed (never written blind)', () => {
+    const spy = makeStoreSpy();
+    const ANCHOR = 'src/util.ts::greet';
+    const { emit } = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice' });
+    const first = mkAdvisory({ id: 'a', anchor: ANCHOR, claimNorm: 'the original claim', scope: 'core' });
+    expect(emit(first, AT).emitted).toBe(true);
+
+    // The projection still names the node, but its content-addressed bytes are gone (pruned CAS / partial
+    // restore). The door cannot READ the class it must clear ⇒ it must refuse, not assume the write's own.
+    const blindStore: DiskStore = { ...spy.store, get: () => undefined };
+    const blind = createGovernedEmit({ store: blindStore, gate: HOLDS_GATE, policy: POLICY, actor: 'alice' });
+    const out = blind.emit(mkAdvisory({ id: 'b', anchor: ANCHOR, claimNorm: 'written blind', scope: 'core' }), AT);
+    expect(out.emitted).toBe(false);
+    expect(out.rejected ?? '').toContain('unverifiable');
   });
 });

@@ -41,6 +41,8 @@ grounded (the docs dogfood the Atlas: reference is pinned to `source@sha` and dr
 - [adr/ADR-0003](./adr/ADR-0003-governed-write-doors.md) — INV-TOOLS-1: single write door → governed write doors
 - [adr/ADR-0004](./adr/ADR-0004-authoring-planner-doors.md) — the authoring surface is planners, not write doors
 - [adr/ADR-0005](./adr/ADR-0005-mcp-read-surface.md) — the advertised MCP surface is governance ∪ read
+- [adr/ADR-0006](./adr/ADR-0006-architecture-hierarchy-and-tool-exposure.md) — the layer hierarchy is machine-checked; the tool surface is derived and budgeted
+- [adr/ADR-0007](./adr/ADR-0007-governance-class-is-a-property-of-the-node.md) — a write's governance class belongs to the node it targets, not to the write
 
 ## Product design (prose) & legacy specs
 - [design/atlas.md](./design/atlas.md) — the product design (working-backwards prose)

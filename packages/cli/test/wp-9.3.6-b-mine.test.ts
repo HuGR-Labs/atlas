@@ -28,6 +28,7 @@ import type {
   AdmitDeps,
 } from '@atlas/genesis';
 import type { DiskStore } from '@atlas/adapter-io';
+import type { StoreProjection, CurrentNode } from '@atlas/knowledge';
 import { runMine, driveMine, buildControllerDeps, makeAdmitGate, MINE_ABSTAIN_LINE } from '../src/mine.js';
 import type { MineDeps } from '../src/mine.js';
 
@@ -244,5 +245,52 @@ describe('WP-F6 — a default (no-model) mine render is a legible abstain, not a
     expect(v.stdout).toContain(MINE_ABSTAIN_LINE); //  the real driver EXPLAINS the 0
     expect(silent).not.toContain(MINE_ABSTAIN_LINE); // the mutant hides WHY it is 0 — the guard flips RED
     expect(silent).toContain('seeded 0'); //           yet still reports 0: a silent, mysterious empty render
+  });
+});
+
+// ── SCN-CLI-4d — mine must not DESTROY the governed projection it shares a store with ──────────────────
+//
+// `atlas mine` writes to the SAME durable store the governed emit door writes to
+// (`createDiskStore(<repo>/.atlas/cas)`), through the SAME `persistProjection` sidecar. But the driver seeds
+// its projection from `emptyStore()` and never rehydrates, then persists unconditionally — so a mine pass
+// overwrites the sidecar with ONLY what that pass mined, silently dropping every previously emitted node.
+// The facts' CAS bytes survive (put is content-addressed and append-only), but the projection is the index
+// every read goes through, so the knowledge is gone as far as `query`/`doctor` are concerned.
+//
+// TEETH: revert `buildControllerDeps` to `let projection = emptyStore()` and this goes RED.
+describe('CLI-4d — a mine pass PRESERVES the governed projection (it shares the store with the emit door)', () => {
+  it('an already-emitted node survives a mine pass that mines nothing', () => {
+    const persisted: StoreProjection[] = [];
+    const existing: CurrentNode = { nodeKey: 'nk-already-emitted', family: 'advisory', contentHash: 'ch-1', claims: ['a governed claim'] };
+    const store: DiskStore = {
+      put: () => asHash('x'),
+      get: () => undefined,
+      persistProjection: (p) => void persisted.push(p),
+      // the durable sidecar the governed emit door already wrote
+      loadProjection: () => (persisted.length > 0 ? persisted[persisted.length - 1]! : { current: new Map([[existing.nodeKey, existing]]), cas: new Set(['ch-1']) }),
+    };
+    const cd = buildControllerDeps(REPO, depsOf({ store }));
+    cd.upsert([]); // a site that yielded no fact — the abstain case, and the common one
+
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]!.current.get('nk-already-emitted')).toEqual(existing);
+    expect(persisted[0]!.cas.has('ch-1')).toBe(true);
+  });
+
+  it('a mine pass ADDS to the existing projection rather than replacing it', () => {
+    const persisted: StoreProjection[] = [];
+    const existing: CurrentNode = { nodeKey: 'nk-already-emitted', family: 'advisory', contentHash: 'ch-1', claims: ['a governed claim'] };
+    const store: DiskStore = {
+      put: () => asHash('x'),
+      get: () => undefined,
+      persistProjection: (p) => void persisted.push(p),
+      loadProjection: () => (persisted.length > 0 ? persisted[persisted.length - 1]! : { current: new Map([[existing.nodeKey, existing]]), cas: new Set(['ch-1']) }),
+    };
+    const deps = depsOf({ store, budget: budget(FRONTIER.length) });
+    driveMine(REPO, deps);
+
+    const last = persisted[persisted.length - 1]!;
+    expect(last.current.get('nk-already-emitted')).toEqual(existing); // the emitted node is still there…
+    expect(last.current.size).toBeGreaterThan(1); // …alongside what this pass mined
   });
 });

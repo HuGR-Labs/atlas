@@ -18,6 +18,9 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+// The drift vocabulary lives in its own module so it can be exercised by a test (drift-patterns.test.mjs)
+// without importing this file's top-level sweep + process.exit. A regex nobody can falsify is not a gate.
+import { isStaleGovernanceClaim } from './drift-patterns.mjs';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const problems = [];
@@ -40,27 +43,6 @@ try {
 }
 
 // ── (2) DOC ANTI-DRIFT ──────────────────────────────────────────────────────────────────────────
-const STALE = [
-  /\b(4|four)[ -]?(governance|governed|legs?|tools?|write)\b/i,
-  /\bfour-leg\b/i, /\b4-leg\b/i, /\b4-tool\b/i,
-  /\bno fifth\b/i, /\bfifth (governance|write) tool\b/i,
-  /writePaths ?== ?1\b/i, /write-?[sS]urface ?== ?4\b/i, /cardinality ?== ?4\b/i,
-  /\bthe closed four\b/i, /\bthe four governed tools\b/i, /\bexactly four\b/i,
-  // The SINGULAR-write-door form. Previously unmatched by ANY pattern — which is how
-  // `handler.ts` shipped "the single fail-closed write door" as the MCP-published description of
-  // `atlas-emit`, telling every agent seat there is one write door, for four days after the amendment.
-  // Matched on the CONCEPT (an optional qualifier may sit between the words) rather than a literal
-  // phrase: a literal `/single[ -]write[ -]door/` misses "single **fail-closed** write door".
-  /\bsingle\b[^.\n]{0,24}\bwrite door\b/i, /\bone\b[^.\n]{0,16}\bwrite door\b/i,
-  /\bthe only write door\b/i, /\bwritePaths ?== ?1\b/i,
-];
-// A line matching any of these is a LEGITIMATE use, not drift.
-const ALLOW = [
-  /ADR-0003/, /\bformer\b/i, /\bamend/i, /\baccidental\b/i, /\bevolves\b/i, /\bwording\b/i, // amendment narrative
-  /single-write-door structural/i,            // INV-TOOLS-15 term-of-art (store-row medium)
-  /four read legs?/i, /ALL FOUR legs/i, /the four legs, no more/i, /exactly the four legs/i, // doctor read legs
-  /GATE's four legs/i, /the four legs route/i, /DOCTOR_SUBCOMMANDS/,
-];
 function walk(dir, exts, out = []) {
   for (const name of readdirSync(dir)) {
     if (name === 'node_modules' || name === 'dist' || name === '.git') continue;
@@ -91,7 +73,7 @@ const files = [
 for (const f of files) {
   const lines = readFileSync(f, 'utf8').split('\n');
   lines.forEach((line, i) => {
-    if (STALE.some((r) => r.test(line)) && !ALLOW.some((r) => r.test(line))) {
+    if (isStaleGovernanceClaim(line)) {
       problems.push(`DOC-DRIFT: ${f.replace(REPO + '/', '')}:${i + 1} — stale governance-count claim: ${line.trim().slice(0, 120)}`);
     }
   });

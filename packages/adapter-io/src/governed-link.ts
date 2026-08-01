@@ -10,9 +10,12 @@
 //                     from CAS (`store.get(node.contentHash)`), its `scope` taken, and `actorInScope` is
 //                     required for BOTH (reused verbatim from `governed-emit.ts` — the same authz seam). An
 //                     empty/unset actor, or an actor outside EITHER node's scope, is denied (fail-closed v1).
-//   4. RATIFY       — a sameAs assertion is a governed shared-truth mutation, so it requires a NON-EMPTY
-//                     ratifier (mirrors emit's full-ratify token). The token is env-sourced by the
-//                     composition root (`ATLAS_RATIFY_TOKEN`) — NEVER a payload field (the spoof-guard).
+//   4. RATIFY       — a sameAs assertion is a governed shared-truth mutation, so it runs the SAME KNOW-8
+//                     gate emit runs, over the JOIN of both endpoints' tiers: a non-empty ratifier always,
+//                     and `billy` specifically when EITHER endpoint is `T0` (task #84 — a link spanning a
+//                     `T0` node is a `T0` act, else the weaker endpoint is a side door onto the stronger).
+//                     The token is env-sourced by the composition root (`ATLAS_RATIFY_TOKEN`) — NEVER a
+//                     payload field (the spoof-guard).
 // Only after all four does it `linkSameAs` the projection and `persistProjection` it durably.
 //
 // Pure of clock/random: no wall-clock, no nonce, no counter enters the decision. Composes OVER the frozen
@@ -20,8 +23,8 @@
 // none. DAG: adapter-io depends on knowledge + tools; `LinkOut` is imported FROM tools (never the reverse).
 
 import type { Hash } from '@atlas/contracts';
-import { linkSameAs } from '@atlas/knowledge';
-import type { CurrentNode, GroundedFact } from '@atlas/knowledge';
+import { linkSameAs, ratify, stage, strictestTier } from '@atlas/knowledge';
+import type { Candidate, CurrentNode, GroundedFact } from '@atlas/knowledge';
 import type { LinkOut } from '@atlas/tools';
 import { actorInScope } from './policy.js';
 import type { AtlasPolicy } from './policy.js';
@@ -33,7 +36,10 @@ import type { DiskStore } from './store.js';
 const REJECTED_SAME = 'sameAs requires two distinct nodes';
 const REJECTED_UNAUTHORIZED = 'unauthorized: actor not in scope of both nodes (KNOW-11)';
 const REJECTED_UNRATIFIED =
-  'unratified: sameAs link requires a non-empty ratifier (v1; the T0→billy tier gate emit runs is deferred — sameAs is non-destructive)';
+  'unratified: a sameAs link requires a ratifier, and the billy token when either endpoint is T0 (KNOW-8)';
+const REJECTED_UNVERIFIABLE =
+  'unverifiable endpoint: a linked node\'s stored fact is not readable from CAS, so its governance class ' +
+  'cannot be confirmed — refused fail-closed';
 const unknownNode = (key: string): string => `unknown node: ${key} not in the current projection`;
 
 /** What the governed link leg is composed over: the durable CAS store (fact read-back + persist), the admin
@@ -44,18 +50,16 @@ export interface GovernedLinkDeps {
   readonly actor: string;
   /** The ratify token authorizing a governed sameAs assertion. Env-sourced by the composition root
    *  (`ATLAS_RATIFY_TOKEN`), threaded EXACTLY like `actor` — NEVER read from a payload. ABSENT ⇒ `''` ⇒ the
-   *  link fails closed (unratified). v1 SCOPE: this is a NON-EMPTY check only — it does NOT run emit's
-   *  tier-graded KNOW-8 ratification (a T0 fact's `by === 'billy'` requirement). Deferred deliberately because
-   *  `sameAs` is NON-DESTRUCTIVE (a derived read-side edge, never a fact merge — see docs/adr/ADR-0003-governed-write-doors.md). */
+   *  link fails closed (unratified). It runs the SAME KNOW-8 `ratify` law emit runs, over the JOIN of the two
+   *  endpoints' tiers — so a link touching a `T0` node requires `billy` exactly as a `T0` emit does. */
   readonly ratifyToken?: string;
 }
 
-/** Is `actor` authorized to write the SCOPE of `node`'s fact? Reads the whole fact back from CAS by its
- *  content address (the CAS bytes ARE the fact) and gates on `fact.scope` via `actorInScope` — the identical
- *  KNOW-11 seam `governed-emit.ts` uses. A missing fact / absent scope ⇒ no scope ⇒ denied (fail-closed). */
-function actorAuthorizedFor(deps: GovernedLinkDeps, node: CurrentNode): boolean {
-  const fact = deps.store.get(node.contentHash as unknown as Hash) as GroundedFact | undefined;
-  return actorInScope(deps.policy, deps.actor, fact?.scope);
+/** The stored fact behind a current node — read back from CAS by content address (the CAS bytes ARE the
+ *  fact). `undefined` when the bytes are absent (pruned CAS / partial restore), which every caller treats
+ *  as fail-closed: an endpoint whose governance class cannot be READ is never linked on trust. */
+function storedFact(deps: GovernedLinkDeps, node: CurrentNode): GroundedFact | undefined {
+  return deps.store.get(node.contentHash as unknown as Hash) as GroundedFact | undefined;
 }
 
 /**
@@ -76,14 +80,27 @@ export function createGovernedLink(deps: GovernedLinkDeps): { readonly link: (a:
     const nodeB = proj.current.get(b);
     if (nodeB === undefined) return { linked: false, rejected: unknownNode(b) };
 
-    // 3. AUTHZ (KNOW-11) — the actor must be in the scope of BOTH nodes' facts (read back from CAS).
-    if (!actorAuthorizedFor(deps, nodeA) || !actorAuthorizedFor(deps, nodeB)) {
+    // 2.5 CLASS READ-BACK — both endpoints' stored facts, the source of BOTH remaining gates. An endpoint
+    //     whose bytes are gone has an unknowable scope AND an unknowable tier, so it is refused outright
+    //     rather than defaulted (the same fail-closed stance `governed-emit.ts`'s incumbent guard takes).
+    const factA = storedFact(deps, nodeA);
+    const factB = storedFact(deps, nodeB);
+    if (factA === undefined || factB === undefined) {
+      return { linked: false, rejected: REJECTED_UNVERIFIABLE };
+    }
+
+    // 3. AUTHZ (KNOW-11) — the actor must be in the scope of BOTH endpoints' facts.
+    if (!actorInScope(deps.policy, deps.actor, factA.scope) || !actorInScope(deps.policy, deps.actor, factB.scope)) {
       return { linked: false, rejected: REJECTED_UNAUTHORIZED };
     }
 
-    // 4. RATIFY — a governed shared-truth mutation requires a NON-EMPTY ratifier (env-sourced). v1: a
-    //    non-empty check only, NOT emit's tier-graded KNOW-8 gate (T0→billy) — deferred, sameAs is non-destructive.
-    if ((deps.ratifyToken ?? '').length === 0) {
+    // 4. RATIFY (KNOW-8) — the SAME law emit runs, over the JOIN of the two endpoints' tiers. Composed, not
+    //    re-implemented: `ratify` refuses an empty token and refuses a non-`billy` ratifier on a `T0` class.
+    //    The join is what closes the side door — linking a T2 node to a T0 node is a T0 act, so it cannot be
+    //    signed by a ratifier who could not have written the T0 node directly.
+    const linkClass = strictestTier(factA.tier, factB.tier);
+    const staged = stage({ tier: linkClass } as unknown as Candidate);
+    if (!ratify(staged, { by: deps.ratifyToken ?? '' }).committed) {
       return { linked: false, rejected: REJECTED_UNRATIFIED };
     }
 

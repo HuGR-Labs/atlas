@@ -54,3 +54,39 @@ export function classify(territory: TerritoryView): { readonly t0Candidate: bool
 
 /** The frozen-`TierApi` binding (conformance handle). */
 export const classifier: TierApi = { classify };
+
+// ── the tier LATTICE — the ordering the write doors gate on (task #84) ────────────────────────────────
+//
+// `Tier` is an ORDERED governance class, not a label: `T0` (human+billy, KNOW-8) is strictly stricter than
+// `T1`, which is strictly stricter than `T2` (fast-path auto-accept, KNOW-18). Until this was written down,
+// the ordering existed only as scattered `=== 'T0'` / `=== 'T2'` equality checks, so no code could ask the
+// one question a write door must ask: "is this write's class WEAKER than the class of the node it targets?"
+// A door that cannot ask it gates on the write's own self-declaration — a confused deputy, since the
+// routing `nodeKey` (hash(primaryAnchorId ‖ slot[‖ check])) contains no tier at all.
+//
+// Pure + total + no clock/LLM, like every other law in this facet.
+
+/** Strictness rank — HIGHER binds harder. `T0` is the strictest (human+billy); `T2` the most permissive. */
+const TIER_STRICTNESS: Readonly<Record<Tier, number>> = { T2: 0, T1: 1, T0: 2 };
+
+/** The tier lattice as a total order, strictest-first — the canonical enumeration for a doc/gate to read. */
+export const TIER_ORDER: readonly Tier[] = ['T0', 'T1', 'T2'];
+
+/**
+ * Is `declared` a WEAKER governance class than `incumbent`? This is the predicate a write door gates on:
+ * a write may re-state or RAISE the class of the node it targets, never lower it. Lowering the class of a
+ * ratified node is a re-classification — a separate governed act, never a side effect of emitting a fact.
+ * Pure + total.
+ */
+export function isWeakerTier(declared: Tier, incumbent: Tier): boolean {
+  return TIER_STRICTNESS[declared] < TIER_STRICTNESS[incumbent];
+}
+
+/**
+ * The lattice JOIN — the stricter of two classes. A governed act spanning SEVERAL nodes (the `sameAs` link
+ * spans two) must clear the strictest class among them: linking a `T0` node to a `T2` one is a `T0` act,
+ * because the weaker endpoint would otherwise be a side door onto the stronger. Pure + total.
+ */
+export function strictestTier(a: Tier, b: Tier): Tier {
+  return isWeakerTier(a, b) ? b : a;
+}
