@@ -207,3 +207,55 @@ export function ungroundedFact(claim: string, scope = 'src'): GroundedFact {
     predicateSlot: 'invariant',
   };
 }
+
+/** The recipe for one advisory fact grounded at SEVERAL `::` sub-file symbols, possibly across files. */
+export interface MultiSymbolFactSpec {
+  readonly repoPath: string;
+  readonly sites: readonly (readonly [file: string, symbol: string])[]; // ≥1 (file, top-level symbol) pairs
+  readonly slot: PredicateSlot;
+  readonly claim: string;
+  readonly tier?: Tier; // default 'T1'
+  readonly scope?: string; // default 'src'
+}
+
+/**
+ * A serializable advisory `GroundedFact` grounded at MANY symbol anchors — the shape that exposed the
+ * degenerate-anchor defect (SEAT ANCHOR). Every cited `subtreeHash` is the REAL folded-index hash, so the
+ * emit truth-gate re-derives each site FRESH and the write is refused (or accepted) on IDENTITY grounds
+ * alone, never on grounding.
+ *
+ * `id` IS AUTHORED DEFENSIVELY. The payload `id` is never used for routing — both write paths RE-MINT the
+ * identity from the content — but the product's own `nodeKey` now REFUSES a grounding that names no single
+ * structural unit, so an authoring helper that called it unguarded could not even construct the adversarial
+ * input. The placeholder keeps the black-box story honest: what is emitted is exactly what a hostile author
+ * could write by hand into a JSON file, and the door re-mints regardless.
+ */
+export function groundedMultiSymbolFact(spec: MultiSymbolFactSpec): GroundedFact {
+  const tier: Tier = spec.tier ?? 'T1';
+  const axes = axesOf(spec.repoPath);
+  const entries = spec.sites.map(([filePath, symbolName]) => {
+    const fileNode = findNode(axes.spatial, filePath);
+    if (fileNode === undefined) throw new Error(`author: no file node '${filePath}'`);
+    const unit = fileNode.children.find((c) => unitLeafName(c.key) === symbolName);
+    if (unit === undefined) throw new Error(`author: no symbol unit '${symbolName}' under '${filePath}'`);
+    return {
+      anchor: { kind: 'symbol' as const, qualifiedPath: unit.key, subtreeHash: asSubtree(String(unit.subtreeHash)) },
+      path: filePath,
+    };
+  });
+  const grounding = { entries } as unknown as GroundedFact['grounding'];
+  const candidate: Candidate = {
+    claimText: spec.claim, claimNorm: spec.claim, slot: spec.slot, grounding,
+    provenance: { source: 'e2e-blackbox', trusted: true }, tier,
+  };
+  let authoredId: GroundedFact['id'];
+  try {
+    authoredId = nodeKey(candidate);
+  } catch {
+    authoredId = 'author-could-not-mint' as unknown as GroundedFact['id'];
+  }
+  return {
+    kind: 'advisory', id: authoredId, tier, claimNorm: spec.claim, grounding, freshness: 'FRESH',
+    claims: [], authoring: 'ADVISORY', scope: spec.scope ?? 'src', predicateSlot: spec.slot,
+  };
+}

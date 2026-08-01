@@ -31,6 +31,9 @@
 import { asNodeKey, canonicalForm, defaultEncoder, id } from '@atlas/kernel';
 import type { NodeKey } from '@atlas/contracts';
 import type { Candidate, Check, PredicateSlot } from '../types.js';
+// The projection type the frozen `RouterApi.writeDecision` / `writeDecision` read — defined in the reducer
+// module this file re-exports below (type-only import; the runtime cycle is the re-export, see there).
+import type { StoreProjection } from './upsert.js';
 
 // ── frozen RouterApi surface, co-located here (was ref/router.ts) ─────────────────────────────────────
 
@@ -121,153 +124,12 @@ export function routeWrite(inputs: RouteInputs): WriteDecision {
   return inputs.checkSame ? 'SUPERSEDE' : 'CREATE'; // 4e — same-check re-evidence supersedes
 }
 
-// ─────────────────────────────────────────────────────────────────────────────────────────────
-// The upsert reducer — applies a routed write to a store PROJECTION, so "every write is an upsert"
-// (one current node per key) is a STRUCTURAL consequence, not merely asserted. The projection is a
-// minimal current-node carrier (nodeKey → the ONE current node) + the append-only CAS retention
-// set; it is session-internal state (cf. index/src/fold.ts), NOT the OWNER-DEFINE composed store.
-// ─────────────────────────────────────────────────────────────────────────────────────────────
+// ── the upsert REDUCER (projection types + `upsert`/`currentNodes`) now lives in `upsert.ts` ──────────
+// Split out at the 400-LOC godfile ceiling along the section boundary this file already drew (see that
+// module's header). RE-EXPORTED here so the package surface — and every existing `write/router.js` import —
+// is byte-identical to the pre-split form; the identity legs below did NOT move (LEAD-RATIFIED placement).
+export * from './upsert.js';
 
-/** One write, its identity VALUES supplied by the upstream identity facet (5.13-b) + the emitter. */
-export interface WriteRequest {
-  readonly nodeKey: string; // WHICH — opaque identity (value computed upstream)
-  readonly contentHash: string; // WHAT  — opaque CAS id (value computed upstream)
-  readonly family: NodeFamily;
-  readonly claimNorm: string; // the advisory claim body — the set-union element (KNOW-4c)
-  // ── ADJACENCY carrier (ADDITIVE, OPTIONAL) — anchor+slot for WP-B's sibling-adjacency scan; NOT routed.
-  readonly primaryAnchor?: string; // the computed primaryAnchorId VALUE (qualifiedPath-prefix), string form
-  readonly slot?: PredicateSlot; //  the closed-vocabulary predicate slot the node lives at (R3-optional)
-}
-
-/** A current node in the territory projection. Exactly one lives per `nodeKey` (KNOW-4g). */
-export interface CurrentNode {
-  readonly nodeKey: string;
-  readonly family: NodeFamily;
-  readonly contentHash: string;
-  readonly claims: readonly string[]; // claimNorms — the advisory set-union set (dedup by claimNorm)
-  readonly supersededBy?: string; // predicate lineage pointer into CAS (KNOW-4e); absent for advisory
-  // ── ADJACENCY carrier (ADDITIVE, OPTIONAL) — carried from the req for WP-B; store.ts WireProjection round-trips them free. NOT read here.
-  readonly primaryAnchor?: string; // the primaryAnchorId VALUE (qualifiedPath-prefix), string form
-  readonly slot?: PredicateSlot; //  the closed-vocabulary predicate slot the node lives at (R3-optional)
-  // ── sameAs carrier (ADDITIVE, OPTIONAL — WP-SAMEAS) — the SORTED, de-duped nodeKeys a HUMAN asserted name
-  //    the SAME fact at an unrelated code site (H1). Stored SYMMETRICALLY on both endpoints, so the read-side
-  //    union-find fold (`deriveSameAs`) is local from either end; absent ⇒ no asserted equivalence. It round-
-  //    trips inside the CurrentNode entry (store.ts WireProjection serializes the whole node — no change there).
-  //    ADDITIVE/OPTIONAL, back-compat: a node minted before this WP simply has no `sameAs` and is a singleton.
-  readonly sameAs?: readonly string[];
-}
-
-/** The territory store projection: the one-current-node map + the append-only CAS retention set. */
-export interface StoreProjection {
-  readonly current: ReadonlyMap<string, CurrentNode>; // nodeKey → the ONE current node
-  readonly cas: ReadonlySet<string>; // retained contentHashes — prior versions stay addressable
-  // ── freshness watermark (ADDITIVE, OPTIONAL — N11) — the git HEAD sha this projection's stored per-fact
-  //    freshness was last computed against (stamped at persist). A query cheaply compares it to current HEAD:
-  //    if they differ, the read is BEHIND HEAD ⇒ its freshness is unverified ⇒ honestly `stale` (never a
-  //    silent "fresh"). Absent (old projections / never-persisted) ⇒ "unknown", treated conservatively by the
-  //    reader (it only asserts behind-HEAD when it can PROVE it: both this AND live HEAD are known and differ).
-  readonly builtAt?: string;
-}
-
-/** An empty store projection. */
-export function emptyStore(): StoreProjection {
-  return { current: new Map(), cas: new Set() };
-}
-
-/** The outcome of one upsert: the route taken + the next store projection (pure — inputs untouched). */
-export interface UpsertResult {
-  readonly decision: WriteDecision;
-  readonly store: StoreProjection;
-}
-
-/**
- * Apply one write as an upsert: resolve the routing inputs against the current projection, route
- * with {@link routeWrite}, then reduce the projection per the route. DEDUP is a no-op; CREATE mints
- * a node; UPDATE set-unions the advisory claim in place (same node, no lineage pointer — git holds
- * the prior); SUPERSEDE mints a new predicate node at the SAME key with a `supersededBy` pointer
- * while the prior bytes remain in CAS.
- *
- * ADJACENCY (WP-DEDUP-1 un-merge): the ADJACENCY-B door-2 always-merge is REMOVED. A routed CREATE at an
- * adjacent anchor now mints its OWN node (each keeps its own grounding — A2), never folding into a neighbor.
- * Adjacency is no longer a merge; it is a derived-on-read `subsumes` relation (WP-DEDUP-2, `deriveSubsumes`),
- * so the destructive fold is gone. The `primaryAnchor`/`slot` carriers on `CurrentNode` STAY — DP-2 reads
- * them off the projection. `cfg` remains in the signature (default τ=1) for callers + the forthcoming DP-2 use.
- *
- * CARRY-FORWARD IS THE DEFAULT (ADR-0009): UPDATE and SUPERSEDE both SPREAD the prior node and re-mint only the
- * fields named inline, so a field added to `CurrentNode` later is carried with no edit here and DROPPING one has
- * to be spelled out (only `claims`, at SUPERSEDE). `sameAs` is why — a SIGNED act established it (`atlas-link`'s
- * authz + ratifier over the whole class), and a class that SHRINKS under-charges every gate `sameAsClassOf` prices.
- */
-export function upsert(
-  store: StoreProjection,
-  req: WriteRequest,
-  cfg: NearDupConfig = { claimNormThreshold: 1 },
-): UpsertResult {
-  const nodeKeyHit = store.current.has(req.nodeKey);
-  const inputs: RouteInputs = {
-    contentHashHit: store.cas.has(req.contentHash),
-    nodeKeyHit,
-    family: req.family,
-    checkSame: req.family === 'predicate' && nodeKeyHit, // predicate nodeKey encodes check ⇒ hit ⟺ same check
-  };
-  const decision = routeWrite(inputs);
-  const cas = new Set(store.cas);
-  const current = new Map(store.current);
-
-  switch (decision) {
-    case 'DEDUP':
-      break; // idempotent no-op — no node minted, no new CAS object (KNOW-4b)
-    case 'CREATE':
-      cas.add(req.contentHash);
-      current.set(req.nodeKey, {
-        nodeKey: req.nodeKey,
-        family: req.family,
-        contentHash: req.contentHash,
-        claims: [req.claimNorm],
-        // ADJACENCY carrier (additive) — spread keeps the field ABSENT when omitted (never explicit undefined).
-        ...(req.primaryAnchor !== undefined ? { primaryAnchor: req.primaryAnchor } : {}),
-        ...(req.slot !== undefined ? { slot: req.slot } : {}),
-      });
-      break;
-    case 'UPDATE': {
-      const prior = current.get(req.nodeKey)!; // nodeKeyHit ⇒ present
-      const claims = prior.claims.includes(req.claimNorm)
-        ? prior.claims // set-union: dedup by claimNorm (idempotent)
-        : [...prior.claims, req.claimNorm];
-      cas.add(req.contentHash);
-      current.set(req.nodeKey, {
-        ...prior, // ADJACENCY: `...prior` carries prior anchor/slot; the req's WIN below when present
-        contentHash: req.contentHash,
-        claims, // in place, no supersededBy
-        ...(req.primaryAnchor !== undefined ? { primaryAnchor: req.primaryAnchor } : {}),
-        ...(req.slot !== undefined ? { slot: req.slot } : {}),
-      });
-      break;
-    }
-    case 'SUPERSEDE': {
-      const prior = current.get(req.nodeKey)!; // nodeKeyHit ⇒ present
-      cas.add(req.contentHash); // prior.contentHash stays in `cas` (append-only) — old bytes addressable
-      current.set(req.nodeKey, {
-        ...prior, // CARRY-FORWARD (ADR-0009, see above): `sameAs` + every future field survive; only ↓ is re-minted
-        nodeKey: req.nodeKey,
-        family: req.family,
-        contentHash: req.contentHash,
-        claims: [req.claimNorm], // the ONE deliberate drop: a predicate version REPLACES its body (prior in CAS)
-        supersededBy: prior.contentHash,
-        ...(req.primaryAnchor !== undefined ? { primaryAnchor: req.primaryAnchor } : {}), // req wins, else `...prior`
-        ...(req.slot !== undefined ? { slot: req.slot } : {}),
-      });
-      break;
-    }
-    // REJECT is unreachable — admission (KNOW-2) is emit.ts, not the upsert route.
-  }
-  return { decision, store: { current, cas } };
-}
-
-/** A territory query: the current nodes — exactly one per `nodeKey` by construction (KNOW-4g). */
-export function currentNodes(store: StoreProjection): readonly CurrentNode[] {
-  return [...store.current.values()];
-}
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 // WP-5.13-b.KNOW · EPIC-13-b — THE ANCHOR-IDENTITY FACET (additive; 5.13-a's routeWrite/upsert above
@@ -339,17 +201,113 @@ function deepestCommonUnit(paths: readonly string[]): string {
 }
 
 /**
+ * THE REFUSAL an un-namable grounding earns (KNOW-15d). Stated in the write-door's voice — long, specific,
+ * and it explains the MECHANISM — because it is the caller's only signal and the caller can act on it.
+ *
+ * WHY A GROUNDING CAN FAIL TO NAME A FACT. `primaryAnchorId` is a segment-wise longest common prefix over
+ * the `::` structural chain. The FIRST segment of a symbol path is its FILE (`src/billing.ts::7:fn:charge`),
+ * so two symbols in two different files share NO prefix and the common unit is the EMPTY STRING. That empty
+ * string used to be minted as the anchor, and `nodeKey = hash(primaryAnchorId ‖ predicateSlot [‖ check])`
+ * then collapsed EVERY such fact in the repository onto ONE address per slot. Reproduced through the front
+ * door with no hash weakness whatsoever: a fact grounded at `[src/billing.ts::charge, src/ledger.ts::post]`
+ * and a fact grounded at `[vendor/evil.ts::pwn, docs/readme.ts::x]` minted the SAME nodeKey, the second
+ * `atlas emit` routed to UPDATE, and the advisory set-union appended the second claim to the first fact's
+ * node — the confused-deputy objective reached with a DEGENERATE ANCHOR instead of a broken digest.
+ *
+ * An empty anchor is not an identity, it is a WILDCARD, and a wildcard in an identity function is a
+ * collision generator: it matches everything, so it OWNS everything. The remedy is not a better hash — the
+ * hash was never the weak part — it is to refuse to mint an address that does not name what it addresses.
+ *
+ * WHAT THE AUTHOR DOES ABOUT IT, because a refusal that leaves no way forward is a brick: re-ground the
+ * claim at the single unit that really does contain every cited site (the file, the module, the directory
+ * node the spatial axis already carries), or emit ONE fact per site and let the read-side `subsumes`
+ * relation put them back together. Both are ordinary writes. Nothing is made permanently un-writable: this
+ * gate reads the GROUNDING the author sends and nothing else — no stored state, no incumbent, no policy —
+ * so a refusal is a statement about this payload, reversible by re-sending a better-grounded one.
+ *
+ * WHY NOT MINT A COVERING ANCHOR INSTEAD (the alternative was measured, not assumed): the common DIRECTORY
+ * re-creates the same defect one level down — a diffuse grounding under `src/` would mint the anchor `src`,
+ * which is exactly the anchor an honest fact grounded at the `src` directory node mints, so an attacker
+ * needing only two symbols in two files under `src/` lands on it. A composite over the sorted site list IS
+ * collision-free, but it is not a structural unit: `deriveSubsumes` reads `::`-prefix containment, so such a
+ * node can never be broader or narrower than anything, and two authors of the SAME cross-cutting invariant
+ * citing slightly different site sets get two un-unionable nodes — the proliferation the closed slot
+ * vocabulary exists to prevent (atlas-knowledge:150). Refusal keeps identity meaning what it says.
+ */
+export const DEGENERATE_ANCHOR_REASON =
+  'degenerate anchor: this grounding does not name ONE structural unit, so there is no address to write it ' +
+  'to. The primary anchor is the deepest unit CONTAINING every cited site, computed as the common prefix of ' +
+  'the `::` structural chain; when the cited sites live in different files that common prefix is EMPTY, and ' +
+  'an empty anchor is not an identity but a WILDCARD — `nodeKey` would collapse every such fact in the ' +
+  'repository onto ONE address per predicate slot, where the advisory set-union would merge unrelated ' +
+  "claims into whichever fact got there first. The same refusal covers a cited anchor whose `qualifiedPath` " +
+  'is absent or not a non-empty string, which computes the identical empty prefix by a different route. ' +
+  'Re-ground the claim at the single unit that genuinely contains every site it cites, or emit one fact per ' +
+  'site and let the derived `subsumes` relation relate them';
+
+/** The refusal, as a THROWN value the composed doors already convert into a structured rejection (the tools
+ *  handler turns a leg throw into a fail-closed `Verdict`, persisting nothing). A named class — never a bare
+ *  `Error` and never the raw `TypeError` an unguarded `.split` on a non-string would have produced — so a
+ *  caller can discriminate this refusal from an internal fault. */
+export class DegenerateAnchorError extends Error {
+  constructor() {
+    super(DEGENERATE_ANCHOR_REASON);
+    this.name = 'DegenerateAnchorError';
+  }
+}
+
+/** `true` iff `v` is a string that could name a unit. Anchors arrive over `JSON.parse` + a cast (the CLI) or
+ *  a bare `object` schema (MCP), so `qualifiedPath` is TYPE-ONLY at this seam exactly as `Tier`/`Scope` are:
+ *  refused here or nowhere. Total over `unknown`, fail-CLOSED. */
+function isAnchorPath(v: unknown): v is string {
+  return typeof v === 'string' && v.length > 0;
+}
+
+/**
+ * The cited anchor paths that ENTER IDENTITY, read totally over `unknown`. The selection is unchanged from
+ * the pre-guard form — symbol anchors if any are cited, else the FIRST entry (broader citations are
+ * SECONDARY: they feed drift, never the key, KNOW-15g) — but every hop is now defensive, because a
+ * `Candidate` reaches this seam through an `as unknown as Candidate` cast on both write paths and its
+ * declared types are erased. A malformed shape yields the EMPTY list, which the caller refuses; it never
+ * throws a raw `TypeError` out of a door and it never silently contributes a coerced path to the prefix.
+ */
+function identityAnchorPaths(node: Candidate): readonly string[] {
+  const entries: unknown = (node as { grounding?: { entries?: unknown } } | null | undefined)?.grounding?.entries;
+  if (!Array.isArray(entries)) return [];
+  const anchorOf = (e: unknown): { kind?: unknown; qualifiedPath?: unknown } | undefined =>
+    (e as { anchor?: { kind?: unknown; qualifiedPath?: unknown } } | null | undefined)?.anchor;
+  const symbolAnchors = entries.filter((e) => anchorOf(e)?.kind === 'symbol');
+  const source = symbolAnchors.length > 0 ? symbolAnchors : entries.slice(0, 1);
+  const paths = source.map((e) => anchorOf(e)?.qualifiedPath);
+  return paths.every(isAnchorPath) ? paths : []; // one bad path poisons the prefix ⇒ refuse the whole set
+}
+
+/**
  * The COMPUTED primary anchor (KNOW-15d) — the tightest structural unit containing every SYMBOL the
  * claim references, resolved MECHANICALLY from the grounding (never an LLM-chosen anchor, KNOW-15e).
  * ONLY the primary symbol anchors enter identity: broader (block/file/repo/project) citations are
  * SECONDARY — they live in `grounding.entries` and feed DRIFT only, never the `nodeKey` (KNOW-15g).
- * Pure + total, no LLM. (The move-aware re-anchoring across rename/move is the UPSTREAM matcher —
- * OPEN-DEFINE parametric, not computed here; see the facet header.)
+ * No LLM. (The move-aware re-anchoring across rename/move is the UPSTREAM matcher — OPEN-DEFINE
+ * parametric, not computed here; see the facet header.)
+ *
+ * TOTALITY, HONESTLY STATED — this facet's header used to call this function "total", and it was, in the
+ * sense that it returned a value for every input; it returned the WILDCARD for a whole class of them, which
+ * is worse than being undefined there. It is now total in the sense that matters: it is defined over every
+ * `unknown` shape (see `identityAnchorPaths`) and it either returns an anchor that REALLY CONTAINS every
+ * site it was computed from, or it refuses. There is no third outcome and no input that reaches a raw throw
+ * from inside. Determinism, purity and freedom from clock/LLM are untouched.
+ *
+ * THE GUARD LIVES HERE, ONCE, ON PURPOSE. `nodeKey` is defined in terms of this function, so the identity
+ * key and the stored `primaryAnchor` carrier are validated by the SAME check and cannot disagree — the
+ * shape of the recent regression in this area was a pair where one half was validated and the other was
+ * not, which left an anchor that passed one gate and failed the other forever.
  */
 export function primaryAnchorId(node: Candidate): NodeKey {
-  const symbolAnchors = node.grounding.entries.filter((e) => e.anchor.kind === 'symbol');
-  const source = symbolAnchors.length > 0 ? symbolAnchors : node.grounding.entries.slice(0, 1);
-  return asNodeKey(deepestCommonUnit(source.map((e) => e.anchor.qualifiedPath)));
+  const paths = identityAnchorPaths(node);
+  const common = paths.length > 0 ? deepestCommonUnit(paths) : '';
+  // The whole defect in one line: an empty common unit is a wildcard, so it is REFUSED, never minted.
+  if (common === '') throw new DegenerateAnchorError();
+  return asNodeKey(common);
 }
 
 /**
