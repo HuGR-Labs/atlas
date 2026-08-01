@@ -86,14 +86,35 @@ function storedFact(deps: GovernedLinkDeps, node: CurrentNode): GroundedFact | u
   return deps.store.get(node.contentHash as unknown as Hash) as GroundedFact | undefined;
 }
 
-/** Is the actor authorized over a node BY ITS PROJECTION ROW (ADR-0007 carrier) — i.e. without reading a
- *  single CAS byte? This is what lets the authz gates run BEFORE the read-back, which is what keeps the two
- *  refusals from encoding storage health to a caller with no authority (the same repair `governed-emit.ts`
- *  received; see its header). `isScope` first, because `actorInScope` looks the scope up as a property KEY
- *  and property keys COERCE — a malformed stored scope would otherwise read as a legitimate one. A row with
- *  no scope (minted before the carrier) authorizes NOBODY: fail-closed, never a grant. */
-function rowAuthorized(deps: GovernedLinkDeps, node: CurrentNode): boolean {
-  return isScope(node.scope) && actorInScope(deps.policy, deps.actor, node.scope);
+/**
+ * Is the actor authorized over a node, decided WITHOUT letting the answer depend on storage health? The row
+ * carries the node's scope (ADR-0007), so the question is answered off the projection and the authz gates
+ * can run BEFORE the read-back — which is what keeps the two refusals from encoding CAS health to a caller
+ * with no authority (the same repair `governed-emit.ts` received; see its header). `isScope` first, because
+ * `actorInScope` looks the scope up as a property KEY and property keys COERCE, so a malformed stored scope
+ * would otherwise read as a legitimate one.
+ *
+ * A CARRIER-LESS ROW FALLS BACK TO ITS STORED FACT, mirroring the emit door exactly (lead-reversed; ADR-0007
+ * §Consequences). Without it a node written before the carrier would be permanently UNLINKABLE — the same
+ * brick, one door over. The fallback is narrow in the same way: ONLY a row with no `scope` property at all
+ * takes it, so a malformed or byte-contradicting row is still judged on the row and never borrows the bytes'
+ * authority. It cannot grant anything the bytes do not already grant, and it closes no oracle it opens:
+ * unreadable bytes on a carrier-less row leave authority unestablished, which is `unauthorized` — the same
+ * string an out-of-scope caller gets when the bytes ARE readable.
+ *
+ * UNLIKE THE EMIT DOOR, THIS ONE DOES NOT DRAIN THE LEGACY PATH: `linkSameAs` spreads the prior row and adds
+ * only the peer, so a successful link does not stamp the carrier. A legacy node becomes carried the first
+ * time it is EMITTED to, not the first time it is linked. Recorded, not silently relied upon.
+ */
+function rowAuthorized(deps: GovernedLinkDeps, node: CurrentNode, fact: GroundedFact | undefined): boolean {
+  const authorityScope = node.scope === undefined ? fact?.scope : node.scope;
+  return isScope(authorityScope) && actorInScope(deps.policy, deps.actor, authorityScope);
+}
+
+/** Do a node's stored bytes CONTRADICT the governance its row advertises? Only meaningful for a CARRIED row
+ *  — a carrier-less row advertises nothing to contradict, and its authority came from the bytes already. */
+function rowContradicted(node: CurrentNode, fact: GroundedFact): boolean {
+  return node.scope !== undefined && fact.scope !== node.scope;
 }
 
 /**
@@ -125,7 +146,9 @@ export function createGovernedLink(deps: GovernedLinkDeps): { readonly link: (a:
     //    over nodes the caller cannot touch, at keys it can name freely. SCN-GL-14 pinned exactly this
     //    precedence for the CLASS walk and could not pin it here, because the gate physically could not run
     //    before the read it depended on. With `scope` on the row it can, so it does.
-    if (!rowAuthorized(deps, nodeA) || !rowAuthorized(deps, nodeB)) {
+    const factA = storedFact(deps, nodeA);
+    const factB = storedFact(deps, nodeB);
+    if (!rowAuthorized(deps, nodeA, factA) || !rowAuthorized(deps, nodeB, factB)) {
       return { linked: false, rejected: REJECTED_UNAUTHORIZED };
     }
 
@@ -136,9 +159,7 @@ export function createGovernedLink(deps: GovernedLinkDeps): { readonly link: (a:
     //     `unverifiable endpoint` stays a DISTINCT reason (SCN-GL-7) — a pruned CAS is not a policy gap an
     //     admin should try to fix by granting a scope — and it is now reached ONLY by a caller already shown
     //     to hold authority over both endpoints, so it discloses nothing it has not earned.
-    const factA = storedFact(deps, nodeA);
-    const factB = storedFact(deps, nodeB);
-    if (factA === undefined || factB === undefined || factA.scope !== nodeA.scope || factB.scope !== nodeB.scope) {
+    if (factA === undefined || factB === undefined || rowContradicted(nodeA, factA) || rowContradicted(nodeB, factB)) {
       return { linked: false, rejected: REJECTED_UNVERIFIABLE };
     }
 
@@ -174,11 +195,11 @@ export function createGovernedLink(deps: GovernedLinkDeps): { readonly link: (a:
     //    bytes are missing. The rows answer the authority question without any read at all.
     const merged = [...new Set([...sameAsClassOf(proj, a), ...sameAsClassOf(proj, b)])];
     const members = merged.map((key) => proj.current.get(key)).filter((m): m is CurrentNode => m !== undefined);
-    if (!members.every((m) => rowAuthorized(deps, m))) {
+    const memberFacts = members.map((m) => storedFact(deps, m));
+    if (!members.every((m, i) => rowAuthorized(deps, m, memberFacts[i]))) {
       return { linked: false, rejected: REJECTED_UNAUTHORIZED };
     }
-    const memberFacts = members.map((m) => storedFact(deps, m));
-    if (memberFacts.some((f, i) => f === undefined || f.scope !== members[i]!.scope)) {
+    if (memberFacts.some((f, i) => f === undefined || rowContradicted(members[i]!, f))) {
       return { linked: false, rejected: REJECTED_UNVERIFIABLE };
     }
     const classFacts = memberFacts as readonly GroundedFact[];

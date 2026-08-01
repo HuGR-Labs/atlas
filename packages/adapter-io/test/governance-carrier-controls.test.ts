@@ -24,7 +24,7 @@ import type { Hash } from '@atlas/contracts';
 import { createGovernedEmit } from '../src/governed-emit.js';
 import { createGovernedLink } from '../src/governed-link.js';
 import { rehydrateProjection } from '../src/store.js';
-import { AT, HOLDS, advisoryFact, freshWorkspace, keyOf, policyOf } from './door-regression-support.js';
+import { AT, HOLDS, advisoryFact, freshWorkspace, keyOf, policyOf, reasonOf } from './door-regression-support.js';
 import type { Workspace } from './door-regression-support.js';
 
 const ANCHOR = 'src/core.ts::carrier';
@@ -61,52 +61,165 @@ describe('ADR-0007 carrier — controls', () => {
     expect(row?.tier).toBe('T1');
   });
 
-  it('CARRIER-2 — an OLD-SHAPE sidecar (no scope/tier on the row) LOADS and REFUSES; never grants, never throws', () => {
-    ws = freshWorkspace();
-    // The fixture is authored in the OLD SHAPE BY HAND — this is the point of the control. Emitting through
-    // the door and deleting the fields afterwards would prove nothing about a file this code has never seen.
-    const legacy = advisoryFact({ anchor: ANCHOR, claimNorm: 'a pre-carrier claim', scope: 'core' });
-    const addr = ws.store.put(legacy as unknown as CasObject);
-    const key = keyOf(legacy);
+  /** An OLD-SHAPE sidecar, authored BY HAND: a row with no `scope`/`tier` property at all, exactly what a
+   *  projection minted before the carrier looks like on disk. Emitting through the door and deleting the
+   *  fields afterwards would prove nothing about a file this code has never seen. Returns the node key. */
+  function writeLegacySidecar(w: Workspace, fact: ReturnType<typeof advisoryFact>, row: Record<string, unknown> = {}): string {
+    const addr = w.store.put(fact as unknown as CasObject);
+    const key = keyOf(fact);
     writeFileSync(
-      sidecarOf(ws),
+      sidecarOf(w),
       JSON.stringify({
-        current: [[key, { nodeKey: key, family: 'advisory', contentHash: addr, claims: ['a pre-carrier claim'] }]],
+        current: [[key, { nodeKey: key, family: 'advisory', contentHash: addr, claims: [(fact as { claimNorm: string }).claimNorm], ...row }]],
         cas: [addr],
       }),
       'utf8',
     );
+    return key;
+  }
 
-    // 1. IT LOADS — the whole file, with the row present. A new optional field must not make an old sidecar
-    //    unparseable (that would route every pre-existing store into `emptyStore()` at boot).
+  it('CARRIER-2 — a CARRIER-LESS row LOADS, is WRITABLE by its legitimate owner, and is UPGRADED by that write', () => {
+    // THE AVAILABILITY PROPERTY, and the one the strict first version broke. A row written before the carrier
+    // existed must not be bricked: the lead reversed the strict rule precisely because "unwritable forever,
+    // with no migration door" is the outcome this codebase has twice ruled unacceptable. Authority for such a
+    // row comes from the CAS bytes — the MORE authenticated source, and where authority lived before today.
+    ws = freshWorkspace();
+    const legacy = advisoryFact({ anchor: ANCHOR, claimNorm: 'a pre-carrier claim', scope: 'core' });
+    const key = writeLegacySidecar(ws, legacy);
+
+    // 1. IT LOADS — the whole file, row present, both carrier fields absent. A new optional field must never
+    //    make an old sidecar unparseable (that would route every pre-existing store into `emptyStore()`).
     const loaded = rehydrateProjection(ws.store);
     expect(loaded.current.has(key)).toBe(true);
     expect(loaded.current.get(key)!.scope).toBeUndefined();
     expect(loaded.current.get(key)!.tier).toBeUndefined();
 
-    // 2. IT REFUSES, and specifically for the actor who WOULD be authorized by the stored bytes (`core`).
-    //    Absent carrier ⇒ authority UNCONFIRMABLE ⇒ fail closed. Never a grant.
-    const policy = policyOf({ core: ['alice'] });
+    // 2. ITS LEGITIMATE OWNER CAN WRITE IT. alice is in `core`, which is the scope the stored BYTES declare.
+    const policy = policyOf({ core: ['alice'], public: ['mallory'] });
     const alice = createGovernedEmit({ store: ws.store, gate: HOLDS, policy, actor: 'alice', ratifyToken: 'billy' });
     const write = advisoryFact({ anchor: ANCHOR, claimNorm: 'an addendum', scope: 'core', gen: 2 });
     expect(keyOf(write)).toBe(key); // PREMISE — it lands on the legacy node
-    let out = alice.emit(write, AT); // must not throw
-    expect(out.emitted).toBe(false);
-    expect(out.rejected ?? '').toContain('unauthorized for target');
+    expect(alice.emit(write, AT).emitted).toBe(true);
 
-    // 3. NOTHING WAS WRITTEN — the refusal is not a partial write. The row is byte-for-byte the old shape.
-    const after = JSON.parse(readFileSync(sidecarOf(ws), 'utf8')) as { current: [string, Record<string, unknown>][] };
-    expect(after.current[0]![1]).not.toHaveProperty('scope');
-    expect(after.current[0]![1].claims).toEqual(['a pre-carrier claim']);
+    // 3. UPGRADE ON WRITE — the legacy path DRAINS instead of living forever. One successful governed write
+    //    and the row carries its governance; no new door, no task-#88 dependency.
+    const row = rehydrateProjection(ws.store).current.get(key)!;
+    expect(row.scope).toBe('core');
+    expect(row.tier).toBe('T2');
+    expect(row.claims).toEqual(['a pre-carrier claim', 'an addendum']); // the UPDATE really happened
+    const wire = JSON.parse(readFileSync(sidecarOf(ws), 'utf8')) as { current: [string, Record<string, unknown>][] };
+    expect(wire.current[0]![1].scope).toBe('core'); // durable, not just in-process
 
-    // 4. AND IT IS THE SAME REFUSAL WITH THE BYTES GONE — a legacy row discloses nothing about storage
-    //    either, because the authority question is already unanswerable before the bytes are consulted.
-    const healthy = out.rejected;
-    rmSync(join(ws.casPath, String(addr).slice(0, 2), String(addr)));
-    expect(ws.store.get(addr as unknown as Hash)).toBeUndefined();
-    out = alice.emit(write, AT); // must not throw
-    expect(out.emitted).toBe(false);
-    expect(out.rejected).toBe(healthy);
+    // 4. AND THE FALLBACK IS NO LONGER REACHABLE FOR IT — the node is now judged on its row. Proof: pruning
+    //    the bytes now yields the CARRIED-row answer (`unverifiable`, authority established from the row),
+    //    which is precisely the answer a carrier-less row could never produce.
+    const addr = row.contentHash;
+    rmSync(join(ws.casPath, addr.slice(0, 2), addr));
+    const afterPrune = alice.emit(advisoryFact({ anchor: ANCHOR, claimNorm: 'third', scope: 'core', gen: 3 }), AT);
+    expect(afterPrune.emitted).toBe(false);
+    expect(reasonOf(afterPrune.rejected)).toBe('unverifiable target');
+  });
+
+  it('CARRIER-6 — the fallback CANNOT GRANT where the bytes do not, and never throws', () => {
+    // The fallback reads authority off the CAS bytes; it must not become a grant. mallory holds `public`;
+    // the bytes say `core`. Refused — and refused identically when the bytes are gone, so the legacy path
+    // discloses no storage health either.
+    ws = freshWorkspace();
+    const legacy = advisoryFact({ anchor: ANCHOR, claimNorm: 'a pre-carrier claim', scope: 'core' });
+    const key = writeLegacySidecar(ws, legacy);
+    const policy = policyOf({ core: ['alice'], public: ['mallory'] });
+    const mallory = createGovernedEmit({ store: ws.store, gate: HOLDS, policy, actor: 'mallory', ratifyToken: 'billy' });
+    const probe = advisoryFact({ anchor: ANCHOR, claimNorm: 'probe', scope: 'public', gen: 9 });
+    expect(keyOf(probe)).toBe(key);
+
+    expect(() => mallory.emit(probe, AT)).not.toThrow();
+    const healthy = Buffer.from(mallory.emit(probe, AT).rejected ?? '', 'utf8');
+    expect(mallory.emit(probe, AT).emitted).toBe(false);
+    expect(reasonOf(healthy.toString())).toBe('unauthorized for target');
+
+    // Bytes gone ⇒ authority cannot be established at all ⇒ the SAME string. Asserted as BYTES, with the
+    // non-empty guard, because two empty buffers also compare equal (the vacuity trap).
+    const addr = rehydrateProjection(ws.store).current.get(key)!.contentHash;
+    rmSync(join(ws.casPath, addr.slice(0, 2), addr));
+    expect(() => mallory.emit(probe, AT)).not.toThrow();
+    const pruned = Buffer.from(mallory.emit(probe, AT).rejected ?? '', 'utf8');
+    expect(healthy.length).toBeGreaterThan(0);
+    expect(Buffer.compare(healthy, pruned)).toBe(0);
+  });
+
+  it('CARRIER-7 — a row that HAS a scope never takes the fallback: mismatched ⇒ unverifiable, malformed ⇒ unauthorized', () => {
+    // THE NARROWNESS IS THE POINT. Only a row with NO `scope` property falls back. If "malformed" or
+    // "disagrees with the bytes" collapsed into "absent", the carrier would be bypassable by WRITING JUNK
+    // rather than by deleting — strictly easier, and it would let a forged row borrow the bytes' authority.
+    ws = freshWorkspace();
+    const bytes = advisoryFact({ anchor: ANCHOR, claimNorm: 'the real claim', scope: 'other' });
+    // (a) WELL-FORMED but MISMATCHED: the row says `core`, the authenticated bytes say `other`.
+    const key = writeLegacySidecar(ws, bytes, { scope: 'core', tier: 'T2' });
+    const policy = policyOf({ core: ['alice'], other: ['carol'] });
+    const write = advisoryFact({ anchor: ANCHOR, claimNorm: 'addendum', scope: 'core', gen: 2 });
+    expect(keyOf(write)).toBe(key);
+
+    // alice is in the ROW's scope ⇒ authority established from the row ⇒ corroboration then refuses.
+    const alice = createGovernedEmit({ store: ws.store, gate: HOLDS, policy, actor: 'alice', ratifyToken: 'billy' });
+    const aliceOut = alice.emit(write, AT);
+    expect(aliceOut.emitted).toBe(false);
+    expect(reasonOf(aliceOut.rejected)).toBe('unverifiable target');
+
+    // carol is in the BYTES' scope only. If the mismatch fell back to the bytes she would be authorized —
+    // she must not be. This is the assertion that pins "mismatched is not absent".
+    const carol = createGovernedEmit({ store: ws.store, gate: HOLDS, policy, actor: 'carol', ratifyToken: 'billy' });
+    const carolOut = carol.emit(advisoryFact({ anchor: ANCHOR, claimNorm: 'addendum', scope: 'other', gen: 3 }), AT);
+    expect(carolOut.emitted).toBe(false);
+    expect(reasonOf(carolOut.rejected)).toBe('unauthorized for target');
+
+    // (b) MALFORMED: a JSON-reachable non-string scope on the row. `isScope` refuses it; it must NOT be
+    //     re-routed to the bytes, and `actorInScope` must never see it (a property key COERCES: `["core"]`
+    //     reads as `core` in a lookup while staying `!==`-unequal to every string).
+    ws.dispose();
+    ws = freshWorkspace();
+    const bytes2 = advisoryFact({ anchor: ANCHOR, claimNorm: 'the real claim', scope: 'core' });
+    const key2 = writeLegacySidecar(ws, bytes2, { scope: ['core'], tier: 'T2' });
+    const alice2 = createGovernedEmit({ store: ws.store, gate: HOLDS, policy: policyOf({ core: ['alice'] }), actor: 'alice', ratifyToken: 'billy' });
+    const out2 = alice2.emit(advisoryFact({ anchor: ANCHOR, claimNorm: 'addendum', scope: 'core', gen: 2 }), AT);
+    expect(keyOf(advisoryFact({ anchor: ANCHOR, claimNorm: 'addendum', scope: 'core', gen: 2 }))).toBe(key2);
+    expect(out2.emitted).toBe(false);
+    expect(reasonOf(out2.rejected)).toBe('unauthorized for target');
+  });
+
+  it('CARRIER-8 — `atlas-link` takes the SAME narrow fallback, so a legacy node is not unlinkable', () => {
+    // The brick the lead reversed had a twin one door over: `rowAuthorized` required a scope ON THE ROW, so a
+    // carrier-less node could never be linked either. Same fallback, same narrowness — and the stranger still
+    // learns nothing, in either byte-state.
+    ws = freshWorkspace();
+    const policy = policyOf({ core: ['alice'], public: ['mallory'] });
+    const one = advisoryFact({ anchor: 'src/a.ts::one', claimNorm: 'first', scope: 'core' });
+    const two = advisoryFact({ anchor: 'src/b.ts::two', claimNorm: 'second', scope: 'core' });
+    const [h1, h2] = [ws.store.put(one as unknown as CasObject), ws.store.put(two as unknown as CasObject)];
+    const [k1, k2] = [keyOf(one), keyOf(two)];
+    writeFileSync(
+      sidecarOf(ws),
+      JSON.stringify({
+        current: [
+          [k1, { nodeKey: k1, family: 'advisory', contentHash: h1, claims: ['first'] }], // carrier-less
+          [k2, { nodeKey: k2, family: 'advisory', contentHash: h2, claims: ['second'] }], // carrier-less
+        ],
+        cas: [h1, h2],
+      }),
+      'utf8',
+    );
+
+    // 1. THE OWNER CAN LINK THEM — authority falls back to the authenticated bytes (`core`).
+    const alice = createGovernedLink({ store: ws.store, policy, actor: 'alice', ratifyToken: 'billy' });
+    expect(alice.link(k1, k2).linked).toBe(true);
+
+    // 2. A STRANGER STILL CANNOT, and learns nothing about storage in the process.
+    const mallory = createGovernedLink({ store: ws.store, policy, actor: 'mallory', ratifyToken: 'billy' });
+    const healthy = Buffer.from(mallory.link(k1, k2).rejected ?? '', 'utf8');
+    expect(reasonOf(healthy.toString())).toBe('unauthorized');
+    rmSync(join(ws.casPath, h1.slice(0, 2), h1));
+    const pruned = Buffer.from(mallory.link(k1, k2).rejected ?? '', 'utf8');
+    expect(healthy.length).toBeGreaterThan(0);
+    expect(Buffer.compare(healthy, pruned)).toBe(0);
   });
 
   it('CARRIER-3 — nodeKey does NOT fold scope or tier: LITERAL digests, pinned', () => {
@@ -176,7 +289,7 @@ describe('ADR-0007 carrier — controls', () => {
     // reason for the very same pruned store — and it is NOT the string the stranger was handed.
     const owner = createGovernedLink({ store: ws.store, policy, actor: 'alice', ratifyToken: 'billy' }).link(kOne, kTwo);
     expect(owner.linked).toBe(false);
-    expect(owner.rejected ?? '').toContain('unverifiable');
+    expect(reasonOf(owner.rejected)).toBe('unverifiable endpoint');
     expect(Buffer.compare(Buffer.from(owner.rejected ?? '', 'utf8'), healthy)).not.toBe(0);
   });
 });

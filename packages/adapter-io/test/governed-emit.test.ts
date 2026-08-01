@@ -9,6 +9,7 @@
 //   - drop `persistProjection`  → the durability golden RED (no projection persisted).
 
 import { describe, it, expect } from 'vitest';
+import { reasonOf } from './door-regression-support.js';
 import { id } from '@atlas/kernel';
 import type { CasObject } from '@atlas/kernel';
 import type { GroundedFact, StoreProjection } from '@atlas/knowledge';
@@ -36,7 +37,7 @@ describe('COMPOSE-A — createGovernedEmit (truth-door · authz · upsert · dur
     const { emit } = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice' });
     const out = emit(advisory('secret'), AT);
     expect(out.emitted).toBe(false);
-    expect(out.rejected ?? '').toContain('unauthorized');
+    expect(reasonOf(out.rejected)).toBe('unauthorized'); // EQUALITY: the WRITE's own scope, never the incumbent's
     // TEETH — drop the authz check and this write would persist: assert NOTHING did.
     expect(spy.puts()).toHaveLength(0);
     expect(spy.persists()).toHaveLength(0);
@@ -66,7 +67,7 @@ describe('COMPOSE-A — createGovernedEmit (truth-door · authz · upsert · dur
     const { emit } = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: '' });
     const out = emit(advisory('core'), AT);
     expect(out.emitted).toBe(false);
-    expect(out.rejected ?? '').toContain('unauthorized');
+    expect(reasonOf(out.rejected)).toBe('unauthorized'); // EQUALITY: the WRITE's own scope, never the incumbent's
     expect(spy.puts()).toHaveLength(0);
     expect(spy.persists()).toHaveLength(0);
   });

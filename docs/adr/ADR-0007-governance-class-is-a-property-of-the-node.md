@@ -225,15 +225,39 @@ Recorded because the first draft's own §Decision asserted things a cold review 
   intended: strictness ratchets up freely, because raising a class cannot be an attack.
 - **`atlas-emit` regains `unverifiable target` as a distinct reason** — reachable only by a caller already
   shown to hold authority in the row's scope, which is what makes it safe to say out loud this time.
-- **A node whose row predates the carrier is UNWRITABLE through the emit door, and unlinkable through the
-  link door, until it is re-classified.** This is the one real cost of the decision and it is a REGRESSION in
-  availability for any store written before this WP: such a row names no scope, no scope authorizes anyone,
-  and the door fails closed. It is the correct reading of "authority unconfirmable" — the alternative,
-  falling back to the CAS bytes when the row is silent, is *also* oracle-free (the fallback only ever runs
-  where authority has not yet been established, so an unauthorized caller still sees one string in both
-  byte-states) and was rejected here only because it makes the carrier bypassable by deleting a field.
-  **The migration door is task #88 and does not exist**, so today the recovery is an admin rewriting the
-  sidecar. Flagged as the item most likely to need an owner decision.
+- **A carrier-less row falls back to its CAS bytes for authority, and is UPGRADED by the next successful
+  governed write.** This is a REVERSAL, recorded as one.
+
+  *What was implemented first, and why it was wrong.* The carrier WP shipped the strict reading of "authority
+  unconfirmable": a row with no `scope` authorizes nobody, so the door fails closed. That is correct
+  fail-closed reasoning and it is still a BRICK — every row written before the carrier became permanently
+  unwritable through the emit door and unlinkable through the link door, with the migration door (task #88)
+  not built. The implementing seat measured the brick and escalated it rather than shipping it quietly.
+
+  *The lead reversed it,* on three grounds. (1) A permanently unwritable row is the failure this codebase has
+  twice declared unacceptable and twice fixed — the scope-rename brick and the relocation brick — and trading
+  an availability catastrophe for a diagnostic improvement is the wrong trade even when it fails closed.
+  (2) The objection that a fallback lets an attacker bypass the carrier by DELETING the field does not
+  survive this ADR's own threat model: the projection sidecar is unauthenticated mutable state, so whoever
+  can delete a field can rewrite the file — it was never a trust boundary. Falling back therefore degrades to
+  the MORE authenticated source (CAS bytes are content-addressed and re-hashed on read), landing exactly
+  where the product stood before the carrier, which is not a grant. (3) The oracle stays shut by the same
+  argument that closes it for carried rows: on the legacy path authority can only come from the bytes, so
+  unreadable bytes leave authority unestablished ⇒ `unauthorized for target` — the same string an
+  out-of-scope caller gets when the bytes ARE readable. One string in both byte-states.
+
+  *Scoped narrowly, and the narrowness is load-bearing.* ONLY a row with no `scope` property at all takes the
+  fallback. A row that HAS one is judged on it: malformed ⇒ refused, byte-contradicting ⇒ `unverifiable
+  target`. Collapsing either into "absent" would make the bypass reachable by writing junk rather than by
+  deleting, which is strictly easier. `strictestTier(row, stored)` still governs the class wherever BOTH
+  exist, so a forged row can only ever make the gate harder; where the row carries no class the authenticated
+  bytes stand alone, because joining `undefined` through the lattice fails closed to `T0` and would re-brick
+  precisely the rows the fallback exists to keep writable.
+
+  *The legacy path DRAINS.* `upsert` stamps the carrier from the governed door, so the first successful write
+  to a carrier-less node makes it carried — migration by use, no new door, no task-#88 dependency. The link
+  door does NOT drain it (`linkSameAs` adds only the peer), so a node becomes carried the first time it is
+  emitted to, not the first time it is linked. Recorded rather than relied upon.
 
 ## Evidence
 
@@ -274,6 +298,23 @@ Recorded because the first draft's own §Decision asserted things a cold review 
   letting an absent row scope fall back to the CAS bytes → `CARRIER-2`; restoring the disclosure-first
   ordering in `governed-emit.ts` → the held test's equality leg AND `CARRIER-4`; restoring it in
   `governed-link.ts` → `CARRIER-5` alone, with all 16 pre-existing link cases still green.
+- **Reversal WP.** `CARRIER-2` (a carrier-less row is WRITABLE by its owner and UPGRADED by that write),
+  `CARRIER-6` (the fallback cannot grant where the bytes do not; byte-identical for a stranger in both
+  storage states), `CARRIER-7` (a row that HAS a scope never takes the fallback — mismatched ⇒ `unverifiable
+  target`, malformed ⇒ `unauthorized for target`), `CARRIER-8` (the link door's twin). Six mutants, each
+  killed: fallback grants blindly → `CARRIER-6`; malformed collapses into absent → `CARRIER-7`; "try the row,
+  else try the bytes" → `CARRIER-7`; `unverifiable` collapsed into `unauthorized` → the held test +
+  `CARRIER-2`/`-7`; disclosure-first ordering → the held test + `CARRIER-4`/`-6`; link door reads bytes
+  before authz → `CARRIER-5`.
+- **A VACUOUS-ASSERTION CLASS was found and closed while doing it.** `REJECTED_UNVERIFIABLE_TARGET`'s prose
+  quotes `unauthorized for target` BY NAME — correctly, since it documents that a caller without authority
+  gets that reason in both byte-states — so every `expect(rejected).toContain('unauthorized for target')` in
+  the branch was ALSO satisfied by the `unverifiable target` string. Those assertions could not see a
+  downgrade from the former to the latter, which is the exact oracle this ADR exists to prevent. Measured,
+  not theorised: the "try the row, else try the bytes" mutant SURVIVED the battery until the assertions became
+  discriminant EQUALITY (`reasonOf`, in `door-regression-support.ts`). Converted in the carrier controls and
+  in `governed-emit-incumbent.test.ts`; the remaining `toContain('unauthorized')` sites in
+  `governed-link.test.ts` / `compose.test.ts` are a weaker form of the same hazard and are NOT yet converted.
 - `router.ts` was split at the seam its own banner already declared — the WP-5.13-a routing table and upsert
   reducer moved to `packages/knowledge/src/write/projection.ts`, re-exported so no import site changed, and
   the emit door's refusal vocabulary moved to `governed-emit-reasons.ts`. Both files had run out of room

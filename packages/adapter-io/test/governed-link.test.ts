@@ -12,6 +12,7 @@
 // JOIN of the two endpoints' tiers.
 
 import { describe, it, expect } from 'vitest';
+import { reasonOf } from './door-regression-support.js';
 import { id, asNodeKey, asSubtreeHash } from '@atlas/kernel';
 import type { CasObject } from '@atlas/kernel';
 import type { GroundedFact, StoreProjection, CurrentNode } from '@atlas/knowledge';
@@ -119,7 +120,7 @@ describe('WP-SAMEAS — createGovernedLink (distinct · both-known · class read
     const { link } = createGovernedLink({ store: fx.store, policy: POLICY, actor: 'mallory', ratifyToken: 'lead' });
     const out = link('n0', 'n1');
     expect(out.linked).toBe(false);
-    expect(out.rejected ?? '').toContain('unauthorized');
+    expect(reasonOf(out.rejected)).toBe('unauthorized'); // discriminant EQUALITY — see reasonOf
     // TEETH: drop EITHER half of the both-endpoints authz check and a one-sided actor links across scopes.
     expect(fx.persists()).toHaveLength(0);
   });
@@ -305,7 +306,7 @@ describe('WP-SAMEAS — createGovernedLink (distinct · both-known · class read
     const mallory = createGovernedLink({ store: fx.store, policy: CLASS_POLICY, actor: 'mallory', ratifyToken: 'lead' });
     const out = mallory.link('n1', 'n2');
     expect(out.linked).toBe(false);
-    expect(out.rejected ?? '').toContain('unauthorized');
+    expect(reasonOf(out.rejected)).toBe('unauthorized'); // discriminant EQUALITY — see reasonOf
     expect(fx.persists()).toHaveLength(1); // only alice's link ever landed
     expect(fx.persists()[0]!.current.get('n2')?.sameAs).toBeUndefined(); // her node never joined the class
 
@@ -358,7 +359,7 @@ describe('WP-SAMEAS — createGovernedLink (distinct · both-known · class read
     // mallory owns `other`; both endpoints live in `core`, AND the class member n2 is unreadable.
     const out = createGovernedLink({ store: halfBlind, policy: POLICY, actor: 'mallory', ratifyToken: 'billy' }).link('n0', 'n1');
     expect(out.linked).toBe(false);
-    expect(out.rejected ?? '').toContain('unauthorized');
+    expect(reasonOf(out.rejected)).toBe('unauthorized'); // discriminant EQUALITY — see reasonOf
     expect(out.rejected ?? '').not.toContain('unverifiable');
   });
 

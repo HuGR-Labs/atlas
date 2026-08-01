@@ -75,8 +75,18 @@ describe('INDEX-4b — a file query rolls up its module + crate invariants (visi
   });
 
   it('PROP-INDEX-4 (rollup leg): ∀ chain, byScope(full) ≡ ⋃ every ancestor-anchored fact', () => {
+    // `/` was already excluded because it is the path separator, so a segment containing one would name a
+    // node the builder never mints as an ATOMIC key. `::` is now the second such separator (the unit-path
+    // delimiter `resolve.ts` descends on), so it needs the same exclusion for the same reason — this
+    // generator was inventing an atomic key like `::!` with no intermediate node, a shape `build.ts` cannot
+    // produce (it sets `key: node.path`, and `unitPath` returns the CUMULATIVE path `src/x.ts::12:fn:f`,
+    // which is exactly what the descent reconstructs). Measured before the exclusion: 232/3000 seeds failed
+    // at numRuns 100 — 7.7%, bisected to the Merkle-fold commit that introduced `UNIT_SEP`. It read as load
+    // flake for two seats. The product agrees with itself; only the generator disagreed with the product.
     const segArb = fc.uniqueArray(
-      fc.string({ minLength: 1, maxLength: 6 }).filter((s) => s === s.trim() && s.length > 0 && !s.includes('/')),
+      fc
+        .string({ minLength: 1, maxLength: 6 })
+        .filter((s) => s === s.trim() && s.length > 0 && !s.includes('/') && !s.includes('::')),
       { minLength: 1, maxLength: 5 },
     );
     fc.assert(

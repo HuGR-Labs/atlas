@@ -15,6 +15,13 @@ import { createGovernedEmit } from '../src/governed-emit.js';
 import type { DiskStore } from '../src/store.js';
 import type { AtlasPolicy } from '../src/policy.js';
 import { makeStoreSpy, HOLDS_GATE, POLICY, advisory, mkAdvisory, realKey, AT } from './harness/governed-fixtures.js';
+// The refusal DISCRIMINANT, not a substring. `REJECTED_UNVERIFIABLE_TARGET`'s prose quotes
+// `unauthorized for target` BY NAME (deliberately — it documents that a caller without authority gets that
+// reason in both byte-states), so `toContain('unauthorized for target')` is ALSO satisfied by the
+// `unverifiable target` string. The assertions below therefore could not see a downgrade from the former to
+// the latter — which is precisely the oracle ADR-0007 exists to prevent. Measured: a mutant survived the
+// battery until these became discriminant EQUALITY. See `reasonOf`.
+import { reasonOf } from './door-regression-support.js';
 
 describe('COMPOSE-A — the incumbent guard (a write\'s gate comes from its target)', () => {
   // ── INCUMBENT GUARD (task #84) — the CONFUSED DEPUTY the ratify gate alone does NOT close ────────────
@@ -79,7 +86,7 @@ describe('COMPOSE-A — the incumbent guard (a write\'s gate comes from its targ
     expect(out.emitted).toBe(false);
     // The reason names the REAL defect: not that she declared a different scope, but that she has no
     // authority over the scope the node actually lives in.
-    expect(out.rejected ?? '').toContain('unauthorized for target');
+    expect(reasonOf(out.rejected)).toBe('unauthorized for target');
     expect(spy.puts()).toHaveLength(1);
     expect(spy.persists()[0]!.current.get(realKey(owned))!.claims).toEqual(['core-scoped claim']);
   });
@@ -189,7 +196,7 @@ describe('COMPOSE-A — the incumbent guard (a write\'s gate comes from its targ
     expect(out.emitted).toBe(false);
     // An unowned node has no scope to authorize anyone, so `actorInScope` denies (KNOW-11a) — fail-closed
     // by the ordinary rule, with no special case for `undefined`.
-    expect(out.rejected ?? '').toContain('unauthorized for target');
+    expect(reasonOf(out.rejected)).toBe('unauthorized for target');
     expect(spy.persists()[spy.persists().length - 1]!.current.get(key)!.claims).toEqual(['the unowned claim']);
   });
 
@@ -296,7 +303,7 @@ describe('COMPOSE-A — the incumbent guard (a write\'s gate comes from its targ
     const triple = mkAdvisory({ id: 'nk-m', anchor: ANCHOR, claimNorm: 'INJECTED', scope: 'mallory', tier: 'T2' });
     const leaky = mallory.emit(triple, AT);
     expect(leaky.emitted).toBe(false);
-    expect(leaky.rejected ?? '').toContain('unauthorized for target');
+    expect(reasonOf(leaky.rejected)).toBe('unauthorized for target');
     expect(leaky.rejected ?? '').not.toContain('governance-downgrade'); // would disclose the incumbent's tier
     expect(leaky.rejected ?? '').not.toContain('governance-relocation'); // would disclose its scope
 
@@ -324,6 +331,6 @@ describe('COMPOSE-A — the incumbent guard (a write\'s gate comes from its targ
     const blind = createGovernedEmit({ store: blindStore, gate: HOLDS_GATE, policy: POLICY, actor: 'alice' });
     const out = blind.emit(mkAdvisory({ id: 'b', anchor: ANCHOR, claimNorm: 'written blind', scope: 'core' }), AT);
     expect(out.emitted).toBe(false);
-    expect(out.rejected ?? '').toContain('unverifiable');
+    expect(reasonOf(out.rejected)).toBe('unverifiable target');
   });
 });

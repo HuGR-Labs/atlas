@@ -72,7 +72,7 @@
 import { id } from '@atlas/kernel';
 import type { CasObject } from '@atlas/kernel';
 import type { Hash } from '@atlas/contracts';
-import { upsert, normalizeCheck, primaryAnchorId, nodeKey, route, stage, ratify, isWeakerTier, strictestTier, isTier, isScope } from '@atlas/knowledge';
+import { upsert, normalizeCheck, primaryAnchorId, nodeKey, route, stage, ratify, isTier, isScope } from '@atlas/knowledge';
 import type { Candidate, Check, CurrentNode, GroundedFact, NodeFamily, WriteRequest, RatifyContext, RatifyToken } from '@atlas/knowledge';
 import type { EmitOut, TruthGate } from '@atlas/tools';
 import { actorInScope } from './policy.js';
@@ -82,10 +82,10 @@ import type { DiskStore } from './store.js';
 // The structured fail-closed reasons (TOOLS-7b / KNOW-11 / KNOW-8) — the door's user-visible contract AND
 // its disclosure surface, extracted to their own module at the LOC ceiling. See that file's header.
 import {
-  REJECTED_DOWNGRADE, REJECTED_MALFORMED_FAMILY, REJECTED_MALFORMED_SCOPE, REJECTED_MALFORMED_TIER,
-  REJECTED_RELOCATION, REJECTED_UNAUTHORIZED, REJECTED_UNAUTHORIZED_TARGET, REJECTED_UNGROUNDED,
-  REJECTED_UNRATIFIED, REJECTED_UNVERIFIABLE_TARGET,
+  REJECTED_MALFORMED_FAMILY, REJECTED_MALFORMED_SCOPE, REJECTED_MALFORMED_TIER,
+  REJECTED_UNAUTHORIZED, REJECTED_UNGROUNDED, REJECTED_UNRATIFIED,
 } from './governed-emit-reasons.js';
+import { incumbentRefusal } from './governed-emit-incumbent.js';
 
 /** The KNOW-18 fast-path CONTEXT the door hands to `route`. `lowRisk` (the KNOW-17 door-2 threshold verdict)
  *  and `contested` (the KNOW-18b store-veto) are BOTH store/threshold-derived UPSTREAM and are NOT wired
@@ -225,124 +225,20 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
     const candidateView = { ...node, slot: node.predicateSlot } as unknown as Candidate;
 
     // 2.25 INCUMBENT GUARD — the write's TARGET decides which gate it must clear, never the write itself.
+    //    The four target-derived gates and the whole confused-deputy narrative behind them live in
+    //    `./governed-emit-incumbent.ts`, extracted at the LOC ceiling. What stays HERE is the ORDER: this
+    //    call sits between authz and ratify, and `incumbentRefusal` returns the reason rather than deciding
+    //    `emitted`, so the door's increasing-disclosure sequence is still legible in one file.
     //
-    //   The routing identity is `nodeKey = hash(primaryAnchorId ‖ slot[‖ check])`. It contains NEITHER `tier`
-    //   NOR `scope`. So WHICH node a write lands on and WHICH gate that write must clear were, until this
-    //   block, decided by two different things — and the author controlled the second. Declaring `tier:'T2'`
-    //   + advisory made `route` fast-path (no token consulted) while the minted nodeKey still collided with a
-    //   billy-ratified `T0` node, and `upsert` set-unioned the claim straight into it. Declaring a `scope` the
-    //   actor happens to own passed authz while the node lived in someone else's scope. Both are the same
-    //   defect: a CONFUSED DEPUTY — capability gating ("which gate applies") is not authorization ("may THIS
-    //   write touch THAT node"). The remedy is the object-capability one: derive the required authority from
-    //   the RESOURCE, never from the request.
-    //
-    //   So: resolve the target node FIRST, read its governance class off its OWN stored fact (the CAS bytes
-    //   ARE the fact — the same read-back `governed-link.ts` already does for its authz gate), and refuse any
-    //   write that declares a WEAKER class than the node it targets. Strictness therefore only ever ratchets
-    //   UP: re-stating or RAISING a class is ordinary (and a raise still faces the KNOW-8 gate below), while
-    //   LOWERING one is a re-classification — a separate governed act, never a side effect of emitting a fact.
-    //   Refusing the downgrade outright (rather than merely gating it on the stricter class) is what keeps the
-    //   stored `tier` monotone, so no later reader has to distrust it: a ratified `T0` node can never be
-    //   quietly re-served as `T2` — which, since a pack bounds `T2` OUT (TOOLS-6), would erase it from every
-    //   read as effectively as deleting it. The node's SCOPE is monotone in the same way and for the same
-    //   reason (see the relocation gate below): the pair `(scope, tier)` is what a reader trusts, and neither
-    //   half moves as a side effect of a claim. ADR-0009 makes both conditional on a signed re-classification
-    //   — which is task #88 and IS NOT BUILT, so today the monotonicity here is unconditional.
-    //
-    //   The projection is rehydrated ONCE here and reused by the upsert below. (An earlier version of this
-    //   comment claimed it had been read TWICE before — it had not; `rehydrateProjection` appears exactly once
-    //   on every ancestor of this line. Parity presented as an improvement; corrected rather than deleted.)
+    //    The projection is rehydrated ONCE here and reused by the upsert below. (An earlier version of this
+    //    comment claimed it had been read TWICE before — it had not; `rehydrateProjection` appears exactly
+    //    once on every ancestor of this line. Parity presented as an improvement; corrected rather than deleted.)
     const projection = rehydrateProjection(deps.store);
     const targetKey = nodeKey(candidateView) as unknown as string;
     const incumbent: CurrentNode | undefined = projection.current.get(targetKey);
     if (incumbent !== undefined) {
-      // AUTHORITY OVER THE TARGET, not equality of names. Gate 2 above asked "is the actor in the scope this
-      // write DECLARES" — the attacker picks that. The question that actually protects the node is "is the
-      // actor in the scope the NODE ALREADY LIVES IN", so it is asked here, against the incumbent's own
-      // stored fact, with the identical KNOW-11 seam.
-      //
-      // This SUPERSEDED — did not simply delete — a `node.scope !== stored.scope` equality test that was
-      // wrong in both directions AS THE ONLY SCOPE GATE. (The equality itself is still here, below, doing
-      // the one job it is right for; what changed is that it no longer stands in for an authority check.)
-      // Too loose: it carved out `stored.scope === undefined`, and `mine` writes this projection without
-      // passing this door, so every mined row was unowned — ANY actor in ANY scope could adopt one with no
-      // ratify token and then promote it to `T1`, which is INSIDE the pack bound. Too tight: an admin
-      // RENAMING a scope in `policy.json` made every existing node permanently unwritable by anyone, billy
-      // included — the same unrecoverable shape this branch elsewhere treats as critical, reachable by a
-      // routine admin edit; and a second, legitimately-authorized owner of the same symbol was refused
-      // because `nodeKey` carries no scope. Both reproduced by a cold review.
-      //
-      // Membership answers all of it: bob is refused unless the admin actually granted him the incumbent's
-      // scope; a rename degrades to an ordinary `unauthorized` that the admin fixes by declaring the scope,
-      // not to a brick; and an unowned node stays fail-closed, because `actorInScope` denies an absent scope
-      // (KNOW-11a) — while an admin who deliberately grants `atlas:mined` can appoint a curator to adopt
-      // mined candidates. No special cases — but, as the gate directly below records, membership is only
-      // HALF the rule, and the first version of this fix shipped it as the whole one.
-      //
-      // AUTHORITY IS RESOLVED FROM THE ROW, BEFORE A SINGLE BYTE IS READ — the carrier half ADR-0007 decided
-      // and did not ship (the file header has the full narrative). The row answers "who has authority here"
-      // identically whether or not the bytes survive, so a stranger's refusal is BYTE-IDENTICAL in both
-      // states, and the honest storage answer below is reserved for a caller already shown to hold authority.
-      //
-      // `isScope` is the same guard gate 0 applies to the write, now applied to what was STORED — without it
-      // `actorInScope` would coerce a malformed row scope into a legitimate-looking property key exactly as
-      // it would have on the way in. ABSENT is treated identically to malformed: a row minted before this
-      // carrier existed names no scope, so no scope can authorize ANYONE, and the write fails closed. That is
-      // a REFUSAL, never a grant — but it is also unrecoverable through this door for such a row (task #88;
-      // recorded as a stated gap in ADR-0007 §Consequences).
-      const rowScope = incumbent.scope;
-      if (!isScope(rowScope) || !actorInScope(deps.policy, deps.actor, rowScope)) {
-        return { emitted: false, rejected: REJECTED_UNAUTHORIZED_TARGET };
-      }
-
-      // THE STORED FACT — read only now, and reported honestly, because authority is already established.
-      // CORROBORATION, not mere presence: the projection sidecar is UNAUTHENTICATED mutable state while the
-      // CAS bytes are content-addressed and re-hashed on read (`get` misses when `id(bytes) !== key`). So the
-      // row may decide WHO IS HEARD — that is what closes the oracle — but not what the node IS: the bytes
-      // must AGREE with the governance it advertises, else whoever edits the sidecar names themselves the
-      // node's scope. Refused AFTER the authority gate, so a forged row buys its author only this refusal.
-      const stored = deps.store.get(incumbent.contentHash as unknown as Hash) as GroundedFact | undefined;
-      if (stored === undefined || stored.scope !== rowScope) {
-        return { emitted: false, rejected: REJECTED_UNVERIFIABLE_TARGET };
-      }
-
-      // The class to clear is the STRICTEST of the two carriers, same reason: a row disagreeing with its own
-      // bytes may only make this gate HARDER. `strictestTier` is total and joins garbage to `T0`, so a row
-      // with no `tier` (pre-carrier) or an off-lattice one demands the strictest class instead of weakening
-      // the comparison — the `0 < undefined` shape ADR-0007 was written about.
-      const weakerTier = isWeakerTier(tier, strictestTier(incumbent.tier, stored.tier));
-
-      // SCOPE MONOTONICITY — authority over the target is NOT the whole rule, and the membership fix above
-      // silently dropped the other half. Both gates now ask "is the actor in SOME scope"; NEITHER asks
-      // whether the scope this write DECLARES is a legitimate destination for this node. So an actor who
-      // belongs to TWO scopes clears gate 2 on the scope it declares, clears the gate above on the scope
-      // the node lives in, and the node MOVES — permanently evicting every co-owner who is not also in the
-      // destination. Reproduced: policy `{shared:[alice,bob], bob-priv:[bob]}`, alice creates a T1 in
-      // `shared`, bob re-emits the same anchor declaring `bob-priv`, and alice's next write to her own
-      // served invariant comes back `unauthorized for target`. No token beyond a non-empty ratifier was
-      // needed, and T1 is INSIDE the pack bound — a served invariant, captured by its co-owner.
-      //
-      // The judgement, and it is not a new one: RELOCATING A NODE BETWEEN SCOPES IS THE SAME CLASS OF ACT
-      // AS LOWERING ITS TIER. Both re-classify the node — they change which governance boundary holds it,
-      // not what it claims — and ADR-0009 settles that re-classification is an EXPLICIT, out-of-band,
-      // SIGNED act (authority in BOTH the old and the new scope), never a side effect of emitting a claim.
-      // So the declared scope must RE-STATE the incumbent's; anything else is refused, and the two gates
-      // are a conjunction: authority over the target AND no silent relocation.
-      //
-      // MIGRATION CURRENTLY HAS NO DOOR. ADR-0009 is Accepted but its implementation is task #88 and is not
-      // built, so today a node's scope cannot be changed by ANY path through this door — that is a stated
-      // gap, not an oversight. It is not, however, the brick the old `node.scope !== stored.scope` EQUALITY
-      // test was: that test ran INSTEAD of an authority check, so an admin renaming a scope in policy.json
-      // made every existing node unwritable by everyone including billy. Here the equality runs AFTER
-      // membership, so a rename degrades to an ordinary recoverable failure the admin fixes by declaring
-      // both names, and the node keeps taking writes at its stored scope meanwhile.
-      if (node.scope !== stored.scope) {
-        return { emitted: false, rejected: REJECTED_RELOCATION };
-      }
-
-      if (weakerTier) {
-        return { emitted: false, rejected: REJECTED_DOWNGRADE };
-      }
+      const refusal = incumbentRefusal(deps, incumbent, node, tier);
+      if (refusal !== undefined) return { emitted: false, rejected: refusal };
     }
 
     // 2.5 RATIFY — the KNOW-8/KNOW-18 tier-ratification gate, BETWEEN authz and upsert. The fast-path

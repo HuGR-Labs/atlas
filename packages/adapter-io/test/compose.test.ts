@@ -8,6 +8,7 @@
 // and durability legs (drop either and a golden flips).
 
 import { describe, it, expect } from 'vitest';
+import { reasonOf } from './door-regression-support.js';
 import { mkdirSync, writeFileSync, copyFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
@@ -126,7 +127,7 @@ describe('COMPOSE-A — composeRuntime end-to-end (governed durable handler)', (
       const v = handler.handle(EMIT, { node: groundedFact(repoPath, 'secret'), at: AT });
       const out = v.data as EmitOut;
       expect(out.emitted).toBe(false);
-      expect(out.rejected ?? '').toContain('unauthorized');
+      expect(reasonOf(out.rejected)).toBe('unauthorized'); // EQUALITY: the WRITE's own scope, never the incumbent's
 
       // the other governance legs are still wired + resolving (not "not wired at this seam").
       const initV = handler.handle(INIT, { path: repoPath });
@@ -150,7 +151,7 @@ describe('COMPOSE-A — composeRuntime end-to-end (governed durable handler)', (
       const v = handler.handle(EMIT, { node: groundedFact(repoPath, 'core'), at: AT });
       const out = v.data as EmitOut;
       expect(out.emitted).toBe(false);
-      expect(out.rejected ?? '').toContain('unauthorized');
+      expect(reasonOf(out.rejected)).toBe('unauthorized'); // EQUALITY: the WRITE's own scope, never the incumbent's
     } finally {
       if (prev === undefined) delete process.env.ATLAS_ACTOR;
       else process.env.ATLAS_ACTOR = prev;
@@ -229,7 +230,7 @@ describe('COMPOSE-HARDENING — F3 git-derived actor + F5 shared SCIP guard', ()
       const v = handler.handle(EMIT, { node: groundedFact(repoPath, 'core'), at: AT });
       const out = v.data as EmitOut;
       expect(out.emitted).toBe(false);
-      expect(out.rejected ?? '').toContain('unauthorized');
+      expect(reasonOf(out.rejected)).toBe('unauthorized'); // EQUALITY: the WRITE's own scope, never the incumbent's
     } finally {
       if (prev === undefined) delete process.env.ATLAS_ACTOR;
       else process.env.ATLAS_ACTOR = prev;

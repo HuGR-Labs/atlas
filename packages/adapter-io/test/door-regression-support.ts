@@ -54,6 +54,25 @@ export function policyOf(scopes: Record<string, readonly string[]>): AtlasPolicy
   return { nearDup: { claimNormThreshold: 1 }, t0Heuristic: { keywords: [] }, authz: { scopes } };
 }
 
+/**
+ * THE DISCRIMINANT of a refusal — the reason NAME, i.e. everything before the first `:`.
+ *
+ * WHY THIS EXISTS, AND IT IS NOT STYLE. Every refusal constant carries a paragraph of rationale, and those
+ * paragraphs QUOTE EACH OTHER BY NAME on purpose: `unverifiable target`'s text says, in as many words, that
+ * "a caller without that authority gets `unauthorized for target` in BOTH byte-states". That sentence is
+ * exactly right as documentation and it makes `expect(rejected).toContain('unauthorized for target')`
+ * VACUOUS IN ONE DIRECTION — the `unverifiable target` string satisfies it too. So a mutant that downgrades
+ * `unauthorized for target` into `unverifiable target` (which is the ORACLE this whole ADR-0007 line of work
+ * exists to prevent) is INVISIBLE to a substring assertion. Measured, not theorised: it survived the
+ * mutation battery until this helper replaced the `toContain` calls.
+ *
+ * Comparing the discriminant for EQUALITY closes it: the name is the contract, the prose is commentary, and
+ * a reason can never be mistaken for the one it merely mentions.
+ */
+export function reasonOf(rejected: string | undefined): string {
+  return (rejected ?? '').split(':')[0]!;
+}
+
 /** The REAL product identity of a fact — the same `nodeKey(candidateView)` the emit door mints. Never
  *  hand-forged, so no assertion here can pin an identity the product does not actually compute. */
 export function keyOf(fact: GroundedFact): string {
