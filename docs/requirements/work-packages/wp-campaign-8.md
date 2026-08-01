@@ -188,7 +188,7 @@ exclusions: >
 inputs:                                  # ptr+digest
   - source: repo@rev  # ptr+digest
   - source: ../../reference/atlas-genesis.md#gen-11  # ptr+digest
-  - source: ../../reference/atlas-ground.md  # ptr+digest
+  - source: ../../reference/atlas-grounding.md  # ptr+digest
   - source: ../../reference/atlas-tools.md#tools-7  # ptr+digest
 action: >
   Drive S2 proposals over the ranked frontier highest-first, one bounded call per site, enforcing the
@@ -267,7 +267,7 @@ exclusions: >
 inputs:                                  # ptr+digest
   - source: ../../reference/atlas-genesis.md#gen-2  # ptr+digest
   - source: ../../reference/atlas-knowledge.md  # ptr+digest
-  - source: ../../reference/atlas-ground.md  # ptr+digest
+  - source: ../../reference/atlas-grounding.md  # ptr+digest
 action: >
   Implement mechanical admission: compile + evaluate each predicate candidate's synthesized check to
   HOLDS-on-current, require a flip-to-BROKEN on a mechanically-mutated counterfactual (drop vacuous),

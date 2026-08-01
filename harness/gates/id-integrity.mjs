@@ -66,10 +66,12 @@ const KNOWN = new Map(
   process.env.ID_INTEGRITY_ROOT !== undefined
     ? Object.entries(JSON.parse(process.env.ID_INTEGRITY_KNOWN ?? '{}'))
     : [
-        [
-          'ID-5 requirements/work-packages/wp-campaign-8.md -> ../../reference/atlas-ground.md',
-          'the file is `atlas-grounding.md`; cited twice (lines 191, 270) as `atlas-ground.md`',
-        ],
+        // (An ID-5 entry lived here: wp-campaign-8.md cited `../../reference/atlas-ground.md` twice when the
+        // file is `atlas-grounding.md`. It was a two-character typo, i.e. fully mechanical to fix, and
+        // "files this gate's author does not own" — the fair reason for the five ID-3 orphans below, each of
+        // which needs a WP card AUTHORED — was never a reason to ratchet it. Fixed at the source; the gate
+        // then reported the entry STALE on its own, which is the ledger proving it cannot rot into a
+        // permanent exemption.)
         ['ID-3 REQ-TOOLS-1e', 'ADR-0003 sameAs door; placed in EPIC-26-a by roadmap.md but carried by no WP card'],
         ['ID-3 REQ-TOOLS-6d', 'ADR-0002 freshness watermark (N11); added after S4, carried by no WP card'],
         ['ID-3 REQ-MCP-1d', 'added by ADR-0006; has a golden (SCN-MCP-1d-1) but no WP card'],
