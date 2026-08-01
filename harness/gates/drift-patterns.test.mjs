@@ -79,6 +79,13 @@ describe('anti-drift vocabulary — it does NOT cry wolf', () => {
   // followed by a non-article determiner ("the single question EVERY write door answers") still fires.
   // Left over-firing on purpose — a false positive costs a rephrase, a false negative is how the singular
   // claim shipped in a published MCP tool description for four days.
+  it('OVER-FIRES on a non-article determiner — the known limit, ASSERTED not just described', () => {
+    // The comment above used to describe this over-fire and the `it()` below asserted only NON-firing lines,
+    // so the "pinned deliberately rather than hidden" claim was itself unpinned — a cold review caught it.
+    // If a future tightening removes the over-fire, THIS test goes red and the comment gets corrected with it.
+    expect(isStaleGovernanceClaim('the single question every write door answers')).toBe(true);
+  });
+
   it('still does NOT fire where the number quantifies something else (the article is the tell)', () => {
     for (const line of [
       'the one question a write door must ask',

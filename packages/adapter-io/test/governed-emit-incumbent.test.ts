@@ -209,7 +209,13 @@ describe('COMPOSE-A — the incumbent guard (a write\'s gate comes from its targ
 
     let reads = 0;
     const shifty = { ...mkAdvisory({ id: 'nk-x', anchor: ANCHOR, claimNorm: 'ERASED BY TOCTOU', scope: 'core' }) };
-    Object.defineProperty(shifty, 'tier', { get: () => (++reads === 1 ? 'T0' : 'T2'), enumerable: true });
+    // SEQUENCE MATTERS, and the first draft of this test got it wrong — a cold review proved the test VACUOUS
+    // (it passed against the unfixed source). With `T0,T2,T2` the third read lands in `isWeakerTier`, where
+    // `T2 < T0` trips the DOWNGRADE guard, so the case went green for a reason that has nothing to do with
+    // snapshotting. `T0,T2,T0` is the real attack: gate 0 sees T0, the ratify route sees T2 (auto-accept, no
+    // token consulted), and the downgrade comparison sees T0 again so it finds nothing weaker. That is what
+    // overwrote the node before the snapshot existed.
+    Object.defineProperty(shifty, 'tier', { get: () => (reads++ === 1 ? 'T2' : 'T0'), enumerable: true });
 
     const out = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice' }).emit(shifty as GroundedFact, AT);
     expect(out.emitted).toBe(false); // gate 0 saw T0 ⇒ every later gate must ALSO see T0 ⇒ needs billy

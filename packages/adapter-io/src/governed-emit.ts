@@ -185,7 +185,9 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
     //   half moves as a side effect of a claim. ADR-0009 makes both conditional on a signed re-classification
     //   — which is task #88 and IS NOT BUILT, so today the monotonicity here is unconditional.
     //
-    //   The projection is rehydrated ONCE here and reused by the upsert below (it was read twice before).
+    //   The projection is rehydrated ONCE here and reused by the upsert below. (An earlier version of this
+    //   comment claimed it had been read TWICE before — it had not; `rehydrateProjection` appears exactly once
+    //   on every ancestor of this line. Parity presented as an improvement; corrected rather than deleted.)
     const projection = rehydrateProjection(deps.store);
     const targetKey = nodeKey(candidateView) as unknown as string;
     const incumbent: CurrentNode | undefined = projection.current.get(targetKey);

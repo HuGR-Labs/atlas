@@ -165,7 +165,9 @@ Recorded because the first draft's own §Decision asserted things a cold review 
 
 ## Evidence
 
-- Reproduced first, in `packages/adapter-io/test/governed-emit.test.ts` — `SCN-GE-I1` (tier), `SCN-GE-I2`
+- Reproduced first, in `packages/adapter-io/test/governed-emit-incumbent.test.ts` (split out of
+  `governed-emit.test.ts` at the 400-LOC ceiling on this same branch; this pointer named the pre-split file
+  until a review followed it and found nothing) — `SCN-GE-I1` (tier), `SCN-GE-I2`
   (scope), `SCN-GE-I5` (unreadable incumbent). All three failed on `master` before the guard existed.
 - `SCN-GE-I3` / `SCN-GE-I4` are the anti-over-blocking controls: re-emitting at the same class still
   set-unions, and raising strictness is allowed. Both passed *before* the fix and still pass — so the guard
@@ -174,7 +176,8 @@ Recorded because the first draft's own §Decision asserted things a cold review 
   test at all** — only an end-to-end happy-path story, which cannot plant a gate-level mutant.
 - Mutation-verified, with the killers stated exactly (an earlier draft of this line claimed a mutant that
   did not hold, which a cold review caught):
-  - deleting the incumbent-guard block → exactly `SCN-GE-I1` / `SCN-GE-I2` / `SCN-GE-I5`;
+  - deleting the incumbent-guard block → `SCN-GE-I1` / `SCN-GE-I2` / `SCN-GE-I5` **and `SCN-GE-I8`** (the
+    word "exactly" here was itself wrong, in the very bullet that corrects an earlier wrong mutant claim);
   - restoring the old non-empty-token check in the link door → `SCN-GL-6`, and also `SCN-GL-8` / `SCN-GL-9`,
     since those depend on the same call;
   - dropping gate 0 → `SCN-GE-I7`; weakening `isTier` to `in` → `SCN-GE-I6`; de-totalising the lattice →

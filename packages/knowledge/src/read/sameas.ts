@@ -96,7 +96,12 @@ export function deriveSameAs(projection: StoreProjection): readonly SameAs[] {
  * links B to their own node M, and the derived relation contains `{A, M}` — the attacker's node is inside the
  * `T0` node's class, and every read fold walks it, without billy ever signing that.
  *
- * Pure + total, no clock/LLM — the same union-find `deriveSameAs` folds, so the two can never disagree.
+ * Pure + total, no clock/LLM. NOT the same fold as `deriveSameAs`: that one is a union-find that SKIPS
+ * non-current peers, this one is a fixed-point expansion that follows them. So the two DO disagree — a
+ * retired peer bridging two live nodes merges them here and not there. The divergence is a deliberate,
+ * property-tested SOUND OVER-APPROXIMATION (`PROP-SAMEAS-1`): the derived class is always a SUBSET of this
+ * one. Larger means a link asks for a stronger signature than strictly needed; smaller would be a bypass.
+ * (This docstring previously asserted the two "can never disagree" — false on both halves.)
  */
 export function sameAsClassOf(projection: StoreProjection, key: string): readonly string[] {
   const members = new Set<string>([key]);
