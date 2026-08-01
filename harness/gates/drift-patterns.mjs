@@ -31,6 +31,23 @@ export const STALE = [
   // extraction — a gate quietly losing teeth is worse than a gate that never had them.
   /\b(?:single|one)\b(?:(?!\b(?:an?|the)\b)[^.\n]){0,26}\bwrite doors?\b/i,
   /\bthe only write door\b/i,
+
+  // ── UNENFORCED-CONTROL claims ─────────────────────────────────────────────────────────────────────
+  // A SECOND class of overclaim, and the one this guard was blind to. Every pattern above is about a
+  // COUNT; none of them is about whether a described control actually exists. So three copies of
+  // "`.atlas/policy.json` is locked via CODEOWNERS + branch protection" sailed through — including the
+  // one inside `.atlas/policy.json` itself, the authorization source of truth, where a reader is being
+  // handed a guarantee at the exact moment they most need it to be true.
+  //
+  // It was never in force: GitHub rejects the CODEOWNERS line as an unknown owner (the team exists in no
+  // org, and `git log --follow` shows it never did), and branch protection is unavailable on this repo's
+  // plan entirely — 403 "Upgrade to GitHub Pro or make this repository public", for rules AND rulesets.
+  // A guard that stops a doc from overstating a NUMBER but lets it invent an ENFORCEMENT MECHANISM is
+  // guarding the cheap half.
+  /\block(?:ed|s)?\b[^.\n]{0,20}\bvia\b[^.\n]{0,20}\bCODEOWNERS\b/i,
+  /\badmin-locked\b/i,
+  /\bonly\b[^.\n]{0,20}\badmins?\b[^.\n]{0,12}\bratif/i,
+  /\brequires? a review from\b/i,
 ];
 
 /** A line matching any of these is a LEGITIMATE use of the words above, not drift. */
@@ -42,6 +59,12 @@ export const ALLOW = [
   /single-write-door structural/i,            // INV-TOOLS-15 term-of-art (store-row medium)
   /four read legs?/i, /ALL FOUR legs/i, /the four legs, no more/i, /exactly the four legs/i, // doctor read legs
   /GATE's four legs/i, /the four legs route/i, /DOCTOR_SUBCOMMANDS/,
+  // Unenforced-control narrative: a line that NAMES the mechanism in order to say it is absent, aspirational
+  // or historical is the honest form and must survive. Kept deliberately narrow — these are words that
+  // negate or hypothesise, never words that assert.
+  /\bNOT IN FORCE\b/i, /\bnever in force\b/i, /\bnot enforced\b/i, /\bby intent\b/i,
+  /\bused to claim\b/i, /\bis NOT\b/, /\bwould require\b/i, /\bunavailable\b/i,
+  /\baspirational\b/i, /\bonce the team exists\b/i, /\bUpgrade to GitHub\b/i, /\bunknown owner\b/i,
 ];
 
 /** Is this line a stale governance-count claim? Pure + total — the guard's per-line verdict, verbatim. */

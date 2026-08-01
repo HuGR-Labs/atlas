@@ -1,4 +1,4 @@
-// @atlas/adapter-io — test/policy.test.ts  (WP-POLICY: admin-locked governance policy, fail-closed loader)
+// @atlas/adapter-io — test/policy.test.ts  (WP-POLICY: the versioned governance policy + fail-closed loader)
 //
 // Teeth on the two invariants that make the policy SAFE to externalize:
 //   1. FAIL-CLOSED LOAD — a missing OR malformed policy resolves to `defaultPolicy()` WITHOUT throwing,

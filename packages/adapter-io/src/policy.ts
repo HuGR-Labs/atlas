@@ -1,10 +1,18 @@
-// @atlas/adapter-io — src/policy.ts  (WP-POLICY: admin-locked, versioned governance policy)
+// @atlas/adapter-io — src/policy.ts  (WP-POLICY: the versioned governance policy + its fail-closed loader)
 //
 // THE governance tunables, externalized as DATA. The engine's governance seams (near-dup τ, the T0
 // heuristic keyword set, the KNOW-11 owner-scoped write gate) are RULES admins own — so they live in a
-// declarative `<repoPath>/.atlas/policy.json` an admin edits (locked via CODEOWNERS + branch-protection),
-// while the runtime reads them here as a plain config. This module is the FAIL-CLOSED loader: it never
-// throws and never silently permits a write.
+// declarative `<repoPath>/.atlas/policy.json` an admin edits, while the runtime reads them here as plain
+// config.
+//
+// THE WP NAME AND THIS HEADER BOTH USED TO SAY THE FILE WAS LOCKED. It is NOT, and the distinction that
+// matters is that the lock is UNAVAILABLE rather than merely un-configured: the CODEOWNERS line names a
+// team that exists in no org (GitHub rejects it outright as an unknown owner), and branch protection 403s
+// on this repo's plan — "Upgrade to GitHub Pro or make this repository public", for rules and rulesets
+// alike. Anyone with write access can edit the authorization policy directly.
+//
+// So the ONLY control actually holding is the one implemented BELOW, which is why it is written the way it
+// is. This module is the FAIL-CLOSED loader: it never throws and never silently permits a write.
 //
 // FAIL-CLOSED is the whole point. A missing OR malformed policy resolves to `defaultPolicy()` — the
 // CONSERVATIVE default: exact-match-only near-dup (`claimNormThreshold: 1`), an EMPTY T0 keyword set, and

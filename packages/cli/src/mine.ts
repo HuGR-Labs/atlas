@@ -123,7 +123,8 @@ function defaultProposer(): SiteProposer {
  * unowned node is not writable by "anyone", it is writable by NOBODY until an admin says otherwise. No actor
  * is a member of this scope unless `.atlas/policy.json` declares it, so `actorInScope` denies by default
  * (KNOW-11a) and the emit door's scope check refuses any fact declaring a different scope onto a mined row.
- * Granting it is the deliberate, admin-locked act of appointing a curator for mined candidates.
+ * Granting it is the deliberate act of appointing a curator for mined candidates. Deliberate, but NOT
+ * protected: the grant lives in `.atlas/policy.json`, which no live mechanism gates (see policy.ts).
  */
 export const MINED_SCOPE = 'atlas:mined';
 

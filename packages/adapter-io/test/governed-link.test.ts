@@ -44,14 +44,21 @@ interface LinkFixture {
 }
 
 /** A store whose projection holds one current node per supplied fact, keyed `n0`, `n1`, … with the fact's
- *  real content address — so the door's CAS read-back resolves exactly the fact under test. */
-function fixture(facts: readonly GroundedFact[]): LinkFixture {
+ *  real content address — so the door's CAS read-back resolves exactly the fact under test.
+ *
+ *  `edges` seeds STORED `sameAs` peers on those nodes (`{ n0: ['nRETIRED'] }`). A peer that is not itself a
+ *  current node is not a malformed fixture: `linkSameAs` writes the edge onto BOTH endpoints, and a node
+ *  superseded afterwards leaves its peer's stored edge pointing at a key the projection no longer carries.
+ *  That is the shape the class-join below has to survive, and no earlier case here produced it. */
+function fixture(facts: readonly GroundedFact[], edges: Readonly<Record<string, readonly string[]>> = {}): LinkFixture {
   const cas = new Map<string, CasObject>();
   const current = new Map<string, CurrentNode>();
   facts.forEach((f, i) => {
     const h = id(f as CasObject) as unknown as string;
     cas.set(h, f as CasObject);
-    current.set(`n${i}`, { nodeKey: `n${i}`, family: 'advisory', contentHash: h, claims: [f.claimNorm] });
+    const key = `n${i}`;
+    const sameAs = edges[key];
+    current.set(key, { nodeKey: key, family: 'advisory', contentHash: h, claims: [f.claimNorm], ...(sameAs ? { sameAs } : {}) });
   });
   const persists: StoreProjection[] = [];
   const projection: StoreProjection = { current, cas: new Set(cas.keys()) };
@@ -200,5 +207,77 @@ describe('WP-SAMEAS — createGovernedLink (distinct · both-known · class read
     // "unauthorized" — which reads as a policy problem an admin would try to fix by GRANTING a scope.
     expect(out.rejected ?? '').toContain('unverifiable');
     expect(fx.persists()).toHaveLength(0);
+  });
+
+  // ── ONE-SIDED BLINDNESS — the read-back gate is a DISJUNCTION, and only its `&&` collapse was tested ───
+  //
+  // SCN-GL-7 blinds the WHOLE store (`get: () => undefined`), so BOTH endpoints are unreadable at once —
+  // the one input on which `factA === undefined || factB === undefined` and `factA === undefined &&
+  // factB === undefined` agree. Flipping that `||` to `&&` therefore left the suite green, while the
+  // realistic failure is exactly the asymmetric one: CAS is content-addressed, so a prune, a partial
+  // restore or a half-fetched pack drops SOME objects, never all of them. Under the `&&` the door then
+  // walks past the gate holding an `undefined` fact and dereferences it at the authz gate.
+  //
+  // MUTANT: `factA === undefined && factB === undefined` and BOTH cases below go RED.
+
+  it('SCN-GL-10 — endpoint A readable, endpoint B blind ⇒ still unverifiable, and the door never throws', () => {
+    const fx = fixture([T2_A, T2_B]);
+    const hB = id(T2_B as CasObject) as unknown as string; // the ONE object the store has lost
+    const halfBlind: DiskStore = { ...fx.store, get: (h) => ((h as unknown as string) === hB ? undefined : fx.store.get(h)) };
+    const { link } = createGovernedLink({ store: halfBlind, policy: POLICY, actor: 'alice', ratifyToken: 'billy' });
+
+    // TOTALITY FIRST: a write door reports a rejection, it does not throw. Under the `&&` mutant the
+    // unreadable fact survives the gate and `factB.scope` is a TypeError at the authz line below it.
+    expect(() => link('n0', 'n1')).not.toThrow();
+    const out = link('n0', 'n1');
+    expect(out.linked).toBe(false);
+    expect(out.rejected ?? '').toContain('unverifiable');
+    expect(fx.persists()).toHaveLength(0);
+  });
+
+  it('SCN-GL-11 — endpoint A blind, endpoint B readable ⇒ identically refused (the gate is symmetric)', () => {
+    const fx = fixture([T2_A, T2_B]);
+    const hA = id(T2_A as CasObject) as unknown as string;
+    const halfBlind: DiskStore = { ...fx.store, get: (h) => ((h as unknown as string) === hA ? undefined : fx.store.get(h)) };
+    const { link } = createGovernedLink({ store: halfBlind, policy: POLICY, actor: 'alice', ratifyToken: 'billy' });
+
+    expect(() => link('n0', 'n1')).not.toThrow();
+    const out = link('n0', 'n1');
+    expect(out.linked).toBe(false);
+    expect(out.rejected ?? '').toContain('unverifiable');
+    expect(fx.persists()).toHaveLength(0);
+  });
+
+  // ── THE CLASS JOIN OVER A NON-CURRENT MEMBER — over-blocking is a failure mode too ────────────────────
+  //
+  // `sameAsClassOf` is DELIBERATELY wider than the read fold: it keeps dangling peers, because a retired
+  // key is how two live nodes can belong to one governed class (SCN-SA-4 in wp-sameas.test.ts). So the
+  // join below iterates keys that are NOT current nodes, and it must skip them: everything reachable
+  // THROUGH a retired peer is itself in `merged` and priced on its own stored class, while the retired key
+  // has no readable class, is served by no read fold, and is nobody's governance weight.
+  //
+  // MUTANT: `if (member === undefined) return 'T0';` and this goes RED — every link involving a node that
+  // ever had a peer retired would demand billy forever. That is not "fail-closed", it is a gate that says
+  // no to the legitimate case, which is how a governance gate gets routed around.
+
+  it('SCN-GL-9b — a RETIRED peer in the class contributes NO class of its own (the join does not over-block)', () => {
+    const fx = fixture([T2_A, T2_B], { n0: ['nRETIRED'] }); // n0 keeps a stored edge to a superseded node
+    const lead = createGovernedLink({ store: fx.store, policy: POLICY, actor: 'alice', ratifyToken: 'lead' });
+    const out = lead.link('n0', 'n1');
+    expect(out.linked).toBe(true); // T2 ∨ T2 ∨ (nothing) = T2 ⇒ any ratifier signs it
+    expect(fx.persists()).toHaveLength(1);
+  });
+
+  it('SCN-GL-9c — …while a LIVE T0 member reached THROUGH that retired peer still forces billy', () => {
+    // The control that keeps SCN-GL-9b from being a licence to under-price: the retired key BRIDGES n0 to
+    // the T0 node n2, so n2 is in the merged class, is a current node, and is priced off its OWN stored
+    // fact. Skipping the unreadable member costs nothing precisely because the members that matter are
+    // still there. MUTANT: revert the join to the two endpoints and this goes RED (n0/n1 are both T2).
+    const fx = fixture([T2_A, T2_B, T0_C], { n0: ['nRETIRED'], n2: ['nRETIRED'] });
+    const lead = createGovernedLink({ store: fx.store, policy: POLICY, actor: 'alice', ratifyToken: 'lead' });
+    expect(lead.link('n0', 'n1').linked).toBe(false);
+    expect(fx.persists()).toHaveLength(0);
+    const billy = createGovernedLink({ store: fx.store, policy: POLICY, actor: 'alice', ratifyToken: 'billy' });
+    expect(billy.link('n0', 'n1').linked).toBe(true);
   });
 });

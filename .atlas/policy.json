@@ -1,5 +1,5 @@
 {
-  "$comment": "Atlas governance policy — ADMIN-OWNED, versioned. Locked via CODEOWNERS + branch protection (see docs/governance/policy-lock.md). Anyone MAY propose a change by PR; only atlas-admins ratify the merge. The engine reads this as data (fail-closed: absent/malformed => conservative default that denies writes).",
+  "$comment": "Atlas governance policy — ADMIN-OWNED BY INTENT, versioned. WARNING, read this before trusting the file: the CODEOWNERS + branch-protection lock described in docs/governance/policy-lock.md is NOT IN FORCE and cannot be turned on under the repo's current plan (GitHub returns 403 'Upgrade to GitHub Pro or make this repository public' for branch protection and rulesets, and rejects the CODEOWNERS line as an unknown owner). Anyone with write access can therefore edit this file directly. The ONE control that IS live is the loader's fail-closed default: absent/malformed => empty scopes => NO write is authorized.",
   "nearDup": {
     "$comment": "Near-duplicate matcher threshold (feeds @atlas/knowledge NearDupConfig.claimNormThreshold). 1 = exact-match only (conservative). Lower toward ~0.85 to merge near-synonym claims once the synonym-tau is trusted.",
     "claimNormThreshold": 1

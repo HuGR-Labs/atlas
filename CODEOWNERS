@@ -2,6 +2,8 @@
 # ("Require review from Code Owners") for these paths to be admin-gated on every PR.
 # See docs/governance/policy-lock.md.
 
-# The admin-locked governance policy: any change requires review from the atlas-admins team.
-# @HumanGuardrail/atlas-admins is a PLACEHOLDER team — replace with the real admin team handle.
-/.atlas/policy.json @HumanGuardrail/atlas-admins
+# The INTENDED owner of the governance policy. NOT IN FORCE: @HuGR-Labs/atlas-admins does not exist
+# (`gh api orgs/HuGR-Labs/teams` -> [], same in the former HumanGuardrail org), so GitHub rejects this
+# line -- `gh api repos/HuGR-Labs/atlas/codeowners/errors` reports "Unknown owner on line 7". No review
+# is requested for this path today. Create the team (visible, with write access) to make it real.
+/.atlas/policy.json @HuGR-Labs/atlas-admins

@@ -101,7 +101,10 @@ the security boundary is the class; gating the edge gated one edge of a graph wh
 extending. `sameAsClassOf` computes it, and is a deliberate **sound over-approximation** — it also follows
 dangling peers and half-written edges, so it can return a class LARGER than `deriveSameAs` would derive, but
 never smaller. Larger means "asks for a stronger signature than strictly needed"; smaller would mean a
-bypass. Pinned by property test at 5000 runs.
+bypass. Pinned by `PROP-SAMEAS-1` (`packages/knowledge/test/wp-sameas.test.ts`, `numRuns: 5000`). NOTE: this line
+asserted the property test existed BEFORE it did — an architecture review caught it (`grep -rln sameAsClassOf`
+returned three files and zero tests). The 5000 runs had been a reviewer's transcript, not committed code. The
+test now exists and fast-check shrinks the counterexample to a single asymmetric edge.
 
 ### Why refuse a downgrade rather than merely gate it on the stricter class
 
@@ -172,6 +175,12 @@ Recorded because the first draft's own §Decision asserted things a cold review 
     since those depend on the same call;
   - dropping gate 0 → `SCN-GE-I7`; weakening `isTier` to `in` → `SCN-GE-I6`; de-totalising the lattice →
     `SCN-GL-9`; endpoint-only join → `SCN-GL-8`; `mine`'s collision skip → `SCN-CLI-4e`; `mine`'s
-    `store.put` → `SCN-CLI-4f`.
+    `store.put` → `SCN-CLI-4f`;
+  - an unrecognized INCUMBENT no longer strictest → `SCN-TIER-4`; the link join's `member === undefined`
+    leg → `SCN-GL-9b`; `sameAsClassOf`'s dangling-peer inclusion → `SCN-SA-2` / `SCN-SA-4` /
+    `PROP-SAMEAS-1`; its reverse-direction `touches` half → `SCN-SA-3`; one-sided `REJECTED_UNVERIFIABLE`
+    → `SCN-GL-10` / `SCN-GL-11`.
+  Each of the five above was mutation-verified by its author AND re-verified independently by the lead;
+  the two the lead re-ran personally are `SCN-TIER-4` and the `sameAsClassOf` dangling-peer leg.
 - Two independent cold-review seats returned **REJECT** and **FIX-FIRST** on the first draft. Every finding
   they reproduced is either fixed above or recorded as an open task (#87, #88).
