@@ -7,6 +7,7 @@
 // reachable surfaces (pointers + how-to-pull, never content), under the same `OWN_CAP` budget. The result
 // `OwnPackPlus` extends the frozen `OwnPack` with additive exec-observable receipts (assignable to it).
 
+import { tierRank } from '@atlas/contracts';
 import type { NodeKey, Pack, PackInvariant, Tier } from '@atlas/contracts';
 import type { GroundedFact } from '@atlas/knowledge';
 import type { OwnLevel, OwnPack, OwnUnit, RelatedFact, RelationSet } from './types.js';
@@ -34,7 +35,9 @@ export const FINER_CAP = 16;
 export const MANIFEST_CAP = 12;
 
 /** Criticality → ordinal (T0 first). */
-const TIER_ORDINAL: Record<Tier, number> = { T0: 0, T1: 1, T2: 2 };
+// The lattice is NOT rebuilt here. A private `Record<Tier, number>` yields `undefined` for an off-lattice
+// value, so `tierRank(a) - tierRank(b)` was `NaN` and the sort order became undefined around a
+// poisoned row. `tierRank` (@atlas/contracts) is total: an unrecognized class ranks LAST, so it sinks.
 
 // ── facet-local input records (the sized index candidates the composer ranks/caps) ──────────────────────
 /** One `tier≥T1` invariant candidate + its ranking keys + its pinned token cost (index-supplied). */
@@ -148,7 +151,7 @@ export function groundingSource(level: OwnLevel): GroundingSource {
 
 /** Rank invariants `(hits-desc, ppr-desc, nodeKey-asc)` — the pack rank (goldens Fixture A), T0 first. */
 function cmpInvariant(a: SizedInvariant, b: SizedInvariant): number {
-  const t = TIER_ORDINAL[a.inv.tier] - TIER_ORDINAL[b.inv.tier];
+  const t = tierRank(a.inv.tier) - tierRank(b.inv.tier);
   if (t !== 0) return t;
   if (a.hits !== b.hits) return b.hits - a.hits;
   if (a.ppr !== b.ppr) return b.ppr - a.ppr;
@@ -163,7 +166,7 @@ function cmpPointer(a: ManifestCandidate, b: ManifestCandidate): number {
 
 /** Rank gotchas `(tier-asc: T0 first, id-asc)` — deterministic, no LLM. */
 function cmpGotcha(a: SizedGotcha, b: SizedGotcha): number {
-  const t = TIER_ORDINAL[a.fact.tier] - TIER_ORDINAL[b.fact.tier];
+  const t = tierRank(a.fact.tier) - tierRank(b.fact.tier);
   if (t !== 0) return t;
   return keyCmp(a.fact.id, b.fact.id);
 }

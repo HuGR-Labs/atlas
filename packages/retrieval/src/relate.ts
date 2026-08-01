@@ -5,6 +5,7 @@
 // job is presentation only (partition → rank → cap). `coChanged` is opt-in, labeled, and disjoint from the
 // structural bands. Total (RETR-9): a malformed/missing unit ⇒ empty `RelationSet`, never a throw.
 
+import { tierRank } from '@atlas/contracts';
 import type { Tier, PackInvariant } from '@atlas/contracts';
 import type { ReverseClosure } from '@atlas/index';
 import type { BoundMeta, Path, RelatedFact, RelationSet } from './types.js';
@@ -30,7 +31,9 @@ export const K = 8;
 export const RELATE_RANK = 'tier-desc,ppr-desc,distance-asc,nodeKey-asc' as const;
 
 /** Criticality → sort ordinal (T0 highest ⇒ smallest ordinal ⇒ first under ascending). `tier-desc`. */
-const TIER_ORDINAL: Record<Tier, number> = { T0: 0, T1: 1, T2: 2 };
+// The lattice is NOT rebuilt here. A private `Record<Tier, number>` yields `undefined` for an off-lattice
+// value, so `tierRank(a) - tierRank(b)` was `NaN` and the sort order became undefined around a
+// poisoned row. `tierRank` (@atlas/contracts) is total: an unrecognized class ranks LAST, so it sinks.
 
 // ── the deterministic total-rank comparator (RETR-11b) ──────────────────────────────────────────────────
 /**
@@ -40,7 +43,7 @@ const TIER_ORDINAL: Record<Tier, number> = { T0: 0, T1: 1, T2: 2 };
  * A high-`ppr` hub 2 hops out therefore outranks a low-`ppr` leaf 1 hop in (RETR-11b). Pure + no LLM.
  */
 export function compareRelated(a: RelatedFact, b: RelatedFact): number {
-  const t = TIER_ORDINAL[a.tier] - TIER_ORDINAL[b.tier];
+  const t = tierRank(a.tier) - tierRank(b.tier);
   if (t !== 0) return t;
   if (a.ppr !== b.ppr) return b.ppr - a.ppr; // ppr-desc
   if (a.distance !== b.distance) return a.distance - b.distance; // distance-asc (tiebreak)

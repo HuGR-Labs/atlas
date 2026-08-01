@@ -4,6 +4,7 @@
 // injected index port to the MERGED covering bounded `Pack` — `tier≥T1` only, stale-flagged (a stale pack
 // is a re-ground SIGNAL, not served truth). Pure + total; the concrete index resolution is @atlas/index.
 
+import { isTier } from '@atlas/contracts';
 import type { Hash, Pack, PackInvariant } from '@atlas/contracts';
 import type { Guidance, QueryOut } from './types.js';
 
@@ -42,8 +43,18 @@ export const QUERY_GUIDANCE: Guidance = {
   invariant: 'TOOLS-6: bounded read projection (tier>=T1, stale-flagged) — never a global dump',
 };
 
-/** The pack bound: every invariant is `tier≥T1` (T0 or T1); a `T2`/below-T1 node is bounded OUT (TOOLS-6). */
-const atLeastT1 = (inv: PackInvariant): boolean => inv.tier !== 'T2';
+/**
+ * The pack bound: every invariant is `tier≥T1` (T0 or T1); a `T2`/below-T1 node is bounded OUT (TOOLS-6).
+ *
+ * Stated as MEMBERSHIP, not as `!== 'T2'`. The negative form admitted every value that was not the literal
+ * string `'T2'` — including every off-lattice one — so a row carrying `tier:'T3'` was served as though it
+ * were ratified `T1`-or-stricter. That is reachable without any write door: `.atlas/` is a COMMITTED
+ * artifact (only `.atlas/policy.json` is CODEOWNER-gated), so a repository can ship a projection and a CAS
+ * blob that never passed a gate, and the content re-hash on read confirms the bytes, not their governance.
+ * The write doors were made total on `tier`; a read door that is not total is the same hole facing the
+ * other way. An unrecognized class is not `≥T1` — it is not a class at all, and is bounded OUT.
+ */
+const atLeastT1 = (inv: PackInvariant): boolean => isTier(inv.tier) && inv.tier !== 'T2';
 
 /** The advisory `≤ ~2K` token estimate — a deterministic char-count proxy over the merged claims. It is an
  *  ADVISORY size bound (verified by a size test), never a correctness oracle (method-tags-tls:158). */

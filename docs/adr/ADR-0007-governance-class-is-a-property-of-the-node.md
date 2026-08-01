@@ -9,8 +9,14 @@
 - **Amends:** nothing frozen. `GOVERNANCE_SURFACE` stays 5, `WRITE_PATHS` stays `['atlas-emit','atlas-link']`
   (INV-TOOLS-1 / ADR-0003 untouched). The `StoreProjection` / `CurrentNode` seam is **unchanged** — see
   §"What this deliberately does not do".
-- **Introduces:** the tier lattice (`isWeakerTier` / `strictestTier`, `@atlas/knowledge`), the emit door's
-  INCUMBENT GUARD, and the link door's tier gate.
+- **Introduces:** the tier lattice at L0 (`isTier` / `tierRank` / `isWeakerTier` / `strictestTier`,
+  `@atlas/contracts`, re-exported by `@atlas/knowledge`), the emit door's gate-0 class validator and its
+  INCUMBENT GUARD, the link door's class-wide tier gate, and `sameAsClassOf` (`@atlas/knowledge`).
+- **Revised after review (2026-07-25).** The first draft of this decision was reviewed by two independent
+  seats and **rejected**: its guard was bypassable by declaring an off-lattice `tier`, and its link gate
+  joined only the two endpoints of a transitive relation. What is written below is the design that survived
+  that, not the one that was proposed. The rejected version is described in §"What the review broke", because
+  an ADR that quietly presents its remediated form as its original judgement is a false record.
 - **Discharges:** the deferral recorded in `governed-link.ts` (*"the T0→billy tier gate emit runs is
   deferred — sameAs is non-destructive"*).
 
@@ -53,23 +59,49 @@ identity collide, and lie about the **class** instead.
 
 **1. A write may re-state or RAISE the governance class of the node it targets. It may never lower it.**
 
-`Tier` is an ordered lattice (`T0` ≻ `T1` ≻ `T2`), written down for the first time in
-`@atlas/knowledge/ratify/tier.ts`. Before this, the ordering existed only as scattered `=== 'T0'` /
-`=== 'T2'` equality checks, so no code could ask the one question a write door has to ask.
+`Tier` is an ordered lattice (`T0` ≻ `T1` ≻ `T2`), written down for the first time — at **L0, beside the type
+it orders** (`@atlas/contracts/tier.ts`). Before this the ordering existed only as scattered `=== 'T0'` /
+`=== 'T2'` equality checks plus three private `Record<Tier, number>` copies in `@atlas/retrieval`, so no code
+could ask the one question a write door has to ask, and every private copy produced `undefined` on a value
+outside the union.
+
+**1b. The lattice is TOTAL over `unknown` and fails closed.** `Tier` is a type-only union: it does not exist
+at runtime, and nothing upstream validates it — the CLI wire is `JSON.parse` + a cast and the MCP `node`
+schema is a bare `object`. So every lattice operation takes `unknown`: an unrecognized DECLARED class is
+always weaker, an unrecognized INCUMBENT always strictest, and a join with garbage is `T0`.
+
+**1c. Both doors validate the class before anything else** (`gate 0`, `malformed tier`). The lattice guard
+alone is not sufficient: on a CREATE there is no incumbent to compare against, and the read side bounds packs
+with `tier !== 'T2'`, so a node minted at `'T3'` would be served as though it were ratified. The read door is
+made total for the same reason — membership in the lattice, not `!== 'T2'`.
 
 **2. The emit door resolves its target BEFORE it chooses a gate.** It rehydrates the projection, mints the
 `nodeKey`, and — if a node is already there — reads that node's **own stored fact** back from CAS (the same
-content-addressed read-back the link door already used for its authz gate). A write declaring a weaker
-`tier`, or a different `scope`, than that stored fact is refused `governance-downgrade`.
+content-addressed read-back the link door already used for its authz gate). Two questions are then asked of
+the target rather than of the write:
+
+- **Authority** — is the actor in the scope the node ALREADY LIVES IN? Gate 2 asked only about the scope the
+  write *declares*, which the attacker picks. Failing this is `unauthorized for target`. This is membership,
+  **not** name equality: equality was tried first and was wrong in both directions — it carved out
+  scope-less nodes (every `mine`-written row, capturable by any actor), and it made an admin RENAMING a scope
+  brick every existing node permanently, for everyone including `billy`.
+- **Class** — is the declared `tier` weaker than the stored one? Failing this is `governance-downgrade`.
 
 **3. An unreadable incumbent fails closed.** If the projection names a node whose CAS bytes are absent
 (pruned store, partial restore), the class it requires is unknowable, so the write is refused
 `unverifiable target` — never gated on the write's own claim, which is exactly the hole.
 
-**4. `atlas-link` runs the same KNOW-8 law, over the JOIN of its two endpoints' tiers.** A link touching a
+**4. `atlas-link` runs the same KNOW-8 law, over the JOIN of every class the link MERGES.** A link touching a
 `T0` node is a `T0` act and needs `billy`. `sameAs` being non-destructive was the reason the tier gate was
 deferred here, but *non-destructive* is not *ungoverned*: the edge is symmetric and the read-side union-find
 fold walks it, so the weaker endpoint was a side door onto the stronger one.
+
+The join is over the merged **equivalence class**, not the two endpoints. `deriveSameAs` is transitive, so
+the security boundary is the class; gating the edge gated one edge of a graph whose reachability the link was
+extending. `sameAsClassOf` computes it, and is a deliberate **sound over-approximation** — it also follows
+dangling peers and half-written edges, so it can return a class LARGER than `deriveSameAs` would derive, but
+never smaller. Larger means "asks for a stronger signature than strictly needed"; smaller would mean a
+bypass. Pinned by property test at 5000 runs.
 
 ### Why refuse a downgrade rather than merely gate it on the stricter class
 
@@ -95,18 +127,32 @@ not an emit. It is a separate governed act, and it does not exist yet (see below
 - **It does not wire the real `lowRisk` / `contested` verdicts.** `DOOR_RATIFY_CTX` still defaults them
   conservatively (unchanged from WP-N7). The teeth here do not depend on those defaults — they come from the
   target node's own class.
-- **An incumbent with no stored `scope` constrains nothing.** Such nodes predate the KNOW-11 gate; the
-  declared-scope authz check still applies to writes touching them. Recorded as a known limit, not silently
-  fallen through.
+- **It does not make `mine` a governed door.** `mine` still CREATES nodes without passing either door; it is
+  now merely prevented from re-authoring established ones, and its rows carry the reserved `atlas:mined`
+  scope so they are fail-closed until an admin appoints a curator. The remainder is task #87.
+- **It does not distinguish two legitimate owners of one symbol.** Because `nodeKey` carries no scope, a
+  second properly-authorized scope colliding at the same anchor is refused exactly as an attacker would be.
+  Recorded as a real limit of deriving authority from a scope-free identity, not as a safe corner.
+
+## What the review broke
+
+Recorded because the first draft's own §Decision asserted things a cold review then reproduced as false:
+
+1. **"a ratified `T0` node can never be quietly re-served as `T2`."** False. Declaring `tier:'T3'` made the
+   comparison `0 < undefined` — i.e. "not a downgrade" — so `T0 → T3 → T2` walked past the guard in two
+   commands with no `billy` token, and the invariant vanished from every read. Every off-lattice shape worked.
+2. **"the JOIN of its two endpoints' tiers."** Insufficient against a transitive relation (two-hop bypass).
+3. A fix for an unrelated availability bug (`mine` writing rows whose CAS bytes were absent) turned an
+   unreachable capture into a live one, because a scope-less node had been carved out of the scope check.
 
 ## Consequences
 
-- Two new fail-closed reasons on `atlas-emit`: `governance-downgrade` and `unverifiable target`. Both are
-  legible on the CLI and MCP surfaces via the existing rejection channel (WP-F2F5).
+- Four new fail-closed reasons on `atlas-emit`: `malformed tier`, `unauthorized for target`,
+  `governance-downgrade` and `unverifiable target`. All are legible on the CLI and MCP surfaces via the
+  existing rejection channel (WP-F2F5).
 - `atlas-link` gains `unverifiable endpoint`, and its `unratified` reason now names the `billy` condition.
   Previously an unreadable fact degraded to an absent scope and was reported merely `unauthorized` — which
   reads as a policy problem an admin would try to fix by *granting a scope*.
-- The projection is rehydrated once per emit instead of twice.
 - **A pre-existing node emitted at `T2` can still be raised to `T0` by anyone holding `billy`.** That is
   intended: strictness ratchets up freely, because raising a class cannot be an attack.
 
@@ -119,5 +165,13 @@ not an emit. It is a separate governed act, and it does not exist yet (see below
   is not simply denying more.
 - `packages/adapter-io/test/governed-link.test.ts` is new. The second governed write door had **no unit
   test at all** — only an end-to-end happy-path story, which cannot plant a gate-level mutant.
-- Mutation-verified: deleting the incumbent-guard block fails exactly `SCN-GE-I1/I2/I5`; restoring the old
-  non-empty-token check in the link door fails exactly `SCN-GL-6`. No other test moved.
+- Mutation-verified, with the killers stated exactly (an earlier draft of this line claimed a mutant that
+  did not hold, which a cold review caught):
+  - deleting the incumbent-guard block → exactly `SCN-GE-I1` / `SCN-GE-I2` / `SCN-GE-I5`;
+  - restoring the old non-empty-token check in the link door → `SCN-GL-6`, and also `SCN-GL-8` / `SCN-GL-9`,
+    since those depend on the same call;
+  - dropping gate 0 → `SCN-GE-I7`; weakening `isTier` to `in` → `SCN-GE-I6`; de-totalising the lattice →
+    `SCN-GL-9`; endpoint-only join → `SCN-GL-8`; `mine`'s collision skip → `SCN-CLI-4e`; `mine`'s
+    `store.put` → `SCN-CLI-4f`.
+- Two independent cold-review seats returned **REJECT** and **FIX-FIRST** on the first draft. Every finding
+  they reproduced is either fixed above or recorded as an open task (#87, #88).

@@ -59,4 +59,32 @@ describe('anti-drift vocabulary — it does NOT cry wolf', () => {
       expect(isStaleGovernanceClaim(line)).toBe(false);
     });
   }
+
+  // The punctuated forms a `\s`-separated word-token gap silently lost. Each one is real prose that has
+  // appeared in this repo's docs; the corpus previously held only the UN-punctuated variant, which is why
+  // the weakening survived its own test.
+  it('catches the singular claim through markdown, commas and backticks (not just bare adjectives)', () => {
+    for (const line of [
+      'the single **fail-closed** write door',
+      'the single, fail-closed write door',
+      'a single `fail-closed` write door',
+      'the single fail-closed, governed write door',
+      'atlas-emit is the one write door',
+    ]) {
+      expect(isStaleGovernanceClaim(line), line).toBe(true);
+    }
+  });
+
+  // KNOWN LIMIT, pinned deliberately rather than hidden: the article is the only tell, so a quantifier
+  // followed by a non-article determiner ("the single question EVERY write door answers") still fires.
+  // Left over-firing on purpose — a false positive costs a rephrase, a false negative is how the singular
+  // claim shipped in a published MCP tool description for four days.
+  it('still does NOT fire where the number quantifies something else (the article is the tell)', () => {
+    for (const line of [
+      'the one question a write door must ask',
+      'a write door is the only place this is checked',
+    ]) {
+      expect(isStaleGovernanceClaim(line), line).toBe(false);
+    }
+  });
 });

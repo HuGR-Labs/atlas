@@ -118,6 +118,15 @@ function defaultProposer(): SiteProposer {
   return { propose: () => null };
 }
 
+/**
+ * The reserved scope every MINED node carries. Mining has no actor, so a mined node has no owner — and an
+ * unowned node is not writable by "anyone", it is writable by NOBODY until an admin says otherwise. No actor
+ * is a member of this scope unless `.atlas/policy.json` declares it, so `actorInScope` denies by default
+ * (KNOW-11a) and the emit door's scope check refuses any fact declaring a different scope onto a mined row.
+ * Granting it is the deliberate, admin-locked act of appointing a curator for mined candidates.
+ */
+export const MINED_SCOPE = 'atlas:mined';
+
 /** The honest fail-closed default history: no signals, empty frontier ⇒ the structural fallback ranks 0
  *  sites (GEN-15b). A real pass INJECTS `createHistorySource(repo, rev)`; the default never shells git.
  *  (Inlined rather than `createHistorySource(...)` — see the NOTE on the stale consumed adapter-io dist.) */
@@ -168,13 +177,19 @@ export function buildControllerDeps(repoPath: string, d: MineDeps): ControllerDe
   // which is also what `upsert` already assumes — it routes CREATE-vs-UPDATE against the projection it is
   // handed, so an empty one reports a CREATE for a node that in truth already exists. (SCN-CLI-4d)
   let projection: StoreProjection = rehydrateProjection(d.store);
+  // The set of nodes that ALREADY EXISTED when this pass began — the governed knowledge a mined candidate
+  // must not re-author. Snapshotted, NOT re-read off `projection`: the running projection also contains the
+  // rows this very pass just created, so testing against it made a pass drop its OWN second claim about the
+  // same symbol (two mined claims at one anchor ⇒ the second silently vanished). "Never re-author what was
+  // already established" is a statement about the pass-start state, not about the accumulating one.
+  const established = new Set(projection.current.keys());
   const grounded = new Map<string, Fact>(); // KNOW-15 idempotent grounded set, keyed by the MINTED nodeKey (0 duplicates)
 
   return {
     plan: (repo, rev, _scope): Plan => ({ malformed: false, skeleton: scan.scan(repo, rev), sites: mine.mine(repo, rev) }),
     visit: (cand): readonly Fact[] => runExtract([cand], SINGLE_SITE, { proposer: d.proposer, gate: d.gate }).facts,
     upsert: (incoming): readonly Fact[] => {
-      for (const f of incoming) {
+      for (const raw of incoming) {
         // IDENTITY IS MINTED, NEVER TRUSTED — the routing/dedup `nodeKey` is RECOMPUTED from the content
         // via the frozen `nodeKey(f)` formula (KNOW-15b), the SAME seam that mints contentHash/primaryAnchor.
         // The author-supplied payload `f.id` is NEVER used for routing or the grounded-set key — trusting it
@@ -182,6 +197,15 @@ export function buildControllerDeps(repoPath: string, d: MineDeps): ControllerDe
         // Map `predicateSlot` → the Candidate's `.slot` before minting — the cast is otherwise LOSSY
         // (identity fns read `.slot`, a GroundedFact carries `predicateSlot`), producing a slot-free nodeKey
         // that diverges from the true `hash(primaryAnchorId ‖ predicateSlot)` (governed-emit.ts parity).
+        // STAMP THE CANDIDATE SCOPE. A mined fact arrives with no `scope` — there is no actor behind it, so
+        // there was nobody to own it. But an unowned node in the governed projection is not neutral: the
+        // emit door's incumbent guard has nothing to compare against, so ANY actor holding ANY scope could
+        // adopt a mined node with no ratify token and then promote it to `T1`, which is INSIDE the pack
+        // bound — an injected served invariant. Reproduced. `MINED_SCOPE` is a reserved name no actor is a
+        // member of unless an admin deliberately grants it in `.atlas/policy.json`, so mined rows are
+        // fail-closed by default AND a curator can still be given the authority to adopt them. It is
+        // stamped BEFORE the content hash so the bytes and the row agree.
+        const f = { ...raw, scope: MINED_SCOPE } as Fact;
         const view = { ...f, slot: f.predicateSlot } as unknown as KnowledgeCandidate;
         const key = nodeKey(view) as unknown as string;
         const req: WriteRequest = {
@@ -205,7 +229,7 @@ export function buildControllerDeps(repoPath: string, d: MineDeps): ControllerDe
         //   SCOPE, stated honestly: this closes MUTATION of governed nodes. Mining still CREATES nodes
         //   without passing the governed doors at all — that remaining gap is task #87 (mine should stage a
         //   candidate for ratification rather than write the projection directly), and it is not closed here.
-        if (projection.current.has(key)) continue;
+        if (established.has(key)) continue;
         // PUT THE BYTES FIRST, exactly as the governed door does. Persisting a projection row that names a
         // contentHash absent from CAS creates a node whose stored fact can never be read back — and the
         // governed doors now (correctly) refuse to write a node whose class they cannot read, so such a row

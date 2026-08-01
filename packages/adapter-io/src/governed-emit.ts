@@ -39,8 +39,11 @@ const REJECTED_UNGROUNDED = 'ungrounded: citation does not re-derive FRESH at so
 const REJECTED_UNAUTHORIZED = 'unauthorized: actor not in fact scope (KNOW-11)';
 const REJECTED_UNRATIFIED = 'unratified: T0/contested fact requires human+billy ratification (KNOW-8)';
 const REJECTED_DOWNGRADE =
-  'governance-downgrade: this write declares a weaker class (tier/scope) than the node it targets — ' +
-  're-classification is a separate governed act, never a side effect of emitting a fact (KNOW-7 / KNOW-11)';
+  'governance-downgrade: this write declares a weaker tier than the node it targets — re-classification is ' +
+  'a separate governed act, never a side effect of emitting a fact (KNOW-8: a T0 class is human-ratified)';
+const REJECTED_UNAUTHORIZED_TARGET =
+  'unauthorized for target: the actor is not in the scope the node it targets already lives in (KNOW-11) — ' +
+  'being authorized for the scope this write DECLARES is not authority over the node it lands on';
 const REJECTED_MALFORMED_TIER =
   'malformed tier: a fact must declare one of the three governance classes (T0 | T1 | T2). `Tier` is a ' +
   'type-only union with no runtime validator upstream, so an off-lattice value is refused HERE or nowhere';
@@ -85,7 +88,7 @@ function claimNormOf(node: GroundedFact): string {
  * back invariant). Pure of clock/random given a pure store/gate/policy.
  */
 export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (node: GroundedFact, at: Hash) => EmitOut } {
-  const emit = (node: GroundedFact, at: Hash): EmitOut => {
+  const emit = (raw: GroundedFact, at: Hash): EmitOut => {
     // 0. WELL-FORMED CLASS — the `tier` must be one of the three real governance classes.
     //
     //    `Tier` is a TYPE-ONLY union: it does not exist at runtime, and nothing upstream validates it —
@@ -98,9 +101,17 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
     //        bounds a pack with `inv.tier !== 'T2'` (TOOLS-6), so a node minted at `'T3'` would be served
     //        as though it were ratified `T1`-or-stricter. Garbage in the class field is not a lesser
     //        problem than a downgrade; it is the same problem one step earlier.
-    if (!isTier(node.tier)) {
+    //    Read ONCE and carry the snapshot. Re-reading `raw.tier` at each gate would let a property whose
+    //    value changes between reads clear gate 0 as `T2` and route as something else — a TOCTOU. That is
+    //    unreachable over the CLI and MCP wires (both are `JSON.parse`, which cannot produce an accessor),
+    //    but `createGovernedEmit` is an EXPORTED library entry point, so an in-process embedder can hand it
+    //    any object at all. Gating a snapshot and then persisting that same snapshot means what was checked
+    //    is exactly what is stored.
+    const tier = raw.tier;
+    if (!isTier(tier)) {
       return { emitted: false, rejected: REJECTED_MALFORMED_TIER };
     }
+    const node: GroundedFact = { ...raw, tier };
 
     // 1. TRUTH DOOR — re-derive the citation; a non-HOLDS verdict fails closed, nothing persisted.
     if (deps.gate.gateHolds(node, at) !== 'HOLDS') {
@@ -153,12 +164,31 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
         // UNKNOWABLE — fall back to the write's own claim and the guard is exactly the hole it closes.
         return { emitted: false, rejected: REJECTED_UNVERIFIABLE };
       }
-      const weakerTier = isWeakerTier(node.tier, stored.tier);
-      // A scope REWRITE is the same downgrade in the authz dimension: it moves a node out from under the
-      // actors who own it. An incumbent with no stored scope predates the KNOW-11 gate and constrains
-      // nothing — the declared-scope authz check below still applies to it.
-      const reScoped = stored.scope !== undefined && node.scope !== stored.scope;
-      if (weakerTier || reScoped) {
+      const weakerTier = isWeakerTier(tier, stored.tier);
+      // AUTHORITY OVER THE TARGET, not equality of names. Gate 2 above asked "is the actor in the scope this
+      // write DECLARES" — the attacker picks that. The question that actually protects the node is "is the
+      // actor in the scope the NODE ALREADY LIVES IN", so it is asked here, against the incumbent's own
+      // stored fact, with the identical KNOW-11 seam.
+      //
+      // This replaced a `node.scope !== stored.scope` equality test, which was wrong in both directions.
+      // Too loose: it carved out `stored.scope === undefined`, and `mine` writes this projection without
+      // passing this door, so every mined row was unowned — ANY actor in ANY scope could adopt one with no
+      // ratify token and then promote it to `T1`, which is INSIDE the pack bound. Too tight: an admin
+      // RENAMING a scope in `policy.json` made every existing node permanently unwritable by anyone, billy
+      // included — the same unrecoverable shape this branch elsewhere treats as critical, reachable by a
+      // routine admin edit; and a second, legitimately-authorized owner of the same symbol was refused
+      // because `nodeKey` carries no scope. Both reproduced by a cold review.
+      //
+      // Membership answers all of it: bob is refused unless the admin actually granted him the incumbent's
+      // scope; a rename degrades to an ordinary `unauthorized` that the admin fixes by declaring the scope,
+      // not to a brick; and an unowned node stays fail-closed, because `actorInScope` denies an absent scope
+      // (KNOW-11a) — while an admin who deliberately grants `atlas:mined` can appoint a curator to adopt
+      // mined candidates. One rule, no special cases.
+      const unauthorizedForTarget = !actorInScope(deps.policy, deps.actor, stored.scope);
+      if (unauthorizedForTarget) {
+        return { emitted: false, rejected: REJECTED_UNAUTHORIZED_TARGET };
+      }
+      if (weakerTier) {
         return { emitted: false, rejected: REJECTED_DOWNGRADE };
       }
     }

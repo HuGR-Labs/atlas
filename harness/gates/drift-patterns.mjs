@@ -19,10 +19,17 @@ export const STALE = [
   // agent seat there is one write door, for four days after the amendment.
   //
   // Matched on the CONCEPT rather than a literal phrase (a literal `/single[ -]write[ -]door/` misses
-  // "single **fail-closed** write door"), but the gap is at most two ADJECTIVES and an article inside it
-  // breaks the match. A plain `.{0,24}` gap false-fired on "…the one question a write door must ask",
-  // where `one` quantifies `question`, not `write door`. The article is the tell.
-  /\b(?:single|one)\s+(?:(?!(?:an?|the)\b)[a-z-]+\s+){0,2}write doors?\b/i,
+  // "single **fail-closed** write door"). A plain `.{0,24}` gap false-fired on "…the one question a write
+  // door must ask", where `one` quantifies `question`, not `write door` — the ARTICLE is the tell, so the
+  // gap forbids one rather than restricting what else may appear.
+  //
+  // The gap is a CHARACTER class, not `\s`-separated word tokens. A word-token gap silently lost the very
+  // form the paragraph above claims to catch: markdown bold, a comma, or backticks between "single" and
+  // "write door" are punctuation, not word characters, so `single **fail-closed** write door`,
+  // `single, fail-closed write door` and ``a single `fail-closed` write door`` all escaped it. That is
+  // strictly weaker than the regex this module was extracted from, in a commit that called itself an
+  // extraction — a gate quietly losing teeth is worse than a gate that never had them.
+  /\b(?:single|one)\b(?:(?!\b(?:an?|the)\b)[^.\n]){0,26}\bwrite doors?\b/i,
   /\bthe only write door\b/i,
 ];
 
