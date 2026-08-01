@@ -57,8 +57,21 @@ export const isGrounded: GroundApi['isGrounded'] = (g: Grounding): boolean =>
  *   - `¬isGrounded(grounding)`                              ⇒ DRIFTED (GROUND-2: ungrounded never FRESH).
  *   - an anchor whose unit is gone/unresolvable in `src`    ⇒ DRIFTED (GROUND-3: fail-closed, no throw).
  *   - an anchor whose current subtreeHash ≠ the recorded one ⇒ DRIFTED (GROUND-5: a real change drifts).
- *   - every anchor resolves and matches                     ⇒ FRESH   (GROUND-1/5: subtreeHash-only, a
- *                                                              reformat / line-shift / rename stays FRESH).
+ *   - every anchor resolves and matches                     ⇒ FRESH   (GROUND-1/5: the verdict reads the
+ *                                                              subtreeHash ONLY — never `displayLines` or a
+ *                                                              line range — so a change that moves a cited
+ *                                                              unit's LINE NUMBERS without changing the
+ *                                                              unit itself stays FRESH).
+ *
+ * What that does NOT mean — the two overclaims this docstring used to make:
+ *   - a REFORMAT does NOT stay FRESH. There is no whitespace or comment normalization anywhere on this
+ *     path; the subtreeHash folds the unit's bytes as recorded, so re-indenting drifts.
+ *   - a RENAME does NOT stay FRESH, and must not. Renaming a unit re-keys it, so its own anchor stops
+ *     resolving (DRIFTED, fail-closed above) and the PARENT drifts too, because the rollup binds each
+ *     child's NAME to its hash (see `foldNodeHash`, @atlas/index src/rollup.ts). A rename that left an
+ *     ancestor FRESH was the drift oracle certifying a fact against a tree that no longer contains it.
+ * The one normalization that IS applied is the kernel's: `canonicalForm` NFC-normalizes strings, so a pure
+ * Unicode NFD→NFC rewrite of a unit's bytes does NOT drift (KERNEL-1, owned by @atlas/kernel).
  */
 export const driftDetect: DriftApi['driftDetect'] = (grounding: Grounding, src: Axes): Freshness => {
   if (!isGrounded(grounding)) return 'DRIFTED';

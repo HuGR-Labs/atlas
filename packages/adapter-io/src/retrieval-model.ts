@@ -15,7 +15,7 @@
 import { id } from '@atlas/kernel';
 import type { CasObject } from '@atlas/kernel';
 import type { Hash, Pack } from '@atlas/contracts';
-import { createDepgraph, createRetrieval } from '@atlas/index';
+import { createDepgraph, createRetrieval, nodeHashOfPath } from '@atlas/index';
 import type { Axes, AxisForest, Fact, RetrievalModel } from '@atlas/index';
 import { currentNodes } from '@atlas/knowledge';
 import type { CurrentNode, GroundedFact } from '@atlas/knowledge';
@@ -56,7 +56,7 @@ export function buildRetrievalModel(axes: Axes, store: DiskStore): RetrievalMode
     const fact = store.get(contentHash);
     if (fact !== undefined) factStore.set(contentHash, fact);
     if (n.primaryAnchor !== undefined) {
-      const key = String(id({ file: n.primaryAnchor }));
+      const key = String(nodeHashOfPath(n.primaryAnchor));
       const bucket = anchorKeyToContentHashes.get(key) ?? [];
       bucket.push(contentHash); // APPEND — one anchor can carry N facts (different slots); keep every one.
       anchorKeyToContentHashes.set(key, bucket);
@@ -68,7 +68,7 @@ export function buildRetrievalModel(axes: Axes, store: DiskStore): RetrievalMode
   const blastRadius = new Map<string, readonly Hash[]>();
   for (const n of nodes) {
     if (n.primaryAnchor === undefined) continue;
-    const closure = depgraph.reverseClosure(id({ file: n.primaryAnchor }) as Hash).closure;
+    const closure = depgraph.reverseClosure(nodeHashOfPath(n.primaryAnchor)).closure;
     const hashes: Hash[] = [];
     for (const closureKey of closure) {
       hashes.push(...(anchorKeyToContentHashes.get(String(closureKey)) ?? [])); // ALL facts at each closure node

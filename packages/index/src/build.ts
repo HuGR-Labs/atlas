@@ -7,6 +7,7 @@
 
 import { id, asSubtreeHash } from '@atlas/kernel';
 import type { Hash, SubtreeHash } from '@atlas/contracts';
+import { foldNodeHash } from './rollup.js';
 import type { Axes, Axis, DepEdge, FileTree, IndexNode, ScipOutput } from './types.js';
 
 /** The mechanical, `$0`-LLM axis build (INDEX-3): derive every axis-view purely from the file tree +
@@ -23,12 +24,11 @@ export interface BuildApi {
 const SPATIAL_LEVELS = ['repo', 'crate', 'module', 'file', 'item', 'block'] as const;
 const TERRITORY_LEVELS = ['project', 'territory', 'region'] as const;
 
-/** subtreeHash via the sealed seam: a leaf hashes its normalized content; a branch hashes its SORTED child
- *  hashes (order-independent rollup) — `blake3(concat(sorted))` (atlas-index:40). */
+/** subtreeHash via the sealed seam. Delegates to `foldNodeHash` — THE single rollup implementation
+ *  (src/rollup.ts) — so a rebuild and an incremental re-hash cannot diverge. Every node commits to its OWN
+ *  content AND to the NAMES of its children, never to a bare multiset of child hashes (atlas-index:40). */
 function rollupHash(node: FileTree, children: readonly IndexNode[]): SubtreeHash {
-  if (children.length === 0) return asSubtreeHash(id({ content: node.content ?? '' }));
-  const sorted = children.map((c) => String(c.subtreeHash)).sort();
-  return asSubtreeHash(id({ children: sorted }));
+  return foldNodeHash({ key: node.path, content: node.content, children });
 }
 
 /** Build one rooted axis hierarchy from the file tree along a level vocabulary. Deterministic + total. */
@@ -38,8 +38,18 @@ function hierarchy(node: FileTree, axis: Axis, levels: readonly string[], depth:
   return { axis, level, key: node.path, subtreeHash: rollupHash(node, children), children, objects: [] };
 }
 
+/**
+ * The ONE path→node-identity minting for a file (atlas-index:105). EXPORTED because it is the index's
+ * source of truth for a file node's identity and consumers outside this package must REUSE it rather than
+ * restate the formula: the dependency axis keys a file node by `nodeHashOfPath(p)` and carries
+ * `subtreeHash = asSubtreeHash(nodeHashOfPath(p))` (see `dependencyAxis` below), which is exactly the leg
+ * `genesis`'s `resolveSiteKey` looks a mined `StructRef` up by. A parallel copy of `id({file})` in an
+ * adapter is a second source of truth for identity — the class of drift KERNEL-1 exists to forbid.
+ */
+export const nodeHashOfPath = (relativePath: string): Hash => id({ file: relativePath });
+
 /** A stable per-document node hash (the dependency axis keys structural units by hash, atlas-index:105). */
-const docHash = (relativePath: string): Hash => id({ file: relativePath });
+const docHash = nodeHashOfPath;
 
 /** A canonical, order-independent key for one edge — used for dedup + deterministic sort. */
 const edgeKey = (e: DepEdge): string => `${String(e.from)}\0${e.to === null ? '' : String(e.to)}\0${e.kind}`;

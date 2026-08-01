@@ -7,7 +7,7 @@
 // never-ratified is a STRUCTURAL property of the seam, not a stamp this driver applies.
 //
 // The five `ControllerDeps` ports (plan/visit/upsert/changed/handoffTo) are assembled INLINE from the real
-// adapters (`createSiteProposer`/`createHistorySource`/`createDiskStore`) + the genesis stage-builders
+// adapters (`createSkeletonSource`/`createSiteProposer`/`createHistorySource`/`createDiskStore`) + the genesis stage-builders
 // (`createScan`/`createMine`/`runExtract`/`admit`). Each seam is INJECTABLE (`Partial<MineDeps>`) so a
 // conformance test supplies a recorded proposer + an injected frontier + a gate double and never touches a
 // live model (mirrors packages/e2e/test/s02-genesis-mining.e2e.test.ts). `upsert` routes through the KNOW-15
@@ -33,15 +33,14 @@ import type {
   SeedProposal,
   HistorySource,
   SkeletonSource,
-  Skeleton,
   AdmitDeps,
   AdvisoryProposal,
 } from '@atlas/genesis';
-import { createDiskStore, headSha } from '@atlas/adapter-io';
+import { createDiskStore, headSha, createSkeletonSource } from '@atlas/adapter-io';
 import type { DiskStore } from '@atlas/adapter-io';
 import { upsert as knowledgeUpsert, normalizeCheck, primaryAnchorId, nodeKey, emptyStore } from '@atlas/knowledge';
 import type { WriteRequest, StoreProjection, Candidate as KnowledgeCandidate } from '@atlas/knowledge';
-import { id, asNodeKey, asSubtreeHash } from '@atlas/kernel';
+import { id, asNodeKey } from '@atlas/kernel';
 import { join } from 'node:path';
 import type { CliVerdict } from './render.js';
 
@@ -55,7 +54,7 @@ export interface MineDeps {
   readonly rev: string; //                the git rev the pass runs at
   readonly proposer: SiteProposer; //     S2 — the ONE bounded LLM entry (GEN-2); default abstains (no model wired)
   readonly history: HistorySource; //     S1 — mined ranking signals + frontier (GEN-6)
-  readonly skeleton: SkeletonSource; //   S0 — the structural skeleton source (GEN-1)
+  readonly skeleton: SkeletonSource; //   S0 — the structural skeleton source (GEN-1); default = the REAL walk
   readonly store: DiskStore; //           the durable CAS + the STAGING sidecar candidates persist to (ADR-0008)
   readonly gate: EmitGate; //             the 2-door admission gate — forwards the frozen `admit` verbatim
   readonly handoffTo: () => void; //      S4 — the born-from-work terminator (a no-op for a mine pass)
@@ -69,20 +68,20 @@ const OFF = { enabled: false, maxDepth: 0, epsilon: 0 } as const;
 /** A one-site extract budget: the controller already enforces the run ceiling; `visit` extracts its one cand. */
 const SINGLE_SITE: GenesisBudget = { ceiling: 1, deepening: { review: OFF, enrich: OFF, expand: OFF } };
 
-/** An honest-empty, structurally-valid `Skeleton` (GEN-8b: an empty skeleton is never a fabricated full one). */
-function emptySkeleton(): Skeleton {
-  const node = (axis: string): unknown => ({
-    axis,
-    level: 'repo',
-    key: 'root',
-    subtreeHash: asSubtreeHash('root'),
-    children: [],
-    objects: [],
-  });
-  return {
-    axes: { spatial: node('spatial'), territory: node('territory'), dependency: node('dependency'), edges: [] },
-    manifest: { territories: [] },
-  } as unknown as Skeleton;
+/**
+ * The S0 default is the REAL structural source (`createSkeletonSource`, adapter-io) — the frozen walk +
+ * optional SCIP dump + `@atlas/index` build + the `atlas-init` T2 territory move-in, composed.
+ *
+ * It used to be a hand-built `emptySkeleton()` whose `axes.edges` was `[]`. Because `structuralSeeds`
+ * (genesis/rank.ts:321) ranks by dep-graph DEGREE and reads ONLY `axes.edges`, an empty skeleton yielded 0
+ * seeds ⇒ `rank` 0 candidates ⇒ the controller visited 0 sites and made 0 model calls. That made the
+ * ABSENT SKELETON — not the absent model — the operative cause of a 0-candidate run: wiring a real proposer
+ * on top of it would still have produced 0. GEN-8b is unaffected: the real source is itself fail-closed, so
+ * an unwalkable/non-git repo or a malformed rev still degrades to an honestly-empty (never fabricated)
+ * skeleton rather than throwing.
+ */
+function defaultSkeleton(repoPath: string): SkeletonSource {
+  return createSkeletonSource(repoPath);
 }
 
 /** The advisory claim body a write carries (the KNOW-4c set-union element); a predicate carries its check. */
@@ -156,7 +155,7 @@ function withDefaults(repoPath: string, deps?: Partial<MineDeps>): MineDeps {
     rev,
     proposer: deps?.proposer ?? defaultProposer(),
     history: deps?.history ?? defaultHistory(),
-    skeleton: deps?.skeleton ?? { skeleton: () => emptySkeleton() },
+    skeleton: deps?.skeleton ?? defaultSkeleton(repoPath),
     store: deps?.store ?? createDiskStore(join(repoPath, '.atlas', 'cas'), () => headSha(repoPath)),
     gate: deps?.gate ?? defaultGate(),
     handoffTo: deps?.handoffTo ?? ((): void => {}),
@@ -273,34 +272,84 @@ export function driveMine(repoPath: string, deps?: Partial<MineDeps>): GenesisRe
 }
 
 /**
- * The abstain-by-design legibility line (WP-F6). Mining is MODEL-GATED and fails CLOSED by default: with no
- * proposer model wired, the extractor ABSTAINS at every site (`genesis/extract.ts:118` "model abstained")
- * rather than fabricate an ungrounded fact — so a default pass seeds 0 candidates NOT as an error but as an
- * honest abstain. This driver invents NO miner and seeds NO fake fact (facts come solely from real gate
- * verdicts, GEN-6). Emit an explicit line whenever a 0-candidate run is caused by the absent model, so the
- * abstention is LEGIBLE to a user — never a silent/mysterious empty render.
+ * The OBSERVED shape of a finished pass — every leg READ OFF the run's own `GenesisReport`, never asserted
+ * about the wiring (WP-F6). This is the whole point: the "why is it 0" line below is DERIVED from what the
+ * run actually did, so it cannot go stale when a seam upstream of it is wired (or unwired) later.
+ *   - `sitesVisited` — `report.budgetSpent`, the sites the controller COMPLETED against the ceiling
+ *     (run-controller.ts increments it once per completed site). 0 ⇒ the extractor was never reached at
+ *     all, so the proposer was never consulted — a 0 that NO amount of model-wiring would change.
+ *   - `complete`     — no `resumeToken` ⇒ the pass ran to its end (GEN-8); a partial 0 is not a result.
+ *   - `ceiling`      — the caller's explicit `--budget` ceiling, if any. Present ONLY to keep the
+ *     `sitesVisited === 0` explanation exact: with no explicit budget the controller's default ceiling is
+ *     `min(frontierSize, 200)`, so a COMPLETE pass that visited 0 sites proves the frontier itself was
+ *     empty; with an explicit `ceiling: 0` the frontier is unknown and the budget is the honest cause.
  */
-export const MINE_ABSTAIN_LINE =
-  'mine: 0 candidates — no proposer model wired (abstain-by-design; facts are never fabricated)';
+export interface MineOutcome {
+  readonly facts: number; //        grounded candidate facts the pass actually wrote
+  readonly sitesVisited: number; // sites completed against the ceiling (report.budgetSpent)
+  readonly complete: boolean; //    the pass ran to its end (no resumeToken)
+  readonly modelWired: boolean; //  a real S2 proposer was injected at this door
+  readonly ceiling?: number; //     the caller's explicit budget ceiling, when one was given
+}
+
+/** Project the run's own report to the observed outcome — the ONLY input the explanation below reads. */
+export function mineOutcome(r: GenesisReport, modelWired: boolean, ceiling?: number): MineOutcome {
+  return {
+    facts: r.seeded.length,
+    sitesVisited: r.budgetSpent,
+    complete: r.resumeToken === undefined,
+    modelWired,
+    ...(ceiling !== undefined ? { ceiling } : {}),
+  };
+}
+
+/**
+ * WHY the pass produced nothing — COMPUTED from `MineOutcome`, never a hard-coded cause (WP-F6).
+ *
+ * A 0-fact pass has genuinely different causes, and naming the wrong one is a lie even when the sentence is
+ * literally true. The distinction the user needs is WHERE the run stopped producing:
+ *   • 0 sites visited  — the run died UPSTREAM of the model: the structural pass (skeleton → ranked
+ *     frontier) handed the extractor nothing, so no proposer was ever consulted. Saying "no model is wired"
+ *     here would tell the user the product is one wire from working when the model is not even reached.
+ *   • N sites visited, 0 facts — the model gate IS where the 0 came from: every visited site abstained
+ *     (`genesis/extract.ts:118`) or was refused by the 2-door gate. Only HERE is the absent proposer the
+ *     operative cause, and only here is "abstain-by-design, never fabricated" the honest framing.
+ *   • an incomplete pass — a 0 that is not a finished result at all.
+ * Returns `null` when the pass seeded facts (there is nothing to explain).
+ */
+export function mineWhyEmpty(o: MineOutcome): string | null {
+  if (o.facts > 0) return null;
+  if (!o.complete) {
+    return 'mine: 0 candidate facts — the pass did not run to completion, so this 0 is not a finished result';
+  }
+  if (o.sitesVisited === 0) {
+    return o.ceiling === 0
+      ? 'mine: 0 candidate facts — 0 sites visited: the run budget ceiling was 0, so nothing was ever extracted'
+      : 'mine: 0 candidate facts — 0 sites visited: the structural pass (skeleton → ranked frontier) yielded no site, so no proposer was ever consulted; wiring a model would not change this 0';
+  }
+  return o.modelWired
+    ? `mine: 0 candidate facts — ${o.sitesVisited} site(s) visited and every one abstained: nothing was proposed or admitted (facts are never fabricated)`
+    : `mine: 0 candidate facts — ${o.sitesVisited} site(s) visited and every one abstained: no proposer model is wired, so nothing could be proposed (facts are never fabricated)`;
+}
 
 /** Fold a `GenesisReport` to the CLI's process outcome. `renderVerdict` (render.ts) projects a handler
  *  `Verdict`, not a `GenesisReport`, so the fold is direct: a partial/interrupted run is a non-zero exit.
- *  `modelWired` = a real proposer was injected; when false AND 0 candidates seeded, the empty result is the
- *  model-gated abstain, so we render `MINE_ABSTAIN_LINE` to keep the 0-candidate outcome legible (WP-F6). */
-function foldVerdict(r: GenesisReport, modelWired: boolean): CliVerdict {
-  const abstainByDesign = r.seeded.length === 0 && !modelWired;
+ *  An empty pass EXPLAINS itself with `mineWhyEmpty` — the cause is computed from the report, so the line
+ *  stays true whether the 0 came from an empty frontier or from an unwired model (WP-F6). */
+function foldVerdict(r: GenesisReport, modelWired: boolean, ceiling?: number): CliVerdict {
+  const why = mineWhyEmpty(mineOutcome(r, modelWired, ceiling));
   const lines = [
     `genesis: seeded ${r.seeded.length} candidate fact(s); ratified ${r.ratified.length}`,
     `cost: llmCalls ${r.llmCalls} · budgetSpent ${r.budgetSpent}`,
-    ...(abstainByDesign ? [MINE_ABSTAIN_LINE] : []),
+    ...(why ? [why] : []),
     ...(r.resumeToken ? [`partial: resume at rank ${r.resumeToken.lastCompletedRank}`] : []),
   ];
   return { exitCode: r.resumeToken ? 1 : 0, stdout: `${lines.join('\n')}\n` };
 }
 
 /** Run the one-time genesis bootstrap over a repo, projecting the outcome to a `CliVerdict` (CLI-4). A pass
- *  with no proposer injected is model-gated (abstain-by-design) — `foldVerdict` renders that legibly. */
+ *  that seeds nothing renders WHY, read off its own report — `foldVerdict`/`mineWhyEmpty`. */
 export async function runMine(repoPath: string, deps?: Partial<MineDeps>): Promise<CliVerdict> {
   const modelWired = deps?.proposer !== undefined; // a real S2 model was injected (else honest abstain)
-  return foldVerdict(driveMine(repoPath, deps), modelWired);
+  return foldVerdict(driveMine(repoPath, deps), modelWired, deps?.budget?.ceiling);
 }

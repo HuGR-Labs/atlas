@@ -1,64 +1,147 @@
 // @atlas/adapter-io — src/git-history.ts  (ADAPT-GIT-1: history)
 //
 // The S1 mining `HistorySource` (@atlas/genesis) — real `git log`/`blame`/coupling over a rev, feeding
-// ranking only (GEN-6: it MINTS NO FACT — this file imports NO store/upsert seam). Every emitted LIST is
+// ranking only (GEN-6: it MINTS NO FACT — this file imports NO fact-write seam). Every emitted LIST is
 // CANONICALLY SORTED (never git-output / Map-insertion order) so a fixed rev yields byte-identical signals.
+//
+// TWO properties this module is responsible for, both of them load-bearing for the ranker downstream:
+//
+//   IDENTITY — every emitted `StructRef` is joined to the S0 skeleton by `resolveSiteKey`
+//     (genesis/rank.ts:157-158), which looks the site's `subtreeHash` up in the index's
+//     subtreeHash→node-key correspondence and, on a MISS, drops the site into an `unresolved:<hash>`
+//     ISLAND — a vertex with no edges, so its PPR personalization mass is spent on nothing. So the
+//     identity is MINTED BY THE INDEX ITSELF (`nodeHashOfPath`, @atlas/index build.ts) over the SAME path
+//     string the index keys on: the repo-relative path. That means every git read that emits a PATHNAME
+//     must be `-z` (NUL-delimited, RAW): without `-z`, git C-QUOTES any path containing a non-ASCII byte,
+//     a control character, a `"` or a `\` (`src/café.ts` → `"src/caf\303\251.ts"`), and that DISPLAY
+//     string hashes to a DIFFERENT identity than the real path the SCIP indexer and the FS walk report.
+//     The sibling FS adapter already holds this line (`fs.ts` gitLsFiles uses `ls-files -z`).
+//
+//   TOTALITY  — history is a BOOSTER, never a dependency (GEN-15). `probeHistory` (rank.ts:310) is called
+//     by the mine driver with NO try/catch, so a throw here aborts genesis. Every git read is therefore
+//     absorbed and fails CLOSED toward the `thin` verdict (⇒ structural centrality), never upward.
 
 import type { StructRef } from '@atlas/contracts';
 import type { HistorySource, MinedSignals } from '@atlas/genesis';
-import { asSubtreeHash, id } from '@atlas/kernel';
+import { nodeHashOfPath } from '@atlas/index';
+import { asSubtreeHash } from '@atlas/kernel';
 import { runGit } from './run-git.js';
 
-/** All git I/O flows through the ONE shared no-shell seam (#74). */
-const git = (repo: string, args: readonly string[]): string => runGit(repo, args);
+/** All git I/O flows through the ONE shared no-shell seam (#74), absorbed so this module is TOTAL: a bad
+ *  rev, a repo with no commits (`rev-list HEAD` is a hard failure there), a non-git dir or an absent git
+ *  binary yields `fallback`, never a throw. The happy path is byte-identical to an unguarded call. */
+const git = (repo: string, args: readonly string[], fallback = ''): string => {
+  try {
+    return runGit(repo, args);
+  } catch {
+    return fallback;
+  }
+};
 
 /** Non-empty output lines (git pads a trailing newline; `--format=` emits blank separators). */
 const nonEmpty = (out: string): string[] => out.split('\n').filter((l) => l.length > 0);
 
+/** Non-empty NUL-delimited records — the RAW-pathname reader. Every pathname-emitting git read uses `-z`
+ *  and this splitter, so no path is ever C-quoted (see the IDENTITY note above) and a path containing a
+ *  newline survives intact. */
+const nulPaths = (out: string): string[] => out.split('\0').filter((p) => p.length > 0);
+
 /** The single canonical string order used for every emitted list (determinism / SCN-8b). */
 const byPath = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
+/** Message-based SZZ: a bug-fixing commit subject (Śliwerski–Zimmermann–Zeller). One definition, used by
+ *  BOTH `signals().szzBugCommits` and the SZZ leg of the frontier — never two drifting copies. */
+const FIX_SUBJECT = /^fix/i;
+
+/** Hotspot bar: a file must have been CHANGED after introduction (≥2 touching commits). A file added once
+ *  and never touched again has change-frequency 0 — it is un-churned code, which REQ-GEN-3b forbids from
+ *  raising spend (`frontierBudget` IS the ranked-site count, genesis/rank.ts:370). */
+const HOTSPOT_MIN_CHURN = 2;
+
+/** Coupling bar: association-rule MINIMUM SUPPORT over commit baskets — a file must co-change with at
+ *  least one other file in ≥2 distinct commits. A one-shot import that happens to land beside other files
+ *  has support 1 and is NOT a logical dependency. */
+const COUPLING_MIN_SUPPORT = 2;
+
 /**
- * A `file` StructRef for a tracked path. `subtreeHash` is synthesised through the sealed-kernel
- * `id({ file })` seam (the SAME path→node keying `@atlas/index` build uses, index-adapter.ts:17). The
- * isolated ADAPTER goldens (8a/8b/8c) do NOT require index correspondence; the mine-driver integration
- * (out of scope for this WP) does — this is the honest content-addressed placeholder until then.
+ * A `file` StructRef for a tracked path. The `subtreeHash` is minted by `@atlas/index`'s OWN path→node
+ * identity function (`nodeHashOfPath`, build.ts) and wrapped exactly as `dependencyAxis` wraps it
+ * (`asSubtreeHash(nodeHashOfPath(p))`) — so the value IS the dependency-axis node's `subtreeHash` for the
+ * same path, and `resolveSiteKey` finds it. This is a REUSE of the index's minting, not a parallel copy:
+ * a local `id({ file })` would be a second source of truth for identity, free to drift silently.
+ * `qualifiedPath` must therefore be the RAW repo-relative path (see the `-z` note in the header).
  */
 const fileRef = (qualifiedPath: string): StructRef => ({
   kind: 'file',
   qualifiedPath,
-  subtreeHash: asSubtreeHash(id({ file: qualifiedPath })),
+  subtreeHash: asSubtreeHash(nodeHashOfPath(qualifiedPath)),
 });
+
+/** One commit's mining record: its subject (SZZ) and the RAW paths it touched (churn + coupling basket). */
+interface CommitBasket {
+  readonly subject: string;
+  readonly files: readonly string[];
+}
+
+/** `<40-hex>\x1f<subject>` — the record header of the single-pass log walk below. */
+const BASKET_HEADER = /^([0-9a-f]{40})\x1f([\s\S]*)$/;
+
+/**
+ * ONE `git log` pass yielding every reachable commit's subject + touched paths, RAW. `-z` NUL-terminates
+ * both the `--format` header and each pathname, so the stream is `header\0[\n]path\0path\0header\0…`;
+ * records are split on NUL, a leading newline (git's separator after a header) is stripped, and a record
+ * matching the 40-hex + US header shape opens a new commit. A commit that touched nothing (empty commit,
+ * or a merge, whose diff `--name-only` omits by default) yields an empty basket rather than corrupting
+ * the next record. Deterministic at a fixed rev; total (a bad rev ⇒ no commits).
+ */
+function commitBaskets(repo: string, rev: string): CommitBasket[] {
+  const out = git(repo, ['log', '--format=%H%x1f%s', '--name-only', '-z', rev]);
+  const commits: Array<{ subject: string; files: string[] }> = [];
+  for (const raw of out.split('\0')) {
+    const rec = raw.replace(/^\n+/, '');
+    if (rec.length === 0) continue;
+    const header = BASKET_HEADER.exec(rec);
+    if (header !== null) commits.push({ subject: header[2] ?? '', files: [] });
+    else commits[commits.length - 1]?.files.push(rec);
+  }
+  return commits;
+}
 
 /**
  * Construct the S1 mining `HistorySource` at a git revision (ADAPT-GIT-1).
  *
  * Widened from `(rev)` → `(repoPath, rev)`: the factory closes over both so `signals(site)` — whose frozen
  * signature carries NEITHER repo nor rev — can shell git at the pinned rev. The `(repo, rev)`-carrying
- * methods use their own params; `signals` uses the closure. `wire.ts` / `index.ts` only symbol-reference
- * `createHistorySource` (no call site), so the arity widening breaks nothing.
+ * methods use their own params; `signals` uses the closure.
  */
 export function createHistorySource(repoPath: string, rev: string): HistorySource {
   /** SHAs of commits touching `qp` at `rev`, reverse-chronological (git-log order). */
   const commitsTouching = (qp: string): string[] =>
     nonEmpty(git(repoPath, ['log', '--format=%H', rev, '--', qp]));
 
+  /** The RAW tracked path set at a rev — the identity domain every emitted site is drawn from. */
+  const trackedAt = (repo: string, r: string): string[] =>
+    nulPaths(git(repo, ['ls-tree', '-r', '--name-only', '-z', r]));
+
   return {
-    // rev-list count of commits reachable from rev.
+    // rev-list count of commits reachable from rev. TOTAL: an unreadable/absent history counts 0, which
+    // trips GEN-15's `low-commit-count` ⇒ thin ⇒ structural centrality (the honest fail-closed verdict).
     commitCount(repo, r) {
-      return Number(git(repo, ['rev-list', '--count', r]).trim());
+      const n = Number(git(repo, ['rev-list', '--count', r]).trim());
+      return Number.isFinite(n) ? n : 0;
     },
 
     // shallow-clone probe (repository-wide; rev unused — the frozen (repo,rev) shape is honoured).
+    // TOTAL: an unreadable repo falls back to `true` — the CONSERVATIVE verdict (assume degenerate).
     shallow(repo, _r) {
       void _r;
-      return git(repo, ['rev-parse', '--is-shallow-repository']).trim() === 'true';
+      return git(repo, ['rev-parse', '--is-shallow-repository'], 'true').trim() === 'true';
     },
 
     // Over ALL tracked files at rev, aggregate per-commit blame attributions; return the single
     // most-attributed commit's share of total lines (0 when there are no lines). Deterministic.
     blameConcentration(repo, r) {
-      const files = nonEmpty(git(repo, ['ls-tree', '-r', '--name-only', r]));
+      const files = trackedAt(repo, r);
       const perCommit = new Map<string, number>();
       let total = 0;
       const header = /^([0-9a-f]{40}) \d+ \d+/; // porcelain line-block header = <sha> <orig> <final> [n]
@@ -77,17 +160,37 @@ export function createHistorySource(repoPath: string, rev: string): HistorySourc
       return top / total;
     },
 
-    // Tracked files ranked by change-frequency (commit-touch count), count desc then path asc.
+    // The GEN-11 personalization vector: the UNION of the hotspot / SZZ / coupling frontiers
+    // (reference/atlas-genesis.md:56-58), NOT every tracked file. A whole-repo frontier makes LLM spend a
+    // function of FILE COUNT — exactly what REQ-GEN-3a/3b forbid ("adding un-churned code MUST NOT raise
+    // LLM spend"), since `frontierBudget` is the ranked-site count. Ordered churn-desc then path-asc; the
+    // three legs are computed from ONE log pass so a fixed rev is byte-identical.
     frontier(repo, r) {
-      const tracked = nonEmpty(git(repo, ['ls-tree', '-r', '--name-only', r]));
-      const counts = new Map<string, number>(tracked.map((f): [string, number] => [f, 0]));
-      for (const f of nonEmpty(git(repo, ['log', '--format=', '--name-only', r]))) {
-        const seen = counts.get(f);
-        if (seen !== undefined) counts.set(f, seen + 1);
+      const tracked = new Set(trackedAt(repo, r));
+      if (tracked.size === 0) return [];
+      const churn = new Map<string, number>();
+      const szz = new Map<string, number>();
+      const coupling = new Map<string, number>();
+      const bump = (m: Map<string, number>, f: string): void => {
+        m.set(f, (m.get(f) ?? 0) + 1);
+      };
+      for (const commit of commitBaskets(repo, r)) {
+        const basket = commit.files.filter((f) => tracked.has(f));
+        const isFix = FIX_SUBJECT.test(commit.subject);
+        for (const f of basket) {
+          bump(churn, f);
+          if (isFix) bump(szz, f);
+          if (basket.length >= 2) bump(coupling, f);
+        }
       }
-      return [...counts.entries()]
-        .sort(([fa, ca], [fb, cb]) => cb - ca || byPath(fa, fb))
-        .map(([f]) => fileRef(f));
+      const inFrontier = (f: string): boolean =>
+        (churn.get(f) ?? 0) >= HOTSPOT_MIN_CHURN ||
+        (szz.get(f) ?? 0) >= 1 ||
+        (coupling.get(f) ?? 0) >= COUPLING_MIN_SUPPORT;
+      return [...tracked]
+        .filter(inFrontier)
+        .sort((a, b) => (churn.get(b) ?? 0) - (churn.get(a) ?? 0) || byPath(a, b))
+        .map(fileRef);
     },
 
     // The mined ranking heuristics for a site (GEN-6), scoped to the closed-over rev.
@@ -98,7 +201,7 @@ export function createHistorySource(repoPath: string, rev: string): HistorySourc
       const messages = nonEmpty(git(repoPath, ['log', '--format=%s', rev, '--', qp]));
 
       // szzBugCommits — message-based SZZ: subjects matching /^fix/i (deterministic).
-      const szzBugCommits = messages.filter((s) => /^fix/i.test(s)).length;
+      const szzBugCommits = messages.filter((s) => FIX_SUBJECT.test(s)).length;
 
       // hotspot — change-frequency (churn count, complexity factor deferred to v0), --follow across renames.
       const hotspot = nonEmpty(git(repoPath, ['log', '--format=%H', '--follow', rev, '--', qp])).length;
@@ -109,9 +212,10 @@ export function createHistorySource(repoPath: string, rev: string): HistorySourc
       // coChanged — distinct OTHER files that appeared in the same commits as qp, sorted by path.
       // NB: `git log --name-only -- <qp>` FILTERS the file list to the pathspec (git behaviour), so the
       // co-change basket is gathered per touching-commit (full changed-file set), honouring the semantics.
+      // `-z` keeps every partner path RAW, so each emitted `fileRef` resolves against the index.
       const co = new Set<string>();
       for (const sha of commitsTouching(qp)) {
-        for (const f of nonEmpty(git(repoPath, ['show', '--format=', '--name-only', sha]))) {
+        for (const f of nulPaths(git(repoPath, ['show', '--format=', '--name-only', '-z', sha]))) {
           if (f !== qp) co.add(f);
         }
       }

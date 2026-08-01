@@ -15,138 +15,16 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { asSubtreeHash, asHash, asNodeKey, id } from '@atlas/kernel';
-import type { StructRef, Hash } from '@atlas/contracts';
-import type { Axes, DepEdge, IndexNode, Manifest } from '@atlas/index';
+import { asNodeKey, id } from '@atlas/kernel';
 import { makeRunController } from '@atlas/genesis';
-import type {
-  Candidate,
-  Fact,
-  MinedSignals,
-  Skeleton,
-  SiteProposer,
-  EmitGate,
-  HistorySource,
-  SkeletonSource,
-  GenesisBudget,
-  AdmitDeps,
-} from '@atlas/genesis';
+import type { Candidate, Fact } from '@atlas/genesis';
 import { createDiskStore } from '@atlas/adapter-io';
-import type { DiskStore } from '@atlas/adapter-io';
 import type { StoreProjection, CurrentNode } from '@atlas/knowledge';
-import { runMine, driveMine, buildControllerDeps, makeAdmitGate, MINE_ABSTAIN_LINE } from '../src/mine.js';
+import { runMine, driveMine, buildControllerDeps, makeAdmitGate } from '../src/mine.js';
 import type { MineDeps } from '../src/mine.js';
-
-// ── the ranked-frontier skeleton fixture (mirrors s02's acme skeleton) ─────────────────────────────────
-const struct = (id: string): StructRef => ({ kind: 'symbol', qualifiedPath: `pkg/${id}.ts::${id}`, subtreeHash: asSubtreeHash(id) });
-const A = struct('st-a10');
-const B = struct('st-b22');
-const C = struct('st-c31');
-const D = struct('st-d40');
-const FRONTIER: readonly StructRef[] = [A, B, C, D];
-
-const edge = (from: string, to: string | null): DepEdge => ({ from: asHash(from), to: to === null ? null : asHash(to), kind: 'resolved' });
-// def→ref: st-a10 is the hub (referenced by b/c/d) ⇒ highest PPR; st-d40 is cold.
-const REF_EDGES: readonly DepEdge[] = [
-  edge('st-b22', 'st-a10'),
-  edge('st-c31', 'st-a10'),
-  edge('st-c31', 'st-b22'),
-  edge('st-d40', 'st-a10'),
-  edge('st-d40', 'st-b22'),
-  edge('st-d40', 'st-c31'),
-];
-const leaf = (key: string): IndexNode => ({ axis: 'dependency', level: 'symbol', key, subtreeHash: asSubtreeHash(key), children: [], objects: [] as readonly Hash[] });
-const axisRoot = (keys: readonly string[]): IndexNode => ({ axis: 'dependency', level: 'repo', key: 'root', subtreeHash: asSubtreeHash('root'), children: keys.map(leaf), objects: [] });
-const skeletonOf = (): Skeleton => {
-  const keys = ['st-a10', 'st-b22', 'st-c31', 'st-d40'];
-  const axes: Axes = { spatial: axisRoot(keys), territory: axisRoot(keys), dependency: axisRoot(keys), edges: REF_EDGES };
-  const manifest: Manifest = { territories: [] };
-  return { axes, manifest };
-};
-const BASE_SKELETON = skeletonOf();
-
-// ── injected seams ─────────────────────────────────────────────────────────────────────────────────────
-const ZERO_SIGNALS: MinedSignals = { hotspot: 0, szzBugCommits: 0, coChanged: [], owners: [], messages: [] };
-const idOf = (c: Candidate): string => c.site.subtreeHash;
-
-/** A grounded fact whose anchor re-derives from the site — the gate only forwards a verdict. */
-const factFor = (c: Candidate, claim: string): Fact =>
-  ({
-    kind: 'advisory',
-    id: asNodeKey(`nk-${c.site.qualifiedPath}`),
-    tier: 'T2',
-    claimNorm: claim,
-    grounding: { entries: [{ anchor: c.site, path: c.site.qualifiedPath }] },
-    freshness: 'FRESH',
-    claims: [],
-    authoring: 'ADVISORY',
-  }) as unknown as Fact;
-const anchorOf = (f: Fact): string => (f as unknown as { grounding: { entries: { anchor: StructRef }[] } }).grounding.entries[0]!.anchor.subtreeHash;
-const anchorSet = (fs: readonly Fact[]): Set<string> => new Set(fs.map(anchorOf));
-
-const skeletonSource: SkeletonSource = { skeleton: () => BASE_SKELETON };
-
-/** A non-thin history whose frontier IS the injected FRONTIER (so `createMine` ranks it, never a git shell). */
-const injectedHistory: HistorySource = {
-  commitCount: () => 5,
-  shallow: () => false,
-  blameConcentration: () => 0,
-  frontier: () => FRONTIER,
-  signals: () => ZERO_SIGNALS,
-};
-
-/** The recorded proposer — a live call-counter (the `$0`-LLM proof), returns proposal `P0` at every site. */
-const recordingProposer = (): { proposer: SiteProposer; calls: () => number } => {
-  let n = 0;
-  return { proposer: { propose: (c) => { n += 1; return { cand: c, claim: `P0@${idOf(c)}` }; } }, calls: () => n };
-};
-
-const gateEmitAll = (): EmitGate => ({ emit: (seed, c) => ({ emitted: true, fact: factFor(c, seed.claim) }) });
-const gateEmitFor = (ids: ReadonlySet<string>): EmitGate => ({
-  emit: (seed, c) => (ids.has(idOf(c)) ? { emitted: true, fact: factFor(c, seed.claim) } : { emitted: false, whyNot: { site: c.site, reason: 'not in admitted set' } }),
-});
-
-/** The knowledge-projection doors are TRAPS in every mine fixture (ADR-0008): `mine` writes CANDIDATES to
- *  staging and must never so much as READ the governed projection, so any call is a test failure, not a
- *  mismatch to assert on later. Spread into each fake store below. */
-const projectionTrap = {
-  persistProjection: (): never => { throw new Error('ADR-0008: mine must never write the knowledge projection'); },
-  loadProjection: (): never => { throw new Error('ADR-0008: mine must never read the knowledge projection'); },
-};
-
-const fakeStore = (): DiskStore => ({ put: () => asHash('x'), get: () => undefined, ...projectionTrap, persistStaging: () => {}, loadStaging: () => undefined });
-
-/** A recording fake over the STAGING sidecar: `persistStaging` appends to `staged`, `loadStaging` reads the
- *  last staged projection (or `seed`, standing in for what an earlier pass left behind), `put` records the
- *  CAS keys. The projection doors trap. */
-const stagingFake = (seed?: StoreProjection): { store: DiskStore; staged: StoreProjection[]; cas: Set<string> } => {
-  const staged: StoreProjection[] = [];
-  const cas = new Set<string>();
-  const store: DiskStore = {
-    put: (obj) => { const h = id(obj); cas.add(h as unknown as string); return h; },
-    get: () => undefined,
-    ...projectionTrap,
-    persistStaging: (p) => void staged.push(p),
-    loadStaging: () => (staged.length > 0 ? staged[staged.length - 1]! : seed),
-  };
-  return { store, staged, cas };
-};
-
-const OFF = { enabled: false, maxDepth: 0, epsilon: 0 } as const;
-const budget = (ceiling: number): GenesisBudget => ({ ceiling, deepening: { review: OFF, enrich: OFF, expand: OFF } });
-
-const depsOf = (over: Partial<MineDeps> = {}): MineDeps => ({
-  rev: 'HEAD',
-  proposer: over.proposer ?? recordingProposer().proposer,
-  history: over.history ?? injectedHistory,
-  skeleton: over.skeleton ?? skeletonSource,
-  store: over.store ?? fakeStore(),
-  gate: over.gate ?? gateEmitAll(),
-  handoffTo: over.handoffTo ?? ((): void => {}),
-  ...(over.budget !== undefined ? { budget: over.budget } : {}),
-});
-
-const REPO = 'fix-repo';
+// Shared seams — see ./mine-fixtures.ts. Imported, never duplicated: two copies would let this suite and
+// the WP-F6 suite drift into testing different products.
+import { A, B, C, D, FRONTIER, BASE_SKELETON, ZERO_SIGNALS, leaf, anchorSet, recordingProposer, stagingFake, budget, depsOf, REPO } from './mine-fixtures.js';
 
 // ── SCN-CLI-4a — the driver's write-set equals the frozen run-controller's ─────────────────────────────
 describe('CLI-4a — mine drives the frozen run-controller; write-set == the oracle', () => {
@@ -248,34 +126,6 @@ describe('runMine — folds the GenesisReport to a CliVerdict', () => {
   });
 });
 
-// ── WP-F6 — the abstain-by-design render is LEGIBLE (mining is model-gated, fails closed) ────────────────
-// FINDING: `atlas mine` writes 0 grounded candidates with no model wired. VERDICT: NOT a bug — the extractor
-// abstains fail-closed (genesis/extract.ts:118) rather than fabricate an ungrounded fact. FIX: make the
-// abstention LEGIBLE, do NOT invent a fake miner. This suite proves the 0-candidate render EXPLAINS itself.
-describe('WP-F6 — a default (no-model) mine render is a legible abstain, not a silent 0', () => {
-  it('a no-proposer pass seeds 0, exits clean (0), and renders the abstain-by-design line', async () => {
-    const v = await runMine(REPO); // no proposer injected ⇒ model-gated abstain-by-design
-    expect(v.exitCode).toBe(0); //             clean abstain — an empty pass is NOT an error
-    expect(v.stdout).toContain('seeded 0'); // still 0 candidates (no fabricated fact)
-    expect(v.stdout).toContain(MINE_ABSTAIN_LINE); // the WHY is legible on stdout
-    expect(v.stdout).toContain('no proposer model wired'); // names the model-gate cause
-    expect(v.stdout).toContain('never fabricated'); // states the honesty invariant
-  });
-
-  it('a real-model pass that DOES seed suppresses the abstain line (line means "no model", not "0 facts")', async () => {
-    const v = await runMine(REPO, depsOf({ budget: budget(FRONTIER.length) })); // recordingProposer wired
-    expect(v.stdout).not.toContain(MINE_ABSTAIN_LINE); // a wired model that seeded facts never claims abstain
-  });
-
-  it('MUTANT — a silent 0-candidate render (drops the abstain line) leaves the empty pass unexplained', async () => {
-    const v = await runMine(REPO); // the real driver: legible
-    // the mutant render — same seeded/cost lines, but the model-gate explanation stripped out.
-    const silent = v.stdout.split('\n').filter((l) => l !== MINE_ABSTAIN_LINE).join('\n');
-    expect(v.stdout).toContain(MINE_ABSTAIN_LINE); //  the real driver EXPLAINS the 0
-    expect(silent).not.toContain(MINE_ABSTAIN_LINE); // the mutant hides WHY it is 0 — the guard flips RED
-    expect(silent).toContain('seeded 0'); //           yet still reports 0: a silent, mysterious empty render
-  });
-});
 
 // ── ADR-0008 — mine writes STAGING, never knowledge ────────────────────────────────────────────────────
 //

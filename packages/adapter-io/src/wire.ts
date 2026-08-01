@@ -11,8 +11,7 @@
 
 import { createHandler, createInit, createQuery, createReconcile } from '@atlas/tools';
 import type { ToolLegs, ToolLeg, NodeSource } from '@atlas/tools';
-import { id } from '@atlas/kernel';
-import { build, createResolve, createDepgraph } from '@atlas/index';
+import { build, createResolve, createDepgraph, nodeHashOfPath } from '@atlas/index';
 import type { Axes } from '@atlas/index';
 import { currentNodes, deriveSameAs, deriveSubsumes } from '@atlas/knowledge';
 import type { GroundedFact } from '@atlas/knowledge';
@@ -127,7 +126,7 @@ export function assembleHandler(config: WireConfig): WiredHandler {
     build,
     createResolve,
     createDepgraph,
-    nodeHashOfPath: (p: string) => id({ file: p }),
+    nodeHashOfPath, // THE index's own minting, imported — never a local copy of `id({file:p})` (KERNEL-1)
   });
 
   // GOVERNED DURABLE EMIT (COMPOSE-A): the emit leg persists through the governed path — the GROUND

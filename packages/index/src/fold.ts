@@ -45,8 +45,11 @@ function flatten(root: IndexNode, into: Map<string, IndexNode>): void {
   into.set(root.key, root);
   for (const c of root.children) flatten(c, into);
 }
-/** The state fingerprint of a node — its anchored CAS `objects` payload (status/freshness proxy). */
-const objFingerprint = (n: IndexNode): string => [...n.objects].join(' ');
+/** The state fingerprint of a node — its anchored CAS `objects` payload (status/freshness proxy).
+ *  Minted through the sealed `id` seam, NOT by joining on a separator: a separator-joined fingerprint is
+ *  not injective, so `["a b"]` and `["a","b"]` compared EQUAL and `delta` reported `stateChanged: false`
+ *  through a real state change. The structured preimage escapes any separator inside a value. */
+const objFingerprint = (n: IndexNode): string => String(id({ objects: [...n.objects].map(String) }));
 
 /** Which axis buckets changed, structure (`idChanged`) vs state (`stateChanged`); `changedBuckets` names
  *  exactly the affected buckets (never `N`) in root→leaf pre-order over the AFTER trees (INDEX-12b/c/d). */

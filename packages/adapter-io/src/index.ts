@@ -27,6 +27,12 @@ export { materializePoke, pokeFilePath, POKE_FILE_EXT } from './poke-file.js';
 // self-cleaning temp worktree so `atlas-reconcile` can detect real (non-HEAD) drift. Wiring is separate.
 export { createRevIndex, type RevIndex } from './rev-index.js';
 
+// The PRODUCTION genesis S0 seam (GEN-1): the frozen `SkeletonSource` satisfied by COMPOSING walkFileTree +
+// readScipOrEmpty + @atlas/index `build` + the index-adapter/`atlas-init` territory move-in. Consumed by the
+// `atlas mine` driver, which previously injected a hand-built empty skeleton (⇒ 0 seeds, 0 sites, 0 calls).
+export { createSkeletonSource } from './skeleton-source.js';
+export type { SkeletonSourceDeps } from './skeleton-source.js';
+
 // The ONE shared handler assembly (constitution WIRE-1) — consumed by every entrypoint (CLI, MCP).
 export { assembleHandler } from './wire.js';
 export type { WireConfig, WiredHandler, WireSeams } from './wire.js';
