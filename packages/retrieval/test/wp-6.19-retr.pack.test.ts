@@ -221,7 +221,7 @@ describe('REQ-RETR-9 — empty & total (the total surface)', () => {
 
   it('SCN-RETR-9b-1 — a malformed scope never throws', () => {
     const packer = createPacker(indexOf({}));
-    const malformed: unknown[] = [null, undefined, '', ' ///x', {}, { name: 42 }, [], 'ünîcodé', ' '];
+    const malformed: unknown[] = [null, undefined, '', ' ///x', {}, { name: 42 }, [], 'ünîcodé', '\0'];
     for (const m of malformed) {
       expect(() => packer.pack(m as Territory)).not.toThrow(); // every entry point returns empty, never throws
       expect(() => packer.mergedPack([m as Territory])).not.toThrow();

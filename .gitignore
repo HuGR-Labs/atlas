@@ -21,3 +21,6 @@ dist/
 # …except the admin-owned policy: it is the ratified config the doors READ, and it must stay in git so a
 # change to who may write what is reviewable in the same place as the code.
 !.atlas/policy.json
+
+# runtime telemetry from the orchestrator harness — not product source
+.maestro/

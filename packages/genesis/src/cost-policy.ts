@@ -8,6 +8,7 @@
 // Implements the frozen `BudgetApi` (types.ts); the cheap escalation signal is an INJECTED `SignalOracle`.
 
 import type { StructRef, Tier } from '@atlas/contracts';
+import { isWeakerTier } from '@atlas/knowledge';
 import type { BudgetApi, Candidate, CostReport, EscalationDecision, GenesisBudget, Mechanism, PipelineStage, StageCost } from './types.js';
 
 // ── the frozen GEN-13 defaults ─────────────────────────────────────────────────────────────────────────
@@ -44,11 +45,21 @@ export interface SignalOracle {
 
 // ── the escalation predicate + mechanism decision (GEN-13a/b/f) ─────────────────────────────────────────
 
-const TIER_RANK: Record<Tier, number> = { T0: 2, T1: 1, T2: 0 };
-
-/** `tier≥floor` on the `T0 > T1 > T2` order — the checkable / predicate floor (GEN-13d). */
-export function tierAtLeast(tier: Tier, floor: Tier): boolean {
-  return TIER_RANK[tier] >= TIER_RANK[floor];
+/**
+ * `tier≥floor` on the `T0 > T1 > T2` order — the checkable / predicate floor (GEN-13d).
+ *
+ * Derived from THE lattice (`@atlas/knowledge`), never from a private rank table. This function used to
+ * carry its own `Record<Tier, number>`, which made it the fifth such table in the tree and gave it the same
+ * de-totalised shape the lattice was created to kill: `Tier` is TYPE-ONLY, so an off-lattice value read
+ * `undefined` out of the table and `undefined >= 1` is `false` — a silent answer, not a refusal.
+ *
+ * TOTAL over `unknown` and FAIL-CLOSED by construction: `isWeakerTier` returns `true` for anything off the
+ * lattice on either side, so `tierAtLeast` returns `false` — the candidate falls back to `advisory` and
+ * check-synthesis is skipped. That is the LESS-privileged branch at both call sites below, so the
+ * degradation is safe; it is now stated rather than inherited from an arithmetic accident.
+ */
+export function tierAtLeast(tier: unknown, floor: unknown): boolean {
+  return !isWeakerTier(tier, floor);
 }
 
 /**

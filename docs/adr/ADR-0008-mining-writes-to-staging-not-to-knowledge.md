@@ -1,8 +1,13 @@
 # ADR-0008 — mining writes to STAGING; it does not write knowledge
 
-- **Status:** Accepted (2026-08-01). Decision recorded now; implementation is task #87 and is sequenced
-  after the `governance-class-is-a-node-property` branch integrates, because three review seats are reading
-  the files it touches.
+- **Status:** Accepted (2026-08-01) and **IMPLEMENTED on `governance-class-is-a-node-property`**, not
+  deferred. Steps 1 and 2 of the Decision below are in the tree: `packages/adapter-io/src/store.ts` defines
+  `persistStaging`/`loadStaging`, and `packages/cli/src/mine.ts` uses staging exclusively — its header
+  asserts, and a test pins, that `persistProjection` appears nowhere in the file.
+  *(This header previously said implementation "is task #87 and is sequenced after the branch integrates".
+  That was written before the work landed and was left stale — a false status claim inside a canonical
+  decision record, found by a cold architectural review. A repo that ships a guard against exactly this
+  class of overclaim must not carry one in its own ADRs.)*
 - **Owner-authorized:** the owner granted the lead full ownership of this repo and direct responsibility for
   the SOTA bar, and has restated that no debt or loose end is acceptable. This ADR exists so #87 is a
   *decided, sequenced* item rather than an open question — an open question is the debt.
