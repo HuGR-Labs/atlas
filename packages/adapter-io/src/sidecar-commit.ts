@@ -311,10 +311,19 @@ function commitLoop<T>(
     // durable holding a `contentHash` whose bytes were never written: a row that is present, served, and
     // unresolvable. Exactly the read-back invariant `governed-emit.ts` stage 4 and the doctor legs depend on.
     //
-    // No product caller reaches it today — both governed doors compute `id(node)` themselves before handing
-    // the same object over, so an unaddressable object never gets this far, and the door suites EXECUTE that
-    // rather than assert it. It is guarded anyway because "nothing calls it today" is a property of today's
-    // callers, not of this seam, and the failure it permits is silent and durable.
+    // THIS GUARD IS LOAD-BEARING, NOT BELT-AND-BRACES, and the sentence that used to stand here said the
+    // opposite: "No product caller reaches it today — both governed doors compute `id(node)` themselves
+    // before handing the same object over, so an unaddressable object never gets this far." MEASURED FALSE
+    // (task #136), through the real `createGovernedEmit` over a real `createDiskStore`: KERNEL-8 excludes
+    // `grounding`/`status`/`freshness` from the canonical preimage at every level, so a `BigInt` parked in
+    // `grounding` — a field on EVERY `GroundedFact` — canonicalizes FINE, clears `id(node)`, clears every
+    // gate, and arrives HERE. The door suite in this package had in fact been exercising that path all along
+    // (`store-fail-closed-door.test.ts` §C); only this comment had not caught up.
+    //
+    // The throw stays. It is the STORE's fail-closed floor for any caller that reaches this seam without
+    // having asked whether its bytes are addressable. `governed-emit.ts` gate 0.5 now CATCHES it and re-files
+    // it as that door's own recorded refusal, so the operator gets an exit-2 verdict rather than an exception
+    // — but a caller that skips the door still gets stopped here rather than publishing a dangling row.
     for (const obj of decision.put ?? []) {
       if (ctx.put(obj) === CAS_EMPTY) throw new UnaddressableCasObjectError(ctx.base);
     }

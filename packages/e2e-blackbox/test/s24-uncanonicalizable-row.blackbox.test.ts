@@ -116,7 +116,18 @@ describe('S24 — a fact carrying a value Atlas cannot canonicalize', () => {
   it('a FLOAT is refused with the canonicalizer\'s own named reason, and nothing new goes durable', () => {
     const before = generations();
     const run = emitRaw('float', factWith({ confidence: 0.5 }));
-    expect(run.exitCode).not.toBe(0);
+    // GOLDEN MOVED DELIBERATELY (task #136): this pinned `not.toBe(0)`, which was satisfied by the exit 1 the
+    // product actually shipped. MEASURED before the fix: exit 1 / `status: error`, while an UNGROUNDED fact
+    // exits 2 / `status: rejected` and `@atlas/tools` `faultOf` calls BOTH of them `refused`. The reason it
+    // was 1 is mechanical: `id(node)` sat unguarded inside the commit's decide callback, so the violation
+    // escaped as a THROW, and `deriveStatus` classifies by the RECORD a governed door carries back — a throw
+    // carries none. ADR-0003 states the governed-door invariant as a refusal being FAIL-CLOSED-VISIBLE on
+    // both transports, "CLI exit 2 / MCP `isError`"; MCP already answered `isError` (pinned below), so only
+    // the exit code dissented, telling an agent to go and fix an invocation that was fine. The door now
+    // RECORDS the decision it had already made (`governed-emit.ts` gate 0.5), and the exit code follows the
+    // record exactly as it did before — `deriveStatus` is untouched, so SCN-CLI-3b-1 does not move.
+    expect(run.exitCode).toBe(2);
+    expect(run.stdout).toContain('status: rejected');
     // Q2 — LEGIBLE: a named discriminant on the operator's `reason:` line, not a stack trace and not silence.
     expect(reasonOf(reasonLine(run.stdout))).toBe(CANONICAL_VIOLATION);
     expect(run.stderr).toBe(''); // an uncaught throw would land here — it does not
@@ -127,7 +138,8 @@ describe('S24 — a fact carrying a value Atlas cannot canonicalize', () => {
   it('an NFC KEY COLLISION is refused the same way — the one non-numeric shape that crosses a JSON wire', () => {
     const before = generations();
     const run = emitRaw('nfc', factWith({ [NFC_KEY]: 1, [NFD_KEY]: 2 }));
-    expect(run.exitCode).not.toBe(0);
+    expect(run.exitCode).toBe(2); // moved with the float case above — same argument, same commit
+    expect(run.stdout).toContain('status: rejected');
     expect(reasonOf(reasonLine(run.stdout))).toBe(CANONICAL_VIOLATION);
     expect(run.stderr).toBe('');
     expect(generations()).toStrictEqual(before);

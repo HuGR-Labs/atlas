@@ -16,6 +16,40 @@ import type { Hash } from '@atlas/contracts';
 import type { CasObject, StoreApi } from '@atlas/kernel';
 import type { PredicateNode } from '../types.js';
 
+/** The honest-empty content handle `StoreApi.put` answers for an object the CAS cannot address
+ *  (`kernel/store.ts` `asHash('')` — the sole EMPTY sentinel). Matched by EQUALITY on that one value and
+ *  nothing wider, exactly as `adapter-io/src/sidecar-commit.ts` matches it: an injected store is free to
+ *  answer anything else it likes, and narrowing further would turn this guard into a shape check on a seam
+ *  whose shape is the caller's business. A local constant rather than an import for the same reason that
+ *  file gives — the sentinel is one character, and a cross-package edge to carry it is not worth its cost. */
+const CAS_EMPTY = '';
+
+/**
+ * A prior the CAS REFUSED to address (task #136). A NAMED `Error` carrying the discriminant
+ * `unaddressable-cas-object` — the SAME name `adapter-io/src/sidecar-commit.ts` gives this exact situation —
+ * so `reasonOf`/`faultOf` decode one condition to one value at every door instead of three dialects.
+ *
+ * WHY A REFUSAL AND NOT A SILENT `if (h)`. `index/src/cas.ts` guards the same sentinel by simply NOT
+ * REGISTERING the hash, and that is right THERE: its `put` must stay total (the frozen `CasIndexApi`
+ * signature), the empty handle it returns is the kernel's own honest answer, and nothing durable references
+ * it. Here the unresolvable handle IS the return value — `supersededBy` is the KNOW-12 pointer a caller
+ * follows to re-spawn the prior — so swallowing it changes nothing and merely moves the failure to whoever
+ * dereferences it. MEASURED before the guard: `supersede(<prior with a float>, next)` answered
+ * `{ node: next, supersededBy: '' }` while `resolve('')` answered `undefined` and zero bytes reached disk.
+ * "Nothing dies" reported as satisfied over a prior that had just died.
+ */
+export class UnaddressablePriorError extends Error {
+  constructor() {
+    super(
+      'unaddressable-cas-object: refusing to supersede — the CAS could not address the PRIOR node (its ' +
+        'canonical form or its JSON serialization does not exist), so the `supersededBy` pointer would name ' +
+        'bytes that were never written. KNOW-12 retains every prior; a link to nothing is not retention. ' +
+        'Nothing was written and nothing was superseded.',
+    );
+    this.name = 'UnaddressablePriorError';
+  }
+}
+
 // ── frozen ArchiveApi surface, co-located here (was ref/archive.ts) ───────────────────────────────────
 
 export interface ArchiveApi {
@@ -40,6 +74,10 @@ export function bindArchive(store: StoreApi): ArchiveApi {
      *  superseder is `next` UNCHANGED — the prior's bytes are never inlined (only the pointer links them). */
     supersede(old: PredicateNode, next: PredicateNode): { readonly node: PredicateNode; readonly supersededBy: Hash } {
       const supersededBy = store.put(old); // sealed CAS: content-address → dedup, never byte-copy
+      // The answer is CHECKED, not assumed. `put` is deliberately TOTAL over a value it cannot address — it
+      // writes nothing and answers the EMPTY sentinel rather than throwing — so an unchecked read of it is
+      // how a pointer to nothing gets minted and reported as a retained prior. See UnaddressablePriorError.
+      if (supersededBy === CAS_EMPTY) throw new UnaddressablePriorError();
       return { node: next, supersededBy };
     },
     /** Re-spawnable resolve: the prior persists in CAS as a content-addressed object; `get(oldId)` resolves

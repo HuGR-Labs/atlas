@@ -88,6 +88,39 @@ const EXPECTED_REFUSAL: Readonly<Record<string, string>> = {
   'nfc-key-collision': 'canonical-form violation',
 };
 
+/**
+ * HOW each shape's refusal ARRIVES — a RECORDED `emitted:false`, or a THROW. This table is new, and it is
+ * the deliberate move of this suite's Q2 golden (task #136). Recorded here rather than in a commit message
+ * because a pinned assertion that changes without a written reason is exactly the drift these pins catch.
+ *
+ * WHAT MOVED: seven shapes used to arrive as ESCAPING THROWS out of `governed-emit.ts` stage 3, and this
+ * suite pinned that (`expect(thrown).toBeDefined()`). They now arrive as `{emitted:false, rejected}`.
+ *
+ * WHY. A throw carries no `EmitOut`, and `cli/src/map.ts` `deriveStatus` classifies by the RECORD a governed
+ * door carries back — so the operator got `status: error` / EXIT 1 for a fact the door had in fact decided
+ * on, while `@atlas/tools` `faultOf` classified the very same verdict as `refused`. MEASURED through the
+ * real binary before the fix: a grounded fact carrying `confidence: 0.5` → exit 1 / `status: error`, an
+ * UNGROUNDED fact → exit 2 / `status: rejected`, `faultOf` → `refused` for BOTH. ADR-0003 states the
+ * governed-door property invariant as a refusal being FAIL-CLOSED-VISIBLE on both transports — "CLI exit 2 /
+ * MCP `isError`" — and MCP already answered `isError`; only the exit code dissented, telling an agent to go
+ * and fix an invocation that was fine. KERNEL-1 ("floats forbidden … fail-closed reject") is a ratified law,
+ * not an accident of the serializer, so refusing under it IS a governance decision and must be recorded.
+ *
+ * WHAT DID NOT MOVE, and why the fix went to the door rather than to a classifier: `deriveStatus` is
+ * untouched, so an unwired tool and a malformed-args call still render `error`/exit 1 and SCN-CLI-3b-1 is
+ * unchanged. Routing exit codes through `faultOf` instead was measured and rejected — `faultOf({rejected:
+ * "tool 'atlas-query' not wired at this seam"})` is ALSO `'refused'`, so it would have re-classified a
+ * WIRING hole as a governance refusal.
+ *
+ * `cyclic` DELIBERATELY STILL THROWS: a stack-exhaustion `RangeError` is an engine fault, which `fault.ts`
+ * files as `internal-fault` ("a defect in Atlas, not in your arguments"). Recording it as `emitted:false`
+ * would put our own defect behind the caller's name — the same misattribution, committed backwards.
+ *
+ * Q1 (nothing is admitted) and Q3 (nothing is durable) are UNCHANGED for every shape, which is the point:
+ * what moved is the CHANNEL the refusal travels on, never whether the door fails closed.
+ */
+const ARRIVES_AS_THROW: ReadonlySet<string> = new Set(['cyclic']);
+
 describe('(A) the PRODUCT write path — createGovernedEmit over a real createDiskStore', () => {
   it('PREMISE: all eight shapes are ones the sealed `id` genuinely refuses', () => {
     assertPremise();
@@ -127,9 +160,16 @@ describe('(A) the PRODUCT write path — createGovernedEmit over a real createDi
       }
       // Q1 — REFUSED. Whichever way it answers, it must NOT report a write.
       expect(out === undefined || (out as { emitted?: unknown }).emitted === false).toBe(true);
-      // Q2 — LEGIBLE. Compared on the discriminant, by EQUALITY.
-      expect(thrown, `'${shape.name}' neither threw nor returned a refusal`).toBeDefined();
-      expect(refusalNameOf(thrown)).toBe(EXPECTED_REFUSAL[shape.name]);
+      // Q2 — LEGIBLE, on the discriminant, by EQUALITY — AND on the right CHANNEL (see ARRIVES_AS_THROW).
+      if (ARRIVES_AS_THROW.has(shape.name)) {
+        expect(thrown, `'${shape.name}' neither threw nor returned a refusal`).toBeDefined();
+        expect(refusalNameOf(thrown)).toBe(EXPECTED_REFUSAL[shape.name]);
+      } else {
+        // A RECORD, not an exception: this is what makes `deriveStatus` answer `rejected` (exit 2) instead
+        // of falling through to `error` (exit 1), with no change to `deriveStatus` itself.
+        expect(thrown, `'${shape.name}' threw instead of RECORDING its refusal`).toBeUndefined();
+        expect(refusalNameOf(new Error((out as { rejected?: string }).rejected))).toBe(EXPECTED_REFUSAL[shape.name]);
+      }
       // Q3 — NOT ADMITTED: nothing new is durable and the incumbent is byte-identical.
       expect(durableState(ws)).toStrictEqual(before);
       expect([...(ws.store.loadProjection()?.current.keys() ?? [])].sort()).toStrictEqual(beforeRows);
@@ -319,18 +359,30 @@ describe('(C) a canonical-form violation hidden in a KERNEL-8 side-index field',
     const door = doorOver(ws);
     const fact = advisoryFact({ anchor: ANCHOR, scope: SCOPE, claimNorm: 'c' }) as unknown as Record<string, unknown>;
     const grounding = { ...(fact['grounding'] as Record<string, unknown>), probe: BigInt(10) };
+    // MOVED WITH THE REST OF THE Q2 GOLDEN (task #136) — see `ARRIVES_AS_THROW` for the argument. This case
+    // used to assert only `thrown` was DEFINED and not a `TypeError`, i.e. that the escaping throw was named.
+    // It is now a RECORDED refusal: the throw was `sidecar-commit.ts`'s `UnaddressableCasObjectError`, which
+    // is a decision about the caller's own bytes and therefore owes the operator an exit-2 record, not an
+    // exception. `governed-emit.ts` re-files it VERBATIM, so the discriminant every other CAS door uses —
+    // `archive.ts`, `attach.ts`, `sidecar-commit.ts` — is what reaches the user.
+    //
+    // THIS CASE IS ALSO THE COUNTEREXAMPLE TO A COMMENT IN `sidecar-commit.ts`, which still claims "No
+    // product caller reaches it today — both governed doors compute `id(node)` themselves before handing the
+    // same object over, so an unaddressable object never gets this far". It does: KERNEL-8 keeps `grounding`
+    // out of the preimage, so `id(node)` succeeds and the commit's CAS door is the first thing to notice.
     let thrown: unknown;
+    let out: { emitted: boolean; rejected?: string } | undefined;
     try {
-      door.emit({ ...fact, grounding } as unknown as Parameters<typeof door.emit>[0], AT);
+      out = door.emit({ ...fact, grounding } as unknown as Parameters<typeof door.emit>[0], AT);
     } catch (e) {
       thrown = e;
     }
-    expect(thrown).toBeDefined();
+    expect(thrown, 'the door threw instead of RECORDING its refusal').toBeUndefined();
+    expect(out?.emitted).toBe(false);
     // A NAMED refusal, never a bare engine `TypeError`: `fault.ts` `classifyThrown` files an engine fault as
     // `internal-fault` ("a defect in Atlas, not in your arguments"), which for caller-supplied bytes is the
-    // blame-shift that module was written to delete. Asserted on the CLASS, not on prose.
-    expect(thrown).not.toBeInstanceOf(TypeError);
-    expect(thrown).toBeInstanceOf(Error);
+    // blame-shift that module was written to delete. Asserted on the DISCRIMINANT, by EQUALITY.
+    expect(refusalNameOf(new Error(out?.rejected))).toBe('unaddressable-cas-object');
     expect(durableState(ws)).toStrictEqual({ cas: 0, generations: [] });
   });
 });
