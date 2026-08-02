@@ -15,9 +15,9 @@
 //   ABSENT   ⇒ `null`  — no model wired. The honest zero-config state; `mine` abstains and SAYS so.
 //   MALFORMED⇒ THROW   — a stated, actionable error. Never a silent fall-back to `null`.
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 
 import type { ModelCommand } from './llm.js';
 
@@ -160,11 +160,35 @@ function optionalPositive(v: unknown, fallback: number, refuse: () => never): nu
   return v as number;
 }
 
-/** Is `candidate` the repo directory itself, or anything beneath it? Pure path containment — no filesystem
- *  question is asked, so a non-existent path is answered the same way as an existing one. */
+/**
+ * Is `candidate` the repo directory itself, or anything beneath it?
+ *
+ * SYMLINKS ARE RESOLVED FIRST, and that is the whole difficulty. Pure textual containment is evadable: on
+ * macOS `/var` is a symlink to `/private/var`, so a repo the shell reports as `/var/folders/x` has a real
+ * path of `/private/var/folders/x`, and `relative()` between the two spellings yields a `..`-prefixed path —
+ * the guard reads "outside the repo" and the planted config is READ. Found by the S24 black-box story on
+ * its first run, against a real temp repo; the unit suite could not see it because both sides there are
+ * spelled the same way.
+ *
+ * Any symlinked path exhibits it, not just macOS temp dirs — a repo reached through a symlinked parent is
+ * the general case.
+ */
 function isInside(repoPath: string, candidate: string): boolean {
-  const rel = relative(resolve(repoPath), resolve(candidate));
+  const rel = relative(realish(repoPath), realish(candidate));
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
+}
+
+/** `realpathSync` for a path that MAY NOT EXIST: resolve the deepest existing ancestor and re-append what
+ *  is left. The security check must run BEFORE the file is opened, so it cannot require the file to be
+ *  there — and a non-existent path under a symlinked parent must still resolve through that parent. */
+function realish(p: string): string {
+  const abs = resolve(p);
+  try {
+    return realpathSync(abs);
+  } catch {
+    const parent = dirname(abs);
+    return parent === abs ? abs : join(realish(parent), basename(abs)); // bounded by the filesystem root
+  }
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {

@@ -151,10 +151,14 @@ export function makeFixtureRepo(spec: FixtureSpec): FixtureRepo {
  * non-zero exit — the code is returned (ok 0 / error 1 / rejected 2). Uses `process.execPath` (the running
  * node) so no PATH lookup is needed.
  */
-export function runAtlas(repoPath: string, argv: string[]): AtlasRun {
+export function runAtlas(repoPath: string, argv: string[], env?: Readonly<Record<string, string>>): AtlasRun {
   const res = spawnSync(process.execPath, [CLI_BIN, ...argv], {
     cwd: repoPath,
     encoding: 'utf8',
+    // ADDITIVE (ADR-0011): `env` overlays the parent's, so every existing story is unaffected. Needed
+    // because the operator-scoped model config is located by `$ATLAS_MODEL_CONFIG`, and a story about it
+    // must not mutate this process's own environment.
+    ...(env !== undefined ? { env: { ...childEnv(), ...env } } : {}),
   });
   return {
     stdout: res.stdout ?? '',
