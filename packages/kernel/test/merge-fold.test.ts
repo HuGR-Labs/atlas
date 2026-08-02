@@ -11,57 +11,15 @@
 // delegated to the PERSIST-11 integration test; it is recorded UNAVAILABLE (`it.todo`) below, never faked.
 // Held-out `-2` fixtures (12b-2 disjoint add/add, 12c-2 counter-keyed) are NOT transcribed (GATE-only).
 
+// The pinned convergence counterexamples (W1 `fresh`, W2 `seq`) live in `fold-convergence.test.ts`; the
+// builders are shared through `event-builders.ts` so the two files cannot drift.
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
-import type { Hash, NodeKey } from '@atlas/contracts';
-import type { AtlasState, Event, EventLog, Node } from '../src/types.js';
-import { createLog, eventId, combine } from '../src/log.js';
+import type { Event } from '../src/types.js';
+import { combine, eventId } from '../src/log.js';
 import { fold, merge, mergeNode, head } from '../src/fold.js';
 import { toJsonl, parseJsonl, lineMerge, isContentKeyed } from '../src/jsonl.js';
-
-// ── builders ────────────────────────────────────────────────────────────────────────────────────────
-/** One well-formed, content-keyed Event: `id = eventId(content)` (seq excluded) so `isContentKeyed` holds
- *  and a line-merge can dedup by id. `contentHash` is the OR-Set entry key; `seq` is a local hint only. */
-const mkEvent = (
-  nodeKey: string | undefined,
-  ch: string,
-  payload: unknown,
-  opts: { fresh?: boolean; supersedes?: string[]; seq?: number } = {},
-): Event => {
-  const content = {
-    seq: opts.seq ?? 0,
-    nodeKey: nodeKey === undefined ? undefined : (nodeKey as NodeKey),
-    contentHash: ch as Hash,
-    fresh: opts.fresh ?? true,
-    supersedes: (opts.supersedes ?? []) as readonly Hash[],
-    payload,
-  };
-  return { ...content, id: eventId(content) };
-};
-
-const node = (nodeKey: string, entries: readonly Event[]): Node => ({
-  nodeKey: nodeKey as NodeKey,
-  entries: new Map(entries.map((e) => [e.contentHash, e])),
-});
-
-const logOf = (events: readonly Event[]): EventLog => {
-  const l = createLog();
-  let out: EventLog = new Map();
-  for (const e of events) out = l.append(e);
-  return out;
-};
-
-/** Insertion-order-independent serialization of a Node / AtlasState: entry contentHashes (and nodeKeys)
- *  sorted, so equal CONTENT ⇒ byte-identical string regardless of Map insertion order. */
-const serNode = (n: Node): string =>
-  JSON.stringify({ nodeKey: n.nodeKey, entries: [...n.entries.keys()].sort().map((h) => n.entries.get(h)) });
-const serState = (s: AtlasState): string =>
-  JSON.stringify([...s.keys()].sort().map((nk) => serNode(s.get(nk)!)));
-
-/** The node under a nodeKey inside a folded state. */
-const nodeAt = (s: AtlasState, nk: string): Node => s.get(nk as NodeKey)!;
-
-const ARR = 'claim:acme-arr-2024';
+import { mkEvent, node, logOf, serNode, serState, nodeAt, ARR } from './event-builders.js';
 
 // ── SCN-KERNEL-10a-1 — two events on one nodeKey union into one node (happy) ─────────────────────────
 describe('SCN-KERNEL-10a-1 — collision resolves by order-independent set-union (0 dropped)', () => {
@@ -226,10 +184,13 @@ describe('PROP-KERNEL-10 — order-independent union + MAX-by-contentHash tie-br
       .at(-1);
   };
 
-  it('mergeNode is commutative and grow-only (0 dropped)', () => {
+  it('mergeNode is commutative and grow-only (0 dropped) — DISJOINT contentHash spaces', () => {
     fc.assert(
       fc.property(nodeSpecArb, nodeSpecArb, (xs, ys) => {
         // disjoint contentHash spaces so |union| = |x| + |y| exactly (probes no-drop hardest).
+        // NOTE: disjointness is what makes the EXACT size assertion meaningful — and it is also what makes
+        // commutativity trivially true here (nothing to resolve). The OVERLAPPING arm below is the one that
+        // actually exercises commutativity; do not delete it in favour of this one.
         const x = buildNode(xs);
         const y = node('nk', [...buildNode(ys).entries.values()].map((e) => mkEvent('nk', `y-${e.contentHash}`, e.payload, { fresh: e.fresh, seq: e.seq })));
         const xy = mergeNode(x, y);
@@ -239,6 +200,28 @@ describe('PROP-KERNEL-10 — order-independent union + MAX-by-contentHash tie-br
         expect(xy.entries.size).toBe(x.entries.size + y.entries.size); // 0 dropped (disjoint)
         for (const h of x.entries.keys()) expect(xy.entries.has(h)).toBe(true); // x ⊑ mergeNode(x,y)
       }),
+    );
+  });
+
+  it('mergeNode is commutative and grow-only — OVERLAPPING contentHash spaces (the real union)', () => {
+    fc.assert(
+      fc.property(nodeSpecArb, nodeSpecArb, (xs, ys) => {
+        // SHARED contentHash space: x and y may carry DIFFERENT events (differing fresh/supersedes/payload)
+        // on the SAME entry slot. This is the only shape on which `mergeNode` has to choose, so it is the
+        // only shape on which "commutative" says anything. `mergeNode` still may not drop a SLOT.
+        const x = buildNode(xs);
+        const y = buildNode(ys.map((s) => ({ ...s, fresh: !s.fresh, seq: s.seq + 1 })));
+        const xy = mergeNode(x, y);
+        const yx = mergeNode(y, x);
+        expect(serNode(xy)).toBe(serNode(yx)); // commutative — ON AN ACTUAL OVERLAP
+        expect(xy.entries.size).toBeGreaterThanOrEqual(Math.max(x.entries.size, y.entries.size)); // grow-only
+        const slots = new Set([...x.entries.keys(), ...y.entries.keys()]);
+        expect(xy.entries.size).toBe(slots.size); // 0 SLOT dropped
+        for (const h of slots) expect(xy.entries.has(h)).toBe(true); // x ⊔ y ⊒ x, y
+      }),
+      // 5000 runs, not the fast-check default of 100: this law READ GREEN while it was false, so the run
+      // count is part of the evidence, not a tuning knob. See the generator-width note on the arbitrary.
+      { numRuns: 5000 },
     );
   });
 
@@ -273,14 +256,36 @@ describe('PROP-KERNEL-10 — order-independent union + MAX-by-contentHash tie-br
 //   commutative  : merge(a,b) ≡ merge(b,a)
 //   byte-identity: serialize(fold(·)) under the canonicalizer (sorted keys) equal across all orderings
 describe('PROP-KERNEL-11 — convergent commutative fold (∀-law)', () => {
-  // a random event set with COLLIDING nodeKeys (few buckets, distinct contentHashes) so the fold exercises
-  // multi-entry union nodes, not just singletons.
+  // a random event set with COLLIDING nodeKeys (few buckets) so the fold exercises multi-entry union nodes,
+  // not just singletons.
+  //
+  // GENERATOR WIDTH IS LOAD-BEARING — read before narrowing. This arbitrary was previously
+  // `uniqueArray(..., selector: s => s.ch)`, which forced every contentHash DISTINCT and thereby excluded the
+  // ONE input shape on which the fold has to make a choice: two DIFFERENT events landing on the SAME
+  // (nodeKey, contentHash) OR-Set slot. A `selector` here does not "avoid duplicates", it deletes the law's
+  // only interesting case — the property then held for 3000 runs while `fold` was demonstrably
+  // order-dependent (witness: same nodeKey + same contentHash, differing `fresh` ⇒ distinct event ids ⇒ both
+  // enter the log set ⇒ first-seen-wins returned whichever ARRIVED first).
+  //
+  // Two independent collision axes must therefore stay open, and both are `dedupeKey`ed only on the FULL
+  // spec (i.e. a genuine SET of events, which is what the law quantifies over):
+  //   • `ch` may repeat with a different `fresh`  ⇒ distinct ids colliding on one node entry slot;
+  //   • `seq` may differ on otherwise-identical content ⇒ IDENTICAL ids (seq is pinned out of the preimage,
+  //     KERNEL-9) whose retained `seq` value would otherwise leak arrival order into the folded state.
   const eventSpecArb = fc.uniqueArray(
-    fc.record({ ch: fc.integer({ min: 0, max: 500 }), nk: fc.integer({ min: 0, max: 3 }), fresh: fc.boolean() }),
-    { minLength: 1, maxLength: 12, selector: (s) => s.ch },
+    fc.record({
+      ch: fc.integer({ min: 0, max: 8 }), // SMALL space on purpose: contentHash collisions must be frequent
+      nk: fc.integer({ min: 0, max: 3 }),
+      fresh: fc.boolean(),
+      seq: fc.integer({ min: 0, max: 4 }),
+    }),
+    { minLength: 1, maxLength: 12 },
   );
-  const buildSet = (specs: readonly { ch: number; nk: number; fresh: boolean }[]): Event[] =>
-    specs.map((s) => mkEvent(`nk-${s.nk}`, `ch-${String(s.ch).padStart(3, '0')}`, { c: s.ch }, { fresh: s.fresh }));
+  type EventSpec = { ch: number; nk: number; fresh: boolean; seq: number };
+  const buildSet = (specs: readonly EventSpec[]): Event[] =>
+    specs.map((s) =>
+      mkEvent(`nk-${s.nk}`, `ch-${String(s.ch).padStart(3, '0')}`, { c: s.ch }, { fresh: s.fresh, seq: s.seq }),
+    );
 
   it('fold(π(S)) ≡ fold(S) for permutation, reverse, and re-batched branch-union (byte-identical)', () => {
     fc.assert(
@@ -294,20 +299,30 @@ describe('PROP-KERNEL-11 — convergent commutative fold (∀-law)', () => {
         expect(serState(fold(branchUnion))).toBe(base); // convergence
         expect(serState(fold(merge(logOf(S), logOf(S))))).toBe(base); // idempotent: S ∪ S = S
       }),
+      // 5000 runs, not the fast-check default of 100: this law READ GREEN while it was false, so the run
+      // count is part of the evidence, not a tuning knob. See the generator-width note on the arbitrary.
+      { numRuns: 5000 },
     );
   });
 
   it('merge is commutative and associative on the event id (byte-identical fold)', () => {
     fc.assert(
       fc.property(eventSpecArb, eventSpecArb, eventSpecArb, (as, bs, cs) => {
+        // The three branches SHARE one contentHash space on purpose. Offsetting them (`ch + 1000` /
+        // `ch + 2000`, as this test previously did) makes the branches disjoint, so `merge` never has to
+        // resolve anything and commutativity/associativity are true for free — vacuous, exactly like the
+        // `selector` above. Overlapping branches are the real branch-union the law is about.
         const a = logOf(buildSet(as));
-        const b = logOf(buildSet(bs.map((s) => ({ ...s, ch: s.ch + 1000 }))));
-        const c = logOf(buildSet(cs.map((s) => ({ ...s, ch: s.ch + 2000 }))));
+        const b = logOf(buildSet(bs));
+        const c = logOf(buildSet(cs));
         expect(serState(fold(merge(a, b)))).toBe(serState(fold(merge(b, a)))); // commutative
         const left = serState(fold(merge(merge(a, b), c)));
         const right = serState(fold(merge(a, merge(b, c))));
         expect(left).toBe(right); // associative
       }),
+      // 5000 runs, not the fast-check default of 100: this law READ GREEN while it was false, so the run
+      // count is part of the evidence, not a tuning knob. See the generator-width note on the arbitrary.
+      { numRuns: 5000 },
     );
   });
 });
