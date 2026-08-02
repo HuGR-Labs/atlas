@@ -64,12 +64,19 @@ export interface RankApi {
 // the same pins on the same rev ⇒ an identical ranking. Ranking carries NO RNG seed — a personalized
 // PageRank is seedless-deterministic; the "seed" of GEN-11 is the pinned teleport vector, not an RNG. The
 // power iteration runs a PINNED, fixed number of rounds and is evaluated in INTEGER fixed-point.
-export const DAMPING = 0.85 as const;
+/** The damping ratio — the SINGLE declaration, an exact integer pair because the power iteration is
+ *  evaluated in fixed-point (byte-identical across machines). It was previously declared twice, and the
+ *  second copy guarded nothing: see ADR-0011 and `test/ppr-damping-teeth.test.ts`, which pins the ranking
+ *  OUTPUT rather than the constant. */
+export const DAMPING_NUM = 85n;
+export const DAMPING_DEN = 100n;
+
+/** The canonical PageRank damping (Brin & Page 1998), **derived** from the ratio above — never an
+ *  independent literal. Exported because `pinned(damping=0.85, seed)` speaks in decimals. */
+export const DAMPING = Number(DAMPING_NUM) / Number(DAMPING_DEN);
 export const PPR_ITERATIONS = 64 as const;
 
 const FP = 1_000_000_000n; // fixed-point scale (1e9) — integer arithmetic ⇒ byte-identical across machines
-const D_NUM = 85n; // damping numerator   (0.85)
-const D_DEN = 100n; // damping denominator (1.00)
 
 // ── GEN-15 history-thin pre-check thresholds (PINNED) ────────────────────────────────────────────────
 export const MIN_COMMITS = 2 as const; // below ⇒ young/greenfield → low-commit-count
@@ -253,8 +260,8 @@ function pprScores(
       const teleport = isPers ? teleVal : 0n;
       const extra = isPers ? danglingShare : 0n;
       const inV = inflow.get(node) ?? 0n;
-      const base = ((D_DEN - D_NUM) * teleport) / D_DEN;
-      const walk = (D_NUM * (inV + extra)) / D_DEN;
+      const base = ((DAMPING_DEN - DAMPING_NUM) * teleport) / DAMPING_DEN;
+      const walk = (DAMPING_NUM * (inV + extra)) / DAMPING_DEN;
       next.set(node, base + walk);
     }
     score = next;

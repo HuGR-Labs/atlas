@@ -142,12 +142,30 @@ site. Zero-config runs, and nobody has to write a file to use Atlas.
 **`atlas config`** prints every knob with its value, its **source** (default / repo / operator), and whether
 it is spec-pinned. Discovering what is tunable must not require reading the source.
 
+**Every knob is an INTEGER, and the canonicalizer is why.** `kernel/canonical.ts:41` forbids a non-integer
+number outright — it throws. So a config carrying `0.85` could not be canonicalized, could not reach the
+sealed `id` seam, and could not be hashed into provenance at all. A ratio is therefore expressed as a
+numerator/denominator pair, which is not a workaround: `rank.ts` already computes the damping in exact
+integer fixed-point precisely so a run is byte-identical across machines. The config shape follows the
+implementation instead of fighting it.
+
 **Consequence for determinism, and it strengthens the claim.** GEN-1 requires S0+S1 to reproduce a
-byte-identical skeleton and ranking at a pinned commit. With `DAMPING` and `PPR_ITERATIONS` configurable, two
-operators with different configs would diverge on the same commit. Therefore **the resolved configuration is
-hashed into the run's provenance**, and the guarantee is stated as *byte-identical for the same rev **and**
-the same config hash* — which is how Nix and Bazel state reproducibility. This is stronger than the status
-quo, where the guarantee is implicit because the numbers are hidden in source.
+byte-identical skeleton and ranking at a pinned commit. With the ranking knobs configurable, two operators
+with different configs would diverge on the same commit. Therefore **the resolved configuration is hashed
+into the run's provenance**, and the guarantee is stated as *byte-identical for the same rev **and** the same
+config hash* — which is how Nix and Bazel state reproducibility. This is stronger than the status quo, where
+the guarantee is implicit because the numbers are hidden in source.
+
+> **This paragraph originally named `DAMPING` as the worked example, and that was wrong in a way worth
+> recording.** `DAMPING = 0.85` had **zero `src` readers**: `pprScores` computed with a private `D_NUM`/`D_DEN`
+> pair, and the only assertion anywhere was `expect(DAMPING).toBe(0.85)`, which pinned the decorative copy.
+> Exposing `DAMPING` through config would therefore have changed **nothing** in the ranking — the promise
+> would have been a lie by omission. Measured before the fix: setting the real damping to `0.50` passed
+> **780 tests** (genesis 140, e2e + adapter-io 640). A guard reporting green where it should report red is
+> one of the two conditions that stops the line, so it was fixed here rather than filed: the integer pair is
+> now the single declaration, the decimal is derived from it, and `ppr-damping-teeth.test.ts` pins the
+> ranking OUTPUT. The same mutation is now red — and the pre-existing golden `SCN-GEN-11b-1` recovered its
+> teeth as a side effect, having been vacuous for the same reason.
 
 `nearDup.claimNormThreshold` migrates from `policy.json` to `config.json`: it is tuning, and it should not
 require admin to adjust.
@@ -185,9 +203,25 @@ next to the value:
 
 | class | justification | examples |
 |---|---|---|
-| **A — literature** | a citation | `DAMPING = 0.85` (the canonical PageRank damping, Brin & Page 1998) |
-| **B — spec-pinned** | the ratified invariant | `MARGINAL_WINDOW=20` / `MARGINAL_MIN_ADMITS=4` (GEN-2); `DEFAULT_SAMPLES=1`, `DEFAULT_CEGIS_K=1` (GEN-13) |
-| **C — unexamined** | **none yet** | `K=8`, `MAX_HOPS=2`, `OWN_CAP=1500`, `HOTSPOT_MIN_CHURN=2`, `PPR_ITERATIONS=64` |
+| **A — literature** | a citation | `DAMPING_NUM/DAMPING_DEN = 85/100` (the canonical PageRank damping, Brin & Page 1998) |
+| **B — spec-pinned** | the ratified invariant | `MARGINAL_WINDOW=20` / `MARGINAL_MIN_ADMITS=4` (GEN-2); `DEFAULT_SAMPLES=1`, `DEFAULT_CEGIS_K=1` (GEN-13); `MAX_HOPS=2` and `K=8` (RETR-11, `atlas-retrieval.md:128-132`, RATIFIED at `invariant-register.md:216`); `OWN_CAP=1500` / `PACK_CAP=2000` / `POKE_CAP=150` (RETR-7/12, RATIFIED at `invariant-register.md:212,217`, with a golden asserting `own == 1500` "not `~1.6K`" at `goldens-ret.md:344`) |
+| **C — unexamined** | **none yet** | `PPR_ITERATIONS=64`, `HOTSPOT_MIN_CHURN=2`, `COUPLING_MIN_SUPPORT=2`, `MIN_COMMITS=2`, `BLAME_CONCENTRATION_MAX=0.9`, `INTERVIEW_CAP=20`, `EDGE_CAP=8`, `FINER_CAP=16`, `MANIFEST_CAP=12`, `LOGBOOK_SECTION_CAP=280`, `DECAY_PER_WAVE=0.5`, `NEAR_ZERO_FRECENCY=0.1`, `GIT_MAX_ATTEMPTS=4`, `MAX_CAS_BYTES=64MiB` |
+| **N — not a knob** | a stated invariant or a format version, not a tunable | `PUSH_GRANTS_REQUIRED=0`, `RECONCILE_MODEL_CALLS=0`, `ASSIGN_MODEL_CALLS=0`, `OKF_VERSION=1`, `FP=1e9` |
+
+**This table was wrong in its first draft, and the correction is the point of the exercise.** It originally
+placed `K=8`, `MAX_HOPS=2` and `OWN_CAP=1500` in class C. All three were already through the S0 ratification
+gate: `atlas-retrieval.md:128-132` states `maxHops = 2` and `K = 8` in MUST clauses, `invariant-register.md`
+marks RETR-7/11/12 **RATIFIED** with those exact numbers as acceptance criteria, and `goldens-ret.md:344`
+carries a golden with teeth against the `own` cap drifting off `1500`. Writing the rule is not the same as
+applying it; the classification is only worth anything done against the register, file by file.
+
+**Two constants resist all four classes, and the rubric should grow rather than mislabel them.**
+`MAX_ATTEMPTS=64` (`sidecar-commit.ts:42`) is justified by an in-repo stress measurement recorded in its own
+comment — no external citation (not A), no ratified doc clause (not B), but demonstrably not unexamined.
+`RETAINED_GENERATIONS=4` is stronger still: the code states its **correctness** depends on the exact value,
+and that boundary is enforced by unit tests rather than by any `docs/` artifact. Both are provisionally
+recorded as C with a note; a fifth class (**test-pinned / measured-in-repo**) is the honest fix and is left
+for the classification WP rather than invented here.
 
 A class-C value is labelled **provisional**, never "default", until measured. Its measurement comes from the
 genesis run over Atlas itself — which is what the calibration stage is for, and it closes the loop: the
