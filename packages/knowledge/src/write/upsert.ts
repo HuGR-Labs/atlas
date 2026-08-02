@@ -15,6 +15,7 @@ import type { Tier } from '@atlas/contracts';
 import type { PredicateSlot } from '../types.js';
 import type { NearDupConfig, NodeFamily, RouteInputs, WriteDecision } from './router.js';
 import { routeWrite } from './router.js';
+import { isWeakerTier } from '../ratify/tier.js';
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 // The upsert reducer — applies a routed write to a store PROJECTION, so "every write is an upsert"
@@ -103,6 +104,90 @@ export interface UpsertResult {
   readonly store: StoreProjection;
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// ARCH-10 — THE INCUMBENT'S AUTHORITY, ENFORCED WHERE THE DISPLACEMENT PHYSICALLY HAPPENS (ADR-0010)
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+//
+// ADR-0007 established the rule — authority is derived from the RESOURCE, never asserted by the request —
+// and implemented it in ONE caller: `adapter-io/governed-emit.ts` §2.25, which resolves the incumbent and
+// refuses a downgrade or a relocation BEFORE calling this reducer. That is a correct door. It is not a
+// correct invariant, because nothing in `upsert` knew the rule existed: the UPDATE branch replaced
+// `contentHash` in place, with no `supersededBy`, for any caller at all. So the safety of a billy-ratified
+// `T0` node was a property of one caller's GATE ORDER — of a check happening to run before this line —
+// rather than a property of the write. Reproduced against the built packages at `572d391`: a `T2` advisory
+// at the (anchor, slot) of a ratified `T0` fact routed UPDATE and the node came back pointing at the `T2`
+// bytes with `supersededBy: undefined`. Since `atlas-query` bounds `T2` OUT of reads (TOOLS-6), that node
+// then stops appearing for its scope with no refusal on any transport — silent disappearance, which for a
+// knowledge product is the worst failure mode there is.
+//
+// The rule therefore lives HERE TOO, and the duplication is deliberate: the door refuses EARLIER and with
+// more context (it can read the CAS bytes, so it also covers a row that carries no class), while this gate
+// refuses UNCONDITIONALLY, for every present and future caller of the reducer. Neither is redundant — one is
+// a policy check, the other is an invariant of the data structure. `mine` and `genesis` reach knowledge by
+// other paths today; the next caller that reaches THIS one inherits the rule for free instead of having to
+// rediscover ADR-0007.
+//
+// WHY A THROW AND NOT A `REJECT` ROUTE. `WriteDecision` already enumerates `REJECT`, and returning it with an
+// unchanged projection was the tidier-looking option. It is unsafe here: `governed-emit.ts` calls
+// `upsert(projection, req).store` and DISCARDS the decision, so a returned refusal would have persisted
+// nothing while the door reported `emitted: true` — a caller told its write succeeded when it did not, which
+// is the same silent-failure class this guard exists to prevent, moved one layer up. A throw cannot be
+// ignored by an existing caller. It also follows the precedent this package already set for a write-door
+// refusal: `DegenerateAnchorError` (router.ts), a NAMED class the composed doors convert into a structured
+// fail-closed verdict, never a bare `Error` and never a raw `TypeError`.
+
+/** The two ways a write can try to take authority it does not hold. A DISCRIMINANT — the refusal is asserted
+ *  on this value, never on a substring of the message. That is not stylistic: the refusal prose in this repo
+ *  quotes other refusal constants BY NAME, so a `toContain('governance-downgrade')` assertion is also
+ *  satisfied by a message that merely mentions the downgrade rule, and cannot say WHICH gate refused. */
+export type GovernanceAuthorityReason = 'governance-downgrade' | 'governance-relocation';
+
+const AUTHORITY_REASON_TEXT: Readonly<Record<GovernanceAuthorityReason, string>> = {
+  'governance-downgrade':
+    'governance-downgrade: this write declares a WEAKER governance class than the node it lands on. The ' +
+    'routing identity (hash of primary anchor and slot) carries no class, so the node this write displaces ' +
+    'may have been admitted under a stricter gate than the one this write would face. Lowering a class is a ' +
+    're-classification (ADR-0009) — an explicit, separately authorized act — never a side effect of emitting ' +
+    'a fact. Re-state the class the node already carries, or raise it',
+  'governance-relocation':
+    'governance-relocation: this write declares a scope other than the one the node it lands on already ' +
+    'lives in. A node moving between scopes evicts every co-owner who is not in the destination, and the ' +
+    'routing identity carries no scope, so nothing else would have caught it. Relocation is the same class ' +
+    'of act as lowering a class and is settled the same way (ADR-0009): explicit and separately authorized',
+};
+
+/** The refusal, as a THROWN value carrying a machine-readable {@link GovernanceAuthorityReason}. */
+export class GovernanceAuthorityError extends Error {
+  readonly reason: GovernanceAuthorityReason;
+  constructor(reason: GovernanceAuthorityReason) {
+    super(AUTHORITY_REASON_TEXT[reason]);
+    this.name = 'GovernanceAuthorityError';
+    this.reason = reason;
+  }
+}
+
+/**
+ * Does `req` try to take authority the incumbent does not grant it? Returns the reason, or `undefined`.
+ *
+ * AUTHORITY COMES FROM THE INCUMBENT, AND ONLY AS FAR AS THE INCUMBENT DECLARES IT. Each half gates only
+ * when the ROW carries that half: a row minted before the ADR-0007 carrier existed declares nothing, so
+ * there is nothing here to derive authority from and this gate stands aside rather than bricking every
+ * pre-carrier node (the door's CAS-bytes fallback is what covers that shape, and `SCN-AUTH-5` pins the
+ * limit as a stated property instead of leaving it to be mistaken for coverage).
+ *
+ * Where the row DOES declare a half, the write must match it: `isWeakerTier` is total over `unknown` and
+ * treats an off-lattice or ABSENT declared class as weaker, so a write cannot dodge the class comparison by
+ * omitting the field or by sending `'T3'`. Scope is EQUALITY against the stored value for the same reason
+ * the door uses equality there — the question is not "is this scope legitimate" but "is it the one this
+ * node already lives in".
+ */
+function authorityRefusal(incumbent: CurrentNode, req: WriteRequest): GovernanceAuthorityReason | undefined {
+  if (incumbent.scope !== undefined && req.scope !== incumbent.scope) return 'governance-relocation';
+  if (incumbent.tier !== undefined && isWeakerTier(req.tier, incumbent.tier)) return 'governance-downgrade';
+  return undefined;
+}
+
 /** The ADDITIVE governance carrier a write contributes to the row it lands on (ADR-0007). A conditional
  *  spread, so an omitted half stays ABSENT rather than becoming an explicit `undefined` — the same shape
  *  `primaryAnchor`/`slot` use, and what keeps `exactOptionalPropertyTypes` and the JSON round-trip honest. */
@@ -147,6 +232,15 @@ export function upsert(
     checkSame: req.family === 'predicate' && nodeKeyHit, // predicate nodeKey encodes check ⇒ hit ⟺ same check
   };
   const decision = routeWrite(inputs);
+
+  // ARCH-10 (ADR-0010) — a write that DISPLACES a current node must first clear the gate that node's own
+  // stored governance requires. Checked BEFORE any projection is copied, so a refusal cannot leave a
+  // half-applied store behind; DEDUP and CREATE never reach it (nothing is displaced).
+  if (decision === 'UPDATE' || decision === 'SUPERSEDE') {
+    const refusal = authorityRefusal(store.current.get(req.nodeKey)!, req);
+    if (refusal !== undefined) throw new GovernanceAuthorityError(refusal);
+  }
+
   const cas = new Set(store.cas);
   const current = new Map(store.current);
 

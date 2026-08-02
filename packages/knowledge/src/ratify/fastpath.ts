@@ -15,8 +15,10 @@
 //    each a non-empty `subtreeHash`; no raw hashing, the branded value is read), `T2` (the proposed tier),
 //    and `advisory` (a candidate carries a `check` iff predicate — so advisory ⟺ no `check`).
 
+import type { Tier } from '@atlas/contracts';
 import type { Candidate } from '../types.js';
 import type { Grounding } from '@atlas/grounding';
+import { strictestTier } from './tier.js';
 
 // ── frozen FastpathApi surface, co-located here (was ref/fastpath.ts) ─────────────────────────────────
 
@@ -30,6 +32,34 @@ import type { Grounding } from '@atlas/grounding';
 export interface RatifyContext {
   readonly contested: boolean; // KNOW-18b — reviewer veto / conflicting node (store-state verdict)
   readonly lowRisk: boolean; // KNOW-18a/17b — door-2 threshold verdict (threshold value = OPEN-DEFINE, hits.ts)
+
+  /**
+   * [ARCH-9 · ADR-0010] The governance class the DOOR DERIVED for this write's target — the class the author
+   * could not choose. Supplying it is what makes the ratification route a decision about the RESOURCE rather
+   * than a decision the payload announces about itself.
+   *
+   * WHY THIS FIELD EXISTS. `route` selected the ratification gate from `candidate.tier`, an author-supplied
+   * payload field, and `nodeKey = hash(primaryAnchorId ‖ slot[‖ check])` contains no tier — so WHICH node a
+   * write lands on and WHICH gate it must clear were decided by two different things, the second of them by
+   * the author. Declaring `tier:'T2'` + advisory made this function answer `auto-accept`, the KNOW-8 token
+   * was never consulted, and the write landed on whatever node that identity resolved to. That is the
+   * confused deputy, and ARCH-9's remedy is stated as a single requirement, not a choice: a field that
+   * selects a gate is DERIVED by the door, never chosen by the request.
+   *
+   * THE JOIN IS ONE-WAY, ON PURPOSE. The governing class is `strictestTier(derived, declared)`, so a payload
+   * may only ever make its own gate HARDER (declaring `T0` still buys a full ratification) and never softer.
+   * `strictestTier` is TOTAL over `unknown` and joins garbage to `T0`, so an off-lattice derived value fails
+   * CLOSED — a door that computes nonsense pins the gate shut, not open.
+   *
+   * ABSENT MEANS THE DOOR DID NOT SPEAK, AND THAT IS STILL THE OPEN HOLE. With no derived class the declared
+   * one stands, which is exactly the pre-ADR-0010 behaviour: this field is the SEAM ARCH-9 needs, and it is
+   * only closed for a caller that actually fills it. `adapter-io/governed-emit.ts` does not yet — closing the
+   * UPDATE leg there is one line (the incumbent's own class), while the CREATE leg has no incumbent to derive
+   * from at all and is ARCH-D3b, an OPEN owner DEFINE. Optional rather than required for the same reason: a
+   * required field would have forced every existing caller to invent a value, and an invented derivation
+   * ("a constant that pins the gate open") is the one thing ARCH-9 names as NOT satisfying the clause.
+   */
+  readonly derivedTier?: Tier;
 }
 
 export interface FastpathApi {
@@ -61,7 +91,11 @@ export function isAdvisory(candidate: Candidate): boolean {
  */
 export function route(candidate: Candidate, ctx: RatifyContext): FastpathRoute {
   const grounded = isGrounded(candidate.grounding);
-  const t2 = candidate.tier === 'T2';
+  // ARCH-9 — the gate-selecting class. A door-DERIVED class overrides the payload's self-declaration; the
+  // lattice JOIN makes that override one-way (harder only) and fail-closed on anything off-lattice. Absent
+  // ⇒ the declared class stands, the ARCH-D3b hole, documented on `RatifyContext.derivedTier`.
+  const governingTier = ctx.derivedTier === undefined ? candidate.tier : strictestTier(ctx.derivedTier, candidate.tier);
+  const t2 = governingTier === 'T2';
   const advisory = isAdvisory(candidate);
   const fastPath = grounded && ctx.lowRisk && t2 && advisory && !ctx.contested;
   return fastPath ? 'auto-accept' : 'full-ratify';
