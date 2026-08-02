@@ -34,6 +34,7 @@ import { createRevIndex } from './rev-index.js';
 import { runGit, headSha } from './run-git.js';
 import { createDoctorSource, primaryAnchor } from './doctor-source.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
+import { gitSidecarTrust } from './store-provenance.js';
 import { assembleHandler } from './wire.js';
 import type { WireConfig, WireSeams, WiredHandler } from './wire.js';
 
@@ -81,8 +82,12 @@ export function buildGate(axes: Axes): TruthGate {
  * no git, no configured email, a non-repo/absent path, or ANY execFile failure ⇒ `undefined`; an empty
  * result ⇒ `undefined`. Uses the shared no-shell git seam (`runGit`, #74).
  *
- * SECURITY: this is a LOCAL-MACHINE identity source ONLY (the developer's own git config) — it is NEVER
- * derived from an emitted fact or a tool-call payload, so it cannot be used to spoof the KNOW-11 write actor.
+ * SECURITY, STATED PRECISELY BECAUSE THE PREVIOUS WORDING WAS NOT. This is a LOCAL-MACHINE source only: the
+ * value is never derived from an emitted fact or a tool-call payload, so a WRITE REQUEST cannot choose who
+ * it is attributed to. That is the whole of the property, and the earlier note here — "so it cannot be used
+ * to spoof the KNOW-11 write actor" — overstated it into something false. `git config user.email` is a line
+ * in a file the caller owns and can rewrite; `ATLAS_ACTOR` overrides it outright. Neither is verified.
+ * See {@link composeRuntime} for the posture in full.
  */
 export function gitUserEmail(repoPath: string): string | undefined {
   try {
@@ -102,16 +107,41 @@ export function gitUserEmail(repoPath: string): string | undefined {
  *
  * ACTOR RESOLUTION (KNOW-11): `actor = ATLAS_ACTOR ?? gitUserEmail(repoPath) ?? ''` — the env var wins
  * (a `??` fall-through only on absent, so an explicit empty `ATLAS_ACTOR` stays empty); otherwise the LOCAL
- * git identity; otherwise empty. The actor comes ONLY from the environment / local machine — NEVER from an
- * emitted fact or a tool-call payload (the spoof-guard). It is passed EXPLICITLY into the WIRE config
- * (`config.actor`) — no `process.env` mutation, no global state. Fail-closed is preserved: an actor (git
- * email or env) not in a policy scope is still denied, and empty policy scopes deny every write.
+ * git identity; otherwise empty. It is passed EXPLICITLY into the WIRE config (`config.actor`) — no
+ * `process.env` mutation, no global state. Fail-closed is preserved: an actor not in a policy scope is
+ * denied, and empty policy scopes deny every write.
+ *
+ * ── THIS IS NOT AUTHENTICATION, AND KNOW-11 MUST NOT BE READ AS THOUGH IT WERE ───────────────────────────
+ * There is no authentication anywhere in Atlas. `actor` is a CLAIM. `ATLAS_ACTOR` is set by whoever starts
+ * the process; the git-config fallback is a line in a file that same person owns. Nothing verifies either,
+ * and nothing in the system COULD — there is no key, no session, no challenge, no third party. Any caller
+ * can present as any actor the policy names, by setting one environment variable.
+ *
+ * So KNOW-11 is an ANTI-ACCIDENT GUARDRAIL, not an adversarial control (`docs/reference/atlas-architecture.md`
+ * §3.3 / ARCH-12 — the same posture, stated for the architecture; this note exists because the posture was
+ * documented ONLY there while the code here read the other way). It stops the wrong seat from casually
+ * writing another team's scope, which is the failure a local developer tool actually suffers. It stops
+ * nobody who does not want to be stopped. Every authz gate downstream — the confused-deputy incumbent gate,
+ * scope monotonicity, the disclosure ordering between `unauthorized for target` and `unverifiable target` —
+ * is correct ABOUT THE ACTOR IT IS GIVEN and inherits this ceiling: they are the structure a real identity
+ * would plug into, not a substitute for one.
+ *
+ * WHAT THE ENV-ONLY SOURCING DOES BUY, precisely, since it was previously written up as "the spoof-guard"
+ * and that name claimed too much: the actor is never read from an emitted fact or a tool-call payload, so a
+ * write REQUEST cannot choose the identity it is judged as, and a fact that travels between repos carries no
+ * authority with it. That is a real and necessary property. It is not resistance to spoofing.
+ *
+ * IF THE TRANSPORT EVER BECOMES REMOTE OR MULTI-TENANT (ARCH-12 says this in the same words), the env-var
+ * actor and the world-readable policy both become live vulnerabilities and this seam MUST be replaced with a
+ * real identity before that transport ships. Pinned by `test/actor-is-unauthenticated.test.ts`.
  */
 export function composeRuntime(repoPath: string): ComposedRuntime {
   // Resolve the KNOW-11 write actor at the composition root: ATLAS_ACTOR (env) wins; else the LOCAL git
-  // identity (`git config user.email`); else empty (fail-closed ⇒ every write denied). A configured git
-  // email is a better default than a bare env var. NEVER sourced from untrusted input; passed EXPLICITLY
-  // to the assembler below (no global env write).
+  // identity (`git config user.email`); else empty (fail-closed ⇒ every write denied). Passed EXPLICITLY to
+  // the assembler below (no global env write).
+  //
+  // NOT AUTHENTICATION — see the doc block above. This line reads a self-asserted string; it does not
+  // establish who anyone is, and no code downstream of it does either.
   const actor = process.env.ATLAS_ACTOR ?? gitUserEmail(repoPath) ?? '';
   // The KNOW-8 ratify token for a full-ratify (T0/predicate/contested) commit. Env-sourced ONLY
   // (`ATLAS_RATIFY_TOKEN`) — the SAME payload-free channel as the actor; there is NO git/machine fallback (a
@@ -136,7 +166,11 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
   //     `store.put`s the WHOLE `GroundedFact` (invariant 6), so `store.get(contentHash)` reads it back.
   const revIndex = createRevIndex(repoPath);
   // N11: the doctor/reconcile store stamps the same freshness watermark (HEAD at persist) as the handler's.
-  const store = createDiskStore(join(repoPath, CAS_REL), () => headSha(repoPath));
+  // PROVENANCE (the root the doors hang from): git is owned HERE, so the tripwire that asks whether the
+  // durable store is TRACKED — i.e. arrived by commit rather than through a door — is built here and
+  // injected, exactly as the N11 watermark is. One `git ls-files`, memoized for the life of the runtime.
+  const trusted = gitSidecarTrust(repoPath);
+  const store = createDiskStore(join(repoPath, CAS_REL), () => headSha(repoPath), trusted);
   const driftFacts = currentNodes(rehydrateProjection(store))
     .map((n) => store.get(n.contentHash as Hash))
     .filter((o): o is GroundedFact => o !== undefined);
@@ -182,6 +216,10 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     // in-session `atlas-emit` EXACTLY as `--by scope` does (no frozen startup snapshot). `byTrigger` stays a
     // documented dormant mode (no trigger producer exists).
     axes,
+    // The provenance tripwire rides the ASSEMBLED store too — that is the one `atlas query`/`atlas emit`
+    // actually read and write. Threading it only onto the store built above would guard doctor/reconcile
+    // and leave both user-facing doors open.
+    trusted,
     // Conditional spread keeps `ratifyToken` ABSENT (not `undefined`) when unset — exactOptionalPropertyTypes.
     ...(ratifyToken !== undefined ? { ratifyToken } : {}),
   };

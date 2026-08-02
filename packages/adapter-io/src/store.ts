@@ -44,6 +44,7 @@ import type { CasObject, StoreApi } from '@atlas/kernel';
 import { emptyStore } from '@atlas/knowledge';
 import type { StoreProjection } from '@atlas/knowledge';
 import { readSidecarSet } from './sidecar.js';
+import type { SidecarTrust } from './store-provenance.js';
 import { commitSidecar, persistSidecar } from './sidecar-commit.js';
 import type { CommitDecision, CommitResult, SidecarBase, SidecarCtx } from './sidecar.js';
 
@@ -91,8 +92,14 @@ function sidecarDir(casPath: CasPath): string {
 
 /** The commit CONTEXT for one sidecar family: where it lives, which family it is, the N11 watermark seam,
  *  and the CAS write door the commit must run BEFORE it publishes (see `CommitDecision.put`). */
-function ctxFor(casPath: CasPath, base: SidecarBase, headSha: (() => string | undefined) | undefined, put: (o: unknown) => unknown): SidecarCtx {
-  return { dir: sidecarDir(casPath), base, headSha, put };
+function ctxFor(
+  casPath: CasPath,
+  base: SidecarBase,
+  headSha: (() => string | undefined) | undefined,
+  put: (o: unknown) => unknown,
+  trusted: SidecarTrust | undefined,
+): SidecarCtx {
+  return { dir: sidecarDir(casPath), base, headSha, put, trusted };
 }
 
 /**
@@ -148,8 +155,19 @@ export interface DiskStore extends StoreApi {
  * no stamp ⇒ `builtAt` stays `undefined` and the reader treats the watermark as "unknown" (never a false
  * flag). Injected here (not at each write door) so EVERY persist site — governed emit onto the projection,
  * the mine driver onto staging — stamps uniformly with zero change to their code.
+ *
+ * `trusted` (OPTIONAL) is the PROVENANCE seam (`store-provenance.ts`), injected the same way and for the
+ * same reason: this module must stay git-ignorant, and only the composition root knows about git. It answers
+ * "did this durable store arrive through a door, or by a COMMIT". A committed store reads as EMPTY (it
+ * serves nothing) and REFUSES every write (it is not overwritten, so the evidence survives and the
+ * attacker's rows are never laundered into door output). ABSENT ⇒ never consulted ⇒ behaviour unchanged,
+ * which is why every pre-existing suite and every non-git tree is unaffected.
  */
-export function createDiskStore(casPath: CasPath, headSha?: () => string | undefined): DiskStore {
+export function createDiskStore(
+  casPath: CasPath,
+  headSha?: () => string | undefined,
+  trusted?: SidecarTrust,
+): DiskStore {
   // Self-referential so the sidecar commit can call THIS store's `put` (the CAS-before-projection ordering
   // invariant). The methods only run after the literal is bound, so the reference is never in the TDZ.
   const store: DiskStore = {
@@ -238,32 +256,32 @@ export function createDiskStore(casPath: CasPath, headSha?: () => string | undef
     commitProjection<T>(decide: (projection: StoreProjection) => CommitDecision<T>): CommitResult<T> {
       // The CAS door handed to the commit is THIS store's own `put`, so the bytes a decision depends on are
       // durable before the generation that references them is linked into existence.
-      return commitSidecar(ctxFor(casPath, PROJECTION_BASE, headSha, (o) => store.put(o as CasObject)), decide);
+      return commitSidecar(ctxFor(casPath, PROJECTION_BASE, headSha, (o) => store.put(o as CasObject), trusted), decide);
     },
 
     commitStaging<T>(decide: (projection: StoreProjection) => CommitDecision<T>): CommitResult<T> {
-      return commitSidecar(ctxFor(casPath, STAGING_BASE, headSha, (o) => store.put(o as CasObject)), decide);
+      return commitSidecar(ctxFor(casPath, STAGING_BASE, headSha, (o) => store.put(o as CasObject), trusted), decide);
     },
 
     persistProjection(projection: StoreProjection): void {
-      persistSidecar(ctxFor(casPath, PROJECTION_BASE, headSha, (o) => store.put(o as CasObject)), projection);
+      persistSidecar(ctxFor(casPath, PROJECTION_BASE, headSha, (o) => store.put(o as CasObject), trusted), projection);
     },
 
     loadProjection(): StoreProjection | undefined {
-      return readSidecarSet(sidecarDir(casPath), PROJECTION_BASE).projection;
+      return readSidecarSet(sidecarDir(casPath), PROJECTION_BASE, trusted).projection;
     },
 
     persistStaging(projection: StoreProjection): void {
       // The candidate sidecar. Identical machinery, identical stamping (a staged candidate's freshness is
       // read at the HEAD it was mined at) — the ONLY difference from `persistProjection` is the file.
-      persistSidecar(ctxFor(casPath, STAGING_BASE, headSha, (o) => store.put(o as CasObject)), projection);
+      persistSidecar(ctxFor(casPath, STAGING_BASE, headSha, (o) => store.put(o as CasObject), trusted), projection);
     },
 
     loadStaging(): StoreProjection | undefined {
       // Total on exactly the same branches as `loadProjection` — it IS `loadProjection`'s reader. A missing,
       // corrupt or shape-invalid staging sidecar reads back as "nothing staged", never a throw: `mine`
       // rehydrates staging at pass start, so a throw here would abort the pass on a half-written file.
-      return readSidecarSet(sidecarDir(casPath), STAGING_BASE).projection;
+      return readSidecarSet(sidecarDir(casPath), STAGING_BASE, trusted).projection;
     },
   };
   return store;

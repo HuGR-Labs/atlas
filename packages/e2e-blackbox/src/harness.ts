@@ -112,6 +112,14 @@ export function makeFixtureRepo(spec: FixtureSpec): FixtureRepo {
     documents: [],
   });
   writeFileSync(join(repoPath, '.atlas', 'index.scip'), serializeSCIP(scip));
+  // THE FIXTURE MUST LOOK LIKE A REAL ATLAS REPO, and a real one ignores its own durable store — Atlas's
+  // repo-root `.gitignore` does exactly this (`.atlas/*` with `!.atlas/policy.json`). Without the rule the
+  // `git add -A` in `commit()` below sweeps the store `atlas emit` just wrote into version control, and the
+  // provenance tripwire (`adapter-io/src/store-provenance.ts`) then correctly refuses to serve it: a
+  // COMMITTED projection carries rows no door ever saw, so it is not knowledge. That refusal is the product
+  // behaving as designed; what was wrong was the fixture, which committed its store and then expected to
+  // read it back. `index.scip` stays tracked deliberately — it is a build input, not the governed store.
+  writeFileSync(join(repoPath, '.gitignore'), '.atlas/*\n!.atlas/policy.json\n!.atlas/index.scip\n');
   git(repoPath, 'init', '-q');
   git(repoPath, 'config', 'user.email', 'e2e@atlas.local');
   git(repoPath, 'config', 'user.name', 'atlas-e2e');

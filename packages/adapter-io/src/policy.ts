@@ -21,6 +21,11 @@
 // write path — the default denies. `actorInScope` mirrors @atlas/knowledge authz `inScope` (KNOW-11a):
 // fail-closed on an absent/empty scope or an unlisted actor.
 //
+// AND THE POLICY IS NOT AN AUTHENTICATED INPUT EITHER. `authz.scopes` names WHO may write WHAT, but the
+// "who" is a self-asserted string (`actorInScope` below says why), and this file is world-readable and
+// world-writable to anyone who can run the tool. Both halves are advisory. That is a legitimate posture for
+// a local developer tool and it is stated here so no reader has to infer it from the absence of a check.
+//
 // One-way DAG leaf (adapter ring): the core never imports this. The `claimNormThreshold` here feeds the
 // frozen `NearDupConfig` (@atlas/knowledge) EXACTLY — same field name, same meaning (the OPEN-DEFINE τ the
 // near-dup matcher takes as a parameter, never a baked-in constant).
@@ -166,7 +171,17 @@ export function nearDupConfig(policy: AtlasPolicy): NearDupConfig {
 }
 
 /**
- * Is `actor` authorized to write `scope`? Mirrors @atlas/knowledge authz `inScope` (KNOW-11a) — FAIL-CLOSED:
+ * Is `actor` authorized to write `scope`?
+ *
+ * NOT AUTHENTICATION. Read the signature literally: this takes `actor` as a STRING and asks whether that
+ * string is listed under `scope`. It does not, and cannot, ask whether the caller IS that actor — nothing in
+ * Atlas establishes that. The string arrives from `ATLAS_ACTOR` or the caller's own `git config user.email`
+ * (see `compose.ts`), both self-asserted, and the policy it is checked against is a file readable and
+ * writable by anyone who can invoke the CLI. This is an ANTI-ACCIDENT GUARDRAIL — it stops the wrong seat
+ * writing the wrong scope by mistake — and it is not an adversarial control (ARCH-12). Every caller of this
+ * function inherits that ceiling, however carefully the gate around it is built.
+ *
+ * Mirrors @atlas/knowledge authz `inScope` (KNOW-11a) — FAIL-CLOSED:
  * `false` when `scope` is absent/empty, when the scope is not declared in the policy, or when `actor` is not
  * a listed member. `true` only when the policy declares the scope AND lists the actor. Pure + total, no IO —
  * an absent/broken policy (⇒ empty scopes via {@link defaultPolicy}) therefore authorizes NO write.

@@ -187,7 +187,14 @@ function commitLoop<T>(
   guardUnreadable: boolean,
 ): CommitResult<T> {
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const read = readSidecarSet(ctx.dir, ctx.base);
+    const read = readSidecarSet(ctx.dir, ctx.base, ctx.trusted);
+    // PROVENANCE — UNCONDITIONAL, unlike `unreadable`. The `guardUnreadable` distinction exists because an
+    // unconditional persist never looked at the snapshot, so refusing over a torn read would brick a caller
+    // whose decision does not depend on it. That reasoning does not transfer here: writing over a COMMITTED
+    // store would LAUNDER it — the attacker's rows become a file this process produced, indistinguishable
+    // from door output afterwards, with the tracked-file evidence overwritten. Both write shapes refuse, and
+    // `persistSidecar` turns this into a thrown, readable error rather than a silent no-op.
+    if (read.untrusted) return { settled: false, refusal: 'untrusted' };
     if (guardUnreadable && read.unreadable) return { settled: false, refusal: 'unreadable' };
     const decision = decide(read.projection ?? emptyStore());
     if (decision.next === undefined) return { settled: true, out: decision.out }; // governed refusal: no write
@@ -208,6 +215,16 @@ function commitLoop<T>(
 export function persistSidecar(ctx: SidecarCtx, projection: StoreProjection): void {
   const result = commitLoop(ctx, () => ({ out: undefined, next: projection }), false);
   if (!result.settled) {
+    if (result.refusal === 'untrusted') {
+      // Named separately because the operator action is completely different from the other two, and a
+      // generic "could not persist" would send them to look at the disk.
+      throw new Error(
+        `atlas: refusing to write the ${ctx.base} sidecar — \`.atlas/\` is TRACKED BY GIT in this repo, so the ` +
+          `durable store arrived by COMMIT rather than through a governed door. A committed store carries rows ` +
+          `no gate ever saw. Nothing was written and nothing was served. Remove it from version control ` +
+          `(\`git rm -r --cached .atlas\`, keeping \`.atlas/policy.json\`) and re-derive the store locally.`,
+      );
+    }
     throw new Error(
       `atlas: could not persist the ${ctx.base} sidecar (${result.refusal}) after ${MAX_ATTEMPTS} attempts — ` +
         `nothing was written. This is reported rather than swallowed: a persist that silently does nothing ` +

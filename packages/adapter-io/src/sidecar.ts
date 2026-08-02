@@ -59,6 +59,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { CurrentNode, StoreProjection } from '@atlas/knowledge';
+import type { SidecarTrust } from './store-provenance.js';
 
 /** The two mutable sidecars (ADR-0008): governed knowledge, and the explorer's CANDIDATE store. They share
  *  ONE implementation so their totality AND their atomicity cannot drift apart; they differ ONLY here. */
@@ -92,13 +93,17 @@ export interface CommitDecision<T> {
   readonly put?: readonly unknown[];
 }
 
-/** Why a commit did not settle. Both are VISIBLE refusals the door reports — never a silent no-op.
+/** Why a commit did not settle. All three are VISIBLE refusals the door reports — never a silent no-op.
  *  `contended`  — MAX_ATTEMPTS generations were published under this writer; the store is alive, this
  *                 write is not. Retry is the caller's to make.
  *  `unreadable` — a sidecar EXISTS but no generation of it parses. Reads still degrade to empty (a corrupt
  *                 file must never crash a bin at boot); a WRITE must not, because writing onto `emptyStore`
- *                 is precisely the leg-2 amplifier that turned a torn read into a 402-node erasure. */
-export type CommitRefusal = 'contended' | 'unreadable';
+ *                 is precisely the leg-2 amplifier that turned a torn read into a 402-node erasure.
+ *  `untrusted`  — the sidecar is TRACKED BY GIT, so it arrived by COMMIT rather than through a door
+ *                 (`store-provenance.ts`). Distinct from `unreadable` on purpose: unreadable is a storage
+ *                 fault that may heal, this is a governance fault that will not, and reporting one as the
+ *                 other would send an operator to fsck instead of to `git rm --cached`. */
+export type CommitRefusal = 'contended' | 'unreadable' | 'untrusted';
 
 /** A decision that SETTLED (it may still be a governed refusal — see `CommitDecision.next`), or one that
  *  could not be durably resolved at all. */
@@ -113,6 +118,9 @@ export interface SidecarCtx {
   readonly base: SidecarBase;
   readonly headSha?: (() => string | undefined) | undefined;
   readonly put: (obj: unknown) => unknown;
+  /** The provenance seam (`store-provenance.ts`), injected by the composition root exactly as `headSha` is.
+   *  ABSENT ⇒ never consulted ⇒ the pre-existing behaviour (tests, non-git trees). */
+  readonly trusted?: SidecarTrust | undefined;
 }
 
 /** The compat mirror: the fixed, pre-protocol name. NEVER the compare-and-swap target — it is republished
@@ -241,6 +249,9 @@ export interface SidecarRead {
   readonly projection: StoreProjection | undefined;
   readonly top: number;
   readonly unreadable: boolean;
+  /** The durable store is COMMITTED (`store-provenance.ts`). `projection` is forced to `undefined`, so a
+   *  read serves nothing; a WRITE must refuse rather than persist over it (see `commitLoop`). */
+  readonly untrusted: boolean;
 }
 
 /**
@@ -252,20 +263,27 @@ export interface SidecarRead {
  * used to collapse straight to `emptyStore()`. It now costs one extra parse to fall back to the state before
  * it, which is exactly one governed write behind rather than a total loss.
  */
-export function readSidecarSet(dir: string, base: SidecarBase): SidecarRead {
+export function readSidecarSet(dir: string, base: SidecarBase, trusted?: SidecarTrust): SidecarRead {
   const gens = generations(dir, base);
   const top = gens.length > 0 ? gens[0]! : undefined;
+  // PROVENANCE FIRST — before a single byte of the store is parsed. A committed store must not be able to
+  // influence anything, including which error the caller sees, so this returns BEFORE `readOne`. `top` is
+  // still reported honestly (it is a directory listing, not store content) so no caller has to special-case
+  // it; nothing may write here anyway.
+  if (trusted !== undefined && !trusted()) {
+    return { projection: undefined, top: top ?? 0, unreadable: false, untrusted: true };
+  }
   for (const g of gens) {
     const hit = readOne(genPath(dir, base, g));
-    if (hit !== undefined) return { projection: hit.projection, top: top!, unreadable: false };
+    if (hit !== undefined) return { projection: hit.projection, top: top!, unreadable: false, untrusted: false };
   }
   const legacy = readOne(mirrorPath(dir, base));
   if (legacy !== undefined) {
     // No readable generation: the mirror's own counter keeps the sequence monotone over a store whose
     // generation files were pruned or hand-deleted, so a successor never reuses a name that once held
     // different bytes.
-    return { projection: legacy.projection, top: Math.max(top ?? 0, legacy.gen), unreadable: false };
+    return { projection: legacy.projection, top: Math.max(top ?? 0, legacy.gen), unreadable: false, untrusted: false };
   }
   const anyFile = top !== undefined || existsSync(mirrorPath(dir, base));
-  return { projection: undefined, top: top ?? 0, unreadable: anyFile };
+  return { projection: undefined, top: top ?? 0, unreadable: anyFile, untrusted: false };
 }

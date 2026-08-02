@@ -28,6 +28,7 @@ import { createGovernedEmit } from './governed-emit.js';
 import { createGovernedLink } from './governed-link.js';
 import { loadPolicy } from './policy.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
+import type { SidecarTrust } from './store-provenance.js';
 // DAG-pin imports — referenced (not wired as legs) to keep the frozen skeleton's dependency edges real.
 import { foldAstUnits } from './ast.js';
 import { createForge } from './git-forge.js';
@@ -92,6 +93,13 @@ export interface WireConfig {
    *  so dependency/trigger are as fresh as scope. ABSENT for the bare WIRE assembly (wire-only fake tests
    *  exercise `--by scope` only), where the non-scope modes fail closed. */
   readonly axes?: Axes;
+  /** The PROVENANCE seam (`store-provenance.ts`) for the ONE durable store below — "did this store arrive
+   *  through a door, or by a COMMIT". Resolved by the composition root (git lives there, `store.ts` is
+   *  deliberately git-ignorant). ABSENT ⇒ never consulted ⇒ behaviour unchanged, which is the shape every
+   *  wire-only fake test relies on. It MUST be threaded here and not only onto compose's own store: THIS is
+   *  the store both user-facing doors ride, and a seam applied only to compose's drift/doctor store would
+   *  leave `atlas query` serving a committed projection while every test of the seam passed. */
+  readonly trusted?: SidecarTrust;
 }
 
 /**
@@ -142,7 +150,8 @@ export function assembleHandler(config: WireConfig): WiredHandler {
   // N11: inject the freshness-watermark seam — a cheap `git rev-parse HEAD` (no worktree). The store stamps
   // `builtAt` at each persist; the query index (below) compares it to live HEAD to flag a behind-HEAD read.
   const currentHead = (): string | undefined => headSha(config.repoPath);
-  const store = createDiskStore(config.casPath, currentHead);
+  // PROVENANCE: threaded from the composition root onto the ONE store both doors ride (see `WireConfig`).
+  const store = createDiskStore(config.casPath, currentHead, config.trusted);
 
   const governedEmit = createGovernedEmit({
     store,
