@@ -167,7 +167,7 @@ method-tag:
 |---|---|
 | every INV has final text + anchor + `behavioural` | ✅ 18/18 |
 | every non-behavioural INV carries an `exempt:` reason | ✅ vacuous — **0** non-behavioural INVs in this surface (every clause constrains observable behaviour) |
-| zero open design question inside a ratified INV | ⚠️ **two open DEFINE items exist OUTSIDE the register** — A-D3 (`sameAs` retraction) and A-D4 (KNOW-8 staging prose vs runtime). Both are deliberately **not** INVs here: they are out of CAMPAIGN-10's appetite and must be dispositioned by the owner. Recorded in `reference/atlas-authoring.md` §Decisions |
+| zero open design question inside a ratified INV | ✅ **both DEFINE items dispositioned (task #83, owner-authorized).** **A-D3** (`sameAs` retraction) is DECIDED and BUILT as a MODE of `atlas-link`, `GOVERNANCE_SURFACE`/`WRITE_PATHS` unchanged — ADR-0003 §Retraction. **A-D4** (KNOW-8 staging prose vs runtime) is MEASURED and the prose is NARROWED: the measurable holds **vacuously** (severance, not ratification), which is now stated at the code and in the register/reference; the residual is a build task (the governed promotion door), not an open design question. Both were deliberately **not** INVs here. Recorded in `reference/atlas-authoring.md` §Decisions |
 | zero `owner: TBD` | ✅ |
 | zero unresolved contradiction with a ratified invariant | ✅ INV-TOOLS-1 / ADR-0003 untouched — verified: `GOVERNANCE_SURFACE` 5, `WRITE_PATHS` 2, both unchanged by every clause above |
 | every clause normative, singular-in-intent, free of `~`/TBD | ⚠️ **judgment — belongs to COLD-REVIEW, pending** |

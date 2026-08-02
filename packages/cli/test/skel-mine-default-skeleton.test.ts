@@ -144,7 +144,7 @@ describe('SKEL — the default `atlas mine` S0 seam is the REAL structural skele
       // not check it (the package tsconfig includes `src` only). It reaches `.plan()`/`runExtract` and never
       // `.upsert`, but the write doors are spelled out anyway: an incomplete store fails as a bare `TypeError`
       // from inside the run-controller's total `catch`, i.e. as an anonymous "interrupted pass".
-      store: { put: () => '' as never, get: () => undefined, persistProjection: () => {}, loadProjection: () => undefined, commitProjection: () => ({ settled: true as const, out: undefined }), persistStaging: () => {}, loadStaging: () => undefined, commitStaging: () => ({ settled: true as const, out: undefined }) },
+      store: { put: () => '' as never, get: () => undefined, persistProjection: () => {}, loadProjection: () => undefined, commitProjection: () => ({ settled: true as const, out: undefined }), commitStaging: () => ({ settled: true as const, out: undefined }) },
       gate: { emit: () => ({ emitted: false as const, whyNot: { site: { kind: 'file' as const, qualifiedPath: 'x', subtreeHash: '' as never }, reason: 'unused' } }) },
       handoffTo: (): void => {},
     } as unknown as MineDeps;

@@ -58,6 +58,24 @@ export interface CurrentNode {
   //    trips inside the CurrentNode entry (store.ts WireProjection serializes the whole node — no change there).
   //    ADDITIVE/OPTIONAL, back-compat: a node minted before this WP simply has no `sameAs` and is a singleton.
   readonly sameAs?: readonly string[];
+  // ── sameAs RETRACTION carrier (ADDITIVE, OPTIONAL — A-D3, task #83) — the SORTED, de-duped peers whose
+  //    asserted equivalence with this node has since been RETRACTED through `atlas-link --retract`, the
+  //    retraction MODE of the existing governed link door (no sixth tool, no new medium: INV-TOOLS-1's
+  //    `WRITE_PATHS` stays `{emit, link}` and INV-TOOLS-15's store-row medium is untouched).
+  //
+  //    A RETRACTION IS AN APPEND, NEVER A DELETE, and that is the whole representation decision. The peer
+  //    STAYS in `sameAs`; it additionally appears here. So both halves of the history survive on the row —
+  //    that the equivalence was once asserted, AND that it was later retracted — and a reader can tell the
+  //    difference between "these were never linked" (peer in neither list) and "these were linked and the
+  //    link was withdrawn" (peer in both). Dropping the peer from `sameAs` would have made those two states
+  //    byte-identical, i.e. the store would lie about its own history, which is precisely the failure A-D3
+  //    was opened about one direction over.
+  //
+  //    Stored SYMMETRICALLY on both endpoints, exactly as `sameAs` is; the read fold (`deriveSameAs`) skips
+  //    an edge whose retraction is recorded on EITHER endpoint, so a half-written retraction still splits
+  //    (splitting is the safe direction — see that fold's header). ADDITIVE/OPTIONAL, back-compat: a row
+  //    minted before this field simply has none, which reads as "nothing retracted".
+  readonly sameAsRetracted?: readonly string[];
   // ── GOVERNANCE carrier (ADDITIVE, OPTIONAL — ADR-0007) — the `(scope, tier)` the node ITSELF lives under.
   //
   //    THIS IS THE HALF ADR-0007 SHIPPED WITHOUT. That ADR decided authority is derived from the RESOURCE,

@@ -55,12 +55,100 @@ essential part, and a second named governed door serves it better.
   is now a bounded, precedented change (join `Tool` + `WRITE_PATHS` + a governed door; the guard generalizes).
 - ~10 frozen surface-count assertions were updated to the real 5-tool / 2-write-door surface (honest surface
   growth, cold-reviewed as NOT a loosened gate).
-- **v1 scope boundary (conscious deferral):** `atlas-link`'s ratifier is a NON-EMPTY check, NOT emit's
-  tier-graded ratification (a T0 fact's `by === 'billy'` requirement). For a non-T0 fact this is exact parity
-  with emit; the link door does not read node tier, so in v1 two T0 facts can be equated by any non-empty
-  ratifier. Safe because `sameAs` is non-destructive (it cannot alter a T0 fact's content or grounding). The
-  code states exactly what it enforces ("non-empty ratifier"); no `atlas-link` docstring claims the full tier
-  gate. Tier-graded link ratification is the seam to revisit if link assertions ever need T0 weight.
+- ~~**v1 scope boundary (conscious deferral):** `atlas-link`'s ratifier is a NON-EMPTY check, NOT emit's
+  tier-graded ratification…~~ **SUPERSEDED — the deferral was closed by task #84 and this bullet had gone
+  stale.** `createGovernedLink` now runs the SAME KNOW-8 law emit runs, over the JOIN of every class the link
+  merges (`strictestTier` over each member's stored fact), so a link touching a `T0` node requires `billy`
+  exactly as a `T0` emit does — and the join is over the CLASS, not the two endpoints, which closes the
+  two-hop bypass (billy equates a `T0` A with a `T2` B; anyone then links B to their own node M and lands
+  inside A's class). Recorded here rather than silently dropped: "non-destructive is not ungoverned" was the
+  argument that retired the original deferral.
 - Teeth: `packages/e2e-blackbox/test/s16-sameas.blackbox.test.ts` (authorized link surfaces the edge on both
   doors; unauthorized / unknown-node / empty-ratifier rejected fail-closed; transitive A≡B,B≡C ⇒ A≡C) +
   `packages/knowledge/test/wp-sameas.test.ts` (white-box union-find / reducer goldens).
+
+## Retraction — a MODE of `atlas-link`, not a sixth tool (A-D3, task #83, owner-authorized)
+
+**Context.** `deriveSameAs` is a union-find, so a single wrong `atlas-link` merged an equivalence class
+permanently, on every read, forever. There was no way to undo it. Recorded as **A-D3** (OPEN — DEFINE
+required) in `reference/atlas-authoring.md`, and as **F2 / D2** in `design/authoring-surface-study.md`,
+where the options were framed as *a third write door · a superseding link record · accept permanence*.
+
+**Decision.** Retraction is a **MODE of the existing `atlas-link` door** — `atlas link <a> <b> --retract`
+on the CLI, `atlas-link {a, b, retract: true}` over MCP. It is **not** a sixth tool and **not** a third
+write door.
+
+**Why this needs no amendment.** INV-TOOLS-1 is already a *property* invariant (above): *every write goes
+through a governed door*. INV-TOOLS-15 scopes `sameAs` to the **projection sidecar** medium, explicitly not
+the store-row medium. A retraction that rides the existing `atlas-link` leg therefore adds no door and no
+medium: `GOVERNANCE_SURFACE` stays **5**, `WRITE_PATHS` stays **{`atlas-emit`, `atlas-link`}**, and no
+ratified invariant moves. A sixth tool would have moved TOOLS-1's measurable and required a real amendment,
+for what is the same governed act on the same carrier in the opposite direction.
+
+**The measurement that made it cheap.** `deriveSameAs` is **REBUILD-PER-READ**, not an incrementally
+maintained union-find: it mints a fresh `parent` map per call, there is no module-level cache, and the only
+persisted state is the per-node edge list (`WireProjection` serializes `current`/`cas`/`builtAt`/`gen`/
+`identity` — nothing derived). So filtering a withdrawn edge out of the fold **input** splits the class on
+the very next read. Classical union-find has no DELETE; this fold never needed one. *(Had it been
+incrementally maintained, removing an edge would have left the class merged and the door would have been a
+false promise — worse than no door, because it makes a guarantee it does not keep.)*
+
+**Two non-negotiable properties, both enforced in one code path.**
+
+1. **Identical gates.** `link(a, b, retract)` is ONE function with ONE ladder. The mode is consumed at
+   exactly two points — the pair-state gate 4.5 and the reducer choice at stage 5 — so distinct →
+   both-known → authz-over-the-merged-class → ratify are the *same lines* for both modes. Retracting a link
+   whose merged class contains a `T0` node requires `billy` for the same reason, through the same code, that
+   asserting it did. An asymmetry here would be a governance hole: an unratified actor undoing a ratified
+   merge.
+2. **An APPEND, never a delete.** The peer STAYS in `sameAs`; the withdrawal is recorded in
+   `sameAsRetracted` on both endpoints. So the row distinguishes *"never linked"* from *"linked, then
+   withdrawn"*, and who asserted and who retracted both survive. Deleting the edge would have made those two
+   states the same bytes — the store lying about its own history, which is the failure A-D3 names one
+   direction over.
+
+**Consequences and the deliberate asymmetries, stated rather than left to be discovered.**
+
+- `deriveSameAs` (the READ relation) honours retraction and the class **splits**. A retraction recorded on
+  **either** endpoint is enough — fail-closed, because a half-written marker that kept an edge live would
+  keep it transitively contagious, which is the harm; a half-written marker that splits loses one bounded,
+  visible equivalence.
+- `sameAsClassOf` (the GATE fold) is deliberately **retraction-blind**, and its docstring now carries the
+  caller contract: it prices authority and must never serve the observed relation. Blindness never
+  under-charges (shrinkage is the bypass direction, and the projection is untrusted input, so a hand-written
+  marker must not be able to cheapen a gate) and it keeps PROP-SAMEAS-1 (`derived ⊆ door`) true by
+  construction. **The cost, stated:** after retracting, further links across that class still require the
+  signature the widest class ever demanded. Retraction restores what readers observe; it does not buy back a
+  lower price.
+- **Retraction LATCHES.** Re-asserting a retracted pair is refused (`retracted-pair`), because un-retracting
+  means deleting the retraction record — the evidence. The asymmetry is the justification: a wrong
+  *retraction* costs one bounded, local, visible equivalence; a wrong *assertion* is unbounded and contagious
+  on every read. Permanence in the splitting direction is cheap; permanence in the merging direction is the
+  defect. Re-assertion of a withdrawn pair is a distinct governance act with its own evidence requirements
+  and is deliberately **not** built — it is refused visibly rather than half-built silently.
+- Three mode-specific refusals, each with a NAMED discriminant compared by **equality** (never substring —
+  these texts discuss each other's concepts): `not-linked`, `already-retracted`, `retracted-pair`. All three
+  run **after** the whole governance ladder, so the pair's state is never an oracle for a caller who has not
+  cleared authz and ratify.
+- **Two of those three are mandatory; one is a judgement call, and the distinction was originally recorded
+  with a FALSE justification — corrected here.** The claim was that `linked:true` from this door means "this
+  act changed the stored relation". It does not: re-asserting an already-asserted pair returns `{linked:true}`
+  and publishes a fresh byte-identical generation (measured, three times running). The rule the door *does*
+  keep is narrower — **`linked:true` is never returned when the relation the caller asked for does not hold
+  afterwards.** That makes `retracted-pair` mandatory (a re-link there is a no-op the read fold ignores, so
+  reporting success would claim an equivalence no reader observes) and `not-linked` mandatory (it would
+  record the withdrawal of an assertion nobody made, and pre-emptively latch the pair). `already-retracted`
+  is NOT derivable from it: it is a deliberate ASYMMETRY with the assert path's idempotent success, taken
+  because a retraction is a corrective act and confirming a no-op invites an operator to believe they
+  withdrew a pair they mistyped. Recorded, not resolved — aligning the two paths either way is a behaviour
+  change to a governed door and is not smuggled in under a comment.
+- `LinkOut` gains `retracted?: boolean` (ABSENT on an assertion, so every existing consumer is byte-
+  unchanged). `linked` means *the act settled and changed the relation*; `retracted` names which act. The CLI
+  renders a withdrawal with its own verb (`retracted: a ≢ b`), never the `linked: a ≡ b` line.
+- Teeth: `packages/knowledge/test/sameas-retraction.test.ts` (the rebuild-per-read witness, the chain split,
+  append-only, the either-endpoint fail-closed reading, gate-fold blindness, and PROP-SAMEAS-1 re-checked
+  over projections that carry retractions) · `packages/adapter-io/test/governed-link-retract.test.ts` (gate
+  symmetry as a table over both modes, the `T0` and two-hop legs, the pair-state vocabulary, precedence, and
+  the retract-mode twin of the SCN-GL-15/16/17 disclosure property) ·
+  `packages/e2e-blackbox/test/s25-sameas-retraction.blackbox.test.ts` (the split, the append, and CLI≡MCP
+  refusal parity, driven through the real CLI subprocess and the real MCP stdio server).

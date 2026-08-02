@@ -9,8 +9,9 @@
 // THE ANSWER IS NO, and the reason is worth stating precisely because it is NOT the guard. Three independent
 // things stand between a mined candidate and a governed node, and the first one alone is sufficient:
 //   1. DESTINATION (ADR-0008, structural) — `mine` writes the STAGING sidecar. `staging.json` and
-//      `projection.json` are different files; no read door in the product calls `loadStaging`. Displacement
-//      is impossible because the row never enters the projection, not because a check says no.
+//      `projection.json` are different files, and NO read door in the product reads staging back at all
+//      (task #83 deleted `loadStaging`; nothing replaced it). Displacement is impossible because the row
+//      never enters the projection, not because a check says no.
 //   2. THE COLLISION SKIP (belt-and-braces) — a mined fact never re-authors a node established before the
 //      pass began, even inside staging.
 //   3. THE ARCH-10 REDUCER GUARD (belt-and-braces) — if the mined write DID land on a governance-carrying
@@ -33,7 +34,7 @@ import { nodeKey, primaryAnchorId, upsert as knowledgeUpsert, GovernanceAuthorit
 import type { CurrentNode, StoreProjection, WriteRequest, Candidate as KnowledgeCandidate } from '@atlas/knowledge';
 import type { Fact } from '@atlas/genesis';
 import { driveMine, MINED_SCOPE } from '../src/mine.js';
-import { A, FRONTIER, budget, depsOf, factFor, REPO } from './mine-fixtures.js';
+import { A, FRONTIER, REPO, budget, depsOf, factFor, readStaging } from './mine-fixtures.js';
 
 let dir: string | undefined;
 beforeEach(() => {
@@ -83,7 +84,7 @@ describe('ARCH-10 seam — a mined T2 row cannot displace a governed node at a C
     expect([...store.loadProjection()!.current.keys()]).toEqual([key]);
     // the collision is REAL: the mined row exists, at the very same key, in the other file.
     expect(existsSync(join(dir!, '.atlas', 'staging.json'))).toBe(true);
-    const staged = store.loadStaging()!.current.get(key);
+    const staged = readStaging(store).current.get(key);
     expect(staged, 'the mine pass must have staged a row at the colliding key').toBeDefined();
     expect(staged!.contentHash).not.toBe(governed.contentHash); // different bytes, same identity
     expect(staged!.claims).not.toEqual(governed.claims);
@@ -100,8 +101,7 @@ describe('ARCH-10 seam — a mined T2 row cannot displace a governed node at a C
       ...real,
       put: (o) => real.put(o),
       get: (h) => real.get(h),
-      loadStaging: () => real.loadProjection(),
-      persistStaging: (p) => real.persistProjection(p),
+      // The mutant is now EXACTLY one line, because `commitStaging` is the only staging door there is.
       commitStaging: (d) => real.commitProjection(d),
     };
     const key = mintedKeyForA();
@@ -152,7 +152,7 @@ describe('ADR-0008 provenance — the mined stamp reaches the ROW, not only the 
     const store = createDiskStore(casPath());
     driveMine(REPO, depsOf({ store, budget: budget(FRONTIER.length) }));
 
-    const rows = [...store.loadStaging()!.current.values()];
+    const rows = [...readStaging(store).current.values()];
     expect(rows.length).toBe(FRONTIER.length); // premise
     for (const row of rows) {
       expect(row.scope, `row ${row.nodeKey} carries no mined scope`).toBe(MINED_SCOPE);
@@ -164,7 +164,7 @@ describe('ADR-0008 provenance — the mined stamp reaches the ROW, not only the 
     const store = createDiskStore(casPath());
     driveMine(REPO, depsOf({ store, budget: budget(FRONTIER.length) }));
     // read back through a FRESH store — the value must come off disk, not out of a live closure.
-    const reread = createDiskStore(casPath()).loadStaging()!;
+    const reread = readStaging(createDiskStore(casPath()));
     for (const row of reread.current.values()) expect(row.scope).toBe(MINED_SCOPE);
   });
 });

@@ -106,10 +106,18 @@ export interface EmitOut {
  * present-on-the-relevant-path only.
  */
 export interface LinkOut {
+  /** The governed link act SETTLED and changed the stored relation. It does NOT by itself mean `a ≡ b` now
+   *  holds — read it together with {@link LinkOut.retracted}. `linked:false` is the ONE fail-closed
+   *  discriminator every transport keys off (handler `isFailClosedWrite`, CLI exit 2, MCP `isError`), so
+   *  both modes' refusals are visible everywhere with no new plumbing. */
   readonly linked: boolean;
-  readonly rejected?: string; // structured fail-closed reason (distinct/unknown/unauthorized/unratified)
+  readonly rejected?: string; // structured fail-closed reason (distinct/unknown/unauthorized/unratified/pair-state)
   readonly a?: string; // the first equated nodeKey (present on linked:true)
   readonly b?: string; // the second equated nodeKey (present on linked:true)
+  /** [A-D3 / task #83] the act was a RETRACTION (`atlas-link --retract`) — the withdrawal of a previously
+   *  asserted equivalence — rather than an assertion. Present only on `linked:true` of the retract mode;
+   *  ABSENT (not `false`) on an assertion, so every existing consumer of this record is byte-unchanged. */
+  readonly retracted?: boolean;
 }
 
 /**

@@ -13,10 +13,19 @@
 // STAGING (ADR-0008 / KNOW-8): the store owns a SECOND sidecar of the same shape at a DIFFERENT path — the
 // CANDIDATE store the explorer (`atlas mine`) writes. KNOW-8 says the explorer may write only candidates and
 // never self-commits; what was missing is that staging had nowhere to live, so the explorer wrote the only
-// durable place there was — the knowledge projection. `persistStaging`/`loadStaging` give it that place. The
-// two sidecars share ONE implementation (`sidecar.ts`) so their totality AND their atomicity cannot drift
-// apart; they differ ONLY in the file they name. A candidate is promoted into knowledge solely by passing a
-// governed door, so nothing in this file reads staging back into the projection.
+// durable place there was — the knowledge projection. `commitStaging` gives it that place. The two sidecars
+// share ONE implementation (`sidecar.ts`) so their totality AND their atomicity cannot drift apart; they
+// differ ONLY in the file they name. A candidate is promoted into knowledge solely by passing a governed
+// door, so nothing in this file reads staging back into the projection.
+//
+// THERE IS EXACTLY ONE STAGING DOOR, AND THAT IS DELIBERATE (task #83). `persistStaging`/`loadStaging` used
+// to sit here as an unconditional persist + a bare read. `mine` migrated to `commitStaging` (see
+// `cli/src/mine.ts`) because an unconditional persist is last-writer-wins BY DEFINITION — measured at
+// 8 processes × 5 sites: 40 candidates reported committed, 5 durable — and the pair was then measured to
+// have ZERO production callers, by probe (stderr + stack attribution) across the whole suite including the
+// real CLI subprocesses: every hit came from a test. They are DELETED rather than deprecated: unlike a
+// reference model, they had a live successor doing the same job better, so there was nothing left for a
+// reader to learn from them and keeping them meant keeping a second, weaker way to write candidates.
 //
 // THE SIDECAR FORMAT MOVED TO `sidecar.ts`, ITS COMMIT PROTOCOL TO `sidecar-commit.ts`. Not a line-count
 // dodge: this file owns an IMMUTABLE content-addressed store, where a key's bytes never change and so
@@ -105,10 +114,10 @@ function ctxFor(
 /**
  * The widened disk store: the frozen kernel `StoreApi` (durable put/get, ADAPT-STORE-1) PLUS the durable
  * sidecar primitives STORE owns (ADAPT-STORE-3). `persistProjection` is the primitive the later KNOWLEDGE
- * flush calls; `loadProjection` is the read side `rehydrateProjection` composes over. `persistStaging`/
- * `loadStaging` are the SAME pair over the candidate sidecar (ADR-0008) — same shape, different file, so the
- * explorer has a durable place of its own and no longer has to borrow the knowledge projection. Kernel
- * `StoreApi` is unchanged (this only ADDS methods in the adapter layer).
+ * flush calls; `loadProjection` is the read side `rehydrateProjection` composes over. `commitStaging` is the
+ * SAME atomic door over the candidate sidecar (ADR-0008) — same shape, different file, so the explorer has a
+ * durable place of its own and no longer has to borrow the knowledge projection. Kernel `StoreApi` is
+ * unchanged (this only ADDS methods in the adapter layer).
  */
 export interface DiskStore extends StoreApi {
   /**
@@ -128,8 +137,10 @@ export interface DiskStore extends StoreApi {
    */
   commitProjection<T>(decide: (projection: StoreProjection) => CommitDecision<T>): CommitResult<T>;
   /** The SAME primitive over the candidate sidecar (ADR-0008) — one implementation, different file, so the
-   *  two cannot drift in atomicity any more than they can in totality. This is the seam `mine` needs to stop
-   *  being last-writer-wins across concurrent passes; adopting it is a separate WP (see the seat note). */
+   *  two cannot drift in atomicity any more than they can in totality. THE ONLY staging door: `mine` adopted
+   *  it (`cli/src/mine.ts`), and the weaker `persistStaging`/`loadStaging` pair it replaced has been deleted
+   *  (see the file header). A caller that wants only to READ the staged head passes a decision that returns
+   *  no `next` — `commitStaging((p) => ({ out: p }))` — which reads the snapshot and writes nothing. */
   commitStaging<T>(decide: (projection: StoreProjection) => CommitDecision<T>): CommitResult<T>;
   /** Persist the whole `StoreProjection` durably (the mutable sidecar, NOT content-addressed).
    *  UNCONDITIONAL, therefore last-writer-wins BY DEFINITION — it carries no decision to re-run. It is
@@ -138,11 +149,6 @@ export interface DiskStore extends StoreApi {
   persistProjection(projection: StoreProjection): void;
   /** Read the durable `StoreProjection` back; `undefined` when none has been persisted yet. */
   loadProjection(): StoreProjection | undefined;
-  /** Persist the CANDIDATE projection to the staging sidecar — never the knowledge projection (ADR-0008).
-   *  Same unconditional/last-writer-wins caveat as `persistProjection`. */
-  persistStaging(projection: StoreProjection): void;
-  /** Read the staged candidates back; `undefined` when nothing has been staged yet. Total, like `loadProjection`. */
-  loadStaging(): StoreProjection | undefined;
 }
 
 /**
@@ -297,18 +303,6 @@ export function createDiskStore(
       return readSidecarSet(sidecarDir(casPath), PROJECTION_BASE, trusted).projection;
     },
 
-    persistStaging(projection: StoreProjection): void {
-      // The candidate sidecar. Identical machinery, identical stamping (a staged candidate's freshness is
-      // read at the HEAD it was mined at) — the ONLY difference from `persistProjection` is the file.
-      persistSidecar(ctxFor(casPath, STAGING_BASE, headSha, (o) => store.put(o as CasObject), trusted), projection);
-    },
-
-    loadStaging(): StoreProjection | undefined {
-      // Total on exactly the same branches as `loadProjection` — it IS `loadProjection`'s reader. A missing,
-      // corrupt or shape-invalid staging sidecar reads back as "nothing staged", never a throw: `mine`
-      // rehydrates staging at pass start, so a throw here would abort the pass on a half-written file.
-      return readSidecarSet(sidecarDir(casPath), STAGING_BASE, trusted).projection;
-    },
   };
   return store;
 }

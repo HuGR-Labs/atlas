@@ -19,7 +19,8 @@
 // `persistProjection` or `commitProjection` is CALLED here (they are named only in prose), and that absence
 // IS the guarantee: the fixtures make all THREE throw, so a re-introduced call fails the suite loudly.
 // CONCURRENCY: the write door is `commitStaging`, whose `decide` re-runs the WHOLE pass body on contention.
-// `persistStaging` is never called — an unconditional persist is last-writer-wins by definition.
+// It is also the ONLY staging door there is — the unconditional `persistStaging` this file used to call was
+// last-writer-wins by definition, and was deleted in task #83 once a probe showed nothing called it.
 
 import { makeRunController, createScan, createMine, runExtract, admit } from '@atlas/genesis';
 import type {
@@ -264,8 +265,8 @@ export function buildControllerDeps(repoPath: string, d: MineDeps, onRefusal?: (
     plan: (repo, rev, _scope): Plan => ({ malformed: false, skeleton: scan.scan(repo, rev), sites: mine.mine(repo, rev) }),
     visit: (cand): readonly Fact[] => runExtract([cand], SINGLE_SITE, { proposer: d.proposer, gate: d.gate }).facts,
     upsert: (incoming): readonly Fact[] => {
-      // THE CANDIDATE SIDECAR, NEVER THE KNOWLEDGE PROJECTION — and never `persistStaging`, which carries no
-      // decision to re-run and so cannot be made concurrency-safe.
+      // THE CANDIDATE SIDECAR, NEVER THE KNOWLEDGE PROJECTION. An unconditional persist carries no decision
+      // to re-run and so cannot be made concurrency-safe, which is why this door is the only one left.
       const r = d.store.commitStaging<Map<string, Fact>>((staged) => decide(staged, incoming));
       if (!r.settled) {
         // VISIBLE. Nothing was written, so returning the grounded set unchanged would report a successful

@@ -83,13 +83,11 @@ export function fixture(
       },
       persistProjection: (p) => void persists.push(p),
       loadProjection: () => (persists.length > 0 ? persists[persists.length - 1] : projection),
-      // ADR-0008 staging doors. `governed-link.ts` writes ONLY through `commitProjection` (verified: it is
-      // the file's single store-write call site), so nothing under test reaches these — they were missing
-      // from a literal annotated `DiskStore`, which `tsc -b` could not see while it covered only `src`.
-      // Present now so the annotation means what it says; deliberately inert, never silently "staging".
+      // ADR-0008's staging door. `governed-link.ts` writes ONLY through `commitProjection` (verified: it is
+      // the file's single store-write call site), so nothing under test reaches this — it was missing from a
+      // literal annotated `DiskStore`, which `tsc -b` could not see while it covered only `src`. Present so
+      // the annotation means what it says; deliberately inert, never silently "staging".
       commitStaging: (decide) => ({ settled: true, out: decide(projection).out }),
-      persistStaging: () => {},
-      loadStaging: () => undefined,
     },
     persists: () => persists,
   };

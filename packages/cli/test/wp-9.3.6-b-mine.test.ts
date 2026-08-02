@@ -24,7 +24,7 @@ import { runMine, driveMine, buildControllerDeps, makeAdmitGate } from '../src/m
 import type { MineDeps } from '../src/mine.js';
 // Shared seams — see ./mine-fixtures.ts. Imported, never duplicated: two copies would let this suite and
 // the WP-F6 suite drift into testing different products.
-import { A, B, C, D, FRONTIER, BASE_SKELETON, ZERO_SIGNALS, leaf, anchorSet, recordingProposer, stagingFake, budget, depsOf, REPO } from './mine-fixtures.js';
+import { A, B, BASE_SKELETON, C, D, FRONTIER, REPO, ZERO_SIGNALS, anchorSet, budget, depsOf, leaf, readStaging, recordingProposer, stagingFake } from './mine-fixtures.js';
 
 // ── SCN-CLI-4a — the driver's write-set equals the frozen run-controller's ─────────────────────────────
 describe('CLI-4a — mine drives the frozen run-controller; write-set == the oracle', () => {
@@ -239,7 +239,7 @@ describe('CLI-4g — a real mine pass leaves `projection.json` byte-identical (A
     expect([...store.loadProjection()!.current.keys()]).toEqual(['nk-governed']);
     // …and the candidates are in the staging sidecar, where a curator — not a query — can find them.
     expect(existsSync(join(dir, '.atlas', 'staging.json'))).toBe(true);
-    expect(store.loadStaging()!.current.size).toBe(FRONTIER.length);
-    expect([...store.loadStaging()!.current.keys()]).not.toContain('nk-governed');
+    expect(readStaging(store).current.size).toBe(FRONTIER.length);
+    expect([...readStaging(store).current.keys()]).not.toContain('nk-governed');
   });
 });

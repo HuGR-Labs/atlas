@@ -181,9 +181,13 @@ WiredHandler = ReturnType<createHandler>                       // the ONE 5-leg 
    `headSha` off-repo returns `undefined`, never a throw (ADAPT-GIT-4).
 9. A projection persisted by a store built **with** a `headSha` seam carries `builtAt == HEAD`; one built
    **without** the seam carries no `builtAt` and round-trips identically to a pre-N11 sidecar (ADAPT-STORE-4).
-10. `atlas link a b` lands the symmetric edge **only** when `a≠b`, both nodes exist, the actor is in **both**
-    scopes, and a non-empty ratifier is present; any gate failing ⇒ `linked:false`, nothing persisted
-    (ADAPT-LINK-1).
+10. `atlas link a b` lands the symmetric edge **only** when `a≠b`, both nodes exist, the actor is authorized
+    over **every scope the merged class spans**, and the ratifier satisfies the KNOW-8 law for that class's
+    tier join (`billy` when any member is `T0`); any gate failing ⇒ `linked:false`, nothing persisted
+    (ADAPT-LINK-1). `atlas link a b --retract` withdraws a previous assertion through the SAME ladder and
+    APPENDS the retraction to both rows (removing nothing), after which the read fold stops merging across
+    that edge; retracting an unasserted or already-retracted pair, and re-asserting a retracted one, are each
+    refused with their own discriminant (A-D3 / task #83, ADR-0003 §Retraction).
 
 ## Decisions (ratified / DEFINE-pending — the S0 [NEEDS RECONCILIATION] queue)
 

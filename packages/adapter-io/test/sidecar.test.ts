@@ -21,7 +21,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { emptyStore } from '@atlas/knowledge';
-import type { StoreProjection } from '@atlas/knowledge';
+import type { CurrentNode, StoreProjection } from '@atlas/knowledge';
 import { createDiskStore } from '../src/store.js';
 import { readSidecarSet } from '../src/sidecar.js';
 import { commitSidecar } from '../src/sidecar-commit.js';
@@ -37,7 +37,11 @@ afterEach(() => {
 });
 
 const casDir = (): string => join(tmp!, 'cas');
-const row = (key: string): [string, { nodeKey: string; family: 'advisory'; contentHash: string; claims: string[] }] => [
+// Typed as `[string, CurrentNode]` rather than as the structural literal it happens to be: `new Map([...p.current,
+// row(key)])` below infers its overload from the array's element type, so a narrower row type makes the array a
+// UNION and the Map construction stops type-checking the moment `CurrentNode` grows a field (task #83's
+// `sameAsRetracted` is what surfaced it). Naming the real type makes the fixture independent of that.
+const row = (key: string): [string, CurrentNode] => [
   key,
   { nodeKey: key, family: 'advisory', contentHash: 'a'.repeat(64), claims: [`claim ${key}`] },
 ];
@@ -332,7 +336,10 @@ describe('SIDECAR — the generation-CAS commit protocol', () => {
     store.commitStaging((p) => ({ out: 0, next: withRow(p, 'candidate') }));
     // teeth: point `STAGING_BASE` at `'projection'` and both halves go RED.
     for (const [n, bytes] of before) expect(readFileSync(join(tmp!, n), 'utf8')).toBe(bytes);
-    expect([...store.loadStaging()!.current.keys()]).toEqual(['candidate']);
+    // Read back through the one staging door (task #83 deleted `loadStaging`): a decision returning no
+    // `next` reads the snapshot and writes nothing.
+    const staged = store.commitStaging<readonly string[]>((p) => ({ out: [...p.current.keys()] }));
+    expect(staged.settled ? staged.out : ['<refused>']).toEqual(['candidate']);
     expect(durable()).toEqual(['governed']);
   });
 });

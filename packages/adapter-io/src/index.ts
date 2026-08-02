@@ -49,6 +49,18 @@ export type { GovernedEmitDeps } from './governed-emit.js';
 export { createGovernedLink } from './governed-link.js';
 export type { GovernedLinkDeps } from './governed-link.js';
 export type { LinkOut } from '@atlas/tools';
+// [A-D3 / task #83] the RETRACTION MODE's refusal vocabulary. Its DISCRIMINANTS are exported for the same
+// reason `UntrustedStoreError.reason` is (see below): a test — and an embedder — must be able to compare a
+// refusal by EQUALITY on a named value, never by matching a substring of prose. These refusal texts quote
+// each other's concepts, and substring assertions on this surface have been one-directionally blind before.
+export {
+  ALREADY_RETRACTED_REASON,
+  NOT_LINKED_REASON,
+  RETRACTED_PAIR_REASON,
+  RETRACT_ALREADY_RETRACTED,
+  RETRACT_NOT_LINKED,
+  RETRACT_RETRACTED_PAIR,
+} from './governed-link-retract.js';
 export { composeRuntime, buildHeuristic, buildGate } from './compose.js';
 export type { ComposedRuntime } from './compose.js';
 export { createDoctorSource, regroundTemplate, retireTemplate } from './doctor-source.js';

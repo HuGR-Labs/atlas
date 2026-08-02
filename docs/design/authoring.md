@@ -90,8 +90,8 @@ new language grammar is **out of appetite** and is deferred explicitly below.
 
 | non-goal | why | where it is tracked |
 |---|---|---|
-| A third write door | would re-open INV-TOOLS-1, ratified twice (ADR-0003) | D2 — `sameAs` retraction, owner-gated |
-| A persisted staging / review queue | is a write; `stage()` is in-memory by design today | D3 — owner-gated; the *doc* claim is the defect, or the code is |
+| A third write door | would re-open INV-TOOLS-1, ratified twice (ADR-0003) | D2 — **RESOLVED without one**: `sameAs` retraction shipped as a MODE of `atlas-link` (task #83), so the write surface is unchanged |
+| A persisted staging / review queue | the persisted CANDIDATE store already exists (`commitStaging`, driven by `atlas mine`); what is absent is the governed PROMOTION path out of it, and that is a write | D3 — owner-gated; measured in task #83, prose narrowed, door still to build |
 | New tree-sitter grammars | symbol anchoring stays TypeScript-only | **INV-AUTH-4** makes the hole honest instead of hiding it |
 | Replacing `atlas mine` | mining stays the automatic path; authoring is the manual floor | — |
 | Batch import (G15) / policy-show (G16) | below the appetite line for v1 | roadmap `Later` |
@@ -204,6 +204,6 @@ acceptance criterion for the campaign. Recorded as a known non-orthogonality rat
 | # | decision | status |
 |---|---|---|
 | **D1** | may MCP advertise beyond `GOVERNANCE_SURFACE`? | **RESOLVED by owner directive** — *"tem que ter via mcp tool e via cli"* ⇒ ADR-0005 proposed |
-| **D2** | `sameAs` retraction (F2) — third write door, supersede-record, or accept permanence? | **OPEN** — out of appetite for v1; a wrong link is permanently contagious through the union-find, so it must not stay open indefinitely |
-| **D3** | the propose-for-review queue (F3) — build it, or amend KNOW-8's prose to match the runtime? | **OPEN** — either the code or the constitution is currently wrong |
+| **D2** | `sameAs` retraction (F2) — third write door, supersede-record, or accept permanence? | **DECIDED + BUILT (task #83)** — none of the three: a **retraction MODE of the existing `atlas-link` door** (`--retract` / `retract:true`). No new tool, no new medium, `WRITE_PATHS` unchanged; the same gate ladder prices it, and it is an APPEND (`sameAsRetracted`) so the assertion's evidence survives. `deriveSameAs` splits the class on the next read. See ADR-0003 §Retraction |
+| **D3** | the propose-for-review queue (F3) | **PROSE NARROWED (task #83); the DOOR remains open.** Measurement killed the dichotomy: durable staging is built and driven (`commitStaging` from `atlas mine`), `stage()` was never the explorer's path, and the gap is the missing **promotion** path out of staging. KNOW-8's measurable holds **vacuously** — severance, not ratification. Prose corrected at the code + register + reference; the governed promotion door is its own task |
 | **D4** | v1 scope (`anchors`+`draft`+`check` minimum vs. the full seven DPs) | **DECIDED as lead** — all seven; `slots`/`help` are cheap and `READ_SURFACE` is owner-directed |

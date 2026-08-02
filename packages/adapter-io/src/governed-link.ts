@@ -3,6 +3,12 @@
 // The runtime composition-root's SECOND governed write door (mirrors `governed-emit.ts`). `atlas-link`
 // asserts a human `sameAs` equivalence between two current nodes — a symmetric, non-destructive edge — only
 // THROUGH the gate ladder below — TEN fail-closed refusal points, in order, before a byte is DURABLE.
+//
+// [A-D3 / task #83] IT ALSO RETRACTS ONE, as a MODE of this same door (`link(a, b, retract)`), NOT as a
+// sixth tool: `GOVERNANCE_SURFACE` stays 5 and `WRITE_PATHS` stays `{atlas-emit, atlas-link}`. The mode is
+// consumed at exactly two points — the pair-state gate 4.5 and the reducer choice at stage 5. Gates 1–4 are
+// the same lines for both, which is the non-negotiable property: undoing a ratified merge is priced exactly
+// as making it was. See `governed-link-retract.ts` for the decision and the three mode-specific refusals.
 // The count is stated because it drifted: this header said "four" while the body had five reasons and left
 // `unverifiable endpoint` unlisted entirely. (Eight became ten when the durable write became an atomic
 // COMMIT — stage 6, whose two refusals are the emit door's, byte for byte.)
@@ -29,6 +35,10 @@
 //                     a `T0` node is a `T0` act, else the weaker endpoint is a side door onto the stronger).
 //                     The token is env-sourced by the composition root (`ATLAS_RATIFY_TOKEN`) — NEVER a
 //                     payload field (the spoof-guard).
+//   4.5 PAIR STATE — [A-D3 / task #83] the ONE mode-dependent gate: retracting an unasserted pair
+//                     (`not-linked`) or an already-retracted one (`already-retracted`), and RE-ASSERTING a
+//                     retracted one (`retracted-pair`), are each refused. It runs LAST, after RATIFY, so the
+//                     pair's state is never an oracle for a caller who has not cleared every governance gate.
 //   6. COMMIT       — stages 2→5 are ONE decision over ONE snapshot, published atomically by the
 //                     generation-CAS protocol in `sidecar-commit.ts`; `contended` and `unreadable store`
 //                     are its two refusals, imported from `governed-emit-reasons.ts` so one protocol cannot
@@ -48,7 +58,7 @@
 // none. DAG: adapter-io depends on knowledge + tools; `LinkOut` is imported FROM tools (never the reverse).
 
 import type { Hash, Tier } from '@atlas/contracts';
-import { isScope, linkSameAs, ratify, sameAsClassOf, stage, strictestTier } from '@atlas/knowledge';
+import { isScope, linkSameAs, ratify, sameAsClassOf, sameAsEdgeState, stage, strictestTier, unlinkSameAs } from '@atlas/knowledge';
 import type { Candidate, CurrentNode, GroundedFact } from '@atlas/knowledge';
 import type { LinkOut } from '@atlas/tools';
 import { actorInScope } from './policy.js';
@@ -58,6 +68,8 @@ import { REJECTED_CONTENDED as COMMIT_CONTENDED, REJECTED_UNREADABLE_STORE as CO
 // The PROVENANCE refusal — the THIRD `CommitRefusal` member, which BOTH doors used to collapse into
 // `unreadable store` (a storage fault whose remediation text sends an operator to restore from backup).
 import { REJECTED_UNTRUSTED_STORE as COMMIT_UNTRUSTED } from './read-provenance.js';
+// A-D3 / task #83 — the RETRACTION MODE's three refusals (see that module for the mode-vs-sixth-tool decision).
+import { ALREADY_RETRACTED_REASON, NOT_LINKED_REASON, RETRACTED_PAIR_REASON } from './governed-link-retract.js';
 
 /** The structured fail-closed reasons — a non-distinct, unknown-endpoint, unauthorized, OR unratified link
  *  never lands. */
@@ -138,9 +150,19 @@ function rowContradicted(node: CurrentNode, fact: GroundedFact): boolean {
  * projection. On any gate failure it returns `{linked:false, rejected}` and persists NOTHING. Pure of
  * clock/random given a pure store/policy.
  */
-export function createGovernedLink(deps: GovernedLinkDeps): { readonly link: (a: string, b: string) => LinkOut } {
-  const link = (a: string, b: string): LinkOut => {
-    // 1. DISTINCT — a node never names itself.
+export function createGovernedLink(deps: GovernedLinkDeps): {
+  readonly link: (a: string, b: string, retract?: boolean) => LinkOut;
+} {
+  /**
+   * `retract` selects the MODE (A-D3 / task #83). ONE function, ONE gate ladder: the mode is read only at
+   * stage 5 (which pure reducer to apply) and at the pair-state gate that sits immediately before it. Gates
+   * 1–4 are byte-identical code for both modes, which is not a stylistic choice — it is the property. If
+   * retraction ran its own ladder, an asymmetry could appear in it silently; here retracting a link that
+   * merged a class containing a `T0` node requires the billy token for exactly the same reason, through
+   * exactly the same lines, that asserting it did. An unratified actor cannot undo a ratified merge.
+   */
+  const link = (a: string, b: string, retract = false): LinkOut => {
+    // 1. DISTINCT — a node never names itself (and there is no self-edge to withdraw either).
     if (a === b) return { linked: false, rejected: REJECTED_SAME };
 
     // 2. BOTH KNOWN — resolve both endpoints against the rehydrated projection; an absent one is refused.
@@ -246,10 +268,35 @@ export function createGovernedLink(deps: GovernedLinkDeps): { readonly link: (a:
         return { out: { linked: false, rejected: REJECTED_UNRATIFIED } };
       }
 
-        // 5. APPLY — the pure symmetric reducer. The DECISION is RETURNED, not written: publishing it is the
-      //    commit's job, and only if this snapshot is still the head when the generation is linked in.
-      const next = linkSameAs(proj, a, b);
-      return { out: { linked: true, a, b }, next };
+      // 4.5 PAIR STATE (A-D3 / task #83) — the ONLY mode-dependent gate, and it runs LAST on purpose.
+      //
+      //     PRECEDENCE IS THE GATE, again. Whether `{a,b}` is unlinked / linked / already-retracted is a fact
+      //     about the stored relation, so answering it early would hand a caller a probe over pairs it has no
+      //     authority on, at keys it can name freely — the same one-bit oracle the header's 3-before-3.25 rule
+      //     exists to close. Placed after RATIFY, a caller learns the pair's state only once it has cleared
+      //     authz over every scope the class spans AND produced the ratifier that class demands; anyone else
+      //     gets `unauthorized` or `unratified` and learns nothing.
+      //
+      //     Both branches refuse rather than no-op, and the reasons say why (`governed-link-retract.ts`). The
+      //     re-assert branch is load-bearing rather than tidy: `linkSameAs` is idempotent and a retraction
+      //     never removes the peer from `sameAs`, so WITHOUT this the door would report `linked:true` for a
+      //     re-link that changed nothing and that `deriveSameAs` goes on ignoring — a write door lying about
+      //     its own effect, which is worse than having no retraction at all.
+      const state = sameAsEdgeState(proj, a, b);
+      if (retract && state === 'absent') return { out: { linked: false, rejected: NOT_LINKED_REASON } };
+      if (retract && state === 'retracted') return { out: { linked: false, rejected: ALREADY_RETRACTED_REASON } };
+      if (!retract && state === 'retracted') return { out: { linked: false, rejected: RETRACTED_PAIR_REASON } };
+
+      // 5. APPLY — the pure symmetric reducer for this mode. The DECISION is RETURNED, not written:
+      //    publishing it is the commit's job, and only if this snapshot is still the head when the generation
+      //    is linked in. `unlinkSameAs` APPENDS the retraction to both rows and removes nothing, so who
+      //    asserted the edge and who withdrew it both survive in the projection.
+      const next = retract ? unlinkSameAs(proj, a, b) : linkSameAs(proj, a, b);
+      // `linked` reports that the governed link act SETTLED; `retracted` names WHICH act it was. A refused
+      // act of either mode is `linked:false`, which is the one discriminator the handler, the CLI exit map
+      // and the MCP `isError` mapping already key off — so a retraction's refusals are fail-closed-visible on
+      // every transport with no new plumbing, and a SUCCESSFUL retraction is never mis-rendered as a refusal.
+      return { out: retract ? { linked: true, a, b, retracted: true } : { linked: true, a, b }, next };
     });
     // 6. COMMIT — its own two refusals, visible and never silent. Identical in kind to the emit door's, and
     //    deliberately the SAME vocabulary: one protocol, one set of reason names.

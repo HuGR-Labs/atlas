@@ -23,7 +23,7 @@ import { join } from 'node:path';
 import { createDiskStore } from '@atlas/adapter-io';
 import type { CommitRefusal } from '@atlas/adapter-io';
 import { buildControllerDeps, driveMinePass, runMine, StagingCommitError } from '../src/mine.js';
-import { FRONTIER, budget, depsOf, factFor, refusingStagingFake, stagingFake, REPO } from './mine-fixtures.js';
+import { FRONTIER, REPO, budget, depsOf, factFor, readStaging, refusingStagingFake, stagingFake } from './mine-fixtures.js';
 import { anchorsOf, minePass } from './mine-contention-fixtures.js';
 
 let dir: string | undefined;
@@ -39,8 +39,8 @@ const casPath = (): string => join(dir!, '.atlas', 'cas');
 
 /** The durable staged set as the product's OWN reader sees it, keyed by the anchor each row carries. */
 function durableAnchors(): string[] {
-  const staged = createDiskStore(casPath()).loadStaging();
-  return [...(staged?.current.values() ?? [])].map((n) => n.primaryAnchor ?? `<no anchor: ${n.nodeKey}>`).sort();
+  const staged = readStaging(createDiskStore(casPath()));
+  return [...staged.current.values()].map((n) => n.primaryAnchor ?? `<no anchor: ${n.nodeKey}>`).sort();
 }
 
 describe('CLI-4h — concurrent mine passes: what a pass REPORTS seeded is what is durably staged', () => {

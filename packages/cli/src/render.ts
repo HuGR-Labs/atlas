@@ -69,12 +69,19 @@ function renderData(data: unknown): string {
     return `data:\n${lines.join('\n')}\n`;
   }
 
-  // link { linked, a, b } — the governed sameAs write door result (WP-SAMEAS). A SUCCESSFUL link renders a
-  // single `  linked: <a> ≡ <b>` line; a REJECTED link (linked:false) carries its `rejected` string through
-  // the handler's ok:false path → the `reason:` block (mirrors emit), so it is never shadowed here. Guarded
-  // on `linked === true` BEFORE the `{id}` shape below (a LinkOut has no `id`, so no cross-shadowing).
+  // link { linked, a, b, retracted? } — the governed sameAs write door result (WP-SAMEAS). A SUCCESSFUL link
+  // renders a single `  linked: <a> ≡ <b>` line; a REJECTED link (linked:false) carries its `rejected` string
+  // through the handler's ok:false path → the `reason:` block (mirrors emit), so it is never shadowed here.
+  // Guarded on `linked === true` BEFORE the `{id}` shape below (a LinkOut has no `id`, so no cross-shadowing).
+  //
+  // [A-D3 / task #83] a RETRACTION renders its OWN verb — `  retracted: <a> ≢ <b>` — and never the `linked:`
+  // line. Both modes settle as `linked:true` (that field means "the act changed the stored relation"), so
+  // rendering them alike would put "linked: a ≡ b" on a human's screen at the exact moment the equivalence
+  // was withdrawn. Distinct verb, distinct symbol, no way to misread which act happened.
   if (d.linked === true && typeof d.a === 'string' && typeof d.b === 'string') {
-    return `data:\n  linked: ${d.a} ≡ ${d.b}\n`;
+    return d.retracted === true
+      ? `data:\n  retracted: ${d.a} ≢ ${d.b}\n`
+      : `data:\n  linked: ${d.a} ≡ ${d.b}\n`;
   }
 
   // node — a resolved `GroundedFact` (the `atlas node <addr>` read door, N6). Recognised by its `kind`
