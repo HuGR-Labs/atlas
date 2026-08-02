@@ -18,6 +18,7 @@
 
 import { createRequire } from 'node:module';
 import Parser from 'web-tree-sitter';
+import { escapeKeyComponent } from '@atlas/index';
 import type { FileTree } from '@atlas/index';
 
 const require = createRequire(import.meta.url);
@@ -121,21 +122,52 @@ function collectBlocks(node: SyntaxNode, out: SyntaxNode[]): void {
   }
 }
 
-/** A stable, unique refinement path: the PARENT unit's path + `::` + the unit's byte start (unique among all
- *  units of one file) + kind + name. The `::` join makes the refinement path the sanctioned structural
- *  ancestry chain (`file::item::block`, dedup-identity.md DP-2): a segment-wise prefix on `::` is real
- *  containment, so the index node key `build` mints (`key: node.path`) resolves to a groundable `::` anchor
- *  and `deriveSubsumes` can fire (module ⊃ function). The leading `startIndex` keeps it collision-free
- *  without a counter (byte start is unique within one file); kind + name stay for legibility. */
-function unitPath(parentPath: string, node: SyntaxNode, name: string): string {
-  return `${parentPath}::${node.startIndex}:${node.type}:${name}`;
+/**
+ * A stable, unique refinement path: the PARENT unit's path + `::` + `kind:ordinal[:name]`. The `::` join
+ * makes the refinement path the sanctioned structural ancestry chain (`file::item::block`,
+ * dedup-identity.md DP-2): a segment-wise prefix on `::` is real containment, so the index node key
+ * `build` mints resolves to a groundable `::` anchor and `deriveSubsumes` can fire (module ⊃ function).
+ *
+ * WHAT IS NOT IN IT, AND WHY. This used to lead with the unit's BYTE START INDEX. That made the key
+ * collision-free without a counter, but it also made it a function of everything ABOVE the unit in the
+ * file: adding one `import` line re-keyed every symbol beneath it, so every anchor in the file became
+ * unresolvable and every fact grounded there read DRIFTED. That is precisely the false alarm the drift
+ * oracle exists to suppress — and it is what the golden SCN-GROUND-5b ("import added above stays FRESH")
+ * promises does not happen. The disambiguator is now an ORDINAL among the siblings that share this unit's
+ * (kind, name): it is still collision-free within one parent, and it is invariant under any edit that does
+ * not add or remove a SAME-NAMED, SAME-KIND sibling before it.
+ *
+ * WHAT IS ESCAPED, AND WHY. `name` is attacker-shaped — a declarator name is arbitrary source text
+ * (`const { "a::b": v } = o` yields the name `{ "a::b": v }`), so an unescaped name can inject the `::`
+ * delimiter and fabricate ancestry. Every free-form component goes through `escapeKeyComponent`, the
+ * index's OWN escape (imported, never restated), so the `::` join stays injective. An EMPTY name (an
+ * anonymous closure) is OMITTED rather than rendered as a trailing `:` — `kind:ordinal:` followed by a
+ * `::` join would read back as a boundary in the wrong place.
+ */
+function unitPath(parentPath: string, node: SyntaxNode, name: string, ordinal: number): string {
+  const local = `${escapeKeyComponent(node.type)}:${ordinal}`;
+  const named = name === '' ? local : `${local}:${escapeKeyComponent(name)}`;
+  return `${parentPath}::${named}`;
+}
+
+/** The 0-based ORDINAL of each unit among the siblings sharing its (kind, name), in source order. Pure and
+ *  positional-free: it depends only on the sibling SEQUENCE, never on byte offsets, so an edit anywhere
+ *  above (or inside) the units leaves every ordinal unchanged. */
+function ordinalsOf(nodes: readonly SyntaxNode[], names: readonly string[]): number[] {
+  const seen = new Map<string, number>();
+  return nodes.map((n, i) => {
+    const bucket = `${n.type}\u0000${names[i] ?? ''}`;
+    const next = seen.get(bucket) ?? 0;
+    seen.set(bucket, next + 1);
+    return next;
+  });
 }
 
 /** Build the FileTree node for one `block` unit — a leaf carrying its exact source slice as `content`,
  *  nested under its `item`'s path so the `::` chain is `file::item::block`. */
-function blockNode(parentPath: string, src: string, node: SyntaxNode): FileTree {
+function blockNode(parentPath: string, src: string, node: SyntaxNode, name: string, ordinal: number): FileTree {
   return {
-    path: unitPath(parentPath, node, nameOf(node)),
+    path: unitPath(parentPath, node, name, ordinal),
     children: [],
     content: src.slice(node.startIndex, node.endIndex),
   };
@@ -143,14 +175,16 @@ function blockNode(parentPath: string, src: string, node: SyntaxNode): FileTree 
 
 /** Build the FileTree node for one `item` unit — its source slice as `content`, its blocks as children
  *  (canonical source order), each block nested under THIS item's path (`file::item::block`). */
-function itemNode(filePath: string, src: string, decl: SyntaxNode): FileTree {
+function itemNode(filePath: string, src: string, decl: SyntaxNode, ordinal: number): FileTree {
   const blocks: SyntaxNode[] = [];
   collectBlocks(decl, blocks);
   blocks.sort((a, b) => a.startIndex - b.startIndex);
-  const itemPath = unitPath(filePath, decl, nameOf(decl));
+  const names = blocks.map(nameOf);
+  const ordinals = ordinalsOf(blocks, names);
+  const itemPath = unitPath(filePath, decl, nameOf(decl), ordinal);
   return {
     path: itemPath,
-    children: blocks.map((b) => blockNode(itemPath, src, b)),
+    children: blocks.map((b, i) => blockNode(itemPath, src, b, names[i] ?? '', ordinals[i] ?? 0)),
     content: src.slice(decl.startIndex, decl.endIndex),
   };
 }
@@ -166,7 +200,8 @@ function itemsOf(filePath: string, src: string, grammar: TsLanguage): FileTree[]
     if (root.hasError) return [];
     const items = root.namedChildren.map(unwrapExport).filter((n) => ITEM_KINDS.has(n.type));
     items.sort((a, b) => a.startIndex - b.startIndex);
-    return items.map((decl) => itemNode(filePath, src, decl));
+    const ordinals = ordinalsOf(items, items.map(nameOf));
+    return items.map((decl, i) => itemNode(filePath, src, decl, ordinals[i] ?? 0));
   } catch {
     return [];
   }

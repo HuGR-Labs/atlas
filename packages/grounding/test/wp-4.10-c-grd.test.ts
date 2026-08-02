@@ -52,18 +52,33 @@ const QP_ARR = 'billing.ts#computeArr';
 const src = axesWith([node(QP_ARR, 'sh-arr-01')]); // E_arr resolves; deleted.ts#gone is absent
 
 describe('WP-4.10-c.GROUND — ground() anchor builder: re-derive@src, drop unresolvable (visible goldens)', () => {
-  it('SCN-GROUND-3a-1: ground() drops a dangling citation (E_gone filtered, only E_arr remains)', () => {
+// ⚠️ CONFLICT — REQ-GROUND-3a AS WRITTEN IS FAIL-OPEN, AND THE FIX CONTRADICTS IT (ANCHOR-IDENTITY, E).
+// The golden's Then clause ("`E_gone` is filtered out (dropped); the resulting grounding contains only
+// `E_arr`") is fail-CLOSED for the ENTRY and fail-OPEN for the FACT: a fact citing two sites and losing one
+// re-grounded to a one-entry receipt that `isGrounded` accepted and `driftDetect` read FRESH — half the
+// evidence gone, receipt clean. `ground()` is now fail-closed at the FACT (src/ground.ts): one unresolvable
+// citation ⇒ NO receipt. The golden's TEETH still hold — the dangling citation never appears in the output.
+// Its ARITY and its FRESH verdict do not. The goldens file (docs/requirements/goldens-grd.md) is NOT edited
+// here; this transcription is updated to the shipped law and the amendment is ESCALATED for adjudication.
+  it('SCN-GROUND-3a-1 [AMENDED]: a dangling citation is never retained — and never launders the survivors', () => {
     // a fact whose grounding cites E_gone (deleted.ts#gone — unit/path deleted) alongside resolvable E_arr.
     const f = unit(cite(QP_ARR, '40-52'), cite('deleted.ts#gone', '5-9'));
     const g = ground(f, src);
-    // teeth (breaks-on "ground() retains the unresolvable entry — a dangling citation persists as anchored"):
-    expect(g.entries).toHaveLength(1);
-    expect(g.entries[0]?.anchor.qualifiedPath).toBe(QP_ARR);
-    // the retained anchor carries the RE-DERIVED current subtreeHash from `src` (the drift oracle).
-    expect(g.entries[0]?.anchor.subtreeHash).toBe(asSubtreeHash('sh-arr-01'));
-    // the built grounding is real and reads FRESH against the source it was re-derived from (co-verb reuse).
-    expect(isGrounded(g)).toBe(true);
-    expect(driftDetect(g, src)).toBe('FRESH');
+    // teeth, UNCHANGED (breaks-on "ground() retains the unresolvable entry — a dangling citation persists
+    // as anchored"): the dead citation appears NOWHERE in the receipt.
+    expect(g.entries.map((e) => e.anchor.qualifiedPath)).not.toContain('deleted.ts#gone');
+    // teeth, ADDED (breaks-on "the drop is per-ENTRY — the surviving half is handed back as a real, FRESH
+    // grounding, so a receipt that lost evidence reads clean"):
+    expect(g.entries).toHaveLength(0);
+    expect(isGrounded(g)).toBe(false);
+    expect(driftDetect(g, src)).toBe('DRIFTED');
+
+    // CONTROL — with BOTH units present the same fact grounds fully, re-derives @src, and reads FRESH:
+    // the change is fail-CLOSED, not fail-ALWAYS.
+    const intact = ground(f, axesWith([node(QP_ARR, 'sh-arr-01'), node('deleted.ts#gone', 'sh-gone-01')]));
+    expect(intact.entries).toHaveLength(2);
+    expect(intact.entries[0]?.anchor.subtreeHash).toBe(asSubtreeHash('sh-arr-01'));
+    expect(isGrounded(intact)).toBe(true);
   });
 
   it('SCN-GROUND-3a-1 (kind pass-through): the re-derived anchor preserves the citation kind, not a hardcoded default', () => {

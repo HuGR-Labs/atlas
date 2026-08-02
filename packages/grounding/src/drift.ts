@@ -23,9 +23,14 @@ import type { Axes, IndexNode } from '@atlas/index';
 import type { Grounding, DriftApi, GroundApi } from './types.js';
 
 /** Resolve a structural unit's CURRENT subtreeHash in `node`'s subtree by its qualified key (the anchor's
- *  `qualifiedPath`). Total: an absent unit returns `undefined` (unresolvable), never a throw. */
+ *  `qualifiedPath`). Total: an absent unit returns `undefined` (unresolvable), never a throw.
+ *
+ *  A node whose `subtreeHash` IS its own `key` is treated as ABSENT. Such a node is not hashing anything —
+ *  its "hash" is a constant of its address, so it is byte-identical before and after any edit and can
+ *  never witness drift. Reading one as the oracle is not a weak check, it is NO check; refusing it is
+ *  fail-closed (the anchor reads DRIFTED, never FRESH). */
 function findByKey(node: IndexNode, key: string): SubtreeHash | undefined {
-  if (node.key === key) return node.subtreeHash;
+  if (node.key === key) return String(node.subtreeHash) === node.key ? undefined : node.subtreeHash;
   for (const child of node.children) {
     const hit = findByKey(child, key);
     if (hit !== undefined) return hit;
@@ -33,10 +38,27 @@ function findByKey(node: IndexNode, key: string): SubtreeHash | undefined {
   return undefined;
 }
 
-/** The current subtreeHash of `qualifiedPath` across the built-index axes, or `undefined` if the unit is
- *  gone/unresolvable (GROUND-3 fail-closed). `displayLines`/line-ranges are never consulted (GROUND-1). */
+/**
+ * The current subtreeHash of `qualifiedPath` across the CONTENT-COMMITTING built-index axes, or
+ * `undefined` if the unit is gone/unresolvable (GROUND-3 fail-closed). `displayLines`/line-ranges are
+ * never consulted (GROUND-1).
+ *
+ * THE DEPENDENCY AXIS IS NOT SCANNED, and that omission is the load-bearing part. `spatial` and
+ * `territory` are hierarchies folded by `foldNodeHash` over each node's own bytes plus its named children,
+ * so their hashes move when the code moves. The `dependency` axis is a GRAPH view: its leaves are keyed by
+ * `nodeHashOfPath(p) = id({file: p})` and carry `subtreeHash = asSubtreeHash(<that same key>)` (see
+ * @atlas/index src/build.ts `dependencyAxis`), an IDENTITY that commits to no content. Scanning it here —
+ * first-hit-wins, as this loop used to, over `[spatial, territory, dependency]` — meant an author could
+ * CHOOSE a dependency-axis key as a fact's anchor and mint a fact that CAN NEVER DRIFT: reproduced by
+ * replacing a file's entire contents and re-reading the verdict as FRESH. Freshness is the truth door's
+ * other leg, so an anchor the oracle cannot invalidate is a hole straight through it.
+ *
+ * An anchor that names a dependency-axis node is now simply UNRESOLVABLE ⇒ DRIFTED, fail-closed. A fact
+ * that wants a freshness-bearing anchor names the unit on the spatial/territory rail (the file path, or a
+ * `file::item::block` refinement key), where the hash actually folds the bytes.
+ */
 function resolveCurrent(src: Axes, qualifiedPath: string): SubtreeHash | undefined {
-  for (const root of [src.spatial, src.territory, src.dependency]) {
+  for (const root of [src.spatial, src.territory]) {
     const hit = findByKey(root, qualifiedPath);
     if (hit !== undefined) return hit;
   }

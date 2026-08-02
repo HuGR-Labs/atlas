@@ -44,9 +44,13 @@ export interface GroundableUnit {
 }
 
 /** Resolve a unit's CURRENT subtreeHash under `n` by its qualified key. Total: an absent unit returns
- *  `undefined` (unresolvable), never a throw. Replicates the sealed `drift.ts` walk (not exported there). */
+ *  `undefined` (unresolvable), never a throw. Replicates the sealed `drift.ts` walk (not exported there),
+ *  INCLUDING its refusal of a node whose `subtreeHash` is its own `key` — a "hash" that is a constant of
+ *  the address commits to no content and can never witness drift, so it is treated as absent. `ground` and
+ *  `driftDetect` MUST agree on what resolves, or `ground` would build an anchor `driftDetect` then reads
+ *  as gone. */
 function findByKey(n: IndexNode, key: string): SubtreeHash | undefined {
-  if (n.key === key) return n.subtreeHash;
+  if (n.key === key) return String(n.subtreeHash) === n.key ? undefined : n.subtreeHash;
   for (const child of n.children) {
     const hit = findByKey(child, key);
     if (hit !== undefined) return hit;
@@ -54,10 +58,13 @@ function findByKey(n: IndexNode, key: string): SubtreeHash | undefined {
   return undefined;
 }
 
-/** The current subtreeHash of `qualifiedPath` across the built-index axes, or `undefined` if the unit is
- *  gone/unresolvable (GROUND-3 fail-closed). `displayLines`/line-ranges are never consulted (GROUND-1). */
+/** The current subtreeHash of `qualifiedPath` across the CONTENT-COMMITTING built-index axes, or
+ *  `undefined` if the unit is gone/unresolvable (GROUND-3 fail-closed). `displayLines`/line-ranges are
+ *  never consulted (GROUND-1). The `dependency` axis is deliberately NOT scanned — its leaf hashes are
+ *  node IDENTITIES (`asSubtreeHash(id({file: path}))`), invariant under every content change; see the
+ *  full note on the sealed sibling `drift.ts::resolveCurrent`, whose axis list this MIRRORS. */
 function resolveCurrent(src: Axes, qualifiedPath: string): SubtreeHash | undefined {
-  for (const root of [src.spatial, src.territory, src.dependency]) {
+  for (const root of [src.spatial, src.territory]) {
     const hit = findByKey(root, qualifiedPath);
     if (hit !== undefined) return hit;
   }
@@ -65,17 +72,37 @@ function resolveCurrent(src: Axes, qualifiedPath: string): SubtreeHash | undefin
 }
 
 /**
- * GROUND-3 anchor builder. RE-DERIVES the grounding anchor for `node` against the built-index `src`:
- * for each citation target, resolve its CURRENT `subtreeHash` (the re-derived drift oracle, read from the
- * already-hashed index — never re-hashed locally) and emit a `GroundingEntry`; an unresolvable citation
- * (unit gone / path absent) is DROPPED — fail-closed, never a throw. Pure + total. Conforms to the frozen
- * `GroundApi.ground`, with `node` pinned to `GroundableUnit`.
+ * GROUND-3 anchor builder. RE-DERIVES the grounding anchor for `node` against the built-index `src`: for
+ * each citation target, resolve its CURRENT `subtreeHash` (the re-derived drift oracle, read from the
+ * already-hashed index — never re-hashed locally) and emit a `GroundingEntry`. Pure + total, never a
+ * throw. Conforms to the frozen `GroundApi.ground`, with `node` pinned to `GroundableUnit`.
+ *
+ * FAIL-CLOSED AT THE FACT, NOT AT THE ENTRY — the amendment this function carries.
+ * The dropped-per-entry rule (`continue` past each unresolvable citation) is fail-CLOSED for the entry and
+ * fail-OPEN for the fact, and the fact is the thing being certified. Reproduced: a fact citing TWO sites,
+ * one of them deleted, re-grounded to a ONE-entry receipt that `isGrounded` accepted and `driftDetect`
+ * read FRESH. Half the evidence had vanished and the receipt came back clean; only a fact whose EVERY
+ * citation died was caught, because the empty receipt is the one state GROUND-2 rejects.
+ *
+ * A grounding receipt is a claim about what a fact is anchored to. A receipt that quietly answers a
+ * narrower question than it was asked is a lie about grounding, and the truth gate (GROUND-4: HOLDS iff
+ * grounded ∧ FRESH) then certifies the claim against evidence the repository no longer contains. So: if
+ * ANY declared citation is unresolvable, NO receipt is built — `{ entries: [] }`, which `isGrounded`
+ * rejects (GROUND-2) and `driftDetect` reads DRIFTED (GROUND-3), sending the author back to re-ground the
+ * claim against what actually exists. Nothing is guessed and nothing is retained: the dangling citation
+ * still never appears in the output (the SCN-GROUND-3a teeth), it just no longer takes the surviving
+ * evidence down a path that reads clean.
+ *
+ * [AMENDS REQ-GROUND-3a / SCN-GROUND-3a-1/-2, which pin the PER-ENTRY drop — "the resulting grounding
+ * contains only E_arr". That wording is what makes the receipt fail-open at the fact level. Flagged for
+ * owner adjudication + a docs/requirements amendment; the goldens file is NOT edited here.]
  */
 export function ground(node: GroundableUnit, src: Axes): Grounding {
   const entries: GroundingEntry[] = [];
   for (const c of node.citations) {
     const subtreeHash = resolveCurrent(src, c.qualifiedPath);
-    if (subtreeHash === undefined) continue; // GROUND-3: drop the unresolvable citation, never throw.
+    // GROUND-3, fact-level: one unresolvable citation sinks the whole receipt. Never a throw.
+    if (subtreeHash === undefined) return { entries: [] };
     const anchor: StructRef = { kind: c.kind, qualifiedPath: c.qualifiedPath, subtreeHash };
     entries.push(
       c.displayLines === undefined

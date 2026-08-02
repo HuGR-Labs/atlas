@@ -163,11 +163,16 @@ describe('S12A — symbol + file both resolve & readback; drift contrast (mechan
     fileEmit = emitFact(repo, fileFact);
     if (fileEmit.exitCode !== 0) throw new Error(`S12A setup: file-grounded emit failed:\n${fileEmit.stdout}`);
     preDriftQuery = runAtlas(repo.repoPath, ['query', 'src']).stdout;
-    // ONE commit drifting BOTH, in OPPOSITE ways (mirrors s8-doctor's proven recipe): `foo` MOVES (a new
-    // decl is prepended above it, byte-start shifts) but its body is identical ⇒ mechanical/alive. `rot.ts`'s
-    // body is REWRITTEN ⇒ its recorded content vanishes ⇒ semantic/dead.
+    // ONE commit drifting BOTH, in OPPOSITE ways (mirrors s8-doctor's proven recipe): `foo` MOVES TO
+    // ANOTHER FILE but its body is byte-identical ⇒ the unit's subtreeHash survives and re-derives at HEAD
+    // ⇒ mechanical/alive. `rot.ts`'s body is REWRITTEN ⇒ its recorded content vanishes ⇒ semantic/dead.
+    //
+    // A prepend-above no longer drifts anything: the anchor key used to carry the symbol's BYTE START
+    // INDEX, so an inserted line re-keyed the unit. That was a bug, and this fixture's mechanical verdict
+    // used to depend on it. The move is the real thing the classification is about.
     repo.commit({
-      'src/keep.ts': 'export const bar = 2;\nexport const foo = 1;\n',
+      'src/keep.ts': '// foo moved to src/moved.ts\n',
+      'src/moved.ts': 'export const foo = 1;\n',
       'src/rot.ts': 'export const gone = 999;\n// semantic change\n',
     });
   });

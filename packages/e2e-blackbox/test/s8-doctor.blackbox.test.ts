@@ -96,10 +96,18 @@ beforeAll(() => {
   if (e1.exitCode !== 0) throw new Error(`S8 setup: mechanical grounded emit failed:\n${e1.stdout}`);
   const e2 = emitFact(repo, semFact);
   if (e2.exitCode !== 0) throw new Error(`S8 setup: semantic grounded emit failed:\n${e2.stdout}`);
-  // ONE commit drifting BOTH: prepend a new declaration above `foo` (it MOVES, byte-start shifts, body
-  // identical ⇒ mechanical) AND rewrite `gone`'s body in rot.ts (the file's content changes ⇒ semantic).
+  // ONE commit drifting BOTH: `foo` MOVES TO ANOTHER FILE (its body is byte-identical, so the unit's
+  // subtreeHash survives and `resolveBySubtreeAt` finds it at HEAD ⇒ mechanical) AND `gone`'s body in
+  // rot.ts is rewritten (the file's recorded content vanishes ⇒ semantic).
+  //
+  // WHY NOT "prepend a declaration above `foo`": that is what this fixture used to do, and it manufactured
+  // its mechanical drift by exploiting a BUG — the anchor key carried the symbol's BYTE START INDEX, so an
+  // added import above a unit re-keyed it. With the key now `<parent>::<kind>:<ordinal>[:<name>]`, a
+  // prepend correctly drifts NOTHING, and `doctor why` correctly reports `whyBroken: none`. The doctor's
+  // `mechanical` verdict was, in this fixture, only ever reachable through the false drift.
   repo.commit({
-    'src/keep.ts': 'export const bar = 2;\nexport const foo = 1;\n',
+    'src/keep.ts': '// foo moved to src/moved.ts\n',
+    'src/moved.ts': 'export const foo = 1;\n',
     'src/rot.ts': 'export const gone = 999;\n// semantic change\n',
   });
 });

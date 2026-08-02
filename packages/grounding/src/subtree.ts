@@ -3,8 +3,17 @@
 // The NORMALIZED-AST drift oracle. `subtreeHash(unit)` is the BLAKE3 over the unit's normalized AST
 // subtree — reached ONLY through the @atlas/kernel `Encoder` seam (GROUND-10 / KERNEL-2), never a
 // locally-inlined hash call, so a blake3↔stub digest swap flows through every anchor (the seam-
-// substitution property, SCN-GROUND-10a/10b). A semantically-irrelevant edit (reformat, import-above,
-// unrelated rename) leaves this byte-invariant; a real change to the cited unit changes it (GROUND-5).
+// substitution property, SCN-GROUND-10a/10b). An edit that does NOT TOUCH the cited unit (an import or
+// license header added above it, an unrelated rename elsewhere) leaves this byte-invariant; a real change
+// to the cited unit changes it (GROUND-5).
+//
+// WHAT THIS DOES NOT PROMISE, stated because the header used to promise it: a REFORMAT of the cited unit
+// DOES drift. The hash is over the unit's raw source slice, NFC-normalized only, so `return 42;` →
+// `return  42;` moves it. That is deliberate and REQ-GROUND-5b was amended (2026-08-02) to say so. Any
+// cheap normalization over raw text also erases whitespace that is SEMANTIC in TS/TSX — string, template
+// and regex literals, JSX text, ASI — and the trade is asymmetric: a false alarm costs one re-ground, a
+// false negative lets the truth gate serve HOLDS on a stale fact. Before landing a normalizer here, read
+// the companion test that pins a one-space change INSIDE a template literal as DRIFTED.
 // Conforms to the co-located frozen oracle `SubtreeApi.subtreeHash` (defined below in this file).
 //
 // SEAM: the `unit` is already a NORMALIZED CasObject (its concrete `StructuralNode` shape is owned by the

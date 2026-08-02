@@ -21,6 +21,7 @@
 // while the ADAPT-AST-optin tooth runs FIRST (its own hook-less suite) so it observes the pre-init state.
 
 import { describe, it, expect, beforeAll } from 'vitest';
+import { unescapeKeyComponent } from '@atlas/index';
 import type { FileTree } from '@atlas/index';
 import { foldAstUnits, initAst } from '../src/ast.js';
 
@@ -61,9 +62,19 @@ function find(node: FileTree, path: string): FileTree | undefined {
   return undefined;
 }
 
-/** The trailing `:<kind>:<name>` name of a refinement path (units are keyed `file#start:kind:name`). */
-const unitName = (t: FileTree): string => t.path.slice(t.path.lastIndexOf(':') + 1);
-const unitKind = (t: FileTree): string => t.path.split(':').slice(-2)[0] ?? '';
+// A refinement path is `<parent>::<kind>:<ordinal>[:<name>]` (adapter-io/src/ast.ts `unitPath`). The
+// disambiguator is an ORDINAL among same-(kind,name) siblings, NOT the unit's byte start — a byte start
+// made the key a function of everything above it in the file, so one added import re-keyed every symbol
+// beneath (finding D). The NAME is percent-escaped (`escapeKeyComponent`) so it can never inject the `::`
+// delimiter and fabricate ancestry (finding B); it is OMITTED entirely when empty (an anonymous closure),
+// because a trailing `:` would read back as a segment boundary in the wrong place.
+/** The LOCAL component of a refinement path — everything after the last `::`. */
+const unitLocal = (t: FileTree): string => t.path.slice(t.path.lastIndexOf('::') + 2);
+const unitKind = (t: FileTree): string => unitLocal(t).split(':')[0] ?? '';
+const unitName = (t: FileTree): string => {
+  const parts = unitLocal(t).split(':');
+  return parts.length > 2 ? unescapeKeyComponent(parts.slice(2).join(':')) : '';
+};
 
 // ── opt-in-cost tooth: MUST run before `initAst()` so it observes the uninitialized (null-grammar) state. ──
 // This suite deliberately declares NO beforeAll — placed first, its tests execute while the module singletons

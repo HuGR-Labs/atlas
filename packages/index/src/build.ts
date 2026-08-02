@@ -24,18 +24,101 @@ export interface BuildApi {
 const SPATIAL_LEVELS = ['repo', 'crate', 'module', 'file', 'item', 'block'] as const;
 const TERRITORY_LEVELS = ['project', 'territory', 'region'] as const;
 
+/** The sub-file refinement separator (`file::item::block`, adapter-io/ast.ts `unitPath`; the descent that
+ *  reads it is resolve.ts `descentSteps`). A node key nests on `::` as well as `/`, so a `::` in a key is
+ *  a claim of real structural containment. */
+const UNIT_SEP = '::';
+
+/**
+ * THE key-component escape — the reason a node key can be trusted as a structural ADDRESS.
+ *
+ * Node keys are joined by two whole separators (`/` between path components, `::` between refinement
+ * units) and are SPLIT back apart on those separators by every consumer (resolve.ts `descentSteps`,
+ * knowledge/write/router.ts `primaryAnchorId`, tools `deriveSubsumes`). That round trip is only injective
+ * if no component can contain — or sit adjacent to — the delimiter. `:` is a perfectly legal POSIX
+ * filename character and git tracks it, so without this escape a file named `x::alpha.ts` FABRICATES a
+ * segment: `src/x::alpha.ts` and `src/x::beta.ts` "share" the ancestor `src/x`, a unit that does not
+ * exist, and `primaryAnchorId` mints it — non-empty, so the degenerate-anchor refusal passes it through —
+ * and `nodeKey` then collides with any fact honestly anchored at `src/x`. That is identity capture with
+ * no hash weakness whatsoever, and it is cheap: two committed filenames.
+ *
+ * A single trailing `:` is just as fatal even without a doubled one, because the join reassociates:
+ * `"a:" ‖ "b"` and `"a" ‖ ":b"` both render `a:::b`. So the escape covers EVERY `:`, not just `::`.
+ * `%` must be escaped too, or the encoding stops being injective (`a%3Ab` and `a:b` would collide).
+ * For a normal path (no `:`, no `%`) this is the IDENTITY function — no existing key moves.
+ */
+export function escapeKeyComponent(component: string): string {
+  return component.replaceAll('%', '%25').replaceAll(':', '%3A');
+}
+
+/** The exact inverse of `escapeKeyComponent` (`unescape(escape(s)) === s` for every string) — so a key is
+ *  a lossless encoding of the path/name it addresses, not a lossy sanitization. */
+export function unescapeKeyComponent(component: string): string {
+  return component.replaceAll(/%3A/g, ':').replaceAll(/%25/g, '%');
+}
+
+/** The parent context one level up: its RAW tree path (what the adapter minted its children against), its
+ *  already-MINTED key, and whether it carries its own bytes (only a content-bearing node can have sub-file
+ *  refinement children — a directory cannot). */
+interface Parent {
+  readonly path: string;
+  readonly key: string;
+  readonly content: string | undefined;
+}
+
+/**
+ * A refinement local (`function_declaration:0:computeArr`, minted by adapter-io/ast.ts `unitPath`) is
+ * passed through UNCHANGED when it is well-formed, and escaped WHOLESALE when it is not. Well-formed =
+ * carries no `::` and neither starts nor ends with `:`. The mint does not trust the adapter to have
+ * escaped its own name component: an adapter defect must degrade to an ugly-but-honest key, never to a
+ * forged segment boundary.
+ */
+function safeUnitLocal(local: string): string {
+  const wellFormed =
+    local.length > 0 && !local.includes(UNIT_SEP) && !local.startsWith(':') && !local.endsWith(':');
+  return wellFormed ? local : escapeKeyComponent(local);
+}
+
+/**
+ * THE node-key mint. A key is built STRUCTURALLY from its parent's key plus one escaped local segment —
+ * never copied verbatim out of `FileTree.path` — so a delimiter inside a filename cannot fabricate
+ * ancestry. Two shapes, and only two:
+ *   - REFINEMENT (`parent.key ‖ '::' ‖ local`) — reserved for a sub-file unit, which is recognized by
+ *     BOTH tests: the child extends the parent's raw path by `::`, AND the parent carries content. The
+ *     content test is what stops a DIRECTORY named `a` from claiming the file `a::b.ts` as its unit.
+ *   - PATH (`escape(c1) ‖ '/' ‖ escape(c2) ‖ …`) — everything else, each `/`-component escaped.
+ * For any tree whose paths contain no `:` and no `%`, this returns exactly `node.path` — the previous
+ * behaviour, byte for byte, so no existing subtreeHash moves.
+ */
+function mintKey(node: FileTree, parent: Parent | undefined): string {
+  if (parent !== undefined && parent.content !== undefined && node.path.startsWith(parent.path + UNIT_SEP)) {
+    return `${parent.key}${UNIT_SEP}${safeUnitLocal(node.path.slice(parent.path.length + UNIT_SEP.length))}`;
+  }
+  return node.path.split('/').map(escapeKeyComponent).join('/');
+}
+
 /** subtreeHash via the sealed seam. Delegates to `foldNodeHash` — THE single rollup implementation
  *  (src/rollup.ts) — so a rebuild and an incremental re-hash cannot diverge. Every node commits to its OWN
- *  content AND to the NAMES of its children, never to a bare multiset of child hashes (atlas-index:40). */
-function rollupHash(node: FileTree, children: readonly IndexNode[]): SubtreeHash {
-  return foldNodeHash({ key: node.path, content: node.content, children });
+ *  content AND to the NAMES of its children, never to a bare multiset of child hashes (atlas-index:40).
+ *  The fold is keyed by the MINTED key (not the raw path) so a child's relative name is computed in the
+ *  same namespace the children were minted in. */
+function rollupHash(key: string, node: FileTree, children: readonly IndexNode[]): SubtreeHash {
+  return foldNodeHash({ key, content: node.content, children });
 }
 
 /** Build one rooted axis hierarchy from the file tree along a level vocabulary. Deterministic + total. */
-function hierarchy(node: FileTree, axis: Axis, levels: readonly string[], depth: number): IndexNode {
+function hierarchy(
+  node: FileTree,
+  axis: Axis,
+  levels: readonly string[],
+  depth: number,
+  parent?: Parent,
+): IndexNode {
   const level = levels[Math.min(depth, levels.length - 1)] ?? levels[levels.length - 1] ?? '';
-  const children = node.children.map((c) => hierarchy(c, axis, levels, depth + 1));
-  return { axis, level, key: node.path, subtreeHash: rollupHash(node, children), children, objects: [] };
+  const key = mintKey(node, parent);
+  const self: Parent = { path: node.path, key, content: node.content };
+  const children = node.children.map((c) => hierarchy(c, axis, levels, depth + 1, self));
+  return { axis, level, key, subtreeHash: rollupHash(key, node, children), children, objects: [] };
 }
 
 /**
@@ -83,8 +166,20 @@ function deriveEdges(scip: ScipOutput): DepEdge[] {
   return [...seen.values()].sort((a, b) => (edgeKey(a) < edgeKey(b) ? -1 : edgeKey(a) > edgeKey(b) ? 1 : 0));
 }
 
-/** The dependency axis as a rooted view over the derived edges — one leaf per distinct participating node,
- *  sorted; the root's subtreeHash folds the full edge ledger so a graph change re-keys the root. */
+/**
+ * The dependency axis as a rooted view over the derived edges — one leaf per distinct participating node,
+ * sorted; the root's subtreeHash folds the full edge ledger so a graph change re-keys the root.
+ *
+ * [NOT A FRESHNESS ORACLE] A leaf's `subtreeHash` here is `asSubtreeHash(h)` where `h` IS the leaf's key —
+ * i.e. the node's IDENTITY (`id({file: path})`), a constant of the PATH that commits to no content. It is
+ * shaped that way on purpose: it is the value `genesis`'s `resolveSiteKey` joins a mined `StructRef` back
+ * to the skeleton by (see `nodeHashOfPath` above, and adapter-io/src/git-history.ts `fileRef`, which
+ * REUSES that minting rather than restating it). The consequence must be stated where it can be read: a
+ * dependency-axis leaf is INVARIANT under any change to the file's bytes, so it can never witness drift.
+ * The freshness oracle therefore MUST NOT resolve an anchor here — grounding/src/drift.ts resolves over
+ * the content-committing axes only, and refuses any node whose hash is its own key. If an anchor could be
+ * resolved on this axis, an author could pick one and mint a fact that CAN NEVER DRIFT.
+ */
 function dependencyAxis(edges: readonly DepEdge[]): IndexNode {
   const nodes = new Set<string>();
   for (const e of edges) {

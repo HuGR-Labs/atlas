@@ -110,15 +110,23 @@ gen: conformance   # the mock asserts empty/partial groundings never surface FRE
 
 ## REQ-GROUND-3 — fail-closed, total resolution
 
-### REQ-GROUND-3a — unresolvable citation dropped   (guard)
+### REQ-GROUND-3a — unresolvable citation fails the WHOLE fact   (guard)
 
-### SCN-GROUND-3a-1 — `ground()` drops a dangling citation   (guard)
+> **AMENDED 2026-08-02 (lead), strengthening.** This requirement previously read "unresolvable citation
+> dropped" and pinned per-ENTRY filtering. That was fail-OPEN per FACT, and it was executed: a fact citing
+> two units, one of them deleted, re-grounded to a one-entry receipt that `isGrounded` and read `FRESH`.
+> **Half the evidence vanished and the receipt came back clean.** Only a fact whose EVERY citation died was
+> caught. The original teeth — "a dangling citation must never later read as anchored" — are UNCHANGED and
+> still hold; what changed is that dropping the dangling entry is no longer enough to satisfy them, because
+> the surviving entries then speak for evidence that is gone. REQ-GROUND-3b is unaffected.
+
+### SCN-GROUND-3a-1 — `ground()` refuses a fact with a dangling citation   (guard)
 source: REQ-GROUND-3a
 Given a fact whose grounding cites `E_gone` (its unit/path was deleted) alongside the resolvable `E_arr`
 When `ground()` runs
-Then `E_gone` is **filtered out** (dropped); the resulting grounding contains only `E_arr`
-teeth: breaks-on "`ground()` retains the unresolvable entry — a dangling citation persists in the grounding set and later reads as anchored"
-gen: conformance   # `grounding/ref/ground.ts` is total by construction — unresolvable entries are filtered
+Then the grounding is **empty** — `E_gone` is never retained, and `E_arr` does not stand in for it; `isGrounded` is false and `driftDetect` reads `DRIFTED`
+teeth: breaks-on "`ground()` retains the unresolvable entry — a dangling citation persists in the grounding set and later reads as anchored" · breaks-on "`ground()` returns the surviving entries alone — the fact reads FRESH on evidence that is partly deleted"
+gen: conformance   # `grounding/ref/ground.ts` is total by construction — a fact with any unresolvable entry grounds to nothing
 
 ### REQ-GROUND-3b — unresolvable citation reads DRIFTED   (guard)
 
@@ -184,15 +192,31 @@ Then the verdict is `DRIFTED` — a real change is caught
 teeth: breaks-on "the normalizer over-normalizes and erases the `42→43` change — a genuinely changed unit stays `FRESH` (a false-negative that hides a stale fact)"
 gen: conformance   # differential vs the reference normalizer/`driftDetect` (`grounding/ref/anchor.ts`)
 
-### REQ-GROUND-5b — irrelevant edit never drifts   (guard)
+### REQ-GROUND-5b — an edit that does not touch the cited unit never drifts   (guard)
 
-### SCN-GROUND-5b-1 — reformat + import-above + unrelated-rename stay FRESH   (guard)
+> **AMENDED 2026-08-02 (lead), narrowing to what is actually delivered.** This requirement previously
+> claimed "irrelevant edit never drifts" over three edit classes. Two of the three are delivered, and one
+> of them only became REAL with this amendment: the **import-above** leg used to pass only because its
+> fixture held the anchor key constant BY HAND — the mint put the symbol's BYTE START INDEX in the key, so
+> an added line genuinely re-keyed the unit and the golden was VACUOUS. The key is now
+> `<parent>::<kind>:<ordinal>[:<name>]` and the leg is exercised through the real mint.
+>
+> The **whitespace-reformat** leg is NOT delivered, and deliberately will not be: the oracle hashes the raw
+> source slice, so `return 42;` → `return  42;` drifts. Delivering it needs a normalizer, and any cheap
+> normalization over raw text also erases whitespace that is SEMANTIC in TS/TSX — string, template and
+> regex literals, JSX text, ASI. The trade is asymmetric: a false alarm costs one re-ground, a false
+> negative lets the truth gate serve HOLDS on a stale fact. So the oracle stays byte-exact and the
+> requirement now says so instead of promising otherwise. `packages/grounding/test/` pins BOTH directions:
+> the reformat drifts, and a one-space change inside a template literal MUST drift — the teeth against
+> anyone landing a normalizer later.
+
+### SCN-GROUND-5b-1 — import-above + unrelated-rename stay FRESH; a reformat DOES drift   (guard)
 source: REQ-GROUND-5b
-Given `F_arr` on `U_arr`, then three semantically-irrelevant edits applied — a whitespace reformat, an import added above, and an unrelated rename elsewhere — each leaving `normalize(subtree) = sh-arr-01` byte-invariant
+Given `F_arr` on `U_arr`, then two edits that do not touch the cited unit — an import added above, and an unrelated rename elsewhere — leaving the unit's own bytes and its minted key invariant; and separately a whitespace reformat OF the cited unit
 When `driftDetect(F_arr)` runs after each edit
-Then every verdict is `FRESH` — 0 false drift
-teeth: breaks-on "the normalizer leaks formatting/rename noise — a reformat drifts a still-true fact (the false-alarm the drift oracle exists to suppress)"
-gen: conformance   # PBT-fuzz over an irrelevant-edit class vs the reference oracle (tag stays reference-model per §GROUND-5)
+Then the two non-touching edits verdict `FRESH` — 0 false drift — and the reformat verdicts `DRIFTED`, which is the oracle's stated limit, not a defect
+teeth: breaks-on "an import added above the unit drifts it — the anchor key carries a byte offset and any line inserted above re-keys a still-true fact" · breaks-on "a whitespace reformat of the cited unit reads FRESH — a normalizer landed and the oracle can no longer see a change inside a template literal"
+gen: conformance   # PBT-fuzz over a non-touching-edit class vs the reference oracle (tag stays reference-model per §GROUND-5)
 
 ---
 
@@ -577,10 +601,10 @@ gen: conformance   # independent-data leg of SCN-GROUND-2b-1 (empty/partial grou
 source: REQ-GROUND-3a
 Given a fact whose grounding cites `E_gone2` (its unit/path was deleted) alongside the resolvable `E_tax`
 When `ground()` runs
-Then `E_gone2` is **filtered out** (dropped); the resulting grounding contains only `E_tax`
-teeth: breaks-on "`ground()` retains the unresolvable entry — `E_gone2` persists in the grounding set and later reads as anchored"
+Then the grounding is **empty** — `E_gone2` is never retained, and `E_tax` does not stand in for it; `isGrounded` is false and `driftDetect` reads `DRIFTED`   <!-- AMENDED 2026-08-02 with REQ-GROUND-3a -->
+teeth: breaks-on "`ground()` retains the unresolvable entry — `E_gone2` persists in the grounding set and later reads as anchored" · breaks-on "`ground()` returns `E_tax` alone — the fact reads FRESH on evidence that is partly deleted"
 held_out: true
-gen: conformance   # independent-data leg of SCN-GROUND-3a-1 (`ground.ts` total-by-construction filter)
+gen: conformance   # independent-data leg of SCN-GROUND-3a-1 (`ground.ts` total-by-construction refusal)
 
 ### SCN-GROUND-3b-2 — a gone unit drifts, never freshens (held-out)   (guard)
 source: REQ-GROUND-3b
@@ -611,10 +635,10 @@ gen: conformance   # independent-data leg of SCN-GROUND-5a-1 (differential vs th
 
 ### SCN-GROUND-5b-2 — comment-reindent + license-above + unrelated-rename stay FRESH (held-out)   (guard)
 source: REQ-GROUND-5b
-Given `F_tax` on `U_tax`, then three semantically-irrelevant edits applied — a comment-reindent, a license header added above, and an unrelated helper renamed elsewhere — each leaving `normalize(subtree) = sh-tax-01` byte-invariant
+Given `F_tax` on `U_tax`, then two edits that do not touch the cited unit — a license header added above, and an unrelated helper renamed elsewhere — leaving the unit's own bytes and its minted key invariant; and separately a comment-reindent INSIDE the cited unit
 When `driftDetect(F_tax)` runs after each edit
-Then every verdict is `FRESH` — 0 false drift
-teeth: breaks-on "the normalizer leaks comment/rename noise — the license-header add drifts a still-true fact (the false-alarm the drift oracle exists to suppress)"
+Then the two non-touching edits verdict `FRESH` — 0 false drift — and the in-unit reindent verdicts `DRIFTED`, which is the oracle's stated limit, not a defect   <!-- AMENDED 2026-08-02 with REQ-GROUND-5b -->
+teeth: breaks-on "the license-header add drifts a still-true fact — the anchor key carries a byte offset and any line inserted above re-keys it" · breaks-on "an in-unit comment reindent reads FRESH — a normalizer landed and the oracle can no longer see a change inside a template literal"
 held_out: true
 gen: conformance   # independent irrelevant-edit corpus vs the reference oracle (disjoint from 5b-1's edit class)
 
