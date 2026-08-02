@@ -14,7 +14,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { Hash } from '@atlas/contracts';
 import { canonicalForm, id, defaultEncoder } from '../src/index.js';
-import { jsonObjArb, reorder } from './arb.js';
+import { jsonObjArb, reorder, hasNfcKeyCollision } from './arb.js';
 
 const shaHash = (b: Uint8Array): Hash => bytesToHex(sha256(b)) as Hash;
 const b3Hash = (b: Uint8Array): Hash => bytesToHex(blake3(b)) as Hash;
@@ -57,6 +57,13 @@ describe('PROP-KERNEL-2 — encoder substitution (∀-law)', () => {
     const encoders: Array<(b: Uint8Array) => Hash> = [defaultEncoder.hash.bind(defaultEncoder), b3Hash, shaHash];
     fc.assert(
       fc.property(jsonObjArb, (x) => {
+        // An NFC key collision is rejected by canonicalForm BEFORE any encoder runs — the rejection is a
+        // property of the preimage, so it must hold under EVERY digest fn, presented either way.
+        if (hasNfcKeyCollision(x)) {
+          expect(() => canonicalForm(x)).toThrow(/NFC key collision/);
+          expect(() => canonicalForm(reorder(x))).toThrow(/NFC key collision/);
+          return;
+        }
         for (const h of encoders) {
           // non-digest contract: canonical (key-order-invariant) identity holds under EVERY digest fn
           expect(h(canonicalForm(x))).toBe(h(canonicalForm(reorder(x))));

@@ -47,11 +47,15 @@ export interface RevIndex {
    *  is not a structural unit in that rev's tree. Mirrors grounding's `resolveCurrent` (drift.ts): a node
    *  is keyed by `IndexNode.key` (= the FileTree path). Total: never throws. */
   resolveAnchorAt(rev: string, qp: string): StructRef | undefined;
-  /** The `StructRef` of the FIRST unit in `axesAt(rev)` whose `subtreeHash` equals `subtreeHash`, or
-   *  `undefined` if that exact CONTENT no longer resolves ANYWHERE in the rev — the re-derivability oracle
-   *  keyed on the drift oracle (`subtreeHash`, GROUND-1), NOT on the anchor's `qualifiedPath`. A moved
-   *  anchor whose content survives at a NEW path re-derives here (⇒ mechanical, re-groundable to that path);
-   *  content that genuinely changed/vanished does not (⇒ semantic). Total: never throws. */
+  /** The `StructRef` of the UNIQUE unit in `axesAt(rev)` whose `subtreeHash` equals `subtreeHash` — the
+   *  re-derivability oracle keyed on the drift oracle (`subtreeHash`, GROUND-1), NOT on the anchor's
+   *  `qualifiedPath`. A moved anchor whose content survives at a NEW path re-derives here (⇒ mechanical,
+   *  re-groundable to that path); content that genuinely changed/vanished does not (⇒ semantic).
+   *
+   *  `undefined` in THREE cases, all meaning "not mechanically re-groundable": the content resolves
+   *  NOWHERE in the rev; the content resolves at ≥2 distinct paths, which is genuine AMBIGUITY and is
+   *  refused rather than guessed (see the implementation note); or the rev's checkout FAILED, in which case
+   *  there is no snapshot to answer from. Total: never throws. */
   resolveBySubtreeAt(rev: string, subtreeHash: string): StructRef | undefined;
   /** Does `fact`'s grounding still hold at `newSha` — `driftDetect(fact.grounding, axesAt(newSha))` is
    *  `FRESH`. `false` on any drift, an absent unit, or a bad `newSha` (fail-closed, never throws). */
@@ -86,15 +90,15 @@ function findNode(node: IndexNode, key: string): IndexNode | undefined {
   return undefined;
 }
 
-/** Resolve the FIRST `IndexNode` (preorder) whose `subtreeHash` equals `hash` — the content-addressed dual
- *  of `findNode` (keys on the drift oracle, not the path). Total: an absent content returns `undefined`. */
-function findBySubtree(node: IndexNode, hash: string): IndexNode | undefined {
-  if (String(node.subtreeHash) === hash) return node;
-  for (const child of node.children) {
-    const hit = findBySubtree(child, hash);
-    if (hit !== undefined) return hit;
-  }
-  return undefined;
+/** Collect EVERY node in `node`'s subtree whose `subtreeHash` equals `hash`, keyed by `qualifiedPath` —
+ *  the content-addressed dual of `findNode` (keys on the drift oracle, not the path). Total.
+ *
+ *  Keyed by PATH, not by node hit, and that is load-bearing: `build` emits the spatial and territory axes
+ *  over the SAME tree, so every file matches at least TWICE across axes. Counting raw hits would make every
+ *  content look ambiguous and would disable the mechanical arm entirely; distinct paths is the real arity. */
+function collectBySubtree(node: IndexNode, hash: string, into: Map<string, IndexNode>): void {
+  if (String(node.subtreeHash) === hash && !into.has(node.key)) into.set(node.key, node);
+  for (const child of node.children) collectBySubtree(child, hash, into);
 }
 
 /** Classify a resolved node into a `StructRef.kind`. The build's `IndexNode.level` is DEPTH-based
@@ -120,6 +124,10 @@ function kindOf(node: IndexNode): StructRef['kind'] {
 export function createRevIndex(repoPath: string, deps: RevIndexDeps = {}): RevIndex {
   const runGit = deps.runGit ?? gitExec;
   const cache = new Map<string, Axes>();
+  /** Revs whose checkout FAILED, so `axesAt` served the `EMPTY_AXES` sentinel rather than that rev's real
+   *  tree. Tracked because the sentinel is a genuine built snapshot of an empty tree and is therefore
+   *  INDISTINGUISHABLE BY VALUE from a rev that honestly has one — the readers must key on PROVENANCE. */
+  const unresolved = new Set<string>();
   const base = join(tmpdir(), 'atlas-revcache');
   let seq = 0;
 
@@ -170,21 +178,40 @@ export function createRevIndex(repoPath: string, deps: RevIndexDeps = {}): RevIn
       try {
         const axes = attemptBuild(rev, nextDir());
         cache.set(rev, axes); // memoize the immutable rev's Axes (NOT the worktree)
+        unresolved.delete(rev); // a retry that CLEARED a transient makes the rev genuinely resolved
         return axes;
       } catch (err) {
         // DETERMINISTIC bad rev ⇒ genuine empty, immediately (retrying a bad rev only wastes latency). The
         // classifier is the shared run-git.ts one (superset of the former local BAD_REV_RE; same result).
-        if (isDeterministicGitError(err)) return EMPTY_AXES;
+        if (isDeterministicGitError(err)) {
+          unresolved.add(rev);
+          return EMPTY_AXES;
+        }
         // Transient/lock/unclassified ⇒ yield briefly (clock-free) and retry, unless attempts are exhausted.
         if (attempt < GIT_MAX_ATTEMPTS - 1)
           gitYieldMs(GIT_BACKOFF_MS[attempt] ?? GIT_BACKOFF_MS[GIT_BACKOFF_MS.length - 1]!);
       }
     }
+    unresolved.add(rev);
     return EMPTY_AXES; // fail-closed: a transient that never cleared within the bounded attempts ⇒ empty
   }
 
+  /** `axesAt(rev)`, but ONLY when that rev's checkout actually succeeded — otherwise `undefined`.
+   *
+   *  A failed checkout must not ANSWER. `EMPTY_AXES` is a real built snapshot, so the readers happily found
+   *  the repo ROOT ('.', and its empty-tree hash) inside it and returned a POSITIVE `StructRef` for a rev
+   *  that does not exist — reconcile/doctor then read that as MECHANICAL and re-grounded a fact onto '.'.
+   *  This is the sibling of finding #73: the same "a failure masquerades as a genuinely-empty rev", here in
+   *  the readers rather than in the transient-retry classifier. The gate is on the REV's provenance, never on
+   *  the hash VALUE — so a rev that is genuinely empty still resolves exactly as before. */
+  function axesIfResolved(rev: string): Axes | undefined {
+    const axes = axesAt(rev); // populates `unresolved` as a side effect — must run BEFORE the check
+    return unresolved.has(rev) ? undefined : axes;
+  }
+
   function resolveAnchorAt(rev: string, qp: string): StructRef | undefined {
-    const axes = axesAt(rev);
+    const axes = axesIfResolved(rev);
+    if (axes === undefined) return undefined;
     for (const root of [axes.spatial, axes.territory, axes.dependency]) {
       const node = findNode(root, qp);
       if (node !== undefined) {
@@ -195,18 +222,30 @@ export function createRevIndex(repoPath: string, deps: RevIndexDeps = {}): RevIn
   }
 
   function resolveBySubtreeAt(rev: string, subtreeHash: string): StructRef | undefined {
-    const axes = axesAt(rev);
+    const axes = axesIfResolved(rev);
+    if (axes === undefined) return undefined;
+    const matches = new Map<string, IndexNode>();
     for (const root of [axes.spatial, axes.territory, axes.dependency]) {
-      const node = findBySubtree(root, subtreeHash);
-      if (node !== undefined) {
-        return { kind: kindOf(node), qualifiedPath: node.key, subtreeHash: node.subtreeHash };
-      }
+      collectBySubtree(root, subtreeHash, matches);
     }
-    return undefined;
+    // AMBIGUITY IS REFUSED, NOT GUESSED. This resolver licenses an AUTOMATIC re-ground: compose.ts and
+    // doctor-source.ts read a defined result as MECHANICAL, and git-drift.ts reports the returned
+    // `qualifiedPath` as the anchor's NEW home. When the content lives at ≥2 paths (`__init__.py`,
+    // `mod.rs`, a vendored copy) there is no unique correct target, and the single-`StructRef` return can
+    // only name one — so the preorder-first pick bound the fact to an ARBITRARY duplicate, a wrong anchor
+    // that then reads FRESH forever. Refusing degrades an unsafe automatic re-ground into a SEMANTIC one
+    // (human adjudication), which is the fail-closed direction and the only answer that is never wrong.
+    if (matches.size !== 1) return undefined;
+    const node = [...matches.values()][0]!;
+    return { kind: kindOf(node), qualifiedPath: node.key, subtreeHash: node.subtreeHash };
   }
 
   function reDerives(fact: GroundedFact, newSha: Hash): boolean {
-    return driftDetect(fact.grounding, axesAt(String(newSha))) === 'FRESH';
+    // Gated on the same provenance: an anchor on the repo ROOT would otherwise re-derive FRESH against the
+    // EMPTY sentinel, i.e. a failed checkout could CERTIFY a fact. Fail-closed — a rev we could not read
+    // never certifies anything.
+    const axes = axesIfResolved(String(newSha));
+    return axes !== undefined && driftDetect(fact.grounding, axes) === 'FRESH';
   }
 
   return { axesAt, resolveAnchorAt, resolveBySubtreeAt, reDerives };

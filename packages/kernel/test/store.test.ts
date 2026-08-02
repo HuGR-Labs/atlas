@@ -13,7 +13,7 @@ import fc from 'fast-check';
 import type { Hash } from '@atlas/contracts';
 import { id } from '../src/canonical.js';
 import { createStore } from '../src/store.js';
-import { jsonObjArb } from './arb.js';
+import { jsonObjArb, hasNfcKeyCollision } from './arb.js';
 
 // Three distinct-content object kinds (CasObject is opaque `unknown` at layer 1).
 const N = { kind: 'node', anchor: 'pkg/a.ts', slot: 'fn:foo' };
@@ -69,6 +69,15 @@ describe('PROP-KERNEL-3 — single-store totality (∀-law)', () => {
       fc.property(fc.array(kindArb, { maxLength: 24 }), (objs) => {
         const store = createStore();
         for (const o of objs) {
+          // A body whose keys NFC-collide has NO canonical form (KERNEL-1). `put` stays TOTAL (KERNEL-7b):
+          // it returns the honest-empty, non-resolving handle and stores NOTHING — so the CAS never mints an
+          // insertion-order-dependent address, and the rejected object is not retrievable under any key.
+          if (hasNfcKeyCollision(o)) {
+            const empty = store.put(o);
+            expect(empty).toBe(''); // the honest-empty handle, not a digest
+            expect(store.get(empty)).toBeUndefined(); // nothing was stored under it
+            continue;
+          }
           const h = store.put(o);
           expect(h).toBe(id(o)); // keyed by content, not kind/counter
           expect(store.get(h)).toEqual(o); // resolves from the single CAS

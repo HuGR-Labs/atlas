@@ -190,13 +190,19 @@ describe('createDriftSource — drift over a git merge-base (ADAPT-GIT-2)', () =
   it('SCN-N10-guard — an UNMOVED fact whose content ALSO exists at a DUPLICATE (earlier-sorting) path emits ZERO pairs (no PHANTOM move)', () => {
     sbx = makeGitSbx();
     const APP = 'src/app.ts';
-    const DUP = 'src/aaa-copy.ts'; // sorts EARLIER than src/app.ts ⇒ findBySubtree (preorder) returns THIS
+    const DUP = 'src/aaa-copy.ts'; // sorts EARLIER than src/app.ts — the worst case for a preorder resolver
     const resolveAnchorAt = makeResolveAnchorAt(sbx.repoPath);
     const appMb = resolveAnchorAt(sbx.mb, APP)!; // resolvable + byte-identical mb→topic ⇒ fact intact in place
-    // The recorded content ALSO lives at a DUPLICATE path at HEAD — a byte-for-byte copy elsewhere. A content
-    // resolver keyed on `subtreeHash` returns the FIRST preorder node, i.e. the duplicate (earlier path),
-    // whose qualifiedPath !== qp — so the `!== qp` guard would NOT catch it. Only the narrowing (the recorded
-    // path STILL resolves ⇒ `continue` BEFORE the content lookup) suppresses the phantom rename.
+    // The recorded content ALSO lives at a DUPLICATE path at HEAD — a byte-for-byte copy elsewhere. The stub
+    // below deliberately models the WORST-CASE resolver: one that answers a multi-match with the first
+    // preorder node (the duplicate, at the earlier path), whose qualifiedPath !== qp — so the `!== qp` guard
+    // would NOT catch it. Only the narrowing (the recorded path STILL resolves ⇒ `continue` BEFORE the
+    // content lookup) suppresses the phantom rename.
+    //
+    // The SHIPPED resolver no longer behaves this way — `resolveBySubtreeAt` (rev-index.ts) now REFUSES a
+    // genuine multi-match outright. This test keeps the hostile stub ON PURPOSE: git-drift's narrowing must
+    // hold on its own, not because its collaborator happens to be conservative. Defence in depth, so a future
+    // relaxation of the resolver cannot silently re-open the phantom-move path.
     const resolveBySubtreeAt = (_rev: string, subtreeHash: string): StructRef | undefined =>
       subtreeHash === String(appMb.subtreeHash)
         ? { kind: 'file', qualifiedPath: DUP, subtreeHash: appMb.subtreeHash }

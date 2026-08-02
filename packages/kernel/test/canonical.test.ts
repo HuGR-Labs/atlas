@@ -13,7 +13,7 @@ import { bytesToHex } from '@noble/hashes/utils';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { canonicalForm, id, defaultEncoder } from '../src/index.js';
-import { jsonObjArb, reorder } from './arb.js';
+import { jsonObjArb, reorder, hasNfcKeyCollision } from './arb.js';
 
 const decode = (b: Uint8Array): string => new TextDecoder().decode(b);
 
@@ -73,6 +73,16 @@ describe('PROP-KERNEL-1 — identity determinism (∀-law)', () => {
   it('id is deterministic & key-order invariant, and id ≡ blake3hex(canonicalForm)', () => {
     fc.assert(
       fc.property(jsonObjArb, (x) => {
+        // The law is over the OUTCOME, not just the digest: the generator's key pool contains NFC-equivalent
+        // tokens, so some objects are fail-closed REJECTS (KERNEL-1). Both presentations must reject too —
+        // that is precisely the insertion-order leak, stated as a property instead of hidden by narrowing
+        // the pool. Skipping the collision case here would make this ∀-law vacuous over exactly the inputs
+        // that broke it.
+        if (hasNfcKeyCollision(x)) {
+          expect(() => id(x)).toThrow(/NFC key collision/);
+          expect(() => id(reorder(x))).toThrow(/NFC key collision/); // rejection is presentation-invariant
+          return;
+        }
         expect(id(x)).toBe(id(reorder(x))); // ∀ key-permutation ⟹ same id
         expect(id(x)).toBe(bytesToHex(blake3(canonicalForm(x)))); // id ≡ blake3hex(utf8(canonicalForm(x)))
       }),
@@ -104,6 +114,7 @@ describe('PROP-KERNEL-8 — identity stability (∀-law)', () => {
   it('perturbing grounding/status/freshness never re-keys; the preimage carries no side-index bytes', () => {
     fc.assert(
       fc.property(jsonObjArb, fc.anything(), fc.anything(), (x, g1, g2) => {
+        if (hasNfcKeyCollision(x)) return; // a rejected preimage has no id to hold stable (covered by PROP-KERNEL-1)
         const base = id(x);
         const p1 = { ...(x as object), grounding: g1, status: 'a', freshness: 1 };
         const p2 = { ...(x as object), grounding: g2, status: 'b', freshness: 2 };
