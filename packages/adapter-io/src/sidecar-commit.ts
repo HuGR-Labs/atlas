@@ -11,9 +11,10 @@
 //   2. RUN the caller's whole governed decision over that snapshot — pure, so it can be re-run.
 //   3. WRITE the bytes to a pid-unique temp, `fsync`, close.
 //   4. `link(2)` the temp to `<base>.<top+1>.json`. EEXIST ⇒ another writer got there first ⇒ go to 1.
-//   5. VERIFY the name just won IS the head (see `publish` — winning a RECYCLED name is a silent loss, and
-//      it was measured, not theorised).
-//   6. Republish the compat mirror, prune, sync the directory.
+//   5. VERIFY what winning that name actually MEANT (see `publish`): the head, a generation someone has
+//      since built ON — both durable — or a RECYCLED name, which is a silent loss. All three were measured,
+//      none theorised, and collapsing the middle one into the last is what made a pass disown its own rows.
+//   6. Republish the compat mirror, prune, sync the directory — the HEAD publisher's housekeeping only.
 
 import {
   closeSync,
@@ -39,10 +40,15 @@ import type { CommitDecision, CommitResult, SidecarCtx, WireProjection } from '.
  *  a 1000-node store, 18 trials) never retries more than a handful of times. */
 const MAX_ATTEMPTS = 64;
 
-/** How many generations survive the prune. Correctness does NOT depend on this — the head verification in
- *  `publish` catches a recycled name however small it is — but every recycled name costs a wasted attempt,
- *  so the window is kept wide enough that recycling is rare and narrow enough that the directory holds a
- *  bounded multiple of the projection's size. Head + 3 predecessors. */
+/** How many generations survive the prune: head + 3 predecessors. The window is kept wide enough that
+ *  recycling is rare and narrow enough that the directory holds a bounded multiple of the projection's size.
+ *
+ *  IT IS NO LONGER ONLY A LIVENESS KNOB, and the correction matters more than the constant: this number is
+ *  what MAKES a generation name reusable, so it is also the exact bound the head verification in `publish`
+ *  uses to tell a recycled name from a successor (see {@link PublishOutcome}). Shrinking it still only costs
+ *  retries; changing it moves that bound with it, which is why the boundary is pinned on both sides by a
+ *  test rather than left to this comment. The previous sentence here — "correctness does NOT depend on
+ *  this" — was true of the check as first written and is false of the one below. */
 const RETAINED_GENERATIONS = 4;
 
 /** Process-unique temp discriminator. `pid` separates processes; the counter separates concurrent commits
@@ -50,10 +56,37 @@ const RETAINED_GENERATIONS = 4;
  *  reintroduces the torn write this whole protocol exists to remove. */
 let tmpCounter = 0;
 
-/** Serialize + publish ONE generation. Returns `false` iff another writer got there first (EEXIST) — every
- *  other failure (ENOSPC, EACCES, EROFS) PROPAGATES: a broken disk is not contention, and reporting it as
- *  "retry" would spin 16 times and then lie about why the write did not land. */
-function publish(ctx: SidecarCtx, projection: StoreProjection, gen: number): boolean {
+/**
+ * What one publication attempt DID — three outcomes, not two, and the third is why this type exists.
+ *
+ *   `published`  — the generation was linked and IS the head. The winner's housekeeping (mirror, dir sync,
+ *                  prune) belongs to this outcome alone.
+ *   `superseded` — the generation was linked, and by the time we looked another writer had published ABOVE
+ *                  it. Our bytes are still DURABLE: a writer can only target `head+1`, so the generation
+ *                  above ours READ ours (`readSidecarSet` takes the highest readable name, and our file is
+ *                  complete and fsynced before the link) and BUILT ON IT. The decision landed; it has since
+ *                  been built upon, which is ordinary serialization, not a loss. We do no housekeeping —
+ *                  our bytes are no longer the head, so republishing the mirror from them would push the
+ *                  compat artifact BACKWARDS.
+ *   `lost`       — nothing of ours is durable: either the name was taken (EEXIST), or we cannot PROVE the
+ *                  name we won was not a recycled one (see below). Retry from a fresh snapshot.
+ *
+ * COLLAPSING `superseded` INTO `lost` IS A MEASURED HONESTY DEFECT, and it is the one this type removes.
+ * The retry re-runs `decide` over a snapshot that now CONTAINS this call's own durable rows, and a decision
+ * that is idempotent in `next` need not be idempotent in `out`: `mine`'s pass body deliberately SKIPS a key
+ * it finds already staged (a mined candidate never re-authors an established one), so the re-run mints
+ * nothing and reports an EMPTY seeded set over rows it had in fact just written. Traced, 8 processes × 5
+ * sites: writer `w5` linked generation 23 (23 rows), saw `headNow: 24`, retried, and settled at generation
+ * 26 with `out: []` — while `pkg/w5-s3.ts::w5-s3` was durably staged. Four of five candidates reported, five
+ * on disk. The comment this replaces called the retry "a wasted round, never a wrong answer"; that was true
+ * of `next` and false of `out`.
+ */
+type PublishOutcome = 'published' | 'superseded' | 'lost';
+
+/** Serialize + publish ONE generation — see {@link PublishOutcome} for the three answers. Every failure that
+ *  is NOT contention (ENOSPC, EACCES, EROFS) PROPAGATES: a broken disk is not a lost race, and reporting it
+ *  as "retry" would spin `MAX_ATTEMPTS` times and then lie about why the write did not land. */
+function publish(ctx: SidecarCtx, projection: StoreProjection, gen: number): PublishOutcome {
   const builtAt = ctx.headSha?.();
   const wire: WireProjection = {
     current: [...projection.current.entries()],
@@ -80,11 +113,16 @@ function publish(ctx: SidecarCtx, projection: StoreProjection, gen: number): boo
   }
   let committed = false;
   try {
+    // A PRE-LINK HEAD CHECK WAS TRIED HERE AND REMOVED, because it buys nothing and the reason is worth
+    // keeping: it would shrink the window in which our target name can be RECYCLED (from our whole ~45 ms
+    // serialize+fsync down to one syscall gap) — but a recycled name is the case the verification below
+    // already answers CORRECTLY. The case it answers wrongly is the opposite one, and that window is the
+    // link→readdir gap either way. Narrowing the branch that is already right is not a fix.
     try {
       linkSync(tmp, genPath(ctx.dir, ctx.base, gen)); // THE compare-and-swap — EEXIST ⇒ someone else won
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; // ENOSPC/EACCES is not contention
-      return false;
+      return 'lost';
     }
     // ── HEAD VERIFICATION — the half of the CAS that a name-based CAS does NOT give you for free ────────
     // MEASURED DEFECT, found by an 8-process tight-loop stress and NOT by the CLI race: winning the name
@@ -95,16 +133,36 @@ function publish(ctx: SidecarCtx, projection: StoreProjection, gen: number): boo
     // returned `settled:true`. That is the original silent lost update, reintroduced by the garbage
     // collector. Measured before this check: 2 of 6 stress rounds reported 40 commits with 39 durable.
     //
-    // The check is one `readdir`: our publish is the head, or it is not a publish. If a rival has since
-    // built ON us the check also fires (its generation is higher) and we redundantly retry — a wasted
-    // round, never a wrong answer, and `upsert`/`linkSameAs` are idempotent for a decision re-applied to a
-    // projection that already contains it. Erring toward the retry is the only direction that cannot lose.
+    // The check is one `readdir`. But "the head moved" has TWO causes, and the first version of this file
+    // treated them as one — which cost the honesty defect {@link PublishOutcome} records:
+    //
+    //   RECYCLED (a real loss): our name was already dead when we linked it, so our bytes sit far below the
+    //   head where no reader ever looks. Retry — nothing of ours is durable.
+    //   SUPERSEDED (not a loss): our name was FREE-because-never-used, so linking it made us the head, and
+    //   the generation above us therefore READ us and built on us. Our decision is durable.
+    //
+    // THEY ARE SEPARATED BY ARITHMETIC, not by a guess. `RETAINED_GENERATIONS` is what makes a name reusable
+    // at all: the prune below unlinks `g` only from a winner `W ≥ g + RETAINED_GENERATIONS`, so a name that
+    // was ever recycled had a head at or above `gen + RETAINED_GENERATIONS` at the moment it was freed. The
+    // head is MONOTONE — the prune only ever removes names strictly below the winner's own — so that head
+    // can never have come back down. Contrapositive, and it is exact: `headNow < gen + RETAINED_GENERATIONS`
+    // ⇒ the name was never recycled ⇒ it was free because it was never used ⇒ our link made us the head.
+    //
+    // At or above that bound we cannot tell the two apart from a directory listing, so we take the only
+    // direction that cannot report a write that did not happen: `lost`, and re-run the whole decision. To
+    // land there while actually being durable, `RETAINED_GENERATIONS` generations must be published in the
+    // gap between our `link` and this `readdir` — two adjacent syscalls — against a publication cost of two
+    // fsyncs (~23 ms + ~21 ms on this box) each. That is the residual, it is stated rather than hidden, and
+    // it is the safe direction: it can under-report, never over-report.
     //
     // The stale file is deliberately NOT unlinked: it sits below the head, so no reader resolves it, and
     // the next publisher's prune reclaims it. Removing it here would delete the g-1 fallback out from under
     // a reader in the (real) case where the rival that fired this check had legitimately built on us.
     const headNow = generations(ctx.dir, ctx.base)[0];
-    if (headNow !== undefined && headNow > gen) return false;
+    if (headNow !== undefined && headNow > gen) {
+      const superseded = headNow < gen + RETAINED_GENERATIONS;
+      return superseded ? 'superseded' : 'lost';
+    }
     committed = true;
     // THE MIRROR IS AN INDEPENDENT COPY, published by its own temp+rename — never a rename of the temp we
     // just linked. MEASURED BUG in the first version of this file: `link` + `rename(tmp, mirror)` leaves the
@@ -125,7 +183,7 @@ function publish(ctx: SidecarCtx, projection: StoreProjection, gen: number): boo
         /* best-effort */
       }
     }
-    return true;
+    return 'published';
   } finally {
     // The temp is ALWAYS ours to remove now that the mirror gets its own inode: on a win the generation
     // name holds the data, on a loss nothing does.
@@ -202,7 +260,10 @@ function commitLoop<T>(
     // re-putting the same object writes nothing new; a failing `put` (disk-full/permission) throws BEFORE
     // any sidecar byte, so the sidecar can never reference a hash whose bytes are absent.
     for (const obj of decision.put ?? []) ctx.put(obj);
-    if (publish(ctx, decision.next, read.top + 1)) return { settled: true, out: decision.out };
+    // `superseded` SETTLES. The decision's bytes are durable (see {@link PublishOutcome}), so the ONLY
+    // honest answers are this call's own `out` — the one belonging to the attempt that actually published —
+    // or a re-run that cannot see it wrote. Re-running is what produced a truthful `next` and a false `out`.
+    if (publish(ctx, decision.next, read.top + 1) !== 'lost') return { settled: true, out: decision.out };
   }
   return { settled: false, refusal: 'contended' };
 }
