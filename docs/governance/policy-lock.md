@@ -58,12 +58,21 @@ for a reason that is about identity, not settings. See "What the lock actually b
   proposal cannot degrade safety even if it lands: an absent or malformed policy resolves to the
   conservative `defaultPolicy()` (exact-match near-dup, empty T0 keywords, **empty scopes ⇒ no write
   authorized**; reads stay universal).
-- **Only admins ratify — INTENDED, and enforceable only once a second human exists.** The design is that a
-  merge requires a `@HuGR-Labs/atlas-admins` review, the same shape as Atlas T0 human-ratification. The
-  ownership half is now real (the team resolves, `codeowners/errors` is `[]`) and direct pushes to `master`
-  are blocked for admins too. What is *not* required is the review itself, because the team has exactly one
-  member and that member authors the PRs — see "What the lock actually binds". The fail-closed loader plus
-  write-access scarcity are the controls carrying the weight today.
+- **Only admins ratify — INTENDED, still not enforced, and this bullet is itself a worked example.** The
+  design is that a merge requires a `@HuGR-Labs/atlas-admins` review, the same shape as Atlas T0
+  human-ratification. The ownership half is now real (the team resolves, `codeowners/errors` is `[]`) and
+  direct pushes to `master` are blocked for admins too. The review itself is *not* required, because the team
+  has exactly one member and that member authors the PRs — see "What the lock actually binds". The
+  fail-closed loader plus write-access scarcity are the controls carrying the weight today.
+
+  *The worked example:* this bullet previously read "INTENDED, and enforceable only once a second human
+  exists", and `spec-conformance-guard` **failed the commit** — `DOC-DRIFT: policy-lock.md:61, stale
+  governance-count claim`. The rewrite had dropped the words "not enforced", which is what the ALLOW list
+  keys on, and the ALLOW list is deliberately built from *words that negate or hypothesise, never words that
+  assert*. That is not a false positive dodged by re-adding a magic phrase: "enforceable once X" reads as a
+  property the system has, and the system does not have it. The gate caught the author of this document
+  drifting toward asserting a lock that is not in force — in the document about that lock. Recorded rather
+  than quietly reworded, because it is the only evidence in here that any of this is mechanically checked.
 
 ## The exact sequence that would make the lock real
 
