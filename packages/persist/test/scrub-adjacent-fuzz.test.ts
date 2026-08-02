@@ -7,8 +7,14 @@
 // body of the first credential swallowed the second one's four-character family prefix and shipped its
 // entropy-bearing body in the clear.
 //
-// The generator here injects RUNS of 1..3 credentials with NO separator (and, separately, joined by a
-// single `_`), and it carries its own GROUND TRUTH from the construction — not from the implementation:
+// THE SAME MISTAKE, ONE LEVEL UP. The fix for that was a negative lookahead on the body class — but it
+// blocked only the shape's OWN family prefix, and the corpus contained only ONE family, so the corpus could
+// not tell an own-family lookahead from a union one. The moment a second family is declared,
+// `ghp_AAAAAA` + `xoxb-BBBBBB` merges exactly as before. This generator therefore draws the family of
+// EVERY token independently, so runs are CROSS-FAMILY, and the known-bad below is the own-family lookahead
+// itself — the regression this corpus exists to make impossible.
+//
+// The generator carries its own GROUND TRUTH from the construction — not from the implementation:
 //   * every injected body must be absent from the output          (LEAK)
 //   * every clean piece must survive verbatim                     (OVER-REDACTION)
 //   * the output must equal the constructed expectation           (EXACT)
@@ -20,13 +26,17 @@
 import { describe, it, expect } from 'vitest';
 import { scrub, admitToBuffer } from '../src/scrub.js';
 import {
+  BODY_OPENING_PIECES,
   CLEAN_PIECES,
+  ORACLE_FAMILIES,
   chunkRandomly,
   credentialSpans,
   hasCredentialShape,
+  isBodyChar,
   lcg,
   makeCase,
   referenceScrub,
+  wouldDisturb,
 } from './adjacency-oracle.js';
 
 const enc = new TextEncoder();
@@ -44,6 +54,21 @@ function occurrences(hay: string, needle: string): number {
   let n = 0;
   for (let i = hay.indexOf(needle); i !== -1; i = hay.indexOf(needle, i + 1)) n++;
   return n;
+}
+
+/**
+ * THE KNOWN-BAD, kept inside the suite so the corpus is provably able to fail. This is the shape set
+ * exactly as it would be written with each family blocking only ITS OWN prefix — the naive extension of the
+ * single-family fix to three families, and a silent reopening of the adjacency defect across families.
+ */
+function ownFamilyOnly(s: string): string {
+  const bad: RegExp[] = [
+    /gh[pousr]_(?:(?!gh[pousr]_)[A-Za-z0-9]){6,}/g,
+    /xox[baprs]-(?:(?!xox[baprs]-)[A-Za-z0-9-]){6,}/g,
+  ];
+  let out = s;
+  for (const re of bad) out = out.replace(re, '[REDACTED]');
+  return out;
 }
 
 interface Tally {
@@ -108,6 +133,60 @@ describe('PERSIST-10a adjacency — the GENERATOR reaches the failing region', (
     expect(maxRun).toBeGreaterThanOrEqual(2);
   });
 
+  it('the generator reaches CROSS-FAMILY adjacency, and every family is both first and second', () => {
+    const rnd = lcg(20260801);
+    let crossAdjacent = 0;
+    const asFirst = new Set<string>();
+    const asSecond = new Set<string>();
+    for (let i = 0; i < 20_000; i++) {
+      const c = makeCase(rnd, { minRun: 2, maxRun: 3 });
+      const spans = credentialSpans(c.text);
+      for (let k = 1; k < spans.length; k++) {
+        const prev = spans[k - 1]!;
+        const cur = spans[k]!;
+        if (cur.start === prev.end && cur.family !== prev.family) {
+          crossAdjacent++;
+          asFirst.add(prev.family);
+          asSecond.add(cur.family);
+        }
+      }
+    }
+    // teeth (breaks-on "the corpus draws one family, so an own-family lookahead is indistinguishable from
+    // the union one and the cross-family leak is unreachable" — this was 0 for the single-family corpus):
+    expect(crossAdjacent).toBeGreaterThan(2_000);
+    expect([...asFirst].sort()).toEqual(ORACLE_FAMILIES.map((f) => f.name).sort());
+    expect([...asSecond].sort()).toEqual(ORACLE_FAMILIES.map((f) => f.name).sort());
+  });
+
+  it('the generator reaches CONTINGENT matches — bodies that END on a strict family prefix', () => {
+    const rnd = lcg(555);
+    let contingent = 0;
+    let longAmbiguity = 0;
+    for (let i = 0; i < 20_000; i++) {
+      const c = makeCase(rnd, { minRun: 1, maxRun: 3 });
+      for (const span of credentialSpans(c.text)) {
+        const text = c.text.slice(span.start, span.end);
+        // does the match end on something that could be the head of another family's prefix?
+        for (const g of ORACLE_FAMILIES) {
+          for (let k = g.prefix.length - 1; k >= 1; k--) {
+            const run = text.slice(text.length - k);
+            if (run.length !== k) continue;
+            let ok = true;
+            for (let q = 0; q < k; q++) if (!(g.prefix[q] as string).includes(run[q] as string)) ok = false;
+            if (!ok) continue;
+            contingent++;
+            if (k >= 4) longAmbiguity++; // `xoxb` — the longest ambiguous run the declared families allow
+            k = 0;
+          }
+        }
+      }
+    }
+    // teeth (breaks-on "bodies are drawn from a flat alphabet, so a body never ends on `github`/`ghp` and
+    // the contingent-match branch of the seam is never exercised"):
+    expect(contingent).toBeGreaterThan(5_000);
+    expect(longAmbiguity).toBeGreaterThan(500);
+  });
+
   it('the construction and the independent regex-free scanner agree on every case', () => {
     const rnd = lcg(777);
     for (let i = 0; i < 20000; i++) {
@@ -117,19 +196,42 @@ describe('PERSIST-10a adjacency — the GENERATOR reaches the failing region', (
     }
   });
 
-  it('the scanner has teeth: it SEES a credential, and it is not blinded by the placeholder', () => {
+  it('the scanner has teeth: it SEES a credential of each family, and is not blinded by the placeholder', () => {
     expect(hasCredentialShape('x ghp_ABCDEFGH y')).toBe(true);
+    expect(hasCredentialShape('x xoxb-ABCDEFGH y')).toBe(true);
+    expect(hasCredentialShape('x github_pat_ABCDEFGH y')).toBe(false); // NOT a declared family
     expect(hasCredentialShape('x ghp_ABCDE y')).toBe(false); // five body chars: below the floor
     expect(hasCredentialShape('x gha_ABCDEFGH y')).toBe(false); // not a family member
+    expect(hasCredentialShape('x xoxq-ABCDEFGH y')).toBe(false); // not a slack family member
     expect(hasCredentialShape('[REDACTED]_BBBBBB')).toBe(false); // the leaked FORM is shapeless, hence the body check
     expect(credentialSpans('ghp_AAAAAAghp_BBBBBB').length).toBe(2);
     expect(referenceScrub('ghp_AAAAAAghp_BBBBBB')).toBe('[REDACTED][REDACTED]');
     expect(referenceScrub('ghp_ABCDEF_prod')).toBe('[REDACTED]_prod'); // the `_suffix` bytes are NOT secret
+    // CROSS-FAMILY: the scanner cuts the first body at the second family's prefix
+    expect(credentialSpans('ghp_AAAAAAxoxb-BBBBBB').length).toBe(2);
+    expect(referenceScrub('ghp_AAAAAAxoxb-BBBBBB')).toBe('[REDACTED][REDACTED]');
+    expect(referenceScrub('xoxb-AAAAAAghp_BBBBBB')).toBe('[REDACTED][REDACTED]');
+    // the un-making case: a trailing `ghp` becomes a prefix and BOTH candidates fall below the floor
+    expect(referenceScrub('ghp_AAAAAghp_prod')).toBe('ghp_AAAAAghp_prod');
   });
 
-  it('every clean piece starts with a NON-body character (why a missing piece is unambiguous)', () => {
+  it('the STABILITY RULE is real: it rejects exactly the appends that would re-cut a committed token', () => {
+    expect(wouldDisturb('ghp_AAAAAghp', '_prod')).toBe(true); // completes a prefix inside the body
+    expect(wouldDisturb('ghp_AAAAAghp', 'XYZ')).toBe(false); // stays body
+    expect(wouldDisturb('ghp_AAAAAAxoxb', '-XXXXXX')).toBe(true);
+    expect(wouldDisturb('ghp_AAAAAAxoxb', 'ghp_BBBBBB')).toBe(false); // a NEW token, not a re-cut
+    expect(wouldDisturb('log line ', 'ghp_ABCDEFGH')).toBe(false);
+  });
+
+  it('every clean piece is safe where it is used, and none is itself a credential', () => {
     for (const piece of CLEAN_PIECES) {
-      expect(/^[A-Za-z0-9]/.test(piece)).toBe(false);
+      // opens on a character that is not a body character of ANY family, so it can never be absorbed
+      for (const f of ORACLE_FAMILIES) expect(isBodyChar(f, piece, 0)).toBe(false);
+      expect(hasCredentialShape(piece)).toBe(false);
+    }
+    for (const piece of BODY_OPENING_PIECES) {
+      // these DO open on a body character — used only after a family that cannot reach them
+      expect(ORACLE_FAMILIES.some((f) => isBodyChar(f, piece, 0))).toBe(true);
       expect(hasCredentialShape(piece)).toBe(false);
     }
   });
@@ -164,6 +266,49 @@ describe('PERSIST-10a adjacency — WHOLE-BUFFER scrub, 200k adjacency cases', (
     }
     expect(t.leak).toBeGreaterThan(5_000); // the class the shipped sweep could not reach
     expect(t.generator).toBe(0);
+  });
+
+  it('the metric has teeth ACROSS families: the OWN-FAMILY lookahead scores as a leak', () => {
+    // The regression this corpus exists to prevent: each family blocking only its own prefix. It is a
+    // perfectly good fix for SAME-family adjacency and it silently ships the second body whenever the two
+    // credentials belong to DIFFERENT families.
+    const rnd = lcg(20260801);
+    const t = blank();
+    for (let i = 0; i < 20_000; i++) {
+      const c = makeCase(rnd, { minRun: 2, maxRun: 3 });
+      score(t, c, ownFamilyOnly(c.text));
+    }
+    expect(t.leak).toBeGreaterThan(1_000);
+    expect(t.generator).toBe(0);
+    // and the concrete shape of the failure, byte-exactly
+    expect(ownFamilyOnly('ghp_AAAAAAxoxb-BBBBBB')).toBe('[REDACTED]-BBBBBB');
+    expect(scrubText('ghp_AAAAAAxoxb-BBBBBB')).toBe('[REDACTED][REDACTED]');
+    expect(scrubText('xoxb-AAAAAAghp_BBBBBB')).toBe('[REDACTED][REDACTED]');
+  });
+
+  it('the own-family lookahead is also ORDER-DEPENDENT — the union one is not', () => {
+    // A second, quieter defect of blocking only a shape's own prefix: because `scrub` applies one pass per
+    // shape, a body that swallows another family's prefix makes the OUTPUT depend on the order the shapes
+    // happen to be declared in. `xoxb-AAAAAAghp_BBBBBB` redacts both when the github pass runs first (it
+    // removes `ghp_BBBBBB`, leaving a clean slack token behind) and leaks when the slack pass runs first
+    // (its body eats `ghp`, leaving `[REDACTED]_BBBBBB`). With the union lookahead no body can swallow
+    // another family's prefix, matches cannot overlap, and the passes commute.
+    const pass = (s: string, res: readonly RegExp[]): string => {
+      let out = s;
+      for (const re of res) out = out.replace(re, '[REDACTED]');
+      return out;
+    };
+    const gh = /gh[pousr]_(?:(?!gh[pousr]_)[A-Za-z0-9]){6,}/g;
+    const sl = /xox[baprs]-(?:(?!xox[baprs]-)[A-Za-z0-9-]){6,}/g;
+    const text = 'xoxb-AAAAAAghp_BBBBBB';
+    expect(pass(text, [gh, sl])).toBe('[REDACTED][REDACTED]');
+    expect(pass(text, [sl, gh])).toBe('[REDACTED]_BBBBBB'); // same code, other order, secret in the clear
+    expect(pass(text, [gh, sl])).not.toBe(pass(text, [sl, gh]));
+    // the shipped union shapes commute: same answer either way, and it is the correct one
+    const ghU = /gh[pousr]_(?:(?!(?:gh[pousr]_|xox[baprs]-))[A-Za-z0-9]){6,}/g;
+    const slU = /xox[baprs]-(?:(?!(?:gh[pousr]_|xox[baprs]-))[A-Za-z0-9-]){6,}/g;
+    expect(pass(text, [ghU, slU])).toBe(pass(text, [slU, ghU]));
+    expect(pass(text, [ghU, slU])).toBe(scrubText(text));
   });
 });
 
@@ -223,5 +368,28 @@ describe('PERSIST-10a adjacency — CHUNK INDEPENDENCE, 40k adjacency cases', ()
         expect(dec.decode(buf)).toBe(c.expected);
       }
     }
+  });
+
+  it('CROSS-FAMILY cases specifically: every split offset, byte-at-a-time, fixed sizes', () => {
+    const rnd = lcg(8675309);
+    let crossCases = 0;
+    for (let i = 0; crossCases < 400 && i < 20_000; i++) {
+      const c = makeCase(rnd, { minRun: 2, maxRun: 3 });
+      if (c.familiesUsed < 2) continue;
+      crossCases++;
+      const reference = scrubText(c.text);
+      expect(reference).toBe(c.expected);
+      expect(admitAll(c.text.split(''))).toBe(reference);
+      for (let off = 1; off < c.text.length; off++) {
+        expect(admitAll([c.text.slice(0, off), c.text.slice(off)])).toBe(reference);
+      }
+      for (const size of [1, 2, 3, 5, 7, 11, 13]) {
+        const parts: string[] = [];
+        for (let p = 0; p < c.text.length; p += size) parts.push(c.text.slice(p, p + size));
+        expect(admitAll(parts)).toBe(reference);
+      }
+    }
+    // teeth (breaks-on "no case in the corpus mixes families, so the cross-family seam is never streamed"):
+    expect(crossCases).toBe(400);
   });
 });

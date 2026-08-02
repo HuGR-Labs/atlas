@@ -5,39 +5,76 @@
 // be reproduced here and cancel itself out in the differential.
 //
 // The rule it encodes is the shipped SHAPE rule, stated once, in prose:
-//   a credential is `gh[pousr]_` followed by >= 6 characters of [A-Za-z0-9],
-//   and that body STOPS at the start of the next `gh[pousr]_` — a credential body never swallows the
-//   family prefix of the credential that follows it (which is exactly how `ghp_AAAAAAghp_BBBBBB` used to
-//   collapse into one match and ship the second body in the clear).
+//   a credential is a family PREFIX followed by >= `floor` characters of that family's BODY class,
+//   and that body STOPS at the start of the next credential's family prefix — ANY family's, not just its
+//   own. A body never swallows the prefix of the credential that follows it (which is exactly how
+//   `ghp_AAAAAAghp_BBBBBB` used to collapse into one match and ship the second body in the clear, and how
+//   `ghp_AAAAAAxoxb-BBBBBB` still did after the FIRST fix, whose lookahead blocked only its own family —
+//   the cross-family case this file exists to reach).
 // Matches are leftmost, and scanning resumes after a match (never inside it).
+//
+// The families are re-declared here BY HAND from the prose, not imported from the product.
 
-const FAMILY = 'pousr';
+export interface OracleFamily {
+  readonly name: string;
+  /** One character-SET per prefix position ('g' = literally g, 'pousr' = any one of those). */
+  readonly prefix: readonly string[];
+  /** Characters the body admits beyond [A-Za-z0-9]. */
+  readonly bodyExtra: string;
+  /** Minimum body characters. */
+  readonly floor: number;
+}
 
-/** Is `s[i]` a token-body character? charCode walk — deliberately not a regex. */
-export function isBodyChar(s: string, i: number): boolean {
+export const ORACLE_FAMILIES: readonly OracleFamily[] = [
+  { name: 'github-token', prefix: ['g', 'h', 'pousr', '_'], bodyExtra: '', floor: 6 },
+  { name: 'slack-token', prefix: ['x', 'o', 'x', 'baprs', '-'], bodyExtra: '-', floor: 6 },
+];
+
+/** Is `s[i]` alphanumeric? charCode walk — deliberately not a regex. */
+export function isAlnumAt(s: string, i: number): boolean {
   const c = s.charCodeAt(i);
   return (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122);
 }
 
-/** Does a complete family prefix `gh[pousr]_` start at `i`? */
-export function blockerAt(s: string, i: number): boolean {
-  return (
-    s[i] === 'g' && s[i + 1] === 'h' && s[i + 2] !== undefined && FAMILY.includes(s[i + 2] as string) && s[i + 3] === '_'
-  );
+/** Is `s[i]` a BODY character of `fam`? */
+export function isBodyChar(fam: OracleFamily, s: string, i: number): boolean {
+  if (i >= s.length) return false;
+  return isAlnumAt(s, i) || fam.bodyExtra.includes(s[i] as string);
+}
+
+/** Does `fam`'s complete prefix start at `i`? */
+export function prefixAt(fam: OracleFamily, s: string, i: number): boolean {
+  for (let k = 0; k < fam.prefix.length; k++) {
+    const ch = s[i + k];
+    if (ch === undefined || !(fam.prefix[k] as string).includes(ch)) return false;
+  }
+  return true;
+}
+
+/** Does ANY declared family's prefix start at `i`? (the union the shipped lookahead must encode) */
+export function anyPrefixAt(s: string, i: number): boolean {
+  return ORACLE_FAMILIES.some((f) => prefixAt(f, s, i));
+}
+
+export interface Span {
+  readonly start: number;
+  readonly end: number;
+  readonly family: string;
 }
 
 /** Every credential occurrence in `s`, as half-open [start,end) spans, leftmost-first and non-overlapping. */
-export function credentialSpans(s: string): readonly { readonly start: number; readonly end: number }[] {
-  const spans: { start: number; end: number }[] = [];
+export function credentialSpans(s: string): readonly Span[] {
+  const spans: Span[] = [];
   let i = 0;
-  while (i < s.length) {
-    if (blockerAt(s, i)) {
-      let j = i + 4;
-      while (j < s.length && isBodyChar(s, j) && !blockerAt(s, j)) j++;
-      if (j - (i + 4) >= 6) {
-        spans.push({ start: i, end: j });
+  outer: while (i < s.length) {
+    for (const fam of ORACLE_FAMILIES) {
+      if (!prefixAt(fam, s, i)) continue;
+      let j = i + fam.prefix.length;
+      while (j < s.length && isBodyChar(fam, s, j) && !anyPrefixAt(s, j)) j++;
+      if (j - (i + fam.prefix.length) >= fam.floor) {
+        spans.push({ start: i, end: j, family: fam.name });
         i = j;
-        continue;
+        continue outer;
       }
     }
     i++;
@@ -67,13 +104,19 @@ export function lcg(seed: number): () => number {
   return () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
 }
 
-const BODY_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+const ALNUM = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 
-/** CLEAN filler. EVERY piece starts with a character that is NOT a body character, so no piece can ever be
- *  absorbed into the body of a credential that precedes it — that is what makes the expected output below
- *  exactly computable, and what makes a missing piece unambiguously OVER-redaction. Several pieces are
- *  near-misses (short body, wrong family, a literal placeholder, an `_suffix`) so the generator probes the
- *  boundary rather than only the easy middle. */
+/** Runs that are a STRICT prefix of some family prefix. Appending one to a body is what creates a CONTINGENT
+ *  match — one that is a credential only while those trailing bytes are read as body, and that un-makes
+ *  itself when the next bytes complete the prefix instead. Reaching this class is the whole point: an
+ *  earlier fuzz that never produced it could not distinguish a correct seam from a broken one. */
+export const AMBIGUOUS_TAILS: readonly string[] = ['g', 'gh', 'ghp', 'x', 'xo', 'xox', 'xoxb'];
+
+/** CLEAN filler. EVERY piece starts with a character that is NOT a body character of ANY family, so no piece
+ *  can ever be absorbed into the body of a credential that precedes it — that is what makes the expected
+ *  output below exactly computable, and what makes a missing piece unambiguously OVER-redaction. Pieces that
+ *  open with `_` or `-` (body characters of the github-pat / slack families) are held separately: they are
+ *  still used, but only after a family whose body cannot reach them. */
 export const CLEAN_PIECES: readonly string[] = [
   ' ',
   ' token=',
@@ -81,17 +124,58 @@ export const CLEAN_PIECES: readonly string[] = [
   ' [REDACTED] ',
   ' ghp_ABCDE', // five body chars: below the floor, NOT a credential — and no trailing separator
   ' gha_ABCDEFGH', // not a family member
-  '_prod', // the `_suffix` bytes the widen-the-body-class variant eats
-  ' gho_',
+  ' github_pat_ABCDEFGH', // a shape that is NOT a declared family — passes through untouched, by design
+  ' xoxq-ABCDEFGH', // `q` is not a member of the slack family
+  ' xoxb-ABCDE', // below the floor for the slack family
   '=',
   '!',
   ' end of line',
   '.',
   ' 09:14 UTC ',
+  '_prod', // the `_suffix` bytes the widen-the-body-class variant eats
   '_suffix.log',
   ' gh',
   ':',
 ];
+
+/** Clean pieces that OPEN with a body character of some family. Safe only after a family that cannot eat
+ *  them — `-dev` survives after a github-token (whose body excludes `-`) and is eaten after a slack token,
+ *  which is the declared Slack over-redaction made visible in the corpus. */
+export const BODY_OPENING_PIECES: readonly string[] = ['-dev', '-not-part-of-token', '-2026-08-01'];
+
+/**
+ * The family whose BODY is still open at the end of `text` — a family prefix appears, and every character
+ * after it is one of that family's body characters. The next character written decides whether those bytes
+ * stay body or terminate it.
+ *
+ * This is deliberately NOT "the family of the last token emitted". A near-miss written as CLEAN filler
+ * leaves a body open too: ` github_pat_ABCDE` is five body characters short of the floor and therefore not
+ * a credential, but appending the equally-clean `_prod` to it produces `github_pat_ABCDE_prod`, whose body
+ * is ten characters — a REAL credential assembled out of two pieces the construction believed were both
+ * harmless. Tracking only the last token missed exactly that, and it showed up as 306 construction/scanner
+ * disagreements in 20k cases (also ` xoxb-ABCDE` + `-not-part-of-token`).
+ */
+export function openFamily(text: string): OracleFamily | undefined {
+  for (let i = text.length - 1; i >= 0; i--) {
+    for (const fam of ORACLE_FAMILIES) {
+      if (!prefixAt(fam, text, i)) continue;
+      let ok = true;
+      for (let j = i + fam.prefix.length; j < text.length; j++) {
+        if (!isBodyChar(fam, text, j) || anyPrefixAt(text, j)) ok = false;
+      }
+      if (ok) return fam;
+    }
+  }
+  return undefined;
+}
+
+/** Is `piece` safe to write immediately after a credential of `fam` (i.e. its first character terminates
+ *  that family's body)? A piece that is not safe would be ABSORBED, and its absence would be scored as
+ *  over-redaction when it is in fact correct behaviour. */
+export function pieceSafeAfter(fam: OracleFamily | undefined, piece: string): boolean {
+  if (fam === undefined) return true;
+  return !isBodyChar(fam, piece, 0);
+}
 
 export interface FuzzCase {
   /** The generated stream. */
@@ -102,40 +186,99 @@ export interface FuzzCase {
   readonly bodies: readonly string[];
   /** The clean pieces, in order — every one must survive verbatim. */
   readonly clean: readonly string[];
+  /** How many distinct families the case injected (>= 2 means it reached the CROSS-FAMILY class). */
+  readonly familiesUsed: number;
+}
+
+interface Built {
+  text: string;
+  expected: string;
+  bodies: string[];
+  clean: string[];
+  families: Set<string>;
+}
+
+const MAX_PREFIX_LEN = Math.max(...ORACLE_FAMILIES.map((f) => f.prefix.length));
+
+/**
+ * STABILITY RULE. Appending `nxt` must not create a family-prefix START inside text that is already
+ * committed, because that would silently re-cut a token the construction has already accounted for and the
+ * expectation would be wrong: `ghp_AAAAAghp` + `_prod` is NOT `[REDACTED]_prod`, it is nothing at all — the
+ * trailing `ghp` becomes the head of a `ghp_` prefix, the first body drops to five characters, and both
+ * candidates fall below the floor. That un-making is REAL behaviour and it is covered by dedicated
+ * byte-exact tests; what it must not do is corrupt the fuzz's ground truth, where it would show up as a
+ * phantom leak. Only the last `MAX_PREFIX_LEN - 1` committed characters can be affected.
+ */
+export function wouldDisturb(text: string, nxt: string): boolean {
+  const comb = text + nxt;
+  for (let i = Math.max(0, text.length - (MAX_PREFIX_LEN - 1)); i < text.length; i++) {
+    if (anyPrefixAt(comb, i) && !anyPrefixAt(text, i)) return true;
+  }
+  return false;
+}
+
+function makeBody(rnd: () => number, fam: OracleFamily): string {
+  const alphabet = ALNUM + fam.bodyExtra.repeat(4); // the extra char, deliberately over-weighted
+  const len = fam.floor + Math.floor(rnd() * 10);
+  let body = '';
+  for (let i = 0; i < len; i++) body += alphabet[Math.floor(rnd() * alphabet.length)] as string;
+  // sometimes end on an AMBIGUOUS run, so the contingent-match path is actually reached
+  if (rnd() < 0.35) {
+    const tail = AMBIGUOUS_TAILS[Math.floor(rnd() * AMBIGUOUS_TAILS.length)] as string;
+    if ([...tail].every((c) => isBodyChar(fam, c, 0))) body += tail;
+  }
+  return body;
+}
+
+/** Append `nxt` to the case, refusing it if it would re-cut what is already committed. */
+function append(b: Built, nxt: string, expected: string): boolean {
+  if (wouldDisturb(b.text, nxt)) return false;
+  b.text += nxt;
+  b.expected += expected;
+  return true;
+}
+
+function emitToken(rnd: () => number, b: Built): OracleFamily | undefined {
+  const fam = ORACLE_FAMILIES[Math.floor(rnd() * ORACLE_FAMILIES.length)] as OracleFamily;
+  const prefix = fam.prefix.map((set) => set[Math.floor(rnd() * set.length)] as string).join('');
+  const body = makeBody(rnd, fam);
+  if (!append(b, prefix + body, '[REDACTED]')) return undefined;
+  b.bodies.push(body);
+  b.families.add(fam.name);
+  return fam;
 }
 
 /**
  * Build one fuzz case: clean filler interleaved with RUNS of credentials, where a run is 1..3 credentials
  * with NO separator between them (the class the shipped sweep could never reach — it injected exactly one
- * token per case) or joined by a single `_`.
+ * token per case, and then only ever from ONE family) or joined by a single separator character. Families
+ * are drawn independently per token, so a run mixes them.
  */
 export function makeCase(rnd: () => number, opts: { readonly minRun: number; readonly maxRun: number }): FuzzCase {
-  const bodies: string[] = [];
-  const clean: string[] = [];
-  let text = '';
-  let expected = '';
+  const b: Built = { text: '', expected: '', bodies: [], clean: [], families: new Set() };
   const items = 1 + Math.floor(rnd() * 4);
   for (let k = 0; k < items; k++) {
     if (rnd() < 0.45) {
-      const piece = CLEAN_PIECES[Math.floor(rnd() * CLEAN_PIECES.length)] as string;
-      clean.push(piece);
-      text += piece;
-      expected += piece;
+      const pool = rnd() < 0.3 ? BODY_OPENING_PIECES : CLEAN_PIECES;
+      const piece = pool[Math.floor(rnd() * pool.length)] as string;
+      // a piece opening on a body character of the PRECEDING family would be absorbed — correctly, so it is
+      // not written at all rather than written and then scored as over-redaction
+      if (!pieceSafeAfter(openFamily(b.text), piece)) continue;
+      if (!append(b, piece, piece)) continue;
+      b.clean.push(piece);
       continue;
     }
     const run = opts.minRun + Math.floor(rnd() * (opts.maxRun - opts.minRun + 1));
-    const glue = rnd() < 0.5 ? '' : '_'; // ADJACENT, or separated by a single `_`
     for (let t = 0; t < run; t++) {
-      const fam = FAMILY[Math.floor(rnd() * FAMILY.length)] as string;
-      const len = 6 + Math.floor(rnd() * 10);
-      let body = '';
-      for (let i = 0; i < len; i++) body += BODY_ALPHABET[Math.floor(rnd() * BODY_ALPHABET.length)] as string;
-      bodies.push(body);
-      text += (t === 0 ? '' : glue) + `gh${fam}_${body}`;
-      expected += (t === 0 ? '' : glue) + '[REDACTED]';
+      if (t > 0) {
+        const glue = rnd() < 0.5 ? '' : (['_', '-'][Math.floor(rnd() * 2)] as string);
+        // a separator that IS a body character of the still-open family would be absorbed by it
+        if (glue !== '' && pieceSafeAfter(openFamily(b.text), glue)) append(b, glue, glue);
+      }
+      emitToken(rnd, b);
     }
   }
-  return { text, expected, bodies, clean };
+  return { text: b.text, expected: b.expected, bodies: b.bodies, clean: b.clean, familiesUsed: b.families.size };
 }
 
 /** Cut `s` into random chunks of 1..maxLen characters. */

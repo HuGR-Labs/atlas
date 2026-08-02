@@ -2,7 +2,9 @@
 //
 // Redact-at-source — the PRIMARY credential control. `scrub` drops known credential SHAPES and the write
 // gate `admitToBuffer` scrubs a chunk BEFORE it enters the immutable content-addressed buffer (not a post-hoc
-// scan). Secrets are redacted WITHOUT abridging the record — every non-secret byte is preserved (0 over-redaction).
+// scan). Secrets are redacted WITHOUT abridging the record: a non-secret byte is preserved unless the shape's
+// own body class reaches it (trailing body characters ARE absorbed — see the over-redaction notes per family
+// in scrub-shapes.ts; the bound is the first non-body byte).
 //
 // ── THE SEAM INVARIANT (why this file carries state) ─────────────────────────────────────────────────
 // A credential does not arrive aligned to a caller's chunk boundary. Scrubbing each chunk in ISOLATION
@@ -17,68 +19,29 @@
 // chunks concatenated. There is no flush step and no deferred tail — see `seam` for how that is achieved.
 //
 // ── ADJACENCY (why the body class carries a lookahead) ───────────────────────────────────────────────
-// `[A-Za-z0-9]{6,}` is GREEDY over characters that also spell a family prefix, so two credentials written
-// back to back merged into ONE match: `ghp_AAAAAAghp_BBBBBB` matched through `…AAAAAAghp` and left
+// A body character class is GREEDY over characters that also spell a family prefix, so two credentials
+// written back to back merged into ONE match: `ghp_AAAAAAghp_BBBBBB` matched through `…AAAAAAghp` and left
 // `[REDACTED]_BBBBBB` — the second credential's entropy-bearing body shipped in the clear, and the
 // non-secret bytes of a near-miss like `ghp_ABCDE` immediately before a real token were eaten with it.
-// A credential body therefore STOPS at the start of the next family prefix (`BODY` below). That is a
-// property of the SHAPE, so it must hold across a chunk seam too, where a lookahead cannot see: the seam
-// machinery below decides a candidate only once the bytes the lookahead needs have actually arrived.
+// A credential body therefore STOPS at the start of the next family prefix — of ANY declared family, not
+// just its own: an own-family-only lookahead leaves `ghp_AAAAAAgithub_pat_…` merging exactly as before. The
+// union lookahead lives with the family declarations in scrub-shapes.ts. That is a property of the SHAPE,
+// so it must hold across a chunk seam too, where a lookahead cannot see: the seam machinery below decides a
+// candidate only once the bytes the lookahead needs have actually arrived.
+//
+// ── SCOPE, STATED PLAINLY ────────────────────────────────────────────────────────────────────────────
+// THREE families are declared (GitHub token, Slack token, GitHub fine-grained PAT). This is not a general
+// credential control: a secret of any other shape passes through untouched, by construction. The families
+// deliberately left out — and the specific thing each one breaks — are recorded in scrub-shapes.ts.
+
+import { SHAPES } from './scrub-shapes.js';
+import type { CredentialShape } from './scrub-shapes.js';
 
 /** Redact-at-source surface (PERSIST-10a): `scrub(buffer)` drops known credential shapes BEFORE the body
  *  is stored; every non-secret byte preserved (no over-redaction). (method-tags-pst:91-92) */
 export interface ScrubApi {
   scrub(buffer: Uint8Array): Uint8Array;
 }
-
-/**
- * A credential SHAPE, described completely enough to be recognised ACROSS a chunk boundary. `full` alone is
- * not enough: to decide the tail of a chunk you must also know what a not-yet-complete prefix looks like
- * (`partial`), which bytes a complete match would keep absorbing (`cont`), and which trailing bytes are
- * still AMBIGUOUS because one more byte would turn them into the family prefix of the NEXT credential
- * (`blockPrefix`). Declaring a shape without those is what let a split — and then an adjacent — secret
- * through, so they are part of the shape, not of the algorithm.
- */
-interface CredentialShape {
-  /** g-flagged; matches a COMPLETE credential. The single source of truth for what `scrub` redacts. */
-  readonly full: RegExp;
-  /** Anchored; matches a STRICT prefix — not a credential yet, but one more byte could make it one. */
-  readonly partial: RegExp;
-  /** Anchored; the run of bytes a COMPLETE match keeps absorbing greedily (its body character class). */
-  readonly cont: RegExp;
-  /** End-anchored; the longest trailing run that is a STRICT prefix of this shape's family prefix. Those
-   *  bytes cannot be classified until the next byte arrives: they are either body, or the head of the
-   *  credential that follows. Never longer than the family prefix minus one. */
-  readonly blockPrefix: RegExp;
-  /** The shortest string `full` can match — the floor a candidate must clear WITHOUT its ambiguous tail. */
-  readonly minFull: number;
-  /** The longest string `partial` can match. */
-  readonly maxPartial: number;
-  /** The longest COMPLETE match whose completeness still depends on its ambiguous tail (see `seam`). */
-  readonly maxContingent: number;
-}
-
-// The GitHub token family: `gh[pousr]_` + >= 6 token chars. Matched by shape (never by a hard-coded secret
-// literal) so an unseen secret of the same family is caught too. `BODY` is a token character that does NOT
-// open the next family prefix — that single lookahead is what stops one credential from swallowing the one
-// written immediately after it.
-const FAMILY_PREFIX = 'gh[pousr]_';
-const BODY = `(?:(?!${FAMILY_PREFIX})[A-Za-z0-9])`;
-
-const SHAPES: readonly CredentialShape[] = [
-  {
-    full: new RegExp(`${FAMILY_PREFIX}${BODY}{6,}`, 'g'),
-    partial: /^(?:g|gh|gh[pousr]|gh[pousr]_[A-Za-z0-9]{0,5})$/,
-    cont: new RegExp(`^${BODY}*`),
-    blockPrefix: /(?:gh[pousr]|gh|g)$/,
-    minFull: 10, // 'gh' + family + '_' + the six-character floor
-    // 'g' 'h' family '_' + five token chars = 9: one short of the {6,} floor.
-    maxPartial: 9,
-    // A complete match is CONTINGENT while dropping its ambiguous tail (<= 3 bytes: 'g' / 'gh' / 'ghX')
-    // would drop it back below the floor. The longest such match is 'gh'+fam+'_' + five body + 'ghX' = 12.
-    maxContingent: 12,
-  },
-];
 
 const CREDENTIAL_SHAPES: readonly RegExp[] = SHAPES.map((s) => s.full);
 
@@ -130,8 +93,9 @@ function scrubString(s: string): string {
 }
 
 /**
- * Redact known credential shapes from a transcript buffer at source (PERSIST-10a). Every non-secret byte is
- * preserved — only a matched secret is replaced by the redaction placeholder (0 over-redaction).
+ * Redact the DECLARED credential shapes from a transcript buffer at source (PERSIST-10a) — GitHub token,
+ * Slack token, GitHub fine-grained PAT, and nothing else. Only a matched secret is replaced by the redaction
+ * placeholder; bytes outside a match are preserved byte-for-byte.
  */
 export function scrub(buffer: Uint8Array): Uint8Array {
   return fromLatin1(scrubString(toLatin1(asBytes(buffer))));
@@ -149,8 +113,9 @@ export function scrub(buffer: Uint8Array): Uint8Array {
  *              contingent, `raw` is byte-identical to what was emitted.
  *  - `swallow` the shape whose greedy body is still being absorbed (-1 = none).
  *  - `pending` bytes that were NOT emitted because they are inside a redaction already written, but which
- *              one more byte could reveal to be the family prefix of the NEXT credential. Bounded by the
- *              family prefix length minus one (3).
+ *              more bytes could reveal to be the family prefix of the NEXT credential. Bounded by the longest
+ *              strict family prefix spellable in that shape's body characters (`blockPrefix`) — 10, from
+ *              `github_pat` (the `_` is a body character of the github-pat family).
  *
  * `raw`/`back` and `swallow`/`pending` are mutually exclusive by construction.
  */

@@ -137,8 +137,11 @@ normative-clause: "no raw credential may enter it"
 
 ### REQ-PERSIST-10a-b — redact-at-source is the primary control
 source: INV-PERSIST-10a @ reference/atlas-persist.md#persist-10a
-If a raw credential would reach the transcript buffer, then the framework shall redact it at source before it enters.
+If a raw credential of a DECLARED credential family would reach the transcript buffer, then the framework shall redact it at source before it enters.
 normative-clause: "The **primary control MUST be redact-at-source**: the framework MUST NOT let a raw credential enter the transcript buffer in the first place"
+scope: DECLARED FAMILIES ONLY — GitHub tokens (`gh[pousr]_`) and Slack tokens (`xox[baprs]-`). A credential of any
+other shape (`github_pat_`, AWS, JWT, PEM, …) is **not** redacted and enters the buffer unchanged; that residue is
+covered by the scanner backstop (REQ-PERSIST-10a-c/d), not by this control. See reference/atlas-persist.md#persist-10a.
 
 ### REQ-PERSIST-10a-c — scanner runs server-side
 source: INV-PERSIST-10a @ reference/atlas-persist.md#persist-10a
@@ -154,6 +157,10 @@ normative-clause: "MUST use **≥2 detection engines**"
 source: INV-PERSIST-10a @ reference/atlas-persist.md#persist-10a
 If the scrub redacts a secret, then the persistence layer shall not otherwise abridge the record.
 normative-clause: "The scrub redacts secrets but MUST NOT otherwise abridge the record"
+scope: bytes OUTSIDE a matched shape are preserved exactly. Bytes a declared shape's own body class reaches ARE
+absorbed into the redaction, bounded by the first non-body byte: trailing token characters after a GitHub token
+(`ghp_XXXXXXfoo`, pre-existing) and hyphen-joined text after a Slack token (`xoxb-…-not-part-of-token`, declared
+with the Slack family). Both are stated at reference/atlas-persist.md#persist-10a rather than claimed away.
 
 ### REQ-PERSIST-10b-a — never claim deterministic resume
 source: INV-PERSIST-10b @ reference/atlas-persist.md#persist-10b

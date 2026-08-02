@@ -138,6 +138,22 @@ mergeAtlas(ours, theirs, base): EventLog   // git merge driver: set-union the lo
   detection engines** (pattern + entropy + a verification pass). The scrub redacts secrets but MUST NOT
   otherwise abridge the record. This is billy's security domain; redact-at-source-primary is the load-bearing
   rule.
+  **SCOPE OF WHAT IS SHIPPED (narrower than the rule above, deliberately stated):** redact-at-source is a
+  SHAPE-based control over an explicitly DECLARED list of credential families, not a general credential
+  control. Two families are declared today — **GitHub tokens** (`ghp_`/`gho_`/`ghu_`/`ghs_`/`ghr_` + ≥6 token
+  characters) and **Slack tokens** (`xoxb-`/`xoxa-`/`xoxp-`/`xoxr-`/`xoxs-` + ≥6 body characters). **A secret
+  of any other shape is NOT redacted and passes into the transcript buffer unchanged** — including GitHub
+  fine-grained PATs (`github_pat_`), AWS keys, JWTs and PEM private keys, each of which was measured to break
+  either chunk-independence or the no-over-abridgement rule under the current shape descriptor (the specific
+  defect per family is recorded in `packages/persist/src/scrub-shapes.ts`). Closing that gap is a matter of
+  declaring more families, and for the four above it requires extending the descriptor first. The scanner
+  backstop is what covers everything not declared here — which is why it is a backstop and not optional.
+  **One declared over-redaction:** the Slack body class must include `-` (a real Slack token is
+  `xoxb-<id>-<id>-<secret>`, so excluding the separator would ship the trailing entropy-bearing segment in
+  the clear), so hyphen-joined NON-secret text written immediately after a Slack token is absorbed into the
+  redaction, up to the first non-body byte. This is the same class as the pre-existing absorption of trailing
+  token characters (`ghp_XXXXXXfoo`), and it is accepted: for a credential control, over-redacting bounded
+  adjacent text is preferred to shipping half a secret.
 - **PERSIST-10b Re-invoke = redispatch + replay, NOT deterministic resume.** A hosted model is
   nondeterministic (even at temperature 0) and external side effects do not rewind, so "resume the agent
   from exactly where it stopped" is **NOT deliverable** and MUST NOT be claimed. Two things MUST be

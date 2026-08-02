@@ -216,7 +216,8 @@ describe('PERSIST-10a adjacency — CHUNK INDEPENDENCE across the seam', () => {
       worst = Math.max(worst, seamCarryOf(buf));
     }
     expect(worst).toBeLessThanOrEqual(MAX_SEAM_CARRY);
-    expect(MAX_SEAM_CARRY).toBe(12);
+    // 14 = |'xox'+fam+'-'| + (floor-1) + |'xoxb'| — see the derivation written out in scrub-seam.test.ts.
+    expect(MAX_SEAM_CARRY).toBe(14);
     assertExactBytes(buf, '[REDACTED][REDACTED][REDACTED][REDACTED]_[REDACTED]');
   });
 });

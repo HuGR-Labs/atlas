@@ -234,11 +234,37 @@ describe('PERSIST-10a seam — CONTROL (b): the shipped single-chunk behaviour i
 
 describe('PERSIST-10a seam — CONTROL (c): the memory bound is real', () => {
   it('a long secret-free stream never carries more than MAX_SEAM_CARRY bytes', () => {
-    // 12, not 9. 9 bounds a strictly-INCOMPLETE prefix (family prefix + five token chars). A complete
-    // match whose completeness is CONTINGENT on its ambiguous tail is longer: 'gh'+fam+'_' + five body
-    // chars + 'ghX' = 12, which is a match only while those last three bytes are read as body — one more
-    // byte can turn them into the family prefix of the NEXT credential and un-make it.
-    expect(MAX_SEAM_CARRY).toBe(12);
+    // 14, not 10, and no longer 12. 10 bounds a strictly-INCOMPLETE prefix (the longest family prefix,
+    // `xox[baprs]-` at five characters, plus five body chars — one short of the floor of six). A complete
+    // match whose completeness is CONTINGENT on its ambiguous tail is longer, and the bound is arithmetic
+    // on the DECLARATION, not a guess:
+    //
+    //     maxContingent(family) = |prefix| + (floor - 1) + maxAmbiguous
+    //
+    // where maxAmbiguous is the longest run that is a STRICT prefix of ANY declared family and is spelled
+    // entirely in this family's body characters. With github-token and slack-token declared, that longest
+    // run is `xoxb` (4) — four characters of the five-character slack prefix, all alphanumeric and so
+    // legal inside either body. The worst case is therefore the slack family:
+    //
+    //     'xox' + fam + '-'  +  five body chars  +  'xoxb'   =  5 + 5 + 4  =  14
+    //
+    // i.e. `xoxb-AAAAAxoxb`, which is a credential ONLY while those last four bytes count as body: one
+    // more byte (`-`) turns them into the family prefix of the NEXT credential, drops the first body to
+    // five characters, and un-makes the match. github-token's own worst case is 4 + 5 + 4 = 13, and the
+    // strictly-incomplete bound is 10, so the ceiling is 14.
+    //
+    // It was 12 when github-token was the only declared family (4 + 5 + `ghX`); declaring slack-token
+    // both lengthened the prefix and lengthened the ambiguous run, and BOTH terms moved.
+    expect(MAX_SEAM_CARRY).toBe(14);
+    // the witness, exactly at the bound — and it must still fold identically at every split
+    const contingent = 'xoxb-AAAAAxoxb';
+    expect(contingent.length).toBe(14);
+    expect(dec.decode(scrub(enc.encode(contingent)))).toBe('[REDACTED]');
+    expect(dec.decode(scrub(enc.encode(`${contingent}-ABCDEF`)))).toBe('xoxb-AAAAA[REDACTED]');
+    for (let off = 1; off < `${contingent}-ABCDEF`.length; off++) {
+      const w = `${contingent}-ABCDEF`;
+      expect(dec.decode(admitAll([w.slice(0, off), w.slice(off)]))).toBe('xoxb-AAAAA[REDACTED]');
+    }
     const chunk = 'a long transcript line with no credential in it whatsoever; '.repeat(16);
     let buf = new Uint8Array(0);
     let worst = 0;
