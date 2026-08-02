@@ -2,7 +2,7 @@
 //
 // The runtime composition-root's SECOND governed write door (mirrors `governed-emit.ts`). `atlas-link`
 // asserts a human `sameAs` equivalence between two current nodes — a symmetric, non-destructive edge — only
-// THROUGH the gate ladder below — TEN fail-closed refusal points, in order, before a byte is DURABLE.
+// THROUGH the gate ladder below — NINE fail-closed refusal points, in order, before a byte is DURABLE.
 //
 // [A-D3 / task #83] IT ALSO RETRACTS ONE, as a MODE of this same door (`link(a, b, retract)`), NOT as a
 // sixth tool: `GOVERNANCE_SURFACE` stays 5 and `WRITE_PATHS` stays `{atlas-emit, atlas-link}`. The mode is
@@ -11,16 +11,36 @@
 // as making it was. See `governed-link-retract.ts` for the decision and the three mode-specific refusals.
 // The count is stated because it drifted: this header said "four" while the body had five reasons and left
 // `unverifiable endpoint` unlisted entirely. (Eight became ten when the durable write became an atomic
-// COMMIT — stage 6, whose two refusals are the emit door's, byte for byte.)
-//   1. DISTINCT     — a node never names itself; `a === b` is refused (no self-equivalence).
-//   2. BOTH KNOWN   — both `a` and `b` MUST be current nodes in the rehydrated projection; an absent
-//                     endpoint is refused (no dangling assertion) — one refusal point per endpoint.
-//   3. AUTHZ        — the KNOW-11 owner-scoped write gate over EVERY scope the link's merged equivalence
-//                     class spans, not merely the two endpoints (see gate 3 in the body): the endpoints
-//                     first, then every current member of `sameAsClassOf(a) ∪ sameAsClassOf(b)`, each read
-//                     off its OWN PROJECTION ROW (the ADR-0007 governance carrier). An empty/unset actor, an
-//                     actor outside ANY scope in the class, or a row carrying no confirmable scope at all,
-//                     is denied (fail-closed v1).
+// COMMIT — stage 6, whose two refusals are the emit door's, byte for byte; ten became NINE at task #144,
+// when the endpoint-EXISTENCE refusal was folded into the endpoint-AUTHZ one — see gate 2+3.)
+//   1. DISTINCT     — a node never names itself; `a === b` is refused (no self-equivalence). This gate is
+//                     a pure function of the caller's OWN two arguments, so it discloses nothing about any
+//                     node and is safe to answer first.
+//   2+3. AUTHORIZED ENDPOINTS — ONE gate, ONE refusal, and the MERGE of what used to be two [task #144].
+//                     Both `a` and `b` MUST be current nodes (no dangling assertion) AND the actor must be
+//                     in the scope of each, read off that node's OWN ROW (the ADR-0007 governance carrier).
+//                     An ABSENT endpoint, an empty/unset actor, an actor outside the scope, and a row
+//                     carrying no confirmable scope at all are ALL denied with the SAME BYTES (fail-closed
+//                     v1).
+//
+//                     WHY THEY ARE ONE. They were two refusals with existence FIRST, so any caller —
+//                     `actor: ''` included — could tell `unknown node: X` from `unauthorized` and thereby
+//                     learn whether X is a current node. That is precisely what the precedence rule below
+//                     forbids, and it was the door contradicting its own header. The two CANNOT be
+//                     separated by merely reordering them: authority is carried BY THE ROW, so a nodeKey
+//                     with no row has no scope, nothing can authorize anyone over it, and "not authorized"
+//                     is the only answer computable about it. Running authz first therefore SUBSUMES the
+//                     existence gate rather than preceding it — the collapse is the ordering's consequence,
+//                     not a second decision. Nor can the distinction be earned by clearing the OTHER
+//                     endpoint: a caller allowed to hear "absent" for X could still tell it apart from
+//                     "X exists, outside your scope", which is the same oracle one gate deeper.
+//                     THE COST IS REAL AND IS STATED IN `REJECTED_UNAUTHORIZED`: an operator who mistypes a
+//                     64-hex nodeKey is told `unauthorized`, not `unknown node`. The reason text therefore
+//                     names BOTH causes and points at the read door.
+//   3.5 CLASS AUTHZ — the same KNOW-11 gate over EVERY scope the link's merged equivalence class spans, not
+//                     merely the two endpoints: every current member of `sameAsClassOf(a) ∪ sameAsClassOf(b)`,
+//                     each read off its OWN row. Runs AFTER the endpoint leg so an actor with no authority
+//                     over the nodes it NAMED learns nothing about the class behind them.
 //   3.25 READ-BACK  — every one of those nodes' facts is then read from CAS (`store.get(node.contentHash)`);
 //                     bytes that are gone, or bytes whose `scope` CONTRADICTS the row that authorized the
 //                     caller, mean the node cannot be confirmed to be what the projection says it is, so the
@@ -53,6 +73,22 @@
 // size, membership or CAS health of the class it was reaching into. SCN-GL-14 pins that with a doubly-
 // violating input; CARRIER-5 pins the endpoint-level twin of it, which SCN-GL-14 could not reach.
 //
+// ── HONEST SIZING OF THE EXISTENCE HALF (task #144) — read this before trusting it ───────────────────────
+// Folding existence into authz above makes THIS DOOR's refusals existence-blind. It does NOT make node
+// existence secret in this product, and claiming otherwise here would be the same species of overclaim the
+// pair-key comment in `knowledge/read/sameas.ts` had to withdraw. MEASURED through the real CLI: an actor
+// the write door refuses (`intruder@nowhere`, in no policy scope) runs `atlas query <scope>` and gets exit 0
+// with the full 64-hex nodeKey — AND the claim text — of every current node in that territory. It is the READ
+// LEG, not one command: `atlas node <contentAddress>` is ungated too, and is an even more direct oracle —
+// exit 0 with the whole node on a hit, exit 1 with the discriminant `no-such-node` on a miss, so existence is
+// readable from the exit code alone. Neither is authz-gated at all: `createQuery(index)` in `@atlas/tools`
+// takes neither an actor nor a policy, `resolveNode` likewise, so both are structurally incapable of it, and
+// `actorInScope` is called from the two WRITE doors and nowhere else.
+// So the value of the fold is NOT that it closes a live escalation; today it closes nothing an adjacent
+// ungated door does not hand over in bulk. Its value is that the invariant three paragraphs up is now TRUE
+// OF THIS DOOR BY CONSTRUCTION, ahead of the authoring doors that will let a human NAME a nodeKey, and ahead
+// of any decision to gate reads. Gating reads is a separate, unmade decision and is not tracked here.
+//
 // Pure of clock/random: no wall-clock, no nonce, no counter enters the decision. Composes OVER the frozen
 // core (`@atlas/knowledge` linkSameAs, the `@atlas/tools` `LinkOut` result, the authz seam) — re-implements
 // none. DAG: adapter-io depends on knowledge + tools; `LinkOut` is imported FROM tools (never the reverse).
@@ -74,10 +110,31 @@ import { ALREADY_RETRACTED_REASON, NOT_LINKED_REASON, RETRACTED_PAIR_REASON } fr
 /** The structured fail-closed reasons — a non-distinct, unknown-endpoint, unauthorized, OR unratified link
  *  never lands. */
 const REJECTED_SAME = 'sameAs requires two distinct nodes';
+/**
+ * The ONE refusal for a bad endpoint, whatever is bad about it [task #144].
+ *
+ * It answers FOUR different situations with one byte-string, on purpose: the endpoint is not a current node;
+ * the actor is outside its scope; the actor is empty/unset; the row carries no confirmable scope. Only the
+ * first of those is a fact about a node the caller may not hold — and it is unearnable, because a nodeKey
+ * with no row has no scope for anyone to hold. Splitting them out is an existence oracle over keys the
+ * caller can name freely.
+ *
+ * SO THE REMEDIATION TEXT HAS TO CARRY BOTH CAUSES, because the discriminant no longer can. An operator who
+ * mistyped a 64-hex nodeKey and an operator who genuinely lacks a scope read the same line, and neither
+ * should conclude the other's fix. The READ LEG is where existence is answered — `atlas query <scope>` lists
+ * a territory, `atlas node <contentAddress>` resolves one node — and neither is authz-gated. Note the shape
+ * of the remedy is imperfect and that is deliberate honesty, not an oversight: neither door is a direct
+ * nodeKey→exists lookup (one is addressed by CONTENT hash, the other needs a scope you may not know), so an
+ * operator holding only a suspect nodeKey has more work than one lookup. See the honest sizing note in this
+ * file's header for why pointing at that leg is not a contradiction.
+ */
 const REJECTED_UNAUTHORIZED =
   'unauthorized: the actor must be in the scope of BOTH endpoints AND of every node in the equivalence ' +
   'class this link merges — the sameAs relation is transitive, so the boundary is the class, not the edge ' +
-  '(KNOW-11)';
+  '(KNOW-11). An endpoint that is not a current node is refused with this SAME string, deliberately: a ' +
+  'nodeKey with no row carries no scope, so no authority over it can be established, and reporting the two ' +
+  'apart would let any caller probe which nodeKeys exist. If a nodeKey here may simply be wrong, list the ' +
+  "territory with `atlas query <scope>` and check it against that before concluding a scope is missing.";
 const REJECTED_UNRATIFIED =
   'unratified: a sameAs link requires a ratifier, and the billy token when either endpoint is T0 (KNOW-8)';
 const REJECTED_UNVERIFIABLE =
@@ -91,7 +148,13 @@ const REJECTED_UNVERIFIABLE =
 const REJECTED_CONTENDED = COMMIT_CONTENDED;
 const REJECTED_UNREADABLE = COMMIT_UNREADABLE_STORE;
 
-const unknownNode = (key: string): string => `unknown node: ${key} not in the current projection`;
+// [task #144] `unknownNode(key)` — `unknown node: ${key} not in the current projection` — USED TO LIVE HERE
+// and is deliberately GONE, not merely unreferenced. It was a distinct refusal for an absent endpoint, and
+// because it was reachable BEFORE the authz gate it told every caller, authorized or not, whether a nodeKey
+// names a current node. It cannot be repaired by moving it: there is no point in this ladder at which a
+// caller has earned that answer, since no one can hold authority over a node that does not exist. Its cases
+// now return `REJECTED_UNAUTHORIZED`. Left as a note so a future reader does not "restore the useful
+// diagnostic" without reading why it went.
 
 /** What the governed link leg is composed over: the durable CAS store (fact read-back + persist), the admin
  *  policy (authz scopes), the actor identity, and the env-sourced ratify token — the SAME channels as emit. */
@@ -145,9 +208,10 @@ function rowContradicted(node: CurrentNode, fact: GroundedFact): boolean {
 }
 
 /**
- * Build the GOVERNED sameAs link leg. The returned `link(a, b)` runs the four fail-closed gates (distinct →
- * both-known → authz-on-both → ratifier), then applies the pure `linkSameAs` reducer and persists the
- * projection. On any gate failure it returns `{linked:false, rejected}` and persists NOTHING. Pure of
+ * Build the GOVERNED sameAs link leg. The returned `link(a, b, retract?)` runs the fail-closed ladder in the
+ * header (distinct → authorized-endpoints → endpoint read-back → class authz → class read-back → ratifier →
+ * pair state), then applies the pure `linkSameAs` / `unlinkSameAs` reducer and publishes it through the
+ * atomic commit. On any gate failure it returns `{linked:false, rejected}` and persists NOTHING. Pure of
  * clock/random given a pure store/policy.
  */
 export function createGovernedLink(deps: GovernedLinkDeps): {
@@ -165,7 +229,6 @@ export function createGovernedLink(deps: GovernedLinkDeps): {
     // 1. DISTINCT — a node never names itself (and there is no self-edge to withdraw either).
     if (a === b) return { linked: false, rejected: REJECTED_SAME };
 
-    // 2. BOTH KNOWN — resolve both endpoints against the rehydrated projection; an absent one is refused.
     // ── THE ATOMIC COMMIT (stages 2 → 5) ────────────────────────────────────────────────────────────────
     // Every gate below is priced against ONE snapshot of the projection, and the edge is published against
     // that same snapshot or not at all. `rehydrateProjection` + `persistProjection` was a
@@ -179,14 +242,20 @@ export function createGovernedLink(deps: GovernedLinkDeps): {
     // member) and the ratify tier (`strictestTier` over every member's bytes), so re-publishing the old
     // `linkSameAs` would merge a class nobody was ever authorized over.
     const committed = deps.store.commitProjection<LinkOut>((proj) => {
-      const nodeA = proj.current.get(a);
-      if (nodeA === undefined) return { out: { linked: false, rejected: unknownNode(a) } };
-      const nodeB = proj.current.get(b);
-      if (nodeB === undefined) return { out: { linked: false, rejected: unknownNode(b) } };
-
-      // 3. AUTHZ (KNOW-11), FIRST LEG — the actor must be in the scope of BOTH endpoints. Runs before the
-      //    class walk below so an actor with no authority over the nodes it NAMED is told `unauthorized` and
-      //    learns nothing about the class behind them (the precedence rule in the header).
+      // 2+3. AUTHORIZED ENDPOINTS (KNOW-11), FIRST LEG — ONE gate, ONE refusal [task #144]. Existence and
+      //    authority are decided together and answered with the SAME bytes, because they cannot honestly be
+      //    told apart to a caller: authority is carried by the ROW, so an endpoint with no row has no scope
+      //    and no one can hold authority over it. Reporting `unknown node: X` separately let ANY caller —
+      //    `actor: ''` included — read one bit about whether X is a current node, at keys it can name
+      //    freely, which is the exact disclosure this door's header forbids. Runs before the class walk
+      //    below so an actor with no authority over the nodes it NAMED learns nothing about the class behind
+      //    them (the precedence rule in the header).
+      //
+      //    TOTALITY: the two `=== undefined` checks are load-bearing and must stay AHEAD of `rowAuthorized`
+      //    in the `||` chain. Without them `storedFact`/`rowAuthorized` dereference `undefined.contentHash`
+      //    and this door throws a `TypeError` out of a function its own header calls total — which the CLI's
+      //    outer catch then re-labels as the CALLER's malformed input. Pinned at the unit (SCN-GL-2/2b) and
+      //    at the process boundary (blackbox T3/T3b).
       //
       //    ANSWERED FROM THE ROWS, AND THAT ORDERING IS THE POINT (ADR-0007 carrier). This gate used to run
       //    AFTER the CAS read-back, because the scope it needs lived only in the bytes — so a caller with
@@ -195,9 +264,16 @@ export function createGovernedLink(deps: GovernedLinkDeps): {
       //    over nodes the caller cannot touch, at keys it can name freely. SCN-GL-14 pinned exactly this
       //    precedence for the CLASS walk and could not pin it here, because the gate physically could not run
       //    before the read it depended on. With `scope` on the row it can, so it does.
-      const factA = storedFact(deps, nodeA);
-      const factB = storedFact(deps, nodeB);
-      if (!rowAuthorized(deps, nodeA, factA) || !rowAuthorized(deps, nodeB, factB)) {
+      const nodeA = proj.current.get(a);
+      const nodeB = proj.current.get(b);
+      const factA = nodeA === undefined ? undefined : storedFact(deps, nodeA);
+      const factB = nodeB === undefined ? undefined : storedFact(deps, nodeB);
+      if (
+        nodeA === undefined ||
+        nodeB === undefined ||
+        !rowAuthorized(deps, nodeA, factA) ||
+        !rowAuthorized(deps, nodeB, factB)
+      ) {
         return { out: { linked: false, rejected: REJECTED_UNAUTHORIZED } };
       }
 
