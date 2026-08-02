@@ -64,7 +64,15 @@ that only a human org owner can make — no commit closes them.
    /.atlas/policy.json   @HuGR-Labs/atlas-admins
    /CODEOWNERS           @HuGR-Labs/atlas-admins
    /.github/workflows/   @HuGR-Labs/atlas-admins
+   /harness/gates/       @HuGR-Labs/atlas-admins
    ```
+
+   The fourth line was itself missed on the first cut, and found by a cold review — the same shape of gap
+   one level down. Owning `/.github/workflows/` protects only the line that INVOKES a gate, not what the
+   gate DOES: an author who rewrites `harness/gates/layer-guard.mjs` to `process.exit(0)` touches no owned
+   path, and CI runs the neutered check and reports green. The workflow and the script it runs are one
+   control and are owned together. The lesson generalizes: after adding an owned path, ask what the
+   *content* of that path delegates to, and own that too.
 
 4. **Protect `master`** (branch protection rule or the ruleset equivalent), with all of:
    - *Require a pull request before merging* — no direct pushes.

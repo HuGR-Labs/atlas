@@ -9,10 +9,16 @@
 # that runs the gates is as load-bearing as the policy the gates enforce, and rewriting `ci.yml` disables
 # every mechanical check without touching a single governed path.
 #
-# So three paths are owned, and the set is closed under "what could be used to remove an owner":
+# So four paths are owned, and the set is closed under "what could be used to remove an owner":
 #   1. the policy itself,
 #   2. this file (the ownership map),
-#   3. the workflows (the enforcement).
+#   3. the workflows (the enforcement's SCHEDULE),
+#   4. the gate scripts (the enforcement's BODY).
+#
+# 4 was missed on the first cut and found by a cold review. Owning `/.github/workflows/` alone protects
+# only the line that INVOKES a gate, not what the gate does: an author who rewrites `layer-guard.mjs` to
+# `process.exit(0)` touches no owned path, and CI dutifully runs the neutered check and reports green. The
+# workflow and the script it runs are one control, so they are owned together.
 #
 # ── WHAT MAKES IT ACTUALLY IN FORCE ──────────────────────────────────────────────────────────────────
 # A CODEOWNERS rule is INERT on its own. All three must hold, and each is verifiable:
@@ -30,5 +36,7 @@
 # The ownership map: without this line, the rule above is removable by an ordinary PR.
 /CODEOWNERS @HuGR-Labs/atlas-admins
 
-# The enforcement: the gates that make every other invariant mechanical rather than aspirational.
+# The enforcement, both halves: the workflow that SCHEDULES each gate, and the script that IS the gate.
+# Owning either one alone leaves the other as an unowned way to disable the check.
 /.github/workflows/ @HuGR-Labs/atlas-admins
+/harness/gates/ @HuGR-Labs/atlas-admins
