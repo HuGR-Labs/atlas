@@ -28,7 +28,8 @@ import type {
   AdmitDeps,
 } from '@atlas/genesis';
 import { createDiskStore } from '@atlas/adapter-io';
-import type { DiskStore } from '@atlas/adapter-io';
+import type { CommitDecision, CommitRefusal, CommitResult, DiskStore } from '@atlas/adapter-io';
+import { emptyStore } from '@atlas/knowledge';
 import type { StoreProjection, CurrentNode } from '@atlas/knowledge';
 import { runMine, driveMine, buildControllerDeps, makeAdmitGate, mineOutcome, mineWhyEmpty } from '../src/mine.js';
 import type { MineDeps } from '../src/mine.js';
@@ -102,31 +103,72 @@ export const gateEmitFor = (ids: ReadonlySet<string>): EmitGate => ({
   emit: (seed, c) => (ids.has(idOf(c)) ? { emitted: true, fact: factFor(c, seed.claim) } : { emitted: false, whyNot: { site: c.site, reason: 'not in admitted set' } }),
 });
 
-/** The knowledge-projection doors are TRAPS in every mine fixture (ADR-0008): `mine` writes CANDIDATES to
- *  staging and must never so much as READ the governed projection, so any call is a test failure, not a
- *  mismatch to assert on later. Spread into each fake store below. */
+/**
+ * The knowledge-projection doors are TRAPS in every mine fixture (ADR-0008): `mine` writes CANDIDATES to
+ * staging and must never so much as READ the governed projection, so any call is a test failure, not a
+ * mismatch to assert on later. Spread into each fake store below.
+ *
+ * ALL THREE, and `commitProjection` was the one missing. It is the door the governed writers actually use
+ * (`governed-emit.ts:260`, `governed-link.ts:156`), so a future `mine.ts` reaching for it would have slipped
+ * past this guarantee's own test while every mine suite stayed green — a trap covering two thirds of a
+ * surface proves two thirds of the claim. `mine-projection-surface.test.ts` now pins the coverage against
+ * the live `DiskStore` surface, so a projection door added later cannot escape silently either.
+ */
 export const projectionTrap = {
   persistProjection: (): never => { throw new Error('ADR-0008: mine must never write the knowledge projection'); },
   loadProjection: (): never => { throw new Error('ADR-0008: mine must never read the knowledge projection'); },
+  commitProjection: (): never => { throw new Error('ADR-0008: mine must never commit to the knowledge projection'); },
 };
 
-export const fakeStore = (): DiskStore => ({ put: () => asHash('x'), get: () => undefined, ...projectionTrap, persistStaging: () => {}, loadStaging: () => undefined });
+/** The staging half, as a no-op: enough to satisfy `DiskStore` where a suite never inspects what was staged. */
+const stagingNoop = {
+  persistStaging: (): void => {},
+  loadStaging: (): StoreProjection | undefined => undefined,
+  commitStaging: <T>(decide: (p: StoreProjection) => CommitDecision<T>): CommitResult<T> => ({ settled: true, out: decide(emptyStore()).out }),
+};
 
-/** A recording fake over the STAGING sidecar: `persistStaging` appends to `staged`, `loadStaging` reads the
- *  last staged projection (or `seed`, standing in for what an earlier pass left behind), `put` records the
- *  CAS keys. The projection doors trap. */
+export const fakeStore = (): DiskStore => ({ put: () => asHash('x'), get: () => undefined, ...projectionTrap, ...stagingNoop });
+
+/**
+ * A recording fake over the STAGING sidecar. `commitStaging` is the door `mine` writes through now, and this
+ * fake IMPLEMENTS THE PROTOCOL'S CONTRACT rather than pretending to be it: read the last staged projection
+ * (or `seed`, standing in for what an earlier pass left behind), run the caller's decision over it, `put`
+ * every CAS object the decision names BEFORE publishing, then append `next` to `staged`. Single-threaded, so
+ * it never contends — which is exactly why the concurrency property is proven by real processes in
+ * `mine-contention.test.ts` and not here. `persistStaging` stays (nothing calls it) and the projection doors
+ * trap.
+ */
 export const stagingFake = (seed?: StoreProjection): { store: DiskStore; staged: StoreProjection[]; cas: Set<string> } => {
   const staged: StoreProjection[] = [];
   const cas = new Set<string>();
+  const put = (obj: unknown): Hash => { const h = id(obj as Parameters<typeof id>[0]); cas.add(h as unknown as string); return h; };
+  const snapshot = (): StoreProjection => (staged.length > 0 ? staged[staged.length - 1]! : (seed ?? emptyStore()));
   const store: DiskStore = {
-    put: (obj) => { const h = id(obj); cas.add(h as unknown as string); return h; },
+    put: (obj) => put(obj),
     get: () => undefined,
     ...projectionTrap,
     persistStaging: (p) => void staged.push(p),
     loadStaging: () => (staged.length > 0 ? staged[staged.length - 1]! : seed),
+    commitStaging: <T>(decide: (p: StoreProjection) => CommitDecision<T>): CommitResult<T> => {
+      const decision = decide(snapshot());
+      if (decision.next === undefined) return { settled: true, out: decision.out }; // a refusal writes nothing
+      for (const obj of decision.put ?? []) put(obj); // CAS bytes durable BEFORE the rows naming them
+      staged.push(decision.next);
+      return { settled: true, out: decision.out };
+    },
   };
   return { store, staged, cas };
 };
+
+/** A staging door that ALWAYS refuses — the `settled: false` leg, which must never read as a quiet no-op. */
+export const refusingStagingFake = (refusal: CommitRefusal): DiskStore => ({
+  put: () => asHash('x'),
+  get: () => undefined,
+  ...projectionTrap,
+  persistStaging: () => {},
+  loadStaging: () => undefined,
+  commitStaging: () => ({ settled: false, refusal }),
+});
 
 export const OFF = { enabled: false, maxDepth: 0, epsilon: 0 } as const;
 export const budget = (ceiling: number): GenesisBudget => ({ ceiling, deepening: { review: OFF, enrich: OFF, expand: OFF } });
