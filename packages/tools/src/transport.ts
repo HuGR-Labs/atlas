@@ -3,6 +3,25 @@
 // The push/pull SPAWN LADDER + the frozen transport surface (`TransportApi` / `PullTier` / `Resolution` / …).
 // PUSH reaches a `Read`-only seat with NO grant (`PUSH_GRANTS_REQUIRED == 0`); PULL walks the native-first
 // `PULL_LADDER` (CLI is the FLOOR), every tier backed by the ONE injected `handler` (byte-identical, TOOLS-10).
+//
+// ── REFERENCE MODEL — TYPES LIVE, CODE INERT ─────────────────────────────────────────────────────────
+// Read this one carefully, because the two halves of this module have DIFFERENT status.
+//
+//   The TYPES are shipped surface. `PhasePushSource` is imported — as a type — by
+//   `packages/adapter-io/src/poke-file.ts`. Deleting this file would break a real seam.
+//
+//   The VALUES are not. Nothing in `packages/*/src` calls `createTransport`, and nothing reads
+//   `PULL_LADDER` / `PUSH_TIER` / `PUSH_GRANTS_REQUIRED`. Verified by probe, not by grep: a stderr write
+//   at the top of `createTransport`, rebuilt, driven through 249 real CLI / MCP subprocess runs — the only
+//   hits were this file's own compile-time witness (`_transportConforms`, bottom).
+//
+// The transports the product actually serves are `packages/cli/src/cli.ts` and
+// `packages/mcp-server/src/server.ts`; both reach the one handler directly. This module is the executable
+// STATEMENT of the TOOLS-11 ladder, not the thing that runs it — so a green suite here says the ladder's
+// contract is coherent, not that any tier was exercised.
+//
+// Declared `types: true` in the ledger at `harness/gates/reference-model-guard.mjs`; that flag is what
+// stops a future cleanup from reading "no callers" and deleting a live type seam.
 
 import type { NodeKey, Pack } from '@atlas/contracts';
 import type { Poke } from '@atlas/retrieval';

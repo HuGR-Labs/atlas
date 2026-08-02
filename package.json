@@ -15,6 +15,7 @@
     "postinstall": "node scripts/fix-scip-types.mjs",
     "spec-conformance-guard": "node harness/gates/spec-conformance-guard.mjs",
     "layer-guard": "node harness/gates/layer-guard.mjs",
+    "reference-model-guard": "node harness/gates/reference-model-guard.mjs",
     "id-integrity": "node harness/gates/id-integrity.mjs"
   },
   "engines": {

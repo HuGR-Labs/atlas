@@ -3,6 +3,21 @@
 // `atlas-emit` — the fail-closed grounded write door + the frozen `EmitApi`. `emit(node, at)` RE-DERIVES the
 // citation at `source@sha` (caller's citation NOT trusted): re-derives ⇒ persist through the sealed
 // @atlas/kernel `id` seam; else fail CLOSED (`{emitted:false, rejected}`, nothing persisted). Pure + total.
+//
+// ── REFERENCE MODEL — TYPES LIVE, CODE INERT ─────────────────────────────────────────────────────────
+// This module was NOT in the original #135 finding; it was measured in as a fifth one, in the same package
+// as the other four, by the gate that finding produced. Which is the point.
+//
+//   The TYPE `EmitApi` is consumed elsewhere and is real frozen surface.
+//   The VALUE `createEmit` has ZERO production callers. The composition root
+//   (`packages/adapter-io/src/wire.ts`) value-imports createHandler / createInit / createQuery /
+//   createReconcile from this package, and `createEmit` is not among them.
+//
+// THE SHIPPED GROUNDED WRITE DOOR IS `packages/adapter-io/src/governed-emit.ts`. That is what `atlas emit`
+// routes through. A green suite over this file says the fail-closed re-derivation RULE is stated
+// correctly; it says nothing about whether the door a user reaches obeys it.
+//
+// Declared `types: true` in the ledger at `harness/gates/reference-model-guard.mjs`.
 
 import type { Hash, Status } from '@atlas/contracts';
 import type { GroundedFact } from '@atlas/knowledge';

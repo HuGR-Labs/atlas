@@ -10,6 +10,20 @@
 // seam ALONE (KERNEL-1: RFC-8785/JCS-subset — sorted keys, NFC, one fixed escape, floats forbidden). No
 // ad-hoc key order, no clock, no nonce, no random reaches the content — the same `(source output, seat,
 // outDir)` yields a byte-identical file every run.
+//
+// ── REFERENCE MODEL — NO PRODUCTION CALLERS ──────────────────────────────────────────────────────────
+// Everything above describes a transport that NOTHING CONSTRUCTS. No module in `packages/*/src` calls
+// `materializePoke` or `pokeFilePath`, or reads `POKE_FILE_EXT`. The composition root never wires it, no
+// CLI command reaches it, and MCP does not advertise it — this is the open gap tracked as task #36.
+//
+// It sits in the outer ring beside genuinely shipped adapters (`store.ts`, `governed-emit.ts`,
+// `run-git.ts`), which is exactly where a reader is most likely to assume it runs. It does not.
+//
+// The `PhasePushSource` port it imports below is the ONLY thing keeping
+// `packages/tools/src/transport.ts` type-reachable — so the two reference models are each other's sole
+// remaining tie to the tree, and that tie is a type, not a call.
+//
+// Declared in the ledger at `harness/gates/reference-model-guard.mjs`.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

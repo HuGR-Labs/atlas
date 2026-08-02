@@ -3,6 +3,22 @@
 // `atlas-diff` — the read-only PERSIST-14 version-delta projection + the frozen `DiffApi`. It READS the
 // injected @atlas/persist `DiffApi` (`persist/ref/diff.ts`) — never computes the fold-diff — and renders
 // CLI≡MCP byte-identical (0 write path). A malformed sha fails CLOSED to the SAME rejected `Verdict`.
+//
+// ── REFERENCE MODEL — NO PRODUCTION CALLERS ──────────────────────────────────────────────────────────
+// Nothing in `packages/*/src` calls `createAtlasDiff` or reads `DIFF_GUIDANCE`. Verified by probe (stderr
+// write at the top of the constructor, rebuilt, 249 real CLI / MCP subprocess runs): every hit came from
+// this file's own compile-time witness (`_diffConforms`, bottom) and none from a caller.
+//
+// That is consistent with what the barrel already says out loud: `atlas-diff` is wired to NEITHER
+// transport — there is no `atlas diff` CLI command, and MCP advertises `GOVERNANCE_SURFACE` only, so
+// `handle('atlas-diff')` fails closed as off-surface. There is no shipped counterpart because there is no
+// shipped feature.
+//
+// NOTE for anyone grepping: the `DiffApi` this module CONSUMES is `@atlas/persist`'s own `DiffApi`
+// (`packages/persist/src/diff.ts`), a DIFFERENT type of the same name — and that one is a reference model
+// too. Neither name is evidence about the other.
+//
+// Declared in the ledger at `harness/gates/reference-model-guard.mjs`.
 
 import type { Hash } from '@atlas/contracts';
 import type { DiffOut, Guidance, Transport, Verdict } from './types.js';

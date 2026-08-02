@@ -4,6 +4,22 @@
 // materializes a FRESH `own_<unit>`/`atlas-query` pack from the injected @atlas/retrieval `FreshPackSource`
 // and delivers it grant-free (`grantsRequired == 0`, `pulled == false`) — correct even where native pull is
 // unavailable. Pull stays a non-load-bearing optimization; opens NO write door, no additional governance tool (TOOLS-1).
+//
+// ── REFERENCE MODEL — NO PRODUCTION CALLERS ──────────────────────────────────────────────────────────
+// `createPhaseHook` is this module's only constructor and NOTHING in `packages/*/src` calls it. Neither is
+// `AUTOINJECT_TIER` read anywhere. Verified by probe (stderr write at the top of the constructor, rebuilt,
+// 249 real CLI / MCP subprocess runs): ZERO hits — this module does not even self-invoke at load, unlike
+// its neighbours' conformance witnesses.
+//
+// There is NO shipped counterpart. Atlas has no phase-boundary push path today: the poke-as-file
+// materializer that would carry one, `packages/adapter-io/src/poke-file.ts`, is itself unconstructed
+// (task #36). So this file is the specification of TOOLS-14, waiting for a product to state it about.
+//
+// A green suite here proves the injection CONTRACT is self-consistent — that a boundary hook returning
+// `grantsRequired: 0` / `pulled: false` is well-formed. It proves nothing about any seat ever being
+// grounded, because no seat is ever grounded through this code.
+//
+// Declared in the ledger at `harness/gates/reference-model-guard.mjs`.
 
 import type { Pack, Territory } from '@atlas/contracts';
 import type { OwnApi, OwnPack, OwnUnit, PackApi } from '@atlas/retrieval';

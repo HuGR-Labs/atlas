@@ -3,6 +3,24 @@
 // The SINGLE-WRITE-DOOR — a store-level STRUCTURAL guard + the frozen `GuardApi`/`GuardVerdict`/`StoreRow`.
 // Two legs keyed off the sealed @atlas/kernel `id`: append-only/permissioned WRITE (admit iff `key ==
 // id(value)`) and content-address integrity READ (reject any ungrounded row). Adversarial red-team = FR-12.
+//
+// ── REFERENCE MODEL — NO PRODUCTION CALLERS ──────────────────────────────────────────────────────────
+// Nothing in `packages/*/src` calls `createGuard` or `createGovernedStore`. This module is a SPECIFICATION
+// ARTIFACT: it states INV-TOOLS-15 executably, and that is its entire job.
+//
+// THE SHIPPED WRITE DOOR IS `packages/adapter-io/src/store.ts`. That is the one the CLI and the MCP server
+// reach. Verified, not inferred: a `process.stderr.write` probe at the top of both constructors here,
+// rebuilt, then driven through 249 real `atlas` / `atlas-mcp` subprocess invocations (the whole
+// e2e-blackbox suite) — ZERO calls arrived from anywhere. Every hit was this file's own compile-time
+// conformance witness at the bottom (`_guardConforms`). The module is LOADED, because the barrel
+// re-exports it; it is never CALLED.
+//
+// SO: a green test over this file means THE MODEL IS SELF-CONSISTENT. It does NOT mean the product's write
+// door is covered. A rigorous suite here was once driven to zero surviving mutants and raised shipped
+// confidence by nothing at all — read a passing run as "the specification holds", never as "atlas is safe".
+//
+// Declared in the ledger at `harness/gates/reference-model-guard.mjs`, which fails if this module quietly
+// acquires a caller, loses one, or grows another export nobody calls.
 
 import { id } from '@atlas/kernel';
 import type { CasObject } from '@atlas/kernel';
