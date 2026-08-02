@@ -140,20 +140,30 @@ mergeAtlas(ours, theirs, base): EventLog   // git merge driver: set-union the lo
   rule.
   **SCOPE OF WHAT IS SHIPPED (narrower than the rule above, deliberately stated):** redact-at-source is a
   SHAPE-based control over an explicitly DECLARED list of credential families, not a general credential
-  control. Two families are declared today — **GitHub tokens** (`ghp_`/`gho_`/`ghu_`/`ghs_`/`ghr_` + ≥6 token
-  characters) and **Slack tokens** (`xoxb-`/`xoxa-`/`xoxp-`/`xoxr-`/`xoxs-` + ≥6 body characters). **A secret
-  of any other shape is NOT redacted and passes into the transcript buffer unchanged** — including GitHub
-  fine-grained PATs (`github_pat_`), AWS keys, JWTs and PEM private keys, each of which was measured to break
-  either chunk-independence or the no-over-abridgement rule under the current shape descriptor (the specific
-  defect per family is recorded in `packages/persist/src/scrub-shapes.ts`). Closing that gap is a matter of
-  declaring more families, and for the four above it requires extending the descriptor first. The scanner
-  backstop is what covers everything not declared here — which is why it is a backstop and not optional.
-  **One declared over-redaction:** the Slack body class must include `-` (a real Slack token is
-  `xoxb-<id>-<id>-<secret>`, so excluding the separator would ship the trailing entropy-bearing segment in
-  the clear), so hyphen-joined NON-secret text written immediately after a Slack token is absorbed into the
-  redaction, up to the first non-body byte. This is the same class as the pre-existing absorption of trailing
-  token characters (`ghp_XXXXXXfoo`), and it is accepted: for a credential control, over-redacting bounded
-  adjacent text is preferred to shipping half a secret.
+  control. **Four** families are declared today — **GitHub tokens** (`ghp_`/`gho_`/`ghu_`/`ghs_`/`ghr_` + ≥6
+  token characters), **Slack tokens** (`xoxb-`/`xoxa-`/`xoxp-`/`xoxr-`/`xoxs-` + ≥6 body characters),
+  **GitHub fine-grained PATs** (`github_pat_` + ≥22 body characters, `_` included) and **AWS access key ids**
+  (`AKIA` + exactly 16 uppercase/digit characters). **A secret of any other shape is NOT redacted and passes
+  into the transcript buffer unchanged** — including **JWTs**, **PEM private keys** and the **AWS SECRET
+  access key**, each of which was measured to break either chunk-independence or the no-over-abridgement rule
+  under the current shape descriptor (the specific defect per family is recorded in
+  `packages/persist/src/scrub-shapes.ts`): a JWT is multi-segment across a separator that is not a body
+  character, PEM needs a terminator field plus a bound, and the AWS secret key has no distinctive prefix and
+  would need a context field. Closing that gap is a matter of declaring more families, and for those three it
+  requires extending the descriptor first. The scanner backstop is what covers everything not declared here —
+  which is why it is a backstop and not optional.
+  **Declared over-redactions (two, same class):** a family whose token is MULTI-SEGMENT must admit its
+  separator as a body character, or the trailing entropy-bearing segment ships in the clear. Slack is
+  `xoxb-<id>-<id>-<secret>`, so `-` is a Slack body character; a fine-grained PAT is
+  `github_pat_<22>_<59>`, so `_` is a PAT body character. The cost is that separator-joined NON-secret text
+  written immediately after such a token is absorbed into the redaction, up to the first non-body byte. This
+  is the same class as the pre-existing absorption of trailing token characters (`ghp_XXXXXXfoo`), and it is
+  accepted: for a credential control, over-redacting bounded adjacent text is preferred to shipping half a
+  secret. **One consequence of the union lookahead, stated:** because a body stops at the start of ANY
+  declared family prefix, a token whose body happens to spell another family's prefix is cut there —
+  `ghp_AAAA` + `AKIA…` redacts the AWS key and leaves the eight-character fragment `ghp_AAAA` — four BODY
+  characters, below the GitHub floor of six, therefore not a credential by this control's own definition —
+  in the clear. That is pre-existing behaviour, and declaring more families widens it.
 - **PERSIST-10b Re-invoke = redispatch + replay, NOT deterministic resume.** A hosted model is
   nondeterministic (even at temperature 0) and external side effects do not rewind, so "resume the agent
   from exactly where it stopped" is **NOT deliverable** and MUST NOT be claimed. Two things MUST be

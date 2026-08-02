@@ -19,15 +19,30 @@ export interface OracleFamily {
   readonly name: string;
   /** One character-SET per prefix position ('g' = literally g, 'pousr' = any one of those). */
   readonly prefix: readonly string[];
-  /** Characters the body admits beyond [A-Za-z0-9]. */
+  /** Which base class the body is drawn from: [A-Za-z0-9] or [0-9A-Z]. */
+  readonly bodyBase?: 'alnum' | 'upper';
+  /** Characters the body admits beyond its base class. */
   readonly bodyExtra: string;
   /** Minimum body characters. */
   readonly floor: number;
+  /** Maximum body characters, for a FIXED-LENGTH family. `undefined` = unbounded. */
+  readonly ceiling?: number;
 }
 
 export const ORACLE_FAMILIES: readonly OracleFamily[] = [
   { name: 'github-token', prefix: ['g', 'h', 'pousr', '_'], bodyExtra: '', floor: 6 },
   { name: 'slack-token', prefix: ['x', 'o', 'x', 'baprs', '-'], bodyExtra: '-', floor: 6 },
+  // `_` IS a body character: the fine-grained PAT is `github_pat_<22>_<59>` and leaving `_` out would ship
+  // the 59-character segment — where the entropy is — in the clear.
+  {
+    name: 'github-pat',
+    prefix: ['g', 'i', 't', 'h', 'u', 'b', '_', 'p', 'a', 't', '_'],
+    bodyExtra: '_',
+    floor: 22,
+  },
+  // BOUNDED: `AKIA` + exactly 16 uppercase/digit characters. The ceiling is the whole point — an unbounded
+  // reading absorbs the 17th character on the streaming path and disagrees with the whole-buffer one.
+  { name: 'aws-access-key-id', prefix: ['A', 'K', 'I', 'A'], bodyBase: 'upper', bodyExtra: '', floor: 16, ceiling: 16 },
 ];
 
 /** Is `s[i]` alphanumeric? charCode walk — deliberately not a regex. */
@@ -36,10 +51,17 @@ export function isAlnumAt(s: string, i: number): boolean {
   return (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122);
 }
 
+/** Is `s[i]` in `fam`'s BASE class? */
+function inBaseAt(fam: OracleFamily, s: string, i: number): boolean {
+  const c = s.charCodeAt(i);
+  if (fam.bodyBase === 'upper') return (c >= 48 && c <= 57) || (c >= 65 && c <= 90);
+  return isAlnumAt(s, i);
+}
+
 /** Is `s[i]` a BODY character of `fam`? */
 export function isBodyChar(fam: OracleFamily, s: string, i: number): boolean {
   if (i >= s.length) return false;
-  return isAlnumAt(s, i) || fam.bodyExtra.includes(s[i] as string);
+  return inBaseAt(fam, s, i) || fam.bodyExtra.includes(s[i] as string);
 }
 
 /** Does `fam`'s complete prefix start at `i`? */
@@ -69,9 +91,11 @@ export function credentialSpans(s: string): readonly Span[] {
   outer: while (i < s.length) {
     for (const fam of ORACLE_FAMILIES) {
       if (!prefixAt(fam, s, i)) continue;
-      let j = i + fam.prefix.length;
-      while (j < s.length && isBodyChar(fam, s, j) && !anyPrefixAt(s, j)) j++;
-      if (j - (i + fam.prefix.length) >= fam.floor) {
+      const bodyStart = i + fam.prefix.length;
+      const stop = fam.ceiling === undefined ? Infinity : bodyStart + fam.ceiling;
+      let j = bodyStart;
+      while (j < s.length && j < stop && isBodyChar(fam, s, j) && !anyPrefixAt(s, j)) j++;
+      if (j - bodyStart >= fam.floor) {
         spans.push({ start: i, end: j, family: fam.name });
         i = j;
         continue outer;
@@ -110,7 +134,12 @@ const ALNUM = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
  *  match — one that is a credential only while those trailing bytes are read as body, and that un-makes
  *  itself when the next bytes complete the prefix instead. Reaching this class is the whole point: an
  *  earlier fuzz that never produced it could not distinguish a correct seam from a broken one. */
-export const AMBIGUOUS_TAILS: readonly string[] = ['g', 'gh', 'ghp', 'x', 'xo', 'xox', 'xoxb'];
+export const AMBIGUOUS_TAILS: readonly string[] = [
+  'g', 'gh', 'ghp',
+  'x', 'xo', 'xox', 'xoxb',
+  'gi', 'git', 'gith', 'githu', 'github', 'github_', 'github_p', 'github_pa', 'github_pat',
+  'A', 'AK', 'AKI',
+];
 
 /** CLEAN filler. EVERY piece starts with a character that is NOT a body character of ANY family, so no piece
  *  can ever be absorbed into the body of a credential that precedes it — that is what makes the expected
@@ -124,7 +153,7 @@ export const CLEAN_PIECES: readonly string[] = [
   ' [REDACTED] ',
   ' ghp_ABCDE', // five body chars: below the floor, NOT a credential — and no trailing separator
   ' gha_ABCDEFGH', // not a family member
-  ' github_pat_ABCDEFGH', // a shape that is NOT a declared family — passes through untouched, by design
+  ' github_pat_ABCDEFGH', // eight body characters: below the github-pat floor of 22, so NOT a credential
   ' xoxq-ABCDEFGH', // `q` is not a member of the slack family
   ' xoxb-ABCDE', // below the floor for the slack family
   '=',
@@ -132,16 +161,25 @@ export const CLEAN_PIECES: readonly string[] = [
   ' end of line',
   '.',
   ' 09:14 UTC ',
-  '_prod', // the `_suffix` bytes the widen-the-body-class variant eats
-  '_suffix.log',
   ' gh',
+  ' AKI',
+  ' AKIAIOSFODNN7EXAMP', // fourteen body characters: below the AWS ceiling AND its floor of 16
   ':',
 ];
 
 /** Clean pieces that OPEN with a body character of some family. Safe only after a family that cannot eat
  *  them — `-dev` survives after a github-token (whose body excludes `-`) and is eaten after a slack token,
  *  which is the declared Slack over-redaction made visible in the corpus. */
-export const BODY_OPENING_PIECES: readonly string[] = ['-dev', '-not-part-of-token', '-2026-08-01'];
+export const BODY_OPENING_PIECES: readonly string[] = [
+  '-dev',
+  '-not-part-of-token',
+  '-2026-08-01',
+  // `_`-opening pieces moved here when github-pat was declared: `_` is a body character of exactly one
+  // family, so `_prod` survives after a GitHub token and is ABSORBED after a fine-grained PAT. Leaving them
+  // in CLEAN_PIECES would have scored that correct absorption as over-redaction.
+  '_prod',
+  '_suffix.log',
+];
 
 /**
  * The family whose BODY is still open at the end of `text` — a family prefix appears, and every character
@@ -159,6 +197,8 @@ export function openFamily(text: string): OracleFamily | undefined {
   for (let i = text.length - 1; i >= 0; i--) {
     for (const fam of ORACLE_FAMILIES) {
       if (!prefixAt(fam, text, i)) continue;
+      const bodyLen = text.length - (i + fam.prefix.length);
+      if (fam.ceiling !== undefined && bodyLen >= fam.ceiling) continue; // bounded and already full: closed
       let ok = true;
       for (let j = i + fam.prefix.length; j < text.length; j++) {
         if (!isBodyChar(fam, text, j) || anyPrefixAt(text, j)) ok = false;
@@ -217,15 +257,23 @@ export function wouldDisturb(text: string, nxt: string): boolean {
   return false;
 }
 
+const UPPER_DIGIT = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
 function makeBody(rnd: () => number, fam: OracleFamily): string {
-  const alphabet = ALNUM + fam.bodyExtra.repeat(4); // the extra char, deliberately over-weighted
-  const len = fam.floor + Math.floor(rnd() * 10);
+  const base = fam.bodyBase === 'upper' ? UPPER_DIGIT : ALNUM;
+  const alphabet = base + fam.bodyExtra.repeat(4); // the extra char, deliberately over-weighted
+  const span = fam.ceiling === undefined ? Math.floor(rnd() * 10) : Math.floor(rnd() * (fam.ceiling - fam.floor + 1));
+  const len = fam.floor + span;
   let body = '';
   for (let i = 0; i < len; i++) body += alphabet[Math.floor(rnd() * alphabet.length)] as string;
-  // sometimes end on an AMBIGUOUS run, so the contingent-match path is actually reached
+  // sometimes end on an AMBIGUOUS run, so the contingent-match path is actually reached. A BOUNDED family
+  // has no room to append one, so the run REPLACES the body's own tail — which is the harder case: the run
+  // is inside a body that is already exactly at its ceiling.
   if (rnd() < 0.35) {
     const tail = AMBIGUOUS_TAILS[Math.floor(rnd() * AMBIGUOUS_TAILS.length)] as string;
-    if ([...tail].every((c) => isBodyChar(fam, c, 0))) body += tail;
+    if (![...tail].every((c) => isBodyChar(fam, c, 0))) return body;
+    if (fam.ceiling === undefined) return body + tail;
+    if (tail.length <= body.length) return body.slice(0, body.length - tail.length) + tail;
   }
   return body;
 }

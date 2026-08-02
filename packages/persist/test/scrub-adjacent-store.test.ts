@@ -194,7 +194,7 @@ describe('PERSIST-10a adjacency — CHUNK INDEPENDENCE across the seam', () => {
   it('THE CONTINGENT SEAM: a sub-floor prefix is not committed to before the deciding byte arrives', () => {
     // `ghp_ABCDEghp` is a credential ONLY while its trailing `ghp` counts as body. One more byte (`_`)
     // turns those three bytes into the family prefix of the NEXT credential and un-makes the match, which
-    // is why they cannot be decided at the seam and why the carry bound is 12 rather than 9.
+    // is why they cannot be decided at the seam and why the carry bound is not simply `maxPartial`.
     const text = `ghp_ABCDE${A}`;
     const at = 'ghp_ABCDEghp'.length; // the split that puts the seam exactly inside the ambiguity
     expect(text.slice(0, at)).toBe('ghp_ABCDEghp');
@@ -216,8 +216,8 @@ describe('PERSIST-10a adjacency — CHUNK INDEPENDENCE across the seam', () => {
       worst = Math.max(worst, seamCarryOf(buf));
     }
     expect(worst).toBeLessThanOrEqual(MAX_SEAM_CARRY);
-    // 14 = |'xox'+fam+'-'| + (floor-1) + |'xoxb'| — see the derivation written out in scrub-seam.test.ts.
-    expect(MAX_SEAM_CARRY).toBe(14);
+    // 74 = MAX_CANON_MATCH (43) + MAX_PARTIAL (32) - 1 — the derivation is written out in scrub-seam.test.ts.
+    expect(MAX_SEAM_CARRY).toBe(74);
     assertExactBytes(buf, '[REDACTED][REDACTED][REDACTED][REDACTED]_[REDACTED]');
   });
 });

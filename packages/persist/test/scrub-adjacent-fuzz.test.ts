@@ -1,19 +1,17 @@
 // @atlas/persist — test/scrub-adjacent-fuzz.test.ts  (WP-3.5-a.PERSIST · PERSIST-10a — ADJACENCY FUZZ)
 //
-// WHY THIS FILE EXISTS. The shipped differential sweep injects EXACTLY ONE token per case, so two
-// credentials with nothing between them are never generated and the whole ADJACENCY class is unreachable
-// by it. A generator that cannot reach the failing region is indistinguishable from a passing test — and
-// that is precisely how `ghp_AAAAAAghp_BBBBBB` -> `[REDACTED]_BBBBBB` survived a green suite: the greedy
-// body of the first credential swallowed the second one's four-character family prefix and shipped its
-// entropy-bearing body in the clear.
+// WHY THIS FILE EXISTS. The shipped differential sweep injects EXACTLY ONE token per case, so two credentials
+// with nothing between them are never generated and the whole ADJACENCY class is unreachable by it. A
+// generator that cannot reach the failing region is indistinguishable from a passing test — and that is
+// precisely how `ghp_AAAAAAghp_BBBBBB` -> `[REDACTED]_BBBBBB` survived a green suite: the greedy body of the
+// first credential swallowed the second one's family prefix and shipped its entropy-bearing body in the clear.
 //
-// THE SAME MISTAKE, ONE LEVEL UP. The fix for that was a negative lookahead on the body class — but it
-// blocked only the shape's OWN family prefix, and the corpus contained only ONE family, so the corpus could
-// not tell an own-family lookahead from a union one. The moment a second family is declared,
-// `ghp_AAAAAA` + `xoxb-BBBBBB` merges exactly as before. This generator therefore draws the family of
-// EVERY token independently, so runs are CROSS-FAMILY, and the known-bad below is the own-family lookahead
-// itself — the regression this corpus exists to make impossible.
-//
+// THE SAME MISTAKE, ONE LEVEL UP. The fix for that was a negative lookahead on the body class — but it blocked
+// only the shape's OWN family prefix, and the corpus contained only ONE family, so the corpus could not tell
+// an own-family lookahead from a union one. The moment a second family is declared, `ghp_AAAAAA` +
+// `xoxb-BBBBBB` merges exactly as before. This generator therefore draws the family of EVERY token
+// independently, so runs are CROSS-FAMILY, and the known-bad below is the own-family lookahead itself. FOUR
+// families now (#120 added `github_pat_` + AWS); per-family evidence in scrub-declared-families.test.ts.
 // The generator carries its own GROUND TRUTH from the construction — not from the implementation:
 //   * every injected body must be absent from the output          (LEAK)
 //   * every clean piece must survive verbatim                     (OVER-REDACTION)
@@ -56,29 +54,21 @@ function occurrences(hay: string, needle: string): number {
   return n;
 }
 
-/**
- * THE KNOWN-BAD, kept inside the suite so the corpus is provably able to fail. This is the shape set
- * exactly as it would be written with each family blocking only ITS OWN prefix — the naive extension of the
- * single-family fix to three families, and a silent reopening of the adjacency defect across families.
- */
+/** THE KNOWN-BAD, kept inside the suite so the corpus is provably able to fail: the shape set as it would be
+ *  written with each family blocking only ITS OWN prefix — a silent reopening of the cross-family defect. */
 function ownFamilyOnly(s: string): string {
   const bad: RegExp[] = [
     /gh[pousr]_(?:(?!gh[pousr]_)[A-Za-z0-9]){6,}/g,
     /xox[baprs]-(?:(?!xox[baprs]-)[A-Za-z0-9-]){6,}/g,
+    /github_pat_(?:(?!github_pat_)[A-Za-z0-9_]){22,}/g,
+    /AKIA(?:(?!AKIA)[0-9A-Z]){16}/g,
   ];
   let out = s;
   for (const re of bad) out = out.replace(re, '[REDACTED]');
   return out;
 }
 
-interface Tally {
-  cases: number;
-  leak: number;
-  over: number;
-  residual: number;
-  mismatch: number;
-  generator: number;
-}
+interface Tally { cases: number; leak: number; over: number; residual: number; mismatch: number; generator: number }
 
 const blank = (): Tally => ({ cases: 0, leak: 0, over: 0, residual: 0, mismatch: 0, generator: 0 });
 
@@ -175,7 +165,7 @@ describe('PERSIST-10a adjacency — the GENERATOR reaches the failing region', (
             for (let q = 0; q < k; q++) if (!(g.prefix[q] as string).includes(run[q] as string)) ok = false;
             if (!ok) continue;
             contingent++;
-            if (k >= 4) longAmbiguity++; // `xoxb` — the longest ambiguous run the declared families allow
+            if (k >= 4) longAmbiguity++; // `xoxb`/`gith…` — an ambiguous run long enough to straddle a seam
             k = 0;
           }
         }
@@ -199,7 +189,9 @@ describe('PERSIST-10a adjacency — the GENERATOR reaches the failing region', (
   it('the scanner has teeth: it SEES a credential of each family, and is not blinded by the placeholder', () => {
     expect(hasCredentialShape('x ghp_ABCDEFGH y')).toBe(true);
     expect(hasCredentialShape('x xoxb-ABCDEFGH y')).toBe(true);
-    expect(hasCredentialShape('x github_pat_ABCDEFGH y')).toBe(false); // NOT a declared family
+    expect(hasCredentialShape('x github_pat_ABCDEFGH y')).toBe(false); // eight body chars: below floor 22
+    expect(hasCredentialShape(`x github_pat_${'A'.repeat(22)} y`)).toBe(true); // …at the floor it IS one
+    expect([hasCredentialShape('x AKIAIOSFODNN7EXAMPLE y'), hasCredentialShape('x AKIAIOSFODNN7EXAMPL y')]).toEqual([true, false])
     expect(hasCredentialShape('x ghp_ABCDE y')).toBe(false); // five body chars: below the floor
     expect(hasCredentialShape('x gha_ABCDEFGH y')).toBe(false); // not a family member
     expect(hasCredentialShape('x xoxq-ABCDEFGH y')).toBe(false); // not a slack family member
@@ -238,11 +230,17 @@ describe('PERSIST-10a adjacency — the GENERATOR reaches the failing region', (
 });
 
 // ── the measurement ──────────────────────────────────────────────────────────────────────────────────
-
+// DO NOT TRADE THESE FOR WALL-CLOCK. #120 briefly cut them to 140k/28k on the theory that four families made
+// each case too dear for the 10s cap. Both halves were wrong: measured on THIS branch the counts below run in
+// 8.1s and 7.5s (the cap never bound), while the cut removed 31% of all adjacent pairs and 4.3x of the four
+// ordered pairs master already covered — `github-token -> github-pat`, the adjacency of the taproot defect
+// this file exists for, fell from 4,261 to 2,983. Cases are dearer (+32% in-suite, ~2.5x isolated: the two
+// disagree on a contended box, so no single figure is quoted) and longer (mean 53.7 -> 68.4 chars). If the
+// cap ever binds, the lever is the cap; scrub-declared-families.test.ts is ADDITIVE and buys back no sample.
 const N_WHOLE = 200_000;
 const N_FOLD = 40_000;
 
-describe('PERSIST-10a adjacency — WHOLE-BUFFER scrub, 200k adjacency cases', () => {
+describe(`PERSIST-10a adjacency — WHOLE-BUFFER scrub, ${String(N_WHOLE)} adjacency cases`, () => {
   it('0 leaks, 0 over-redactions, 0 residual shapes, 0 exact mismatches', () => {
     const rnd = lcg(20260801);
     const t = blank();
@@ -312,7 +310,7 @@ describe('PERSIST-10a adjacency — WHOLE-BUFFER scrub, 200k adjacency cases', (
   });
 });
 
-describe('PERSIST-10a adjacency — CHUNK INDEPENDENCE, 40k adjacency cases', () => {
+describe(`PERSIST-10a adjacency — CHUNK INDEPENDENCE, ${String(N_FOLD)} adjacency cases`, () => {
   it('a random chunking folds to exactly the whole-buffer result, and to the ground truth', () => {
     const rnd = lcg(31337);
     const t = blank();

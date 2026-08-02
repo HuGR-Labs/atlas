@@ -139,9 +139,10 @@ normative-clause: "no raw credential may enter it"
 source: INV-PERSIST-10a @ reference/atlas-persist.md#persist-10a
 If a raw credential of a DECLARED credential family would reach the transcript buffer, then the framework shall redact it at source before it enters.
 normative-clause: "The **primary control MUST be redact-at-source**: the framework MUST NOT let a raw credential enter the transcript buffer in the first place"
-scope: DECLARED FAMILIES ONLY — GitHub tokens (`gh[pousr]_`) and Slack tokens (`xox[baprs]-`). A credential of any
-other shape (`github_pat_`, AWS, JWT, PEM, …) is **not** redacted and enters the buffer unchanged; that residue is
-covered by the scanner backstop (REQ-PERSIST-10a-c/d), not by this control. See reference/atlas-persist.md#persist-10a.
+scope: DECLARED FAMILIES ONLY — GitHub tokens (`gh[pousr]_`), Slack tokens (`xox[baprs]-`), GitHub fine-grained
+PATs (`github_pat_`) and AWS access key ids (`AKIA`). A credential of any other shape (JWT, PEM private key, the AWS
+SECRET access key, …) is **not** redacted and enters the buffer unchanged; that residue is covered by the scanner
+backstop (REQ-PERSIST-10a-c/d), not by this control. See reference/atlas-persist.md#persist-10a.
 
 ### REQ-PERSIST-10a-c — scanner runs server-side
 source: INV-PERSIST-10a @ reference/atlas-persist.md#persist-10a
@@ -159,8 +160,10 @@ If the scrub redacts a secret, then the persistence layer shall not otherwise ab
 normative-clause: "The scrub redacts secrets but MUST NOT otherwise abridge the record"
 scope: bytes OUTSIDE a matched shape are preserved exactly. Bytes a declared shape's own body class reaches ARE
 absorbed into the redaction, bounded by the first non-body byte: trailing token characters after a GitHub token
-(`ghp_XXXXXXfoo`, pre-existing) and hyphen-joined text after a Slack token (`xoxb-…-not-part-of-token`, declared
-with the Slack family). Both are stated at reference/atlas-persist.md#persist-10a rather than claimed away.
+(`ghp_XXXXXXfoo`, pre-existing), hyphen-joined text after a Slack token (`xoxb-…-not-part-of-token`, declared with
+the Slack family) and underscore-joined text after a fine-grained PAT (`github_pat_<22>_<59>_prod`, declared with
+that family — a MULTI-SEGMENT token must admit its separator or its trailing segment ships in the clear). All are
+stated at reference/atlas-persist.md#persist-10a rather than claimed away.
 
 ### REQ-PERSIST-10b-a — never claim deterministic resume
 source: INV-PERSIST-10b @ reference/atlas-persist.md#persist-10b

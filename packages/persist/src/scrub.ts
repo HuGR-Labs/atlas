@@ -6,56 +6,69 @@
 // own body class reaches it (trailing body characters ARE absorbed — see the over-redaction notes per family
 // in scrub-shapes.ts; the bound is the first non-body byte).
 //
+// ── REACHABILITY: `admitToBuffer` HAS NO PRODUCTION CALLER TODAY ─────────────────────────────────────
+// Read this before assigning severity to anything below. The shipped write door is
+// `transcript-store.ts` `put()`, and it calls `scrub(body)` — the WHOLE-BUFFER path. Nothing in this
+// product folds a stream through `admitToBuffer`; it is published-but-uncalled library surface, offered to
+// callers who stream (and pointed at by `put`'s own docstring as the documented way to join across calls).
+// A defect in the seam machinery would therefore be LATENT, not live, until something calls it. That does
+// not make the seam optional — `put` cannot join across calls, so a streaming caller MUST have a correct
+// gate to reach for, and this file is a T0 security path the moment one does. It does mean that a green
+// suite over this module is not evidence that the shipped path is exercised. This repo has mistaken those
+// two things before (a rigorously tested write door with zero production callers), so it is stated here
+// rather than left to be rediscovered.
+//
 // ── THE SEAM INVARIANT (why this file carries state) ─────────────────────────────────────────────────
 // A credential does not arrive aligned to a caller's chunk boundary. Scrubbing each chunk in ISOLATION
 // therefore admits a secret that straddles two admits: `ghp_ABCDEF|GHIJ` is two non-matching halves, and
 // `TranscriptStoreApi` is put/fetch only, so a secret admitted once can never be removed. The invariant
-// this file now enforces is CHUNK INDEPENDENCE:
+// this file enforces is CHUNK INDEPENDENCE:
 //
 //     for every way a byte stream is cut into chunks,
 //         chunks.reduce(admitToBuffer, empty)  ===  scrub(whole stream)
 //
 // It holds at EVERY prefix, not just at the end: the buffer after N admits equals `scrub` of the first N
-// chunks concatenated. There is no flush step and no deferred tail — see `seam` for how that is achieved.
+// chunks concatenated. There is no flush step and no deferred tail.
 //
-// ── ADJACENCY (why the body class carries a lookahead) ───────────────────────────────────────────────
-// A body character class is GREEDY over characters that also spell a family prefix, so two credentials
-// written back to back merged into ONE match: `ghp_AAAAAAghp_BBBBBB` matched through `…AAAAAAghp` and left
-// `[REDACTED]_BBBBBB` — the second credential's entropy-bearing body shipped in the clear, and the
-// non-secret bytes of a near-miss like `ghp_ABCDE` immediately before a real token were eaten with it.
-// A credential body therefore STOPS at the start of the next family prefix — of ANY declared family, not
-// just its own: an own-family-only lookahead leaves `ghp_AAAAAAgithub_pat_…` merging exactly as before. The
-// union lookahead lives with the family declarations in scrub-shapes.ts. That is a property of the SHAPE,
-// so it must hold across a chunk seam too, where a lookahead cannot see: the seam machinery below decides a
-// candidate only once the bytes the lookahead needs have actually arrived.
+// ── THE SEAM STATE: ONE CARRY, NOT TWO ───────────────────────────────────────────────────────────────
+// This used to be four fields in two mutually exclusive pairs: `raw`/`back` (bytes already EMITTED, in
+// scrubbed form, still rewritable) and `swallow`/`pending` (bytes NOT emitted because they were absorbed
+// into a redaction already written). That split could not represent a real state, and the state it could not
+// represent is a live streaming leak:
+//
+//     ghp_AAAAAAgithub_pat_BBBBBB     whole-buffer  ->  [REDACTED][REDACTED]
+//                                     byte-at-a-time ->  [REDACTED]_pat_BBBBBB     <- the fine-grained PAT
+//
+// `ghp_AAAAAAgithub` is a COMPLETE github-token match — it has already been emitted as `[REDACTED]` — and at
+// the same time its trailing `github` is a strict prefix of `github_pat_`. When the `_` arrives it ends the
+// github-token body (`_` is not one of its body characters), so the match no longer touches the end of the
+// stream, yet the bytes that must be re-decided are INSIDE the redaction that was already written. Emitted
+// and rewritable, and not-emitted, at once. The old seam had to pick one, and picking "not emitted" fed
+// `github` back into the absorbed body, leaving `_pat_BBBBBB` in the clear in an undeletable object.
+//
+// The state below is a single undecided SUFFIX of the raw stream (`carry`) plus how many trailing EMITTED
+// bytes it currently accounts for (`back`, which is `scrub(carry)`'s length and is 0 for nothing pending).
+// A committed redaction whose extent is still provisional is simply a carry that happens to render as
+// `[REDACTED]`: the placeholder is inside the rewritable window, so the boundary can move without the
+// buffer ever holding a raw credential. Everything else — where the carry starts, how it is bounded — is
+// re-derived per admit by scrub-scan.ts from the same definition `scrub` uses.
 //
 // ── SCOPE, STATED PLAINLY ────────────────────────────────────────────────────────────────────────────
-// THREE families are declared (GitHub token, Slack token, GitHub fine-grained PAT). This is not a general
-// credential control: a secret of any other shape passes through untouched, by construction. The families
-// deliberately left out — and the specific thing each one breaks — are recorded in scrub-shapes.ts.
+// FOUR families are declared (GitHub token, Slack token, GitHub fine-grained PAT, AWS access key id). This
+// is not a general credential control: a secret of any other shape passes through untouched, by
+// construction. The families deliberately left out — and the specific thing each one breaks — are recorded
+// in scrub-shapes.ts.
 
-import { SHAPES } from './scrub-shapes.js';
-import type { CredentialShape } from './scrub-shapes.js';
+import { MAX_SEAM_CARRY } from './scrub-shapes.js';
+import { canonicalise, renderPrefix, scanMatches, scrubString, seamCut } from './scrub-scan.js';
+
+export { MAX_SEAM_CARRY };
 
 /** Redact-at-source surface (PERSIST-10a): `scrub(buffer)` drops known credential shapes BEFORE the body
  *  is stored; every non-secret byte preserved (no over-redaction). (method-tags-pst:91-92) */
 export interface ScrubApi {
   scrub(buffer: Uint8Array): Uint8Array;
 }
-
-const CREDENTIAL_SHAPES: readonly RegExp[] = SHAPES.map((s) => s.full);
-
-/** The redaction placeholder written in place of a matched secret (redaction, not deletion of the line). */
-const REDACTION = '[REDACTED]';
-
-/**
- * The hard ceiling on bytes an in-progress stream may hold undecided at a chunk seam. A caller streaming
- * 100MB cannot make the scrubber retain it: a COMPLETE match is redacted immediately and its greedy tail is
- * absorbed byte-by-byte, so only a candidate that is still strictly-incomplete — or whose completeness is
- * contingent on bytes that have not arrived — is ever carried, and that is bounded by the shape itself.
- * State per buffer is O(1); nothing accumulates.
- */
-export const MAX_SEAM_CARRY = SHAPES.reduce((n, s) => Math.max(n, s.maxPartial, s.maxContingent), 0);
 
 // Byte-preserving latin1 view: each byte <-> exactly one char (1:1, reversible). Scanning/replacing on this
 // view leaves every NON-matching byte byte-identical — no UTF-8 normalization, no over-redaction of the
@@ -86,16 +99,10 @@ function asBytes(v: unknown): Uint8Array {
   return new Uint8Array(0);
 }
 
-function scrubString(s: string): string {
-  let out = s;
-  for (const re of CREDENTIAL_SHAPES) out = out.replace(re, REDACTION);
-  return out;
-}
-
 /**
  * Redact the DECLARED credential shapes from a transcript buffer at source (PERSIST-10a) — GitHub token,
- * Slack token, GitHub fine-grained PAT, and nothing else. Only a matched secret is replaced by the redaction
- * placeholder; bytes outside a match are preserved byte-for-byte.
+ * Slack token, GitHub fine-grained PAT, AWS access key id, and nothing else. Only a matched secret is
+ * replaced by the redaction placeholder; bytes outside a match are preserved byte-for-byte.
  */
 export function scrub(buffer: Uint8Array): Uint8Array {
   return fromLatin1(scrubString(toLatin1(asBytes(buffer))));
@@ -106,27 +113,20 @@ export function scrub(buffer: Uint8Array): Uint8Array {
 /**
  * What a buffer still owes the next admit.
  *
- *  - `back`    how many trailing bytes of the EMITTED buffer are provisional and will be rewritten.
- *  - `raw`     what those provisional bytes really were. They are emitted ALREADY SCRUBBED, so a candidate
- *              whose fate is still contingent shows up as a placeholder rather than as a raw credential;
- *              `raw` is what gets re-decided once the deciding bytes arrive. For a stream with nothing
- *              contingent, `raw` is byte-identical to what was emitted.
- *  - `swallow` the shape whose greedy body is still being absorbed (-1 = none).
- *  - `pending` bytes that were NOT emitted because they are inside a redaction already written, but which
- *              more bytes could reveal to be the family prefix of the NEXT credential. Bounded by the longest
- *              strict family prefix spellable in that shape's body characters (`blockPrefix`) — 10, from
- *              `github_pat` (the `_` is a body character of the github-pat family).
- *
- * `raw`/`back` and `swallow`/`pending` are mutually exclusive by construction.
+ *  - `carry` the raw suffix of the stream whose classification is not final. It may be a not-yet-complete
+ *            candidate, a complete match that could still grow, or a complete match whose LAST BYTES are a
+ *            strict prefix of the credential that follows it — all one thing now. A long absorbed body is
+ *            stored canonicalised (scrub-scan.ts), which is what keeps this bounded.
+ *  - `back`  how many trailing bytes of the EMITTED buffer that carry accounts for, i.e. `scrub(carry)`'s
+ *            length. Those bytes are ALREADY SCRUBBED — a candidate whose fate is still contingent shows up
+ *            as a placeholder, never as a raw credential — and they are what the next admit rewrites.
  */
 interface SeamState {
   readonly back: number;
-  readonly raw: string;
-  readonly swallow: number;
-  readonly pending: string;
+  readonly carry: string;
 }
 
-const FRESH: SeamState = { back: 0, raw: '', swallow: -1, pending: '' };
+const FRESH: SeamState = { back: 0, carry: '' };
 
 // State is keyed on the IDENTITY of the buffer this module returned, so the published `admitToBuffer`
 // signature is unchanged and the ordinary `buffer = admitToBuffer(buffer, chunk)` fold carries it for free.
@@ -140,92 +140,37 @@ export function seamCarryOf(buffer: Uint8Array): number {
   return (SEAM.get(asBytes(buffer)) ?? FRESH).back;
 }
 
-/** The trailing bytes of `s` that are a strict prefix of the shape's family prefix — undecidable until the
- *  next byte arrives, because they are either body characters or the head of the NEXT credential. */
-function ambiguousTail(shape: CredentialShape, s: string): string {
-  return shape.blockPrefix.exec(s)?.[0] ?? '';
-}
-
-/** For one shape: where does the UNDECIDED tail of `s` begin, is it already a complete credential, and
- *  which of its trailing bytes stay ambiguous? Walks `s` exactly the way a global `replace` walks it, so
- *  completed matches are skipped rather than re-entered, and only a candidate that survives to the end of
- *  `s` is undecided. */
-function undecided(s: string, shape: CredentialShape): { cut: number; complete: boolean; absorbed: string } {
-  const re = new RegExp(shape.full.source, 'g');
-  let after = 0;
-  for (let m = re.exec(s); m !== null; m = re.exec(s)) {
-    const end = m.index + m[0].length;
-    // A match touching the end can still GROW with the next chunk — it is the undecided tail.
-    if (end === s.length) {
-      const amb = ambiguousTail(shape, m[0]);
-      // Clears the floor even WITHOUT its ambiguous tail: it is a credential either way, so redact now and
-      // re-offer those trailing bytes to the next chunk (they may open the credential that follows).
-      if (m[0].length - amb.length >= shape.minFull) return { cut: m.index, complete: true, absorbed: amb };
-      // CONTINGENT: it is a match only while those bytes are read as body. One more byte decides it, so the
-      // whole candidate is carried (emitted scrubbed) rather than committed to.
-      return { cut: m.index, complete: false, absorbed: '' };
-    }
-    after = end;
-    re.lastIndex = m[0].length === 0 ? end + 1 : end; // total: a zero-width shape cannot spin here
-  }
-  // No match reaches the end. Only the last `maxPartial` positions can host an incomplete prefix, so this
-  // costs O(1) per chunk rather than rescanning the whole chunk.
-  for (let j = Math.max(after, s.length - shape.maxPartial); j < s.length; j++) {
-    if (shape.partial.test(s.slice(j))) return { cut: j, complete: false, absorbed: '' };
-  }
-  return { cut: s.length, complete: false, absorbed: '' };
-}
-
 /**
- * Decide as much of `s` as can be decided without seeing the next chunk, and say what must be remembered.
+ * Decide as much of `carry + input` as can be decided without seeing the next chunk, and say what must be
+ * remembered.
  *
- * The shape of the fix is DECIDE-AND-ABSORB rather than buffer-until-excluded: a match is redacted the
- * moment it is complete, and the greedy remainder of its body is then absorbed from the following chunks.
- * That is what keeps the bound at twelve bytes — buffering until a pattern can be excluded would mean
- * holding an unbounded token body, since the shape's `{6,}` has no upper length, which is a memory DoS from
- * ordinary use. Only a candidate that is still incomplete, or whose completeness is CONTINGENT on bytes
- * that have not arrived, is ever held back — and it is held in the returned buffer in its SCRUBBED form,
- * so what the caller can read is always exactly `scrub` of what it has written so far. Hence: no flush step,
- * and no window in which the buffer holds a raw credential.
+ * The emitted answer is `scrub` of everything seen so far, by construction: the head is `scrub` of the
+ * decided part and the carry is emitted as `scrub` of ITSELF. There is no window in which the buffer holds
+ * a raw credential and no flush step — a caller that stops mid-credential has a buffer that already reads
+ * `[REDACTED]`.
+ *
+ * FAIL-CLOSED, unconditionally: the provisional tail enters the buffer only as `scrub` of itself. If a
+ * future family ever breaks the cut analysis, the failure mode is a MISSED JOIN across the seam — never a
+ * raw credential in an immutable, undeletable record.
+ *
+ * The previous version also carried a "tail longer than the bound: decide it now and forget it" escape,
+ * which is gone. The reason it is gone is that the bound is now derived arithmetic on the declaration
+ * (`MAX_SEAM_CARRY`) and measured, so the branch was unreachable — and an unreachable branch no test can
+ * exercise is a liability, not a safety net. It was ALSO suspected of being unsafe when reachable (dropping
+ * a carry mid-absorb should release the rest of the body in the clear), but that is UNPROVEN: an
+ * independent review restored the escape and got 0 failures on its differential corpus, i.e. nobody has
+ * produced a witness. Removing it is correct on the reachability argument alone; do not cite the leak.
  */
-function seam(prev: SeamState, input: string): { emit: string; state: SeamState } {
-  let s = prev.raw + prev.pending + input;
-  const shape = SHAPES[prev.swallow];
-  if (shape !== undefined) {
-    const run = shape.cont.exec(s)?.[0] ?? '';
-    // Still inside the greedy body of an already-redacted match: those bytes belong to the secret. Only the
-    // ambiguous tail is held back — it may turn out to open the NEXT credential instead.
-    if (run.length === s.length) {
-      return { emit: '', state: { back: 0, raw: '', swallow: prev.swallow, pending: ambiguousTail(shape, run) } };
-    }
-    s = s.slice(run.length);
-  }
-
-  let cut = s.length;
-  let complete = false;
-  let shapeIdx = -1;
-  let absorbed = '';
-  for (let i = 0; i < SHAPES.length; i++) {
-    const c = undecided(s, SHAPES[i]!);
-    if (c.cut < cut || (c.cut === cut && c.complete && !complete)) {
-      cut = c.cut;
-      complete = c.complete;
-      shapeIdx = i;
-      absorbed = c.absorbed;
-    }
-  }
-
-  const head = scrubString(s.slice(0, cut));
-  const tail = s.slice(cut);
-  if (complete) return { emit: head + REDACTION, state: { back: 0, raw: '', swallow: shapeIdx, pending: absorbed } };
-
-  // FAIL-CLOSED, unconditionally: the provisional tail enters the buffer only as `scrub` of itself. If a
-  // future shape ever breaks the cut analysis, the failure is a missed JOIN across the seam — never a raw
-  // credential in an immutable, undeletable record. The declared bound is enforced here too: a tail that
-  // exceeds it is decided now rather than carried.
+function advance(carry: string, input: string): { emit: string; state: SeamState } {
+  const s = carry + input;
+  const matches = scanMatches(s);
+  const cut = seamCut(s, matches);
+  // The head is decided from the matches of the WHOLE `s`, never by re-scrubbing `s.slice(0, cut)` — a
+  // right-truncated string can lose the lookahead that blocked a body and gain a match that is not there.
+  // See `renderPrefix`. The carry is left-truncated, which is safe.
+  const tail = canonicalise(s.slice(cut));
   const provisional = scrubString(tail);
-  if (tail.length > MAX_SEAM_CARRY) return { emit: head + provisional, state: FRESH };
-  return { emit: head + provisional, state: { back: provisional.length, raw: tail, swallow: -1, pending: '' } };
+  return { emit: renderPrefix(s, matches, cut) + provisional, state: { back: provisional.length, carry: tail } };
 }
 
 /**
@@ -237,14 +182,13 @@ function seam(prev: SeamState, input: string): { emit: string; state: SeamState 
 export function admitToBuffer(existing: Uint8Array, chunk: Uint8Array): Uint8Array {
   const prev = asBytes(existing);
   const known = SEAM.get(prev);
-  const st = known ?? FRESH;
   // For a buffer we did not produce (resumed from a fetched body, rebuilt by a caller) there is no state to
   // read, so re-examine the widest window a split credential could occupy rather than assuming the seam is
   // clean. For our own buffers this is exactly the provisional region recorded when it was written.
-  const back = Math.min(known === undefined ? MAX_SEAM_CARRY : st.back, prev.length);
+  const back = Math.min(known === undefined ? MAX_SEAM_CARRY : known.back, prev.length);
   const keep = prev.length - back;
-  const raw = known === undefined ? toLatin1(prev.subarray(keep)) : st.raw;
-  const { emit, state } = seam({ ...st, back, raw }, toLatin1(asBytes(chunk)));
+  const carry = known === undefined ? toLatin1(prev.subarray(keep)) : known.carry;
+  const { emit, state } = advance(carry, toLatin1(asBytes(chunk)));
 
   const emitted = fromLatin1(emit);
   const out = new Uint8Array(keep + emitted.length);
@@ -252,6 +196,12 @@ export function admitToBuffer(existing: Uint8Array, chunk: Uint8Array): Uint8Arr
   out.set(emitted, keep);
   SEAM.set(out, state);
   return out;
+}
+
+/** The RAW undecided suffix a buffer is holding — the memory bound the seam actually pays, as opposed to
+ *  the emitted `seamCarryOf`. Exported so the bound can be MEASURED rather than asserted. */
+export function seamRawCarryOf(buffer: Uint8Array): number {
+  return (SEAM.get(asBytes(buffer)) ?? FRESH).carry.length;
 }
 
 // differential-vs-oracle (compile-time): `scrub` conforms to the co-located frozen ScrubApi.

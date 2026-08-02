@@ -13,6 +13,9 @@
 // and a literal NOTAREAL marker — so nothing here resembles a credential a scanner should ever act on.
 
 import { describe, it, expect } from 'vitest';
+import { readFileSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { join, dirname } from 'node:path';
 import { scrub, admitToBuffer, MAX_SEAM_CARRY, seamCarryOf } from '../src/scrub.js';
 
 const enc = new TextEncoder();
@@ -234,29 +237,27 @@ describe('PERSIST-10a seam — CONTROL (b): the shipped single-chunk behaviour i
 
 describe('PERSIST-10a seam — CONTROL (c): the memory bound is real', () => {
   it('a long secret-free stream never carries more than MAX_SEAM_CARRY bytes', () => {
-    // 14, not 10, and no longer 12. 10 bounds a strictly-INCOMPLETE prefix (the longest family prefix,
-    // `xox[baprs]-` at five characters, plus five body chars — one short of the floor of six). A complete
-    // match whose completeness is CONTINGENT on its ambiguous tail is longer, and the bound is arithmetic
-    // on the DECLARATION, not a guess:
+    // 74, and it is arithmetic on the DECLARATION rather than a guess. The carry begins EITHER at a
+    // not-yet-complete candidate — which must reach the end of the stream, so it starts at most
+    // MAX_PARTIAL bytes back — OR at the start of the match that ENCLOSES such a candidate, when the
+    // undecided bytes turn out to be inside a redaction that has already been written:
     //
-    //     maxContingent(family) = |prefix| + (floor - 1) + maxAmbiguous
+    //     MAX_SEAM_CARRY = MAX_CANON_MATCH + MAX_PARTIAL - 1  =  43 + 32 - 1  =  74
     //
-    // where maxAmbiguous is the longest run that is a STRICT prefix of ANY declared family and is spelled
-    // entirely in this family's body characters. With github-token and slack-token declared, that longest
-    // run is `xoxb` (4) — four characters of the five-character slack prefix, all alphanumeric and so
-    // legal inside either body. The worst case is therefore the slack family:
+    //   · MAX_PARTIAL = 32 = |github_pat_| + (22 - 1): the fine-grained PAT one body character short of
+    //     its floor is the longest thing that is not yet a credential but could still become one.
+    //   · MAX_CANON_MATCH = 43 = minFull(github-pat) + AMBIGUOUS_TAIL = 33 + 10: an UNBOUNDED body is
+    //     canonicalised down to its floor plus the longest run that could still be a strict family prefix
+    //     (`github_pat` at 10). A BOUNDED family cannot exceed |prefix| + ceiling (AWS: 4 + 16 = 20).
+    //   · the "- 1" is the tail after that match: it must itself contain the candidate that forced the
+    //     relaxation, so it is strictly shorter than MAX_PARTIAL.
     //
-    //     'xox' + fam + '-'  +  five body chars  +  'xoxb'   =  5 + 5 + 4  =  14
-    //
-    // i.e. `xoxb-AAAAAxoxb`, which is a credential ONLY while those last four bytes count as body: one
-    // more byte (`-`) turns them into the family prefix of the NEXT credential, drops the first body to
-    // five characters, and un-makes the match. github-token's own worst case is 4 + 5 + 4 = 13, and the
-    // strictly-incomplete bound is 10, so the ceiling is 14.
-    //
-    // It was 12 when github-token was the only declared family (4 + 5 + `ghX`); declaring slack-token
-    // both lengthened the prefix and lengthened the ambiguous run, and BOTH terms moved.
-    expect(MAX_SEAM_CARRY).toBe(14);
-    // the witness, exactly at the bound — and it must still fold identically at every split
+    // It was 14 with two families declared and 12 with one. Declaring `github_pat_` moved it to 74 because
+    // BOTH terms moved: a 22-character floor lengthens the incomplete window, and an 11-character prefix
+    // lengthens the ambiguous run. This is the price of the fine-grained PAT and it is O(1) per stream.
+    expect(MAX_SEAM_CARRY).toBe(74);
+    // the witness for the old two-family bound, still exactly what it was — and it must still fold
+    // identically at every split
     const contingent = 'xoxb-AAAAAxoxb';
     expect(contingent.length).toBe(14);
     expect(dec.decode(scrub(enc.encode(contingent)))).toBe('[REDACTED]');
@@ -352,5 +353,47 @@ describe('PERSIST-10a seam — TOTAL and fail-closed', () => {
     expect(dec.decode(admitToBuffer(foreign, enc.encode('abc123 and on')))).toBe(
       'prior value was [REDACTED]abc123 and on',
     );
+  });
+});
+
+describe('PERSIST-10a seam — REACHABILITY CALIBRATION (this seam has no production caller)', () => {
+  // A rigorous suite over a module nothing calls is not evidence about the shipped path — this repo has
+  // been caught by exactly that before (a write door with zero production callers). `scrub.ts`'s header
+  // says so in prose; prose rots, so the fact is pinned here. When someone DOES wire the streaming gate
+  // into a product path, this test fails and the header must be re-calibrated in the same commit.
+  const src = (rel: string): string =>
+    readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'src', rel), 'utf8');
+
+  /** A CALL to `admitToBuffer` in CODE. Three things must not count, and each one produced a false
+   *  positive while this was written: its own declaration (`export function admitToBuffer(`), a whole-line
+   *  comment, and a trailing comment — `scrub.ts`'s header describes the fold in prose, parentheses and
+   *  all. The mutant test below is what keeps the stripping from silently blinding the probe. */
+  const callsSeam = (text: string): boolean =>
+    text
+      .split('\n')
+      .map((line) => (/^\s*(?:\/\/|\*|\/\*)/.test(line) ? '' : line.replace(/\/\/.*$/, '')))
+      .some((line) => /(?<![.\w])admitToBuffer\s*\(/.test(line) && !/function\s+admitToBuffer/.test(line));
+
+  it('the probe SEES a caller when there is one (mutant on the real door), and there is none', () => {
+    const door = src('transcript-store.ts');
+    const mutant = door.replace('const admitted = scrub(body);', 'const admitted = admitToBuffer(new Uint8Array(0), body);');
+    // teeth (breaks-on "the probe is a comment/definition match, so it would report 'no caller' forever"):
+    expect([mutant !== door, callsSeam(mutant)]).toEqual([true, true]); // live anchor, and the probe fires
+    // …and it is NOT satisfied by the declaration, a whole-line comment, or a trailing one
+    expect(callsSeam('export function admitToBuffer(existing: Uint8Array, chunk: Uint8Array): Uint8Array {')).toBe(false);
+    expect(callsSeam('// the ordinary `buffer = admitToBuffer(buffer, chunk)` fold carries it for free.')).toBe(false);
+    expect(callsSeam('const x = 1; // see admitToBuffer(a, b)')).toBe(false);
+    expect(callsSeam('  buffer = admitToBuffer(buffer, chunk);')).toBe(true); // a real call, indented
+    expect(callsSeam('  const out = store.admitToBuffer(a, b);')).toBe(false); // a METHOD of something else
+    // the shipped door: `put` admits `scrub(body)` — the WHOLE-BUFFER path
+    expect(door).toContain('const admitted = scrub(body);');
+    expect(callsSeam(door)).toBe(false);
+  });
+
+  it('NO module under src/ folds a stream through the seam', () => {
+    const dir = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
+    // Not empty any more? The seam IS live: re-calibrate scrub.ts's reachability header and re-read the
+    // severity of everything in it, in the same commit.
+    expect(readdirSync(dir).filter((f) => f.endsWith('.ts') && callsSeam(src(f)))).toEqual([]);
   });
 });
