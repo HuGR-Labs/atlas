@@ -102,7 +102,18 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
     // pass, projecting the outcome to a `CliVerdict`. It routes NOT through `deps.handler` (genesis is its own
     // composed driver, mine.ts) but its rendered `CliVerdict` reaches the console over the SAME emit/exit path
     // as every other command (uniform bytes). Every mined write is CANDIDATE-only (GEN-4/12); never throws.
-    return emitCli(await runMine(process.cwd()));
+    // [ADR-0011] A misconfigured MODEL is not a mining outcome. It must stay loud — rendering it as
+    // "0 candidate facts" would be indistinguishable from a repo that genuinely holds none — but a raw
+    // stack trace is below this CLI's own bar. It is rendered through the SAME refusal path as every other
+    // governed decline, carrying the loader's actionable message verbatim. Any OTHER throw is re-raised:
+    // our own crash must not be dressed up as the caller's bad configuration (the #129 blame-shift).
+    try {
+      return emitCli(await runMine(process.cwd()));
+    } catch (e) {
+      const name = (e as { name?: unknown } | null)?.name;
+      if (name !== 'ModelConfigError' && name !== 'PromptError') throw e;
+      return emitCli(renderRefusal(refusalVerdict((e as Error).message)));
+    }
   }
 
   if (command === 'doctor') {

@@ -40,6 +40,7 @@ import type {
   AdvisoryProposal,
 } from '@atlas/genesis';
 import { createDiskStore, headSha, createSkeletonSource, gitSidecarTrust } from '@atlas/adapter-io';
+import { resolveProposer } from './mine-proposer.js';
 import type { CommitDecision, CommitRefusal, DiskStore } from '@atlas/adapter-io';
 import { upsert as knowledgeUpsert, normalizeCheck, primaryAnchorId, nodeKey } from '@atlas/knowledge';
 import type { WriteRequest, StoreProjection, Candidate as KnowledgeCandidate } from '@atlas/knowledge';
@@ -121,12 +122,6 @@ function defaultGate(): EmitGate {
   return { emit: (_seed, cand) => ({ emitted: false, whyNot: { site: cand.site, reason: 'no admission seam wired (mine default)' } }) };
 }
 
-/** The honest fail-closed default proposer: no model is wired, so the model abstains at every site (GEN-12).
- *  (Inlined rather than `createSiteProposer(...)` — see the NOTE on the stale consumed adapter-io dist.) */
-function defaultProposer(): SiteProposer {
-  return { propose: () => null };
-}
-
 /**
  * The reserved scope every MINED node carries — PROVENANCE plus a fail-closed default, not the boundary itself
  * (ADR-0008 moved these rows out of the governed projection entirely). Mining has no actor, so a mined node has no
@@ -163,7 +158,7 @@ function withDefaults(repoPath: string, deps?: Partial<MineDeps>): MineDeps {
   const rev = deps?.rev ?? 'HEAD';
   return {
     rev,
-    proposer: deps?.proposer ?? defaultProposer(),
+    proposer: deps?.proposer ?? resolveProposer(repoPath),
     history: deps?.history ?? defaultHistory(),
     skeleton: deps?.skeleton ?? defaultSkeleton(repoPath),
     // PROVENANCE (the third seam this store takes, alongside the N11 watermark). `mine` built its store
@@ -390,3 +385,4 @@ export async function runMine(repoPath: string, deps?: Partial<MineDeps>): Promi
   const pass = driveMinePass(repoPath, deps);
   return foldVerdict(pass.report, modelWired, deps?.budget?.ceiling, pass.refusal);
 }
+

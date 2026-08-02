@@ -23,6 +23,15 @@ export { createForge } from './git-forge.js';
 // error classifier/backoff primitives stay module-internal, consumed intra-package via relative import.
 export { headSha } from './run-git.js';
 export { createSiteProposer } from './llm.js';
+// ADR-0011 D1 — the one concrete model adapter (an operator-supplied command). The port's own type name
+// is deliberately NOT written here: golden 11a audits it TEXTUALLY across `packages/*/src`, so keeping
+// the name in exactly one file is a stronger property than 'only one importer', and worth the terseness.
+export { createCommandClient, ModelCommandError } from './llm.js';
+export type { ModelCommand, ModelFailure } from './llm.js';
+export { loadModelConfig, modelConfigPath, ModelConfigError } from './model-config.js'; // ADR-0011 D2
+export type { ModelConfig, ModelRole } from './model-config.js';
+export { createPromptFactory, createFileSourceReader, PromptError } from './prompt.js'; // ADR-0011 D3
+export type { PromptFactory, SourceReader } from './prompt.js';
 export { createIndexAdapter } from './index-adapter.js';
 export type { IndexAdapterDeps } from './index-adapter.js';
 export { materializePoke, pokeFilePath, POKE_FILE_EXT } from './poke-file.js';
