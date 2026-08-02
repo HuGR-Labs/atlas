@@ -87,7 +87,32 @@ assertions, not semantic ones**.
 | clean | 13/13 pass | 13/13 pass |
 | guard opened | **2 failed** — `11798ms vs cap 10000` | **2 failed** — `18078ms vs cap 10000` |
 
-So the mutant **is** causal and reproducible (2/2 vs 0/2), not load. But read what that means: opening the
+> ### ⚠️ CORRECTED 2026-08-02 — THIS ATTRIBUTION IS WRONG, AND THE ERROR MATTERS MORE THAN THE FINDING DID
+>
+> The paragraph below originally read *"So the mutant **is** causal and reproducible (2/2 vs 0/2), not
+> load."* **It is not causal.** A later seat re-ran it and measured the opposite:
+>
+> - Under the mutant (rebuilt), `s10-node-door` + `s6-edge` ran **13/13 GREEN, 3 times out of 3** (7.5 s,
+>   8.8 s, 8.0 s against the 10 000 ms cap).
+> - The decisive probe: `process.stderr.write('GUARD-PROBE-REACHED')` at the top of `contentAddressed`,
+>   rebuilt — **0 hits** across the entire black-box story, with every `expect(stderr).toBe('')` still green.
+> - `s6-edge` contains **no wall-clock assertion at all** (no `Date.now`, no `toBeLessThan`), so it could
+>   only ever have failed on a project timeout.
+>
+> The 2×2 above was HOST LOAD on a box that was running several agents. Two clean runs and two loaded runs
+> is not an attribution; it is a coincidence that survived a sample of four.
+>
+> **The real finding is larger and worse.** `createGuard` / `createGovernedStore` / `admitOn*` have **ZERO
+> production callers** — verified independently by the lead: every caller in the repository is a test
+> (`packages/tools/test/*`, `packages/e2e/test/s08-transport-writedoor.e2e.test.ts`). `guard.ts` is a
+> REFERENCE MODEL. The durable write door the CLI actually uses is `packages/adapter-io/src/store.ts`.
+>
+> So before `guard-fail-closed.test.ts` landed, mutant A was killed by **nothing at all** — not weakly, not
+> by a timing proxy. And the sharper open question is not "is this guard well tested" but **"does the
+> SHIPPED store have this fail-closed leg?"**, which remains UNMEASURED. Tracked as its own task.
+>
+> Kept rather than rewritten, because the way this doc was wrong is itself an instance of what it audits: a
+> confident causal claim from four samples, about a code path nobody had checked was reachable. But read what that means: opening the
 write-door guard's fail-closed leg is detected **only** because the door then does real filesystem work and
 blows a performance budget. **Not one assertion in 1717 tests says "an uncanonicalizable row is refused."**
 The lone detector is a timing assertion in a suite whose own `vitest.workspace.ts` banner documents that its
