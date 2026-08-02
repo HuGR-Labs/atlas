@@ -204,27 +204,56 @@ the file computes the hashes with the product's own `id()`. Content-addressing a
 never **provenance**. Only a keyed construction (a MAC/signature under a key the committer lacks) would, and
 this product has no key material and nowhere to put it that a committer could not also read.
 
-## The one hole this rewrite found: CI is not required to pass
+## The hole this rewrite found, and closed the same day: CI is now a merge condition
 
-`required_status_checks` on `master` is **`null`**. Measured 2026-08-02.
+`required_status_checks` on `master` was **`null`**. Measured 2026-08-02, **fixed 2026-08-02** (owner-executed):
+it now reads `{ strict: false, contexts: ["gate"], checks: [{ context: "gate", app_id: 15368 }] }`.
 
-Nothing stops a pull request with a **red** `ci` run from being merged. Every mechanical control this repo
-has — all seven gates, `tsc -b`, the whole 2100-test suite — runs *inside* that workflow, so a null
-`required_status_checks` means none of them is a merge condition. They are advisory output that a human is
-trusted to read. The gates are only as binding as the thing that requires them, and today nothing does.
+**What it was.** Nothing stopped a pull request with a **red** `ci` run from being merged. Every mechanical
+control this repo has — all seven gates, `tsc -b`, the whole 2100-test suite — runs *inside* that workflow, so
+a null `required_status_checks` meant none of them was a merge condition. They were advisory output a human
+was trusted to read. **A gate is only as binding as the thing that requires it.**
 
-This is the same shape as the CODEOWNERS gap that made this document necessary in the first place, one level
-further out: an enforcement body whose *schedule* is owned (`/.github/workflows/`) and whose *content* is
-owned (`/harness/gates/`), but whose **verdict** is not consulted at the merge point.
+Same shape as the CODEOWNERS gap that made this document necessary, one level further out: an enforcement
+body whose *schedule* is owned (`/.github/workflows/`) and whose *content* is owned (`/harness/gates/`), but
+whose **verdict** was not consulted at the merge point. Owning all three is what closes it.
 
-It is also the one remaining item that does **not** need a second human — unlike the two review fields, a
-required status check binds a solo author perfectly well, because it is the CI that must be satisfied, not a
-reviewer. Left open here rather than set silently: the check name must be pinned exactly right or every PR
-deadlocks (`enforce_admins: true` means the author cannot bypass it either), and that is worth doing
-deliberately with a green PR in flight to verify against. The check to require is `gate`, in workflow `ci`.
+It was also the one item that needed **no second human** — unlike the two review fields, a required check
+binds a solo author perfectly well, because what must be satisfied is the CI, not a reviewer.
+
+### Three things about the fix that are worth keeping, because each was a trap
+
+1. **`PATCH .../required_status_checks` returns `404 "Required status checks not enabled"`.** That endpoint
+   edits an existing object; with `null` there is nothing to edit, and GitHub exposes no create verb for it.
+   The full `PUT` on `/protection` is the only route.
+2. **That `PUT` REPLACES the entire protection object.** Every field omitted is silently turned off. The
+   payload below therefore restates `enforce_admins`, both push blocks and all three review fields — not for
+   completeness, but because leaving any of them out would have quietly removed a control while appearing to
+   add one. That was the real risk in this change, not the status check.
+3. **`strict: false` is deliberate.** `strict: true` requires every branch to be up to date with `master`
+   before merging, which under a parallel fleet means each merge invalidates every other open PR and
+   serializes the whole wave. Near-zero safety gain, high cost. And **`contexts` takes the JOB name (`gate`),
+   not the workflow name (`ci`)** — get that wrong and every PR deadlocks with no way out through the UI,
+   because `enforce_admins: true` binds the author too. It was checked against two green runs first.
 
 ```sh
-# the fix — verify the check NAME against a recent green run before running this
-gh api -X PATCH repos/HuGR-Labs/atlas/branches/master/protection/required_status_checks \
-  -F strict=true -f 'contexts[]=gate'
+# what was run. The undo, if a wrong context name ever deadlocks the repo, is the same PUT with
+# "required_status_checks": null — settings writes are NOT blocked by enforce_admins.
+gh api -X PUT repos/HuGR-Labs/atlas/branches/master/protection --input - <<'JSON'
+{
+  "required_status_checks": { "strict": false, "contexts": ["gate"] },
+  "enforce_admins": true,
+  "required_pull_request_reviews": {
+    "required_approving_review_count": 0,
+    "require_code_owner_reviews": false,
+    "dismiss_stale_reviews": true
+  },
+  "restrictions": null,
+  "allow_force_pushes": false,
+  "allow_deletions": false
+}
+JSON
 ```
+
+**So every mechanical control is now binding, and exactly one thing is not: ratification.** The team has one
+member. That remains the only open item in this document.
