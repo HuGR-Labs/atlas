@@ -172,19 +172,45 @@ export function createDiskStore(
   // invariant). The methods only run after the literal is bound, so the reference is never in the TDZ.
   const store: DiskStore = {
     put(obj: CasObject): Hash {
+      // TWO serializations, and BOTH must be able to refuse. `id` runs the canonical preimage
+      // (`canonical.ts`); `JSON.stringify` produces the stored bytes. They do NOT accept the same inputs,
+      // and the gap between them is where this door used to break its own contract.
+      //
+      // MEASURED DEFECT (the `JSON.stringify` call used to sit BELOW this try, unguarded): KERNEL-8 excludes
+      // the mutable side-indexes `grounding` / `status` / `freshness` from the preimage at EVERY level, so a
+      // canonical-form violation parked in one of them never reaches the canonicalizer. `id` SUCCEEDS, this
+      // catch never fires, and control fell through to a bare `JSON.stringify` that throws a raw engine
+      // `TypeError` on a bigint or a cycle — out of a method whose own comment promised "never throw".
+      // `grounding` is on EVERY `GroundedFact` and `governed-emit.ts` puts the WHOLE fact here, so the throw
+      // came straight back out of `atlas-emit`; `@atlas/tools` `fault.ts` then files a `TypeError` as
+      // `internal-fault` ("a defect in Atlas, not in your arguments") for bytes that were entirely the
+      // caller's. Reachable from an in-process embedder, which gate 0 of `governed-emit.ts` names as in the
+      // threat model in as many words. Both serializations are inside the try now, so the door has ONE
+      // answer for "these bytes cannot be stored": the honest empty handle.
       let h: Hash;
+      let bytes: string;
       try {
         // canonicalize → hash via the sealed seam; the caller never supplies the key (KERNEL-1/2a).
         h = id(obj);
+        // the STORED bytes, produced BEFORE any directory is made — so a value that cannot serialize
+        // leaves not one filesystem trace, exactly as a value that cannot canonicalize does.
+        bytes = JSON.stringify(obj);
+        // `JSON.stringify` is NOT total either, and its OTHER failure mode is silent: it ANSWERS
+        // `undefined` — no throw — for a bare `undefined`, a top-level function or a top-level symbol.
+        // Meanwhile `canonicalForm` maps `undefined` to `null`, so `id` happily returns an address for it.
+        // Storing that answer writes a value that cannot be parsed back to the object it addresses, i.e. a
+        // durable row that reads as absent — the bricked row a refusal is strictly better than. Same sentinel.
+        if (typeof bytes !== 'string') return EMPTY;
       } catch {
-        // malformed input (float / bigint / symbol / cyclic) → honest empty, write nothing, never throw.
+        // malformed input (float / bigint / symbol / cyclic / an NFC key collision) → honest empty, write
+        // nothing, never throw. This is the contract `index/cas.ts` already codes against (`if (h)`).
         return EMPTY;
       }
       const path = valuePath(casPath, h);
       // content-keyed dedup: equal content already on disk ⇒ store nothing new (idempotent).
       if (!existsSync(path)) {
         mkdirSync(dirname(path), { recursive: true });
-        writeFileSync(path, JSON.stringify(obj), 'utf8');
+        writeFileSync(path, bytes, 'utf8');
       }
       return h;
     },

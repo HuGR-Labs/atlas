@@ -30,7 +30,7 @@ import { join } from 'node:path';
 import { emptyStore } from '@atlas/knowledge';
 import type { StoreProjection } from '@atlas/knowledge';
 import { generations, genPath, mirrorPath, readSidecarSet } from './sidecar.js';
-import type { CommitDecision, CommitResult, SidecarCtx, WireProjection } from './sidecar.js';
+import type { CommitDecision, CommitResult, SidecarBase, SidecarCtx, WireProjection } from './sidecar.js';
 import { IDENTITY_SCHEMA, refuseForeignIdentityWrite } from './identity-schema.js';
 
 /** How many times a contended writer re-reads and re-decides before refusing. Bounded so a pathological
@@ -231,6 +231,27 @@ function publish(ctx: SidecarCtx, projection: StoreProjection, gen: number): Pub
   }
 }
 
+/** The honest-empty handle `store.ts` `put` answers for an object the CAS cannot address (`asHash('')`).
+ *  Matched by EQUALITY on that one sentinel and nothing wider: an injected `put` seam is free to answer
+ *  anything else it likes (a test double answers `undefined`), and narrowing further would turn this guard
+ *  into a shape check on a seam whose shape is the caller's business. */
+const CAS_EMPTY = '';
+
+/** A `decision.put` object the CAS refused to address. A NAMED `Error`, not the engine `TypeError` this
+ *  used to surface as: `@atlas/tools` `fault.ts` files an engine fault as `internal-fault` ("a defect in
+ *  Atlas, not in your arguments"), and an object the caller supplied is not that. The message carries a
+ *  DISCRIMINANT before its first `:` so `reasonOf`/`faultOf` can name this refusal without matching prose. */
+export class UnaddressableCasObjectError extends Error {
+  constructor(readonly base: SidecarBase) {
+    super(
+      `unaddressable-cas-object: refusing to publish the ${base} sidecar — a decision named a CAS object the ` +
+        `store could not address (its canonical form or its JSON serialization does not exist), so publishing ` +
+        `would durably reference bytes that were never written. Nothing was written and nothing was served.`,
+    );
+    this.name = 'UnaddressableCasObjectError';
+  }
+}
+
 /**
  * THE write door of the mutable sidecar: read → decide → publish, retried WHOLE on a lost CAS.
  *
@@ -282,7 +303,21 @@ function commitLoop<T>(
     // CAS bytes FIRST, then the projection that references them. Idempotent by content address, so a retry
     // re-putting the same object writes nothing new; a failing `put` (disk-full/permission) throws BEFORE
     // any sidecar byte, so the sidecar can never reference a hash whose bytes are absent.
-    for (const obj of decision.put ?? []) ctx.put(obj);
+    //
+    // THE ANSWER USED TO BE DISCARDED, AND THAT MADE THE SENTENCE ABOVE FALSE. It rests on "a failing `put`
+    // THROWS", which is true of a disk-full `put` and false of an UNADDRESSABLE one: `store.ts` `put` is
+    // deliberately total over malformed input — it answers the EMPTY sentinel and writes nothing. So an
+    // object the CAS cannot address was silently skipped, `publish` ran anyway, and the generation went
+    // durable holding a `contentHash` whose bytes were never written: a row that is present, served, and
+    // unresolvable. Exactly the read-back invariant `governed-emit.ts` stage 4 and the doctor legs depend on.
+    //
+    // No product caller reaches it today — both governed doors compute `id(node)` themselves before handing
+    // the same object over, so an unaddressable object never gets this far, and the door suites EXECUTE that
+    // rather than assert it. It is guarded anyway because "nothing calls it today" is a property of today's
+    // callers, not of this seam, and the failure it permits is silent and durable.
+    for (const obj of decision.put ?? []) {
+      if (ctx.put(obj) === CAS_EMPTY) throw new UnaddressableCasObjectError(ctx.base);
+    }
     // `superseded` SETTLES. The decision's bytes are durable (see {@link PublishOutcome}), so the ONLY
     // honest answers are this call's own `out` — the one belonging to the attempt that actually published —
     // or a re-run that cannot see it wrote. Re-running is what produced a truthful `next` and a false `out`.
