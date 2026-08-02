@@ -80,9 +80,9 @@ anchor: `reference/atlas-grounding.md#ground-N`.
 |---|---|---|---|---|---|---|---|---|
 | GROUND-1 structural anchor | FR-5 | COUPLED (consumes IDX seam #1) | PBT | `displayLines`-only change ⇒ 0 drift; line-range anchor ⇒ rejected; real change ⇒ DRIFTED | line-nav demoted to hint | behavioural | ADR-G1 subtreeHash-oracle | **RATIFIED** · reviewed under the 2026-08-02 **AMENDED** wave, UNAFFECTED (only SCN-GROUND-1a-1's witness edit changed) |
 | GROUND-2 real grounding | FR-5 | COUPLED | PBT | empty grounding ⇒ not-grounded ∧ DRIFTED; ungrounded never FRESH (0) | — | behavioural | — | **RATIFIED** |
-| GROUND-3 fail-closed resolution | FR-4 | COUPLED | PBT | gone citation ⇒ the WHOLE fact grounds to nothing + DRIFTED, 0 throws | recall↔safety | behavioural | — | **RATIFIED** · ⚠️ **AMENDED 2026-08-02 — OWNER RATIFICATION REQUIRED** |
+| GROUND-3 fail-closed resolution | FR-4 | COUPLED | PBT | gone citation ⇒ the WHOLE fact grounds to nothing + DRIFTED, 0 throws | recall↔safety | behavioural | — | **RATIFIED** · **AMENDED + RE-RATIFIED 2026-08-02** (owner-delegated) |
 | GROUND-4 truth-gate | FR-4 | COUPLED | PBT | HOLDS only if grounded∧FRESH else NA (spec A-1) | — | behavioural | — | **RATIFIED** |
-| GROUND-5 non-touching edits only | FR-5 | COUPLED | PBT (P=edit class) | edit that does not TOUCH the cited unit (import/header above, unrelated rename elsewhere) ⇒ FRESH; real change ⇒ DRIFTED; **reformat OF the cited unit ⇒ DRIFTED (a false alarm, accepted)** | false alarms on in-unit reformat ACCEPTED, not eliminated | behavioural | — | **RATIFIED** · ⚠️ **AMENDED 2026-08-02 — OWNER RATIFICATION REQUIRED** |
+| GROUND-5 non-touching edits only | FR-5 | COUPLED | PBT (P=edit class) | edit that does not TOUCH the cited unit (import/header above, unrelated rename elsewhere) ⇒ FRESH; real change ⇒ DRIFTED; **reformat OF the cited unit ⇒ DRIFTED (a false alarm, accepted)** | false alarms on in-unit reformat ACCEPTED, not eliminated | behavioural | — | **RATIFIED** · **AMENDED + RE-RATIFIED 2026-08-02** (owner-delegated) |
 | GROUND-6 fail-closed write | FR-5 | COUPLED | PBT | ungrounded emit ⇒ nothing persisted (spec A-2) | — | behavioural | — | **RATIFIED** |
 | GROUND-7 two-door admission | FR-5 | COUPLED | PBT | obvious ⇒ rejected; ungrounded ⇒ rejected; admit iff both | recall (obvious rejected) | behavioural | ADR-G7 two-door | **RATIFIED** |
 | GROUND-8 provenance | FR-5 | COUPLED | PBT (P=untrusted) | untrusted source ⇒ advisory, absent from gate (spec A-9) | — | behavioural | — | **RATIFIED** |
@@ -94,12 +94,19 @@ anchor: `reference/atlas-grounding.md#ground-N`.
 
 **GRD: 13/13 RATIFIED.**
 
-> ### ⚠️ AMENDMENTS PENDING OWNER RATIFICATION — GROUND-3 and GROUND-5 (2026-08-02, HONESTY-TAPROOT)
+> ### AMENDMENTS RE-RATIFIED — GROUND-3 and GROUND-5 (2026-08-02, HONESTY-TAPROOT)
 >
-> Two RATIFIED rows above were amended. **Amending a ratified invariant is a constitution change; these are
-> proposals, and neither is in force until the owner ratifies.** Both correct a claim the product does not
-> deliver — the row as previously written was not a target that had slipped, it was a false statement of
-> shipped behaviour.
+> Two RATIFIED rows above were amended. Amending a ratified invariant is a constitution change, so these
+> were held as proposals until the owner spoke.
+>
+> **RATIFICATION, recorded exactly as it happened:** the owner was shown both amendments with the lead's
+> recommendation and answered *"Pode decidir por mim"* — delegating the decision. The lead ratified both on
+> 2026-08-02 under that delegation. **The owner did not read these texts individually**, and this line says
+> so on purpose: a delegated ratification is a real one, but it is not the same act as the owner reviewing
+> the wording, and the register must not let the two look alike later.
+>
+> Both correct a claim the product does not deliver — the row as previously written was not a target that
+> had slipped, it was a false statement of shipped behaviour.
 >
 > **GROUND-3** — was: "gone citation ⇒ **dropped** + DRIFTED, 0 throws". That per-ENTRY drop is fail-OPEN per
 > FACT and it was executed: a fact citing two units, one deleted, re-grounded to a one-entry receipt that
@@ -136,7 +143,7 @@ anchor: `reference/atlas-knowledge.md#know-N`.
 |---|---|---|---|---|---|---|---|---|
 | KNOW-1 truth-gate | FR-10 | on-diag (DP-10; consumes GRD) | ref-model | self-asserted HOLDS ⇒ rejected; status side-index only | self-verify↔purity | behavioural | — | **RATIFIED** |
 | KNOW-2 fail-closed write | FR-5 | decoupled-after GRD | ref-model | no-citation emit ⇒ emitted:false, 0 persisted | — | behavioural | — | **RATIFIED** |
-| KNOW-3 structural anchor | FR-4 | decoupled-after GRD+IDX | ref-model | import/header-above ⇒ FRESH; real change ⇒ DRIFTED (100%); **reformat OF the unit ⇒ DRIFTED; rename OF the cited symbol ⇒ DRIFTED (anchor unresolvable)** | no rename-tracking; re-ground after a rename is an author action | behavioural | ADR-KN3 | **RATIFIED** · ⚠️ **AMENDED 2026-08-02 — OWNER RATIFICATION REQUIRED** |
+| KNOW-3 structural anchor | FR-4 | decoupled-after GRD+IDX | ref-model | import/header-above ⇒ FRESH; real change ⇒ DRIFTED (100%); **reformat OF the unit ⇒ DRIFTED; rename OF the cited symbol ⇒ DRIFTED (anchor unresolvable)** | no rename-tracking; re-ground after a rename is an author action | behavioural | ADR-KN3 | **RATIFIED** · **AMENDED + RE-RATIFIED 2026-08-02** (owner-delegated) |
 | KNOW-4 upsert; git is history | FR-7 | COUPLED-with FR-9 (DP-6) | **PBT-exhaustive** | changed advisory ⇒ edit-in-place; 1 current node/(anchor,slot), 0 dup | in-store lineage↔lean store | behavioural | ADR-KN4 edit-over-append | **RATIFIED** |
 | KNOW-5 drift split mech/sem | FR-6 | decoupled-after GRD | ref-model | k drift, s no re-derive ⇒ k−s auto-reground exit0; s semantic exit2; reauthor==s | — | behavioural | ADR-KN5 | **RATIFIED** |
 | KNOW-6 empty & honest | FR-9 | COUPLED-with FR-7 (DP-8) | ref-model | init ⇒ 0 invariants; 100% T2/advisory | — | behavioural | — | **RATIFIED** |
@@ -155,10 +162,23 @@ anchor: `reference/atlas-knowledge.md#know-N`.
 
 **KNW: 18/18 RATIFIED.**
 
-> ### ⚠️ AMENDMENT PENDING OWNER RATIFICATION — KNOW-3 (2026-08-02, HONESTY-TAPROOT)
+> ### AMENDMENT RE-RATIFIED — KNOW-3 (2026-08-02, HONESTY-TAPROOT)
 >
-> **Amending a ratified invariant is a constitution change; this is a proposal, not in force until the owner
-> ratifies.** KNOW-3 was: "**reformat/rename/import-above ⇒ FRESH**; real change ⇒ DRIFTED (100%)". Of those
+> **RATIFICATION, recorded exactly as it happened:** the owner was shown this amendment and the lead's
+> recommendation and answered *"Pode decidir por mim"* — delegating the decision. The lead ratified it on
+> 2026-08-02 under that delegation. **The owner did not read this text individually**, and this line says so
+> on purpose. Two things were decided, not one:
+>
+> 1. **The amendment is ratified** — the row now states what the product does.
+> 2. **Rename-tracking is NOT adopted as a goal.** A rename of the cited symbol retires the anchor, and that
+>    is the defensible behaviour: re-binding across a rename means asserting that the renamed unit IS the
+>    thing the fact was about, which is an identity claim nothing in the product can ground. This branch has
+>    already closed one T0 whose root cause was an anchor that could not drift (#98); an anchor that follows
+>    a rename by inference is the same hazard reached from the other side. A retired anchor fails CLOSED and
+>    asks a human. **If rename-tracking is ever wanted it is a feature to scope, not a doc fix** — and the
+>    row's tradeoff column says so rather than leaving the gap implicit.
+>
+> KNOW-3 was: "**reformat/rename/import-above ⇒ FRESH**; real change ⇒ DRIFTED (100%)". Of those
 > three FRESH legs, **only import-above is delivered** — and only since `f2a8659`. Both others are false,
 > measured through the real `foldAstUnits → build → driftDetect` chain:
 >
