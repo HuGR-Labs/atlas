@@ -75,8 +75,13 @@ describe('R1 — every governance gate refuses a RETRACTION exactly as it refuse
     readonly discriminant: string;
   }> = [
     { name: 'DISTINCT', actor: 'alice', token: 'lead', a: 'n0', b: 'n0', discriminant: 'sameAs requires two distinct nodes' },
-    { name: 'BOTH KNOWN (b absent)', actor: 'alice', token: 'lead', a: 'n0', b: 'n-nope', discriminant: 'unknown node' },
-    { name: 'BOTH KNOWN (a absent)', actor: 'alice', token: 'lead', a: 'n-nope', b: 'n1', discriminant: 'unknown node' },
+    // [task #144] These two used to expect `unknown node`. An absent endpoint is now refused with the
+    // ENDPOINT-AUTHZ bytes, because telling the two apart is an existence oracle over keys any caller can
+    // name (see `governed-link-endpoint-existence.test.ts`). What this table pins is unchanged and is the
+    // point of the file: whatever the refusal is, RETRACTING gets the identical one — the fold did not give
+    // the retraction mode a different ladder.
+    { name: 'ENDPOINT (b absent)', actor: 'alice', token: 'lead', a: 'n0', b: 'n-nope', discriminant: 'unauthorized' },
+    { name: 'ENDPOINT (a absent)', actor: 'alice', token: 'lead', a: 'n-nope', b: 'n1', discriminant: 'unauthorized' },
     { name: 'AUTHZ (actor outside both scopes)', actor: 'mallory', token: 'lead', a: 'n0', b: 'n1', discriminant: 'unauthorized' },
     { name: 'AUTHZ (empty actor — fail-closed)', actor: '', token: 'lead', a: 'n0', b: 'n1', discriminant: 'unauthorized' },
     { name: 'RATIFY (empty ratifier)', actor: 'alice', token: '', a: 'n0', b: 'n1', discriminant: 'unratified' },

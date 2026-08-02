@@ -43,57 +43,15 @@ describe('WP-SAMEAS — createGovernedLink (distinct · both-known · class read
     expect(fx.persists()).toHaveLength(0);
   });
 
-  it('SCN-GL-2 — an endpoint absent from the projection is refused (no dangling assertion)', () => {
-    const fx = fixture([T2_A, T2_B]);
-    const { link } = createGovernedLink({ store: fx.store, policy: POLICY, actor: 'alice', ratifyToken: 'lead' });
-    expect(() => link('n0', 'n-nope')).not.toThrow(); // a write door REFUSES; it does not throw
-    const out = link('n0', 'n-nope');
-    expect(out.linked).toBe(false);
-    expect(reasonOf(out.rejected)).toBe('unknown node');
-    // …and it names the endpoint that is actually ABSENT. The two endpoints share one discriminant, so this
-    // is the one place a substring is the only available instrument — and it is anti-vacuous in both
-    // directions: the present key must NOT appear.
-    expect(out.rejected ?? '').toContain('n-nope');
-    expect(out.rejected ?? '').not.toContain('n0');
-    expect(fx.persists()).toHaveLength(0);
-  });
-
-  it('SCN-GL-2b — the FIRST endpoint is refused identically (the mirror of SCN-GL-2)', () => {
-    // TEETH, MEASURED: delete the `nodeA === undefined` guard and the ENTIRE suite stayed green — 221 files,
-    // 1614 tests, exit 0. Not equivalent, and not a near-miss: with the guard gone `storedFact(deps, nodeA)`
-    // dereferences `undefined.contentHash` and the door throws `TypeError: Cannot read properties of
-    // undefined (reading 'contentHash')` — a fail-closed refusal becomes an uncaught crash out of a door
-    // whose own header calls it total.
-    //
-    // The blind spot was the FIXTURES, not the guard: SCN-GL-2 (`link('n0','n-nope')`) and blackbox T3
-    // (`link(rejA.id,'not-a-real-nodekey')`) both put the unknown key SECOND, so the `b` twin was pinned
-    // twice and the `a` guard not at all. The header advertises "one refusal point per endpoint"; this is
-    // the other one.
-    const fx = fixture([T2_A, T2_B]);
-    const { link } = createGovernedLink({ store: fx.store, policy: POLICY, actor: 'alice', ratifyToken: 'lead' });
-
-    expect(() => link('n-nope', 'n0')).not.toThrow(); // THE MUTANT DIES HERE (TypeError, not a rejection)
-    const out = link('n-nope', 'n0');
-    expect(out.linked).toBe(false);
-    expect(reasonOf(out.rejected)).toBe('unknown node');
-    expect(out.rejected ?? '').toContain('n-nope');
-    expect(out.rejected ?? '').not.toContain('n0');
-    expect(fx.persists()).toHaveLength(0);
-  });
-
-  it('SCN-GL-2c — BOTH endpoints absent is still one refusal, and it names the FIRST', () => {
-    // Precedence between the two twins: `a` is resolved first, so `a` is what the caller is told about.
-    // Without this, swapping the two guards is a free mutant. Nothing is disclosed by the choice — neither
-    // key is in the projection, which the caller learns either way.
-    const fx = fixture([T2_A, T2_B]);
-    const { link } = createGovernedLink({ store: fx.store, policy: POLICY, actor: 'alice', ratifyToken: 'lead' });
-    const out = link('n-absent-a', 'n-absent-b');
-    expect(out.linked).toBe(false);
-    expect(reasonOf(out.rejected)).toBe('unknown node');
-    expect(out.rejected ?? '').toContain('n-absent-a');
-    expect(out.rejected ?? '').not.toContain('n-absent-b');
-    expect(fx.persists()).toHaveLength(0);
-  });
+  // ── THE ENDPOINT-EXISTENCE FOLD LIVES IN ITS OWN FILE (task #144) ───────────────────────────────────
+  // SCN-GL-2 / 2b / 2c used to sit here and pin a distinct `unknown node: <key>` refusal for an absent
+  // endpoint. That refusal was an existence oracle — it ran BEFORE authz, so any caller, an empty actor
+  // included, could tell it from `unauthorized` and thereby learn whether a nodeKey names a current node.
+  // It is folded into `unauthorized`, and the cases that pin the fold (totality, no echoed key, byte
+  // identity with the out-of-scope refusal) moved to `governed-link-endpoint-existence.test.ts` together
+  // with the oracle matrix, because the property they test is a BYTE-COMPARISON across states and needs the
+  // two-scope fixture this file's single-scope `POLICY` cannot express. Same seam, same reason, as
+  // `governed-link-endpoint-authz.test.ts`.
 
   it('SCN-GL-3 — an actor outside EITHER endpoint\'s scope is denied (KNOW-11, both endpoints)', () => {
     const fx = fixture([T2_A, T2_B]);

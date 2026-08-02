@@ -11,10 +11,11 @@
 //   T1 — an AUTHORIZED, RATIFIED link surfaces the `a ≡ b` edge on BOTH doors (CLI `sameAs` line + MCP
 //        `data.sameAs`), symmetric regardless of query/argument order.
 //   T2 — an UNAUTHORIZED actor (outside the nodes' scope) is REJECTED (exit 2), nothing persisted.
-//   T3 — a link to an UNKNOWN nodeKey is REJECTED (exit 2, 'unknown node'), a no-op — in EITHER argument
-//        position (T3b: the unknown key FIRST, which no case here reached until it was measured that
-//        deleting the door's `a`-side guard left the whole suite green and turned the refusal into an
-//        uncaught TypeError).
+//   T3 — a link to an UNKNOWN nodeKey is REJECTED (exit 2), a no-op — in EITHER argument position (T3b: the
+//        unknown key FIRST, which no case here reached until it was measured that deleting the door's
+//        `a`-side guard left the whole suite green and turned the refusal into an uncaught TypeError).
+//        [task #144] The refusal is now `unauthorized`, the SAME one an out-of-scope caller gets: a distinct
+//        `unknown node` reason, resolved before authz, let any caller read node EXISTENCE off the write door.
 //   T4 — TRANSITIVE fold: link A≡B and B≡C ⇒ `atlas query` also derives A≡C (union-find teeth).
 //   T5 — an EMPTY ratifier is REJECTED (exit 2, 'unratified') even for an authorized actor.
 
@@ -139,12 +140,18 @@ describe('S16 — the governed sameAs write door (WP-SAMEAS)', () => {
     expect(sameAsLines(q.stdout)).toEqual([]);
   });
 
-  it('T3: a link to an UNKNOWN nodeKey is rejected (exit 2, "unknown node"), a no-op', () => {
+  it('T3: a link to an UNKNOWN nodeKey is rejected (exit 2), a no-op, and does NOT confirm the key is absent', () => {
+    // [task #144] This used to assert `unknown node` and that the CLI ECHOED the absent key. Both were the
+    // leak: an absent endpoint had its own refusal, resolved BEFORE authz, so any caller could tell "not a
+    // node" from "not yours" and read node existence off the write door at keys it can name freely. The two
+    // are now one refusal — authority is carried by the row, so a key with no row has no scope and nobody
+    // can be authorized over it, which makes `unauthorized` the only computable answer.
     const link = runAtlas(rejRepo.repoPath, ['link', rejA.id, 'not-a-real-nodekey']);
-    expect(link.exitCode).toBe(2);
+    expect(link.exitCode).toBe(2); // a GOVERNED refusal, at the process boundary
     expect(link.stdout).toContain('status: rejected');
-    expect(link.stdout).toContain('unknown node');
-    expect(link.stdout).toContain('not-a-real-nodekey'); // it names the endpoint that is actually absent
+    expect(link.stdout.toLowerCase()).toContain('unauthorized');
+    expect(link.stdout).not.toContain('unknown node'); // the existence discriminant is GONE, not renamed
+    expect(link.stdout).not.toContain('not-a-real-nodekey'); // …and the probed key is not echoed back
     // Still nothing persisted.
     const q = runAtlas(rejRepo.repoPath, ['query', 'src']);
     expect(sameAsLines(q.stdout)).toEqual([]);
@@ -159,8 +166,9 @@ describe('S16 — the governed sameAs write door (WP-SAMEAS)', () => {
     const link = runAtlas(rejRepo.repoPath, ['link', 'not-a-real-nodekey', rejB.id]);
     expect(link.exitCode).toBe(2); // a GOVERNED refusal — not the crash exit code, and not 0
     expect(link.stdout).toContain('status: rejected');
-    expect(link.stdout).toContain('unknown node');
-    expect(link.stdout).toContain('not-a-real-nodekey');
+    expect(link.stdout.toLowerCase()).toContain('unauthorized'); // [task #144] folded; see T3
+    expect(link.stdout).not.toContain('unknown node');
+    expect(link.stdout).not.toContain('not-a-real-nodekey');
 
     // TOTALITY at the PROCESS boundary, and this is what the mutant actually does — MEASURED, not imagined.
     // The crash does NOT reach stderr (stderr is empty; an earlier draft asserted on it and that assertion
