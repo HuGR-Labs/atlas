@@ -34,7 +34,7 @@ import type { CommitDecision, CommitResult, DiskStore } from '@atlas/adapter-io'
 import type { StoreProjection } from '@atlas/knowledge';
 import type { Fact } from '@atlas/genesis';
 import { buildControllerDeps } from '../src/mine.js';
-import { A, B, depsOf, factFor, REPO } from './mine-fixtures.js';
+import { A, B, REPO, depsOf, factFor, readStaging } from './mine-fixtures.js';
 
 let dir: string | undefined;
 beforeEach(() => {
@@ -50,8 +50,8 @@ const casPath = (): string => join(dir!, '.atlas', 'cas');
 /** The durable staged set as the product's OWN reader sees it, keyed by the anchor each row carries — the
  *  same projection `mine-contention.test.ts` compares against, so the two suites cannot drift. */
 function durableAnchors(): string[] {
-  const staged = createDiskStore(casPath()).loadStaging();
-  return [...(staged?.current.values() ?? [])].map((n) => n.primaryAnchor ?? `<no anchor: ${n.nodeKey}>`).sort();
+  const staged = readStaging(createDiskStore(casPath()));
+  return [...staged.current.values()].map((n) => n.primaryAnchor ?? `<no anchor: ${n.nodeKey}>`).sort();
 }
 
 /**

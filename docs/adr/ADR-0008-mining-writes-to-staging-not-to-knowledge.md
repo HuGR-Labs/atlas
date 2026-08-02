@@ -2,7 +2,9 @@
 
 - **Status:** Accepted (2026-08-01) and **IMPLEMENTED on `governance-class-is-a-node-property`**, not
   deferred. Steps 1 and 2 of the Decision below are in the tree: `packages/adapter-io/src/store.ts` defines
-  `persistStaging`/`loadStaging`, and `packages/cli/src/mine.ts` uses staging exclusively — its header
+  the staging sidecar door (`commitStaging`; the original `persistStaging`/`loadStaging` pair was superseded
+  by it and DELETED in task #83 after a probe measured zero production callers — see step 1 below), and
+  `packages/cli/src/mine.ts` uses staging exclusively — its header
   asserts, and a test pins, that `persistProjection` appears nowhere in the file.
   *(This header previously said implementation "is task #87 and is sequenced after the branch integrates".
   That was written before the work landed and was left stale — a false status claim inside a canonical
@@ -56,8 +58,14 @@ explorer wrote the only durable place there was.
 
 Concretely:
 
-1. `DiskStore` gains `persistStaging` / `loadStaging` over a sidecar distinct from `projection.json`.
-   Same shape, different file — staging is a projection of *candidates*, not of facts.
+1. `DiskStore` gains a staging door over a sidecar distinct from `projection.json`. Same shape, different
+   file — staging is a projection of *candidates*, not of facts.
+   *(As shipped this was `persistStaging`/`loadStaging`. Both were replaced by the atomic `commitStaging`
+   and then DELETED in task #83: the unconditional persist was last-writer-wins by definition — measured at
+   8 processes × 5 sites, 40 candidates reported committed and 5 durable — and a probe showed neither had a
+   production caller left. `commitStaging` is now the only staging door, which `mine-projection-surface.test.ts`
+   pins mechanically against the live `DiskStore` surface. The ADR's decision is unchanged; only the member
+   names are.)*
 2. `buildControllerDeps` in `packages/cli/src/mine.ts` targets staging. Its rehydrate, its `store.put`, and
    its put-before-persist ordering all stay; only the destination changes.
 3. A candidate is promoted into knowledge **only** by passing a governed door, like anything else.

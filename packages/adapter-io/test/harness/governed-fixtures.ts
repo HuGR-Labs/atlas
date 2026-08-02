@@ -56,13 +56,9 @@ export function makeStoreSpy(): StoreSpy {
     loadProjection() {
       return persists.length > 0 ? persists[persists.length - 1] : undefined;
     },
-    // ADR-0008 widened `DiskStore` with the STAGING doors. These doubles never stage — `mine` is the only
-    // stager and it is not under test here — but an incomplete literal is a type error waiting for the day
-    // tests are typechecked (today `tsc -b` includes only `src`, so it is silent).
-    persistStaging() {},
-    loadStaging() {
-      return undefined;
-    },
+    // ADR-0008's STAGING door. This double never stages — `mine` is the only stager and it is not under
+    // test here — but an incomplete literal is a type error. (`persistStaging`/`loadStaging` were deleted in
+    // task #83: `commitStaging` is now the only staging door.)
   };
   return { store, puts: () => puts, persists: () => persists };
 }

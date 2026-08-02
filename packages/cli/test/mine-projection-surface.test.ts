@@ -26,14 +26,18 @@ import { fakeStore, stagingFake, projectionTrap } from './mine-fixtures.js';
  * Enumerated from `packages/adapter-io/src/store.ts`'s `DiskStore` interface (which extends the kernel
  * `StoreApi`), partitioned by which sidecar family each member touches:
  *   · projection — `loadProjection`, `persistProjection`, `commitProjection`   ⇒ MUST be trapped
- *   · staging    — `loadStaging`,   `persistStaging`,   `commitStaging`        ⇒ MUST work (mine's own door)
+ *   · staging    — `commitStaging`                                             ⇒ MUST work (mine's own door)
  *   · CAS        — `put`, `get`                                                ⇒ shared, content-addressed
+ * The staging family is DOWN TO ONE MEMBER as of task #83: `loadStaging`/`persistStaging` were measured to
+ * have zero production callers and deleted, so there is now exactly one way to touch candidates. This test
+ * is what makes that claim mechanical rather than asserted — it compares the lists below against the LIVE
+ * `Object.keys` of a real store, so re-adding a door without listing it fails here.
  * There is no fourth family. The composed entry point `rehydrateProjection(store)` is a projection READ, but
  * it is not a store member: it CALLS `store.loadProjection()`, so the trap covers it transitively — asserted
  * below rather than reasoned about.
  */
 const PROJECTION_DOORS = ['loadProjection', 'persistProjection', 'commitProjection'] as const;
-const STAGING_DOORS = ['loadStaging', 'persistStaging', 'commitStaging'] as const;
+const STAGING_DOORS = ['commitStaging'] as const;
 const CAS_DOORS = ['put', 'get'] as const;
 
 /** A call shaped for any of the doors: a decision function that also reads as a projection argument is not
@@ -42,7 +46,7 @@ function invoke(store: DiskStore, door: string): unknown {
   if (door === 'commitProjection' || door === 'commitStaging') {
     return (store as unknown as Record<string, (d: unknown) => unknown>)[door]!(() => ({ out: 0 }));
   }
-  if (door === 'persistProjection' || door === 'persistStaging') {
+  if (door === 'persistProjection') {
     return (store as unknown as Record<string, (p: unknown) => unknown>)[door]!({ current: new Map(), cas: new Set() });
   }
   return (store as unknown as Record<string, () => unknown>)[door]!();

@@ -106,7 +106,7 @@ Authoring goals × the door that serves them today:
 | G11 | Ratify a fact that routed to full-ratify | A3 | env token only | ⚠️ no queue — see F3 |
 | G12 | Understand why a write was rejected | A1 A2 | raw `TypeError` on malformed shape | ❌ |
 | G13 | Author a PREDICATE (with a `check`) | A1 | — | ❌ |
-| G14 | Retract a wrong `sameAs` | A1 A3 | — | ❌ see F2 |
+| G14 | Retract a wrong `sameAs` | A1 A3 | `link --retract` | ✅ **BUILT** (task #83) — a MODE of the existing door, not a new one |
 | G15 | Batch-author / import many facts | A1 A2 | loop over `emit` | ⚠️ |
 | G16 | See the current policy / my writable scopes | A1 A4 | — | ❌ |
 
@@ -187,23 +187,45 @@ Lenses 5 and 6 produced the following, which none of the others caught:
 | HEAD moves ⇒ packs go `stale` | N11 watermark | none (surfaced only if someone queries) |
 | `reconcile` finds semantic drift | `exitCode 2` | CI blocks; no per-author routing |
 
-**F2 — `sameAs` has no retraction.** `governed-link.ts` creates edges; there is no `unlink` anywhere in
-the tree (verified by grep). `deriveSameAs` is a **union-find**, so one wrong link silently merges an
-entire equivalence class on every read, permanently.
+**F2 — `sameAs` had no retraction. RESOLVED (task #83, owner-authorized).** As surveyed, `governed-link.ts`
+only created edges and there was no `unlink` in the tree. `deriveSameAs` is a **union-find**, so one wrong
+link merged an entire equivalence class on every read, permanently.
 
-**F3 — `stage()` is not a staging area.** `knowledge/src/ratify/ratify.ts:53` returns `{ node }` — a pure
-in-memory wrapper. `governed-emit.ts:106-109` calls `ratify(stage(view), token)` and, on failure,
-**returns rejected and persists nothing**. So authoring a T0 / predicate / contested fact is
+Retraction now ships as a **MODE of the existing `atlas-link` door** — `link --retract` / `retract:true` —
+so the finding is closed **without** the third write door it looked like it needed. The measurement that
+made that cheap: `deriveSameAs` is **rebuild-per-read** (a fresh `parent` map per call; the only persisted
+state is the per-node edge list), so filtering a withdrawn edge out of the fold input splits the class on
+the next read. Union-find's missing DELETE was never on the critical path. Retraction is an APPEND
+(`sameAsRetracted`), and it runs the same gate ladder an assertion does.
+
+**F3 — `stage()` is not a staging area — and the survey under-stated it.** `knowledge/src/ratify/ratify.ts`
+returns `{ node }`, a pure in-memory wrapper; `governed-emit.ts` calls `ratify(stage(view), token)` and, on
+failure, **returns rejected and persists nothing**. So authoring a T0 / predicate / contested fact is
 *all-or-nothing*: you either already hold the ratifier token or your work is discarded. There is **no
-propose-for-review flow** — which is exactly the flow KNOW-8's "the explorer's ONLY write path — stage a
-candidate (never commit directly)" describes. The doc describes a queue the runtime does not have.
+propose-for-review flow**.
+
+**Sharpened by measurement (task #83, probe with stack attribution over the whole suite incl. the real CLI
+subprocesses) — the finding is not the one this survey wrote down:**
+- `stage()` is not the explorer's write path *at all*. Its only production callers are the two governed write
+  doors (`governed-emit.ts`, `governed-link.ts`) — the LEAD's doors. `atlas mine` never calls it.
+- Durable staging **is built and is driven**: `atlas mine` writes candidates to its own sidecar through
+  `DiskStore.commitStaging` (80 probe hits, all from `cli/src/mine.ts`). The medium is not missing.
+- What is missing is the **promotion path**. Nothing reads staging back — `loadStaging` had ZERO production
+  callers (deleted in task #83) and there is no `promote` command. A staged candidate has no route into
+  governed knowledge, ratified or otherwise.
+
+So KNOW-8's measurable ("0 explorer writes reach the store except via a ratifier") **holds, and holds
+vacuously**: 0 explorer writes reach the store by any route. The separation is enforced by **severance, not
+ratification** — `cli/src/mine.ts` puts it exactly: *"mining cannot mutate governed knowledge because it
+cannot REACH it, not because a check says no."* The prose has been narrowed to say that (A-D4); the governed
+promotion door is tracked as its own task.
 
 ### Lens 6 — resource / CRUD
 
 | entity | Create | Read | Update | Delete | List |
 |---|---|---|---|---|---|
 | Fact | `emit` ✅ | `node` / `query` ✅ | `emit` @ same nodeKey ✅ | supersede — **no door** ❌ | `query` (bounded: tier≥T1, ≤~2K) ⚠️ |
-| sameAs edge | `link` ✅ | query envelope ✅ | n/a | **no door** ❌ (F2) | envelope ✅ |
+| sameAs edge | `link` ✅ | query envelope ✅ | n/a | `link --retract` ✅ (task #83) | envelope ✅ |
 | Territory / policy | `init` ✅ | **no door** ❌ (G16) | hand-edit `.atlas/policy.*` ⚠️ | n/a | `init` output ⚠️ |
 | Projection | derived | ✅ | — | — | — |
 
@@ -285,8 +307,8 @@ a seam smell and belongs inside the shared computer, not in each caller.
 | # | decision | why it is the owner's |
 |---|---|---|
 | **D1** | **May the MCP server advertise a second, non-governance `READ_SURFACE`** (`atlas-anchors`, `atlas-slots`, `atlas-draft`, `atlas-check`, and — separately — the already-built `doctor`/`node`/`diff`)? | The owner's requirement is "via MCP tool *and* via CLI". `server.ts` advertises exactly `GOVERNANCE_SURFACE`. Publishing more does **not** change `WRITE_PATHS` or the governance count, but it *does* falsify the documented claim "the MCP surface is exactly the five governance tools" ⇒ **spec change + ADR**, in the same class as ADR-0003. |
-| **D2** | **`sameAs` retraction (F2).** Add a governed `unlink` (a *third* write door — a real constitution amendment), or model retraction as a superseding link record through the existing door, or accept permanent edges? | Union-find makes a wrong link unboundedly contagious. Only the owner can trade a constitution amendment against that risk. |
-| **D3** | **Propose-for-review queue (F3).** Today T0/predicate authoring is reject-or-commit; `stage()` persists nothing while KNOW-8 prose describes staging as "the explorer's ONLY write path". Build the queue (a write ⇒ amendment), or amend the prose to match the runtime? | Either the code or the constitution is wrong. Which one is fixed is an owner call. |
+| **D2** | **`sameAs` retraction (F2).** | **DECIDED + BUILT (task #83).** None of the three options as framed: retraction is a **MODE of the existing `atlas-link` door**, so there is no third write door and no constitution amendment to trade — `GOVERNANCE_SURFACE` stays 5, `WRITE_PATHS` stays `{emit, link}`, INV-TOOLS-15's store-row medium is untouched. Permanence is **not** accepted for merges; it IS accepted for retraction (the marker latches), because un-retracting means deleting the evidence, and permanence in the *splitting* direction costs one bounded equivalence while permanence in the *merging* direction is the unbounded contagion this finding is about. |
+| **D3** | **Propose-for-review queue (F3).** | **RE-FRAMED by measurement (task #83); PROSE NARROWED, DOOR STILL OPEN.** The dichotomy was false — neither "the code is wrong" nor "the prose is wrong" describes it. Durable staging IS built and driven (`commitStaging`, from `atlas mine`); `stage()` was never the explorer's path; what does not exist is the **promotion** path out of staging. KNOW-8's measurable holds **vacuously** (severance, not ratification). The prose has been narrowed to state exactly that, at the code and in the register/reference. The remaining decision is scoped down to one thing: **build the governed promotion door** (staging → projection through the ratifier, reusing the existing gate ladder, plus a staging read leg) — its own task, owner-gated. |
 | **D4** | **Scope of v1.** D-A + D-C + D-D is the minimum that makes authoring possible. D-B and D-E are cheap. Do the CRUD/List gaps (G15 batch, G16 policy-show) ship now or later? | Scope. |
 
 ---

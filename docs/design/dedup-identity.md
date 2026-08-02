@@ -81,11 +81,19 @@ to human ratification** (A1-honest).
   WP-DEDUP-3, `d290bd2`; owner un-deferred 2026-07-21.)* A cross-location sameness a human asserts. Shipped
   shape: a SYMMETRIC `sameAs?: readonly string[]` carrier on `CurrentNode` (sorted/de-duped, both endpoints
   carry the peer — `write/link.ts` `linkSameAs`), written ONLY through the governed `atlas-link` door
-  (`adapter-io/src/governed-link.ts`: distinct → both-known → KNOW-11 authz on BOTH scopes → non-empty
-  ratifier). `sameAs` links two **distinct** `nodeKey`s and is presented as a **read-fold**
-  (`read/sameas.ts` `deriveSameAs`, union-find equivalence surfaced in the query envelope), never a second
-  current-node — so the "one node per nodeKey" invariant is intact. *(v1 ratifier is a non-empty check, not
-  the tier-graded T0→billy gate — deferred, sameAs is non-destructive; see ADR-0003.)*
+  (`adapter-io/src/governed-link.ts`: distinct → both-known → KNOW-11 authz over every scope the merged
+  CLASS spans → the class-tier-graded KNOW-8 ratifier, `billy` when any member is `T0`). `sameAs` links two
+  **distinct** `nodeKey`s and is presented as a **read-fold** (`read/sameas.ts` `deriveSameAs`, union-find
+  equivalence surfaced in the query envelope), never a second current-node — so the "one node per nodeKey"
+  invariant is intact.
+  **RETRACTION (A-D3, task #83):** a second ADDITIVE carrier `sameAsRetracted?: readonly string[]`, written
+  through the SAME door in its `--retract` MODE (no sixth tool; `WRITE_PATHS` unchanged) and with the SAME
+  gate ladder. It is an APPEND — the peer stays in `sameAs` — so the row records both the assertion and its
+  withdrawal. `deriveSameAs` skips a withdrawn edge (recorded on EITHER endpoint, fail-closed) and the class
+  splits; `sameAsClassOf`, which prices the door's gates rather than serving readers, stays deliberately
+  retraction-blind so a retraction can never shrink a class below the authority needed to touch it.
+  *(The earlier "v1 ratifier is a non-empty check, not the tier-graded T0→billy gate" note is SUPERSEDED —
+  that deferral was closed by task #84; see ADR-0003 §Consequences.)*
 
 - **DP-4 — resolution is at read, not write.** `subsumes` = coverage on read (never folds/deletes).
   Ratified `sameAs` = union-find equivalence-fold at the **knowledge** read layer over `StoreProjection`

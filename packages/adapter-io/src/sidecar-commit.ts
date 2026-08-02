@@ -335,7 +335,7 @@ function commitLoop<T>(
   return { settled: false, refusal: 'contended' };
 }
 
-/** The UNCONDITIONAL publish behind `persistProjection`/`persistStaging` — the pre-existing seam, which has
+/** The UNCONDITIONAL publish behind `persistProjection` — the pre-existing seam, which has
  *  no decision to re-run and therefore stays last-writer-wins by DEFINITION. What it gains is atomicity: the
  *  bytes are published by `link`+`rename` from a synced temp, so no reader ever observes a prefix and leg 2
  *  cannot fire through it. Exhaustion THROWS: this signature returns void, and a silent no-op persist would

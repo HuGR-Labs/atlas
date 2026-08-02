@@ -245,7 +245,7 @@ the rest read/derive (ADR-0003):
 | `atlas-query` | a territory's pack | returns a `≤2K` pack of `tier≥T1` invariants; `stale:true` ⇒ re-ground before trusting (§3.4 pack/stale rule; A-1 truth-gate). |
 | `atlas-emit` | fail-closed grounded write | re-derives the citation `@sha`; ungrounded ⇒ rejected, not persisted (A-2). |
 | `atlas-reconcile` | merge-time drift → BROKEN | flips the `DRIFTED` subset `BROKEN`; exits 2 to block the merge on any flip (A-3). |
-| `atlas-link` | governed sameAs assertion | links two existing nodeKeys as the same fact after authz-on-both + a ratifier; a non-destructive read-side equivalence edge, never a merge (ADR-0003). |
+| `atlas-link` | governed sameAs assertion **or retraction** | links two existing nodeKeys as the same fact after authz-over-the-merged-class + a ratifier (`billy` when any class member is `T0`); a non-destructive read-side equivalence edge, never a merge. With `--retract` / `retract:true` it WITHDRAWS a previously asserted equivalence through the SAME gates — an APPEND, never a delete, and the class splits on the next read (ADR-0003, incl. §Retraction / A-D3). |
 
 - Every tool MUST be callable identically over the CLI and over MCP, with a published input schema.
 - **[Δ Orchestra]** the write path (`atlas-emit` at wave-close) is driven by `ResultCard.absorb`, not a

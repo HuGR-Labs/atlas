@@ -234,8 +234,16 @@ export function assembleHandler(config: WireConfig): WiredHandler {
       )) satisfies ToolLeg,
     // WP-SAMEAS: the governed sameAs link leg — routes through the ONE handler like every other tool. Reads
     // the two nodeKeys off the marshalled `{a,b}` arg shape (CLI marshal.ts / MCP inputSchema both supply it).
+    // [A-D3 / task #83] `retract` selects the MODE on the SAME leg and the SAME tool — no sixth tool, no
+    // second leg, so CLI and MCP reach retraction through one code path and cannot diverge. Compared to the
+    // literal `true`: the published schema declares `retract` as a boolean, so anything else is refused as
+    // `malformed-args` at the door BEFORE this line, and the CLI marshaller hands over a real boolean.
     'atlas-link': ((args) =>
-      governedLink.link((args as { a: string }).a, (args as { b: string }).b)) satisfies ToolLeg,
+      governedLink.link(
+        (args as { a: string }).a,
+        (args as { b: string }).b,
+        (args as { retract?: unknown }).retract === true,
+      )) satisfies ToolLeg,
     'atlas-reconcile': ((args) =>
       createReconcile(
         createDriftSource({

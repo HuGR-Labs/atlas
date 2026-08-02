@@ -21,7 +21,9 @@ export type MarshalResult =
  *   query     → `{ scope }`                       (leg: `(args as { scope }).scope`)
  *   reconcile → `{ mergeBase, options }`          (leg: `.mergeBase` + `.options?: {acceptReground?}`)
  *   emit      → `{ node, at }`                    (leg: `.node: GroundedFact` + `.at: Hash`)
- *   link      → `{ a, b }`                         (leg: `.a` + `.b` — the two nodeKeys to equate, WP-SAMEAS)
+ *   link      → `{ a, b, retract }`               (leg: `.a` + `.b` — the two nodeKeys to equate, WP-SAMEAS;
+ *                                                   `.retract` selects the A-D3 retraction MODE. This one
+ *                                                   REFUSES unknown/odd flags — see `marshalLink`)
  * `doctor` / `mine` / `node` are dispatched BEFORE the handler (cli.ts) and never reach here — the default fails closed.
  */
 export function marshalArgs(
@@ -54,13 +56,66 @@ export function marshalArgs(
     case 'emit':
       return marshalEmit(positionals, flags);
     case 'link':
-      // `atlas link <a> <b>` — the governed sameAs door (WP-SAMEAS). The leg reads `{a,b}` (wire.ts). `parse`
-      // enforces arity 2, so both positionals are present via the normal flow.
-      return { ok: true, args: { a: positionals[0], b: positionals[1] } };
+      return marshalLink(positionals, flags);
     default:
       // doctor/mine are intercepted before routing; a stray command here fails closed rather than routing blind.
       return { ok: false, error: `command '${command}' has no argument marshaller` };
   }
+}
+
+/** The ONLY flag `atlas link` accepts, and the only values that select the retraction MODE. `parse` folds a
+ *  bare `--retract` to the string `'true'`, and `--retract=true` arrives as the same string, so ONE literal
+ *  covers both spellings a user would reasonably type. */
+const LINK_FLAG = 'retract';
+const LINK_TRUE = 'true';
+
+/**
+ * `atlas link <a> <b> [--retract]` — the governed sameAs door (WP-SAMEAS / A-D3). The leg reads
+ * `{a, b, retract}` (wire.ts). `parse` enforces arity 2, so both positionals are present via the normal flow.
+ *
+ * `retract` is converted to a REAL boolean because the published input schema (TOOLS-3) declares it as one
+ * and the door type-checks declared properties; passing the raw string through would make the CLI fail
+ * `malformed-args` on a call MCP accepts — a transport divergence on a governed door.
+ *
+ * ── WHY THIS DOOR REFUSES WHAT EVERY OTHER COMMAND IGNORES (measured; cold-review finding F4) ─────────────
+ * `parse` deliberately never fails on an unknown or oddly-valued flag: an unrecognised `--x` folds into the
+ * bag as `'true'` and is dropped by whichever marshaller does not read it (CLI-1b totality). For a READ
+ * command that is harmless. For THIS one it silently INVERTED THE MODE — measured through the real parser:
+ * `--retract=1`, `--retract=TRUE`, `--retract=false` and the typo `--retracted` every one of them produced
+ * `retract: false`, i.e. an ASSERTION. An operator who asked to withdraw an equivalence got `linked: a ≡ b`
+ * on screen and a fresh generation published.
+ *
+ * A governed WRITE door must not silently discard an argument its operator supplied, so this marshaller
+ * fails CLOSED on anything it does not recognise, with a structured reason naming the accepted spellings
+ * (never a throw — CLI-1b totality is preserved; the refusal is a `MarshalResult`, exit 1). The strictness
+ * is scoped to `link` ALONE: no other command's flag handling moves, so no other command's totality
+ * semantics change.
+ *
+ * `--retract=false` is REFUSED rather than read as "assert": the way to not retract is to omit the flag, and
+ * refusing a confused invocation on a write door beats guessing which of two opposite acts was meant.
+ *
+ * NOT CLOSED HERE, and stated rather than left to be discovered: an EXTRA POSITIONAL (`atlas link a b c`) is
+ * still silently ignored, since `parse` enforces a minimum arity and this reads only the first two. Same
+ * class of defect, not part of the reviewed finding, and tightening arity touches every command's parser
+ * contract — recorded for a follow-up rather than widened into this pass.
+ */
+function marshalLink(positionals: readonly string[], flags: Readonly<Record<string, string>>): MarshalResult {
+  for (const name of Object.keys(flags)) {
+    if (name !== LINK_FLAG) {
+      return {
+        ok: false,
+        error: `link: unknown flag '--${name}'. The only flag this door accepts is '--retract' (withdraw a previously asserted equivalence); a governed write door does not ignore an argument you supplied`,
+      };
+    }
+  }
+  const raw = flags[LINK_FLAG];
+  if (raw !== undefined && raw !== LINK_TRUE) {
+    return {
+      ok: false,
+      error: `link: '--retract' is a bare flag — write '--retract' or '--retract=true'; got '--retract=${raw}'. To assert (not retract), omit the flag entirely`,
+    };
+  }
+  return { ok: true, args: { a: positionals[0], b: positionals[1], retract: raw === LINK_TRUE } };
 }
 
 /**

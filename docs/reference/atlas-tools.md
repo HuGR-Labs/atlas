@@ -162,9 +162,13 @@ atlas doctor    reground <fact>        → DoctorOut    // guided re-ground/reti
 - **`atlas-emit`** — the grounded-fact write door. Re-derives the citation; upserts (idempotent on unchanged,
   supersedes on changed); rejects ungrounded or non-templated facts fail-closed.
 - **`atlas-link`** — the sameAs-equivalence write door (WP-SAMEAS): asserts two existing nodeKeys name the
-  SAME fact (H1). Fail-closed gates: distinct nodes → both exist → KNOW-11 authz on BOTH scopes → non-empty
-  ratifier. NON-destructive — the equivalence is a derived read-side edge (union-find, surfaced in the query
-  envelope), never a fact merge. v1: non-empty ratifier, not emit's tier-graded gate (ADR-0003).
+  SAME fact (H1), **or retracts a previous assertion** (`--retract` / `retract:true` — a MODE of this door,
+  not a sixth tool; A-D3 / task #83). Fail-closed gates, IDENTICAL in both modes: distinct nodes → both exist
+  → KNOW-11 authz over every scope the merged CLASS spans → the class-tier-graded KNOW-8 ratifier (`billy`
+  when any class member is `T0`). NON-destructive — the equivalence is a derived read-side edge (union-find,
+  surfaced in the query envelope), never a fact merge; and a retraction is non-destructive of EVIDENCE (an
+  APPEND to `sameAsRetracted`, never a delete) while still splitting the class on the next read
+  (ADR-0003, incl. §Retraction).
 - **`atlas-reconcile`** — merge gate. Classifies drift (KNOW-5) into a reviewable set; **semantic** drift
   exits 2 (blocking), **mechanical** drift does not. `--accept-reground` auto-re-grounds the mechanical
   subset in one pass — no human, no block — leaving only genuine semantic drift for review.

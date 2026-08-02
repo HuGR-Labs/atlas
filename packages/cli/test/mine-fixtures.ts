@@ -120,10 +120,26 @@ export const projectionTrap = {
   commitProjection: (): never => { throw new Error('ADR-0008: mine must never commit to the knowledge projection'); },
 };
 
+/**
+ * Read the staged head THROUGH the one staging door. `persistStaging`/`loadStaging` were deleted in task #83
+ * after a probe measured ZERO production callers, so a test reads staging the way the protocol says to: a
+ * decision that returns no `next` reads the snapshot and writes nothing (`sidecar-commit.ts` — `decision.next
+ * === undefined` returns before any temp file is opened). That is strictly BETTER than the bare read it
+ * replaces: it goes through the provenance + identity-schema guards, so a test can no longer read a
+ * committed or foreign-schema store that the product itself would refuse.
+ *
+ * Note the one honest behavioural difference: with nothing staged this yields the EMPTY projection, where
+ * `loadStaging()` yielded `undefined` — the commit protocol has no "nothing persisted" state, it decides over
+ * `emptyStore()`. Call sites assert on `.current` either way.
+ */
+export function readStaging(store: DiskStore): StoreProjection {
+  const r = store.commitStaging<StoreProjection>((p) => ({ out: p }));
+  if (!r.settled) throw new Error(`readStaging: the staging door refused (${r.refusal})`);
+  return r.out;
+}
+
 /** The staging half, as a no-op: enough to satisfy `DiskStore` where a suite never inspects what was staged. */
 const stagingNoop = {
-  persistStaging: (): void => {},
-  loadStaging: (): StoreProjection | undefined => undefined,
   commitStaging: <T>(decide: (p: StoreProjection) => CommitDecision<T>): CommitResult<T> => ({ settled: true, out: decide(emptyStore()).out }),
 };
 
@@ -135,8 +151,8 @@ export const fakeStore = (): DiskStore => ({ put: () => asHash('x'), get: () => 
  * (or `seed`, standing in for what an earlier pass left behind), run the caller's decision over it, `put`
  * every CAS object the decision names BEFORE publishing, then append `next` to `staged`. Single-threaded, so
  * it never contends — which is exactly why the concurrency property is proven by real processes in
- * `mine-contention.test.ts` and not here. `persistStaging` stays (nothing calls it) and the projection doors
- * trap.
+ * `mine-contention.test.ts` and not here. The projection doors trap. (`persistStaging`/`loadStaging` are gone
+ * as of task #83 — `commitStaging` is the only staging door, here and in the product.)
  */
 export const stagingFake = (seed?: StoreProjection): { store: DiskStore; staged: StoreProjection[]; cas: Set<string> } => {
   const staged: StoreProjection[] = [];
@@ -147,8 +163,6 @@ export const stagingFake = (seed?: StoreProjection): { store: DiskStore; staged:
     put: (obj) => put(obj),
     get: () => undefined,
     ...projectionTrap,
-    persistStaging: (p) => void staged.push(p),
-    loadStaging: () => (staged.length > 0 ? staged[staged.length - 1]! : seed),
     commitStaging: <T>(decide: (p: StoreProjection) => CommitDecision<T>): CommitResult<T> => {
       const decision = decide(snapshot());
       if (decision.next === undefined) return { settled: true, out: decision.out }; // a refusal writes nothing
@@ -165,8 +179,6 @@ export const refusingStagingFake = (refusal: CommitRefusal): DiskStore => ({
   put: () => asHash('x'),
   get: () => undefined,
   ...projectionTrap,
-  persistStaging: () => {},
-  loadStaging: () => undefined,
   commitStaging: () => ({ settled: false, refusal }),
 });
 

@@ -102,5 +102,11 @@ alternative to it.
   fact using **only** product doors, on **both** transports — after which
   `packages/e2e-blackbox/test/author.ts` is **deleted**. Until that helper can be deleted, the gap is not
   closed.
-- Two findings are **deferred, not solved**, and are recorded as open DEFINE items (A-D3, A-D4): `sameAs`
-  has no retraction door, and KNOW-8's "staging" prose describes a queue the runtime does not implement.
+- Two findings were **deferred, not solved**, and were recorded as open DEFINE items (A-D3, A-D4).
+  **A-D3 is now DECIDED and BUILT** (task #83): `sameAs` retraction ships as a MODE of the existing
+  `atlas-link` door, so it needed no third write door and no amendment — see ADR-0003 §Retraction.
+  **A-D4 remains OPEN**, and the measurement has since sharpened it: `stage()` is a pure in-memory wrapper
+  whose only production callers are the two governed doors (`governed-emit.ts`, `governed-link.ts`), so it is
+  not the explorer's write path at all; the explorer's real durable path is `commitStaging` (driven by
+  `atlas mine`), and `persistStaging`/`loadStaging` have ZERO production callers. What is missing is not the
+  staging medium but a governed PROMOTION path out of it.

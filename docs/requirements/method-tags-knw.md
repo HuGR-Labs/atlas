@@ -78,6 +78,7 @@ anti-rot: `knowledge/ref/tier.ts` is the mock; a heuristic that writes `tier=T0`
 method-tag: reference-model
 fspec: —
 up-property: "propose/ratify separation: 0 explorer writes reach the committed store except through a reconcile-side ratifier (human for `T0` / contested / predicate; deterministic fast-path for grounded low-risk `T2` advisory); the explorer never self-commits, and `T0` requires billy"
+runtime-note (A-D4, measured task #83): "the up-property HOLDS in the shipped runtime and holds VACUOUSLY — 0 explorer writes reach the committed store by ANY route, because no promotion path out of staging exists. The reference model below routes `candidate → staging → ratifier`; the runtime implements `candidate → staging` (durably, via `commitStaging`) and stops there. The separation is enforced by SEVERANCE, not by the ratifier. Stated so the reference model is not read as a description of the shipped flow."
 down-model: "reference commit path routes `candidate → staging → ratifier`; the explorer surface can write only to staging; a unit asserts no staged candidate is committed without a ratifier token, and a `T0` candidate requires the billy token"
 anti-rot: `knowledge/ref/ratify.ts` (the staging / ratifier gate) is the mock; an explorer path that writes straight to the store fails the no-self-commit assertion.
 

@@ -5,6 +5,31 @@
 // requires billy. Binds the FROZEN, PINNED `RatifyApi` (co-located below): `stage(candidate): Staged` and
 // `ratify(staged, token): { committed: boolean }`, over the minimal `Staged`/`RatifyToken` records.
 //
+// ── WHAT KNOW-8 ACTUALLY ENFORCES TODAY (A-D4, MEASURED — read this before the paragraph above) ───────────
+// KNOW-8's measurable is "0 explorer writes reach the store except via a ratifier". IT HOLDS. IT HOLDS
+// VACUOUSLY, and the difference matters because the sentence above describes a propose→ratify FLOW that is
+// NOT WIRED.
+//
+// Measured in task #83 by probe (`process.stderr.write` + stack attribution at each function, rebuilt, driven
+// through the whole suite including the real CLI subprocesses):
+//   · the explorer (`atlas mine`) writes candidates DURABLY, to its own sidecar, via `DiskStore.commitStaging`
+//     — 80 hits, all from `cli/src/mine.ts`. That half of KNOW-8 is real and built.
+//   · NOTHING READS STAGING BACK. `loadStaging` had zero production callers (it has since been deleted), and
+//     there is no `promote` command in the CLI's `COMMANDS`. There is no path from staging into the governed
+//     projection, ratified or otherwise.
+//   · `stage()` (below) is not on the explorer's path at all — its only production callers are the two
+//     governed write doors in `adapter-io`.
+//
+// So what stops an explorer write from reaching governed knowledge today is SEVERANCE, NOT RATIFICATION. The
+// ratifier is not the gate on that path; the ABSENCE of a path is. `cli/src/mine.ts` says it in its own
+// words: "mining cannot mutate governed knowledge because it cannot REACH it, not because a check says no."
+//
+// This is a statement of the CURRENT STATE, not a retirement of the design. Propose→ratify remains the
+// intended shape; the governed PROMOTION door (staging → projection through the ratifier, reusing the
+// existing gate ladder, plus a staging read leg) is simply not built yet and is tracked as its own task.
+// Recorded here rather than left implicit because a reader who takes the paragraph above at face value will
+// build on a review workflow that does not exist.
+//
 // FACET BOUNDARY (BIND — resolved vs the frozen RatifyApi, co-located below):
 //  • [PINNED — oracle-pin-map §8] the gate types (`Staged{node}`, `RatifyToken{by}`) are frozen; this
 //    facet supplies ONLY the routing method-tags-knw:70-72 freezes: `candidate → staging → ratifier`,
@@ -45,8 +70,14 @@ export interface RatifyToken {
 }
 
 export interface RatifyApi {
-  /** The explorer's ONLY write path — stage a candidate (never commit directly, KNOW-8). Pure + total.
-   *  Returns the minimal `Staged` handle. */
+  /** Wrap a candidate in the `Staged` handle the ratifier gate consumes. Pure + total.
+   *
+   *  IT IS NOT "THE EXPLORER'S ONLY WRITE PATH", WHICH IS WHAT THIS DOCSTRING USED TO SAY (A-D4, measured in
+   *  task #83). Two things are wrong with that sentence and both were measured by probe, not read off the
+   *  code: (1) this function persists NOTHING — it returns `{ node }`; (2) its only PRODUCTION callers are
+   *  `adapter-io`'s two governed write doors (`governed-emit.ts`, `governed-link.ts`), i.e. the LEAD's doors.
+   *  The explorer (`atlas mine`) never calls it. Its real durable path is `DiskStore.commitStaging`.
+   *  What this actually is: the in-memory adapter that hands a candidate to {@link RatifyApi.ratify}. */
   stage(candidate: Candidate): Staged;
 
   /** The reconcile/lead ratifier gate: a staged candidate commits ONLY with a ratifier token; a `T0`
@@ -76,8 +107,11 @@ export interface RatifyApi {
 export const BILLY = 'billy';
 
 /**
- * The explorer's ONLY write path — stage a candidate (never commit directly, KNOW-8). Pure + total; the
- * node is held in staging, un-committed until the reconcile/lead ratifies.
+ * Wrap a candidate in the `Staged` handle {@link ratify} consumes. Pure + total — it persists NOTHING.
+ *
+ * See {@link RatifyApi.stage} for why the previous description ("the explorer's ONLY write path … held in
+ * staging, un-committed until the reconcile/lead ratifies") was false on every clause: nothing is held, there
+ * is no staging here, and the explorer does not call this. A-D4 / task #83.
  */
 export function stage(candidate: Candidate): Staged {
   return { node: candidate };

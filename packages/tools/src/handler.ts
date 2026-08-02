@@ -82,8 +82,8 @@ const GUIDANCE: Record<Tool, Guidance> = {
     invariant: 'TOOLS-8: reviewable drift, block on any semantic flip',
   },
   'atlas-link': {
-    next: 'a rejected link failed a governance gate (two distinct known nodes, authorized on both scopes, ratified) — fix and re-link',
-    invariant: 'WP-SAMEAS / KNOW-11: sameAs is a governed symmetric edge — authz on BOTH scopes + a non-empty ratifier (v1; T0→billy tier gate deferred, non-destructive) — never a merge',
+    next: 'a rejected link failed a governance gate (two distinct known nodes, authorized on both scopes, ratified) or a pair-state gate (not-linked / already-retracted / retracted-pair) — fix and re-run; `retract:true` withdraws an asserted equivalence through the same gates',
+    invariant: 'WP-SAMEAS / KNOW-11 / A-D3: sameAs is a governed symmetric edge — authz on BOTH scopes + a non-empty ratifier over the whole merged class (billy when any member is T0) — never a merge; retraction is a MODE of this door (WRITE_PATHS stays {emit,link}) and is an APPEND, never a delete',
   },
 };
 
@@ -166,12 +166,20 @@ const SCHEMAS: Record<Tool, ToolSchema> = {
   },
   'atlas-link': {
     name: 'atlas-link',
-    description: 'the governed sameAs write door — asserts two nodeKeys name the SAME fact (a symmetric, transitive, NON-destructive equivalence edge surfaced on read), fail-closed on authz/ratify (WP-SAMEAS)',
+    description: 'the governed sameAs write door — asserts two nodeKeys name the SAME fact (a symmetric, transitive, NON-destructive equivalence edge surfaced on read), or with retract:true WITHDRAWS a previously asserted one (an append, never a delete — the class splits on the next read); fail-closed on authz/ratify, and retraction is priced through the SAME gates as assertion (WP-SAMEAS, A-D3)',
     inputSchema: {
       type: 'object',
       properties: {
         a: { type: 'string', description: 'the first nodeKey to equate' },
         b: { type: 'string', description: 'the second nodeKey to equate' },
+        // [A-D3] the MODE, not a second tool. DECLARED here so both transports validate it identically: the
+        // door's own `malformedArgsReason` type-checks every DECLARED property that is present, so a
+        // non-boolean `retract` over MCP is `malformed-args` rather than a silently-ignored assertion. The
+        // CLI marshaller produces a real boolean from `--retract`, so the two doors agree by construction.
+        retract: {
+          type: 'boolean',
+          description: 'withdraw the previously asserted equivalence instead of asserting it (CLI: `atlas link <a> <b> --retract`)',
+        },
       },
       required: ['a', 'b'],
       additionalProperties: false,

@@ -7,8 +7,8 @@
 //   • SCN-ADAPTER-6c-1  — a tampered on-disk value reads as absent                          (guard)
 //   • SCN-ADAPTER-12a-1 — a fresh process rehydrates the flushed fact byte-identically       (happy)
 //   • SCN-ADAPTER-12b-1 — rehydrate reconstructs state only, minting nothing                (guard)
-// Plus the ADR-0008 STAGING sidecar (persistStaging/loadStaging): the candidate store round-trips, is TOTAL
-// on a missing/corrupt/wrong-shape file, and never writes `projection.json`.
+// The ADR-0008 STAGING sidecar cases live in the sibling `store-staging.test.ts` — split out in task #83
+// because they exercise a DIFFERENT sidecar family through a DIFFERENT door (`commitStaging`).
 //
 // Harness (per fs.test.ts convention): a temp CAS dir per test + afterEach cleanup. `casPath` is the CAS
 // ROOT — value files land at `<casPath>/<H[0:2]>/<H>` and the projection sidecar beside it (outside cas/).
@@ -326,70 +326,5 @@ describe('rehydrateProjection — ADAPT-STORE-3 cross-process rehydrate, minting
     const imports = src.split('\n').filter((l) => l.trimStart().startsWith('import')).join('\n');
     expect(imports).not.toMatch(/routeWrite/);
     expect(imports).not.toMatch(/\bupsert\b/);
-  });
-});
-
-// ── ADR-0008 — the STAGING sidecar: same shape, DIFFERENT file ─────────────────────────────────────────
-//
-// `atlas mine` is the explorer: no truth gate, no KNOW-11 authz, no KNOW-8 ratification. KNOW-8 lets it
-// write only CANDIDATES — but staging had nowhere to live, so it wrote the only durable place there was,
-// the knowledge projection, and three defects followed (destroy → mutate-a-ratified-T0 → unwritable rows).
-// `persistStaging`/`loadStaging` give candidates their own file. These cases pin the two properties that
-// make that real: the candidate store ROUND-TRIPS, and it NEVER touches `projection.json`.
-describe('persistStaging / loadStaging — the ADR-0008 candidate sidecar', () => {
-  it('round-trips a projection through the staging sidecar in a fresh process', () => {
-    const dir = freshCasDir();
-    const { store: candidates } = upsert(emptyStore(), reqF());
-    createDiskStore(dir).persistStaging(candidates);
-    // a fresh instance over the same dir = a new process with NO shared memory.
-    const back = createDiskStore(dir).loadStaging();
-    expect(back?.current.get('claim:fix-cov')).toEqual(candidates.current.get('claim:fix-cov'));
-    expect([...back!.cas]).toEqual([...candidates.cas]);
-  });
-
-  it('MUTANT (stagingPath → PROJECTION_FILE): staging writes its OWN file and leaves projection.json alone', () => {
-    const dir = freshCasDir();
-    const s = createDiskStore(dir);
-    // a governed projection is already on disk — exactly the state a mine pass runs against.
-    s.persistProjection(upsert(emptyStore(), reqF()).store);
-    const governedBytes = readFileSync(join(tmp!, 'projection.json'), 'utf8');
-    // stage a DIFFERENT node: if staging resolved to the projection path, this write would replace the file.
-    s.persistStaging(upsert(emptyStore(), { ...reqF(), nodeKey: 'claim:a-candidate' }).store);
-
-    // teeth: point `stagingPath` at PROJECTION_FILE and the next two lines both go RED.
-    expect(readFileSync(join(tmp!, 'projection.json'), 'utf8')).toBe(governedBytes); // byte-identical, untouched
-    expect(existsSync(join(tmp!, 'staging.json'))).toBe(true); //                      its own file exists
-    // and the two stores read back DISJOINT sets — a candidate is not visible as a fact, nor a fact as one.
-    expect([...s.loadProjection()!.current.keys()]).toEqual(['claim:fix-cov']);
-    expect([...s.loadStaging()!.current.keys()]).toEqual(['claim:a-candidate']);
-  });
-
-  it('loadStaging over corrupt sidecar bytes is total — undefined, never throws', () => {
-    const dir = freshCasDir();
-    createDiskStore(dir).persistStaging(upsert(emptyStore(), reqF()).store);
-    corruptSidecar('staging', '{ "current": [ truncated');
-    let out: unknown = 'sentinel';
-    // MUTANT: unwrap the `JSON.parse` try/catch in `readSidecar` (store.ts). `mine` rehydrates staging at
-    // pass start, so a throw here aborts the pass on a half-written file instead of starting from nothing.
-    expect(() => {
-      out = createDiskStore(dir).loadStaging();
-    }).not.toThrow();
-    expect(out).toBeUndefined();
-  });
-
-  it('loadStaging is total on a MISSING and on a wrong-shape sidecar (same discipline as loadProjection)', () => {
-    const dir = freshCasDir();
-    expect(createDiskStore(dir).loadStaging()).toBeUndefined(); // nothing staged yet — not a throw
-    createDiskStore(dir).persistStaging(upsert(emptyStore(), reqF()).store);
-    // valid JSON whose `current` is NOT the [k,v] entry-array — `new Map(5)` would throw without the guard.
-    corruptSidecar('staging', JSON.stringify({ current: 5, cas: {} }));
-    let out: unknown = 'sentinel';
-    // MUTANT (measured, both halves needed): drop the `Array.isArray` guard AND the try/catch around the
-    // Map/Set construction in `readSidecar` ⇒ `TypeError: number 5 is not iterable`. Dropping the guard
-    // ALONE leaves this green — the catch covers it — so the guard is defence-in-depth, not the tooth.
-    expect(() => {
-      out = createDiskStore(dir).loadStaging();
-    }).not.toThrow();
-    expect(out).toBeUndefined();
   });
 });
