@@ -234,7 +234,11 @@ describe('PERSIST-10a seam — CONTROL (b): the shipped single-chunk behaviour i
 
 describe('PERSIST-10a seam — CONTROL (c): the memory bound is real', () => {
   it('a long secret-free stream never carries more than MAX_SEAM_CARRY bytes', () => {
-    expect(MAX_SEAM_CARRY).toBe(9); // 'gh' + family + '_' + five token chars: one short of the {6,} floor
+    // 12, not 9. 9 bounds a strictly-INCOMPLETE prefix (family prefix + five token chars). A complete
+    // match whose completeness is CONTINGENT on its ambiguous tail is longer: 'gh'+fam+'_' + five body
+    // chars + 'ghX' = 12, which is a match only while those last three bytes are read as body — one more
+    // byte can turn them into the family prefix of the NEXT credential and un-make it.
+    expect(MAX_SEAM_CARRY).toBe(12);
     const chunk = 'a long transcript line with no credential in it whatsoever; '.repeat(16);
     let buf = new Uint8Array(0);
     let worst = 0;
