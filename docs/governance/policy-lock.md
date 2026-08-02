@@ -6,21 +6,24 @@ write what — and how facts merge — the file is **admin-owned by intent** and
 locked. This mirrors Atlas's own T0 rule: a governance change is a **human-ratified** act, not an automatic
 one. **Neither lock mechanism below is in force today** — see the status note on each.
 
-## The lock (two mechanisms, both required — neither active as of 2026-08-01)
+## The lock (two mechanisms, both required — neither active as of 2026-08-02)
 
-1. **Ownership — CODEOWNERS.** The repo-root `CODEOWNERS` assigns `/.atlas/policy.json` to
-   `@HuGR-Labs/atlas-admins`. **NOT IN FORCE:** that team does not exist. `gh api orgs/HuGR-Labs/teams`
-   returns `[]` (as does the former `HumanGuardrail` org), and `gh api repos/HuGR-Labs/atlas/codeowners/errors`
-   reports `Unknown owner` for the `/.atlas/policy.json` rule. (That endpoint reads the **default branch**,
-   so it still quotes the pre-move `@HumanGuardrail/atlas-admins` string until the rename lands on `master`;
-   neither team exists, so the verdict is identical.) GitHub cannot request review from a team that is not there, so the
-   entry protects nothing. It starts binding only once the team exists, is visible, has write access — and
-   only together with mechanism 2.
+1. **Ownership — CODEOWNERS.** The repo-root `CODEOWNERS` assigns `/.atlas/policy.json`, `/CODEOWNERS`
+   **itself**, and `/.github/workflows/` to `@HuGR-Labs/atlas-admins` (step 3 below, landed 2026-08-02).
+   **STILL NOT IN FORCE:** that team does not exist. `gh api orgs/HuGR-Labs/teams` returns `[]` (as did the
+   former `HumanGuardrail` org), so `gh api repos/HuGR-Labs/atlas/codeowners/errors` reports `Unknown owner`
+   for every one of the three rules. (That endpoint reads the **default branch**, so it reflects the widened
+   file only once this lands on `master` — and the verdict is `Unknown owner` either way until the team is
+   created.) GitHub cannot request review from a team that is not there, so the entries protect nothing.
+   They start binding only once the team exists, is visible, has write access — and only together with
+   mechanism 2.
 2. **Enforcement — branch protection.** CODEOWNERS is only advisory until branch protection makes the
-   code-owner review *required to merge*. **NOT IN FORCE, and unavailable on the current plan:**
-   `gh api repos/HuGR-Labs/atlas/branches/master/protection` and `gh api repos/HuGR-Labs/atlas/rulesets`
-   both return `403 — "Upgrade to GitHub Pro or make this repository public to enable this feature."` The
-   org is on the **free** plan and the repo is **private**, so no protection rule or ruleset can exist at all.
+   code-owner review *required to merge*. **NOT IN FORCE, but no longer blocked:** the 403 was
+   `"Upgrade to GitHub Pro or make this repository public to enable this feature."` — the org is on the
+   **free** plan and the repo *was* private. **The repo was made public by the owner on 2026-08-02**
+   (`gh api repos/HuGR-Labs/atlas --jq .visibility` ⇒ `public`), so protection rules and rulesets are now
+   available at no cost. None has been created yet: no rule exists on `master`, and until one does, any
+   collaborator with write access can push straight to it.
 
 ## Who may do what
 
@@ -36,20 +39,23 @@ one. **Neither lock mechanism below is in force today** — see the status note 
 
 ## The exact sequence that would make the lock real
 
-Verified read-only on 2026-08-01 (`gh api`, no setting changed). Every step is a precondition for the next;
-skipping any one leaves the lock inert in exactly the way it is inert today.
+Every step is a precondition for the next; skipping any one leaves the lock inert in exactly the way it is
+inert today. Steps 1 and 3 are **DONE**; 2, 4 and 5 remain, and all three are org/repo *settings* changes
+that only a human org owner can make — no commit closes them.
 
-1. **Make the repo public** — tracked as task #92, already owner-authorized. `gh api orgs/HuGR-Labs` reports
-   plan `free` and the repo is `private`, which is precisely why protection 403s. Public makes branch
-   protection **and** rulesets available at no cost, so this resolves without money. (The alternative is
-   paying for a plan; nothing else about the sequence changes.) *Precondition: the history must be fit to
-   publish — this is a private repo, and publishing is irreversible in practice.*
+1. **Make the repo public** — **DONE 2026-08-02** (task #92, owner-authorized and owner-executed:
+   `gh api -X PATCH repos/HuGR-Labs/atlas -f visibility=public`). The org is on plan `free` and the repo
+   was `private`, which is precisely why protection 403'd. Public makes branch protection **and** rulesets
+   available at no cost, so this resolved without money. (The alternative was paying for a plan; nothing
+   else about the sequence changes.) *Precondition, met before publishing: the history had to be fit to
+   publish — a full secret scan over the tree and all 307 history commits came back clean.*
 2. **Create the `atlas-admins` team** in `HuGR-Labs` — **visible** (not secret: GitHub will not resolve a
    secret team in CODEOWNERS) and holding **write** access on the repo. `gh api orgs/HuGR-Labs/teams`
-   currently returns `[]`. Add the ratifying humans as members. **Note what this moves, rather than
+   still returns `[]`. Add the ratifying humans as members. **Note what this moves, rather than
    removes: the root of trust becomes "who may change team membership", i.e. the org owners.** The file
    never was the root.
-3. **Widen CODEOWNERS beyond `policy.json` — this is a gap in the plan as previously written.** Owning only
+3. **Widen CODEOWNERS beyond `policy.json`** — **DONE 2026-08-02**, and it was a gap in the plan as
+   originally written. Owning only
    `/.atlas/policy.json` is defeated by two ordinary PRs: the first edits `CODEOWNERS` itself (no owner
    ⇒ no review required), the second edits the policy freely. The same holds for any workflow that can
    commit. So the file must own **itself** and the CI that enforces it:
@@ -69,9 +75,41 @@ skipping any one leaves the lock inert in exactly the way it is inert today.
    - **Do not allow bypassing the above settings — apply to administrators too.** Without this the whole
      sequence is decorative: any repo admin pushes straight to `master`.
 5. **Verify mechanically, not by reading the settings page.** The lock is real only when both of these hold:
-   - `gh api repos/HuGR-Labs/atlas/codeowners/errors` returns **no** errors (today: `Unknown owner on line 7`).
-   - `gh api repos/HuGR-Labs/atlas/branches/master/protection` returns **200** (today: `403`) with
+   - `gh api repos/HuGR-Labs/atlas/codeowners/errors --jq '.errors'` returns `[]`. **Measured 2026-08-02:**
+     one `Unknown owner` on the `policy.json` line — the endpoint reads the default branch, which does not
+     yet carry the two widened rules, so expect **three** such errors once this lands and until step 2 runs.
+   - `gh api repos/HuGR-Labs/atlas/branches/master/protection` returns **200** with
      `required_pull_request_reviews.require_code_owner_reviews == true` **and** `enforce_admins.enabled == true`.
+     **Measured 2026-08-02:** `404 — Branch not protected`. The change from the pre-publication `403 — Upgrade
+     to GitHub Pro…` to a plain `404` is the evidence that step 1 unblocked this: the feature is now
+     available and simply unused, rather than forbidden.
+
+### The two commands (steps 2 and 4, verbatim)
+
+Both are **org/repo settings** writes; neither is reachable from a commit.
+
+```sh
+# step 2 — the team, visible (`closed`, not `secret`), then write access on the repo
+gh api -X POST orgs/HuGR-Labs/teams -f name=atlas-admins -f privacy=closed \
+  -f description='Ratifies governance policy, CODEOWNERS and CI workflows for atlas'
+gh api -X PUT orgs/HuGR-Labs/teams/atlas-admins/repos/HuGR-Labs/atlas -f permission=push
+
+# step 4 — protect master, applying to admins (`enforce_admins=true` is the load-bearing field)
+gh api -X PUT repos/HuGR-Labs/atlas/branches/master/protection --input - <<'JSON'
+{
+  "required_status_checks": null,
+  "enforce_admins": true,
+  "required_pull_request_reviews": {
+    "required_approving_review_count": 1,
+    "require_code_owner_reviews": true,
+    "dismiss_stale_reviews": true
+  },
+  "restrictions": null,
+  "allow_force_pushes": false,
+  "allow_deletions": false
+}
+JSON
+```
 
 **What still would not be true afterwards.** The lock governs how the file CHANGES IN THIS REPO. It does not
 authenticate the actor the policy names (`docs/reference/atlas-architecture.md` §3.3 / ARCH-12 — `ATLAS_ACTOR`
