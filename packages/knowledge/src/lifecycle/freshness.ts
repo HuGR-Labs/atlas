@@ -1,7 +1,11 @@
 // @atlas/knowledge — src/freshness.ts  (WP-4.10-a.KNOW · knowledge drift-verdict binding site)
 //
-// KNOW-3 (atlas-knowledge:53): the drift oracle is the BLAKE3 `subtreeHash`, NOT a line-range — a
-// reformat/rename/import-above stays FRESH; a real change to the cited unit DRIFTs. This module is the
+// KNOW-3 (atlas-knowledge:53): the drift oracle is the BLAKE3 `subtreeHash`, NOT a line-range — an
+// import added above the cited unit, or an unrelated rename elsewhere, stays FRESH; a real change to the
+// cited unit DRIFTs. KNOW-3 was AMENDED 2026-08-02: a REFORMAT of the cited unit also drifts (no
+// normalizer exists), and a rename OF the cited symbol drifts by a stronger mechanism — the name is in
+// the anchor key, so the anchor stops resolving and fails closed. That leg was never delivered in any
+// revision. See `@atlas/grounding` `src/subtree.ts` for why the byte-exact oracle is deliberate. This module is the
 // KNOWLEDGE-LAYER BINDING that wires a Knowledge fact's freshness verdict to GROUND's frozen
 // drift-oracle (`@atlas/grounding` `DriftApi.driftDetect`, WP-4.10-a.GROUND). It CONSUMES the oracle;
 // it does NOT redefine it, and it computes NO hash itself (the subtreeHash compute lives in GROUND /

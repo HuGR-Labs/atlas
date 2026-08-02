@@ -35,8 +35,8 @@ Candidate     = a proposed, un-ratified fact in staging (from the explorer)
 claim, no verdict). `predicate` adds a checkable `check` + mechanical `HOLDS/BROKEN/NA`. Both are available
 from day-one; the store still operates on advisory alone when no evaluator is wired (KNOW-9).
 
-**Grounding** anchors a fact to a structural unit by the BLAKE3 hash of its normalized subtree — never to
-line numbers. Full shape and the drift-oracle rules are in [spec §3.1](../spec/atlas.md) (the grounding
+**Grounding** anchors a fact to a structural unit by the BLAKE3 hash of its subtree, taken over the unit's
+raw source slice (NFC-normalized only) — never to line numbers. Full shape and the drift-oracle rules are in [spec §3.1](../spec/atlas.md) (the grounding
 reference). A `Grounding` is real iff it has ≥1 entry, each with a non-empty `subtreeHash`.
 
 **Structure.** `Territory = { path, owner, tier, files[], regions?, blastRadius }`; `Pack` is a territory's
@@ -64,7 +64,7 @@ Each is falsifiable and maps to a spec axiom. `MUST` / `MUST NOT` are normative.
 |---|---|---|---|
 | **KNOW-1** Truth-gate | A fact never self-declares true. | → see spec **A-1**; enforced in atlas-knowledge (the served-`HOLDS` gate; the structural mechanism is KNOW-3). | A-1 |
 | **KNOW-2** Fail-closed write | Ungrounded facts don't enter. | → see spec **A-2**; enforced by `atlas-emit` (atlas-tools TOOLS-7). | A-2 |
-| **KNOW-3** Structural anchor | Grounding is a hash, not a line-range. | The drift oracle MUST be the BLAKE3 `subtreeHash`; a reformat/rename/import-above MUST stay `FRESH`; a real change to the cited unit MUST `DRIFT`. | A-1, §3.1 |
+| **KNOW-3** Structural anchor ⚠️ **AMENDED 2026-08-02 — OWNER RATIFICATION REQUIRED** | Grounding is a hash, not a line-range. | The drift oracle MUST be the BLAKE3 `subtreeHash`; an import or license header added **above** the cited unit, and an unrelated rename **elsewhere**, MUST stay `FRESH`; a real change to the cited unit MUST `DRIFT`. **A reformat OF the cited unit DRIFTS** (the oracle hashes raw bytes — accepted false alarm), and **a rename OF the cited symbol DRIFTS** (the name is in the anchor key `<parent>::<kind>:<ordinal>[:<name>]`, so the anchor becomes unresolvable and fails closed; there is no rename-tracking). *Was: "a reformat/rename/import-above MUST stay `FRESH`" — only the import-above leg was ever delivered.* | A-1, §3.1 |
 | **KNOW-4** Upsert; git is the history | Current, not a landfill — no redundant in-store copy. | A write MUST be an upsert: identical fact idempotent; an advisory subject's claims **set-union**. A *changed* **advisory** fact is **edited in place** — the Atlas is git-native, so its prior version is preserved by the repo's own history (rewind a PR ⇒ the Atlas rewinds). A *changed* **predicate** (same `check`, new evidence) **supersedes**; a *different* `check` is a new node (identity includes its `check` — KNOW-15). A territory query MUST return one current node per `(anchor, slot[, check])`. | A-12 |
 | **KNOW-5** Drift splits mechanical vs semantic | Only *semantic* rot blocks; a moved anchor doesn't. | At reconcile the `DRIFTED` subset MUST be split: **mechanical** (the anchor moved but the claim still re-derives at the new `@sha`) is **auto-re-grounded, no human, no block**; **semantic** (the claim no longer re-derives) flips `BROKEN` and blocks (exit 2). Human re-author count MUST equal `|semantic|`, never `|DRIFTED|`, never `N`. (Tool surface: `atlas-reconcile` TOOLS-8/13.) | A-3, A-4 |
 | **KNOW-6** Empty & honest | Knowledge starts un-authored. | `atlas-init` output MUST carry zero invariants; every territory ships the `T2/advisory` default by construction. | A-5 |
@@ -200,8 +200,10 @@ bumps the contract version `cv`. Each slot binds to exactly one write template (
 
 One falsifiable check per invariant; each MUST fail if its invariant is violated.
 
-1. **Structural drift, not line drift.** A change to the cited unit ⇒ `DRIFTED`; a reformat / import-above
-   / unrelated rename ⇒ still `FRESH`. *(KNOW-1, KNOW-3)*
+1. **Structural drift, not line drift.** A change to the cited unit ⇒ `DRIFTED`; an import or license
+   header added **above** it, or an unrelated rename **elsewhere**, ⇒ still `FRESH`. A reformat OF the
+   cited unit ⇒ `DRIFTED`, and a rename OF the cited symbol ⇒ `DRIFTED` (anchor unresolvable).
+   *(KNOW-1, KNOW-3)*   <!-- AMENDED 2026-08-02 (HONESTY-TAPROOT) -->
 2. **Ungrounded reject.** `atlas-emit` of a node with no resolvable citation ⇒ `emitted:false`, nothing
    persisted. *(KNOW-2)*
 3. **Edit-over-append.** Emitting a *changed* fact about a known subject ⇒ the old node is superseded (not

@@ -16,7 +16,7 @@ id: WP-4.10-a.GROUND
 content_hash: <filled-at-freeze>
 title: subtreeHash local drift-oracle in the grounding gate
 intent: >
-  Make the grounding gate compute and read each entry's `subtreeHash` (via the kernel encoder seam) as the sole drift oracle — displayLines/line-ranges never anchor, ungrounded is never FRESH, unresolvable citations read DRIFTED without throwing, a real change drifts and a cosmetic edit does not. (non-authoritative handle)
+  Make the grounding gate compute and read each entry's `subtreeHash` (via the kernel encoder seam) as the sole drift oracle — displayLines/line-ranges never anchor, ungrounded is never FRESH, an unresolvable citation grounds the whole fact to nothing and reads DRIFTED without throwing, a real change drifts and an edit that does not touch the cited unit does not. (non-authoritative handle)
 source_reqs:                             # ptr+digest
   - source: ../req-grd.md#REQ-GROUND-1a  # ptr+digest
   - source: ../req-grd.md#REQ-GROUND-1b  # ptr+digest
@@ -77,7 +77,7 @@ id: WP-4.10-a.KNOW
 content_hash: <filled-at-freeze>
 title: knowledge drift oracle binds to the grounding subtreeHash
 intent: >
-  Bind the knowledge module's drift verdict to GROUND's subtreeHash oracle — cosmetic edits stay FRESH, a real change to the cited unit DRIFTs. Consumes the oracle; does not redefine it. (non-authoritative handle)
+  Bind the knowledge module's drift verdict to GROUND's subtreeHash oracle — an edit that does not touch the cited unit stays FRESH, a real change to it DRIFTs (as does a reformat of it, and a rename of it). Consumes the oracle; does not redefine it. (non-authoritative handle)
 source_reqs:                             # ptr+digest
   - source: ../req-knw.md#REQ-KNOW-3a  # ptr+digest
   - source: ../req-knw.md#REQ-KNOW-3b  # ptr+digest

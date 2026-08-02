@@ -34,10 +34,12 @@ import type { SubtreeHash } from '@atlas/contracts';
 export type SubtreeSeam = Encoder;
 
 export interface SubtreeApi {
-  /** BLAKE3 over the unit's normalized AST subtree — the drift oracle (branded `SubtreeHash`, from
-   *  contracts). Computed through the `Encoder` seam (GROUND-10). A semantically-irrelevant edit
-   *  (reformat, import added above, unrelated rename) leaves this byte-invariant; a real change to the
-   *  cited unit changes it (GROUND-5). (method-tags-grd:56)
+  /** BLAKE3 over the unit's source slice — the drift oracle (branded `SubtreeHash`, from contracts).
+   *  Computed through the `Encoder` seam (GROUND-10). An edit that does NOT TOUCH the cited unit (an
+   *  import or license header added above it, an unrelated rename elsewhere) leaves this byte-invariant;
+   *  a real change to the cited unit changes it (GROUND-5). A REFORMAT of the cited unit also changes it
+   *  — there is no normalizer, and REQ-GROUND-5b was amended 2026-08-02 to say so. See this file's header
+   *  for why that is deliberate. (method-tags-grd:56)
    *
    *  [FLAG — `unit` arg, downward-owned] The reference names `subtreeHash(unit)` without a concrete
    *  arg type; the "unit" is a structural node whose concrete `StructuralNode` shape is owned by the

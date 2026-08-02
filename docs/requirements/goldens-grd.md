@@ -27,7 +27,7 @@ Concrete fixture universe reused across the block (structural nodes hashed via t
 
 | fixture | subtreeHash / rState | on edit | notes |
 |---|---|---|---|
-| `U_arr` = `billing.ts › computeArr()` | `sh-arr-01` | real change `42→43` ⇒ `sh-arr-02`; reformat / import-above / unrelated-rename ⇒ **still `sh-arr-01`** (structural, normalize-invariant) | cited unit of `F_arr` |
+| `U_arr` = `billing.ts › computeArr()` | `sh-arr-01` | import-above / license-header-above / unrelated-rename-elsewhere ⇒ **still `sh-arr-01`** (the unit's own bytes are untouched); real change `42→43` ⇒ `sh-arr-02`; **whitespace reformat OF the unit ⇒ `sh-arr-0R` — it MOVES** <!-- AMENDED 2026-08-02 with REQ-GROUND-5b: the oracle hashes the raw source slice, NFC only; there is no normalize step --> | cited unit of `F_arr` |
 | `E_arr` (grounding entry on `U_arr`) | anchor.subtreeHash `sh-arr-01`, displayLines `[40-52]`, source `trusted` | import-above shifts displayLines `[40-52]→[44-56]`, subtreeHash **unchanged** | — |
 | `E_lronly` | anchor: line-range `[40-52]` only, **no** subtreeHash | — | invalid anchor |
 | `E_empty` | anchor.subtreeHash `""` (empty), displayLines `[40-52]` | — | ungrounded entry |
@@ -56,10 +56,20 @@ Verdict candidates (`Status × grounded × Freshness`) for the gate laws (GROUND
 
 ### SCN-GROUND-1a-1 — drift keys off subtreeHash alone   (happy)
 source: REQ-GROUND-1a
-Given `E_arr` (anchor.subtreeHash `sh-arr-01`); run A recomputes the cited unit after a **whitespace reformat** (source bytes change, but `normalize(subtree)=sh-arr-01` is unchanged), run B recomputes it after a real edit `42→43` (`sh-arr-02`)
+
+> **AMENDED 2026-08-02 (HONESTY-TAPROOT).** Run A was previously "a **whitespace reformat** (source bytes
+> change, but `normalize(subtree)=sh-arr-01` is unchanged)", and its tooth read *breaks-on "the oracle is
+> mutated to the raw byte-hash of the source text … a false alarm the subtreeHash oracle must not raise"*.
+> **The shipped oracle IS the hash of the unit's raw source slice** (NFC-normalized only) — so that tooth
+> named the delivered product as its failure mode, and the scenario could only ever pass on a fixture that
+> held the hash constant by hand. Run A is now an **import added above the unit**: it shifts the unit's LINES
+> without touching its bytes, which is the real content of "the verdict tracks `subtreeHash` and nothing
+> else" and is delivered (measured `FRESH`). The reformat case is pinned as `DRIFTED` under REQ-GROUND-5b.
+
+Given `E_arr` (anchor.subtreeHash `sh-arr-01`); run A recomputes the cited unit after an **import added above it** (the unit's own bytes and minted key untouched, its line-range shifted), run B recomputes it after a real edit `42→43` (`sh-arr-02`)
 When `driftDetect(E_arr)` reads its oracle in each run
 Then run A is `FRESH` and run B is `DRIFTED` — the verdict tracks **`subtreeHash`** and nothing else
-teeth: breaks-on "the oracle is mutated to the raw byte-hash of the source text — run A (subtreeHash-equal but byte-reformatted) flips to `DRIFTED`, a false alarm the subtreeHash oracle must not raise"
+teeth: breaks-on "the oracle folds the unit's line-range — run A (bytes-equal but shifted down the file) flips to `DRIFTED`, the false alarm the subtreeHash oracle exists to suppress"
 gen: conformance   # differential vs `grounding/ref/anchor.ts` (`resolveAnchor(entry)=entry.anchor.subtreeHash`)
 
 ### REQ-GROUND-1b — displayLines excluded from drift   (guard)
@@ -186,11 +196,11 @@ gen: residue   # **DEFINE dependency**: the concrete A-1 threshold is an OPEN re
 
 ### SCN-GROUND-5a-1 — a real change to the cited unit drifts it   (happy)
 source: REQ-GROUND-5a
-Given `F_arr` anchored to `U_arr` (subtreeHash `sh-arr-01`); the cited unit's returned constant is changed `42→43`, recomputing the normalized subtree to `sh-arr-02`
+Given `F_arr` anchored to `U_arr` (subtreeHash `sh-arr-01`); the cited unit's returned constant is changed `42→43`, recomputing its subtree hash to `sh-arr-02`
 When `driftDetect(F_arr)` runs
 Then the verdict is `DRIFTED` — a real change is caught
-teeth: breaks-on "the normalizer over-normalizes and erases the `42→43` change — a genuinely changed unit stays `FRESH` (a false-negative that hides a stale fact)"
-gen: conformance   # differential vs the reference normalizer/`driftDetect` (`grounding/ref/anchor.ts`)
+teeth: breaks-on "a normalizer is landed on the oracle and erases the `42→43` change — a genuinely changed unit stays `FRESH` (a false-negative that hides a stale fact)"
+gen: conformance   # differential vs the reference oracle/`driftDetect` (`grounding/ref/anchor.ts`)   <!-- AMENDED 2026-08-02: there is no reference normalizer; see method-tags-grd.md#INV-GROUND-5 -->
 
 ### REQ-GROUND-5b — an edit that does not touch the cited unit never drifts   (guard)
 
@@ -528,7 +538,7 @@ Independent held-out fixture universe (a parallel data family — different anch
 
 | fixture | subtreeHash / rState | on edit | notes |
 |---|---|---|---|
-| `U_tax` = `pricing.ts › computeVat()` | `sh-tax-01` | real change `20→21` ⇒ `sh-tax-02`; comment-reindent / license-header-above / unrelated-rename ⇒ **still `sh-tax-01`** (structural, normalize-invariant) | cited unit of `F_tax` |
+| `U_tax` = `pricing.ts › computeVat()` | `sh-tax-01` | license-header-above / unrelated-rename-elsewhere ⇒ **still `sh-tax-01`** (the unit's own bytes are untouched); real change `20→21` ⇒ `sh-tax-02`; **comment-reindent INSIDE the unit ⇒ `sh-tax-0R` — it MOVES** <!-- AMENDED 2026-08-02 with REQ-GROUND-5b --> | cited unit of `F_tax` |
 | `E_tax` (grounding entry on `U_tax`) | anchor.subtreeHash `sh-tax-01`, displayLines `[88-96]`, source `trusted` | license-header-above shifts displayLines `[88-96]→[95-103]`, subtreeHash **unchanged** | — |
 | `E_lronly2` | anchor: line-range `[88-96]` only, **no** subtreeHash | — | invalid anchor |
 | `E_empty2` | anchor.subtreeHash `""` (empty), displayLines `[88-96]` | — | ungrounded entry |
@@ -554,10 +564,10 @@ Held-out gate candidates (`Status × grounded × Freshness`) for GROUND-4/7/8 le
 
 ### SCN-GROUND-1a-2 — drift keys off subtreeHash alone (held-out)   (happy)
 source: REQ-GROUND-1a
-Given `E_tax` (anchor.subtreeHash `sh-tax-01`); run A recomputes the cited unit after a **comment-reindent** (source bytes change, but `normalize(subtree)=sh-tax-01` is unchanged), run B recomputes it after a real VAT edit `20→21` (`sh-tax-02`)
+Given `E_tax` (anchor.subtreeHash `sh-tax-01`); run A recomputes the cited unit after a **license header added above it** (the unit's own bytes and minted key untouched, its line-range shifted), run B recomputes it after a real VAT edit `20→21` (`sh-tax-02`)   <!-- AMENDED 2026-08-02 with SCN-GROUND-1a-1: run A was a comment-reindent, which MOVES the raw-source-slice hash; the old tooth named the shipped oracle as its failure mode -->
 When `driftDetect(E_tax)` reads its oracle in each run
 Then run A is `FRESH` and run B is `DRIFTED` — the verdict tracks **`subtreeHash`** and nothing else
-teeth: breaks-on "the oracle is mutated to the raw byte-hash of the source text — run A (subtreeHash-equal but comment-reindented) flips to `DRIFTED`, a false alarm the subtreeHash oracle must not raise"
+teeth: breaks-on "the oracle folds the unit's line-range — run A (bytes-equal but shifted down the file) flips to `DRIFTED`, the false alarm the subtreeHash oracle exists to suppress"
 held_out: true
 gen: conformance   # independent-data leg of SCN-GROUND-1a-1 (differential vs `grounding/ref/anchor.ts`)
 
@@ -626,12 +636,12 @@ gen: conformance   # independent corpus (disjoint seed + corner class) — diffe
 
 ### SCN-GROUND-5a-2 — a real change to the cited unit drifts it (held-out)   (happy)
 source: REQ-GROUND-5a
-Given `F_tax` anchored to `U_tax` (subtreeHash `sh-tax-01`); the cited unit's VAT rate constant is changed `20→21`, recomputing the normalized subtree to `sh-tax-02`
+Given `F_tax` anchored to `U_tax` (subtreeHash `sh-tax-01`); the cited unit's VAT rate constant is changed `20→21`, recomputing its subtree hash to `sh-tax-02`
 When `driftDetect(F_tax)` runs
 Then the verdict is `DRIFTED` — a real change is caught
-teeth: breaks-on "the normalizer over-normalizes and erases the `20→21` change — a genuinely changed unit stays `FRESH` (a false-negative that hides a stale fact)"
+teeth: breaks-on "a normalizer is landed on the oracle and erases the `20→21` change — a genuinely changed unit stays `FRESH` (a false-negative that hides a stale fact)"
 held_out: true
-gen: conformance   # independent-data leg of SCN-GROUND-5a-1 (differential vs the reference normalizer/`driftDetect`)
+gen: conformance   # independent-data leg of SCN-GROUND-5a-1 (differential vs the reference oracle/`driftDetect`)
 
 ### SCN-GROUND-5b-2 — comment-reindent + license-above + unrelated-rename stay FRESH (held-out)   (guard)
 source: REQ-GROUND-5b

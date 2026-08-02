@@ -32,9 +32,19 @@ anti-rot: `knowledge/ref/emit.ts` (the fail-closed admitter) is the mock in atla
 ### INV-KNOW-3
 method-tag: reference-model
 fspec: —
-up-property: "structural drift oracle: freshness is a function of the BLAKE3 `subtreeHash` of the cited unit alone — a reformat / rename / import-above (subtreeHash unchanged under normalize) stays `FRESH`; a real change (subtreeHash changes) `DRIFT`s; line numbers never enter identity or freshness"
-down-model: "reference `freshness(fact,tree) = subtreeHash(normalize(anchoredUnit)) == fact.grounding.subtreeHash ? FRESH : DRIFTED`; the oracle is a differential corpus {cosmetic-edit ⇒ FRESH, semantic-edit ⇒ DRIFTED}. Not exhaustive — the edit space is open, so a corpus/reference-model, not a finite enumeration."
-anti-rot: shares the grounding subtreeHash normalizer (`grounding/ref/subtree.ts`) as the mock; a line-range or un-normalized anchor drifts on cosmetic edits and fails the corpus.
+up-property: "structural drift oracle: freshness is a function of the BLAKE3 `subtreeHash` of the cited unit alone — an import or license header added ABOVE the unit, and an unrelated rename elsewhere, stay `FRESH`; a real change `DRIFT`s, and so do a reformat OF the cited unit and a rename OF the cited symbol; line numbers never enter identity or freshness"
+down-model: "reference `freshness(fact,tree) = subtreeHash(anchoredUnit) == fact.grounding.subtreeHash ? FRESH : DRIFTED`, where `subtreeHash` is taken over the unit's RAW SOURCE SLICE (NFC-normalized only) and an unresolvable anchor key is `DRIFTED` (fail-closed); the oracle is a differential corpus {non-touching-edit ⇒ FRESH, in-unit-edit ∪ cited-symbol-rename ⇒ DRIFTED}. Not exhaustive — the edit space is open, so a corpus/reference-model, not a finite enumeration."
+anti-rot: shares the grounding subtreeHash oracle (`grounding/ref/subtree.ts`) as the mock; a line-range anchor drifts on an edit ABOVE the unit and fails the FRESH leg, and an oracle that erases in-unit bytes goes blind to a one-space change inside a template literal and fails the DRIFTED leg.
+
+> **AMENDED 2026-08-02 (HONESTY-TAPROOT).** The up-property claimed "a reformat / **rename** / import-above
+> … stays `FRESH`", and the down-model invoked `normalize(anchoredUnit)`. **There is no `normalize` step**
+> (see the INV-GROUND-5 amendment in `method-tags-grd.md` — the reference normalizer was never built), and
+> two of the three FRESH legs are not delivered. Measured through the real `foldAstUnits → build →
+> driftDetect` chain: import-above `FRESH`; **reformat of the cited unit `DRIFTED`**; **rename of the cited
+> symbol `DRIFTED`, with the anchor key GONE** — the name is part of the key
+> (`<parent>::<kind>:<ordinal>[:<name>]`), so a rename retires the anchor and the fact fails closed rather
+> than re-binding. KNOW-3's rename leg is a strictly stronger claim than GROUND-5b's "unrelated rename
+> elsewhere" and was never true; it is corrected here for the first time.
 
 ### INV-KNOW-4
 method-tag: exhaustive

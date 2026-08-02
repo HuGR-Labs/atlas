@@ -30,9 +30,10 @@ re-derived: the same move kills hallucination *and* the token bill.
 **rots** — the docs drift from the code, nobody trusts it, so nobody reads it, so it dies. The Atlas
 defeats rot with one non-negotiable rule: **a fact never self-declares true; its only claim to truth is a
 citation that still re-checks against the code.** And the citation anchors to a *structural unit* (a
-symbol/block/file, by the hash of its normalized subtree), **never to line numbers** — because a reformat
-or an import added above would drift a fact whose code never changed, a false `BROKEN` that destroys
-trust. Three consequences fall out: forgetting is *earned* (the code changed under the fact, not a guessed
+symbol/block/file, by the hash of its subtree), **never to line numbers** — because an import added above
+it, or an unrelated rename elsewhere, would drift a fact whose code never changed, a false `BROKEN` that
+destroys trust. (A reformat OF the cited unit *does* drift it: the hash is over raw bytes and there is no
+normalization step. See [grounding](./grounding.md) for why that trade is taken deliberately.) Three consequences fall out: forgetting is *earned* (the code changed under the fact, not a guessed
 time-constant); the gate is *fail-closed* (no grounding ⇒ an honest `NA`, never a false "true"); and trust
 is *auditable* (the receipt travels with the fact). This is why Knowledge can be a foundation — it is the
 one layer structurally incapable of confidently lying.

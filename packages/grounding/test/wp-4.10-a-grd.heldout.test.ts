@@ -43,12 +43,15 @@ const grounding = (...entries: GroundingEntry[]): Grounding => ({ entries });
 // U_tax = billing.ts › tax() — subtreeHash `sh-tax-01`; a real VAT edit 20→21 ⇒ `sh-tax-02`.
 const QP_TAX = 'billing.ts#tax';
 const g_tax = grounding(entry(QP_TAX, 'sh-tax-01', '88-96'));
-const src_same = axesWith([node(QP_TAX, 'sh-tax-01')]); // comment-reindent / license-above / rename
+const src_same = axesWith([node(QP_TAX, 'sh-tax-01')]); // license-above / unrelated-rename-elsewhere: U_tax's own bytes untouched
 const src_edit = axesWith([node(QP_TAX, 'sh-tax-02')]); // real VAT change 20→21
 
 describe('WP-4.10-a.GROUND — HELD-OUT (-2) pinned-verb goldens against existing src', () => {
-  it('SCN-GROUND-1a-2: drift keys off subtreeHash alone (comment-reindent ⇒ FRESH, VAT edit ⇒ DRIFTED)', () => {
-    expect(driftDetect(g_tax, src_same)).toBe('FRESH');   // run A — comment-reindent, subtreeHash unchanged
+  // AMENDED 2026-08-02 (HONESTY-TAPROOT): run A was labelled "comment-reindent", which MOVES the
+  // raw-source-slice hash — the label contradicted the fixture, which held sh-tax-01 constant by hand.
+  // Run A is now a license header added ABOVE the unit, which genuinely leaves its bytes untouched.
+  it('SCN-GROUND-1a-2 [AMENDED]: drift keys off subtreeHash alone (license-above ⇒ FRESH, VAT edit ⇒ DRIFTED)', () => {
+    expect(driftDetect(g_tax, src_same)).toBe('FRESH');   // run A — license header above, subtreeHash unchanged
     expect(driftDetect(g_tax, src_edit)).toBe('DRIFTED');  // run B — real VAT edit 20→21
   });
 
@@ -84,13 +87,18 @@ describe('WP-4.10-a.GROUND — HELD-OUT (-2) pinned-verb goldens against existin
     expect(driftDetect(g_tax, src_edit)).toBe('DRIFTED');
   });
 
-  it('SCN-GROUND-5b-2: comment-reindent + license-above + unrelated-rename all stay FRESH (0 false drift)', () => {
-    const reindent = axesWith([node(QP_TAX, 'sh-tax-01')]);
+  // AMENDED 2026-08-02 (HONESTY-TAPROOT) — the `reindent` leg declared BY HAND that an in-unit comment
+  // reindent leaves the hash at sh-tax-01, which is false: the oracle hashes the unit's raw source slice.
+  // goldens-grd.md SCN-GROUND-5b-2 was amended at f2a8659; this transcription had been left contradicting it.
+  it('SCN-GROUND-5b-2 [AMENDED]: edits that do not TOUCH the cited unit stay FRESH; an in-unit reindent DRIFTS', () => {
     const licenseAbove = axesWith([node(QP_TAX, 'sh-tax-01'), node('LICENSE.md#hdr', 'sh-lic')]);
     const unrelatedRename = axesWith([node(QP_TAX, 'sh-tax-01'), node('util.ts#renamed', 'sh-util-2')]);
-    for (const src of [reindent, licenseAbove, unrelatedRename]) {
+    for (const src of [licenseAbove, unrelatedRename]) {
       expect(driftDetect(g_tax, src)).toBe('FRESH');
     }
+    // teeth (breaks-on "an in-unit comment reindent reads FRESH — a normalizer landed"):
+    const reindented = axesWith([node(QP_TAX, 'sh-tax-0R')]);
+    expect(driftDetect(g_tax, reindented)).toBe('DRIFTED');
   });
 
   it('SCN-GROUND-10a-2: every subtreeHash follows the swapped seam (distinct FNV-style stub)', () => {

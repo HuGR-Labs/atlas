@@ -40,8 +40,8 @@ truth becomes false shared belief). **But they are parts of one Atlas, not two s
 | **Knowledge** | **shared, grounded, project-level** truth about the codebase — the Atlas. Evolves by edit/supersede. |
 | **Memory** | **scoped, per-member** craft/experience — a *separate* layer, out of this spec. Never merged into Knowledge. |
 | **Territory** | a region of the repo (directory/module granularity) with an owner, a criticality tier, and a day-one blast radius. |
-| **Grounding** | the content-addressed receipt of a fact: a `StructRef` anchored by the BLAKE3 `subtreeHash` of the cited code's normalized AST subtree (§3.1). Line-ranges are display-only, never the drift oracle. |
-| **subtreeHash** | BLAKE3 hash of the cited structural unit's **normalized** AST subtree — the drift oracle (§3.1). A semantically-irrelevant edit MUST NOT change it; a real change to the unit MUST. |
+| **Grounding** | the content-addressed receipt of a fact: a `StructRef` anchored by the BLAKE3 `subtreeHash` of the cited code's AST subtree (§3.1). Line-ranges are display-only, never the drift oracle. |
+| **subtreeHash** | BLAKE3 hash of the cited structural unit's AST subtree, taken over the unit's **raw source slice** (NFC-normalized only) — the drift oracle (§3.1). An edit that does not TOUCH the unit MUST NOT change it; a real change to the unit MUST. A reformat OF the unit DOES change it (§3.1). |
 | **Fact / node** | a unit of knowledge. Two families: **advisory** (a grounded claim) and **predicate** (a checkable statement with a `HOLDS/BROKEN/NA` verdict). |
 | **Tier** | criticality: `T0` (must-be-right), `T1` (load-bearing), `T2` (default). |
 | **Freshness** | `FRESH` (grounding re-checks) or `DRIFTED` (source moved). |
@@ -56,25 +56,33 @@ Types below are the seam. Identity is **content-addressed**; grounding and statu
 
 ### 3.1 Grounding — the trust primitive (structural anchor, not line-ranges)
 
-Grounding anchors a fact to a **structural unit** of the code, identified by the hash of its normalized
-subtree — **not** to line numbers. Line numbers are fragile: an import added above, a reformat, or an
-unrelated rename shifts them and drifts a fact whose code did not change (a false `BROKEN`). The anchor is
-therefore a content-addressed **structural ref**, and line-ranges are demoted to display metadata.
+Grounding anchors a fact to a **structural unit** of the code, identified by the hash of its subtree —
+**not** to line numbers. Line numbers are fragile: an import added above, or an unrelated rename elsewhere,
+shifts them and would drift a fact whose code did not change (a false `BROKEN`). The anchor is therefore a
+content-addressed **structural ref**, and line-ranges are demoted to display metadata.
 
 ```
 Grounding      = { entries: GroundingEntry[] }          // sorted by anchor
 GroundingEntry = {
-  anchor:     StructRef,   // the drift oracle — a content hash of the normalized structural unit
+  anchor:     StructRef,   // the drift oracle — a content hash of the structural unit's raw source slice
   path:       string,      // repo-relative, for humans/navigation
   displayLines?: string,   // OPTIONAL navigation hint ("42-50") — NEVER the drift oracle
 }
 StructRef = { kind:'symbol'|'block'|'file', qualifiedPath: string, subtreeHash: string }
 ```
 
-- **The drift oracle is `subtreeHash`**, computed over the unit's **normalized** AST subtree (whitespace,
-  comments-if-configured, and De-Bruijn/param-name/lifetime noise erased — reuse v1's `SymRef` /
-  `normalizedSignature`). A semantically-irrelevant edit MUST NOT drift a fact; a real change to the cited
-  unit MUST.
+- **The drift oracle is `subtreeHash`**, computed over the cited unit's **raw source slice**
+  (`src.slice(startIndex, endIndex)`), NFC-normalized only by `canonicalForm`. An edit that does not TOUCH
+  the cited unit MUST NOT drift a fact; a real change to the cited unit MUST.
+  - ⚠️ **AMENDED 2026-08-02 (HONESTY-TAPROOT) — this bullet previously specified a normalizer that was
+    never built.** It read: *"computed over the unit's **normalized** AST subtree (whitespace,
+    comments-if-configured, and De-Bruijn/param-name/lifetime noise erased — reuse v1's `SymRef` /
+    `normalizedSignature`)"*. No such normalization exists in the product; the hash is over raw bytes. The
+    consequence, stated plainly rather than left implicit: **a reformat OF the cited unit DRIFTS the fact.**
+    That is a false alarm, and it is ACCEPTED. Any cheap normalization over raw text also erases whitespace
+    that is SEMANTIC in TS/TSX — string, template and regex literals, JSX text, ASI — and the trade is
+    asymmetric: a false alarm costs one re-ground, a false negative lets the truth gate serve `HOLDS` on a
+    stale fact. Delivering the normalizer is REFUSED, not deferred. See `req-grd.md#REQ-GROUND-5b`.
 - **Hash function: BLAKE3** (`[Δ Orchestra]`, replacing v1's SHA-256), chosen because it is *internally a
   Merkle tree* — the same hash yields the hierarchical, incrementally-verifiable index of §3.5. Behind the
   `@orchestra/kernel` encoder seam, so it is swappable; correctness does not depend on the choice,
@@ -365,8 +373,11 @@ claim fools us:
 
 Each maps to an invariant; each is a test that MUST fail if the invariant is violated.
 
-1. **Structural drift, not line drift.** A real change to the cited structural unit ⇒ `DRIFTED`; a
-   reformat, an import added *above* it, or an unrelated rename ⇒ still `FRESH`. *(A-1, §3.1)*
+1. **Structural drift, not line drift.** A real change to the cited structural unit ⇒ `DRIFTED`; an import
+   or license header added *above* it, or an unrelated rename *elsewhere*, ⇒ still `FRESH`. A reformat OF
+   the cited unit ⇒ `DRIFTED` (the oracle hashes raw bytes — an accepted false alarm, §3.1). *(A-1, §3.1)*
+   <!-- AMENDED 2026-08-02 (HONESTY-TAPROOT): "a reformat … ⇒ still FRESH" was never delivered; the
+        acceptance test as written could only pass on a fixture that held the hash constant by hand. -->
 2. **Ungrounded reject.** `atlas-emit` of a node with no resolvable citation ⇒ `emitted:false`, nothing
    persisted. *(A-2)*
 3. **Drift blocks the merge.** A merge that drifts a fact ⇒ `atlas-reconcile` reports `BROKEN` non-empty ⇒

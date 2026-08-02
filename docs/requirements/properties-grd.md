@@ -37,7 +37,8 @@ law:         ∀ entry E ∈ StructRef. resolveAnchor(E) ≡ E.anchor.subtreeHas
 arbitrary:   StructRef entries {random subtreeHash, random displayLines, source}; a displayLines-only mutation class (line-shift, range-widen); a subtreeHash mutation class; line-range-only anchors (no subtreeHash)
 covers_reqs: [ req-grd.md#REQ-GROUND-1a, req-grd.md#REQ-GROUND-1b, req-grd.md#REQ-GROUND-1c ]   # ptr+digest
 witness:     [ SCN-GROUND-1a-1, SCN-GROUND-1b-1, SCN-GROUND-1c-1 ]   # goldens-grd.md
-teeth:       breaks-on "the oracle is mutated to fold displayLines / the raw byte-hash — the single witness is one line-shift, but the property flips DRIFTED across the whole displayLines-only mutation class (any shift the byte-oracle mis-drifts)"
+teeth:       breaks-on "the oracle is mutated to fold displayLines — the single witness is one line-shift, but the property flips DRIFTED across the whole displayLines-only mutation class"
+<!-- Reviewed under the 2026-08-02 AMENDED wave (HONESTY-TAPROOT) and UNAFFECTED: this law is about displayLines exclusion and line-range-only rejection, both delivered. Only SCN-GROUND-1a-1's witness EDIT changed (whitespace reformat → import-above); the law did not. The stale "/ the raw byte-hash" fragment is dropped, because the oracle IS a byte-hash of the unit's raw slice — that is the design, not a mutant. -->
 
 ### PROP-GROUND-2 — real-grounding predicate
 inv:         INV-GROUND-2
@@ -52,13 +53,13 @@ teeth:       breaks-on "the `every` conjunct is weakened to `some` (AND→OR) �
 ### PROP-GROUND-3 — fail-closed, total resolution
 inv:         INV-GROUND-3
 source:      method-tags-grd.md#INV-GROUND-3                    # ptr+digest
-law:         ∀ citation c (arbitrary / malformed / absent). c unresolvable ⇒ c ∉ ground(S ∪ {c})   (dropped, never retained)
+law:         ∀ citation c (arbitrary / malformed / absent). c unresolvable ⇒ ground(S ∪ {c}) ≡ ∅   (the WHOLE fact grounds to nothing — c is never retained, and the survivors S never stand in for it)   <!-- AMENDED 2026-08-02 (HONESTY-TAPROOT): was "c ∉ ground(S ∪ {c}) (dropped, never retained)", which is satisfied by returning S alone — fail-OPEN per fact. -->
              ∧ driftDetect(grounding-with-unresolvable) ≡ DRIFTED   (fail-closed, never FRESH)
              ∧ ¬throws(ground(c)) ∧ ¬throws(driftDetect(c))   (total — 0 exceptions)
 arbitrary:   corner-biased fuzz stream of citations — arbitrary strings, malformed StructRefs, deleted units, absent paths, empty/nested; both entry points invoked on each
 covers_reqs: [ req-grd.md#REQ-GROUND-3a, req-grd.md#REQ-GROUND-3b, req-grd.md#REQ-GROUND-3c ]   # ptr+digest
 witness:     [ SCN-GROUND-3a-1, SCN-GROUND-3b-1, SCN-GROUND-3c-1 ]
-teeth:       breaks-on "an absent-path citation raises instead of being dropped, or a gone unit reads FRESH — the property drives the whole fuzz corpus; a single hand golden cannot exhibit the one malformed input that throws"
+teeth:       breaks-on "an absent-path citation raises instead of collapsing the fact, or a gone unit reads FRESH — the property drives the whole fuzz corpus; a single hand golden cannot exhibit the one malformed input that throws" · breaks-on "the drop is per-ENTRY — a multi-citation fact losing one citation returns the survivors as a real, FRESH grounding"
 
 ### PROP-GROUND-4 — truth-gate monotone downgrade
 inv:         INV-GROUND-4
@@ -74,15 +75,23 @@ covers_reqs: [ req-grd.md#REQ-GROUND-4 ]   # ptr+digest
 witness:     [ SCN-GROUND-4-1, SCN-GROUND-4-2, SCN-GROUND-4-3 ]   # 4-3 = DEFINE-parametric on Θ_A1
 teeth:       breaks-on "the gate upgrades on re-gate (a downgraded NA laundered back to HOLDS), or is FRESH-blind (gates on grounded alone) — the property tests every (status,grounded,freshness) cell + every re-gate pair, killing the non-monotone / FRESH-blind mutant the two witnesses only sample"
 
-### PROP-GROUND-5 — semantic-drift-only classification
+### PROP-GROUND-5 — non-touching-edit classification
 inv:         INV-GROUND-5
 source:      method-tags-grd.md#INV-GROUND-5                    # ptr+digest
-law:         ∀ fact F on cited unit U, ∀ edit δ. driftDetect(F after δ) = FRESH  ⟺  normalize(subtree(U) after δ) = normalize(subtree(U) before δ)
-             i.e. a semantically-irrelevant edit (reformat / import-above / unrelated-rename) ⇒ FRESH (0 false drift); a real change to U ⇒ DRIFTED
-arbitrary:   two edit classes over U — an irrelevant class {whitespace reformat, import added above, unrelated rename, comment edit, param-name / De-Bruijn / lifetime noise} (all normalize-invariant) and a real-change class {returned-constant / body / signature edits}
+law:         ∀ fact F on cited unit U, ∀ edit δ. driftDetect(F after δ) = FRESH  ⟺  subtree(U) after δ = subtree(U) before δ  (byte-identical raw source slice, NFC only)  ∧  U's anchor key still resolves
+             i.e. an edit that does NOT TOUCH U (import / license header added above it, unrelated rename elsewhere) ⇒ FRESH; a real change to U ⇒ DRIFTED; a reformat OF U ⇒ DRIFTED (an accepted false alarm, NOT 0 false drift)
+arbitrary:   two edit classes over U — a NON-TOUCHING class {import added above, license header added above, unrelated rename elsewhere, unrelated file added/edited} (U's own bytes and key invariant) and a TOUCHING class {returned-constant / body / signature edits, whitespace reformat of U, comment reindent inside U, rename of U itself}
 covers_reqs: [ req-grd.md#REQ-GROUND-5a, req-grd.md#REQ-GROUND-5b ]   # ptr+digest
 witness:     [ SCN-GROUND-5a-1, SCN-GROUND-5b-1 ]
-teeth:       breaks-on "the normalizer leaks formatting / rename noise — the property exercises the whole irrelevant-edit class, catching the leak on inputs the three-edit witness never enumerates (and an over-normalizer that erases the real 42→43 change)"
+teeth:       breaks-on "the oracle folds U's line-range — the property exercises the whole non-touching class, catching the leak on inputs the two-edit witness never enumerates" · breaks-on "a normalizer lands and erases in-unit formatting — the TOUCHING class then reads FRESH on a reformat, and with it on a one-space change inside a template literal, where the erased whitespace is SEMANTIC"
+
+> **AMENDED 2026-08-02 (HONESTY-TAPROOT).** The law was stated over `normalize(subtree(U))`, and the
+> arbitrary put "whitespace reformat, comment edit, param-name / De-Bruijn / lifetime noise" in the
+> ⇒FRESH class as "all normalize-invariant". **The normalizer does not exist** (see the INV-GROUND-5
+> amendment in `method-tags-grd.md`), so none of those are normalize-invariant — every one of them moves the
+> hash and reads `DRIFTED`. The generator is therefore re-partitioned by the real predicate: does the edit
+> touch the cited unit's own bytes or its key? A PBT run over the old arbitrary would have failed on its
+> first reformat sample, which is why the property was only ever witnessed by hand-held fixtures.
 
 ### PROP-GROUND-6 — fail-closed write at emit
 inv:         INV-GROUND-6

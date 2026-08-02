@@ -44,11 +44,17 @@ teeth:       breaks-on "the admitter treats a partially-grounded node (some entr
 ### PROP-KNOW-3 — structural drift oracle is the subtreeHash
 inv:         INV-KNOW-3
 source:      method-tags-knw.md#INV-KNOW-3                   # ptr+digest
-law:         ∀ fact f, tree t. freshness(f,t) = (subtreeHash(normalize(anchoredUnit(f,t))) == f.grounding.subtreeHash) ? FRESH : DRIFTED — line numbers never enter identity or freshness; a normalize-invariant edit (reformat/rename/import-above) stays FRESH, a body change (subtreeHash moves) DRIFTs
-arbitrary:   a cosmetic-edit generator (whitespace/reformat, rename, import-above — normalize invariant ⇒ subtreeHash unchanged) AND a semantic-edit generator (body change ⇒ subtreeHash moves); assert the FRESH/DRIFTED split over the paired corpus
+law:         ∀ fact f, tree t. freshness(f,t) = (subtreeHash(anchoredUnit(f,t)) == f.grounding.subtreeHash) ? FRESH : DRIFTED, with an unresolvable anchor key ⇒ DRIFTED (fail-closed) — line numbers never enter identity or freshness; an edit that does not touch the cited unit (import/license-header above it, unrelated rename elsewhere) stays FRESH; a body change, a reformat OF the unit, and a rename OF the cited symbol all DRIFT
+arbitrary:   a NON-TOUCHING-edit generator (import/license header added above, unrelated rename elsewhere ⇒ the unit's own bytes and key invariant) AND a TOUCHING-edit generator (body change, in-unit whitespace/reindent ⇒ subtreeHash moves; rename of the cited symbol ⇒ anchor key retired); assert the FRESH/DRIFTED split over the paired corpus
 covers_reqs: [ REQ-KNOW-3a, REQ-KNOW-3b, REQ-KNOW-3c ]      # ptr+digest
 witness:     [ SCN-KNOW-3a-1, SCN-KNOW-3b-1, SCN-KNOW-3c-1 ]
-teeth:       breaks-on "freshness is computed from the cited unit's line-range or un-normalized bytes — across the generated corpus every downward shift / reformat spuriously DRIFTs (the 3 witnesses pin only one cosmetic and one semantic row)"
+teeth:       breaks-on "freshness is computed from the cited unit's line-range — across the generated corpus every downward shift spuriously DRIFTs" · breaks-on "a whitespace normalizer lands — the TOUCHING corpus reads FRESH on an in-unit reformat, and with it on a one-space change inside a template literal" · breaks-on "a rename of the cited symbol re-binds the fact to the renamed unit instead of failing closed"
+
+> **AMENDED 2026-08-02 (HONESTY-TAPROOT).** The law was stated over `normalize(anchoredUnit)` and the
+> arbitrary generated "whitespace/reformat, rename, import-above" as one *normalize-invariant* cosmetic
+> class. **No normalizer exists**, and only import-above is invariant; a reformat moves the hash and a rename
+> of the cited symbol retires the anchor key outright. See the KNOW-3 amendment in `invariant-register.md`
+> (pending owner ratification) and `method-tags-knw.md#INV-KNOW-3`.
 
 ### PROP-KNOW-4 — every write is an upsert (enumerated universe A)
 inv:         INV-KNOW-4

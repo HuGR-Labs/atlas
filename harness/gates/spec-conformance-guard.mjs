@@ -130,6 +130,96 @@ for (const mod of WHOLE_FILE_PINNED) {
   console.log(`  (idx: ${heads.length - 1}/${heads.length} INV blocks gated; terminal INV-INDEX-${lines[terminal].match(/INV-INDEX-(\d+)/)[1]} declared uncovered — needs the original render tool.)`);
 }
 
+// ── (4) AMENDMENT FAN-OUT ────────────────────────────────────────────────────────────────────────
+// WHY THIS EXISTS. On 2026-08-02 the corpus contained a live, load-bearing contradiction and this gate
+// exited 0 on it: `goldens-grd.md` REQ-GROUND-5b had been amended (at f2a8659) to say a reformat DRIFTS,
+// while `req-grd.md` REQ-GROUND-5b, `invariant-register.md` GROUND-5, `method-tags-grd.md` INV-GROUND-5 and
+// `properties-grd.md` PROP-GROUND-5 all still asserted the opposite. Same for REQ-GROUND-3a. Checks (1)-(3)
+// could not see it: (1) pins a code constant, (2) is a per-LINE regex over ONE historical vocabulary
+// (governance counts), (3) hashes files that carry no pins for grd/knw. None of them models the corpus as a
+// set of documents that RESTATE the same requirement, so none of them can see two of them disagree.
+//
+// WHAT THIS CHECKS, precisely. Atlas states each invariant family (`GROUND-5`, `KNOW-3`, …) in FIVE
+// canonical places: `req-<m>.md` (normative-clause), `goldens-<m>.md` (scenarios + teeth),
+// `method-tags-<m>.md` (up-property / down-model), `properties-<m>.md` (the PBT law), and the row in
+// `invariant-register.md`. If a family is AMENDED in any one of them, every other one that also states it
+// MUST carry an amendment marker for that same family. An amendment that does not FAN OUT is, by
+// construction, a corpus that contradicts itself.
+//
+// WHAT THIS CANNOT DO, stated rather than implied — it is a fan-out check, not a truth check:
+//   • It cannot detect a claim that was authored inconsistently FROM THE START, with no `AMENDED` marker
+//     anywhere. Detecting that needs semantic agreement between prose statements, which is not mechanical.
+//     The reformat overclaim itself was in that state for the whole life of the corpus and this check would
+//     NOT have caught it before f2a8659 — only after the first document was corrected.
+//   • It cannot tell a CORRECT fan-out from a marker pasted into each file. It enforces that every
+//     restatement was VISITED, not that each was fixed well. That is a real limit; the review still matters.
+//   • It gates the requirement corpus only. `docs/reference/**`, `docs/spec/**`, `docs/design/**` and
+//     `docs/explanation/**` also restate these invariants and are NOT covered here, because they carry no
+//     per-family block structure to key on. Those remain review-only.
+{
+  const REQ_DIR = join(REPO, 'docs/requirements');
+  const REGISTER = 'invariant-register.md';
+  /** `REQ-GROUND-5b` / `SCN-GROUND-5b-1` / `INV-GROUND-5` / `PROP-GROUND-5` → the family `GROUND-5`. */
+  const familyOf = (id) => {
+    const m = /^(?:REQ|SCN|INV|PROP)-([A-Z]+)-(\d+)/.exec(id);
+    return m === null ? null : `${m[1]}-${m[2]}`;
+  };
+  const AMENDED = /\bAMENDED\b/;
+
+  // families[family] = Map(file → { amended: bool })
+  const families = new Map();
+  const seen = (family, file, amended) => {
+    if (!families.has(family)) families.set(family, new Map());
+    const per = families.get(family);
+    const prev = per.get(file) ?? { amended: false };
+    per.set(file, { amended: prev.amended || amended });
+  };
+
+  const modDocs = readdirSync(REQ_DIR).filter((f) =>
+    /^(req|goldens|method-tags|properties)-[a-z]+\.md$/.test(f),
+  );
+  // Block model for the module docs: a `### <ID>` heading owns every line down to the next `### ` or `## `.
+  for (const name of modDocs) {
+    const lines = readFileSync(join(REQ_DIR, name), 'utf8').split('\n');
+    let curFamily = null;
+    let curAmended = false;
+    const flush = () => { if (curFamily !== null) seen(curFamily, name, curAmended); };
+    for (const line of lines) {
+      const head = /^###\s+([A-Za-z]+-[A-Z]+-[0-9][A-Za-z0-9-]*)/.exec(line);
+      if (head !== null) {
+        flush();
+        curFamily = familyOf(head[1]);
+        curAmended = AMENDED.test(line);
+        continue;
+      }
+      if (/^##\s/.test(line)) { flush(); curFamily = null; curAmended = false; continue; }
+      if (curFamily !== null && AMENDED.test(line)) curAmended = true;
+    }
+    flush();
+  }
+  // Block model for the register: ONE TABLE ROW per invariant — `| GROUND-5 semantic drift only | … |`.
+  for (const line of readFileSync(join(REQ_DIR, REGISTER), 'utf8').split('\n')) {
+    const row = /^\|\s*([A-Z]+-\d+)\b/.exec(line);
+    if (row !== null) seen(row[1], REGISTER, AMENDED.test(line));
+  }
+
+  for (const [family, per] of [...families].sort()) {
+    const amendedIn = [...per].filter(([, v]) => v.amended).map(([f]) => f);
+    if (amendedIn.length === 0) continue; // never amended — nothing to fan out
+    const silent = [...per].filter(([, v]) => !v.amended).map(([f]) => f).sort();
+    if (silent.length) {
+      problems.push(
+        `AMENDMENT-FAN-OUT: ${family} is AMENDED in [${amendedIn.sort().join(', ')}] but ` +
+          `[${silent.join(', ')}] still state it unamended. An amendment that does not reach every ` +
+          `restatement leaves the corpus contradicting itself (this is the exact class that exited 0 on ` +
+          `2026-08-02). Amend those blocks, or mark them with the amendment date if they are unaffected.`,
+      );
+    }
+  }
+  const fannedOut = [...families].filter(([, per]) => [...per].some(([, v]) => v.amended)).length;
+  console.log(`  (fan-out: ${families.size} invariant families indexed across ${modDocs.length + 1} requirement docs; ${fannedOut} carry an amendment.)`);
+}
+
 // ── report ────────────────────────────────────────────────────────────────────────────────────────
 if (problems.length) {
   console.error(`spec-conformance-guard: FAIL — ${problems.length} problem(s):`);

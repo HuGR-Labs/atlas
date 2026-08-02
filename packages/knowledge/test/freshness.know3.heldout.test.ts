@@ -4,6 +4,11 @@
 // grounding seam: the oracle is a fixture `DriftApi` simulating GROUND's `grounding/ref/subtree.ts`
 // (subtreeHash-only, never a line-range). Verifies the KNOWLEDGE-LAYER binding narrows the oracle
 // verdict to the 2-state KnowledgeFreshness. No raw hashing, no line numbers.
+//
+// STALE PREMISE, same as the non-held-out twin: this was written when `@atlas/grounding` shipped zero
+// runtime. It does not any more, and there is no `normalize` step in the real oracle. The fixture is
+// therefore evidence about the BINDING only — never about the hashing. The real-mint leg is
+// `freshness.know3.realmint.test.ts`.
 
 import { describe, it, expect } from 'vitest';
 import { asSubtreeHash, asNodeKey } from '@atlas/kernel';

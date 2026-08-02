@@ -1,7 +1,9 @@
 // @atlas/contracts — struct.ts
 //
 // The grounding anchor. A StructRef points at a structural unit; its `subtreeHash` is THE drift
-// oracle (BLAKE3 of the normalized subtree), never line numbers.
+// oracle (BLAKE3 of the unit's source slice), never line numbers. NOT "the normalized subtree" — no
+// normalizer exists in this product, so a reformat OF the cited unit drifts. REQ-GROUND-5b / KNOW-3
+// were amended 2026-08-02; `@atlas/grounding` `src/subtree.ts` carries the reason.
 
 import type { SubtreeHash } from './hash.js';
 

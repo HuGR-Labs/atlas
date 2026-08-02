@@ -119,8 +119,8 @@ campaign: CAMPAIGN-2
 split: Rules (the coverage-gate rule) from EPIC-9
 
 ### EPIC-10-a — subtreeHash freshness oracle
-goal-trace: "a fact is trusted only while its code is unchanged → subtreeHash distinguishes a real change from a cosmetic edit → the local drift-oracle route"
-vertical: INDEX (every object BLAKE3 CAS, grounded & drift-checked) → GROUND (subtreeHash is the oracle · displayLines/line-ranges never an anchor · ungrounded never FRESH · unresolvable citation reads DRIFTED, never throws · irrelevant edit never drifts · computed via the seam) → KNOW (drift oracle is subtreeHash · cosmetic stays FRESH · real change drifts) — demoable: reformat code, the fact stays FRESH; change behavior, it DRIFTS; a doc-as-object drifts exactly like a fact
+goal-trace: "a fact is trusted only while its code is unchanged → subtreeHash distinguishes an edit that TOUCHES the cited unit from one that does not → the local drift-oracle route"
+vertical: INDEX (every object BLAKE3 CAS, grounded & drift-checked) → GROUND (subtreeHash is the oracle · displayLines/line-ranges never an anchor · ungrounded never FRESH · unresolvable citation reads DRIFTED, never throws · an edit that does not touch the cited unit never drifts · computed via the seam) → KNOW (drift oracle is subtreeHash · an edit above the unit stays FRESH · real change drifts) — demoable: add an import above the cited function, the fact stays FRESH; change behavior, it DRIFTS; a doc-as-object drifts exactly like a fact   <!-- AMENDED 2026-08-02 (HONESTY-TAPROOT): the demo script said "reformat code, the fact stays FRESH" — that demo FAILS on the shipped product; a reformat of the cited unit reads DRIFTED. -->
 reqs: [ REQ-GROUND-1a, REQ-GROUND-1b, REQ-GROUND-1c, REQ-GROUND-2a, REQ-GROUND-2b, REQ-GROUND-3a, REQ-GROUND-3b, REQ-GROUND-3c, REQ-GROUND-5a, REQ-GROUND-5b, REQ-GROUND-10a, REQ-GROUND-10b, REQ-KNOW-3a, REQ-KNOW-3b, REQ-KNOW-3c, REQ-INDEX-11a, REQ-INDEX-11b ]
 campaign: CAMPAIGN-4
 split: Path (the local drift-oracle route) from EPIC-10

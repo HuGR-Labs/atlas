@@ -26,6 +26,7 @@ fspec: —
 up-property: "structural-anchor oracle: a grounding entry's drift oracle is its `subtreeHash` alone; `displayLines` never participates in drift (a `displayLines`-only change ⇒ 0 drift); a line-range-only anchor is rejected as invalid"
 down-model: "the reference anchor resolver `resolveAnchor(entry)=entry.anchor.subtreeHash` ignores `displayLines`; a `StructRef` lacking a `subtreeHash` (line-range only) is rejected; the mock asserts drift keys off `subtreeHash` and is invariant to `displayLines` edits"
 anti-rot: `grounding/ref/anchor.ts` (the reference `StructRef`/`subtreeHash` resolver) is imported as the mock in the drift unit tests; any code path that reads `displayLines` or a line-range as the oracle diverges from it and breaks the build.
+<!-- Reviewed under the 2026-08-02 AMENDED wave (HONESTY-TAPROOT) and UNAFFECTED: this INV is about displayLines exclusion and line-range rejection, both delivered. Only SCN-GROUND-1a-1's witness EDIT changed (whitespace reformat → import-above). -->
 
 ### INV-GROUND-2
 method-tag: reference-model
@@ -37,9 +38,11 @@ anti-rot: `grounding/ref/ground.ts` (the reference `isGrounded`) is the mock; an
 ### INV-GROUND-3
 method-tag: reference-model
 fspec: —
-up-property: "fail-closed resolution (robustness/totality): an unresolvable citation (unit gone, path absent) is dropped by `ground()` and treated as `DRIFTED` by `driftDetect()`, and resolution never throws (0 exceptions)"
-down-model: "the reference `ground` is total by construction — an unresolvable entry is filtered out (never throws), and `driftDetect` maps the resulting empty/partial set to `DRIFTED`; the golden generator is PBT-fuzz over arbitrary/absent citations asserting drop + DRIFTED + no-throw"
-anti-rot: `grounding/ref/ground.ts` (total, drop-on-unresolvable) is the mock; PBT fuzzes it and the code side-by-side so a throwing or FRESH-on-gone path fails the shared property. *(Tag stays `reference-model`: its generator is PBT-fuzz but the shape is robustness/totality — the total reference IS the oracle, not a standalone ordering law, so it does not earn a standalone `PBT` tag; the KERNEL-7 pattern.)*
+up-property: "fail-closed resolution (robustness/totality): a citation that is unresolvable (unit gone, path absent) makes the WHOLE fact ground to nothing in `ground()` and read `DRIFTED` in `driftDetect()`, and resolution never throws (0 exceptions)"
+down-model: "the reference `ground` is total by construction — ANY unresolvable entry collapses the fact to an EMPTY grounding (never throws; the surviving entries are NOT handed back), and `driftDetect` maps that empty set to `DRIFTED`; the golden generator is PBT-fuzz over arbitrary/absent citations asserting empty-grounding + DRIFTED + no-throw"
+anti-rot: `grounding/ref/ground.ts` (total, fail-closed-at-the-fact) is the mock; PBT fuzzes it and the code side-by-side so a throwing, FRESH-on-gone, or survivors-returned path fails the shared property.
+
+> **AMENDED 2026-08-02 (HONESTY-TAPROOT), fanning out the `f2a8659` `goldens-grd.md` REQ-GROUND-3a amendment.** Was: "dropped by `ground()`" / "an unresolvable entry is filtered out" / "asserting drop + DRIFTED". Dropping the dead ENTRY is fail-OPEN per FACT and was executed — a fact citing two units, one deleted, re-grounded to a one-entry receipt that `isGrounded` accepted and `driftDetect` read `FRESH`. The shipped `ground()` is now fail-closed at the fact. *(Tag stays `reference-model`: its generator is PBT-fuzz but the shape is robustness/totality — the total reference IS the oracle, not a standalone ordering law, so it does not earn a standalone `PBT` tag; the KERNEL-7 pattern.)*
 
 ### INV-GROUND-4
 method-tag: PBT
@@ -51,9 +54,29 @@ anti-rot: `grounding/ref/gate.ts` (the reference gate automaton) is the mock reu
 ### INV-GROUND-5
 method-tag: reference-model
 fspec: —
-up-property: "semantic-drift-only classification: a semantically-irrelevant edit (reformat, import added above, unrelated rename) ⇒ still `FRESH` (0 false drift); a real change to the cited unit ⇒ `DRIFTED`"
-down-model: "the reference normalizer `normalize(subtree)` (whitespace / comments-if-configured / De-Bruijn / param-name / lifetime noise erased) drives `driftDetect` — FRESH iff `normalize` is byte-invariant across the edit; the golden generator is PBT-fuzz over an irrelevant-edit class (asserts FRESH) vs a real-change class (asserts DRIFTED) against the reference oracle"
-anti-rot: `grounding/ref/anchor.ts` (shares the K1 normalizer/oracle) is the mock; a normalization that leaks formatting/rename noise drifts a still-true fact and fails the invariance test. *(Tag stays `reference-model`: PBT-fuzz generator, but the shape is conformance-to-the-reference-drift-oracle (robustness of classification), not a standalone ordering law — the reference normalizer is the thing under test; KERNEL-7 pattern.)*
+up-property: "non-touching-edit classification: an edit that does not TOUCH the cited unit (import or license header added above it, unrelated rename elsewhere) ⇒ still `FRESH`; a real change to the cited unit ⇒ `DRIFTED`; a reformat OF the cited unit ⇒ `DRIFTED` — an accepted false alarm, not 0 false drift"
+down-model: "the oracle is `subtreeHash(unit) = Encoder.hash(canonicalForm(unit))` over the unit's RAW SOURCE SLICE (`src.slice(startIndex, endIndex)`, NFC-normalized only by `canonicalForm`); `driftDetect` is FRESH iff that hash is byte-invariant across the edit AND the anchor key still resolves; the golden generator is PBT-fuzz over a non-touching-edit class (asserts FRESH) vs an in-unit/real-change class (asserts DRIFTED) against the reference oracle"
+anti-rot: `grounding/ref/anchor.ts` (shares the K1 oracle) is the mock; an oracle that folds the unit's line-range drifts a still-true fact on an edit above it and fails the invariance test, and an oracle that erases in-unit bytes goes blind to a one-space change inside a template literal and fails the DRIFTED leg. *(Tag stays `reference-model`: PBT-fuzz generator, but the shape is conformance-to-the-reference-drift-oracle (robustness of classification), not a standalone ordering law; KERNEL-7 pattern.)*
+
+> **AMENDED 2026-08-02 (HONESTY-TAPROOT) — this down-model described a component that was never built.**
+> It previously read: *"the reference normalizer `normalize(subtree)` (whitespace / comments-if-configured /
+> De-Bruijn / param-name / lifetime noise erased) drives `driftDetect`"*. **No such normalizer exists
+> anywhere in the product, and none ever did.** Verified mechanically: the only `normalize`-named function in
+> any `packages/*/src` is `normalizeCheck` in `packages/knowledge/src/write/router.ts`, which normalizes a
+> predicate CHECK STRING for node identity and has nothing to do with subtrees; there is no whitespace pass,
+> no comment stripper, no De-Bruijn indexing, no param-name or lifetime erasure. The shipped chain is
+> `foldAstUnits` → `content: src.slice(node.startIndex, node.endIndex)` → `canonicalForm` (NFC on strings
+> only) → `Encoder.hash`. So this was not an overclaim about *behaviour* — it was a down-model specifying a
+> component that no WP ever built, which is why every scenario derived from it could only pass on a fixture
+> that held the hash constant by hand.
+>
+> The up-property is amended with it: "0 false drift" was never achieved. Measured through the real
+> `foldAstUnits → build → driftDetect` chain — import-above `FRESH`, license-header-above `FRESH`,
+> unrelated-rename-elsewhere `FRESH`, whitespace-reformat-of-the-unit **`DRIFTED`**, comment-reindent-inside
+> **`DRIFTED`**, real change `DRIFTED`. Building the normalizer is deliberately REFUSED, not deferred: any
+> cheap normalization over raw text also erases whitespace that is SEMANTIC in TS/TSX (string, template and
+> regex literals, JSX text, ASI), and a false negative — serving `HOLDS` on a stale fact — costs far more
+> than the re-ground a false alarm costs. See REQ-GROUND-5b in `goldens-grd.md`.
 
 ### INV-GROUND-6
 method-tag: reference-model

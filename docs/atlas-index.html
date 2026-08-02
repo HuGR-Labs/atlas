@@ -144,7 +144,7 @@
     <div class="axcard">
       <div class="ah"><span class="an">1 · spatial</span><span class="ag">a árvore estrutural — o eixo da granularidade</span></div>
       <div class="row"><span class="rk">Níveis</span><span class="rv"><code>repo→crate→módulo→file→item→bloco</code>. <b>item</b>=decl de topo (fn/struct/trait/class); <b>bloco</b>=unidade sub-item com <code>subtreeHash</code> próprio (corpo de método, match-arm, closure) — a âncora mais fina de um <code>StructRef</code>.</span></div>
-      <div class="row"><span class="rk">Deriva de</span><span class="rv">file tree + AST normalizado (sem comentário/whitespace → <code>subtreeHash</code>). <b>$0-LLM</b>, determinístico.</span></div>
+      <div class="row"><span class="rk">Deriva de</span><span class="rv">file tree + parse AST; o <code>subtreeHash</code> é o hash do <b>trecho de código cru</b> da unidade (comentário e whitespace <b>não</b> são removidos — não existe normalizador). <b>$0-LLM</b>, determinístico.</span></div>
       <div class="row"><span class="rk">Pendura</span><span class="rv"><div class="km"><div class="kk"><span class="tag">Knowledge</span>fatos aterrados por <code>StructRef</code> nesse nó — a superfície primária de grounding ("essa fn TEM que valer X").</div><div class="km2"><span class="tag">Memory</span>task/pr do membro, cruzada pelas unidades que ele tocou ("o que aprendi da última vez em <code>cas.ts</code>").</div></div></span></div>
       <div class="row"><span class="rk">Responde</span><span class="rv"><b>scope</b> (modo 1) — "tô nesse path, o que se sabe aqui e acima". O <b>poke</b> dispara ao entrar num escopo spatial.</span></div>
     </div>

@@ -4,6 +4,7 @@
 source: INV-GROUND-1 @ reference/atlas-grounding.md#ground-1
 The grounding gate shall use each grounding entry's `subtreeHash` as its drift oracle.
 normative-clause: "A grounding entry's drift oracle MUST be its `subtreeHash`."
+> Reviewed under the 2026-08-02 **AMENDED** wave (HONESTY-TAPROOT) and **UNAFFECTED** — the oracle IS the `subtreeHash` and always was. Only the witness edit in `SCN-GROUND-1a-1` changed (a whitespace reformat, which does not hold the hash constant, → an import added above, which does).
 
 ### REQ-GROUND-1b — displayLines excluded from drift
 source: INV-GROUND-1 @ reference/atlas-grounding.md#ground-1
@@ -25,10 +26,16 @@ source: INV-GROUND-2 @ reference/atlas-grounding.md#ground-2
 If a grounding is ungrounded, then the grounding gate shall never report it as FRESH.
 normative-clause: "An ungrounded grounding MUST NOT ever be FRESH."
 
-### REQ-GROUND-3a — unresolvable citation dropped
+### REQ-GROUND-3a — unresolvable citation fails the WHOLE fact
 source: INV-GROUND-3 @ reference/atlas-grounding.md#ground-3
-If a citation is unresolvable, then the grounding gate shall drop it in `ground()`.
-normative-clause: "An unresolvable citation (unit gone, path absent) MUST fail closed — dropped by `ground()`"
+If a citation is unresolvable, then the grounding gate shall ground the whole fact to nothing in `ground()`.
+normative-clause: "An unresolvable citation (unit gone, path absent) MUST fail closed — the WHOLE fact grounds to nothing in `ground()`"
+> **AMENDED 2026-08-02 (HONESTY-TAPROOT), fanning out the amendment already made in `goldens-grd.md`.**
+> Previously: "the grounding gate shall drop it" / "dropped by `ground()`". That per-ENTRY wording is
+> fail-OPEN per FACT and was executed — a fact citing two units, one deleted, re-grounded to a one-entry
+> receipt that `isGrounded` accepted and `driftDetect` read `FRESH`. `goldens-grd.md` REQ-GROUND-3a was
+> amended at `f2a8659`; THIS document was not, so the two contradicted each other while every gate exited 0.
+> Now claimed: one unresolvable citation ⇒ no receipt at all. The original teeth are unchanged.
 
 ### REQ-GROUND-3b — unresolvable citation reads DRIFTED
 source: INV-GROUND-3 @ reference/atlas-grounding.md#ground-3
@@ -50,10 +57,22 @@ source: INV-GROUND-5 @ reference/atlas-grounding.md#ground-5
 When a real change is made to the cited unit, the grounding gate shall drift the fact.
 normative-clause: "a real change to the cited unit MUST drift it."
 
-### REQ-GROUND-5b — irrelevant edit never drifts
+### REQ-GROUND-5b — an edit that does not touch the cited unit never drifts
 source: INV-GROUND-5 @ reference/atlas-grounding.md#ground-5
-If a semantically-irrelevant edit (reformat, import added above, unrelated rename) is made, then the grounding gate shall not drift the fact.
-normative-clause: "A semantically-irrelevant edit (reformat, import added above, unrelated rename) MUST NOT drift a fact"
+If an edit that does not touch the cited unit (an import or license header added above it, an unrelated rename elsewhere) is made, then the grounding gate shall not drift the fact. A reformat OF the cited unit DOES drift it.
+normative-clause: "An edit that does not touch the cited unit (import/license header added above it, unrelated rename elsewhere) MUST NOT drift a fact; a reformat OF the cited unit DOES drift it, and MUST"
+> **AMENDED 2026-08-02 (HONESTY-TAPROOT), fanning out the amendment already made in `goldens-grd.md`.**
+> Previously: "a semantically-irrelevant edit (reformat, import added above, unrelated rename) MUST NOT
+> drift a fact". Two of those three legs are delivered — MEASURED through the real
+> `foldAstUnits → build → driftDetect` chain: import/license-header-above ⇒ `FRESH`, unrelated-rename-
+> elsewhere ⇒ `FRESH`. The import-above leg only became true at `f2a8659`, when the symbol's BYTE START
+> INDEX left the anchor key. The **reformat** leg is NOT delivered and deliberately will not be: the oracle
+> hashes the unit's raw source slice (NFC-normalized only), so `return 42;` → `return  42;` moves the hash
+> and the verdict is `DRIFTED` (measured). Delivering it needs a normalizer, and any cheap normalization
+> over raw text also erases whitespace that is SEMANTIC in TS/TSX — string, template and regex literals,
+> JSX text, ASI. The trade is asymmetric: a false alarm costs one re-ground, a false negative lets the truth
+> gate serve HOLDS on a stale fact. `goldens-grd.md` REQ-GROUND-5b was amended at `f2a8659`; THIS document
+> was not, so the two contradicted each other while every gate exited 0.
 
 ### REQ-GROUND-6 — fail-closed write at emit
 source: INV-GROUND-6 @ reference/atlas-grounding.md#ground-6

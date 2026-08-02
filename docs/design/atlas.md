@@ -136,10 +136,12 @@ The Atlas defeats rot with one non-negotiable rule, transcribed verbatim from th
 > against the code.
 
 **What the citation anchors to matters — and it is *not* line numbers.** Line-ranges are fragile: an
-import added above, a reformat, or an unrelated rename shifts them and would drift a fact whose code never
+import added above, or an unrelated rename elsewhere, shifts them and would drift a fact whose code never
 changed (a false `BROKEN` that destroys trust). So the anchor is a **structural unit** — a symbol, block,
-or file — identified by the hash of its *normalized* subtree; line numbers are kept only as a navigation
-hint. A semantically-irrelevant edit doesn't drift the fact; a real change to the cited unit does. *(This
+or file — identified by the hash of its subtree; line numbers are kept only as a navigation hint. An edit
+that doesn't TOUCH the cited unit doesn't drift the fact; a real change to it does. A reformat OF the cited
+unit *does* drift it — the hash is over raw bytes, with no normalization step, and that false alarm is an
+accepted trade rather than a gap (see [spec §3.1](../spec/atlas.md)). *(This
 uses BLAKE3, whose native Merkle-tree structure also gives the hierarchical index that powers discovery —
 one tree, drift and lookup both. See [spec §3.1 / §3.5](../spec/atlas.md).)*
 

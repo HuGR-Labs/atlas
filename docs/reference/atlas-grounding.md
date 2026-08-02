@@ -11,12 +11,15 @@ This module owns the structural anchor, drift detection, and the two-door gate �
 
 ### Scope & honest limit — structure, not truth
 
-Grounding proves exactly one thing: **the cited unit's normalized structure is unchanged since the
-receipt was taken.** It does **NOT** prove the claim is still true. FRESH ≠ true; DRIFTED ≠ false. Two
-gaps follow, and the module MUST NOT phrase around them (honestidade inegociável):
+Grounding proves exactly one thing: **the cited unit's bytes are unchanged since the receipt was taken.**
+It does **NOT** prove the claim is still true. FRESH ≠ true; DRIFTED ≠ false. Two gaps follow, and the
+module MUST NOT phrase around them (honestidade inegociável):
 
-- **False alarm.** A behavior-preserving refactor (extract helper / inline) drifts the normalized
-  subtree ⇒ a still-true fact flips BROKEN.
+- **False alarm.** ANY edit inside the cited unit drifts it — including a behavior-preserving refactor
+  (extract helper / inline) and, because the oracle hashes the raw source slice with no normalization
+  step, a pure **whitespace reformat** or **comment reindent** as well ⇒ a still-true fact flips BROKEN.
+  This is wider than a "normalized structure" oracle would be, and it is the accepted side of a
+  deliberate trade — see GROUND-5 below.
 - **False negative.** A behavior-**changing** edit to a *callee* leaves a *caller*-anchored fact FRESH
   though it is now false — the caller's own bytes did not move.
 
@@ -29,15 +32,15 @@ instead (GROUND-13), never either arm of the split.
 
 ## Data model
 
-Grounding anchors to a `StructRef`, identified by the BLAKE3 hash of its **normalized subtree**
-(`subtreeHash`) — **not** line numbers. Line numbers are fragile: an import added above, a reformat,
-or an unrelated rename shifts them and would drift a fact whose code did not change. Line-ranges are
-therefore demoted to an optional display hint and are **never** the drift oracle.
+Grounding anchors to a `StructRef`, identified by the BLAKE3 hash of its **subtree** (`subtreeHash`,
+taken over the unit's raw source slice) — **not** line numbers. Line numbers are fragile: an import added
+above, or an unrelated rename elsewhere, shifts them and would drift a fact whose code did not change.
+Line-ranges are therefore demoted to an optional display hint and are **never** the drift oracle.
 
 ```
 Grounding      = { entries: GroundingEntry[] }              // sorted by anchor
 GroundingEntry = {
-  anchor:        StructRef,   // THE DRIFT ORACLE — hash of the normalized structural unit
+  anchor:        StructRef,   // THE DRIFT ORACLE — hash of the structural unit's raw source slice
   path:          string,      // repo-relative, for humans/navigation
   displayLines?: string,      // OPTIONAL nav hint ("42-50") — NEVER the drift oracle
 }
@@ -49,16 +52,20 @@ Freshness      = 'FRESH' | 'DRIFTED' | 'STALE'   // STALE = advisory drift: non-
 Status         = 'HOLDS' | 'BROKEN' | 'NA' | 'advisory'
 ```
 
-- **The drift oracle is `subtreeHash`**, computed over the unit's **normalized** AST subtree
-  (whitespace, comments-if-configured, and De-Bruijn / param-name / lifetime noise erased — reuse v1's
-  `SymRef` / `normalizedSignature`).
+- **The drift oracle is `subtreeHash`**, computed over the cited unit's **raw source slice**
+  (`src.slice(startIndex, endIndex)`), NFC-normalized only by `canonicalForm`.
+  - ⚠️ **AMENDED 2026-08-02 (HONESTY-TAPROOT).** This bullet previously read *"computed over the unit's
+    **normalized** AST subtree (whitespace, comments-if-configured, and De-Bruijn / param-name / lifetime
+    noise erased — reuse v1's `SymRef` / `normalizedSignature`)"*. **That normalizer was never built** —
+    there is no whitespace pass, no comment stripper, no De-Bruijn indexing, no param-name or lifetime
+    erasure anywhere in the product. Consequence, stated rather than implied: an in-unit reformat DRIFTS.
 - **Hash function: BLAKE3**, reached through the `@orchestra/kernel` encoder seam (KERNEL-2), chosen
   because its native Merkle tree *is* the hierarchical index (see [atlas-index](./atlas-index.md)).
 - **Fallback:** a non-parseable file (`kind:'file'`) anchors on the BLAKE3 of its bytes — the weakest
   rung, isolated to where structure is unavailable.
 
 > **Move-awareness note (KNOW-15 precondition).** `subtreeHash` is a BLAKE3 **equality** oracle: it
-> catches a PURE move/rename (identical normalized subtree relocated) but NOT a rename co-occurring with
+> catches a PURE move (an identical, byte-for-byte subtree relocated) but NOT a rename co-occurring with
 > a body edit — the common case — whose hash differs. Therefore `atlas-knowledge` KNOW-15's "move-aware
 > `primaryAnchorId`, never orphans" MUST NOT be built on `subtreeHash` equality; it requires a real
 > **similarity matcher (GumTree / RefactoringMiner-grade)**. Until that matcher is specified as its own
@@ -79,11 +86,24 @@ Status         = 'HOLDS' | 'BROKEN' | 'NA' | 'advisory'
 - **GROUND-2 Real grounding.** A `Grounding` is real iff it has ≥1 entry and every entry carries a
   non-empty `subtreeHash`. An ungrounded grounding MUST NOT ever be FRESH.
 - **GROUND-3 Fail-closed resolution.** An unresolvable citation (unit gone, path absent) MUST fail
-  closed — dropped by `ground()`, treated as `DRIFTED` by `driftDetect()`. It MUST NOT throw.
+  closed — the WHOLE fact grounds to nothing in `ground()`, and is treated as `DRIFTED` by
+  `driftDetect()`. It MUST NOT throw.
+  <!-- AMENDED 2026-08-02 (HONESTY-TAPROOT), fanning out the f2a8659 goldens-grd.md amendment: was
+       "dropped by `ground()`". Dropping the dead ENTRY is fail-OPEN per FACT — a two-citation fact
+       losing one re-grounded to a one-entry receipt that isGrounded and read FRESH. -->
 - **GROUND-4 Truth-gate.** → see spec **A-1**; enforced in atlas-grounding by `gateHolds` (GROUND-2/3/5
   supply the grounded ∧ FRESH inputs it gates on).
-- **GROUND-5 Semantic drift only.** A semantically-irrelevant edit (reformat, import added above,
-  unrelated rename) MUST NOT drift a fact; a real change to the cited unit MUST drift it.
+- **GROUND-5 Non-touching edits only.** An edit that does not TOUCH the cited unit (an import or license
+  header added above it, an unrelated rename elsewhere) MUST NOT drift a fact; a real change to the cited
+  unit MUST drift it. **A reformat OF the cited unit DOES drift it** — the oracle hashes raw bytes, so any
+  byte inside the unit moves the hash. That false alarm is ACCEPTED, not a defect and not a TODO: any
+  cheap normalization over raw text also erases whitespace that is SEMANTIC in TS/TSX (string, template
+  and regex literals, JSX text, ASI), and the trade is asymmetric — a false alarm costs one re-ground, a
+  false negative lets the truth gate serve `HOLDS` on a stale fact.
+  <!-- AMENDED 2026-08-02 (HONESTY-TAPROOT): was "A semantically-irrelevant edit (reformat, import added
+       above, unrelated rename) MUST NOT drift a fact". The reformat leg was never delivered. The
+       import-above leg became true only at f2a8659. INV GROUND-5 is RATIFIED — the register amendment is
+       pending owner ratification. -->
 - **GROUND-6 Fail-closed write.** → see spec **A-2**; enforced at `emit` (atlas-tools TOOLS-7) — ungrounded
   facts do not enter.
 - **GROUND-7 Admission — two doors.** A fact is admitted iff it passes **both**: (1) **truth** — its
@@ -125,7 +145,7 @@ Status         = 'HOLDS' | 'BROKEN' | 'NA' | 'advisory'
 ## Surface / API
 
 ```
-ground(node, src): Grounding          // re-derive the anchor@src; unresolvable entries dropped (GROUND-3)
+ground(node, src): Grounding          // re-derive the anchor@src; ANY unresolvable entry ⇒ empty grounding (GROUND-3)
 driftDetect(grounding, src): Freshness// FRESH iff every anchor's subtreeHash matches AND the forward-closure INTERFACE rState is unchanged (GROUND-11); an advisory fact's drift resolves to STALE not DRIFTED (GROUND-13); else DRIFTED
 isGrounded(g): boolean                // ≥1 entry ∧ every entry has a non-empty subtreeHash (GROUND-2)
 gateHolds(candidate, grounding, src): Status  // HOLDS only if grounded ∧ FRESH, else NA (GROUND-4)
@@ -137,10 +157,11 @@ admit(fact): boolean                  // both doors: truth (gateHolds FRESH) ∧
 
 ## Acceptance
 
-1. **GROUND-1 / GROUND-5** — A real change to the cited unit ⇒ `DRIFTED`; a reformat, an import added
-   above it, or an unrelated rename ⇒ still `FRESH`.
+1. **GROUND-1 / GROUND-5** — A real change to the cited unit ⇒ `DRIFTED`; an import or license header
+   added above it, or an unrelated rename elsewhere, ⇒ still `FRESH`. A reformat OF the cited unit ⇒
+   `DRIFTED` (accepted false alarm — see GROUND-5).   <!-- AMENDED 2026-08-02 (HONESTY-TAPROOT) -->
 2. **GROUND-2** — An empty grounding ⇒ `isGrounded==false` and `driftDetect==DRIFTED`.
-3. **GROUND-3** — A citation whose unit/path is gone ⇒ dropped by `ground`, `DRIFTED` by `driftDetect`,
+3. **GROUND-3** — A citation whose unit/path is gone ⇒ the whole fact grounds to nothing in `ground`, `DRIFTED` by `driftDetect`,
    no throw.
 4. **GROUND-4 / GROUND-6** — A `HOLDS` candidate that is ungrounded or drifted serves `NA`; `emit` of an
    ungrounded node ⇒ `emitted:false`, nothing persisted.

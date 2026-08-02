@@ -15,10 +15,25 @@ source: INV-KNOW-3 @ reference/atlas-knowledge.md#know-3
 The knowledge module shall use the BLAKE3 subtreeHash as the drift oracle.
 normative-clause: "The drift oracle MUST be the BLAKE3 `subtreeHash`"
 
-### REQ-KNOW-3b — cosmetic edits stay FRESH
+### REQ-KNOW-3b — an edit that does not touch the cited unit stays FRESH
 source: INV-KNOW-3 @ reference/atlas-knowledge.md#know-3
-When a cited unit is reformatted, renamed, or has an import added above it, the knowledge module shall keep the fact FRESH.
-normative-clause: "a reformat/rename/import-above MUST stay `FRESH`"
+When an import or license header is added above the cited unit, or an unrelated symbol elsewhere is renamed, the knowledge module shall keep the fact FRESH. A reformat OF the cited unit, and a rename OF the cited symbol, DRIFT it.
+normative-clause: "an import/license-header added above the cited unit, or an unrelated rename elsewhere, MUST stay `FRESH`; a reformat OF the cited unit and a rename OF the cited symbol DRIFT it, and MUST"
+> **AMENDED 2026-08-02 (HONESTY-TAPROOT), narrowing to what is actually delivered.**
+> Previously: "a reformat/rename/import-above MUST stay `FRESH`". Of those three legs only **import-above**
+> is delivered (and only since `f2a8659`, when the symbol's byte start index left the anchor key). The other
+> two are false, both MEASURED through the real `foldAstUnits → build → driftDetect` chain:
+> - **reformat OF the cited unit ⇒ `DRIFTED`.** The oracle hashes the unit's raw source slice, NFC-normalized
+>   only, so `return 42;` → `return  42;` moves the hash. Deliberate — see REQ-GROUND-5b for the full reason;
+>   in short, any cheap normalization over raw text also erases whitespace that is SEMANTIC in TS/TSX, and a
+>   false negative (serving HOLDS on a stale fact) costs far more than a false alarm.
+> - **rename OF the cited symbol ⇒ `DRIFTED`, and by a STRONGER mechanism than a hash move: the anchor
+>   becomes UNRESOLVABLE.** The anchor key is `<parent>::<kind>:<ordinal>[:<name>]`, so the name is part of
+>   the key; renaming `computeArr` → `computeArrears` retires the key entirely and the fact fails closed
+>   under GROUND-3, never re-binding to the renamed unit. This leg was NOT covered by the `f2a8659`
+>   REQ-GROUND-5b amendment, because GROUND-5b only ever claimed an *unrelated* rename ELSEWHERE — which is
+>   delivered. KNOW-3 claimed the strictly stronger "the symbol renamed", and that claim was never true.
+>   Atlas has no rename-tracking; re-grounding after a rename is an author action, not an automatic one.
 
 ### REQ-KNOW-3c — real change drifts
 source: INV-KNOW-3 @ reference/atlas-knowledge.md#know-3

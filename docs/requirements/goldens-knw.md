@@ -118,8 +118,8 @@ gen: conformance
 
 ### SCN-KNOW-3a-1 — freshness is a function of the BLAKE3 subtreeHash alone   (happy)
 source: REQ-KNOW-3a
-Given a fact grounded at `subtreeHash = st-77`, and the cited unit re-hashed to `st-77` after `normalize`
-When `freshness(fact,tree)` runs against `grounding/ref/subtree.ts` (`subtreeHash(normalize(unit)) == fact.grounding.subtreeHash ? FRESH : DRIFTED`)
+Given a fact grounded at `subtreeHash = st-77`, and the cited unit re-hashing to `st-77` (its own bytes unchanged)
+When `freshness(fact,tree)` runs against `grounding/ref/subtree.ts` (`subtreeHash(unit) == fact.grounding.subtreeHash ? FRESH : DRIFTED`)   <!-- AMENDED 2026-08-02 with REQ-KNOW-3b: there is no `normalize(unit)` step; the oracle hashes the unit's raw source slice, NFC-normalized only -->
 Then it is `FRESH`, and no line number enters the computation
 teeth: breaks-on "freshness is computed from the cited unit's line-range instead of the subtreeHash — a downward shift of the unit (same bytes) drifts the fact"
 gen: conformance
@@ -127,27 +127,48 @@ gen: conformance
 ### SCN-KNOW-3a-2 — freshness ignores a 200-line downward shift of the cited unit   (happy · held-out)
 source: REQ-KNOW-3a
 held_out: true
-Given a fact grounded at `subtreeHash = st-42` on the unit `fn popTail`, that unit shifted 200 lines down in the file (unrelated code inserted above), re-hashed to `st-42` after `normalize`
-When `freshness(fact,tree)` runs against `grounding/ref/subtree.ts` (`subtreeHash(normalize(unit)) == fact.grounding.subtreeHash ? FRESH : DRIFTED`)
+Given a fact grounded at `subtreeHash = st-42` on the unit `fn popTail`, that unit shifted 200 lines down in the file (unrelated code inserted above), re-hashing to `st-42` (its own bytes unchanged)
+When `freshness(fact,tree)` runs against `grounding/ref/subtree.ts` (`subtreeHash(unit) == fact.grounding.subtreeHash ? FRESH : DRIFTED`)   <!-- AMENDED 2026-08-02 with REQ-KNOW-3b: there is no `normalize(unit)` step -->
 Then it is `FRESH`, and the 200-line offset enters no part of the computation
 teeth: breaks-on "freshness is computed from the cited unit's line-range instead of the subtreeHash — the 200-line downward shift (same bytes) drifts the fact"
 gen: conformance
 
-### SCN-KNOW-3b-1 — reformat / rename / import-above stays FRESH   (happy)
-source: REQ-KNOW-3b
-Given the cited unit reformatted (whitespace), the symbol renamed, and an `import` inserted above it — such that `normalize(unit)` is byte-unchanged (`subtreeHash` still `st-77`)
-When `freshness` runs over this cosmetic-edit corpus row
-Then the fact stays `FRESH` — the cosmetic edit perturbs no identity
-teeth: breaks-on "the normalizer does not strip formatting / imports-above — a reformat changes the subtreeHash and the fact spuriously DRIFTs"
-gen: conformance   # differential over the {cosmetic ⇒ FRESH} corpus (method-tags-knw §KNOW-3)
+### REQ-KNOW-3b — an edit that does not touch the cited unit stays FRESH
 
-### SCN-KNOW-3b-2 — reindent + a different rename + import-above on fn popTail stays FRESH   (happy · held-out)
+> **AMENDED 2026-08-02 (HONESTY-TAPROOT), narrowing to what is actually delivered.** This requirement
+> previously claimed "reformat / rename / import-above stays FRESH" over three edit classes. **Only
+> import-above is delivered** (and only since `f2a8659`, when the symbol's byte start index left the anchor
+> key). The other two were false and are now stated as such — measured through the real
+> `foldAstUnits → build → driftDetect` chain, not asserted:
+>
+> - A **reformat OF the cited unit DRIFTS.** The oracle hashes the unit's raw source slice, NFC-normalized
+>   only; there is no `normalize(unit)` step that erases whitespace, and there deliberately never will be —
+>   any cheap normalization over raw text also erases whitespace that is SEMANTIC in TS/TSX (string,
+>   template and regex literals, JSX text, ASI), and the trade is asymmetric: a false alarm costs one
+>   re-ground, a false negative lets the truth gate serve `HOLDS` on a stale fact. See REQ-GROUND-5b.
+> - A **rename OF the cited symbol DRIFTS**, and more strongly: the anchor key is
+>   `<parent>::<kind>:<ordinal>[:<name>]`, so a rename retires the key and the anchor becomes
+>   **unresolvable**, failing closed under GROUND-3. There is no rename-tracking; re-grounding after a
+>   rename is an author action.
+>
+> The scenarios below now pin all three legs — the delivered one FRESH, the two undelivered ones DRIFTED —
+> so the limit is a tooth rather than a silence.
+
+### SCN-KNOW-3b-1 — import-above stays FRESH; an in-unit reformat and a rename OF the cited symbol DRIFT   (guard)
+source: REQ-KNOW-3b
+Given a fact grounded on the cited unit at `subtreeHash = st-77`, and three separate edits: (i) an `import` inserted ABOVE the unit, leaving the unit's own bytes and its minted key untouched; (ii) a whitespace reformat OF the cited unit, moving its `subtreeHash`; (iii) a rename OF the cited symbol, retiring its anchor key
+When `freshness` runs over each edit
+Then (i) is `FRESH` — nothing the unit commits to moved; (ii) is `DRIFTED` — the raw-source-slice oracle's stated limit, not a defect; (iii) is `DRIFTED` — the anchor is unresolvable, fail-closed
+teeth: breaks-on "an import added above the unit drifts it — the anchor key carries a byte offset and any line inserted above re-keys a still-true fact" · breaks-on "an in-unit reformat reads FRESH — a whitespace normalizer landed and the oracle can no longer see a one-space change inside a template literal" · breaks-on "a rename of the cited symbol reads FRESH — the fact silently re-binds to a unit it was never grounded on"
+gen: conformance   # differential over the {non-touching ⇒ FRESH, in-unit ⇒ DRIFTED} corpus (method-tags-knw §KNOW-3)
+
+### SCN-KNOW-3b-2 — import-above on fn popTail stays FRESH; a reindent and a `pop`→`dequeue` rename DRIFT   (guard · held-out)
 source: REQ-KNOW-3b
 held_out: true
-Given the cited unit `fn popTail` reindented (tabs→spaces), its symbol renamed `pop`→`dequeue`, and an `import` inserted above it — such that `normalize(unit)` is byte-unchanged (`subtreeHash` still `st-42`)
-When `freshness` runs over this cosmetic-edit corpus row
-Then the fact stays `FRESH` — the cosmetic edit perturbs no identity
-teeth: breaks-on "the normalizer does not strip the reindent / the rename / the import-above — the reformat changes the subtreeHash and the fact spuriously DRIFTs"
+Given a fact grounded on `fn popTail` at `subtreeHash = st-42`, and three separate edits: (i) an `import` inserted ABOVE it, leaving its own bytes and minted key untouched; (ii) a reindent (tabs→spaces) INSIDE it, moving its `subtreeHash`; (iii) its symbol renamed `pop`→`dequeue`, retiring its anchor key
+When `freshness` runs over each edit
+Then (i) is `FRESH`; (ii) is `DRIFTED` — the oracle's stated limit   <!-- AMENDED 2026-08-02 with REQ-KNOW-3b -->; (iii) is `DRIFTED` — the anchor is unresolvable, fail-closed
+teeth: breaks-on "the import-above drifts a still-true fact — the anchor key carries a byte offset and any line inserted above re-keys it" · breaks-on "an in-unit reindent reads FRESH — a whitespace normalizer landed and the oracle can no longer see a change inside a template literal" · breaks-on "the `pop`→`dequeue` rename reads FRESH — the fact silently re-binds to a unit it was never grounded on"
 gen: conformance
 
 ### SCN-KNOW-3c-1 — a real change to the cited unit DRIFTs   (happy)

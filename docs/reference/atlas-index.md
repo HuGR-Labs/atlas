@@ -54,8 +54,9 @@ An object is cross-indexed on every applicable axis but stored **once** in the C
 - **Levels:** `repo → crate → module → file → item → block`. `item` = a top-level decl (fn / struct /
   trait / class / const / type); `block` = a sub-item unit with its own `subtreeHash` (a method body, a
   match arm, a closure) — the finest anchor a `StructRef` can point at.
-- **Derived from:** the file tree + a normalized AST parse (comments/whitespace stripped → `subtreeHash`).
-  `$0`-LLM, deterministic, reconstructable.
+- **Derived from:** the file tree + an AST parse; each unit's `subtreeHash` is taken over its **raw source
+  slice** (comments and whitespace are NOT stripped — there is no normalizer).
+  `$0`-LLM, deterministic, reconstructable.   <!-- AMENDED 2026-08-02 (HONESTY-TAPROOT) -->
 - **Hangs off it — Knowledge:** `GroundedFact`s anchored by `StructRef` at exactly this node — the primary
   grounding surface ("this fn MUST hold invariant X"). **Memory:** a seat's task/pr memory cross-indexed by
   the structural units it touched ("what did I learn last time I was in `cas.ts`").

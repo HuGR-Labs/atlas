@@ -18,13 +18,25 @@ serve a lie. This is the truth-gate — see [`atlas-grounding`](../reference/atl
 (GROUND-4) — and the reason a stale fact can never masquerade as fresh.
 
 **Why structural, not line numbers.** The obvious anchor is "file X, lines 42–50." It is also the wrong
-one. Add an import above the function, run the formatter, rename an unrelated symbol — the lines shift
-and the fact drifts, screaming `BROKEN` about code that never changed. That is a false alarm factory,
-and false alarms train people to ignore the alarm. So the anchor is the **structural unit** — a symbol,
-block, or file — identified by the hash of its *normalized* subtree, with line-ranges demoted to a mere
-display hint that never participates in the drift check. A reformat is invisible; a real edit to the
-cited unit is not. The old model (`VEC(path ‖ lineRanges ‖ contentSha)` over SHA-256 at line ranges)
-was exactly this line-fragile trap, and it is gone.
+one. Add an import above the function, rename an unrelated symbol in another file — the lines shift and
+the fact drifts, screaming `BROKEN` about code that never changed. That is a false alarm factory, and
+false alarms train people to ignore the alarm. So the anchor is the **structural unit** — a symbol,
+block, or file — identified by the hash of its subtree, with line-ranges demoted to a mere display hint
+that never participates in the drift check. An edit that never touches the cited unit is invisible to it;
+a real edit to the cited unit is not. The old model (`VEC(path ‖ lineRanges ‖ contentSha)` over SHA-256 at
+line ranges) was exactly this line-fragile trap, and it is gone.
+
+**What this does NOT buy you, said plainly.** Running the formatter over the cited function *does* drift
+the fact. The subtree hash is taken over the unit's raw source slice, NFC-normalized and nothing else —
+there is no whitespace-erasing normalizer, and there deliberately never will be. Whitespace is *semantic*
+in TS/TSX (inside string, template and regex literals, in JSX text, and under ASI), so a normalizer cheap
+enough to erase formatting is also blind to a one-space change that alters what a function returns. The
+trade is asymmetric: a false alarm costs one re-ground, a false negative lets the truth gate serve `HOLDS`
+on a fact that is no longer true. Atlas takes the false alarm. Renaming the cited symbol drifts it too,
+for a different reason — the name is part of the anchor key, so the anchor simply stops resolving and the
+fact fails closed. There is no rename-tracking.
+<!-- AMENDED 2026-08-02 (HONESTY-TAPROOT): this page previously said "A reformat is invisible", which was
+     never true in any shipped revision. -->
 
 **Why BLAKE3.** The hash is not just an identity trick — BLAKE3 is *internally a Merkle tree*, so the
 same hashing that anchors one fact also gives, for free, a hierarchical index over the whole repo

@@ -7,7 +7,7 @@
 // dropped) and SCN-GROUND-3c-1 (fuzz over ground()) are NOT transcribed here (node is never invented).
 //
 // Transcribed (pinned-verb goldens):
-//   - SCN-GROUND-1a-1 (happy)  — drift keys off `subtreeHash` alone (reformat ⇒ FRESH, real edit ⇒ DRIFTED).
+//   - SCN-GROUND-1a-1 (happy)  — drift keys off `subtreeHash` alone (import-above ⇒ FRESH, real edit ⇒ DRIFTED).
 //   - SCN-GROUND-1b-1 (guard)  — a pure `displayLines` line-shift does not participate in drift.
 //   - SCN-GROUND-1c-1 (guard)  — a line-range-only (no-subtreeHash) anchor is not real grounding
 //                                 (structural realization via `isGrounded`/`driftDetect`; the ground-time
@@ -16,7 +16,7 @@
 //   - SCN-GROUND-2b-1 (guard)  — an ungrounded / partial grounding never surfaces FRESH.
 //   - SCN-GROUND-3b-1 (guard)  — a gone/unresolvable unit reads DRIFTED, fail-closed, never throws.
 //   - SCN-GROUND-5a-1 (happy)  — a real change to the cited unit drifts it.
-//   - SCN-GROUND-5b-1 (guard)  — reformat + import-above + unrelated-rename all stay FRESH (0 false drift).
+//   - SCN-GROUND-5b-1 (guard)  — import-above + unrelated-rename stay FRESH; a reformat OF the unit DRIFTS.
 //   - SCN-GROUND-10a-1 (happy) — every `subtreeHash` follows the swapped @atlas/kernel Encoder seam.
 //   - SCN-GROUND-10b-1 (guard) — no off-seam digest call site exists in this WP's source (static + differential).
 //
@@ -60,15 +60,21 @@ const grounding = (...entries: GroundingEntry[]): Grounding => ({ entries });
 // The cited unit `U_arr = billing.ts › computeArr()` — subtreeHash `sh-arr-01`; a real edit 42→43 ⇒ `sh-arr-02`.
 const QP_ARR = 'billing.ts#computeArr';
 const g_arr = grounding(entry(QP_ARR, 'sh-arr-01', '40-52'));
-const src_same = axesWith([node(QP_ARR, 'sh-arr-01')]); // reformat / import-above / rename: subtree unchanged
+const src_same = axesWith([node(QP_ARR, 'sh-arr-01')]); // import-above / unrelated-rename: U_arr's own bytes untouched
 const src_edit = axesWith([node(QP_ARR, 'sh-arr-02')]); // real change 42→43: subtree recomputed
 
 describe('WP-4.10-a.GROUND — local drift oracle: subtreeHash · isGrounded · driftDetect (visible goldens)', () => {
-  it('SCN-GROUND-1a-1: drift keys off subtreeHash alone (reformat ⇒ FRESH, real edit ⇒ DRIFTED)', () => {
-    // run A — whitespace reformat: source bytes changed but normalize(subtree) = sh-arr-01 is unchanged.
+  // AMENDED 2026-08-02 (HONESTY-TAPROOT): run A was labelled a "whitespace reformat" whose
+  // "normalize(subtree)" was claimed unchanged. There is no normalize step — the oracle IS the hash of the
+  // unit's raw source slice, so a reformat moves it, and the old tooth ("oracle mutated to the raw
+  // byte-hash … a false alarm") named the SHIPPED product as its failure mode. Run A is now an import
+  // added above the unit: it shifts the unit's LINES without touching its bytes, which is the real content
+  // of "the verdict tracks subtreeHash and nothing else".
+  it('SCN-GROUND-1a-1 [AMENDED]: drift keys off subtreeHash alone (import-above ⇒ FRESH, real edit ⇒ DRIFTED)', () => {
+    // run A — an import added above: the unit's own bytes and key are untouched, so sh-arr-01 stands.
     expect(driftDetect(g_arr, src_same)).toBe('FRESH');
-    // run B — real edit 42→43: normalized subtree recomputed to sh-arr-02.
-    // teeth (breaks-on "oracle mutated to the raw byte-hash — run A flips to DRIFTED, a false alarm"):
+    // run B — real edit 42→43: the unit's slice changed, so its hash is recomputed to sh-arr-02.
+    // teeth (breaks-on "the oracle folds the unit's line-range — run A flips to DRIFTED, a false alarm"):
     expect(driftDetect(g_arr, src_edit)).toBe('DRIFTED');
   });
 
@@ -121,15 +127,27 @@ describe('WP-4.10-a.GROUND — local drift oracle: subtreeHash · isGrounded · 
     expect(driftDetect(g_arr, src_edit)).toBe('DRIFTED');
   });
 
-  it('SCN-GROUND-5b-1: reformat + import-above + unrelated-rename all stay FRESH (0 false drift)', () => {
-    // three semantically-irrelevant edits, each leaving normalize(subtree) = sh-arr-01 byte-invariant.
-    const reformat = axesWith([node(QP_ARR, 'sh-arr-01')]);
+  // ⚠️ AMENDED 2026-08-02 (HONESTY-TAPROOT) — this case CONTRADICTED the golden it transcribes.
+  // It was titled "SCN-GROUND-5b-1: reformat + import-above + unrelated-rename all stay FRESH (0 false
+  // drift)" and built a `reformat` tree as `axesWith([node(QP_ARR, 'sh-arr-01')])` — i.e. it declared BY
+  // HAND that a reformat leaves the hash at `sh-arr-01`, which is the very thing in question, and is
+  // false. `goldens-grd.md` SCN-GROUND-5b-1 was amended at `f2a8659` to "import-above + unrelated-rename
+  // stay FRESH; a reformat DOES drift", but this transcription was left claiming the opposite, so the
+  // suite asserted one law and the goldens another while `npx vitest run` and every gate exited 0.
+  // The reformat leg is exercised for real (through the parser + mint) in
+  // `adapter-io/test/anchor-identity.test.ts` (ANCHOR-C) and `knowledge/test/freshness.know3.realmint.test.ts`.
+  it('SCN-GROUND-5b-1 [AMENDED]: an edit that does not TOUCH the cited unit stays FRESH', () => {
+    // Neither edit changes U_arr's own bytes, so its subtreeHash is genuinely still sh-arr-01.
     const importAbove = axesWith([node(QP_ARR, 'sh-arr-01'), node('other.ts#import', 'sh-other')]);
     const unrelatedRename = axesWith([node(QP_ARR, 'sh-arr-01'), node('other.ts#renamed', 'sh-other-2')]);
-    // teeth (breaks-on "the normalizer leaks formatting/rename noise — a reformat drifts a still-true fact"):
-    for (const src of [reformat, importAbove, unrelatedRename]) {
+    // teeth (breaks-on "the oracle folds the unit's line-range — an edit above it drifts a still-true fact"):
+    for (const src of [importAbove, unrelatedRename]) {
       expect(driftDetect(g_arr, src)).toBe('FRESH');
     }
+    // teeth (breaks-on "a reformat OF the cited unit reads FRESH — a normalizer landed"): the reformat
+    // MOVES the raw-source-slice hash, and the oracle must report that as drift.
+    const reformatted = axesWith([node(QP_ARR, 'sh-arr-0R')]);
+    expect(driftDetect(g_arr, reformatted)).toBe('DRIFTED');
   });
 
   it('SCN-GROUND-10a-1: every subtreeHash follows the swapped @atlas/kernel Encoder seam', () => {

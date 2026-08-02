@@ -78,11 +78,11 @@ anchor: `reference/atlas-grounding.md#ground-N`.
 
 | INV | FR | independence | tag | testable + number | tradeoff | flag | ADR | verdict |
 |---|---|---|---|---|---|---|---|---|
-| GROUND-1 structural anchor | FR-5 | COUPLED (consumes IDX seam #1) | PBT | `displayLines`-only change ⇒ 0 drift; line-range anchor ⇒ rejected; real change ⇒ DRIFTED | line-nav demoted to hint | behavioural | ADR-G1 subtreeHash-oracle | **RATIFIED** |
+| GROUND-1 structural anchor | FR-5 | COUPLED (consumes IDX seam #1) | PBT | `displayLines`-only change ⇒ 0 drift; line-range anchor ⇒ rejected; real change ⇒ DRIFTED | line-nav demoted to hint | behavioural | ADR-G1 subtreeHash-oracle | **RATIFIED** · reviewed under the 2026-08-02 **AMENDED** wave, UNAFFECTED (only SCN-GROUND-1a-1's witness edit changed) |
 | GROUND-2 real grounding | FR-5 | COUPLED | PBT | empty grounding ⇒ not-grounded ∧ DRIFTED; ungrounded never FRESH (0) | — | behavioural | — | **RATIFIED** |
-| GROUND-3 fail-closed resolution | FR-4 | COUPLED | PBT | gone citation ⇒ dropped + DRIFTED, 0 throws | recall↔safety | behavioural | — | **RATIFIED** |
+| GROUND-3 fail-closed resolution | FR-4 | COUPLED | PBT | gone citation ⇒ the WHOLE fact grounds to nothing + DRIFTED, 0 throws | recall↔safety | behavioural | — | **RATIFIED** · ⚠️ **AMENDED 2026-08-02 — OWNER RATIFICATION REQUIRED** |
 | GROUND-4 truth-gate | FR-4 | COUPLED | PBT | HOLDS only if grounded∧FRESH else NA (spec A-1) | — | behavioural | — | **RATIFIED** |
-| GROUND-5 semantic drift only | FR-5 | COUPLED | PBT (P=edit class) | irrelevant edit ⇒ FRESH (0 false drift); real change ⇒ DRIFTED | false-alarm bounded not eliminated | behavioural | — | **RATIFIED** |
+| GROUND-5 non-touching edits only | FR-5 | COUPLED | PBT (P=edit class) | edit that does not TOUCH the cited unit (import/header above, unrelated rename elsewhere) ⇒ FRESH; real change ⇒ DRIFTED; **reformat OF the cited unit ⇒ DRIFTED (a false alarm, accepted)** | false alarms on in-unit reformat ACCEPTED, not eliminated | behavioural | — | **RATIFIED** · ⚠️ **AMENDED 2026-08-02 — OWNER RATIFICATION REQUIRED** |
 | GROUND-6 fail-closed write | FR-5 | COUPLED | PBT | ungrounded emit ⇒ nothing persisted (spec A-2) | — | behavioural | — | **RATIFIED** |
 | GROUND-7 two-door admission | FR-5 | COUPLED | PBT | obvious ⇒ rejected; ungrounded ⇒ rejected; admit iff both | recall (obvious rejected) | behavioural | ADR-G7 two-door | **RATIFIED** |
 | GROUND-8 provenance | FR-5 | COUPLED | PBT (P=untrusted) | untrusted source ⇒ advisory, absent from gate (spec A-9) | — | behavioural | — | **RATIFIED** |
@@ -94,6 +94,40 @@ anchor: `reference/atlas-grounding.md#ground-N`.
 
 **GRD: 13/13 RATIFIED.**
 
+> ### ⚠️ AMENDMENTS PENDING OWNER RATIFICATION — GROUND-3 and GROUND-5 (2026-08-02, HONESTY-TAPROOT)
+>
+> Two RATIFIED rows above were amended. **Amending a ratified invariant is a constitution change; these are
+> proposals, and neither is in force until the owner ratifies.** Both correct a claim the product does not
+> deliver — the row as previously written was not a target that had slipped, it was a false statement of
+> shipped behaviour.
+>
+> **GROUND-3** — was: "gone citation ⇒ **dropped** + DRIFTED, 0 throws". That per-ENTRY drop is fail-OPEN per
+> FACT and it was executed: a fact citing two units, one deleted, re-grounded to a one-entry receipt that
+> `isGrounded` accepted and `driftDetect` read `FRESH`. Half the evidence vanished and the receipt came back
+> clean. The code was fixed at `f2a8659` (fail-closed at the fact) and `goldens-grd.md` was amended with it;
+> this register and `req-grd.md` were not, so the corpus contradicted itself while every gate exited 0.
+> Now: one unresolvable citation ⇒ the whole fact grounds to nothing.
+>
+> **GROUND-5** — was: "**irrelevant edit ⇒ FRESH (0 false drift)**". The "0 false drift" figure was never
+> delivered. MEASURED on this tree through the real `foldAstUnits → build → driftDetect` chain:
+>
+> | edit | verdict |
+> |---|---|
+> | import added ABOVE the cited unit | `FRESH` ✅ |
+> | license header added ABOVE the cited unit | `FRESH` ✅ |
+> | unrelated rename ELSEWHERE | `FRESH` ✅ |
+> | **whitespace reformat OF the cited unit** | **`DRIFTED`** ❌ claimed FRESH |
+> | **comment reindent INSIDE the cited unit** | **`DRIFTED`** ❌ claimed FRESH |
+> | real change `42`→`43` | `DRIFTED` ✅ |
+>
+> The drift oracle hashes the cited unit's **raw source slice**, NFC-normalized only, so any byte inside the
+> unit moves it. The two delivered "above" legs only became true at `f2a8659`, when the symbol's byte start
+> index left the anchor key. **The reformat leg is deliberately not delivered and will not be**: a normalizer
+> cheap enough to erase formatting over raw text also erases whitespace that is SEMANTIC in TS/TSX — string,
+> template and regex literals, JSX text, ASI — and the trade is asymmetric. A false alarm costs one re-ground;
+> a false negative lets the truth gate serve `HOLDS` on a stale fact. The tradeoff column is amended
+> accordingly: false alarms on an in-unit reformat are **ACCEPTED**, not "bounded".
+
 ## Block KNW — knowledge (18) · M-Lifecycle (owns DP-6/8/9/11; consumes DP-4/5/10) · **FR-4/5/6/7/9/10** · elevated · write-decision core = KNOW-4/10/15 (`PBT-exhaustive`)
 
 anchor: `reference/atlas-knowledge.md#know-N`.
@@ -102,7 +136,7 @@ anchor: `reference/atlas-knowledge.md#know-N`.
 |---|---|---|---|---|---|---|---|---|
 | KNOW-1 truth-gate | FR-10 | on-diag (DP-10; consumes GRD) | ref-model | self-asserted HOLDS ⇒ rejected; status side-index only | self-verify↔purity | behavioural | — | **RATIFIED** |
 | KNOW-2 fail-closed write | FR-5 | decoupled-after GRD | ref-model | no-citation emit ⇒ emitted:false, 0 persisted | — | behavioural | — | **RATIFIED** |
-| KNOW-3 structural anchor | FR-4 | decoupled-after GRD+IDX | ref-model | reformat/rename/import-above ⇒ FRESH; real change ⇒ DRIFTED (100%) | — | behavioural | ADR-KN3 | **RATIFIED** |
+| KNOW-3 structural anchor | FR-4 | decoupled-after GRD+IDX | ref-model | import/header-above ⇒ FRESH; real change ⇒ DRIFTED (100%); **reformat OF the unit ⇒ DRIFTED; rename OF the cited symbol ⇒ DRIFTED (anchor unresolvable)** | no rename-tracking; re-ground after a rename is an author action | behavioural | ADR-KN3 | **RATIFIED** · ⚠️ **AMENDED 2026-08-02 — OWNER RATIFICATION REQUIRED** |
 | KNOW-4 upsert; git is history | FR-7 | COUPLED-with FR-9 (DP-6) | **PBT-exhaustive** | changed advisory ⇒ edit-in-place; 1 current node/(anchor,slot), 0 dup | in-store lineage↔lean store | behavioural | ADR-KN4 edit-over-append | **RATIFIED** |
 | KNOW-5 drift split mech/sem | FR-6 | decoupled-after GRD | ref-model | k drift, s no re-derive ⇒ k−s auto-reground exit0; s semantic exit2; reauthor==s | — | behavioural | ADR-KN5 | **RATIFIED** |
 | KNOW-6 empty & honest | FR-9 | COUPLED-with FR-7 (DP-8) | ref-model | init ⇒ 0 invariants; 100% T2/advisory | — | behavioural | — | **RATIFIED** |
@@ -120,6 +154,28 @@ anchor: `reference/atlas-knowledge.md#know-N`.
 | KNOW-18 confidence fast-path | FR-9 | COUPLED-with FR-7 (DP-11) | ref-model | grounded low-risk T2 ⇒ auto-accept 0-human; T0/contested/predicate ⇒ 100% full ratify | review only on risk | behavioural | ADR-KN18 | **RATIFIED** |
 
 **KNW: 18/18 RATIFIED.**
+
+> ### ⚠️ AMENDMENT PENDING OWNER RATIFICATION — KNOW-3 (2026-08-02, HONESTY-TAPROOT)
+>
+> **Amending a ratified invariant is a constitution change; this is a proposal, not in force until the owner
+> ratifies.** KNOW-3 was: "**reformat/rename/import-above ⇒ FRESH**; real change ⇒ DRIFTED (100%)". Of those
+> three FRESH legs, **only import-above is delivered** — and only since `f2a8659`. Both others are false,
+> measured through the real `foldAstUnits → build → driftDetect` chain:
+>
+> - **reformat OF the cited unit ⇒ `DRIFTED`.** Same root cause as GROUND-5 above (raw source slice, NFC
+>   only); deliberate, and deliberately permanent.
+> - **rename OF the cited symbol ⇒ `DRIFTED`, by a stronger mechanism — the anchor becomes UNRESOLVABLE.**
+>   The anchor key is `<parent>::<kind>:<ordinal>[:<name>]`, so the symbol's name is *part of the key*.
+>   Renaming `computeArr` → `computeArrears` retires the key; the fact then fails closed under GROUND-3 and
+>   never re-binds to the renamed unit. Atlas has no rename-tracking, so re-grounding after a rename is an
+>   author action.
+>
+> **This second leg is NOT covered by the `f2a8659` GROUND-5b amendment and is a distinct, previously
+> unrecorded overclaim.** GROUND-5b only ever promised that an *unrelated* rename ELSEWHERE stays FRESH,
+> which is delivered and verified. KNOW-3 promised the strictly stronger "the symbol renamed" — i.e. a
+> rename of the cited unit itself — and that has never been true in any revision of this product. It is the
+> only leg in this taproot where the corpus claimed a capability (rename-tracking) that was never designed,
+> rather than a normalization that was designed and then deliberately dropped.
 
 ## Block RET — retrieval (13) · M-Retrieval (DP-2+DP-3) · **FR-2⇄FR-3 COUPLED** (consumes IDX relate + MEM packs) · elevated / PBT
 
