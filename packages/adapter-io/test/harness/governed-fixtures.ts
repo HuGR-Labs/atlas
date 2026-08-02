@@ -6,7 +6,7 @@
 
 import { id, asNodeKey, asSubtreeHash, asHash } from '@atlas/kernel';
 import type { CasObject } from '@atlas/kernel';
-import { nodeKey } from '@atlas/knowledge';
+import { emptyStore, nodeKey } from '@atlas/knowledge';
 import type { GroundedFact, StoreProjection, Candidate } from '@atlas/knowledge';
 import type { TruthGate } from '@atlas/tools';
 import type { DiskStore } from '../../src/store.js';
@@ -34,6 +34,21 @@ export function makeStoreSpy(): StoreSpy {
     },
     get(h) {
       return cas.get(h as unknown as string);
+    },
+    // The ATOMIC commit, faked over the same in-memory list. In-process and single-threaded, so there is no
+    // race to lose — but the ORDER the real protocol enforces is reproduced exactly, because two teeth
+    // depend on it: `put` runs BEFORE the projection is published (so a throwing `put` persists nothing),
+    // and a decision with no `next` writes nothing at all (every governed refusal).
+    commitProjection(decide) {
+      const decision = decide(persists.length > 0 ? persists[persists.length - 1]! : emptyStore());
+      if (decision.next === undefined) return { settled: true, out: decision.out };
+      for (const obj of decision.put ?? []) store.put(obj as CasObject);
+      persists.push(decision.next);
+      return { settled: true, out: decision.out };
+    },
+    commitStaging(decide) {
+      const decision = decide(emptyStore());
+      return { settled: true, out: decision.out };
     },
     persistProjection(p) {
       persists.push(p);

@@ -11,6 +11,10 @@ export type { LangId, IndexerPlan } from './scip.js';
 export { foldAstUnits, initAst } from './ast.js';
 export { createDiskStore, rehydrateProjection } from './store.js';
 export type { CasPath, DiskStore } from './store.js';
+// The durable-sidecar seam the two governed doors commit through. Exported because `DiskStore.commitProjection`
+// is part of the store's public shape: a consumer (the `mine` driver is the next one — see `commitStaging`)
+// cannot write a `decide` callback without naming these. The commit PROTOCOL itself stays module-internal.
+export type { CommitDecision, CommitRefusal, CommitResult } from './sidecar.js';
 export { createHistorySource } from './git-history.js';
 export { createDriftSource } from './git-drift.js';
 export { createForge } from './git-forge.js';

@@ -14,7 +14,7 @@
 // ROOT — value files land at `<casPath>/<H[0:2]>/<H>` and the projection sidecar beside it (outside cas/).
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync, existsSync, readFileSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -30,6 +30,31 @@ let tmp: string | undefined;
 function freshCasDir(): string {
   tmp = mkdtempSync(join(tmpdir(), 'atlas-store-'));
   return join(tmp, 'cas');
+}
+
+/**
+ * Corrupt EVERY file of one sidecar family — the fixed-name mirror AND every published generation.
+ *
+ * "The sidecar" used to be ONE file, so these cases wrote garbage over `projection.json` and were done. It
+ * is now a SET: a commit publishes `projection.<g>.json` by `link(2)` (the compare-and-swap that makes a
+ * concurrent write atomic — 8 racing `atlas emit`s used to lose 1–5 nodes each while reporting `status: ok`)
+ * and republishes `projection.json` as a derived, INDEPENDENT copy for tools that know the fixed name.
+ *
+ * So corrupting ONE member is no longer "a corrupt sidecar": it is a corrupt member, and the reader is now
+ * SUPPOSED to survive it by falling back to another generation. That fallback is half the fix for the
+ * erasure where a torn read read as "no knowledge" and one emit replaced 402 nodes with 1; it has its own
+ * cases in `sidecar.test.ts`, including the mirror-vs-generation inode isolation that keeps an in-place
+ * write to the mirror from reaching the truth.
+ *
+ * What THESE cases pin is unchanged and still worth pinning: when NOTHING is readable the reader is TOTAL
+ * (`undefined`, never a throw), because `composeRuntime` rehydrates at boot and a throw here crashes BOTH
+ * bins. They therefore corrupt the whole family.
+ */
+function corruptSidecar(base: 'projection' | 'staging', bytes: string): void {
+  const isGeneration = new RegExp('^' + base + '\\.\\d+\\.json' + '$');
+  for (const name of readdirSync(tmp!)) {
+    if (name === base + '.json' || isGeneration.test(name)) writeFileSync(join(tmp!, name), bytes, 'utf8');
+  }
 }
 
 afterEach(() => {
@@ -255,7 +280,7 @@ describe('rehydrateProjection — ADAPT-STORE-3 cross-process rehydrate, minting
     const s = createDiskStore(dir);
     // persist a genuine projection, then corrupt the sidecar to NON-JSON (truncated write on disk).
     s.persistProjection(upsert(emptyStore(), reqF()).store);
-    writeFileSync(join(tmp!, 'projection.json'), '{ "current": [ truncated', 'utf8');
+    corruptSidecar('projection', '{ "current": [ truncated');
     let out: unknown = 'sentinel';
     // MUTANT: the unwrapped `JSON.parse(raw) as WireProjection` in loadProjection (store.ts) — a corrupt
     // sidecar throws there, and since composeRuntime rehydrates at boot, that throw crashes BOTH bins.
@@ -273,7 +298,7 @@ describe('rehydrateProjection — ADAPT-STORE-3 cross-process rehydrate, minting
     const dir = freshCasDir();
     createDiskStore(dir).persistProjection(upsert(emptyStore(), reqF()).store);
     // valid JSON whose `current` is NOT the [k,v] entry-array — `new Map(5)` / `new Map({})` would throw.
-    writeFileSync(join(tmp!, 'projection.json'), JSON.stringify({ current: 5, cas: {} }), 'utf8');
+    corruptSidecar('projection', JSON.stringify({ current: 5, cas: {} }));
     let p: ReturnType<typeof rehydrateProjection> | undefined;
     // MUTANT: dropping the Array.isArray shape guard (and its try/catch) — the wrong-shape wire reaches
     // `new Map(wire.current)` and throws, again crashing rehydrate at boot.
@@ -342,7 +367,7 @@ describe('persistStaging / loadStaging — the ADR-0008 candidate sidecar', () =
   it('loadStaging over corrupt sidecar bytes is total — undefined, never throws', () => {
     const dir = freshCasDir();
     createDiskStore(dir).persistStaging(upsert(emptyStore(), reqF()).store);
-    writeFileSync(join(tmp!, 'staging.json'), '{ "current": [ truncated', 'utf8');
+    corruptSidecar('staging', '{ "current": [ truncated');
     let out: unknown = 'sentinel';
     // MUTANT: unwrap the `JSON.parse` try/catch in `readSidecar` (store.ts). `mine` rehydrates staging at
     // pass start, so a throw here aborts the pass on a half-written file instead of starting from nothing.
@@ -357,7 +382,7 @@ describe('persistStaging / loadStaging — the ADR-0008 candidate sidecar', () =
     expect(createDiskStore(dir).loadStaging()).toBeUndefined(); // nothing staged yet — not a throw
     createDiskStore(dir).persistStaging(upsert(emptyStore(), reqF()).store);
     // valid JSON whose `current` is NOT the [k,v] entry-array — `new Map(5)` would throw without the guard.
-    writeFileSync(join(tmp!, 'staging.json'), JSON.stringify({ current: 5, cas: {} }), 'utf8');
+    corruptSidecar('staging', JSON.stringify({ current: 5, cas: {} }));
     let out: unknown = 'sentinel';
     // MUTANT (measured, both halves needed): drop the `Array.isArray` guard AND the try/catch around the
     // Map/Set construction in `readSidecar` ⇒ `TypeError: number 5 is not iterable`. Dropping the guard

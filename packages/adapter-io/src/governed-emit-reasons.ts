@@ -7,6 +7,9 @@
 // control flow. They are consumed ONLY by `governed-emit.ts`; the split changes no behaviour and no export
 // (they were module-private there and are package-private here — `src/index.ts` does not re-export them).
 //
+// The two COMMIT reasons at the bottom are the exception the rule needs stated: they are door-wide, reached
+// either before any incumbent exists or after every gate has cleared, so they disclose nothing about a node.
+//
 // THE PRECEDENCE RULE THEY ENCODE lives in `governed-emit.ts`'s header, where the gate ORDER is: a refusal
 // may never tell the caller more about the incumbent than the gates it has already CLEARED entitle it to.
 
@@ -50,6 +53,31 @@ export const REJECTED_MALFORMED_FAMILY =
   '`advisory` MUST carry none: keeping the check while declaring `kind:"advisory"` routed an UPDATE onto a ' +
   'predicate node (free text on a checked fact, one generation of supersede lineage dropped), and declaring ' +
   '`kind:"predicate"` with no check threw a raw TypeError out of the door instead of refusing';
+/** The COMMIT refusals (door stage 5 — `store.commitProjection`). Neither is error handling dressed as a
+ *  gate: each names a state in which the door REFUSES to make a write durable, and each REPLACES a silent
+ *  loss that used to be reported as `status: ok` — a contended writer's node vanishing under a concurrent
+ *  one (measured: 1–5 nodes per 8-writer race, 6/6 trials), and a write onto a projection that only LOOKED
+ *  empty erasing every fact in the store (measured: 402 nodes → 1, from ONE emit with no concurrency).
+ *
+ *  DISCRIMINANTS, not prose: `contended` and `unreadable store` are new reason NAMES, and the suites pin
+ *  them by equality on the text before the first `:` (`reasonOf`) for the reason that helper documents —
+ *  every constant here quotes its neighbours by name, so a substring assertion cannot tell them apart.
+ *
+ *  Both are DOOR-WIDE, not incumbent-derived: they disclose nothing about any node (they are reached before
+ *  any incumbent can be resolved, or after every gate has already passed), so they sit outside the
+ *  increasing-disclosure ordering rather than at a point in it. */
+export const REJECTED_CONTENDED =
+  'contended: the projection advanced under this write — other writers published a new generation on every ' +
+  'one of this write\'s attempts, so it was never applied. NOTHING was written and no gate was bypassed; ' +
+  're-run the emit. The refusal is deliberate: the alternative — publishing a decision taken against a ' +
+  'snapshot that has since moved — is how a governed write silently overwrites a node it never gated';
+export const REJECTED_UNREADABLE_STORE =
+  'unreadable store: the projection sidecar exists but no generation of it parses, so the incumbent this ' +
+  'write must be gated against cannot be read. REFUSED rather than applied to an empty projection — ' +
+  'treating "corrupt" as "no knowledge" is what let one emit replace a 402-node store with a single row and ' +
+  'report success. Restore `.atlas/projection.*.json` from a backup, or delete them deliberately to start ' +
+  'empty; this is a storage fault a human repairs, not a licence for the door to start over';
+
 export const REJECTED_RELOCATION =
   'governance-relocation: this write declares a DIFFERENT scope than the node it targets — moving a node ' +
   'between scopes is a re-classification, an explicit out-of-band signed act, never a side effect of ' +

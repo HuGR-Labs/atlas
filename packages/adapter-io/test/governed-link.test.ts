@@ -75,6 +75,13 @@ function fixture(facts: readonly GroundedFact[], edges: Readonly<Record<string, 
         return h;
       },
       get: (h) => cas.get(h as unknown as string),
+      // The atomic commit, faked: read the head, run the WHOLE decision, publish only what it returns. A
+      // decision with no `next` (every governed refusal) writes nothing — the property `persists()` pins.
+      commitProjection: (decide) => {
+        const decision = decide(persists.length > 0 ? persists[persists.length - 1]! : projection);
+        if (decision.next !== undefined) persists.push(decision.next);
+        return { settled: true, out: decision.out };
+      },
       persistProjection: (p) => void persists.push(p),
       loadProjection: () => (persists.length > 0 ? persists[persists.length - 1] : projection),
     },

@@ -14,9 +14,17 @@
 // CANDIDATE store the explorer (`atlas mine`) writes. KNOW-8 says the explorer may write only candidates and
 // never self-commits; what was missing is that staging had nowhere to live, so the explorer wrote the only
 // durable place there was — the knowledge projection. `persistStaging`/`loadStaging` give it that place. The
-// two sidecars share ONE implementation (`writeSidecar`/`readSidecar`) so their totality discipline cannot
-// drift apart; they differ ONLY in the file they name. A candidate is promoted into knowledge solely by
-// passing a governed door, so nothing in this file reads staging back into the projection.
+// two sidecars share ONE implementation (`sidecar.ts`) so their totality AND their atomicity cannot drift
+// apart; they differ ONLY in the file they name. A candidate is promoted into knowledge solely by passing a
+// governed door, so nothing in this file reads staging back into the projection.
+//
+// THE SIDECAR FORMAT MOVED TO `sidecar.ts`, ITS COMMIT PROTOCOL TO `sidecar-commit.ts`. Not a line-count
+// dodge: this file owns an IMMUTABLE content-addressed store, where a key's bytes never change and so
+// concurrency is free, while the sidecar is the one MUTABLE cell in the product and every governed door
+// read-modify-writes it. It was persisted by a bare in-place `writeFileSync`, which cost 1–5 lost nodes per
+// 8-writer race — every writer exiting 0 with `status: ok` — and turned any torn read into a total erasure
+// reported as success. See the `sidecar.ts` header for both measured legs and for why the commit is a
+// `link(2)` compare-and-swap over generation-named files.
 
 import {
   closeSync,
@@ -34,7 +42,10 @@ import type { Hash } from '@atlas/contracts';
 import { asHash, id } from '@atlas/kernel';
 import type { CasObject, StoreApi } from '@atlas/kernel';
 import { emptyStore } from '@atlas/knowledge';
-import type { CurrentNode, StoreProjection } from '@atlas/knowledge';
+import type { StoreProjection } from '@atlas/knowledge';
+import { readSidecarSet } from './sidecar.js';
+import { commitSidecar, persistSidecar } from './sidecar-commit.js';
+import type { CommitDecision, CommitResult, SidecarBase, SidecarCtx } from './sidecar.js';
 
 /** A filesystem path to the on-disk CAS root (D4: value files at `<casPath>/<h[0:2]>/<h>`). */
 export type CasPath = string;
@@ -43,13 +54,13 @@ export type CasPath = string;
  *  (mirrors kernel/store.ts:26 — `asHash('')`, the sole EMPTY sentinel). */
 const EMPTY: Hash = asHash('');
 
-/** The mutable projection sidecar filename — NOT content-addressed; lives beside the CAS root (D4). */
-const PROJECTION_FILE = 'projection.json';
-
-/** The mutable STAGING sidecar filename — the explorer's CANDIDATE store (ADR-0008). Same shape as the
- *  projection, DELIBERATELY a different file: a candidate is not a fact, and keeping the two in one place is
- *  exactly what let an ungoverned mine pass destroy, then mutate, governed knowledge. */
-const STAGING_FILE = 'staging.json';
+/** The two mutable sidecar FAMILIES — NOT content-addressed; they live beside the CAS root (D4), one
+ *  directory up. `staging` is the explorer's CANDIDATE store (ADR-0008): same shape as the projection,
+ *  DELIBERATELY a different file, because keeping the two in one place is exactly what let an ungoverned
+ *  mine pass destroy, then mutate, governed knowledge. Named here and NOWHERE else, so the mutant
+ *  `STAGING_BASE → 'projection'` stays the one-line, test-killable change it was. */
+const PROJECTION_BASE: SidecarBase = 'projection';
+const STAGING_BASE: SidecarBase = 'staging';
 
 /** The upper bound on a single CAS object read (N13 DoS guard): a CAS object is a small JSON fact/skeleton
  *  (KB-scale). A value whose on-disk size exceeds this is rejected as a miss BEFORE it is read — belt for a
@@ -70,146 +81,18 @@ function valuePath(casPath: CasPath, h: Hash): string {
   return join(casPath, h.slice(0, 2), h);
 }
 
-/** The projection sidecar path: `<dirname(casPath)>/projection.json` — OUTSIDE the `cas/` root. */
-function projectionPath(casPath: CasPath): string {
-  return join(dirname(casPath), PROJECTION_FILE);
+/** The sidecar DIRECTORY: `dirname(casPath)` — OUTSIDE the `cas/` root (D4). Both sidecar families live
+ *  here; `sidecar.ts` derives every concrete filename from (dir, base), so a path is never spelled twice.
+ *  Point `STAGING_BASE` at `'projection'` and mining reaches governed knowledge again — the mutant the
+ *  suites kill (ADR-0008). */
+function sidecarDir(casPath: CasPath): string {
+  return dirname(casPath);
 }
 
-/** The STAGING sidecar path: `<dirname(casPath)>/staging.json` — beside the projection, never the same file.
- *  This ONE line is what makes mining structurally unable to reach knowledge (ADR-0008): point it back at
- *  `PROJECTION_FILE` and the whole guarantee is gone, which is precisely the mutant the suites kill. */
-function stagingPath(casPath: CasPath): string {
-  return join(dirname(casPath), STAGING_FILE);
-}
-
-/**
- * The durable wire shape of a `StoreProjection`: the `current` Map as entry-array, the `cas` Set as array
- * — the single source of truth (no dir-walk). "Byte-identical" is asserted as `deepEqual` after the JSON
- * round-trip; the only lossy corner is explicit `undefined`-valued properties (dropped consistently). The
- * `put`-accepted canonical domain excludes Date/Map/Set/bigint, so no non-JSON CasObject reaches here.
- */
-interface WireProjection {
-  readonly current: ReadonlyArray<readonly [string, CurrentNode]>;
-  readonly cas: readonly string[];
-  readonly builtAt?: string; // N11 freshness watermark (HEAD sha at persist); absent ⇒ unknown (old sidecars)
-}
-
-// THE GOVERNANCE CARRIER (ADR-0007: `CurrentNode.scope` / `.tier`) NEEDS NO LINE HERE, and that is worth
-// stating rather than leaving as an absence a later reader has to re-derive. `current` serializes the WHOLE
-// `CurrentNode`, so the two fields round-trip by construction — the same way `sameAs` did, with no edit to
-// this format — and an OLD sidecar that carries neither round-trips UNREWRITTEN: JSON simply has no key,
-// which reads back as `undefined`, which is the ABSENT the doors treat as "authority unconfirmable".
-//
-// NOR IS THERE A READ-SIDE VALIDATOR FOR THEM, DELIBERATELY. `isKeyedEntry` below rejects the WHOLE file on
-// a bad row, which is right for the representation invariant (a row whose key is not its own `nodeKey` is a
-// shape no producer can make). Governance is different on both counts: ABSENT is legitimate and must not
-// reject anything, and MALFORMED must not be a way to make a whole store unloadable — that would hand anyone
-// who can write one byte of this file a total-denial primitive, where today the worst case is one node that
-// fails closed. So the guard lives at the CONSUMPTION point instead, where both doors apply `isScope` and
-// the total tier lattice to the row before trusting it (see `governed-emit.ts`'s incumbent guard). The rule:
-// this file decides whether the sidecar is STRUCTURALLY a projection; the doors decide whether a given row
-// can authorize a given actor.
-
-/**
- * Write a `StoreProjection` to ONE mutable sidecar file. Shared verbatim by the projection and the staging
- * door (ADR-0008) so the two can differ only in WHICH file they name — a second hand-copied implementation
- * would be free to drift in its stamping or its atomicity.
- *
- * N11: STAMP the freshness watermark at persist — `builtAt` = the HEAD this projection's stored per-fact
- * freshness reflects. The injected `headSha` seam is authoritative (git lives in the composition root), so
- * the store re-derives it on every persist rather than trusting a caller-set field; when the seam is absent
- * (tests / non-git) or resolves undefined, no stamp is written (the reader then treats the watermark as
- * "unknown"). JSON drops an undefined key, so an unstamped projection round-trips to `undefined` exactly as
- * before this field existed (deepEqual-preserving).
- */
-function writeSidecar(path: string, projection: StoreProjection, builtAt: string | undefined): void {
-  const wire: WireProjection = {
-    current: [...projection.current.entries()],
-    cas: [...projection.cas],
-    ...(builtAt !== undefined ? { builtAt } : {}),
-  };
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, JSON.stringify(wire), 'utf8');
-}
-
-/**
- * Is `e` a well-formed `[nodeKey, CurrentNode]` entry — one whose MAP KEY IS the row's OWN `nodeKey`?
- *
- * THE representation invariant of `StoreProjection.current` ("nodeKey → the ONE current node", KNOW-4g). Every
- * in-process producer holds it by construction: `upsert` only ever `current.set(req.nodeKey, {nodeKey:
- * req.nodeKey, …})`, and `linkSameAs` re-sets rows at the key it fetched them by. NOTHING re-established it
- * across the disk round-trip, and `new Map(wire.current)` accepts any entry array whatsoever — so a row
- * written at key `M` declaring `nodeKey: B` rehydrated into a typed `StoreProjection` that no producer could
- * have made, and every consumer downstream reads one of the two identities without knowing the other exists.
- * Measured consequence: `sameAsClassOf` SEEDS on the map key but EXPANDED on `nodeKey`, so `classOf(M)`
- * collapsed to the singleton `[M]` and `governed-link.ts:147` resolved ZERO class members — pricing its authz
- * and its ratify gates over nothing. Class SHRINKAGE is the bypass direction.
- *
- * This is IN the threat model, not out of it: `@atlas/knowledge` `ratify/tier.ts` names this very file as
- * untrusted input ("a CAS blob out of a COMMITTED `.atlas/` directory … none of those is trusted and none was
- * validated"). `isTier` exists because of that sentence; the same reasoning covers every other field the
- * projection carries, `nodeKey` included.
- */
-function isKeyedEntry(e: unknown): e is readonly [string, CurrentNode] {
-  if (!Array.isArray(e) || e.length !== 2) return false;
-  const [key, row] = e as readonly unknown[];
-  if (typeof key !== 'string' || row === null || typeof row !== 'object') return false;
-  // `nodeKey === key` also settles its TYPE (`key` is a string) — no separate typeof needed, and no coercion:
-  // `===` is byte-exact, so no case-folding, no trimming, no Unicode normalization can smuggle a mismatch.
-  return (row as { readonly nodeKey?: unknown }).nodeKey === key;
-}
-
-/**
- * Read ONE mutable sidecar file back. Shared verbatim by the projection and the staging door (ADR-0008).
- *
- * TOTAL (mirrors `get` below): a missing OR corrupt/unparseable/shape-invalid sidecar reads as "none
- * persisted" (`undefined`) — NEVER a throw. A throw here would crash `rehydrateProjection` (and thus BOTH
- * bins) at boot, since composeRuntime rehydrates at startup. The staging door inherits that discipline by
- * CONSTRUCTION rather than by a promise: it is the same code.
- *
- * ALL-OR-NOTHING, deliberately: one invariant-violating row rejects the WHOLE sidecar, exactly as one corrupt
- * byte or one wrong-shaped `current` already does. Dropping only the offending ROW would be the strictly worse
- * design — it hands an attacker who can write this file a SELECTIVE "make this node non-current" primitive,
- * and `governed-link.ts` deliberately SKIPS a class member that is not a current node (a retired key is
- * nobody's authority), so a targeted drop is exactly the under-pricing this guard exists to stop. Rejecting
- * the file routes a NEW corruption class into the EXISTING failure mode — `rehydrateProjection` degrades to
- * `emptyStore()`, under which every write door fails closed on `unknown node` and no gate is priced over a
- * partial class — so the blast radius is unchanged and no new degradation path is introduced.
- */
-function readSidecar(path: string): StoreProjection | undefined {
-  let raw: string;
-  try {
-    raw = readFileSync(path, 'utf8');
-  } catch {
-    return undefined; // ENOENT / none persisted yet
-  }
-  let wire: WireProjection;
-  try {
-    wire = JSON.parse(raw) as WireProjection;
-  } catch {
-    return undefined; // corrupt / truncated bytes
-  }
-  // shape guard: the entry-array and value-array must be arrays before Map/Set construction, else a
-  // valid-JSON-but-wrong-shape sidecar (e.g. `{}`, `[]`, `{current:5}`) throws in `new Map(...)`.
-  // MEASURED: this line alone is defence-in-depth — deleting it keeps the suite GREEN, because the
-  // try/catch below also catches the `new Map(5)` TypeError. It stays as the cheap, explicit rejection
-  // (and it is the reason the catch is a narrow last resort rather than the only shape check).
-  if (!wire || !Array.isArray(wire.current) || !Array.isArray(wire.cas)) return undefined;
-  // INTEGRITY guard (unlike the line above, this one is a TOOTH, not defence-in-depth): every entry must be a
-  // `[key, row]` pair whose key IS `row.nodeKey`. `new Map(wire.current)` accepts ANY entry array, so without
-  // this the disk round-trip is the one producer in the system that can mint a `StoreProjection` violating its
-  // own representation invariant. See `isKeyedEntry` for the measured bypass and for why one bad row rejects
-  // the whole file rather than just itself.
-  if (!wire.current.every(isKeyedEntry)) return undefined;
-  // deserialize back: entry-array → Map, array → Set — defended in case an entry itself is non-iterable.
-  // N11: carry the watermark back only when a string was persisted (a non-string wire value ⇒ omit ⇒
-  // "unknown", the conservative reader default) — keeps the projection shape honest, never a bad type.
-  try {
-    const builtAt = typeof wire.builtAt === 'string' ? { builtAt: wire.builtAt } : {};
-    return { current: new Map(wire.current), cas: new Set(wire.cas), ...builtAt };
-  } catch {
-    return undefined; // malformed entries (e.g. a non-[k,v] element)
-  }
+/** The commit CONTEXT for one sidecar family: where it lives, which family it is, the N11 watermark seam,
+ *  and the CAS write door the commit must run BEFORE it publishes (see `CommitDecision.put`). */
+function ctxFor(casPath: CasPath, base: SidecarBase, headSha: (() => string | undefined) | undefined, put: (o: unknown) => unknown): SidecarCtx {
+  return { dir: sidecarDir(casPath), base, headSha, put };
 }
 
 /**
@@ -221,11 +104,35 @@ function readSidecar(path: string): StoreProjection | undefined {
  * `StoreApi` is unchanged (this only ADDS methods in the adapter layer).
  */
 export interface DiskStore extends StoreApi {
-  /** Persist the whole `StoreProjection` durably (the mutable sidecar, NOT content-addressed). */
+  /**
+   * THE governed write door onto the projection: read → decide → publish, ATOMIC against every other
+   * writer. `decide` receives the freshly-read projection and returns the whole decision; on a lost race it
+   * is RE-RUN from scratch against the new snapshot, so it MUST be pure (no writes, no clock, no random) and
+   * it MUST contain the gates, not just the state change.
+   *
+   * The gates are inside `decide` for a security reason, not an aesthetic one: the target-derived gates
+   * (`governed-emit-incumbent.ts`) resolve authority from the incumbent ROW on this snapshot — its `scope`
+   * and `tier`, with the ADR-0007 fallback to the authenticated bytes for a carrier-less row. Re-publishing
+   * a decision computed against a STALE snapshot would apply a write that cleared its gates against a
+   * projection that no longer exists: the confused deputy those gates were written to close, re-entered
+   * through the back door of a retry, and reachable by ordinary contention rather than by an attack.
+   *
+   * `settled:false` is a VISIBLE refusal (contended, or an unreadable sidecar), never a silent no-op.
+   */
+  commitProjection<T>(decide: (projection: StoreProjection) => CommitDecision<T>): CommitResult<T>;
+  /** The SAME primitive over the candidate sidecar (ADR-0008) — one implementation, different file, so the
+   *  two cannot drift in atomicity any more than they can in totality. This is the seam `mine` needs to stop
+   *  being last-writer-wins across concurrent passes; adopting it is a separate WP (see the seat note). */
+  commitStaging<T>(decide: (projection: StoreProjection) => CommitDecision<T>): CommitResult<T>;
+  /** Persist the whole `StoreProjection` durably (the mutable sidecar, NOT content-addressed).
+   *  UNCONDITIONAL, therefore last-writer-wins BY DEFINITION — it carries no decision to re-run. It is
+   *  atomic (no reader ever sees a prefix) but it is NOT the concurrency-safe door: a read-modify-write MUST
+   *  go through `commitProjection`. THROWS rather than silently doing nothing on exhaustion. */
   persistProjection(projection: StoreProjection): void;
   /** Read the durable `StoreProjection` back; `undefined` when none has been persisted yet. */
   loadProjection(): StoreProjection | undefined;
-  /** Persist the CANDIDATE projection to the staging sidecar — never the knowledge projection (ADR-0008). */
+  /** Persist the CANDIDATE projection to the staging sidecar — never the knowledge projection (ADR-0008).
+   *  Same unconditional/last-writer-wins caveat as `persistProjection`. */
   persistStaging(projection: StoreProjection): void;
   /** Read the staged candidates back; `undefined` when nothing has been staged yet. Total, like `loadProjection`. */
   loadStaging(): StoreProjection | undefined;
@@ -243,7 +150,9 @@ export interface DiskStore extends StoreApi {
  * the mine driver onto staging — stamps uniformly with zero change to their code.
  */
 export function createDiskStore(casPath: CasPath, headSha?: () => string | undefined): DiskStore {
-  return {
+  // Self-referential so the sidecar commit can call THIS store's `put` (the CAS-before-projection ordering
+  // invariant). The methods only run after the literal is bound, so the reference is never in the TDZ.
+  const store: DiskStore = {
     put(obj: CasObject): Hash {
       let h: Hash;
       try {
@@ -326,27 +235,38 @@ export function createDiskStore(casPath: CasPath, headSha?: () => string | undef
       }
     },
 
+    commitProjection<T>(decide: (projection: StoreProjection) => CommitDecision<T>): CommitResult<T> {
+      // The CAS door handed to the commit is THIS store's own `put`, so the bytes a decision depends on are
+      // durable before the generation that references them is linked into existence.
+      return commitSidecar(ctxFor(casPath, PROJECTION_BASE, headSha, (o) => store.put(o as CasObject)), decide);
+    },
+
+    commitStaging<T>(decide: (projection: StoreProjection) => CommitDecision<T>): CommitResult<T> {
+      return commitSidecar(ctxFor(casPath, STAGING_BASE, headSha, (o) => store.put(o as CasObject)), decide);
+    },
+
     persistProjection(projection: StoreProjection): void {
-      writeSidecar(projectionPath(casPath), projection, headSha?.());
+      persistSidecar(ctxFor(casPath, PROJECTION_BASE, headSha, (o) => store.put(o as CasObject)), projection);
     },
 
     loadProjection(): StoreProjection | undefined {
-      return readSidecar(projectionPath(casPath));
+      return readSidecarSet(sidecarDir(casPath), PROJECTION_BASE).projection;
     },
 
     persistStaging(projection: StoreProjection): void {
       // The candidate sidecar. Identical machinery, identical stamping (a staged candidate's freshness is
       // read at the HEAD it was mined at) — the ONLY difference from `persistProjection` is the file.
-      writeSidecar(stagingPath(casPath), projection, headSha?.());
+      persistSidecar(ctxFor(casPath, STAGING_BASE, headSha, (o) => store.put(o as CasObject)), projection);
     },
 
     loadStaging(): StoreProjection | undefined {
       // Total on exactly the same branches as `loadProjection` — it IS `loadProjection`'s reader. A missing,
       // corrupt or shape-invalid staging sidecar reads back as "nothing staged", never a throw: `mine`
       // rehydrates staging at pass start, so a throw here would abort the pass on a half-written file.
-      return readSidecar(stagingPath(casPath));
+      return readSidecarSet(sidecarDir(casPath), STAGING_BASE).projection;
     },
   };
+  return store;
 }
 
 /** Rehydrate the territory `StoreProjection` from a disk-backed store, minting nothing (ADAPT-STORE-3). */

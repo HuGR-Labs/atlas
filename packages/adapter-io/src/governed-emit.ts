@@ -1,9 +1,11 @@
 // @atlas/adapter-io — src/governed-emit.ts  (COMPOSE-A: the governed durable emit leg)
 //
 // The runtime composition-root's governed write door. `atlas-emit` persists DURABLY only THROUGH the
-// governed path — TEN fail-closed refusals across five stages, in order, before a single byte is written.
+// governed path — TWELVE fail-closed refusals, in the order below, before a single byte is DURABLE.
 // The count is stated because it drifted: this header said "three" and listed four items while the body had
 // seven refusal points, and a header that under-counts the gates is how a gate gets deleted unnoticed.
+// (Ten became twelve when the durable write became an atomic COMMIT: stage 5 can refuse a write that has
+// cleared every governance gate, and a refusal is counted like any other refusal.)
 //   0. WELL-FORMED  — the three payload fields the LATER gates route on are type-only and reach this door
 //                     unvalidated (`JSON.parse` + a cast on the CLI wire; a bare `object` schema on MCP),
 //                     so each is refused HERE or nowhere: `tier` must be one of the three real governance
@@ -28,6 +30,13 @@
 //                     ratify token (a T0 fact requires the billy token). The token is env-sourced by the
 //                     composition root (`ATLAS_RATIFY_TOKEN`, threaded like the actor) — NEVER read off the
 //                     fact payload. Absent/invalid ⇒ REJECTED fail-closed, nothing persisted (KNOW-8).
+//   5. COMMIT       — stages 2.25→3 are ONE decision over ONE snapshot, published atomically by the
+//                     generation-CAS protocol in `sidecar-commit.ts`. Two refusals live here and BOTH are
+//                     gates, not error handling: `contended` (other writers published on all 64 attempts)
+//                     and `unreadable store` (the sidecar exists but no generation parses — refuse rather
+//                     than write onto a phantom-empty snapshot, which is how ONE emit erased 402 nodes).
+//                     The decision is RE-RUN, gates included, on every lost race — see the body. Neither
+//                     reason discloses anything about a node, so both sit outside the disclosure ordering.
 //   3. UPSERT+PUT   — route the write through the proven KNOW-15 `upsert(WriteRequest)` decision (mirrors
 //                     the CLI `mine.ts` durable-write path), persist the projection sidecar durably, AND
 //                     `store.put(node)` the WHOLE GroundedFact into CAS so the content-addressed bytes ARE
@@ -77,12 +86,11 @@ import type { Candidate, Check, CurrentNode, GroundedFact, NodeFamily, WriteRequ
 import type { EmitOut, TruthGate } from '@atlas/tools';
 import { actorInScope } from './policy.js';
 import type { AtlasPolicy } from './policy.js';
-import { rehydrateProjection } from './store.js';
 import type { DiskStore } from './store.js';
 // The structured fail-closed reasons (TOOLS-7b / KNOW-11 / KNOW-8) — the door's user-visible contract AND
 // its disclosure surface, extracted to their own module at the LOC ceiling. See that file's header.
 import {
-  REJECTED_MALFORMED_FAMILY, REJECTED_MALFORMED_SCOPE, REJECTED_MALFORMED_TIER,
+  REJECTED_CONTENDED, REJECTED_UNREADABLE_STORE, REJECTED_MALFORMED_FAMILY, REJECTED_MALFORMED_SCOPE, REJECTED_MALFORMED_TIER,
   REJECTED_UNAUTHORIZED, REJECTED_UNGROUNDED, REJECTED_UNRATIFIED,
 } from './governed-emit-reasons.js';
 import { incumbentRefusal } from './governed-emit-incumbent.js';
@@ -230,65 +238,89 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
     //    call sits between authz and ratify, and `incumbentRefusal` returns the reason rather than deciding
     //    `emitted`, so the door's increasing-disclosure sequence is still legible in one file.
     //
-    //    The projection is rehydrated ONCE here and reused by the upsert below. (An earlier version of this
-    //    comment claimed it had been read TWICE before — it had not; `rehydrateProjection` appears exactly
-    //    once on every ancestor of this line. Parity presented as an improvement; corrected rather than deleted.)
-    const projection = rehydrateProjection(deps.store);
+    //    The projection is read ONCE PER ATTEMPT — by the commit below, which hands the SAME snapshot to
+    //    these gates and to the upsert, so what the gates were priced against is exactly what the upsert
+    //    lands on. (An earlier version of this comment claimed the projection had been read TWICE before —
+    //    it had not. Parity presented as an improvement; corrected rather than deleted.)
     const targetKey = nodeKey(candidateView) as unknown as string;
-    const incumbent: CurrentNode | undefined = projection.current.get(targetKey);
-    if (incumbent !== undefined) {
-      const refusal = incumbentRefusal(deps, incumbent, node, tier);
-      if (refusal !== undefined) return { emitted: false, rejected: refusal };
-    }
 
-    // 2.5 RATIFY — the KNOW-8/KNOW-18 tier-ratification gate, BETWEEN authz and upsert. The fast-path
-    //    `route` auto-accepts a grounded ∧ lowRisk ∧ T2 ∧ advisory ∧ ¬contested fact (the common case —
-    //    straight to upsert, unchanged behavior). A T0 / predicate / contested fact routes to FULL
-    //    ratification: it commits ONLY with a valid KNOW-8 token, and a T0 fact requires the `billy` token.
-    //    The token is env-sourced by the composition root (never the payload). Absent/invalid ⇒ REJECTED
-    //    fail-closed, nothing persisted — this is the door that was previously bypassing the human+billy gate.
-    if (route(candidateView, DOOR_RATIFY_CTX) === 'full-ratify') {
-      const token: RatifyToken = { by: deps.ratifyToken ?? '' };
-      if (!ratify(stage(candidateView), token).committed) {
-        return { emitted: false, rejected: REJECTED_UNRATIFIED };
+    // ── THE ATOMIC COMMIT (stages 2.25 → 4) ─────────────────────────────────────────────────────────────
+    // Everything from here down is ONE decision, taken against ONE snapshot of the projection and published
+    // as a whole or not at all. The old shape — rehydrate, gate, upsert, `persistProjection` — was a
+    // read-modify-whole-file-write with no lock and no compare-and-swap: 8 concurrent `atlas emit`s over a
+    // 1000-node store silently lost 1–5 nodes in 6/6 measured trials, each writer exiting 0 with
+    // `status: ok`, and a single emit onto a torn sidecar erased 402 nodes down to 1. See `sidecar.ts`.
+    //
+    // The callback is re-run FROM SCRATCH when another writer publishes first, and it contains the GATES,
+    // not merely the upsert. That is a security requirement, not an implementation detail:
+    // `incumbentRefusal` resolves target authority from the incumbent ROW on THIS snapshot (ADR-0007), so
+    // re-publishing a decision taken against a snapshot that has since acquired a billy-ratified T0
+    // incumbent — or acquired a `scope` carrier where there was none — would apply a write that never faced
+    // the gate it now owes. That is the confused deputy, re-entered through the back door of a retry.
+    const committed = deps.store.commitProjection<EmitOut>((projection) => {
+      const incumbent: CurrentNode | undefined = projection.current.get(targetKey);
+      if (incumbent !== undefined) {
+        const refusal = incumbentRefusal(deps, incumbent, node, tier);
+        if (refusal !== undefined) return { out: { emitted: false, rejected: refusal } };
       }
-    }
 
-    // 3. ROUTE + UPSERT — the KNOW-15 write-decision over the rehydrated projection (mine.ts parity).
-    //    IDENTITY IS MINTED, NEVER TRUSTED — the routing/dedup `nodeKey` is RECOMPUTED from the content
-    //    via the frozen `nodeKey(node)` formula (KNOW-15b: hash(primaryAnchorId ‖ slot[‖ check])), the same
-    //    seam that mints `contentHash`/`primaryAnchor` below. The author-supplied payload `node.id` is NEVER
-    //    used for routing — trusting it would let an author spoof/collide/dodge another node's identity.
-    const contentHash = id(node as CasObject);
-    const req: WriteRequest = {
-      nodeKey: targetKey, // the SAME minted key the incumbent guard above resolved — one identity, one read
-      contentHash: contentHash as unknown as string,
-      family, // the CHECKED discriminant (gate 0), never the raw `node.kind` — see `familyOf`
-      claimNorm: claimNormOf(node, family),
-      // ── ADJACENCY carrier (ADDITIVE) — carry the computed primary anchor + the R3-optional slot onto
-      //    the node so a later sibling-adjacency scan reads them off the projection (WP-B); NOT read here.
-      //    `predicateSlot` is R3-optional; conditional spread keeps `slot` ABSENT (exactOptionalPropertyTypes).
-      primaryAnchor: primaryAnchorId(candidateView) as unknown as string,
-      ...(node.predicateSlot !== undefined ? { slot: node.predicateSlot } : {}),
-      // ── GOVERNANCE carrier (ADDITIVE — ADR-0007) — stamp the `(scope, tier)` pair onto the ROW so the
-      //    incumbent guard above can resolve target authority off the projection instead of off the CAS
-      //    bytes. These are the GATE-0 SNAPSHOT values, not `raw.*`: what was validated is what is stored,
-      //    and it is the same snapshot `put` writes into CAS below — so the row and its bytes agree by
-      //    construction, which is exactly what the corroboration check above requires.
-      scope, // the gate-0 narrowed const (`isScope` proved it a non-empty string), never the raw field
-      tier,
-    };
-    const next = upsert(projection, req).store;
+      // 2.5 RATIFY — the KNOW-8/KNOW-18 tier-ratification gate, BETWEEN authz and upsert. The fast-path
+      //    `route` auto-accepts a grounded ∧ lowRisk ∧ T2 ∧ advisory ∧ ¬contested fact (the common case —
+      //    straight to upsert, unchanged behavior). A T0 / predicate / contested fact routes to FULL
+      //    ratification: it commits ONLY with a valid KNOW-8 token, and a T0 fact requires the `billy` token.
+      //    The token is env-sourced by the composition root (never the payload). Absent/invalid ⇒ REJECTED
+      //    fail-closed, nothing persisted — this is the door that was previously bypassing the human+billy gate.
+      if (route(candidateView, DOOR_RATIFY_CTX) === 'full-ratify') {
+        const token: RatifyToken = { by: deps.ratifyToken ?? '' };
+        if (!ratify(stage(candidateView), token).committed) {
+        return { out: { emitted: false, rejected: REJECTED_UNRATIFIED } };
+      }
+      }
 
-    // 4. DURABLE PERSIST — write the content-addressed bytes FIRST, then the projection sidecar that
-    //    references them (INVARIANT: the CAS bytes ARE the fact, so driftFacts/doctor can read them back).
-    //    Order matters for crash-safety: if `put` fails (disk-full/permission) the projection is never
-    //    written, so the sidecar can NEVER reference a contentHash whose bytes are absent from CAS. The
-    //    reverse order would leave a dangling reference on a mid-write failure.
-    deps.store.put(node as CasObject);
-    deps.store.persistProjection(next);
+      // 3. ROUTE + UPSERT — the KNOW-15 write-decision over the rehydrated projection (mine.ts parity).
+      //    IDENTITY IS MINTED, NEVER TRUSTED — the routing/dedup `nodeKey` is RECOMPUTED from the content
+      //    via the frozen `nodeKey(node)` formula (KNOW-15b: hash(primaryAnchorId ‖ slot[‖ check])), the same
+      //    seam that mints `contentHash`/`primaryAnchor` below. The author-supplied payload `node.id` is NEVER
+      //    used for routing — trusting it would let an author spoof/collide/dodge another node's identity.
+      const contentHash = id(node as CasObject);
+      const req: WriteRequest = {
+        nodeKey: targetKey, // the SAME minted key the incumbent guard above resolved — one identity, one read
+        contentHash: contentHash as unknown as string,
+        family, // the CHECKED discriminant (gate 0), never the raw `node.kind` — see `familyOf`
+        claimNorm: claimNormOf(node, family),
+        // ── ADJACENCY carrier (ADDITIVE) — carry the computed primary anchor + the R3-optional slot onto
+        //    the node so a later sibling-adjacency scan reads them off the projection (WP-B); NOT read here.
+        //    `predicateSlot` is R3-optional; conditional spread keeps `slot` ABSENT (exactOptionalPropertyTypes).
+        primaryAnchor: primaryAnchorId(candidateView) as unknown as string,
+        ...(node.predicateSlot !== undefined ? { slot: node.predicateSlot } : {}),
+        // ── GOVERNANCE carrier (ADDITIVE — ADR-0007) — stamp the `(scope, tier)` pair onto the ROW so the
+        //    incumbent guard above can resolve target authority off the projection instead of off the CAS
+        //    bytes. These are the GATE-0 SNAPSHOT values, not `raw.*`: what was validated is what is stored,
+        //    and it is the same snapshot `put` writes into CAS below — so the row and its bytes agree by
+        //    construction, which is exactly what the corroboration check above requires.
+        scope, // the gate-0 narrowed const (`isScope` proved it a non-empty string), never the raw field
+        tier,
+      };
+      const next = upsert(projection, req).store;
 
-    return { emitted: true, id: contentHash };
+      // 4. DURABLE PERSIST — the content-addressed bytes FIRST, then the projection sidecar that references
+      //    them (INVARIANT: the CAS bytes ARE the fact, so driftFacts/doctor can read them back). The order is
+      //    now enforced BY the commit rather than by two adjacent statements a later edit could swap: `put`
+      //    names the objects the protocol writes before it links the generation in. A failing `put`
+      //    (disk-full / permission) throws before any sidecar byte, so the sidecar can NEVER reference a
+      //    contentHash whose bytes are absent from CAS.
+        return { out: { emitted: true, id: contentHash }, next, put: [node as CasObject] };
+    });
+
+    // 5. THE COMMIT'S OWN REFUSALS — visible, never silent, and door-wide rather than incumbent-derived
+    //    (neither discloses anything about a node). `contended`: other writers published on all 64 attempts;
+    //    nothing was written and no gate was bypassed. `unreadable store`: the sidecar exists but no
+    //    generation parses, so the incumbent cannot be read — refuse rather than treat "corrupt" as "empty",
+    //    which is the amplification that turned a torn read into a 402-node erasure. Both rank strictly
+    //    above the silent loss they replace.
+    return committed.settled
+      ? committed.out
+      : { emitted: false, rejected: committed.refusal === 'contended' ? REJECTED_CONTENDED : REJECTED_UNREADABLE_STORE };
   };
   return { emit };
 }

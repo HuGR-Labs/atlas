@@ -2,9 +2,10 @@
 //
 // The runtime composition-root's SECOND governed write door (mirrors `governed-emit.ts`). `atlas-link`
 // asserts a human `sameAs` equivalence between two current nodes — a symmetric, non-destructive edge — only
-// THROUGH six stages producing EIGHT fail-closed refusal points, in order, before a single byte is written.
+// THROUGH the gate ladder below — TEN fail-closed refusal points, in order, before a byte is DURABLE.
 // The count is stated because it drifted: this header said "four" while the body had five reasons and left
-// `unverifiable endpoint` unlisted entirely.
+// `unverifiable endpoint` unlisted entirely. (Eight became ten when the durable write became an atomic
+// COMMIT — stage 6, whose two refusals are the emit door's, byte for byte.)
 //   1. DISTINCT     — a node never names itself; `a === b` is refused (no self-equivalence).
 //   2. BOTH KNOWN   — both `a` and `b` MUST be current nodes in the rehydrated projection; an absent
 //                     endpoint is refused (no dangling assertion) — one refusal point per endpoint.
@@ -28,7 +29,11 @@
 //                     a `T0` node is a `T0` act, else the weaker endpoint is a side door onto the stronger).
 //                     The token is env-sourced by the composition root (`ATLAS_RATIFY_TOKEN`) — NEVER a
 //                     payload field (the spoof-guard).
-// Only after all of them does it `linkSameAs` the projection and `persistProjection` it durably.
+//   6. COMMIT       — stages 2→5 are ONE decision over ONE snapshot, published atomically by the
+//                     generation-CAS protocol in `sidecar-commit.ts`; `contended` and `unreadable store`
+//                     are its two refusals, imported from `governed-emit-reasons.ts` so one protocol cannot
+//                     grow two vocabularies.
+// Only after all of them does it `linkSameAs` the projection and publish it durably.
 //
 // GATE PRECEDENCE IS AN INVARIANT (the same rule `governed-emit.ts` states): no pair of these gates changes
 // `linked` when swapped, so a reordering leaves the suite green — but the order fixes which `rejected`
@@ -48,8 +53,8 @@ import type { Candidate, CurrentNode, GroundedFact } from '@atlas/knowledge';
 import type { LinkOut } from '@atlas/tools';
 import { actorInScope } from './policy.js';
 import type { AtlasPolicy } from './policy.js';
-import { rehydrateProjection } from './store.js';
 import type { DiskStore } from './store.js';
+import { REJECTED_CONTENDED as COMMIT_CONTENDED, REJECTED_UNREADABLE_STORE as COMMIT_UNREADABLE_STORE } from './governed-emit-reasons.js';
 
 /** The structured fail-closed reasons — a non-distinct, unknown-endpoint, unauthorized, OR unratified link
  *  never lands. */
@@ -64,6 +69,13 @@ const REJECTED_UNVERIFIABLE =
   'unverifiable endpoint: the stored fact of an endpoint — or of a node in the equivalence class this link ' +
   'merges — is not readable from CAS, so its governance class and its scope cannot be confirmed; refused ' +
   'fail-closed rather than defaulted';
+/** The COMMIT refusals — the SAME two the emit door reports, imported from the one place they are defined
+ *  so the two doors cannot drift into two vocabularies for one protocol. `unreadable store` on this door
+ *  means the equivalence class this link merges — and therefore its authority set and its ratify tier —
+ *  cannot be read, so the link is refused rather than asserted over a projection that only LOOKED empty. */
+const REJECTED_CONTENDED = COMMIT_CONTENDED;
+const REJECTED_UNREADABLE = COMMIT_UNREADABLE_STORE;
+
 const unknownNode = (key: string): string => `unknown node: ${key} not in the current projection`;
 
 /** What the governed link leg is composed over: the durable CAS store (fact read-back + persist), the admin
@@ -129,100 +141,118 @@ export function createGovernedLink(deps: GovernedLinkDeps): { readonly link: (a:
     if (a === b) return { linked: false, rejected: REJECTED_SAME };
 
     // 2. BOTH KNOWN — resolve both endpoints against the rehydrated projection; an absent one is refused.
-    const proj = rehydrateProjection(deps.store);
-    const nodeA = proj.current.get(a);
-    if (nodeA === undefined) return { linked: false, rejected: unknownNode(a) };
-    const nodeB = proj.current.get(b);
-    if (nodeB === undefined) return { linked: false, rejected: unknownNode(b) };
+    // ── THE ATOMIC COMMIT (stages 2 → 5) ────────────────────────────────────────────────────────────────
+    // Every gate below is priced against ONE snapshot of the projection, and the edge is published against
+    // that same snapshot or not at all. `rehydrateProjection` + `persistProjection` was a
+    // read-modify-whole-file-write with no compare-and-swap, so a concurrent emit could land between the
+    // read and the write and be erased by this door's whole-Map replacement — measured at 1–5 nodes lost per
+    // 8-writer race, every writer reporting `status: ok` (see `sidecar.ts`).
+    //
+    // The callback re-runs FROM SCRATCH on a lost race, GATES INCLUDED — which matters MORE here than at the
+    // emit door, because these gates are priced over the merged equivalence CLASS: a node that joins the
+    // class between the snapshot and the commit changes both the authority set (`rowAuthorized` over every
+    // member) and the ratify tier (`strictestTier` over every member's bytes), so re-publishing the old
+    // `linkSameAs` would merge a class nobody was ever authorized over.
+    const committed = deps.store.commitProjection<LinkOut>((proj) => {
+      const nodeA = proj.current.get(a);
+      if (nodeA === undefined) return { out: { linked: false, rejected: unknownNode(a) } };
+      const nodeB = proj.current.get(b);
+      if (nodeB === undefined) return { out: { linked: false, rejected: unknownNode(b) } };
 
-    // 3. AUTHZ (KNOW-11), FIRST LEG — the actor must be in the scope of BOTH endpoints. Runs before the
-    //    class walk below so an actor with no authority over the nodes it NAMED is told `unauthorized` and
-    //    learns nothing about the class behind them (the precedence rule in the header).
-    //
-    //    ANSWERED FROM THE ROWS, AND THAT ORDERING IS THE POINT (ADR-0007 carrier). This gate used to run
-    //    AFTER the CAS read-back, because the scope it needs lived only in the bytes — so a caller with
-    //    authority over NEITHER endpoint got `unverifiable endpoint` when an endpoint's bytes were pruned
-    //    and `unauthorized` when they were healthy. Those two strings are a one-bit storage-health oracle
-    //    over nodes the caller cannot touch, at keys it can name freely. SCN-GL-14 pinned exactly this
-    //    precedence for the CLASS walk and could not pin it here, because the gate physically could not run
-    //    before the read it depended on. With `scope` on the row it can, so it does.
-    const factA = storedFact(deps, nodeA);
-    const factB = storedFact(deps, nodeB);
-    if (!rowAuthorized(deps, nodeA, factA) || !rowAuthorized(deps, nodeB, factB)) {
-      return { linked: false, rejected: REJECTED_UNAUTHORIZED };
-    }
+      // 3. AUTHZ (KNOW-11), FIRST LEG — the actor must be in the scope of BOTH endpoints. Runs before the
+      //    class walk below so an actor with no authority over the nodes it NAMED is told `unauthorized` and
+      //    learns nothing about the class behind them (the precedence rule in the header).
+      //
+      //    ANSWERED FROM THE ROWS, AND THAT ORDERING IS THE POINT (ADR-0007 carrier). This gate used to run
+      //    AFTER the CAS read-back, because the scope it needs lived only in the bytes — so a caller with
+      //    authority over NEITHER endpoint got `unverifiable endpoint` when an endpoint's bytes were pruned
+      //    and `unauthorized` when they were healthy. Those two strings are a one-bit storage-health oracle
+      //    over nodes the caller cannot touch, at keys it can name freely. SCN-GL-14 pinned exactly this
+      //    precedence for the CLASS walk and could not pin it here, because the gate physically could not run
+      //    before the read it depended on. With `scope` on the row it can, so it does.
+      const factA = storedFact(deps, nodeA);
+      const factB = storedFact(deps, nodeB);
+      if (!rowAuthorized(deps, nodeA, factA) || !rowAuthorized(deps, nodeB, factB)) {
+        return { out: { linked: false, rejected: REJECTED_UNAUTHORIZED } };
+      }
 
-    // 3.25 CLASS READ-BACK — both endpoints' stored facts, the source of the tier gate below. An endpoint
-    //     whose bytes are gone has an unknowable tier, and one whose bytes CONTRADICT its row is a node the
-    //     projection is misdescribing, so both are refused outright rather than defaulted (the same
-    //     fail-closed stance, and the same corroboration rule, `governed-emit.ts`'s incumbent guard takes).
-    //     `unverifiable endpoint` stays a DISTINCT reason (SCN-GL-7) — a pruned CAS is not a policy gap an
-    //     admin should try to fix by granting a scope — and it is now reached ONLY by a caller already shown
-    //     to hold authority over both endpoints, so it discloses nothing it has not earned.
-    if (factA === undefined || factB === undefined || rowContradicted(nodeA, factA) || rowContradicted(nodeB, factB)) {
-      return { linked: false, rejected: REJECTED_UNVERIFIABLE };
-    }
+      // 3.25 CLASS READ-BACK — both endpoints' stored facts, the source of the tier gate below. An endpoint
+      //     whose bytes are gone has an unknowable tier, and one whose bytes CONTRADICT its row is a node the
+      //     projection is misdescribing, so both are refused outright rather than defaulted (the same
+      //     fail-closed stance, and the same corroboration rule, `governed-emit.ts`'s incumbent guard takes).
+      //     `unverifiable endpoint` stays a DISTINCT reason (SCN-GL-7) — a pruned CAS is not a policy gap an
+      //     admin should try to fix by granting a scope — and it is now reached ONLY by a caller already shown
+      //     to hold authority over both endpoints, so it discloses nothing it has not earned.
+      if (factA === undefined || factB === undefined || rowContradicted(nodeA, factA) || rowContradicted(nodeB, factB)) {
+        return { out: { linked: false, rejected: REJECTED_UNVERIFIABLE } };
+      }
 
-    // 3.5 THE MERGED CLASS — resolved ONCE and consumed by BOTH remaining gates.
-    //
-    //    The relation is TRANSITIVE (`deriveSameAs` is a union-find), so linking a~b merges the WHOLE of a's
-    //    class with the WHOLE of b's. Every gate on this door therefore has to be a gate on the CLASS; a gate
-    //    on the EDGE is a gate on one arc of a graph whose reachability the link is extending. The tier gate
-    //    below already learned that. The AUTHZ gate above had NOT: it read `factA.scope`/`factB.scope` only,
-    //    which is the same defect one gate over, and it was live — policy `{secure:[alice], shared:[alice,
-    //    mallory], mallory:[mallory]}`, alice links her `secure` node A to the `shared` node B, then mallory
-    //    (who is nowhere near `secure`) links B to her own node M and `deriveSameAs` yields `{A,M}`: her node
-    //    sits inside alice's `secure` class, and every read fold walks it, with no authority there ever
-    //    granted. So the actor must hold authority in EVERY scope the merged class spans, each read off that
-    //    member's OWN stored fact — the resource decides, never the request.
-    //
-    //    A key in `merged` that is not a CURRENT node is skipped: `sameAsClassOf` deliberately keeps dangling
-    //    peers (a retired key is how two live nodes share one class), and a retired key has no readable scope,
-    //    no readable class, and is served by no read fold — it is nobody's authority and nobody's governance
-    //    weight. Everything reachable THROUGH it is itself in `merged` and is priced on its own fact.
-    //
-    //    A member that IS current but whose bytes are unreadable fails closed, exactly as `strictestTier`
-    //    fails an unreadable class closed to `T0`: its scope cannot be confirmed, so no authority over it can
-    //    be. It is reported `unverifiable`, not `unauthorized` — the SCN-GL-7 distinction, because an admin
-    //    reading `unauthorized` would try to fix a pruned CAS by GRANTING a scope. Note this is strictly
-    //    stronger than the previous tier-only treatment: before, an unreadable member merely forced billy;
-    //    now no one, billy included, links across a class it cannot fully read.
-    //
-    //    Both passes are order-INDEPENDENT (all facts resolved, then all checked), so the reason returned
-    //    never depends on the iteration order of the class.
-    //    AUTHZ FIRST, BYTES SECOND — the same ordering as the endpoint gate above, for the same reason: a
-    //    caller who cannot be shown to hold authority over every member must not be told which member's
-    //    bytes are missing. The rows answer the authority question without any read at all.
-    const merged = [...new Set([...sameAsClassOf(proj, a), ...sameAsClassOf(proj, b)])];
-    const members = merged.map((key) => proj.current.get(key)).filter((m): m is CurrentNode => m !== undefined);
-    const memberFacts = members.map((m) => storedFact(deps, m));
-    if (!members.every((m, i) => rowAuthorized(deps, m, memberFacts[i]))) {
-      return { linked: false, rejected: REJECTED_UNAUTHORIZED };
-    }
-    if (memberFacts.some((f, i) => f === undefined || rowContradicted(members[i]!, f))) {
-      return { linked: false, rejected: REJECTED_UNVERIFIABLE };
-    }
-    const classFacts = memberFacts as readonly GroundedFact[];
+      // 3.5 THE MERGED CLASS — resolved ONCE and consumed by BOTH remaining gates.
+      //
+      //    The relation is TRANSITIVE (`deriveSameAs` is a union-find), so linking a~b merges the WHOLE of a's
+      //    class with the WHOLE of b's. Every gate on this door therefore has to be a gate on the CLASS; a gate
+      //    on the EDGE is a gate on one arc of a graph whose reachability the link is extending. The tier gate
+      //    below already learned that. The AUTHZ gate above had NOT: it read `factA.scope`/`factB.scope` only,
+      //    which is the same defect one gate over, and it was live — policy `{secure:[alice], shared:[alice,
+      //    mallory], mallory:[mallory]}`, alice links her `secure` node A to the `shared` node B, then mallory
+      //    (who is nowhere near `secure`) links B to her own node M and `deriveSameAs` yields `{A,M}`: her node
+      //    sits inside alice's `secure` class, and every read fold walks it, with no authority there ever
+      //    granted. So the actor must hold authority in EVERY scope the merged class spans, each read off that
+      //    member's OWN stored fact — the resource decides, never the request.
+      //
+      //    A key in `merged` that is not a CURRENT node is skipped: `sameAsClassOf` deliberately keeps dangling
+      //    peers (a retired key is how two live nodes share one class), and a retired key has no readable scope,
+      //    no readable class, and is served by no read fold — it is nobody's authority and nobody's governance
+      //    weight. Everything reachable THROUGH it is itself in `merged` and is priced on its own fact.
+      //
+      //    A member that IS current but whose bytes are unreadable fails closed, exactly as `strictestTier`
+      //    fails an unreadable class closed to `T0`: its scope cannot be confirmed, so no authority over it can
+      //    be. It is reported `unverifiable`, not `unauthorized` — the SCN-GL-7 distinction, because an admin
+      //    reading `unauthorized` would try to fix a pruned CAS by GRANTING a scope. Note this is strictly
+      //    stronger than the previous tier-only treatment: before, an unreadable member merely forced billy;
+      //    now no one, billy included, links across a class it cannot fully read.
+      //
+      //    Both passes are order-INDEPENDENT (all facts resolved, then all checked), so the reason returned
+      //    never depends on the iteration order of the class.
+      //    AUTHZ FIRST, BYTES SECOND — the same ordering as the endpoint gate above, for the same reason: a
+      //    caller who cannot be shown to hold authority over every member must not be told which member's
+      //    bytes are missing. The rows answer the authority question without any read at all.
+      const merged = [...new Set([...sameAsClassOf(proj, a), ...sameAsClassOf(proj, b)])];
+      const members = merged.map((key) => proj.current.get(key)).filter((m): m is CurrentNode => m !== undefined);
+      const memberFacts = members.map((m) => storedFact(deps, m));
+      if (!members.every((m, i) => rowAuthorized(deps, m, memberFacts[i]))) {
+        return { out: { linked: false, rejected: REJECTED_UNAUTHORIZED } };
+      }
+      if (memberFacts.some((f, i) => f === undefined || rowContradicted(members[i]!, f))) {
+        return { out: { linked: false, rejected: REJECTED_UNVERIFIABLE } };
+      }
+      const classFacts = memberFacts as readonly GroundedFact[];
 
-    // 4. RATIFY (KNOW-8) — the SAME law emit runs, over the JOIN of every class this link MERGES.
-    //
-    //    Joining only `factA.tier` and `factB.tier` was a live two-hop bypass — billy equates a T0 node A with
-    //    a T2 node B, then anyone links B to their own node M and lands inside A's class with no billy
-    //    signature. The join runs over the same class resolved above; the endpoints seed it explicitly so the
-    //    gate does not silently depend on `sameAsClassOf` including its own argument.
-    const linkClass = classFacts.reduce<Tier>(
-      (acc, f) => strictestTier(acc, f.tier),
-      strictestTier(factA.tier, factB.tier),
-    );
-    const staged = stage({ tier: linkClass } as unknown as Candidate);
-    if (!ratify(staged, { by: deps.ratifyToken ?? '' }).committed) {
-      return { linked: false, rejected: REJECTED_UNRATIFIED };
-    }
+      // 4. RATIFY (KNOW-8) — the SAME law emit runs, over the JOIN of every class this link MERGES.
+      //
+      //    Joining only `factA.tier` and `factB.tier` was a live two-hop bypass — billy equates a T0 node A with
+      //    a T2 node B, then anyone links B to their own node M and lands inside A's class with no billy
+      //    signature. The join runs over the same class resolved above; the endpoints seed it explicitly so the
+      //    gate does not silently depend on `sameAsClassOf` including its own argument.
+      const linkClass = classFacts.reduce<Tier>(
+        (acc, f) => strictestTier(acc, f.tier),
+        strictestTier(factA.tier, factB.tier),
+      );
+      const staged = stage({ tier: linkClass } as unknown as Candidate);
+      if (!ratify(staged, { by: deps.ratifyToken ?? '' }).committed) {
+        return { out: { linked: false, rejected: REJECTED_UNRATIFIED } };
+      }
 
-    // 5. APPLY + PERSIST — the pure symmetric reducer, then the durable projection sidecar.
-    const next = linkSameAs(proj, a, b);
-    deps.store.persistProjection(next);
-    return { linked: true, a, b };
+        // 5. APPLY — the pure symmetric reducer. The DECISION is RETURNED, not written: publishing it is the
+      //    commit's job, and only if this snapshot is still the head when the generation is linked in.
+      const next = linkSameAs(proj, a, b);
+      return { out: { linked: true, a, b }, next };
+    });
+    // 6. COMMIT — its own two refusals, visible and never silent. Identical in kind to the emit door's, and
+    //    deliberately the SAME vocabulary: one protocol, one set of reason names.
+    return committed.settled
+      ? committed.out
+      : { linked: false, rejected: committed.refusal === 'contended' ? REJECTED_CONTENDED : REJECTED_UNREADABLE };
   };
   return { link };
 }
