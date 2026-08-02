@@ -13,88 +13,15 @@
 
 import { describe, it, expect } from 'vitest';
 import { reasonOf } from './door-regression-support.js';
-import { id, asNodeKey, asSubtreeHash } from '@atlas/kernel';
-import type { CasObject } from '@atlas/kernel';
-import type { GroundedFact, StoreProjection, CurrentNode } from '@atlas/knowledge';
+import { addressOf, blindTo, fact, fixture, POLICY } from './governed-link-support.js';
+import type { GroundedFact } from '@atlas/knowledge';
 import { createGovernedLink } from '../src/governed-link.js';
 import type { DiskStore } from '../src/store.js';
 import type { AtlasPolicy } from '../src/policy.js';
 
 // ── fixture ──────────────────────────────────────────────────────────────────────────────────────────
-
-/** A grounded advisory fact at a given scope/tier — the CAS bytes a projection node points at. */
-function fact(opts: { claim: string; scope: string; tier: GroundedFact['tier'] }): GroundedFact {
-  return {
-    kind: 'advisory',
-    id: asNodeKey(`nk-${opts.claim}`),
-    tier: opts.tier,
-    claimNorm: opts.claim,
-    grounding: {
-      entries: [{ anchor: { kind: 'symbol', qualifiedPath: `src/${opts.claim}.ts::f`, subtreeHash: asSubtreeHash('sh') }, path: 'src' }],
-    },
-    freshness: 'FRESH',
-    claims: [],
-    authoring: 'ADVISORY',
-    scope: opts.scope,
-  };
-}
-
-interface LinkFixture {
-  readonly store: DiskStore;
-  readonly persists: () => readonly StoreProjection[];
-}
-
-/** A store whose projection holds one current node per supplied fact, keyed `n0`, `n1`, … with the fact's
- *  real content address — so the door's CAS read-back resolves exactly the fact under test.
- *
- *  `edges` seeds STORED `sameAs` peers on those nodes (`{ n0: ['nRETIRED'] }`). A peer that is not itself a
- *  current node is not a malformed fixture: `linkSameAs` writes the edge onto BOTH endpoints, and a node
- *  superseded afterwards leaves its peer's stored edge pointing at a key the projection no longer carries.
- *  That is the shape the class-join below has to survive, and no earlier case here produced it. */
-function fixture(facts: readonly GroundedFact[], edges: Readonly<Record<string, readonly string[]>> = {}): LinkFixture {
-  const cas = new Map<string, CasObject>();
-  const current = new Map<string, CurrentNode>();
-  facts.forEach((f, i) => {
-    const h = id(f as CasObject) as unknown as string;
-    cas.set(h, f as CasObject);
-    const key = `n${i}`;
-    const sameAs = edges[key];
-    // The row carries the node's `(scope, tier)` (ADR-0007 carrier) exactly as `upsert` stamps it, so the
-    // authz gates can resolve authority off the projection without reading CAS. Mirrored FROM the fact, not
-    // invented: the door corroborates the two against each other, and a fixture that disagreed with its own
-    // bytes would be testing the tamper path rather than the ordinary one.
-    current.set(key, { nodeKey: key, family: 'advisory', contentHash: h, claims: [f.claimNorm], scope: f.scope!, tier: f.tier, ...(sameAs ? { sameAs } : {}) });
-  });
-  const persists: StoreProjection[] = [];
-  const projection: StoreProjection = { current, cas: new Set(cas.keys()) };
-  return {
-    store: {
-      put(obj) {
-        const h = id(obj);
-        cas.set(h as unknown as string, obj);
-        return h;
-      },
-      get: (h) => cas.get(h as unknown as string),
-      // The atomic commit, faked: read the head, run the WHOLE decision, publish only what it returns. A
-      // decision with no `next` (every governed refusal) writes nothing — the property `persists()` pins.
-      commitProjection: (decide) => {
-        const decision = decide(persists.length > 0 ? persists[persists.length - 1]! : projection);
-        if (decision.next !== undefined) persists.push(decision.next);
-        return { settled: true, out: decision.out };
-      },
-      persistProjection: (p) => void persists.push(p),
-      loadProjection: () => (persists.length > 0 ? persists[persists.length - 1] : projection),
-    },
-    persists: () => persists,
-  };
-}
-
-/** alice owns `core`; mallory owns `other`. */
-const POLICY: AtlasPolicy = {
-  nearDup: { claimNormThreshold: 1 },
-  t0Heuristic: { keywords: [] },
-  authz: { scopes: { core: ['alice'], other: ['mallory'] } },
-};
+// The builders live in `governed-link-support.ts` (see its header). `POLICY`: alice owns `core`, mallory
+// owns `other`.
 
 const T2_A = fact({ claim: 'alpha', scope: 'core', tier: 'T2' });
 const T2_B = fact({ claim: 'beta', scope: 'core', tier: 'T2' });
@@ -108,16 +35,63 @@ describe('WP-SAMEAS — createGovernedLink (distinct · both-known · class read
     const { link } = createGovernedLink({ store: fx.store, policy: POLICY, actor: 'alice', ratifyToken: 'lead' });
     const out = link('n0', 'n0');
     expect(out.linked).toBe(false);
-    expect(out.rejected ?? '').toContain('distinct');
+    // DISCRIMINANT EQUALITY, not a substring. This reason carries no `:`, so the discriminant IS the whole
+    // string; pinned literally so a mutant that swaps it for another door's refusal cannot pass by sharing a
+    // word with it. (See `reasonOf`: refusal prose quotes OTHER refusals by name, which makes `toContain`
+    // vacuous in one direction.)
+    expect(reasonOf(out.rejected)).toBe('sameAs requires two distinct nodes');
     expect(fx.persists()).toHaveLength(0);
   });
 
   it('SCN-GL-2 — an endpoint absent from the projection is refused (no dangling assertion)', () => {
     const fx = fixture([T2_A, T2_B]);
     const { link } = createGovernedLink({ store: fx.store, policy: POLICY, actor: 'alice', ratifyToken: 'lead' });
+    expect(() => link('n0', 'n-nope')).not.toThrow(); // a write door REFUSES; it does not throw
     const out = link('n0', 'n-nope');
     expect(out.linked).toBe(false);
-    expect(out.rejected ?? '').toContain('unknown node');
+    expect(reasonOf(out.rejected)).toBe('unknown node');
+    // …and it names the endpoint that is actually ABSENT. The two endpoints share one discriminant, so this
+    // is the one place a substring is the only available instrument — and it is anti-vacuous in both
+    // directions: the present key must NOT appear.
+    expect(out.rejected ?? '').toContain('n-nope');
+    expect(out.rejected ?? '').not.toContain('n0');
+    expect(fx.persists()).toHaveLength(0);
+  });
+
+  it('SCN-GL-2b — the FIRST endpoint is refused identically (the mirror of SCN-GL-2)', () => {
+    // TEETH, MEASURED: delete the `nodeA === undefined` guard and the ENTIRE suite stayed green — 221 files,
+    // 1614 tests, exit 0. Not equivalent, and not a near-miss: with the guard gone `storedFact(deps, nodeA)`
+    // dereferences `undefined.contentHash` and the door throws `TypeError: Cannot read properties of
+    // undefined (reading 'contentHash')` — a fail-closed refusal becomes an uncaught crash out of a door
+    // whose own header calls it total.
+    //
+    // The blind spot was the FIXTURES, not the guard: SCN-GL-2 (`link('n0','n-nope')`) and blackbox T3
+    // (`link(rejA.id,'not-a-real-nodekey')`) both put the unknown key SECOND, so the `b` twin was pinned
+    // twice and the `a` guard not at all. The header advertises "one refusal point per endpoint"; this is
+    // the other one.
+    const fx = fixture([T2_A, T2_B]);
+    const { link } = createGovernedLink({ store: fx.store, policy: POLICY, actor: 'alice', ratifyToken: 'lead' });
+
+    expect(() => link('n-nope', 'n0')).not.toThrow(); // THE MUTANT DIES HERE (TypeError, not a rejection)
+    const out = link('n-nope', 'n0');
+    expect(out.linked).toBe(false);
+    expect(reasonOf(out.rejected)).toBe('unknown node');
+    expect(out.rejected ?? '').toContain('n-nope');
+    expect(out.rejected ?? '').not.toContain('n0');
+    expect(fx.persists()).toHaveLength(0);
+  });
+
+  it('SCN-GL-2c — BOTH endpoints absent is still one refusal, and it names the FIRST', () => {
+    // Precedence between the two twins: `a` is resolved first, so `a` is what the caller is told about.
+    // Without this, swapping the two guards is a free mutant. Nothing is disclosed by the choice — neither
+    // key is in the projection, which the caller learns either way.
+    const fx = fixture([T2_A, T2_B]);
+    const { link } = createGovernedLink({ store: fx.store, policy: POLICY, actor: 'alice', ratifyToken: 'lead' });
+    const out = link('n-absent-a', 'n-absent-b');
+    expect(out.linked).toBe(false);
+    expect(reasonOf(out.rejected)).toBe('unknown node');
+    expect(out.rejected ?? '').toContain('n-absent-a');
+    expect(out.rejected ?? '').not.toContain('n-absent-b');
     expect(fx.persists()).toHaveLength(0);
   });
 
@@ -128,7 +102,18 @@ describe('WP-SAMEAS — createGovernedLink (distinct · both-known · class read
     const out = link('n0', 'n1');
     expect(out.linked).toBe(false);
     expect(reasonOf(out.rejected)).toBe('unauthorized'); // discriminant EQUALITY — see reasonOf
-    // TEETH: drop EITHER half of the both-endpoints authz check and a one-sided actor links across scopes.
+    // THIS CASE HAS NO TEETH ON THE CONJUNCTION, AND THE COMMENT THAT SAID IT DID WAS WRONG TWICE.
+    // It read: "drop EITHER half of the both-endpoints authz check and a one-sided actor links across
+    // scopes." MEASURED, both halves, full suite: dropping either half alone leaves 221/221 green, and this
+    // case CANNOT detect it — mallory is in NEITHER endpoint's scope, so whichever half survives still fires
+    // on her. A fixture with no one-sided actor in it can never see a one-sided gate.
+    // The second error is in KIND: a one-sided actor does NOT link across scopes even with a half gone. The
+    // class walk below re-checks `rowAuthorized` over every CURRENT member of the merged class, and
+    // `sameAsClassOf` includes its own argument, so both endpoints are always re-covered — the endpoint gate
+    // is `linked`-EQUIVALENT. What it is not is REASON-equivalent: it is a DISCLOSURE gate, and dropping a
+    // half opens a storage-health oracle over the endpoint it stopped checking.
+    // The real teeth, one genuine two-scope one-sided actor per endpoint, are in
+    // `governed-link-endpoint-authz.test.ts` (SCN-GL-15 / SCN-GL-16).
     expect(fx.persists()).toHaveLength(0);
   });
 
@@ -137,7 +122,7 @@ describe('WP-SAMEAS — createGovernedLink (distinct · both-known · class read
     const { link } = createGovernedLink({ store: fx.store, policy: POLICY, actor: 'alice' });
     const out = link('n0', 'n1');
     expect(out.linked).toBe(false);
-    expect(out.rejected ?? '').toContain('unratified');
+    expect(reasonOf(out.rejected)).toBe('unratified');
     expect(fx.persists()).toHaveLength(0);
   });
 
@@ -164,7 +149,7 @@ describe('WP-SAMEAS — createGovernedLink (distinct · both-known · class read
     const lead = createGovernedLink({ store: fx.store, policy: POLICY, actor: 'alice', ratifyToken: 'lead' });
     const refused = lead.link('n0', 'n1');
     expect(refused.linked).toBe(false);
-    expect(refused.rejected ?? '').toContain('unratified');
+    expect(reasonOf(refused.rejected)).toBe('unratified');
     expect(fx.persists()).toHaveLength(0);
 
     const billy = createGovernedLink({ store: fx.store, policy: POLICY, actor: 'alice', ratifyToken: 'billy' });
@@ -193,7 +178,7 @@ describe('WP-SAMEAS — createGovernedLink (distinct · both-known · class read
     const lead = createGovernedLink({ store: fx.store, policy: POLICY, actor: 'alice', ratifyToken: 'lead' });
     const out = lead.link('n2', 'n0');
     expect(out.linked).toBe(false);
-    expect(out.rejected ?? '').toContain('unratified');
+    expect(reasonOf(out.rejected)).toBe('unratified');
 
     // …and billy CAN sign it, because the act is honestly a T0 act, not because it is forbidden.
     expect(billy.link('n2', 'n0').linked).toBe(true);
@@ -217,7 +202,7 @@ describe('WP-SAMEAS — createGovernedLink (distinct · both-known · class read
     expect(out.linked).toBe(false);
     // TEETH: previously an unreadable fact degraded to `undefined` scope and was reported merely
     // "unauthorized" — which reads as a policy problem an admin would try to fix by GRANTING a scope.
-    expect(out.rejected ?? '').toContain('unverifiable');
+    expect(reasonOf(out.rejected)).toBe('unverifiable endpoint');
     expect(fx.persists()).toHaveLength(0);
   });
 
@@ -234,8 +219,7 @@ describe('WP-SAMEAS — createGovernedLink (distinct · both-known · class read
 
   it('SCN-GL-10 — endpoint A readable, endpoint B blind ⇒ still unverifiable, and the door never throws', () => {
     const fx = fixture([T2_A, T2_B]);
-    const hB = id(T2_B as CasObject) as unknown as string; // the ONE object the store has lost
-    const halfBlind: DiskStore = { ...fx.store, get: (h) => ((h as unknown as string) === hB ? undefined : fx.store.get(h)) };
+    const halfBlind = blindTo(fx.store, addressOf(T2_B)); // the ONE object the store has lost
     const { link } = createGovernedLink({ store: halfBlind, policy: POLICY, actor: 'alice', ratifyToken: 'billy' });
 
     // TOTALITY FIRST: a write door reports a rejection, it does not throw. Under the `&&` mutant the
@@ -243,20 +227,19 @@ describe('WP-SAMEAS — createGovernedLink (distinct · both-known · class read
     expect(() => link('n0', 'n1')).not.toThrow();
     const out = link('n0', 'n1');
     expect(out.linked).toBe(false);
-    expect(out.rejected ?? '').toContain('unverifiable');
+    expect(reasonOf(out.rejected)).toBe('unverifiable endpoint');
     expect(fx.persists()).toHaveLength(0);
   });
 
   it('SCN-GL-11 — endpoint A blind, endpoint B readable ⇒ identically refused (the gate is symmetric)', () => {
     const fx = fixture([T2_A, T2_B]);
-    const hA = id(T2_A as CasObject) as unknown as string;
-    const halfBlind: DiskStore = { ...fx.store, get: (h) => ((h as unknown as string) === hA ? undefined : fx.store.get(h)) };
+    const halfBlind = blindTo(fx.store, addressOf(T2_A));
     const { link } = createGovernedLink({ store: halfBlind, policy: POLICY, actor: 'alice', ratifyToken: 'billy' });
 
     expect(() => link('n0', 'n1')).not.toThrow();
     const out = link('n0', 'n1');
     expect(out.linked).toBe(false);
-    expect(out.rejected ?? '').toContain('unverifiable');
+    expect(reasonOf(out.rejected)).toBe('unverifiable endpoint');
     expect(fx.persists()).toHaveLength(0);
   });
 
@@ -340,13 +323,12 @@ describe('WP-SAMEAS — createGovernedLink (distinct · both-known · class read
     expect(alice.link('n0', 'n2').linked).toBe(true); // n0 and n2 are now one class
 
     // Now n2's bytes are gone. n0/n1 are both perfectly readable, so the ENDPOINT gate cannot see this.
-    const hE = id(T2_E as CasObject) as unknown as string;
-    const halfBlind: DiskStore = { ...fx.store, get: (h) => ((h as unknown as string) === hE ? undefined : fx.store.get(h)) };
+    const halfBlind = blindTo(fx.store, addressOf(T2_E));
     const blindLink = createGovernedLink({ store: halfBlind, policy: POLICY, actor: 'alice', ratifyToken: 'billy' });
     expect(() => blindLink.link('n0', 'n1')).not.toThrow();
     const out = blindLink.link('n0', 'n1');
     expect(out.linked).toBe(false);
-    expect(out.rejected ?? '').toContain('unverifiable');
+    expect(reasonOf(out.rejected)).toBe('unverifiable endpoint');
     expect(fx.persists()).toHaveLength(1); // still only the first, legitimate link
   });
 
@@ -361,8 +343,7 @@ describe('WP-SAMEAS — createGovernedLink (distinct · both-known · class read
     const alice = createGovernedLink({ store: fx.store, policy: POLICY, actor: 'alice', ratifyToken: 'billy' });
     expect(alice.link('n0', 'n2').linked).toBe(true);
 
-    const hE = id(T2_E as CasObject) as unknown as string;
-    const halfBlind: DiskStore = { ...fx.store, get: (h) => ((h as unknown as string) === hE ? undefined : fx.store.get(h)) };
+    const halfBlind = blindTo(fx.store, addressOf(T2_E));
     // mallory owns `other`; both endpoints live in `core`, AND the class member n2 is unreadable.
     const out = createGovernedLink({ store: halfBlind, policy: POLICY, actor: 'mallory', ratifyToken: 'billy' }).link('n0', 'n1');
     expect(out.linked).toBe(false);

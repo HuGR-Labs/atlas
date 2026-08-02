@@ -11,7 +11,10 @@
 //   T1 — an AUTHORIZED, RATIFIED link surfaces the `a ≡ b` edge on BOTH doors (CLI `sameAs` line + MCP
 //        `data.sameAs`), symmetric regardless of query/argument order.
 //   T2 — an UNAUTHORIZED actor (outside the nodes' scope) is REJECTED (exit 2), nothing persisted.
-//   T3 — a link to an UNKNOWN nodeKey is REJECTED (exit 2, 'unknown node'), a no-op.
+//   T3 — a link to an UNKNOWN nodeKey is REJECTED (exit 2, 'unknown node'), a no-op — in EITHER argument
+//        position (T3b: the unknown key FIRST, which no case here reached until it was measured that
+//        deleting the door's `a`-side guard left the whole suite green and turned the refusal into an
+//        uncaught TypeError).
 //   T4 — TRANSITIVE fold: link A≡B and B≡C ⇒ `atlas query` also derives A≡C (union-find teeth).
 //   T5 — an EMPTY ratifier is REJECTED (exit 2, 'unratified') even for an authorized actor.
 
@@ -141,6 +144,34 @@ describe('S16 — the governed sameAs write door (WP-SAMEAS)', () => {
     expect(link.exitCode).toBe(2);
     expect(link.stdout).toContain('status: rejected');
     expect(link.stdout).toContain('unknown node');
+    expect(link.stdout).toContain('not-a-real-nodekey'); // it names the endpoint that is actually absent
+    // Still nothing persisted.
+    const q = runAtlas(rejRepo.repoPath, ['query', 'src']);
+    expect(sameAsLines(q.stdout)).toEqual([]);
+  });
+
+  it('T3b: the MIRROR — an unknown FIRST endpoint is refused identically, and the CLI does not crash', () => {
+    // This position was untested on BOTH doors: the unit case (SCN-GL-2) and T3 above each put the unknown
+    // key SECOND, so the door's `a`-side guard was pinned by nothing. Deleting it left 221 files / 1614
+    // tests green while turning `atlas link` into an uncaught `TypeError: Cannot read properties of
+    // undefined (reading 'contentHash')`. Through the REAL CLI that is the difference between a governed
+    // refusal and a stack trace on the operator's terminal, so it is pinned HERE as well as at the unit.
+    const link = runAtlas(rejRepo.repoPath, ['link', 'not-a-real-nodekey', rejB.id]);
+    expect(link.exitCode).toBe(2); // a GOVERNED refusal — not the crash exit code, and not 0
+    expect(link.stdout).toContain('status: rejected');
+    expect(link.stdout).toContain('unknown node');
+    expect(link.stdout).toContain('not-a-real-nodekey');
+
+    // TOTALITY at the PROCESS boundary, and this is what the mutant actually does — MEASURED, not imagined.
+    // The crash does NOT reach stderr (stderr is empty; an earlier draft asserted on it and that assertion
+    // passed under the mutant, i.e. it was vacuous, and was removed). The CLI's outer catch swallows the
+    // TypeError and re-labels it:
+    //     status: error
+    //     reason: malformed args — fail-closed: Cannot read properties of undefined (reading 'contentHash')
+    // …at exit 1. So the door's own bug is reported to the operator as THE CALLER'S malformed input, which
+    // is worse than a crash: it is a crash wearing a governance verdict. Both assertions below fire on it.
+    expect(link.stdout).not.toContain('malformed args');
+    expect(link.stdout).not.toContain('Cannot read properties');
     // Still nothing persisted.
     const q = runAtlas(rejRepo.repoPath, ['query', 'src']);
     expect(sameAsLines(q.stdout)).toEqual([]);
