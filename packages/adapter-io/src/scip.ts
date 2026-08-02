@@ -3,7 +3,7 @@
 // The raw scip adapter: read an external `scip.proto` dump into the frozen `ScipOutput` projection
 // (@atlas/index) and plan which indexer to run per language. Implemented — WP-9.1.1-b.SCIP (tests: scip.test.ts).
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { deserializeSCIP, SymbolRole } from '@c4312/scip';
 import type { ScipOutput } from '@atlas/index';
 
@@ -17,9 +17,48 @@ export interface IndexerPlan {
   readonly args: readonly string[];
 }
 
+/**
+ * The bytes of a SCIP dump, read ONLY when the path is a REGULAR FILE.
+ *
+ * WHY THE TYPE CHECK IS THE GUARD, and why the existing try/catch was not one. `readFileSync` on a
+ * character device reads until EOF, and `/dev/zero` has none: the call never returns, never throws, and
+ * never allocates enough to be killed — measured at 3 minutes still spinning, and 60s of the real `atlas`
+ * bin producing no stdout, no stderr and no exit. `readScipOrEmpty` absorbs THROWS (a missing dump, a
+ * corrupt one); a read that does not return is outside what any `catch` can see.
+ *
+ * That is reachable from a COMMITTED artifact, which is the whole reason it matters. `.atlas/index.scip`
+ * is deliberately EXEMPT from the durable-store provenance refusal (`store-provenance.ts`
+ * `isDurableStorePath`) because it is a build input, and `atlas init`'s ignore rule un-ignores it by name.
+ * Git tracks symlinks (mode `120000`), so "ship a dump" and "ship a symlink named like a dump" are one
+ * act — and BOTH entrypoints read this path at STARTUP (`composeRuntime`, `assembleHandler`), so the CLI
+ * and the MCP server are bricked before any door opens, silently. `wire.ts` already names this exact
+ * hazard one door over ("an unbounded file like /dev/zero … can never hang/OOM") and guards the `atlas
+ * node` content address against it; the guard was never applied to the dump.
+ *
+ * `statSync` FOLLOWS the link deliberately — a symlink pointing at a real `.scip` is a legitimate build
+ * layout and stays supported. What is refused is the TARGET not being a regular file: a character/block
+ * device, a FIFO, a socket, a directory. Refused by THROWING, so the one shared degrade below
+ * (`readScipOrEmpty` ⇒ `{documents: []}`, a files-only index) covers it with no second failure path —
+ * the same outcome a missing or corrupt dump already produces.
+ *
+ * WHAT THIS DOES NOT BOUND, stated because it would otherwise read as a size guard: a genuinely enormous
+ * REGULAR file is still read whole. That case is self-limiting and visible — the bytes have to exist in
+ * the repository — whereas the device symlink costs 9 bytes and is unbounded.
+ */
+function scipBytes(scipPath: string): Uint8Array {
+  const stat = statSync(scipPath); // throws on a dangling link ⇒ absorbed by the degrade, like any ENOENT
+  if (!stat.isFile()) {
+    throw new Error(
+      `scip: '${scipPath}' is not a regular file — a device, FIFO, socket or directory is not an indexer ` +
+        'dump, and reading one can block forever (a git-tracked symlink to /dev/zero bricks both bins at boot)',
+    );
+  }
+  return readFileSync(scipPath);
+}
+
 /** Read a per-language SCIP indexer dump into the minimal frozen `ScipOutput` projection (ADAPT-SCIP-1). */
 export function readScip(scipPath: string): ScipOutput {
-  const index = deserializeSCIP(readFileSync(scipPath));
+  const index = deserializeSCIP(scipBytes(scipPath));
   return {
     documents: index.documents.map((doc) => ({
       relativePath: doc.relativePath,
@@ -35,7 +74,9 @@ export function readScip(scipPath: string): ScipOutput {
  * Read the optional SCIP dump at `scipPath`, DEGRADING to the empty projection (`{ documents: [] }`) when
  * the dump cannot be projected — NEVER a throw. Both failure modes fold to the SAME files-only structural
  * view:
- *   • MISSING file      — a fresh repo with no `.atlas/index.scip` yet (`readScip` → `readFileSync` ENOENT).
+ *   • MISSING file      — a fresh repo with no `.atlas/index.scip` yet (`readScip` → `statSync` ENOENT).
+ *   • NOT-A-REGULAR-FILE — a git-tracked symlink to a device/FIFO (see `scipBytes`): the read would never
+ *     return, so the path is refused BEFORE any byte is read rather than absorbed after the fact.
  *   • PRESENT-but-corrupt — garbage bytes, a truncated protobuf, or a foreign/stale schema that makes
  *     `deserializeSCIP` THROW. Fail CLOSED here rather than at boot: `wire.ts` (`assembleHandler`) and
  *     `compose.ts` (`composeRuntime`) BOTH read the `.scip` at startup through this ONE shared guard, so an

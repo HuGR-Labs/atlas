@@ -29,7 +29,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { createDiskStore } from '@atlas/adapter-io';
+import { createDiskStore, IDENTITY_SCHEMA } from '@atlas/adapter-io';
 import type { CommitDecision, CommitResult, DiskStore } from '@atlas/adapter-io';
 import type { StoreProjection } from '@atlas/knowledge';
 import type { Fact } from '@atlas/genesis';
@@ -77,7 +77,16 @@ function storeWithRivalOnFirstCommit(): DiskStore {
         commits += 1;
         if (commits === 1 && decision.next !== undefined) {
           // Our first commit targets generation 1 over an empty sidecar, so the rival is generation 2.
-          const wire = { current: [...decision.next.current.entries()], cas: [...decision.next.cas], gen: 2 };
+          // `identity` (#112) is what keeps this a FAITHFUL rival: a rival is by definition another instance
+          // of THIS build, so it stamps the identity schema it minted its hashes under. Without the stamp it
+          // is a store no Atlas could have written, and the commit protocol correctly refuses to publish over
+          // it — the pass would then fail for a reason that has nothing to do with the law under test.
+          const wire = {
+            current: [...decision.next.current.entries()],
+            cas: [...decision.next.cas],
+            gen: 2,
+            identity: IDENTITY_SCHEMA,
+          };
           mkdirSync(sidecarDir, { recursive: true }); // the protocol creates it in `publish`, one step later
           writeFileSync(join(sidecarDir, 'staging.2.json'), JSON.stringify(wire), 'utf8');
         }

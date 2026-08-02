@@ -29,7 +29,7 @@ import { createGovernedLink } from './governed-link.js';
 import { loadPolicy } from './policy.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
 import type { SidecarTrust } from './store-provenance.js';
-import { isUntrustedStore, refuseUntrustedRead } from './read-provenance.js';
+import { refuseUntrustedRead } from './read-provenance.js';
 // DAG-pin imports — referenced (not wired as legs) to keep the frozen skeleton's dependency edges real.
 import { foldAstUnits } from './ast.js';
 import { createForge } from './git-forge.js';
@@ -270,11 +270,13 @@ export function assembleHandler(config: WireConfig): WiredHandler {
       // the sidecar, where the tripwire lives; this one reads CAS by content address DIRECTLY, and `.atlas/cas/**`
       // is committed by the same `git add -f` that lands the sidecar (`isDurableStorePath` covers both). So a
       // committed blob came back WHOLE over `atlas node <addr>` with `ok:true`, with every write door denying.
-      // It returns `undefined` rather than throwing: the frozen `resolveNode` does NOT wrap this call in a
-      // try/catch (unlike `handle`), so a throw here would escape as a raw exception at the user door. The
-      // LEGIBLE half is one frame up — `cli.ts` refuses the whole command with the provenance reason before it
-      // ever reaches the handler — and this is the fail-closed backstop that holds for every other caller.
-      if (isUntrustedStore(config.trusted)) return undefined;
+      // It USED to return `undefined` here — fail-closed but indistinguishable from an ordinary miss —
+      // because the frozen `resolveNode` did not wrap this call in a try/catch, so a throw would have escaped
+      // as a raw exception at the user door. `resolveNode` now catches and attributes (packages/tools/src/
+      // fault.ts), so the refusal can travel the channel `ToolLeg` already uses and reach EVERY transport
+      // with its own discriminant instead of being flattened into "no grounded node at <addr>". The CLI
+      // still refuses one frame up with the same reason; this is the backstop for every other caller.
+      refuseUntrustedRead(config.trusted);
       // SECURITY (billy PoC): `nodeAddr` is attacker-controllable over MCP/poke. A CAS content address is
       // EXACTLY 64 lowercase hex; anything else (a `../` traversal to an unbounded file like /dev/zero) is a
       // MISS — rejected BEFORE any filesystem read, so it can never hang/OOM. Defense-in-depth: `store.get`

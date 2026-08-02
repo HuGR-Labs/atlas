@@ -27,6 +27,7 @@ import { CLI_BIN, makeFixtureRepo } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
 import { groundedAdvisoryFact } from './author.js';
 import { ACTOR, scopedPolicy } from './support.js';
+import { IDENTITY_SCHEMA } from '@atlas/adapter-io';
 import type { GroundedFact } from '@atlas/knowledge';
 
 interface Run {
@@ -85,7 +86,17 @@ function seed(repo: FixtureRepo, k: number): void {
     `synthetic:${i}`,
     { nodeKey: `synthetic:${i}`, family: 'advisory', contentHash: hex, claims: [`seeded claim ${i} with body text for mass`] },
   ]);
-  writeFileSync(join(atlasDir(repo), 'projection.json'), JSON.stringify({ current, cas: [hex] }), 'utf8');
+  // THE `identity` STAMP IS NOT OPTIONAL DRESSING — without it this hand-written store is `unstamped`, and
+  // the #112 guard REFUSES every write over a store whose identity schema is unknown. That refusal is the
+  // product behaving as designed: an unstamped store may have been minted by any older Atlas, and reading
+  // its anchors as though they were current is exactly the silent mis-read the guard exists to stop. What
+  // was wrong was this fixture, which wrote a projection by hand and then expected the doors to treat it as
+  // one they had written. A real store carries the stamp because `publish` puts it there; so does this one.
+  // (Same shape as the harness `.gitignore`: a fixture that does not look like a real repo tests a product
+  // nobody runs. Verified end-to-end first — `s1-genesis` init→emit→query is green, so the guard is not
+  // refusing any path a user actually takes.)
+  const sidecar = { current, cas: [hex], identity: IDENTITY_SCHEMA };
+  writeFileSync(join(atlasDir(repo), 'projection.json'), JSON.stringify(sidecar), 'utf8');
 }
 
 function factFile(repo: FixtureRepo, fact: GroundedFact, tag: string): string {

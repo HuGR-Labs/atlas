@@ -9,6 +9,7 @@
 
 import type { Verdict } from '@atlas/tools';
 import { deriveStatus, EXIT } from './map.js';
+import type { Status } from './map.js';
 
 /** The CLI's process-level projection of one handler verdict (ring shape). */
 export interface CliVerdict {
@@ -115,7 +116,28 @@ function renderData(data: unknown): string {
  * the Seam-2 `data:` block when the verdict is `ok` and carries a known data shape (else nothing appended).
  */
 export function renderVerdict(v: Verdict): CliVerdict {
-  const status = deriveStatus(v);
+  return renderAs(v, deriveStatus(v));
+}
+
+/**
+ * Render a verdict the CLI itself has already classified as a GOVERNANCE REFUSAL — `status: rejected`,
+ * exit 2 — through the SAME byte-for-byte body as {@link renderVerdict}.
+ *
+ * WHY IT EXISTS RATHER THAN A BRANCH IN `deriveStatus`. `deriveStatus` is a pure function of ONE verdict and
+ * classifies by the RECORD a governed door carries back (`emitted:false` / `linked:false` / a non-zero
+ * reconcile `exitCode`). A refusal raised at the ENTRYPOINT, before any door opens, has no such record and
+ * never will — there is no door result to inspect. Fabricating an `EmitOut` so the duck-type fires would be
+ * a lie in the data, and widening `deriveStatus` to treat every `ok:false` as a rejection would re-classify
+ * an unwired tool and a parse error as governance refusals, which they are not (it also MOVES the pinned
+ * SCN-CLI-3b exit derivation). So the classification is made where the knowledge is — at the call site that
+ * knows a gate refused — and the rendering stays one function.
+ */
+export function renderRefusal(v: Verdict): CliVerdict {
+  return renderAs(v, 'rejected');
+}
+
+/** The shared body: identical bytes for a given verdict, with the status/exit supplied by the caller. */
+function renderAs(v: Verdict, status: Status): CliVerdict {
   const dataBlock = v.ok && v.data !== undefined ? renderData(v.data) : '';
   // F5: on a fail-closed / rejected verdict (`ok:false` with a reason), render the REASON so the CLI door is
   // as legible as the MCP `isError` door — the governed refusal is never silent. DETERMINISTIC: a pure

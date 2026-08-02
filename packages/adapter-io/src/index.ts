@@ -64,6 +64,22 @@ export {
   refuseUntrustedRead,
 } from './read-provenance.js';
 export type { ReadProvenanceReason } from './read-provenance.js';
+
+// #112 — THE IDENTITY SCHEMA a durable store was written under (`identity-schema.ts`). Exported for the same
+// two reasons the provenance refusal above is: a composition root / entrypoint has to be able to RENDER the
+// refusal (see the RESIDUAL note on `identitySchemaRefusal` — `compose.ts` and `wire.ts` do not call it yet),
+// and a test has to be able to assert on the DISCRIMINANT (`IdentitySchemaError.reason`) and to stamp a
+// hand-built rival sidecar with the schema a real rival would have written.
+export {
+  IDENTITY_SCHEMA,
+  IdentitySchemaError,
+  REJECTED_FOREIGN_IDENTITY_SCHEMA,
+  classifyIdentity,
+  identitySchemaRefusal,
+  identitySchemaText,
+  refuseForeignIdentityWrite,
+} from './identity-schema.js';
+export type { IdentityBearing, IdentitySchemaReason, IdentityVerdict } from './identity-schema.js';
 // The provenance SEAM itself — `mine` composes its own store and needs the same tripwire the doors ride.
 export { gitSidecarTrust, isDurableStorePath } from './store-provenance.js';
 export type { SidecarTrust } from './store-provenance.js';

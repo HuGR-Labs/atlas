@@ -22,12 +22,12 @@
 // converts a leg throw into a structured rejected `Verdict` on EVERY transport (TOOLS-2). A returned empty
 // pack is exactly the silence being fixed. The throw is caught one frame up, so nothing escapes to a user.
 //
-// RESIDUAL, STATED RATHER THAN GLOSSED: `handler.handle` labels every caught leg throw
-// `malformed args — fail-closed: <message>`. For this refusal that prefix is WRONG — the args were fine, the
-// STORE was untrusted — and it is not fixable from this package (`packages/tools/src/handler.ts` owns the
-// prefix, and it mislabels every leg throw the same way, e.g. the `--by dependency` no-axes refusal). The
-// full reason text still reaches the user verbatim after the prefix, and the CLI door refuses EARLIER with
-// clean prose (`cli.ts`), so the mislabel is confined to the MCP transport.
+// FIXED, and this note is kept as the record rather than deleted: `handler.handle` USED TO label every
+// caught leg throw `malformed args — fail-closed: <message>`, which for this refusal was flatly wrong — the
+// args were fine, the STORE was untrusted — and it mislabelled every other leg throw the same way (the
+// `--by dependency` no-axes refusal, and an internal crash). `packages/tools/src/fault.ts` now separates the
+// three classes and passes a refusal's reason through VERBATIM, so this discriminant survives to every
+// transport intact and `faultOf(v)` answers `refused` rather than `malformed-args`.
 
 import type { SidecarTrust } from './store-provenance.js';
 

@@ -4,9 +4,22 @@
 // (count == 5) + the two governed `WRITE_PATHS` (`atlas-emit` + `atlas-link`, TOOLS-1 / ADR-0003), the
 // published per-tool `SCHEMAS` (CLI≡MCP,
 // TOOLS-3), and `handle`/`resolveNode` — PURE + TOTAL, malformed args fail CLOSED, guidance on every path.
+//
+// Every fail-closed path is also ATTRIBUTED: the caller's arguments, a door's deliberate refusal, and a
+// fault inside Atlas are three different things and carry three different names (see ./fault.ts). They used
+// to share one label — `malformed args — fail-closed:` — which reported our own crashes as the caller's bad
+// input and sent an operator to debug an invocation that was fine.
 
 import type { NodeKey, ToolSchema } from '@atlas/contracts';
 import type { GroundedFact } from '@atlas/knowledge';
+import {
+  classifyThrown,
+  internalReason,
+  malformedArgsReason,
+  malformedReason,
+  missingRequiredReason,
+  INTERNAL_GUIDANCE,
+} from './fault.js';
 import type { Guidance, HandlerApi, Tool, ToolData, Transport, Verdict } from './types.js';
 
 /** The CLOSED governance surface (TOOLS-1) — the order is fixed; membership is the load-bearing fact.
@@ -83,6 +96,12 @@ const GUIDANCE_OFF_SURFACE: Guidance = {
 const guidanceFor = (tool: Tool): Guidance => GUIDANCE[tool] ?? GUIDANCE_OFF_SURFACE;
 
 const reason = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+/** The DISCRIMINANT of `resolveNode`'s two fail-closed outcomes (the text before the first `:`, the form
+ *  `reasonOf` compares for EQUALITY). Before these existed the whole reason string WAS the discriminant, and
+ *  it embedded the address — so no two misses shared one, and nothing could be asserted on but prose. */
+const NO_NODE_SOURCE = 'no-node-source';
+const NO_SUCH_NODE = 'no-such-node';
 
 /** A leg return is a FAIL-CLOSED governed write iff it carries `emitted:false` (`EmitOut`) OR `linked:false`
  *  (`LinkOut`, WP-SAMEAS). A fail-closed write is a GOVERNANCE refusal, NOT a success — it MUST surface as a
@@ -181,6 +200,13 @@ export function createHandler(legs: ToolLegs, nodes?: NodeSource): HandlerApi {
     if (leg === undefined) {
       return { ok: false, rejected: `tool '${tool}' not wired at this seam`, guidance };
     }
+    // CLASS (a) — the arguments, judged by the DOOR against this tool's own published schema (TOOLS-3),
+    // BEFORE the leg runs. Deciding it here is the whole point: inferring "malformed args" from a throw is
+    // what let an internal `TypeError` be reported as the caller's bad input (see ./fault.ts).
+    const argFault = malformedArgsReason(tool, schema(tool), args);
+    if (argFault !== undefined) {
+      return { ok: false, rejected: argFault, guidance };
+    }
     try {
       const data = leg(args);
       if (isFailClosedWrite(data)) {
@@ -194,8 +220,30 @@ export function createHandler(legs: ToolLegs, nodes?: NodeSource): HandlerApi {
       }
       return { ok: true, data, guidance };
     } catch (e) {
-      // TOOLS-2: fail CLOSED on a malformed argument — a structured rejected verdict, never a throw.
-      return { ok: false, rejected: `malformed args — fail-closed: ${reason(e)}`, guidance };
+      // TOOLS-2: fail CLOSED — a structured rejected verdict, never a throw. ATTRIBUTED, which is the part
+      // this catch used to get wrong: it stamped `malformed args — fail-closed:` on every throw, so a fault
+      // INSIDE a door arrived at the operator as their own bad input, carrying the door's caller-facing
+      // guidance. The three classes and how each is decided are documented in ./fault.ts.
+      const kind = classifyThrown(e);
+      if (kind === 'internal-fault') {
+        // Before claiming a defect of ours: did the caller leave a REQUIRED argument out? That is the better
+        // explanation for a crash the engine raised, and it is the one case an up-front `required` check
+        // cannot cover (see `missingRequiredReason`). It never over-fires — a leg that tolerates the
+        // omission returns normally and never reaches this catch.
+        const missing = missingRequiredReason(tool, schema(tool), args);
+        if (missing !== undefined) {
+          return { ok: false, rejected: missing, guidance };
+        }
+        // It NAMES ITSELF, and it does NOT borrow the tool guidance — that guidance tells the caller to go
+        // and change their arguments, which is precisely the wrong instruction for a defect of ours.
+        return { ok: false, rejected: internalReason(tool, e), guidance: INTERNAL_GUIDANCE };
+      }
+      if (kind === 'malformed-args') {
+        return { ok: false, rejected: malformedReason(e), guidance };
+      }
+      // A governed refusal: its reason travels VERBATIM, so a refusal that already carries a discriminant
+      // (`untrusted-store: …`) keeps it and `reasonOf` still answers WHICH gate refused.
+      return { ok: false, rejected: reason(e), guidance };
     }
   };
 
@@ -204,13 +252,44 @@ export function createHandler(legs: ToolLegs, nodes?: NodeSource): HandlerApi {
   // node content is byte-identical over MCP | poke | CLI (the one handler is the single oracle), so it never
   // changes the result. Per wave-plan §X1 a node is reached as a DRILL-DOWN WITHIN its pack. Total: a missing
   // source or an unknown address fails closed to a rejected verdict, never a throw; guidance rides every path.
+  //
+  // TOTALITY, AND THE CONTRACT DECISION BEHIND IT. `resolveNode` was DOCUMENTED total and was NOT: nothing
+  // wrapped `nodes.resolve`, so a throwing source escaped as a raw exception at the user door — and because
+  // `main` is `async`, as an unhandled rejection rather than a rendered outcome. `adapter-io/src/wire.ts`
+  // says so in as many words and works around it by collapsing its provenance refusal to `undefined`. The
+  // decision taken here is to make the code match the contract it already publishes (a catch + the same
+  // three-class attribution `handle` uses) rather than to widen the signature: a refusal thrown by a source
+  // is then LEGIBLE and total, with no ripple through `HandlerApi` / `WiredHandler` / every test fake.
+  //
+  // WHAT THAT DOES NOT FIX, STATED RATHER THAN GLOSSED: the composed `NodeSource` still RETURNS `undefined`
+  // for a refused store, so over the assembled runtime an untrusted store is still reported as a miss. That
+  // half lives on the other side of the port and is a one-line change there (`return undefined` → throw the
+  // named refusal, the channel `ToolLeg` already uses, TOOLS-2) — not a port-signature change, and not this
+  // module's to make.
   const resolveNode = (nodeAddr: NodeKey, _transport: Transport): Verdict => {
     if (nodes === undefined) {
-      return { ok: false, rejected: 'no per-node projection source wired at this seam', guidance: NODE_GUIDANCE };
+      return {
+        ok: false,
+        rejected: `${NO_NODE_SOURCE}: no per-node projection source wired at this seam`,
+        guidance: NODE_GUIDANCE,
+      };
     }
-    const node = nodes.resolve(nodeAddr);
+    let node: GroundedFact | undefined;
+    try {
+      node = nodes.resolve(nodeAddr);
+    } catch (e) {
+      const kind = classifyThrown(e);
+      if (kind === 'internal-fault') {
+        return { ok: false, rejected: internalReason('atlas node', e), guidance: INTERNAL_GUIDANCE };
+      }
+      return { ok: false, rejected: reason(e), guidance: NODE_GUIDANCE };
+    }
     if (node === undefined) {
-      return { ok: false, rejected: `no grounded node at content address '${nodeAddr}'`, guidance: NODE_GUIDANCE };
+      return {
+        ok: false,
+        rejected: `${NO_SUCH_NODE}: no grounded node at content address '${nodeAddr}'`,
+        guidance: NODE_GUIDANCE,
+      };
     }
     return { ok: true, data: node, guidance: NODE_GUIDANCE };
   };

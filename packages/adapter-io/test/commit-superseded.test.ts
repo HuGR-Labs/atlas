@@ -41,6 +41,7 @@ import { createDiskStore } from '../src/store.js';
 import type { DiskStore } from '../src/store.js';
 import { genPath, readSidecarSet } from '../src/sidecar.js';
 import type { CommitDecision, CommitResult, SidecarBase, SidecarCtx } from '../src/sidecar.js';
+import { IDENTITY_SCHEMA } from '../src/identity-schema.js';
 import { commitSidecar } from '../src/sidecar-commit.js';
 import { createGovernedEmit } from '../src/governed-emit.js';
 import { HOLDS_GATE, POLICY, advisory, AT } from './harness/governed-fixtures.js';
@@ -68,9 +69,15 @@ const durable = (): string[] => [...(readSidecarSet(tmp!, 'projection').projecti
 
 /** A RIVAL WRITER, as a file. Publishing IS writing `<base>.<gen>.json` — no other writer state is durable,
  *  so a rival a test builds by hand is indistinguishable from one that ran. That is the only way to reach
- *  this branch on demand: no in-process double can interpose between the `link(2)` and the `readdir`. */
+ *  this branch on demand: no in-process double can interpose between the `link(2)` and the `readdir`.
+ *
+ *  `identity` ADDED with the #112 identity stamp, and it is what KEEPS the sentence above true. A rival is by
+ *  definition another instance of THIS build, so it stamps the schema it minted its hashes under; a rival
+ *  without the stamp is one no Atlas could be, and the store now (correctly) refuses to publish over it. The
+ *  fixture is more faithful for the addition, and no expectation below changed. */
 function rivalPublishes(base: SidecarBase, gen: number, p: StoreProjection): void {
-  writeFileSync(genPath(tmp!, base, gen), JSON.stringify({ current: [...p.current.entries()], cas: [...p.cas], gen }), 'utf8');
+  const wire = { current: [...p.current.entries()], cas: [...p.cas], gen, identity: IDENTITY_SCHEMA };
+  writeFileSync(genPath(tmp!, base, gen), JSON.stringify(wire), 'utf8');
 }
 
 describe('COMMIT PROTOCOL — a generation that was published and then BUILT UPON is durable, and says so', () => {

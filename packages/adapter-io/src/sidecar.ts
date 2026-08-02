@@ -60,6 +60,8 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { CurrentNode, StoreProjection } from '@atlas/knowledge';
 import type { SidecarTrust } from './store-provenance.js';
+import { classifyIdentity } from './identity-schema.js';
+import type { IdentityVerdict } from './identity-schema.js';
 
 /** The two mutable sidecars (ADR-0008): governed knowledge, and the explorer's CANDIDATE store. They share
  *  ONE implementation so their totality AND their atomicity cannot drift apart; they differ ONLY here. */
@@ -81,6 +83,19 @@ export interface WireProjection {
   readonly cas: readonly string[];
   readonly builtAt?: string; // N11 freshness watermark (HEAD sha at persist); absent ⇒ unknown (old sidecars)
   readonly gen?: number; // the generation these bytes were published as; absent ⇒ 0 (pre-protocol sidecars)
+  /**
+   * #112 — the IDENTITY SCHEMA these bytes' hashes and anchor keys were minted under (`identity-schema.ts`
+   * `IDENTITY_SCHEMA`). Stamped by `publish`; ABSENT means the schema is UNKNOWN.
+   *
+   * IT IS THE ONE ADDITIVE FIELD HERE WHOSE ABSENCE IS NOT BENIGN, and the contrast with its neighbours is
+   * the point. `builtAt` absent ⇒ "watermark unknown", which a reader treats conservatively; `gen` absent ⇒
+   * 0, and a pre-protocol sidecar genuinely IS generation 0. Both are harmless because what they describe is
+   * OUTSIDE the data. This one describes what every hash in the file MEANS: read an unstamped store as
+   * though it were current and every anchor silently resolves against rules that did not produce it. So
+   * absent is `unstamped` ⇒ refused on the write doors, never assumed-current (see `identity-schema.ts` for
+   * why an untagged past cannot honestly be given a version number).
+   */
+  readonly identity?: string;
 }
 
 /** The outcome of ONE `decide` pass. `next` ABSENT ⇒ the decision writes NOTHING (a governed refusal): no
@@ -206,7 +221,7 @@ function isKeyedEntry(e: unknown): e is readonly [string, CurrentNode] {
  * "the store is empty", which is the change that disarms leg 2: the
  * caller below tries the PREVIOUS generation, and a write refuses outright rather than starting from empty.
  */
-function readOne(path: string): { projection: StoreProjection; gen: number } | undefined {
+function readOne(path: string): { projection: StoreProjection; gen: number; identity: unknown } | undefined {
   let raw: string;
   try {
     raw = readFileSync(path, 'utf8');
@@ -233,7 +248,10 @@ function readOne(path: string): { projection: StoreProjection; gen: number } | u
     // is untrusted input from a file anyone with write access can forge, so it reads as 0.
     const builtAt = typeof wire.builtAt === 'string' ? { builtAt: wire.builtAt } : {};
     const gen = typeof wire.gen === 'number' && Number.isSafeInteger(wire.gen) && wire.gen >= 0 ? wire.gen : 0;
-    return { projection: { current: new Map(wire.current), cas: new Set(wire.cas), ...builtAt }, gen };
+    // #112: the raw stamp is carried out UNJUDGED and UNCOERCED. Classification is `classifyIdentity`'s job
+    // (it is total over `unknown`), and keeping the raw value means a `foreign` refusal can quote the tag it
+    // actually found rather than "something else" — the one concrete thing such a store can say about itself.
+    return { projection: { current: new Map(wire.current), cas: new Set(wire.cas), ...builtAt }, gen, identity: wire.identity };
   } catch {
     return undefined; // malformed entries (e.g. a non-[k,v] element)
   }
@@ -252,6 +270,26 @@ export interface SidecarRead {
   /** The durable store is COMMITTED (`store-provenance.ts`). `projection` is forced to `undefined`, so a
    *  read serves nothing; a WRITE must refuse rather than persist over it (see `commitLoop`). */
   readonly untrusted: boolean;
+  /**
+   * #112 — which IDENTITY SCHEMA minted the hashes and anchor keys in the state above
+   * (`identity-schema.ts`). `current` for a store this build wrote AND for a store that does not exist yet
+   * (nothing to judge; a fresh install must not be refused).
+   *
+   * UNLIKE `untrusted`, THIS DOES NOT BLANK `projection`, and the asymmetry is deliberate. A committed store
+   * is somebody else's content, so serving it is the harm. A foreign-schema store is the user's OWN
+   * knowledge, and the drift oracle already refuses it fact-by-fact (an unresolvable anchor is DRIFTED,
+   * which `buildGate` collapses to `NA`) — so emptying it would add no safety and would replace "everything
+   * drifted, with no explanation" with "there is nothing here, with no explanation". The teeth go where a
+   * wrong answer is DESTRUCTIVE instead: `commitLoop` refuses every write, because publishing over this
+   * store would stamp the successor generation with the CURRENT schema — so a store whose anchors were
+   * minted under other rules would permanently assert, in one write, that they were minted under these ones.
+   * (Not an ERASURE: the rows ARE carried forward, since `decide` reads them. It is a LAUNDERING, which is
+   * the same shape `store-provenance.ts` refuses for a committed store and for the same reason.)
+   */
+  readonly identity: IdentityVerdict;
+  /** The raw stamp string found on disk when {@link SidecarRead.identity} is `foreign`; `undefined`
+   *  otherwise (including `unstamped`, where the whole point is that there is nothing to report). */
+  readonly identityFound?: string | undefined;
 }
 
 /**
@@ -271,19 +309,32 @@ export function readSidecarSet(dir: string, base: SidecarBase, trusted?: Sidecar
   // still reported honestly (it is a directory listing, not store content) so no caller has to special-case
   // it; nothing may write here anyway.
   if (trusted !== undefined && !trusted()) {
-    return { projection: undefined, top: top ?? 0, unreadable: false, untrusted: true };
+    // PROVENANCE STRICTLY PRECEDES SCHEMA, and `identity: 'current'` here is a statement about WHICH GATE
+    // SPOKE, not a claim about the bytes: a committed store's stamp is attacker-chosen, so it must not be
+    // able to influence which refusal a caller sees. The provenance answer is the only one on offer.
+    return { projection: undefined, top: top ?? 0, unreadable: false, untrusted: true, identity: 'current' };
   }
   for (const g of gens) {
     const hit = readOne(genPath(dir, base, g));
-    if (hit !== undefined) return { projection: hit.projection, top: top!, unreadable: false, untrusted: false };
+    if (hit !== undefined) return { ...withIdentity(hit.identity), projection: hit.projection, top: top!, unreadable: false, untrusted: false };
   }
   const legacy = readOne(mirrorPath(dir, base));
   if (legacy !== undefined) {
     // No readable generation: the mirror's own counter keeps the sequence monotone over a store whose
     // generation files were pruned or hand-deleted, so a successor never reuses a name that once held
     // different bytes.
-    return { projection: legacy.projection, top: Math.max(top ?? 0, legacy.gen), unreadable: false, untrusted: false };
+    return { ...withIdentity(legacy.identity), projection: legacy.projection, top: Math.max(top ?? 0, legacy.gen), unreadable: false, untrusted: false };
   }
   const anyFile = top !== undefined || existsSync(mirrorPath(dir, base));
-  return { projection: undefined, top: top ?? 0, unreadable: anyFile, untrusted: false };
+  // NOTHING PERSISTED ⇒ `current`. There are no stored hashes, so there is no schema to be wrong about, and
+  // any other answer would refuse every write in every fresh repo — bricking the product on install.
+  return { projection: undefined, top: top ?? 0, unreadable: anyFile, untrusted: false, identity: 'current' };
+}
+
+/** The identity fields for one raw stamp. `identityFound` is reported ONLY for `foreign`: `unstamped` has
+ *  nothing to report by definition, and `exactOptionalPropertyTypes` makes the difference between "absent"
+ *  and "present but undefined" load-bearing, so the key is spread in rather than set to `undefined`. */
+function withIdentity(stamp: unknown): { identity: IdentityVerdict; identityFound?: string } {
+  const identity = classifyIdentity(stamp);
+  return identity === 'foreign' ? { identity, identityFound: String(stamp) } : { identity };
 }

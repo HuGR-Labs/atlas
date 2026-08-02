@@ -31,6 +31,7 @@ import { emptyStore } from '@atlas/knowledge';
 import type { StoreProjection } from '@atlas/knowledge';
 import { generations, genPath, mirrorPath, readSidecarSet } from './sidecar.js';
 import type { CommitDecision, CommitResult, SidecarCtx, WireProjection } from './sidecar.js';
+import { IDENTITY_SCHEMA, refuseForeignIdentityWrite } from './identity-schema.js';
 
 /** How many times a contended writer re-reads and re-decides before refusing. Bounded so a pathological
  *  writer cannot spin forever; the size is MEASURED, not guessed. At 16 an 8-process TIGHT COMMIT LOOP
@@ -92,6 +93,12 @@ function publish(ctx: SidecarCtx, projection: StoreProjection, gen: number): Pub
     current: [...projection.current.entries()],
     cas: [...projection.cas],
     gen,
+    // #112 — THE IDENTITY STAMP, written UNCONDITIONALLY and from the constant, never from what was read
+    // back. Copying the incoming store's stamp forward would make the field self-perpetuating: a store would
+    // keep asserting a schema long after this build stopped computing it. Every generation this build
+    // publishes was minted by this build's rules, so it says so, once, here — the single place a sidecar's
+    // bytes are ever produced.
+    identity: IDENTITY_SCHEMA,
     ...(builtAt !== undefined ? { builtAt } : {}),
   };
   mkdirSync(ctx.dir, { recursive: true });
@@ -253,6 +260,22 @@ function commitLoop<T>(
     // from door output afterwards, with the tracked-file evidence overwritten. Both write shapes refuse, and
     // `persistSidecar` turns this into a thrown, readable error rather than a silent no-op.
     if (read.untrusted) return { settled: false, refusal: 'untrusted' };
+    // #112 — THE IDENTITY SCHEMA, and it is UNCONDITIONAL for exactly the reason `untrusted` is: LAUNDERING.
+    // Publishing over a store whose hashes were minted by different rules stamps the successor generation
+    // with the CURRENT schema, so a store that provably cannot be addressed by this build starts asserting
+    // that it can — permanently, in one write, with an exit code of 0, and with the only evidence overwritten.
+    //
+    // Stated precisely because the dramatic version is wrong: this is NOT an erasure. `decide` reads the
+    // snapshot (the read serves it — `sidecar.ts` `SidecarRead.identity` explains why it is flagged rather
+    // than emptied), so the rows are carried forward intact. What is destroyed is the KNOWLEDGE that they are
+    // stale, which is worse in the way that matters: a silent wrong answer instead of a loud missing one.
+    // Refusing leaves the old bytes exactly where they are, which is what makes "re-derive it" advice about
+    // data that still exists.
+    //
+    // A THROW rather than a fourth `CommitRefusal` member — see `IdentitySchemaError` for the semantic
+    // reason and for the measured one. Both write shapes take it: `persistSidecar`'s exhaustion guard below
+    // does not run, because this never reaches a return.
+    refuseForeignIdentityWrite(read);
     if (guardUnreadable && read.unreadable) return { settled: false, refusal: 'unreadable' };
     const decision = decide(read.projection ?? emptyStore());
     if (decision.next === undefined) return { settled: true, out: decision.out }; // governed refusal: no write

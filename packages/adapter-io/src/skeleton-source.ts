@@ -137,7 +137,15 @@ export function createSkeletonSource(repoPath: string, deps: SkeletonSourceDeps 
 
   return {
     skeleton(repo: string, rev: string): Skeleton {
-      const key = `${repo} ${rev}`;
+      // The memo key joins `repo` and `rev` on NUL — the one byte that can appear in NEITHER a POSIX path
+      // NOR a git rev, so the join is injective and no two distinct (repo, rev) pairs can share a cache
+      // entry. It is spelled as the ESCAPE `\0`, and it MUST stay spelled that way: written as a literal
+      // 0x00 byte (as it was) the whole file reads as "binary" to `git diff` and is INVISIBLE to `grep`,
+      // so every grep-derived review or count over this module silently skipped it. Same value, same
+      // runtime bytes — `@atlas/index` build.ts `edgeKey` already spells the identical separator this way.
+      // NOT `\\0`: that is a two-character backslash-zero, which a repo path can contain, and the join
+      // stops being injective the moment it can (`skeleton-memo-key.test.ts` pins exactly that collision).
+      const key = `${repo}\0${rev}`;
       const hit = memo.get(key);
       if (hit !== undefined) return hit;
       const axes = axesFor(repo, rev);

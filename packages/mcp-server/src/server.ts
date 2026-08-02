@@ -30,7 +30,7 @@ import type {
   Tool as SdkTool,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { WiredHandler } from '@atlas/adapter-io';
-import { GOVERNANCE_SURFACE } from '@atlas/tools';
+import { faultOf, GOVERNANCE_SURFACE } from '@atlas/tools';
 import type { Tool, Verdict } from '@atlas/tools';
 
 /** The stdio MCP server handle (frozen ring shape — `start()` connects the SDK stdio transport). */
@@ -72,15 +72,22 @@ export function listTools(handler: WiredHandler): ListToolsResult {
 /**
  * Map a total `Verdict` → `CallToolResult` (MCP-2). An `ok:true` verdict renders as a normal result whose
  * text is the JSON of `data` + `guidance` (`isError` absent). An `ok:false` (rejected / fail-closed) verdict
- * renders with `isError:true` and text that CARRIES `rejected` + `guidance` (next + invariant) — the
- * fail-closed reason is ALWAYS visible, never an empty error (the known past bug). Pure + deterministic.
+ * renders with `isError:true` and text that CARRIES `fault` + `rejected` + `guidance` (next + invariant) —
+ * the fail-closed reason is ALWAYS visible, never an empty error (the known past bug). Pure + deterministic.
+ *
+ * `fault` is the ERROR CLASS as a machine value (`@atlas/tools` `faultOf`): `malformed-args` (the caller's
+ * arguments did not parse against the published schema), `refused` (a door deliberately declined), or
+ * `internal-fault` (Atlas itself threw). An MCP client is an AGENT, and the whole point of the attribution
+ * fix is that an agent must not be left to infer from prose whether to retry with different arguments, stop
+ * and report a governance refusal, or file a defect. It rides an ADDITIVE field: `rejected` and `guidance`
+ * are byte-unchanged, so every existing consumer of this envelope keeps reading what it read.
  */
 export function verdictToResult(verdict: Verdict): CallToolResult {
   if (verdict.ok) {
     const text = JSON.stringify({ data: verdict.data, guidance: verdict.guidance });
     return { content: [{ type: 'text', text }] };
   }
-  const text = JSON.stringify({ rejected: verdict.rejected, guidance: verdict.guidance });
+  const text = JSON.stringify({ fault: faultOf(verdict), rejected: verdict.rejected, guidance: verdict.guidance });
   return { content: [{ type: 'text', text }], isError: true };
 }
 

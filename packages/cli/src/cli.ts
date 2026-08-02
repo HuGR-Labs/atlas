@@ -13,7 +13,7 @@ import { COMMAND_LEG } from './map.js';
 import { marshalArgs } from './marshal.js';
 import { runMine } from './mine.js';
 import { parse } from './parse.js';
-import { renderVerdict } from './render.js';
+import { renderRefusal, renderVerdict } from './render.js';
 import type { CliVerdict } from './render.js';
 
 /** Optional dependency injection seam (additive): tests inject a FAKE `WiredHandler` + a FAKE read-only
@@ -27,10 +27,15 @@ export interface CliDeps {
    * COMMIT rather than through a governed door — so nothing in it can be shown to have passed a gate.
    *
    * It is rendered HERE, before dispatch, for a reason the leg-level guards cannot cover: `doctor`
-   * sub-dispatches to `DoctorApi` without going through the handler at all, and `node` reaches
-   * `resolveNode`, which the frozen handler does NOT wrap in a try/catch. One refusal at the entrypoint
-   * makes every command legible in the CLI's own prose instead of through the handler's catch-all, which
-   * labels every leg throw `malformed args` (true for a bad argument, false for this).
+   * sub-dispatches to `DoctorApi` without going through the handler at all. One refusal at the entrypoint
+   * makes every command legible in the CLI's own prose, and gives the whole invocation ONE outcome class
+   * (a governance rejection, exit 2) rather than one per dispatch route.
+   *
+   * [AMENDED] this used to add "…instead of through the handler's catch-all, which labels every leg throw
+   * `malformed args`" — that catch-all is fixed: it now attributes each throw to the caller's arguments, a
+   * door's refusal, or a fault inside Atlas (`@atlas/tools` `src/fault.ts`), and `resolveNode` is wrapped
+   * too. The entrypoint refusal is kept because it is the only place that covers `doctor`, not because the
+   * handler would mislabel it.
    */
   readonly readRefusal?: string;
 }
@@ -40,6 +45,23 @@ function errorVerdict(message: string): Verdict {
   const guidance: Guidance = {
     next: message,
     invariant: 'CLI-1b: a malformed invocation yields a structured error + guidance + non-zero exit, never a crash',
+  };
+  return { ok: false, rejected: message, guidance };
+}
+
+/**
+ * A structured GOVERNANCE-REFUSAL verdict for a gate that fired at the entrypoint. Distinct from
+ * {@link errorVerdict} in BOTH of the things a caller reads.
+ *
+ * The INVARIANT line, because `errorVerdict`'s says "a malformed invocation" — and this invocation was not
+ * malformed. Stamping the usage-error invariant on a governance refusal is the same blame-shift this seat
+ * removed from the handler's catch, one layer up.
+ */
+function refusalVerdict(message: string): Verdict {
+  const guidance: Guidance = {
+    next: message,
+    invariant:
+      'CLI-3b: a governed refusal exits 2 — the invocation was well-formed and a gate declined it, so re-running it with different arguments will not help; exit 1 is reserved for a usage/wiring error',
   };
   return { ok: false, rejected: message, guidance };
 }
@@ -61,8 +83,18 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
   // structurally, touches no durable state, and it is the command that writes the `.gitignore` rule which
   // stops this happening again — refusing the remedy along with the symptom would leave a user with an
   // Atlas that is off and no supported way to turn it back on.
+  //
+  // EXIT CODE — 2 (`rejected`), not 1 (`error`), and the difference is the whole contract a script has with
+  // this binary. `EXIT` is `ok:0 · error:1 · rejected:2`, where 1 means "your invocation was wrong" and 2
+  // means "your invocation was fine and a governance gate declined it". The provenance tripwire is a
+  // governance gate: nothing under `.atlas/` can be shown to have passed the truth, authz or ratification
+  // gates, so it is refused for the same reason and in the same family as an unauthorized or unratified
+  // write — every one of which already exits 2. It exited 1 only because this gate happens to fire in the
+  // CLI before the door, and WHERE a control runs is an implementation detail; an exit code classifies the
+  // OUTCOME. Nothing pinned it either way (S20 asserts `not.toBe(0)`), so it is pinned now, in both
+  // directions: the write doors AND the read doors.
   if (deps.readRefusal !== undefined && command !== 'init') {
-    return emit(errorVerdict(deps.readRefusal));
+    return emitCli(renderRefusal(refusalVerdict(deps.readRefusal)));
   }
 
   if (command === 'mine') {
@@ -111,7 +143,8 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
   }
   // ARG-MARSHALLING: map the parsed positionals/flags to the NAMED arg shape THIS command's leg reads
   // (init→{path}, query→{scope}, emit→{node,at}, reconcile→{mergeBase,options}). Without it every routed
-  // command fails closed with "malformed args". TOTAL: a missing --at / unreadable emit fact file → a
+  // command fails closed with `malformed-args` (the door reads its own published schema and reports the
+  // argument it wanted by name). TOTAL: a missing --at / unreadable emit fact file → a
   // structured error + guidance + non-zero exit, never a throw (CLI-1b).
   // `init` is the move-in command, and moving in has a DEPLOYMENT dependency the product never discharged:
   // Atlas refuses a durable store that is TRACKED BY GIT, so a repo with no ignore rule is one `git add -A`

@@ -25,6 +25,7 @@ import type { StoreProjection } from '@atlas/knowledge';
 import { createDiskStore } from '../src/store.js';
 import { readSidecarSet } from '../src/sidecar.js';
 import { commitSidecar } from '../src/sidecar-commit.js';
+import { IDENTITY_SCHEMA, IdentitySchemaError } from '../src/identity-schema.js';
 
 let tmp: string | undefined;
 beforeEach(() => {
@@ -243,11 +244,26 @@ describe('SIDECAR — the generation-CAS commit protocol', () => {
   });
 
   // ── back-compat ──────────────────────────────────────────────────────────────────────────────────────
-  it('a PRE-PROTOCOL sidecar (no `gen`, fixed filename) is read and carried forward, losing no rows', () => {
-    // The upgrade path: a store written by the previous release has only `projection.json` and no `gen`.
+  //
+  // ⚠ SEMANTIC COLLISION WITH #112, RECORDED RATHER THAN GLOSSED — flagged for adjudication.
+  // This case was written as "the upgrade path: a store written by the previous release has only
+  // `projection.json` and no `gen`", and it asserted that such a store keeps working. #112 decides the
+  // OPPOSITE for one part of that store: a sidecar written by a previous release carries no IDENTITY STAMP,
+  // its hashes were minted under rules this build no longer computes, and it is therefore refused with a
+  // legible reason rather than silently carried forward (see `identity-schema.ts`). The two claims cannot
+  // both stand for a genuinely pre-#112 file.
+  //
+  // They are separated here rather than merged, because they are two independent axes and this case only
+  // ever meant to test ONE of them:
+  //   · THIS case keeps the `gen` law, with the identity axis held CONSTANT at the current stamp — absent
+  //     `gen` still reads as generation 0 and its successor is generation 1, which is what it was written to
+  //     prove and what its `teeth` bite on.
+  //   · The case BELOW covers the other axis: a file with neither, i.e. a real previous-release store.
+  // No assertion in this case changed; the fixture gained one key and the title stopped over-claiming.
+  it('a sidecar with NO `gen` (the fixed filename) is read as generation 0 and carried forward, losing no rows', () => {
     writeFileSync(
       join(tmp!, 'projection.json'),
-      JSON.stringify({ current: [row('legacy')], cas: ['a'.repeat(64)] }),
+      JSON.stringify({ current: [row('legacy')], cas: ['a'.repeat(64)], identity: IDENTITY_SCHEMA }),
       'utf8',
     );
     const store = createDiskStore(casDir());
@@ -255,6 +271,27 @@ describe('SIDECAR — the generation-CAS commit protocol', () => {
     store.commitProjection((p) => ({ out: 0, next: withRow(p, 'modern') }));
     expect(existsSync(join(tmp!, 'projection.1.json'))).toBe(true); // successor of generation 0
     expect(durable()).toEqual(['legacy', 'modern']);
+  });
+
+  it('a sidecar with neither `gen` NOR an identity stamp — a real previous-release store — is REFUSED (#112)', () => {
+    // The other half of the case above, and the one whose answer #112 reversed. The rows are still READ (the
+    // drift oracle already refuses each fact individually, so emptying would only replace one silence with a
+    // worse one), but nothing may be PUBLISHED over them: a write would carry them into a generation stamped
+    // as current-schema and destroy the only evidence that they are not.
+    writeFileSync(
+      join(tmp!, 'projection.json'),
+      JSON.stringify({ current: [row('legacy')], cas: ['a'.repeat(64)] }),
+      'utf8',
+    );
+    const store = createDiskStore(casDir());
+    expect([...store.loadProjection()!.current.keys()]).toEqual(['legacy']);
+    expect(readSidecarSet(tmp!, 'projection').identity).toBe('unstamped');
+    expect(() => store.commitProjection((p) => ({ out: 0, next: withRow(p, 'modern') }))).toThrow(
+      IdentitySchemaError,
+    );
+    // NOTHING was written: no successor generation, and the user's bytes are still there to re-derive from.
+    expect(existsSync(join(tmp!, 'projection.1.json'))).toBe(false);
+    expect(durable()).toEqual(['legacy']);
   });
 
   it('the mirror `projection.json` keeps being published, and is byte-identical to the head generation', () => {

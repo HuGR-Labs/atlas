@@ -16,6 +16,7 @@
 // Everything runs through the REAL `createDiskStore` + the REAL door — no store double.
 
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { IDENTITY_SCHEMA } from '../src/identity-schema.js';
 import { join } from 'node:path';
 import { describe, expect, it, afterEach } from 'vitest';
 import { id } from '@atlas/kernel';
@@ -63,7 +64,12 @@ describe('ADR-0007 carrier — controls', () => {
 
   /** An OLD-SHAPE sidecar, authored BY HAND: a row with no `scope`/`tier` property at all, exactly what a
    *  projection minted before the carrier looks like on disk. Emitting through the door and deleting the
-   *  fields afterwards would prove nothing about a file this code has never seen. Returns the node key. */
+   *  fields afterwards would prove nothing about a file this code has never seen. Returns the node key.
+   *
+   *  `identity` carries the #112 stamp because the variable under study here is the ROW SHAPE (a carrier-less
+   *  `CurrentNode`), not the IDENTITY SCHEMA — those are orthogonal, and they must be varied one at a time.
+   *  A hand-written sidecar with no stamp is refused by the write doors before any carrier logic runs, which
+   *  would make every assertion below pass for the wrong reason. No expectation changed. */
   function writeLegacySidecar(w: Workspace, fact: ReturnType<typeof advisoryFact>, row: Record<string, unknown> = {}): string {
     const addr = w.store.put(fact as unknown as CasObject);
     const key = keyOf(fact);
@@ -72,6 +78,7 @@ describe('ADR-0007 carrier — controls', () => {
       JSON.stringify({
         current: [[key, { nodeKey: key, family: 'advisory', contentHash: addr, claims: [(fact as { claimNorm: string }).claimNorm], ...row }]],
         cas: [addr],
+        identity: IDENTITY_SCHEMA, // #112 — the row shape is the variable here, not the identity schema
       }),
       'utf8',
     );
@@ -204,6 +211,7 @@ describe('ADR-0007 carrier — controls', () => {
           [k2, { nodeKey: k2, family: 'advisory', contentHash: h2, claims: ['second'] }], // carrier-less
         ],
         cas: [h1, h2],
+        identity: IDENTITY_SCHEMA, // #112 — see `writeLegacySidecar`: carrier shape, not identity schema
       }),
       'utf8',
     );
