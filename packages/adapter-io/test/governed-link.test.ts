@@ -14,7 +14,7 @@
 import { describe, it, expect } from 'vitest';
 import { reasonOf } from './door-regression-support.js';
 import { addressOf, blindTo, fact, fixture, POLICY } from './governed-link-support.js';
-import type { GroundedFact } from '@atlas/knowledge';
+import type { AdvisoryNode } from '@atlas/knowledge';
 import { createGovernedLink } from '../src/governed-link.js';
 import type { DiskStore } from '../src/store.js';
 import type { AtlasPolicy } from '../src/policy.js';
@@ -187,7 +187,7 @@ describe('WP-SAMEAS — createGovernedLink (distinct · both-known · class read
   it('SCN-GL-9 — an OFF-LATTICE tier on an endpoint cannot DILUTE the join (fails closed to T0)', () => {
     // billy F1 reaches this door too: `strictestTier` returning the *other* argument on garbage would let a
     // node declassified with `tier:'T3'` be linked by anyone. An unreadable-or-bogus class must read T0.
-    const bogus = { ...fact({ claim: 'delta', scope: 'core', tier: 'T2' }), tier: 'T3' } as unknown as GroundedFact;
+    const bogus = { ...fact({ claim: 'delta', scope: 'core', tier: 'T2' }), tier: 'T3' } as unknown as AdvisoryNode;
     const fx = fixture([T2_A, bogus]);
     const lead = createGovernedLink({ store: fx.store, policy: POLICY, actor: 'alice', ratifyToken: 'lead' });
     expect(lead.link('n0', 'n1').linked).toBe(false);

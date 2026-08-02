@@ -61,11 +61,11 @@ describe('WP-5.15.KNOW held-out — init empty-genesis (KNOW-6 -2)', () => {
     const views = init(tree);
     expect(views.length).toBe(40);
     const invariantCount = views.reduce(
-      (n, v) => n + (((v as Record<string, unknown>).invariants as unknown[] | undefined)?.length ?? 0),
+      (n, v) => n + ((Reflect.get(v, 'invariants') as unknown[] | undefined)?.length ?? 0),
       0,
     );
     expect(invariantCount).toBe(0);
-    for (const v of views) expect((v as Record<string, unknown>).invariants).toBeUndefined();
+    for (const v of views) expect(Reflect.get(v, 'invariants')).toBeUndefined();
   });
 
   it('SCN-KNOW-6b-2: deeply-nested (5-level) territories all default T2/advisory', () => {
@@ -84,7 +84,7 @@ describe('WP-5.15.KNOW held-out — init empty-genesis (KNOW-6 -2)', () => {
     const skeletonKeys = new Set(['path', 'owner', 'tier', 'files', 'blastRadius', 'regions']);
     for (const v of views) {
       for (const k of Object.keys(v)) expect(skeletonKeys.has(k)).toBe(true);
-      const fam = (v as Record<string, unknown>).family;
+      const fam = Reflect.get(v, 'family');
       expect(fam === undefined || fam === 'advisory').toBe(true);
     }
   });

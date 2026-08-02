@@ -58,7 +58,10 @@ describe('WP-5.16.KNOW — HELD-OUT (-2 fixtures)', () => {
 
   it('SCN-KNOW-9b-2 — a 3-node advisory corpus (2 territories) runs emit→query→reconcile, no evaluator', () => {
     let evaluatorInvoked = false;
-    const store: { readonly evaluator?: ReturnType<typeof makeEvaluator> } = { evaluator: undefined };
+    // `= {}`, not `= { evaluator: undefined }`: `evaluator?` is exactOptionalPropertyTypes-optional, so an
+    // explicit-undefined value does not satisfy it. ABSENT is also the more faithful reading of "evaluator =
+    // none", and it is runtime-identical here (the only use is the `if (store.evaluator)` guard below).
+    const store: { readonly evaluator?: ReturnType<typeof makeEvaluator> } = {};
     const corpus: AdvisoryNode[] = [];
     const emit = (n: AdvisoryNode): void => { corpus.push(n); };
     const query = (cn: string): AdvisoryNode[] => corpus.filter((n) => n.claimNorm === cn);

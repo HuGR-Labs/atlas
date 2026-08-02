@@ -49,7 +49,7 @@ function assertNoSecretRun(buf: Uint8Array, secret: string, minRun = 8): void {
 
 /** Fold a chunk list through the write gate exactly as a caller would. */
 function admitAll(parts: readonly string[]): Uint8Array {
-  let buf = new Uint8Array(0);
+  let buf: Uint8Array = new Uint8Array(0);
   for (const p of parts) buf = admitToBuffer(buf, enc.encode(p));
   return buf;
 }
@@ -138,7 +138,7 @@ describe('PERSIST-10a seam — THE INVARIANT: output does not depend on chunking
   it('the invariant holds at EVERY PREFIX, not only at the end (no deferred flush)', () => {
     const whole = `a ${SECRET_A} b ${SECRET_B} c`;
     for (const size of [1, 2, 3, 5, 7, 11, 13]) {
-      let buf = new Uint8Array(0);
+      let buf: Uint8Array = new Uint8Array(0);
       let acc = '';
       for (let i = 0; i < whole.length; i += size) {
         const part = whole.slice(i, i + size);
@@ -201,7 +201,7 @@ describe('PERSIST-10a seam — CONTROL (a): non-secret content passes through by
   it('raw non-UTF8 and NUL bytes survive the seam unchanged', () => {
     const raw = new Uint8Array([0x00, 0xff, 0x7f, 0x67, 0x68, 0x70, 0x5f, 0x00, 0xfe, 0x80]);
     for (let off = 1; off < raw.length; off++) {
-      let buf = new Uint8Array(0);
+      let buf: Uint8Array = new Uint8Array(0);
       buf = admitToBuffer(buf, raw.subarray(0, off));
       buf = admitToBuffer(buf, raw.subarray(off));
       expect(Array.from(buf)).toEqual(Array.from(raw));
@@ -266,7 +266,7 @@ describe('PERSIST-10a seam — CONTROL (c): the memory bound is real', () => {
       expect(dec.decode(admitAll([w.slice(0, off), w.slice(off)]))).toBe('xoxb-AAAAA[REDACTED]');
     }
     const chunk = 'a long transcript line with no credential in it whatsoever; '.repeat(16);
-    let buf = new Uint8Array(0);
+    let buf: Uint8Array = new Uint8Array(0);
     let worst = 0;
     for (let i = 0; i < 512; i++) {
       buf = admitToBuffer(buf, enc.encode(chunk));

@@ -9,12 +9,15 @@
 
 import { id, asNodeKey, asSubtreeHash } from '@atlas/kernel';
 import type { CasObject } from '@atlas/kernel';
-import type { GroundedFact, StoreProjection, CurrentNode } from '@atlas/knowledge';
+import type { AdvisoryNode, GroundedFact, StoreProjection, CurrentNode } from '@atlas/knowledge';
 import type { DiskStore } from '../src/store.js';
 import type { AtlasPolicy } from '../src/policy.js';
 
 /** A grounded advisory fact at a given scope/tier — the CAS bytes a projection node points at. */
-export function fact(opts: { claim: string; scope: string; tier: GroundedFact['tier'] }): GroundedFact {
+// Returns `AdvisoryNode`, not the wider `GroundedFact`: the literal below is unconditionally
+// `kind: 'advisory'`. The wide return type is what made `f.claimNorm` in `fixture` a union access on a
+// field `PredicateNode` does not have.
+export function fact(opts: { claim: string; scope: string; tier: GroundedFact['tier'] }): AdvisoryNode {
   return {
     kind: 'advisory',
     id: asNodeKey(`nk-${opts.claim}`),
@@ -43,7 +46,9 @@ export interface LinkFixture {
  *  superseded afterwards leaves its peer's stored edge pointing at a key the projection no longer carries.
  *  That is the shape the class-join below has to survive, and no earlier case here produced it. */
 export function fixture(
-  facts: readonly GroundedFact[],
+  // `AdvisoryNode[]`: every row this builds is stamped `family: 'advisory'` and reads `claimNorm`, which
+  // only AdvisoryNode carries. A PredicateNode here would have produced `claims: [undefined]` silently.
+  facts: readonly AdvisoryNode[],
   edges: Readonly<Record<string, readonly string[]>> = {},
 ): LinkFixture {
   const cas = new Map<string, CasObject>();
@@ -78,6 +83,13 @@ export function fixture(
       },
       persistProjection: (p) => void persists.push(p),
       loadProjection: () => (persists.length > 0 ? persists[persists.length - 1] : projection),
+      // ADR-0008 staging doors. `governed-link.ts` writes ONLY through `commitProjection` (verified: it is
+      // the file's single store-write call site), so nothing under test reaches these — they were missing
+      // from a literal annotated `DiskStore`, which `tsc -b` could not see while it covered only `src`.
+      // Present now so the annotation means what it says; deliberately inert, never silently "staging".
+      commitStaging: (decide) => ({ settled: true, out: decide(projection).out }),
+      persistStaging: () => {},
+      loadStaging: () => undefined,
     },
     persists: () => persists,
   };

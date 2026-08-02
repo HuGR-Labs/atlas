@@ -11,8 +11,10 @@
 
 import { describe, it, expect } from 'vitest';
 import { asHash, asNodeKey } from '@atlas/kernel';
-import type { Event, EventLog, NodeKey } from '@atlas/kernel';
-import type { Hash } from '@atlas/contracts';
+import type { Event, EventLog } from '@atlas/kernel';
+// `NodeKey` is a @atlas/contracts type; @atlas/kernel does not re-export it. It was imported from
+// @atlas/kernel here, which esbuild erased as a type-only import — so the suite never saw the bad specifier.
+import type { Hash, NodeKey } from '@atlas/contracts';
 import type { DiffApi } from '../src/diff.js';
 import type { VersionDelta, VersionDeltaEntry } from '../src/types.js';
 import { createDiff, serializeDelta } from '../src/diff.js';

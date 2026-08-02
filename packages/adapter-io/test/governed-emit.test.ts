@@ -13,6 +13,7 @@ import { reasonOf } from './door-regression-support.js';
 import { id } from '@atlas/kernel';
 import type { CasObject } from '@atlas/kernel';
 import type { GroundedFact, StoreProjection } from '@atlas/knowledge';
+import { emptyStore } from '@atlas/knowledge';
 import { createGovernedEmit } from '../src/governed-emit.js';
 import type { DiskStore } from '../src/store.js';
 import { makeStoreSpy, HOLDS_GATE, NA_GATE, POLICY, advisory, mkAdvisory, predicate, realKey, AT } from './harness/governed-fixtures.js';
@@ -86,6 +87,28 @@ describe('COMPOSE-A — createGovernedEmit (truth-door · authz · upsert · dur
       },
       loadProjection() {
         return persists.length > 0 ? persists[persists.length - 1] : undefined;
+      },
+      // The ATOMIC commit door — the seam `createGovernedEmit` actually writes through. It was MISSING from
+      // this literal, and because `tsc -b` covered only `src`, the `: DiskStore` annotation above never
+      // checked it. The consequence was not cosmetic: `emit` died with
+      //   TypeError: deps.store.commitProjection is not a function
+      // BEFORE reaching `put`, so the `EIO: disk full` this fixture exists to raise was never thrown, and
+      // neither `put` nor `persistProjection` was ever called. `expect(...).toThrow()` accepts ANY throw, so
+      // the test passed on the TypeError and `expect(persists).toHaveLength(0)` held vacuously. The stated
+      // teeth ("reverse the order — persistProjection before put — and this flips RED") were therefore
+      // FALSE: the named mutant lives inside a callback this test never entered.
+      // Ordering below is copied from harness/governed-fixtures.ts: put-before-publish, and a decision with
+      // no `next` writes nothing.
+      commitProjection(decide) {
+        const decision = decide(persists.length > 0 ? persists[persists.length - 1]! : emptyStore());
+        if (decision.next === undefined) return { settled: true, out: decision.out };
+        for (const obj of decision.put ?? []) this.put(obj as CasObject);
+        persists.push(decision.next);
+        return { settled: true, out: decision.out };
+      },
+      commitStaging(decide) {
+        const decision = decide(emptyStore());
+        return { settled: true, out: decision.out };
       },
       // ADR-0008 widened `DiskStore` with the STAGING doors — see the note in harness/governed-fixtures.ts.
       persistStaging() {},

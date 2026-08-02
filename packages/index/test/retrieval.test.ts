@@ -133,7 +133,7 @@ describe('INDEX-6 — relevance resolves by exactly three modes, no fourth (visi
   it('SCN-INDEX-6b-1: a fourth-mode / free-text token does not resolve — no search() surface', () => {
     const r = createRetrieval(coreModel());
     expect('search' in r).toBe(false);
-    expect((r as Record<string, unknown>)['search']).toBeUndefined();
+    expect(Reflect.get(r, 'search')).toBeUndefined(); // dynamic read, no cast: RetrievalApi has no index signature
     expect(r.byTrigger('search:acme')).toEqual([]); // free-text token resolves nothing
     expect(Object.keys(r).sort()).toEqual(['byDependency', 'byScope', 'byTrigger']);
   });

@@ -15,7 +15,10 @@
 // builders are shared through `event-builders.ts` so the two files cannot drift.
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
-import type { Event } from '../src/types.js';
+// `Node` is imported EXPLICITLY: with `lib` unset the DOM globals are in scope, so an un-imported `Node`
+// silently resolves to lib.dom's `Node` — which is what the two annotations below were actually checked
+// against before this file was typechecked at all.
+import type { Event, Node } from '../src/types.js';
 import { combine, eventId } from '../src/log.js';
 import { fold, merge, mergeNode, head } from '../src/fold.js';
 import { toJsonl, parseJsonl, lineMerge, isContentKeyed } from '../src/jsonl.js';
@@ -164,7 +167,10 @@ describe('PROP-KERNEL-10 — order-independent union + MAX-by-contentHash tie-br
     selector: (s) => s.ch,
   });
 
-  const buildNode = (specs: readonly { ch: number; fresh: boolean; seq: number; supIdx?: number }[]): Node => {
+  // `supIdx: number | undefined` (a PRESENT key that may hold undefined), not `supIdx?: number` — that is
+  // what `fc.option(..., { nil: undefined })` actually generates, and under exactOptionalPropertyTypes the
+  // two are different types. The body already discriminates on `!== undefined`.
+  const buildNode = (specs: readonly { ch: number; fresh: boolean; seq: number; supIdx: number | undefined }[]): Node => {
     const chOf = (i: number) => `ch-${String(specs[i]!.ch).padStart(4, '0')}`;
     const events = specs.map((s, i) => {
       const supersedes = s.supIdx !== undefined && s.supIdx < specs.length && s.supIdx !== i ? [chOf(s.supIdx)] : [];
@@ -238,7 +244,7 @@ describe('PROP-KERNEL-10 — order-independent union + MAX-by-contentHash tie-br
           [...n.entries.values()].map((e) =>
             mkEvent('nk', e.contentHash as string, e.payload, {
               fresh: e.fresh,
-              supersedes: e.supersedes as string[],
+              supersedes: [...e.supersedes], // copy, not a cast: `supersedes` is `readonly Hash[]`
               seq: (Number(e.seq) + k) % 7,
             }),
           ),

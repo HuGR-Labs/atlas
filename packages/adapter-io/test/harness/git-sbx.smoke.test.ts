@@ -56,7 +56,7 @@ describe('git-sbx harness (fixture infra)', () => {
     // `--line-porcelain`: the first token of the first line is the full 40-hex commit SHA (unlike `-l`,
     // which prefixes root/boundary commits with `^` and truncates a hex digit to keep column width).
     const blame = g(sbx.repoPath, 'blame', '--line-porcelain', '-L', '2,2', sbx.r0, '--', 'src/util.ts');
-    expect(blame.split('\n')[0].split(' ')[0]).toBe(sbx.cGreet);
+    expect(blame.split('\n')[0]!.split(' ')[0]).toBe(sbx.cGreet);
   });
 
   it('all captured SHAs are distinct, non-empty 40-hex', () => {

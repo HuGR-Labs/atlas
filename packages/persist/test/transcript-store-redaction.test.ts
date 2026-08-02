@@ -67,7 +67,7 @@ function roundTrip(body: Uint8Array): Uint8Array {
 
 /** Fold chunks through the redact-at-source write gate, as a streaming caller would. */
 function admitAll(parts: readonly string[]): Uint8Array {
-  let buf = new Uint8Array(0);
+  let buf: Uint8Array = new Uint8Array(0);
   for (const p of parts) buf = admitToBuffer(buf, enc.encode(p));
   return buf;
 }

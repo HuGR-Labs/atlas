@@ -11,7 +11,7 @@ import { runExtract, defaultCeiling, type SeedProposal, type SiteProposer, type 
 
 const ZERO: MinedSignals = { hotspot: 0, szzBugCommits: 0, coChanged: [], owners: [], messages: [] };
 const siteOf = (id: string, st = `st-${id}`): StructRef => ({ kind: 'symbol', qualifiedPath: `beacon/${id}.ts::${id}`, subtreeHash: asSubtreeHash(st) });
-const idOf = (c: Candidate): string => c.site.qualifiedPath.split('::')[1];
+const idOf = (c: Candidate): string => c.site.qualifiedPath.split('::')[1]!;
 const cand = (id: string, ppr: number, rank: number, s: MinedSignals = ZERO, st?: string): Candidate => ({ site: siteOf(id, st), signals: s, ppr, rank });
 const OFF = { enabled: false, maxDepth: 0, epsilon: 0 } as const;
 const budgetOf = (n: number): GenesisBudget => ({ ceiling: defaultCeiling(n), deepening: { review: OFF, enrich: OFF, expand: OFF } });
@@ -33,7 +33,7 @@ describe('GEN-2 held-out (-2 beacon)', () => {
     expect(new Set(r.calls)).toEqual(new Set(['h1', 'h2', 'h3', 'h4', 'h5']));
   });
   it('SCN-GEN-2b-2: strictly descending PPR order over 5 sites', () => {
-    const shuffled = [beacon()[2], beacon()[0], beacon()[4], beacon()[1], beacon()[3]];
+    const shuffled = [beacon()[2]!, beacon()[0]!, beacon()[4]!, beacon()[1]!, beacon()[3]!];
     const r = rec();
     runExtract(shuffled, budgetOf(5), { proposer: seedProposer(r), gate: emitAll() });
     expect(r.calls).toEqual(['h1', 'h2', 'h3', 'h4', 'h5']);
@@ -71,7 +71,7 @@ describe('GEN-4 held-out (-2 beacon)', () => {
   it('SCN-GEN-4a-2: beacon seed carries re-deriving subtreeHash st-e50', () => {
     const c = cand('finalize', 0.9, 1, ZERO, 'st-e50');
     const out = runExtract([c], budgetOf(1), { proposer: seedProposer(rec()), gate: emitAll() });
-    expect(out.facts[0].grounding.entries[0].anchor.subtreeHash).toBe(asSubtreeHash('st-e50'));
+    expect(out.facts[0]!.grounding.entries[0]!.anchor.subtreeHash).toBe(asSubtreeHash('st-e50'));
   });
   it('SCN-GEN-4b-2: grounded ∧ non-obvious beacon seed emitted', () => {
     const out = runExtract([cand('reverse', 0.9, 1, ZERO, 'st-f61')], budgetOf(1), { proposer: seedProposer(rec()), gate: emitAll() });

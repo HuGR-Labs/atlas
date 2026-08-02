@@ -21,7 +21,10 @@ const content = (
   contentHash: string,
   seq: number,
   payload: unknown,
-  opts: { nodeKey?: string; fresh?: boolean; supersedes?: string[] } = {},
+  // `nodeKey?: string | undefined` — the fc arbitrary below passes the key PRESENT-and-undefined
+  // (`fc.option(..., { nil: undefined })`), which `nodeKey?: string` rejects under
+  // exactOptionalPropertyTypes. The body already discriminates before spreading it in.
+  opts: { nodeKey?: string | undefined; fresh?: boolean; supersedes?: string[] } = {},
 ): Content => ({
   seq,
   contentHash: contentHash as Hash,

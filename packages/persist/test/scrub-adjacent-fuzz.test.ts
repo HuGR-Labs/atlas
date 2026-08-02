@@ -45,7 +45,7 @@ const dec = new TextDecoder();
 const scrubText = (s: string): string => dec.decode(scrub(enc.encode(s)));
 
 function admitAll(parts: readonly string[]): string {
-  let buf = new Uint8Array(0);
+  let buf: Uint8Array = new Uint8Array(0);
   for (const p of parts) buf = admitToBuffer(buf, enc.encode(p));
   return dec.decode(buf);
 }
@@ -356,7 +356,7 @@ describe('PERSIST-10a adjacency — CHUNK INDEPENDENCE, 40k adjacency cases', ()
     for (let i = 0; i < 200; i++) {
       const c = makeCase(rnd, { minRun: 2, maxRun: 3 });
       for (const size of [1, 2, 3, 5, 7, 11, 13]) {
-        let buf = new Uint8Array(0);
+        let buf: Uint8Array = new Uint8Array(0);
         let acc = '';
         for (let p = 0; p < c.text.length; p += size) {
           const part = c.text.slice(p, p + size);

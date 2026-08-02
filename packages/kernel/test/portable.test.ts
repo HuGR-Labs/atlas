@@ -11,7 +11,11 @@
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import type { Hash } from '@atlas/contracts';
-import type { Cas, CasObject } from '../ref/types.js';
+// NOTE: this was `from '../ref/types.js'` — a path that does NOT exist in this repo (there is no
+// `packages/kernel/ref/`). As a type-only import esbuild erased it outright, so vitest never saw the
+// missing module and `Cas`/`CasObject` were never checked against anything. The real declarations are in
+// src/types.ts (where `CasObject = unknown`, so the annotations below are permissive by construction).
+import type { Cas, CasObject } from '../src/types.js';
 import type { NodeKey } from '@atlas/contracts';
 import { eventId } from '../src/log.js';
 import { id } from '../src/index.js';

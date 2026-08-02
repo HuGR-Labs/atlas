@@ -105,7 +105,7 @@ describe('PERSIST-10a KNOWN LIMIT — `put` does not join a credential across tw
     // is the same as no workaround, and this is what makes the limit ACCEPTABLE rather than merely known.
     const store = createTranscriptStore();
     const splitAt = AT + 'ghp_'.length; // the worst-case split from the first case
-    let folded = new Uint8Array(0);
+    let folded: Uint8Array = new Uint8Array(0);
     for (const part of [BODY.slice(0, splitAt), BODY.slice(splitAt)]) {
       folded = admitToBuffer(folded, enc.encode(part));
     }

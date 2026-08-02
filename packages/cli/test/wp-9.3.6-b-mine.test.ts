@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { asNodeKey, id } from '@atlas/kernel';
 import { makeRunController } from '@atlas/genesis';
-import type { Candidate, Fact } from '@atlas/genesis';
+import type { AdmitDeps, Candidate, Fact } from '@atlas/genesis';
 import { createDiskStore } from '@atlas/adapter-io';
 import type { StoreProjection, CurrentNode } from '@atlas/knowledge';
 import { runMine, driveMine, buildControllerDeps, makeAdmitGate } from '../src/mine.js';

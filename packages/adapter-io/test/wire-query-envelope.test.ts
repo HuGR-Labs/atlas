@@ -9,7 +9,11 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { upsert, emptyStore } from '@atlas/knowledge';
 import type { StoreProjection, WriteRequest } from '@atlas/knowledge';
-import type { TruthGate, T0Heuristic } from '@atlas/tools';
+// `QueryEnvelope` is the REAL envelope type. It replaces two hand-written structural re-declarations that
+// had drifted from it: both spelled `invariants`/`subsumes` as MUTABLE arrays where the envelope declares
+// them `readonly`, and one narrowed `PackInvariant` to `{ nodeId: string }`. A cast to a stale hand-copy of
+// a type is not evidence about that type.
+import type { TruthGate, T0Heuristic, QueryEnvelope } from '@atlas/tools';
 import type { ReconcileApi, GroundedFact } from '@atlas/knowledge';
 import { createDiskStore } from '../src/store.js';
 import type { DiskStore } from '../src/store.js';
@@ -62,7 +66,7 @@ describe('assembleHandler — Seam-3 the query Verdict.data carries derived subs
     // ACT
     const v = handler.handle('atlas-query', { scope: 'src' });
     expect(v.ok).toBe(true);
-    const data = v.data as { pack: { invariants: { nodeId: string }[] }; subsumes: { broader: string; narrower: string }[] };
+    const data = v.data as QueryEnvelope;
 
     // ASSERT — both facts appear in the pack (Seam-1) AND the coverage edge is derived (Seam-3).
     expect(data.pack.invariants.map((i) => i.nodeId).sort()).toEqual(['k:fn', 'k:mod']);
@@ -90,7 +94,7 @@ describe('assembleHandler — Seam-3 the query Verdict.data carries derived subs
 
     const cfg: WireConfig = { repoPath: repo.repoPath, casPath, scipPath: scip.scipPath, seams };
     const v = assembleHandler(cfg).handle('atlas-query', { scope: 'src' });
-    const data = v.data as { pack: { invariants: unknown[] }; subsumes: unknown[] };
+    const data = v.data as QueryEnvelope;
     // TEETH: dropping the under-scope filter would leak the api-anchored edge into the src-scoped result.
     expect(data.subsumes).toEqual([]);
     expect(data.pack.invariants).toEqual([]);

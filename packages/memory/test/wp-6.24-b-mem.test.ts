@@ -135,15 +135,15 @@ describe('SCN-MEM-12c-1 — Orientation folds only the tail delta, never a full 
     const [m1, m2, m3] = milestones(['M1', 'M2', 'M3']);
 
     // Orientation last assembled at head H1 (only M1 folded so far).
-    const prev = orient(define, logOf([m1]));
+    const prev = orient(define, logOf([m1!]));
     expect(prev.current).toBe('M1');
 
     // 2 new entries appended since (head now H3): the incremental fold receives ONLY the tail delta.
-    const tail = logOf([m2, m3]);
+    const tail = logOf([m2!, m3!]);
     const next = foldOrientation(prev, tail);
 
     // it matches a from-whole-log assembly (correct), while having folded ONLY the 2 tail entries.
-    expect(next).toEqual(orient(define, logOf([m1, m2, m3])));
+    expect(next).toEqual(orient(define, logOf([m1!, m2!, m3!])));
     const instrumented = foldOrientationInstrumented(prev, tail);
     expect(instrumented.folded).toBe(2); // the tail delta only — NOT the whole log (which is 3)
     expect(instrumented.value).toEqual(next);

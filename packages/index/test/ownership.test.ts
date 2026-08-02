@@ -84,8 +84,10 @@ describe('PROP-INDEX-15 — generated + reconciled ownership (∀-law)', () => {
         fc.uniqueArray(fc.constantFrom('c1', 'c2', 'c3', 'c4', 'c5'), { minLength: 2, maxLength: 2 }),
         fc.constantFrom<Territory['tier']>('T0', 'T1', 'T2'),
         ([dom, ovr], tier) => {
-          const blame: BlameEntry[] = ['z/a.ts', 'z/b.ts', 'z/c.ts'].map((p) => ({ path: p, authors: [dom] }));
-          const listed = T('z', ovr, tier, ['z/**']);
+          // `!` justified by the arbitrary: `uniqueArray(..., { minLength: 2, maxLength: 2 })`, so both
+          // slots always exist; `noUncheckedIndexedAccess` cannot see the length bound through destructuring.
+          const blame: BlameEntry[] = ['z/a.ts', 'z/b.ts', 'z/c.ts'].map((p) => ({ path: p, authors: [dom!] }));
+          const listed = T('z', ovr!, tier, ['z/**']);
           const r1 = reconcile(NO_GRAPH, blame, { territories: [listed] });
           expect(r1.get(listed)).toBe(ovr); // explicit override wins over the generated owner
           const gen = T('z', '', tier, ['z/**']);

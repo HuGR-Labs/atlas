@@ -126,15 +126,15 @@ describe('SCN-MEM-12c-2 — Orientation folds a single tail entry, not a replay 
     const [m1, m2, m3, m4] = milestones(['M1', 'M2', 'M3', 'M4']);
 
     // Orientation last assembled at head H3 (M1,M2,M3 folded).
-    const prev = orient(define, logOf([m1, m2, m3]));
+    const prev = orient(define, logOf([m1!, m2!, m3!]));
     expect(prev.current).toBe('M3');
     expect(prev.last).toBe('M2');
 
     // exactly 1 new entry appended since (head now H4): the incremental fold sees ONLY that delta.
-    const tail = logOf([m4]);
+    const tail = logOf([m4!]);
     const next = foldOrientation(prev, tail);
 
-    expect(next).toEqual(orient(define, logOf([m1, m2, m3, m4]))); // == whole-log assembly
+    expect(next).toEqual(orient(define, logOf([m1!, m2!, m3!, m4!]))); // == whole-log assembly
     expect(next.current).toBe('M4');
     expect(next.last).toBe('M3');
 

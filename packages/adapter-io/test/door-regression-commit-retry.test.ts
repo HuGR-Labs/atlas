@@ -84,6 +84,13 @@ function rowsOnDisk(casPath: string): StoreProjection {
 }
 
 /** The stored fact behind a row, read back out of CAS exactly as the door reads it. */
+/** The advisory claim body of a fact, or `undefined` for a predicate. `claimNorm` lives on `AdvisoryNode`
+ *  only; `GroundedFact` is the AdvisoryNode|PredicateNode union, so an un-narrowed `.claimNorm` read was
+ *  `undefined` at runtime for a predicate and invisible to the compiler. Runtime-identical, now stated. */
+function claimNormOf(f: GroundedFact | undefined): string | undefined {
+  return f !== undefined && f.kind === 'advisory' ? f.claimNorm : undefined;
+}
+
 function factBehind(casPath: string, row: CurrentNode): GroundedFact | undefined {
   return createDiskStore(casPath).get(row.contentHash as unknown as Hash) as GroundedFact | undefined;
 }
@@ -102,7 +109,7 @@ function seedLegacyIncumbent(casPath: string, fact: GroundedFact): string {
   const store = createDiskStore(casPath);
   store.put(fact as never);
   const key = keyOf(fact);
-  const row = { nodeKey: key, family: 'advisory' as const, contentHash: hashOf(fact), claims: [fact.claimNorm ?? ''] };
+  const row = { nodeKey: key, family: 'advisory' as const, contentHash: hashOf(fact), claims: [claimNormOf(fact) ?? ''] };
   store.persistProjection({ current: new Map([[key, row as unknown as CurrentNode]]), cas: new Set([hashOf(fact)]) });
   return key;
 }
@@ -137,7 +144,7 @@ describe('DOOR REGRESSION — a contended retry re-runs the GATES, not just the 
     const rows = [...rowsOnDisk(casPath).current.values()];
     expect(rows.length).toBe(1);
     expect(rows[0]!.tier).toBe('T0'); // the ADR-0007 carrier on the row
-    expect(factBehind(casPath, rows[0]!)?.claimNorm).toBe('the ratified truth');
+    expect(claimNormOf(factBehind(casPath, rows[0]!))).toBe('the ratified truth');
   });
 
   it('THE LEGACY CASE: the incumbent that appears is CARRIER-LESS, so the class comes from its BYTES', () => {
@@ -168,7 +175,7 @@ describe('DOOR REGRESSION — a contended retry re-runs the GATES, not just the 
     expect(reasonOf(out.emitted === false ? out.rejected : undefined)).toBe('governance-downgrade');
     const rows = [...rowsOnDisk(casPath).current.values()];
     expect(rows.length).toBe(1);
-    expect(factBehind(casPath, rows[0]!)?.claimNorm).toBe('ratified before the carrier existed');
+    expect(claimNormOf(factBehind(casPath, rows[0]!))).toBe('ratified before the carrier existed');
   });
 
   it('CONTROL (legacy): a carrier-less T2 incumbent does NOT block an equal-class write on the retry', () => {

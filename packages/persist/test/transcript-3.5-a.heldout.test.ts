@@ -67,7 +67,7 @@ describe('PERSIST-10a held-out — a DIFFERENT credential is caught by SHAPE', (
   });
 
   it('SCN-PERSIST-10a-b-2: buffer never admits the second raw credential (redact-at-source)', () => {
-    let buffer = new Uint8Array(0);
+    let buffer: Uint8Array = new Uint8Array(0);
     buffer = admitToBuffer(buffer, enc.encode(`about to write ${SECRET2} into transcript`));
     expect(occurrences(buffer, SECRET2)).toBe(0);
     expect(dec.decode(buffer)).not.toContain(SECRET2);

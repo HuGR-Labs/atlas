@@ -43,7 +43,10 @@ function ceoClaim(claimNorm: string): AdvisoryNode {
 function gateWithPresent(present: ReadonlySet<string>): TruthGate {
   return {
     gateHolds(node: GroundedFact, _at: Hash): Status {
-      return present.has(node.claimNorm) ? 'HOLDS' : 'NA';
+      // `claimNorm` is an AdvisoryNode field; `GroundedFact` also admits PredicateNode, which has none.
+      // The un-narrowed read evaluated to `undefined` for a predicate, so `present.has(undefined)` was false
+      // and the gate FAILED CLOSED. That disposition is preserved verbatim, now stated instead of accidental.
+      return node.kind === 'advisory' && present.has(node.claimNorm) ? 'HOLDS' : 'NA';
     },
   };
 }

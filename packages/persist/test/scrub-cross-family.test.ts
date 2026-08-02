@@ -62,7 +62,7 @@ function assertNoSecretRun(buf: Uint8Array, secret: string, minRun = 6): void {
 }
 
 function admitAll(parts: readonly string[]): Uint8Array {
-  let buf = new Uint8Array(0);
+  let buf: Uint8Array = new Uint8Array(0);
   for (const p of parts) buf = admitToBuffer(buf, enc.encode(p));
   return buf;
 }
@@ -204,7 +204,7 @@ describe('PERSIST-10a cross-family — adjacent credentials of DIFFERENT familie
 
     it(`${c.name}: the invariant holds at EVERY PREFIX, not only at the end`, () => {
       for (const size of [1, 2, 3, 5, 7, 11, 13]) {
-        let buf = new Uint8Array(0);
+        let buf: Uint8Array = new Uint8Array(0);
         let acc = '';
         for (let p = 0; p < c.text.length; p += size) {
           const part = c.text.slice(p, p + size);

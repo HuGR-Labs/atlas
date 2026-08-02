@@ -13,7 +13,7 @@ import { mkdtempSync, rmSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { FileTree } from '@atlas/index';
-import { walkFileTree } from '../src';
+import { walkFileTree } from '../src/index.js'; // explicit extension: NodeNext resolution has no directory-index fallback
 import { makeFixRepo, T_ref } from './harness/fix-repo.js';
 import type { FixRepo } from './harness/fix-repo.js';
 

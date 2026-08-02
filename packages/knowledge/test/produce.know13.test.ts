@@ -68,7 +68,10 @@ describe('WP-5.17.KNOW — production fires ONLY at the three moments; a sealing
     for (const m of MOMENTS) {
       const out = producer.produce(m, [cand('a'), cand('b')]);
       expect(out.length).toBe(2); // kills the always-empty mutant AND the sweep-admitting mutant
-      expect(out.map((f) => f.claimNorm)).toEqual(['cn-a', 'cn-b']);
+      // narrowed on `kind`: `claimNorm` lives on AdvisoryNode only, and `GroundedFact` is the
+      // AdvisoryNode|PredicateNode union. Runtime-identical — a PredicateNode yields `undefined` either
+      // way — but it now STATES that a predicate in this position would fail the assertion.
+      expect(out.map((f) => (f.kind === 'advisory' ? f.claimNorm : undefined))).toEqual(['cn-a', 'cn-b']);
     }
   });
 

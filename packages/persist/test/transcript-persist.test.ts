@@ -102,7 +102,7 @@ describe('PERSIST-10a — no raw credential in the immutable object (visible gol
 
   it('SCN-PERSIST-10a-b-1: the transcript buffer never admits the raw credential (redact-at-source)', () => {
     // the framework is about to write the raw credential into the transcript buffer.
-    let buffer = new Uint8Array(0);
+    let buffer: Uint8Array = new Uint8Array(0);
     buffer = admitToBuffer(buffer, enc.encode(`about to write ${SECRET} into transcript`));
 
     // the buffer never admits the raw credential — redacted BEFORE entering, not after persistence.

@@ -16,7 +16,10 @@ import { create } from '@bufbuild/protobuf';
 import { serializeSCIP, IndexSchema, MetadataSchema, ToolInfoSchema } from '@c4312/scip';
 import { composeRuntime } from '@atlas/adapter-io';
 import type { WiredHandler } from '@atlas/adapter-io';
-import type { DoctorSource, Verdict } from '@atlas/tools';
+// `InitOut` is the REAL `atlas-init` payload type; it replaces a hand-written `{ territories: { name:
+// string }[] }` structural stand-in that had drifted from it (the envelope declares `readonly Territory[]`,
+// and `Territory` carries owner/tier/globs besides `name`).
+import type { DoctorSource, InitOut, Verdict } from '@atlas/tools';
 import { main } from '../src/cli.js';
 
 // OS temp root — portable across dev + CI (never a machine-specific absolute path).
@@ -106,7 +109,7 @@ describe('COMPOSE-B — composeRuntime stands up a real WiredHandler', () => {
     expectWellFormedVerdict(v);
     expect(v.ok).toBe(true);
     if (v.ok) {
-      const names = (v.data as { territories: { name: string }[] }).territories.map((t) => t.name);
+      const names = (v.data as InitOut).territories.map((t) => t.name);
       expect(names).toContain('src'); // the real source tree became a real territory
     }
   });

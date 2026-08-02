@@ -77,12 +77,12 @@ describe('WP-5.15.KNOW — init empty-genesis (KNOW-6 visible goldens)', () => {
     expect(views.length).toBe(2);
     // count(invariants) == 0 across the whole skeleton (by construction — no authored content)
     const invariantCount = views.reduce(
-      (n, v) => n + (((v as Record<string, unknown>).invariants as unknown[] | undefined)?.length ?? 0),
+      (n, v) => n + ((Reflect.get(v, 'invariants') as unknown[] | undefined)?.length ?? 0),
       0,
     );
     expect(invariantCount).toBe(0);
     // teeth: a starter invariant seeded per territory would surface an `invariants` field
-    for (const v of views) expect((v as Record<string, unknown>).invariants).toBeUndefined();
+    for (const v of views) expect(Reflect.get(v, 'invariants')).toBeUndefined();
   });
 
   it('SCN-KNOW-6b-1: every territory ships the T2/advisory default by construction', () => {
@@ -94,7 +94,7 @@ describe('WP-5.15.KNOW — init empty-genesis (KNOW-6 visible goldens)', () => {
     const skeletonKeys = new Set(['path', 'owner', 'tier', 'files', 'blastRadius', 'regions']);
     for (const v of views) {
       for (const k of Object.keys(v)) expect(skeletonKeys.has(k)).toBe(true);
-      const fam = (v as Record<string, unknown>).family;
+      const fam = Reflect.get(v, 'family');
       expect(fam === undefined || fam === 'advisory').toBe(true);
     }
   });

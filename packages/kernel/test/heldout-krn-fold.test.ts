@@ -18,7 +18,8 @@ import { fold } from '../src/fold.js';
 
 const ev = (id: string, node: string | undefined, ch: string, payload: unknown): Event => ({
   id: id as Hash, seq: 0,
-  nodeKey: node === undefined ? undefined : (node as NodeKey),
+  // spread-in, not `nodeKey: undefined`: `Event.nodeKey?` is exactOptionalPropertyTypes-optional.
+  ...(node === undefined ? {} : { nodeKey: node as NodeKey }),
   contentHash: ch as Hash, fresh: true, supersedes: [], payload,
 });
 

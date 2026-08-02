@@ -7,9 +7,9 @@
 //
 // Identity is CONSUMED from the sealed seam (`eventId`); no digest is hand-rolled here.
 
-import type { Hash, NodeKey } from '@atlas/contracts';
 import type { AtlasState, Event, EventLog, Node } from '../src/types.js';
 import { createLog, eventId } from '../src/log.js';
+import { asHash, asNodeKey } from '../src/brand.js';
 
 /** One well-formed, content-keyed Event: `id = eventId(content)` (seq excluded) so `isContentKeyed` holds
  *  and a line-merge can dedup by id. `contentHash` is the OR-Set entry key; `seq` is a local hint only. */
@@ -19,12 +19,17 @@ export const mkEvent = (
   payload: unknown,
   opts: { fresh?: boolean; supersedes?: string[]; seq?: number } = {},
 ): Event => {
-  const content = {
+  // `nodeKey` is SPREAD-IN rather than written as `nodeKey: undefined` because `Event.nodeKey?` is an
+  // exactOptionalPropertyTypes-optional: the explicit-undefined form does not typecheck. The two forms are
+  // id-IDENTICAL — `canonical.ts:serialize` drops `undefined`-valued keys before sorting, so an absent key
+  // and a present-but-undefined one produce the same preimage. Every branded value is minted through the
+  // sanctioned constructors in src/brand.ts (that file: "Do not cast to a brand anywhere else").
+  const content: Omit<Event, 'id'> = {
     seq: opts.seq ?? 0,
-    nodeKey: nodeKey === undefined ? undefined : (nodeKey as NodeKey),
-    contentHash: ch as Hash,
+    ...(nodeKey === undefined ? {} : { nodeKey: asNodeKey(nodeKey) }),
+    contentHash: asHash(ch),
     fresh: opts.fresh ?? true,
-    supersedes: (opts.supersedes ?? []) as readonly Hash[],
+    supersedes: (opts.supersedes ?? []).map(asHash),
     payload,
   };
   return { ...content, id: eventId(content) };
@@ -32,7 +37,7 @@ export const mkEvent = (
 
 /** A Node on one nodeKey whose OR-Set entries are keyed by `contentHash` (the ratified slot key). */
 export const node = (nodeKey: string, entries: readonly Event[]): Node => ({
-  nodeKey: nodeKey as NodeKey,
+  nodeKey: asNodeKey(nodeKey),
   entries: new Map(entries.map((e) => [e.contentHash, e])),
 });
 
@@ -55,7 +60,7 @@ export const serState = (s: AtlasState): string =>
   JSON.stringify([...s.keys()].sort().map((nk) => serNode(s.get(nk)!)));
 
 /** The node under a nodeKey inside a folded state. */
-export const nodeAt = (s: AtlasState, nk: string): Node => s.get(nk as NodeKey)!;
+export const nodeAt = (s: AtlasState, nk: string): Node => s.get(asNodeKey(nk))!;
 
 /** The golden event universe's colliding nodeKey (goldens-krn §event table). */
 export const ARR = 'claim:acme-arr-2024';

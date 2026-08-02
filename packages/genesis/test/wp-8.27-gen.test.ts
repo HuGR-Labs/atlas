@@ -353,7 +353,7 @@ describe('F1+F2 — real-index shape: frontier subtreeHash resolves to node iden
     for (const h of hashes) expect(h.startsWith('st-')).toBe(true);
     expect(hashes.some((h) => h.startsWith('nk-'))).toBe(false);
     // and those seeds round-trip through rank → the hub (highest structural degree) ranks #1.
-    expect(rank(REAL_SKELETON, seeds)[0].site.subtreeHash).toBe('st-zzz-hub');
+    expect(rank(REAL_SKELETON, seeds)[0]!.site.subtreeHash).toBe('st-zzz-hub');
   });
 });
 

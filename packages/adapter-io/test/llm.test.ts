@@ -108,6 +108,6 @@ describe('createSiteProposer — ADAPT-LLM-1 the single bounded S2 site proposer
     // exactly one src call site, and it is llm.ts — 0 out-of-band model entry points.
     // teeth: a second src module importing `ModelClient` makes this length 2.
     expect(srcHits).toHaveLength(1);
-    expect(srcHits[0].endsWith('/adapter-io/src/llm.ts')).toBe(true);
+    expect(srcHits[0]!.endsWith('/adapter-io/src/llm.ts')).toBe(true);
   });
 });

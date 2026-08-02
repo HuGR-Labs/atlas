@@ -143,7 +143,7 @@ describe('SCN-MEM-8b-1 — a second entry for the same PR is rejected', () => {
     expect(store.size()).toBe(1); // rejected — ≤1 entry/prId, and the extant entry is NOT edited in place
 
     // teeth: dropping the one-per-PR guard would append (or overwrite) a second #42 entry
-    expect(store.entries()[0].shipped).toBe('implemented the logbook facet'); // the first entry is untouched
+    expect(store.entries()[0]!.shipped).toBe('implemented the logbook facet'); // the first entry is untouched
   });
 });
 
@@ -210,6 +210,6 @@ describe('SCN-MEM-8e-1 — a later entry supersedes by link, leaving history int
     expect(store.supersessions()).toContainEqual({ prId: '#42', link: 'pr://later-correction@sha' });
 
     // teeth: a rewrite-in-place would mutate L1's `decisions` bytes — here they are intact
-    expect(store.entries()[0].decisions).toBe('the original decision recorded in L1');
+    expect(store.entries()[0]!.decisions).toBe('the original decision recorded in L1');
   });
 });

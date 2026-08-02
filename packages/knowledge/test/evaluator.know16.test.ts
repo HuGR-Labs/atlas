@@ -89,7 +89,10 @@ describe('WP-5.16.KNOW — predicate check-engine (deterministic index-query, no
     // a minimal store shim honoring the FROZEN `StoreApi.evaluator?` optionality: the advisory
     // emit→query→reconcile cycle must complete WITHOUT ever wiring/invoking an evaluator.
     let evaluatorInvoked = false;
-    const store: { readonly evaluator?: ReturnType<typeof makeEvaluator> } = { evaluator: undefined };
+    // `= {}`, not `= { evaluator: undefined }`: `evaluator?` is exactOptionalPropertyTypes-optional, so an
+    // explicit-undefined value does not satisfy it. ABSENT is also the more faithful reading of "evaluator =
+    // none", and it is runtime-identical here (the only use is the `if (store.evaluator)` guard below).
+    const store: { readonly evaluator?: ReturnType<typeof makeEvaluator> } = {};
     const corpus: AdvisoryNode[] = [];
     const emit = (n: AdvisoryNode): void => { corpus.push(n); };
     const query = (cn: string): AdvisoryNode[] => corpus.filter((n) => n.claimNorm === cn);

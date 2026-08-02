@@ -33,7 +33,8 @@ import {
 const ev = (id: string, node: string | undefined, ch: string, seq = 0, supersedes: string[] = []): Event => ({
   id: id as Hash,
   seq,
-  nodeKey: node === undefined ? undefined : (node as NodeKey),
+  // spread-in, not `nodeKey: undefined`: `Event.nodeKey?` is exactOptionalPropertyTypes-optional.
+  ...(node === undefined ? {} : { nodeKey: node as NodeKey }),
   contentHash: ch as Hash,
   fresh: true,
   supersedes: supersedes as Hash[],

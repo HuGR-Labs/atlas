@@ -91,7 +91,7 @@ describe('git-history HistorySource (ADAPT-GIT-1)', () => {
     // blame attributes greet's body to cGreet (the golden's anchor claim) — the top blame commit at r0
     // for util.ts's greet line is cGreet, never a stub SHA.
     const greetBlame = g(repoPath, 'blame', '--line-porcelain', '-L', '2,2', r0, '--', QP);
-    expect(greetBlame.split('\n')[0].split(' ')[0]).toBe(cGreet);
+    expect(greetBlame.split('\n')[0]!.split(' ')[0]).toBe(cGreet);
   });
 
   // ── SCN-ADAPTER-8b — byte-identical across two runs at a fixed rev ────────────────────────────────

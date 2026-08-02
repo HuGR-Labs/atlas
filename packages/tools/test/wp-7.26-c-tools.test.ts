@@ -102,12 +102,17 @@ describe('WP-7.26-c.TOOLS — a node is addressable over three transports agains
 
     const before = JSON.stringify([...medium.entries()]);
     for (const t of ['mcp', 'poke', 'cli'] as Transport[]) {
-      const v = h.resolveNode(g.key as NodeKey, t);
+      // Addressed by `A` (the NodeKey the `storeNodes` resolver above is keyed on), NOT by `g.key`.
+      // `g.key` is `id(N1)` — a CAS content Hash, a different brand and a different string from
+      // 'cas:9b21' — so `resolve(addr)` returned `undefined` for every iteration and `resolveNode` fell
+      // through to its no-node-resolved fail-closed verdict. The loop therefore never reached a RESOLVED
+      // node, which is the only state in which "the projection opens no write door" says anything.
+      // The `as NodeKey` cast was what let a Hash sit in a NodeKey parameter unnoticed.
+      const v = h.resolveNode(A, t);
       // teeth (breaks-on "the MCP transport exposes a set()/put() — a write lands via the node handler"):
-      const asRec = v as unknown as Record<string, unknown>;
-      expect(asRec.set).toBeUndefined();
-      expect(asRec.put).toBeUndefined();
-      expect(asRec.write).toBeUndefined();
+      expect(Reflect.get(v, 'set')).toBeUndefined();
+      expect(Reflect.get(v, 'put')).toBeUndefined();
+      expect(Reflect.get(v, 'write')).toBeUndefined();
     }
     // no per-node READ transport mutated the store; the write surface is the two GOVERNED write doors
     // (atlas-emit + atlas-link, WP-SAMEAS) — the read transports add NO write door.

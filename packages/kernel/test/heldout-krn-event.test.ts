@@ -102,7 +102,7 @@ describe('GATE KERNEL-9 (held-out ∀-laws, independent data)', () => {
     ];
     fc.assert(
       fc.property(logArb, fc.nat(2), (L, k) => {
-        const R = reseq(L, relabels[k]);
+        const R = reseq(L, relabels[k]!);
         expect(keyset(R)).toEqual(keyset(L));
         expect(fp(R)).toBe(fp(L));
       }),

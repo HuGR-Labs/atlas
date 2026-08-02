@@ -87,7 +87,7 @@ describe('HELD-OUT SCN-INDEX-6a-2 / 6b-2 — exactly three modes, no fourth', ()
   it('6b-2: "semantic:payments" does not resolve — no search() surface', () => {
     const r = createRetrieval(netModel());
     expect('search' in r).toBe(false);
-    expect((r as Record<string, unknown>)['search']).toBeUndefined();
+    expect(Reflect.get(r, 'search')).toBeUndefined(); // dynamic read, no cast: RetrievalApi has no index signature
     expect(r.byTrigger('semantic:payments')).toEqual([]);
   });
 });

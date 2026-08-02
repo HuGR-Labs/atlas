@@ -66,7 +66,7 @@ function assertNoSecretRun(buf: Uint8Array, secret: string, minRun = 6): void {
 }
 
 function admitAll(parts: readonly string[]): Uint8Array {
-  let buf = new Uint8Array(0);
+  let buf: Uint8Array = new Uint8Array(0);
   for (const p of parts) buf = admitToBuffer(buf, enc.encode(p));
   return buf;
 }
@@ -177,7 +177,7 @@ describe('PERSIST-10a adjacency — CHUNK INDEPENDENCE across the seam', () => {
   it('the invariant holds at EVERY PREFIX for sizes 1/2/3/5/7/11/13 (no deferred flush)', () => {
     const text = `head ${A}${B} mid ${A}_${B} tail`;
     for (const size of [1, 2, 3, 5, 7, 11, 13]) {
-      let buf = new Uint8Array(0);
+      let buf: Uint8Array = new Uint8Array(0);
       let acc = '';
       for (let i = 0; i < text.length; i += size) {
         const part = text.slice(i, i + size);
@@ -209,7 +209,7 @@ describe('PERSIST-10a adjacency — CHUNK INDEPENDENCE across the seam', () => {
 
   it('the memory bound holds while streaming adjacent credentials byte-at-a-time', () => {
     const text = `${A}${B}${C}${A}_${B}`;
-    let buf = new Uint8Array(0);
+    let buf: Uint8Array = new Uint8Array(0);
     let worst = 0;
     for (const ch of text) {
       buf = admitToBuffer(buf, enc.encode(ch));

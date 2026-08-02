@@ -13,6 +13,9 @@
 
 import { describe, it, expect } from 'vitest';
 import type { OwnPack, OwnUnit } from '@atlas/retrieval';
+// `PackInvariant.nodeId` is a branded `NodeKey`; minted through the sanctioned constructor rather than
+// cast (src/brand.ts: "these three constructors are the ONLY sanctioned cast sites for the brands").
+import { asNodeKey } from '@atlas/kernel';
 import {
   createPhaseHook,
   AUTOINJECT_TIER,
@@ -26,7 +29,7 @@ import {
 /** A minimal, valid `OwnPack` (RETR-12 shape) tagged by `marker` so FRESH vs STALE is observable. */
 const ownPack = (marker: string): OwnPack => ({
   unit: `role:${marker}`,
-  invariants: [{ nodeId: `n:${marker}`, tier: 'T1', claim: `claim ${marker}` }],
+  invariants: [{ nodeId: asNodeKey(`n:${marker}`), tier: 'T1', claim: `claim ${marker}` }],
   shape: { contents: [], owner: 'team', tier: 'T1' },
   edges: { dependents: [], dependencies: [] },
   gotchas: [],

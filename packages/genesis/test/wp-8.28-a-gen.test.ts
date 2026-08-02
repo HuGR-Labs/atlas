@@ -37,7 +37,7 @@ const siteOf = (id: string): StructRef => ({
   qualifiedPath: `pkg/${id}.ts::${id}`,
   subtreeHash: asSubtreeHash(`st-${id}`),
 });
-const idOf = (c: Candidate): string => c.site.qualifiedPath.split('::')[1];
+const idOf = (c: Candidate): string => c.site.qualifiedPath.split('::')[1]!;
 
 const cand = (id: string, ppr: number, rank: number, signals: MinedSignals = ZERO_SIGNALS): Candidate => ({
   site: siteOf(id),
@@ -178,7 +178,7 @@ describe('GEN-4 — every seed is grounded and passes the 2-door bar; nothing se
     const out = runExtract([c], budgetOf(1), { proposer: seedProposer(recorder()), gate: gateEmitAll() });
     expect(out.facts.length).toBe(1);
     // the emitted fact carries the gate's grounded subtreeHash (not ∅ / stale).
-    expect(out.facts[0].grounding.entries[0].anchor.subtreeHash).toBe(c.site.subtreeHash);
+    expect(out.facts[0]!.grounding.entries[0]!.anchor.subtreeHash).toBe(c.site.subtreeHash);
   });
 
   it('SCN-GEN-4b-1: a grounded ∧ non-obvious seed is emitted (both doors pass)', () => {
@@ -232,7 +232,7 @@ describe('GEN-6 — churn/SZZ signals feed the rank only; a fact is minted solel
     // signals never enter Fact[] — the admitted set depends on the gate, not the signal magnitude.
     expect(a.facts.length).toBe(1);
     expect(b.facts.length).toBe(1);
-    expect(b.facts[0].grounding.entries[0].anchor.subtreeHash).toBe(a.facts[0].grounding.entries[0].anchor.subtreeHash);
+    expect(b.facts[0]!.grounding.entries[0]!.anchor.subtreeHash).toBe(a.facts[0]!.grounding.entries[0]!.anchor.subtreeHash);
   });
 
   it('SCN-GEN-6b-1: a high-signal site with no grounded invariant is absent from the fact set', () => {

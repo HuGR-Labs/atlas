@@ -22,12 +22,14 @@ const ev = (
   payload: unknown,
   opts: { fresh?: boolean; supersedes?: string[]; seq?: number } = {},
 ): Event => {
-  const content = {
+  // spread-in, not `nodeKey: undefined`: `Event.nodeKey?` is exactOptionalPropertyTypes-optional. The two
+  // forms are id-IDENTICAL (canonical.ts drops undefined-valued keys before sorting the preimage).
+  const content: Omit<Event, 'id'> = {
     seq: opts.seq ?? 0,
-    nodeKey: nodeKey as NodeKey | undefined,
+    ...(nodeKey === undefined ? {} : { nodeKey: nodeKey as NodeKey }),
     contentHash: ch as Hash,
     fresh: opts.fresh ?? true,
-    supersedes: (opts.supersedes ?? []) as readonly Hash[],
+    supersedes: (opts.supersedes ?? []).map((s) => s as Hash),
     payload,
   };
   return { ...content, id: eventId(content) };

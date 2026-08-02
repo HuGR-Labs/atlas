@@ -60,7 +60,7 @@ describe('WP-8.29.GEN held-out — GEN-5 (beacon)', () => {
   it('SCN-GEN-5c-2 — finalize T0: only candidate→ratified edge is interview; no auto_promote(tier==T0)', () => {
     const toRatified = edgesToRatified();
     expect(toRatified).toHaveLength(1);
-    expect(toRatified[0].via).toBe('interview');
+    expect(toRatified[0]!.via).toBe('interview');
     // mutation-verify: NO edge in the closed set reaches ratified by anything but interview
     expect(ROUTER_EDGES.filter((e) => e.to === 'ratified' && e.via !== 'interview')).toHaveLength(0);
     // the via union is closed to write|interview — no 'auto_promote' literal is even expressible

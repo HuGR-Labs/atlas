@@ -329,7 +329,7 @@ describe('D1 — availability manifest: pointers to reachable packs/memory/knowl
     }));
     const p = own.own(billing);
     // ranked by frecency (hits-desc): the memory pointer (9) leads
-    expect(p.manifest.pointers[0].name).toBe('pr-memory:billing');
+    expect(p.manifest.pointers[0]!.name).toBe('pr-memory:billing');
     // content-free: each pointer carries a name + a (simulated) digest + a how-to-pull, but no content field
     for (const ptr of p.manifest.pointers) {
       expect(ptr.digest.startsWith('sim:')).toBe(true); // SIMULATED digest (real content-identity is index/kernel-supplied)

@@ -198,7 +198,7 @@ describe('SCN-MEM-7f-1 — no delete op removes any memory; store size is monoto
       sizes.push(store.size());
     }
     for (let i = 1; i < sizes.length; i++) {
-      expect(sizes[i]).toBeGreaterThanOrEqual(sizes[i - 1]); // insert-only ⇒ monotone non-decreasing
+      expect(sizes[i]).toBeGreaterThanOrEqual(sizes[i - 1]!); // insert-only ⇒ monotone non-decreasing
     }
     // teeth: a hard delete would drop the evicted bytes and shrink the store — it is rejected
     expect(() => store.attemptDelete('R1')).toThrow();
