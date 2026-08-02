@@ -89,19 +89,35 @@ export function runDoctor(positionals: readonly string[], source?: DoctorSource)
 
   const doctor = createDoctor(source); // built over the READ-ONLY port — structurally no write method
 
-  switch (sub) {
-    case 'archive':
-      return renderDoctorOut('archive', doctor.archive(arg)); // scope is optional
-    case 'why':
-      if (arg === undefined) return doctorError('doctor why requires a <fact>');
-      return renderDoctorOut('why', doctor.whyBroken(arg));
-    case 'hotset':
-      if (arg === undefined || !Number.isFinite(Number(arg))) {
-        return doctorError('doctor hotset requires a numeric <budget>');
-      }
-      return renderDoctorOut('hotset', doctor.hotSet(Number(arg)));
-    case 'reground':
-      if (arg === undefined) return doctorError('doctor reground requires a <fact>');
-      return renderDoctorOut('reground', doctor.reground(arg)); // advisory plan — persists nothing
+  // TOTALITY, RESTORED WHERE IT WAS QUIETLY LOST. This function's own header promises "never a throw", and
+  // it kept that promise only as long as every `DoctorSource` leg was total. One is not any more: the
+  // provenance tripwire makes a COMMITTED durable store refuse rather than report a healthy empty one
+  // (`adapter-io/src/doctor-source.ts`), and it does so by throwing, because the frozen `DoctorSource` legs
+  // return `number` / `Hash[]` / `DriftItem | undefined` and every one of those would have to LIE.
+  //
+  // Unlike `handler.handle`, NOTHING between here and `bin.ts` catches — `main` is `async`, so an escaping
+  // throw becomes an unhandled rejection rather than a rendered outcome. In production the entrypoint
+  // refuses the whole invocation before doctor is dispatched (`cli.ts`, `CliDeps.readRefusal`), so this
+  // catch is the backstop for an embedder that composes a source without that gate, and for the next leg
+  // that decides it has something to refuse.
+  try {
+    switch (sub) {
+      case 'archive':
+        return renderDoctorOut('archive', doctor.archive(arg)); // scope is optional
+      case 'why':
+        if (arg === undefined) return doctorError('doctor why requires a <fact>');
+        return renderDoctorOut('why', doctor.whyBroken(arg));
+      case 'hotset':
+        if (arg === undefined || !Number.isFinite(Number(arg))) {
+          return doctorError('doctor hotset requires a numeric <budget>');
+        }
+        return renderDoctorOut('hotset', doctor.hotSet(Number(arg)));
+      case 'reground':
+        if (arg === undefined) return doctorError('doctor reground requires a <fact>');
+        return renderDoctorOut('reground', doctor.reground(arg)); // advisory plan — persists nothing
+    }
+  } catch (e) {
+    // The refusal's own text, verbatim — never re-worded, so the discriminant survives to the user door.
+    return doctorError(e instanceof Error ? e.message : String(e));
   }
 }

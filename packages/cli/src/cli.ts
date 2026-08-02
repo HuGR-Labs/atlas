@@ -8,6 +8,7 @@
 import type { WiredHandler } from '@atlas/adapter-io';
 import type { DoctorSource, Guidance, Tool, Verdict } from '@atlas/tools';
 import { runDoctor } from './doctor.js';
+import { ensureAtlasIgnored } from './gitignore.js';
 import { COMMAND_LEG } from './map.js';
 import { marshalArgs } from './marshal.js';
 import { runMine } from './mine.js';
@@ -20,6 +21,18 @@ import type { CliVerdict } from './render.js';
 export interface CliDeps {
   readonly handler?: WiredHandler;
   readonly doctorSource?: DoctorSource;
+  /**
+   * The PROVENANCE refusal for the composed runtime's durable store, or absent when it is trustworthy
+   * (`@atlas/adapter-io` `readProvenanceRefusal`). PRESENT means `.atlas/` is TRACKED BY GIT — it arrived by
+   * COMMIT rather than through a governed door — so nothing in it can be shown to have passed a gate.
+   *
+   * It is rendered HERE, before dispatch, for a reason the leg-level guards cannot cover: `doctor`
+   * sub-dispatches to `DoctorApi` without going through the handler at all, and `node` reaches
+   * `resolveNode`, which the frozen handler does NOT wrap in a try/catch. One refusal at the entrypoint
+   * makes every command legible in the CLI's own prose instead of through the handler's catch-all, which
+   * labels every leg throw `malformed args` (true for a bad argument, false for this).
+   */
+  readonly readRefusal?: string;
 }
 
 /** A structured error verdict for a CLI-layer failure (parse / unwired command) — guidance always present. */
@@ -42,6 +55,15 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
   }
 
   const { command, positionals, flags } = parsed;
+
+  // PROVENANCE — refuse the whole invocation over a COMMITTED durable store, with the reason, BEFORE any
+  // door is opened. `init` is deliberately EXEMPT and it is the only exemption: it reads the tree
+  // structurally, touches no durable state, and it is the command that writes the `.gitignore` rule which
+  // stops this happening again — refusing the remedy along with the symptom would leave a user with an
+  // Atlas that is off and no supported way to turn it back on.
+  if (deps.readRefusal !== undefined && command !== 'init') {
+    return emit(errorVerdict(deps.readRefusal));
+  }
 
   if (command === 'mine') {
     // CLI-4: `mine` drives the FROZEN genesis run-controller (`runMine`) over the repo at cwd as ONE governed
@@ -91,12 +113,30 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
   // (init→{path}, query→{scope}, emit→{node,at}, reconcile→{mergeBase,options}). Without it every routed
   // command fails closed with "malformed args". TOTAL: a missing --at / unreadable emit fact file → a
   // structured error + guidance + non-zero exit, never a throw (CLI-1b).
+  // `init` is the move-in command, and moving in has a DEPLOYMENT dependency the product never discharged:
+  // Atlas refuses a durable store that is TRACKED BY GIT, so a repo with no ignore rule is one `git add -A`
+  // away from a silently disabled Atlas. The rule is installed HERE, at the entrypoint, and not behind the
+  // `atlas-init` leg — `createInit` is a pure planner (ADR-0004 AUTHOR-2) and stays one. No knowledge byte
+  // is touched, so `WRITE_PATHS` and the CLI-2 authority matrix are unchanged; see `gitignore.ts`.
+  //
+  // AFTER the unwired-runtime guard above, deliberately: a command that cannot run must not leave a changed
+  // working tree behind. It is against `process.cwd()` — the repository root the entrypoint composes over —
+  // not against the `path` argument, which may name a SUBTREE, and a subtree is not where `.gitignore` lives.
+  const ignoreNote = command === 'init' ? ensureAtlasIgnored(process.cwd()).note : undefined;
   const marshalled = marshalArgs(command, positionals, flags);
   if (!marshalled.ok) {
     return emit(errorVerdict(marshalled.error));
   }
   const verdict = deps.handler.handle(tool, marshalled.args);
-  return emit(verdict);
+  // The gitignore outcome rides the SAME single process-outcome path as everything else (uniform bytes) —
+  // one appended line, never a second write to stdout, and never a changed exit code: failing to install an
+  // ignore rule does not make a structural move-in wrong, it makes it INCOMPLETE, and the line says so.
+  return emitCli(withNote(renderVerdict(verdict), ignoreNote));
+}
+
+/** Append one advisory line to a rendered outcome, or return it unchanged. Pure. */
+function withNote(cv: CliVerdict, note: string | undefined): CliVerdict {
+  return note === undefined ? cv : { exitCode: cv.exitCode, stdout: `${cv.stdout}${note}\n` };
 }
 
 /** The ONE process-outcome path: write a `CliVerdict`'s stdout and return its exit code (uniform bytes —

@@ -17,6 +17,13 @@
  *  unratified write never lands. */
 export const REJECTED_UNGROUNDED = 'ungrounded: citation does not re-derive FRESH at source (TOOLS-7b / GROUND-6)';
 export const REJECTED_UNAUTHORIZED = 'unauthorized: actor not in fact scope (KNOW-11)';
+export const REJECTED_UNAUTHORIZED_ANCHOR =
+  'unauthorized for anchor: the scope this write DECLARES is not the scope the admin policy says OWNS the ' +
+  'code this fact is anchored in (`authz.anchors` in .atlas/policy.json). Being authorized for the scope a ' +
+  'write names is not authority over the CODE it will be served against: the read projection scopes a pack ' +
+  'by the fact\'s computed primary anchor and never looks at the declared scope, so an unbound declaration ' +
+  'let an actor publish into a territory it holds no scope in. Declare the owning scope, or ask an admin to ' +
+  'rebind the prefix — this is a re-classification-shaped act (ADR-0009), not a field to retry with';
 export const REJECTED_UNRATIFIED = 'unratified: T0/contested fact requires human+billy ratification (KNOW-8)';
 export const REJECTED_DOWNGRADE =
   'governance-downgrade: this write declares a weaker tier than the node it targets — re-classification is ' +

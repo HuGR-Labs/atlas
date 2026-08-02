@@ -33,6 +33,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { NearDupConfig } from '@atlas/knowledge';
+import { underScope } from './anchor-scope.js';
 
 // ── the policy shape ─────────────────────────────────────────────────────────────────────────────────
 
@@ -54,6 +55,34 @@ export interface T0HeuristicPolicy {
  *  that scope. An UNLISTED scope (or an absent actor) is fail-closed: no write. */
 export interface AuthzPolicy {
   readonly scopes: Record<string, readonly string[]>;
+  /**
+   * [ARCH-9 · ADR-0010 open item 3] The scope↔ANCHOR binding: which governance scope OWNS which anchor
+   * prefix. `anchors['src/payments'] = 'payments'` means every fact whose computed `primaryAnchor` lies
+   * under `src/payments` must declare scope `payments` — and therefore must be written by an actor the
+   * policy lists under `payments`, not by whoever happens to own some other scope.
+   *
+   * WHY IT EXISTS. `scope` is a gate-selecting field with exactly the shape ARCH-9 forbids: the authz gate
+   * is `actorInScope(policy, actor, node.scope)` on an AUTHOR-SUPPLIED string, while the read projection
+   * scopes on the DERIVED `primaryAnchor` (`projection-query-index.ts` — `underScope(node.primaryAnchor,
+   * queryScope)`) and never looks at the row's scope at all. Nothing bound the two. So an actor authorized
+   * only in `public` could write a fact ANCHORED in `src/payments`, declare `scope:'public'`, clear authz,
+   * and have it SERVED to `atlas query src/payments`. The incumbent gates do not cover it: they only stop a
+   * node MOVING once it exists, and this is a CREATE.
+   *
+   * THIS IS THE MECHANISM, NOT THE DECISION. ADR-0010 states the binding "needs a scope↔anchor mapping in
+   * `adapter-io/policy.ts` AND a decision about which scope owns which anchor prefix". The second half is an
+   * admin/owner judgement about a particular repository and is NOT invented here. Measured, and it is why a
+   * hard-coded rule was not shipped: the two vocabularies are not the same today — every fixture in this
+   * product declares governance scopes like `core` over anchors like `src/a.ts`, so requiring
+   * `underScope(anchor, scope)` unconditionally would refuse writes the product itself makes.
+   *
+   * ABSENT / EMPTY ⇒ NO BINDING, which is honest rather than convenient: the hole is NARROWED (an admin can
+   * now close it, per prefix, and the door enforces it), not CLOSED (an admin who declares nothing still has
+   * the unbound behaviour). Optional for the same reason `derivedTier` is optional on `RatifyContext`: a
+   * required field would force every existing policy to invent a value, and an invented derivation is the
+   * one thing ARCH-9 names as NOT satisfying the clause.
+   */
+  readonly anchors?: Record<string, string>;
 }
 
 /** The admin-owned, versioned governance policy. Carries only DATA the governance seams consume — no code,
@@ -141,8 +170,10 @@ function parseT0(v: unknown): T0HeuristicPolicy | undefined {
   return { keywords: [...kw] };
 }
 
-/** Validate `authz` — requires a `scopes` object mapping scope → string[] of actors. Fail-closed ⇒
- *  `undefined`. A malformed scope map denies (no write authorized). */
+/** Validate `authz` — requires a `scopes` object mapping scope → string[] of actors, and accepts an OPTIONAL
+ *  `anchors` map of anchor-prefix → owning scope. Fail-closed ⇒ `undefined`. A malformed scope map denies
+ *  (no write authorized); a malformed `anchors` map denies the WHOLE policy rather than degrading to "no
+ *  binding", because a typo'd binding that silently disappears is a control that was never there. */
 function parseAuthz(v: unknown): AuthzPolicy | undefined {
   if (!isRecord(v)) return undefined;
   const s = v.scopes;
@@ -152,7 +183,17 @@ function parseAuthz(v: unknown): AuthzPolicy | undefined {
     if (!Array.isArray(actors) || !actors.every((a): a is string => typeof a === 'string')) return undefined;
     scopes[scope] = [...actors];
   }
-  return { scopes };
+  if (v.anchors === undefined) return { scopes }; // ABSENT ⇒ no binding declared (the pre-ADR-0010 shape)
+  if (!isRecord(v.anchors)) return undefined;
+  const anchors = Object.create(null) as Record<string, string>; // null-proto, same reason as `emptyScopes`
+  for (const [prefix, owner] of Object.entries(v.anchors)) {
+    // A prefix owned by a NON-string, an EMPTY owner, or the reserved `__proto__` name binds nothing and is
+    // refused rather than skipped: the whole point of the map is that a declared prefix is enforced.
+    if (typeof owner !== 'string' || owner.length === 0) return undefined;
+    if (prefix.length === 0 || prefix === '__proto__' || owner === '__proto__') return undefined;
+    anchors[prefix] = owner;
+  }
+  return { scopes, anchors };
 }
 
 /** A plain (non-null, non-array) object guard. */
@@ -194,6 +235,50 @@ export function nearDupConfig(policy: AtlasPolicy): NearDupConfig {
  * by name up front: a governance scope is an identifier like `'core/knowledge'`, never `'__proto__'`.
  * Total — never throws — and never permits an unlisted actor.
  */
+/**
+ * WHICH scope OWNS `primaryAnchor`, per the admin-declared anchor binding — or `undefined` when no declared
+ * prefix covers it (⇒ this gate stands aside, the documented default).
+ *
+ * LONGEST DECLARED PREFIX WINS, counted in PATH SEGMENTS, so an admin can write the ordinary nested shape
+ * (`{"src": "core", "src/payments": "payments"}`) and have the specific rule beat the general one regardless
+ * of key order in the JSON file. Ties cannot occur: two declared prefixes with the same segment count that
+ * both cover one anchor would have to be equal strings, and a JSON object has one value per key.
+ *
+ * Coverage is `underScope` — THE predicate the read projection scopes on (`anchor-scope.ts`), not a second
+ * `startsWith`. That identity is the point of the binding: the write is judged by the same notion of "under"
+ * that decides which query will later serve it.
+ *
+ * Pure + total: no IO, no throw, and an undeclared/empty map answers `undefined` for every anchor.
+ */
+export function anchorOwner(policy: AtlasPolicy, primaryAnchor: string | undefined): string | undefined {
+  const anchors = policy.authz.anchors;
+  if (anchors === undefined || primaryAnchor === undefined) return undefined;
+  let best: string | undefined;
+  let bestDepth = -1;
+  for (const [prefix, owner] of Object.entries(anchors)) {
+    if (!underScope(primaryAnchor, prefix)) continue;
+    const depth = prefix.split('/').length;
+    if (depth > bestDepth) {
+      bestDepth = depth;
+      best = owner;
+    }
+  }
+  return best;
+}
+
+/**
+ * Does the write's DECLARED scope agree with the scope the policy says OWNS its computed anchor?
+ *
+ * `true` (permitted) when no declared prefix covers the anchor — the unbound default. `false` ONLY when the
+ * admin has bound this anchor's prefix to a scope and the write declares a different one. Note what is NOT
+ * asked: whether the actor is in either scope. That is `actorInScope`'s job and it still runs; this gate
+ * answers the question authz structurally cannot, because authz is handed the very string under dispute.
+ */
+export function scopeOwnsAnchor(policy: AtlasPolicy, scope: string, primaryAnchor: string | undefined): boolean {
+  const owner = anchorOwner(policy, primaryAnchor);
+  return owner === undefined || owner === scope;
+}
+
 export function actorInScope(policy: AtlasPolicy, actor: string, scope: string | undefined): boolean {
   if (scope === undefined || scope.length === 0) return false; // no ownership anchor ⇒ fail closed
   if (scope === '__proto__') return false; // reserved name (an own key after JSON.parse) ⇒ never anchors a scope

@@ -29,6 +29,7 @@ import { createGovernedLink } from './governed-link.js';
 import { loadPolicy } from './policy.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
 import type { SidecarTrust } from './store-provenance.js';
+import { isUntrustedStore, refuseUntrustedRead } from './read-provenance.js';
 // DAG-pin imports — referenced (not wired as legs) to keep the frozen skeleton's dependency edges real.
 import { foldAstUnits } from './ast.js';
 import { createForge } from './git-forge.js';
@@ -186,6 +187,14 @@ export function assembleHandler(config: WireConfig): WiredHandler {
     // is `deriveSubsumes` (its FIRST production call site — DP-2 resolution-at-read) filtered to the edges
     // whose BOTH endpoints are current nodes UNDER the covering scope, already deterministically sorted.
     'atlas-query': ((args) => {
+      // PROVENANCE, BEFORE ANY MODE SPLIT. The tripwire already made a committed store read as EMPTY; what it
+      // did not do was SAY SO, and `ok:true` + an empty pack is indistinguishable from "no knowledge yet" —
+      // the silent-disappearance failure this product treats as the worst one available. Refusing here (a
+      // throw the frozen handler converts into a structured rejected `Verdict`, TOOLS-2) covers EVERY read
+      // mode from one line: putting it inside the `--by scope` branch would have left `--by dependency`
+      // serving the same committed rows with no refusal, which is exactly how the seam was missed the first
+      // time (`WireConfig.trusted` records the twin of this mistake for the store instance itself).
+      refuseUntrustedRead(config.trusted);
       const a = args as { scope: string; by?: string };
       // N2: `--by dependency|trigger` routes THROUGH the designed three-mode `createRetrieval` surface (INDEX-6),
       // NOT re-implemented here. `scope` (the default, and every MCP/wire-fake call) stays the byte-identical
@@ -257,6 +266,15 @@ export function assembleHandler(config: WireConfig): WiredHandler {
   // a miss ⇒ `undefined` (the handler renders a structured "no grounded node" rejection, never a throw).
   const nodes: NodeSource = {
     resolve: (nodeAddr) => {
+      // PROVENANCE — the leg that goes AROUND `loadProjection`. Everything else on the read side rehydrates
+      // the sidecar, where the tripwire lives; this one reads CAS by content address DIRECTLY, and `.atlas/cas/**`
+      // is committed by the same `git add -f` that lands the sidecar (`isDurableStorePath` covers both). So a
+      // committed blob came back WHOLE over `atlas node <addr>` with `ok:true`, with every write door denying.
+      // It returns `undefined` rather than throwing: the frozen `resolveNode` does NOT wrap this call in a
+      // try/catch (unlike `handle`), so a throw here would escape as a raw exception at the user door. The
+      // LEGIBLE half is one frame up — `cli.ts` refuses the whole command with the provenance reason before it
+      // ever reaches the handler — and this is the fail-closed backstop that holds for every other caller.
+      if (isUntrustedStore(config.trusted)) return undefined;
       // SECURITY (billy PoC): `nodeAddr` is attacker-controllable over MCP/poke. A CAS content address is
       // EXACTLY 64 lowercase hex; anything else (a `../` traversal to an unbounded file like /dev/zero) is a
       // MISS — rejected BEFORE any filesystem read, so it can never hang/OOM. Defense-in-depth: `store.get`

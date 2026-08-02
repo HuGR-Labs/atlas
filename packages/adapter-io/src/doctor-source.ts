@@ -28,6 +28,8 @@ import type { DoctorSource, DriftItem } from '@atlas/tools';
 import type { RevIndex } from './rev-index.js';
 import { rehydrateProjection } from './store.js';
 import type { DiskStore } from './store.js';
+import { refuseUntrustedRead } from './read-provenance.js';
+import type { SidecarTrust } from './store-provenance.js';
 
 /** The rev `drift`/`plan` diff against — the composition root pins HEAD once per process (revIndex memoizes
  *  the built `Axes` by rev), so `drift` compares the RECORDED anchor vs HEAD-at-compose-time. */
@@ -75,9 +77,24 @@ export function retireTemplate(fact: GroundedFact): GroundedFact {
  * `store.get(contentHash)` returns the WHOLE fact governed-emit `put`), so `drift`/`plan` operate on the
  * recorded grounding, never a re-derived guess.
  */
-export function createDoctorSource(store: DiskStore, revIndex: RevIndex): DoctorSource {
-  /** The current nodes of the rehydrated durable projection (exactly one per nodeKey). */
-  const nodes = () => currentNodes(rehydrateProjection(store));
+export function createDoctorSource(store: DiskStore, revIndex: RevIndex, trusted?: SidecarTrust): DoctorSource {
+  /** The current nodes of the rehydrated durable projection (exactly one per nodeKey).
+   *
+   *  PROVENANCE FIRST, and this is the ONE place in this module that is not total. Every doctor leg funnels
+   *  through here, so one guard covers `hotSetSize`/`lineage`/`drift`/`plan` and no future leg can be added
+   *  that forgets it. Without it, a COMMITTED store made `atlas doctor hotset` report `size=0` and exit 0 —
+   *  "your knowledge base is empty and healthy" — about a store the read doors had just refused to serve.
+   *  Reporting health for state you have refused to read is worse than reporting nothing.
+   *
+   *  `DoctorSource` is documented TOTAL, and this throw is a deliberate, narrow exception to that: the port
+   *  has no refusal channel (its legs return `number` / `Hash[]` / `DriftItem | undefined`, all of which
+   *  would have to LIE), and the one production caller, `cli/src/doctor.ts`, converts the throw into the
+   *  same structured error + guidance + non-zero exit every other doctor failure renders. The absent-seam
+   *  case is unaffected: `refuseUntrustedRead` is a no-op for a store built without the provenance seam. */
+  const nodes = () => {
+    refuseUntrustedRead(trusted);
+    return currentNodes(rehydrateProjection(store));
+  };
 
   /** Read a fact back from CAS by its content hash (invariant-6). `undefined` on any miss/tamper. */
   const factOf = (contentHash: string): GroundedFact | undefined =>

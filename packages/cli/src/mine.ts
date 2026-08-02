@@ -38,12 +38,13 @@ import type {
   AdmitDeps,
   AdvisoryProposal,
 } from '@atlas/genesis';
-import { createDiskStore, headSha, createSkeletonSource } from '@atlas/adapter-io';
+import { createDiskStore, headSha, createSkeletonSource, gitSidecarTrust } from '@atlas/adapter-io';
 import type { CommitDecision, CommitRefusal, DiskStore } from '@atlas/adapter-io';
 import { upsert as knowledgeUpsert, normalizeCheck, primaryAnchorId, nodeKey } from '@atlas/knowledge';
 import type { WriteRequest, StoreProjection, Candidate as KnowledgeCandidate } from '@atlas/knowledge';
 import { id, asNodeKey } from '@atlas/kernel';
 import { join } from 'node:path';
+import { StagingCommitError as StagingRefusalError, STAGING_REFUSAL_TEXT as REFUSAL_TEXT } from './mine-staging.js';
 import type { CliVerdict } from './render.js';
 
 /**
@@ -139,24 +140,9 @@ export const MINED_SCOPE = 'atlas:mined';
  *  never forwarded from `f.tier`, so an injected gate cannot mint a staged row DECLARING `T0`. */
 const MINED_TIER = 'T2' as const;
 
-/** Why a staging commit did not settle, in the operator's words. Surfaced, never swallowed: `settled: false`
- *  means NOTHING was written, and reporting that as a successful pass would be a fresh instance of the exact
- *  silent-loss defect the commit protocol exists to remove. */
-const STAGING_REFUSAL_TEXT: Readonly<Record<CommitRefusal, string>> = {
-  contended: 'the staging sidecar advanced under this pass more times than the protocol retries, so its candidates were NOT written. The store is alive; this write is not. Re-run the pass',
-  unreadable: 'a staging sidecar EXISTS but no generation of it parses, so this pass refused rather than rebuild staging from empty and erase every candidate already there. Repair or remove `.atlas/staging*.json`',
-  untrusted: 'the durable store is TRACKED BY GIT, so it arrived by commit rather than through a door and nothing in it can be trusted as mined output. Nothing was written, and the committed file was NOT overwritten, so the evidence survives. Run `git rm --cached -r .atlas` and add `.atlas/*` to `.gitignore`',
-};
-
-/** The refusal, THROWN, carrying a machine-readable {@link CommitRefusal} discriminant. A throw and not a return:
- *  `ControllerDeps.upsert` returns the grounded set, so "an unchanged set" is indistinguishable from a site that
- *  abstained. `run-controller` catches it (GEN-8c) ⇒ partial + non-zero, and `runMine` names the cause on stdout. */
-export class StagingCommitError extends Error {
-  constructor(readonly refusal: CommitRefusal) {
-    super(`atlas mine: staging commit refused (${refusal}) — ${STAGING_REFUSAL_TEXT[refusal]}`);
-    this.name = 'StagingCommitError';
-  }
-}
+/** The staging refusal vocabulary + its thrown discriminant, extracted at the LOC ceiling (see that file's
+ *  header). RE-EXPORTED here because `StagingCommitError` is part of this module's published surface. */
+export { StagingCommitError, STAGING_REFUSAL_TEXT } from './mine-staging.js';
 
 /** The honest fail-closed default history: no signals, empty frontier ⇒ the structural fallback ranks 0
  *  sites (GEN-15b). A real pass INJECTS `createHistorySource(repo, rev)`; the default never shells git.
@@ -179,7 +165,13 @@ function withDefaults(repoPath: string, deps?: Partial<MineDeps>): MineDeps {
     proposer: deps?.proposer ?? defaultProposer(),
     history: deps?.history ?? defaultHistory(),
     skeleton: deps?.skeleton ?? defaultSkeleton(repoPath),
-    store: deps?.store ?? createDiskStore(join(repoPath, '.atlas', 'cas'), () => headSha(repoPath)),
+    // PROVENANCE (the third seam this store takes, alongside the N11 watermark). `mine` built its store
+    // WITHOUT it, so a repo whose `.atlas/` arrived by COMMIT was staged into as though a door had produced
+    // it — and `STAGING_REFUSAL_TEXT.untrusted`, which was already written, could never fire. Staging is not
+    // a serving path, so nothing was being SERVED; what was missing is the seam, and the next reader who
+    // wires staging into a door would have inherited the hole rather than found it. `gitSidecarTrust` is the
+    // same memoized `git ls-files` the composition root injects — one question per pass, not per write.
+    store: deps?.store ?? createDiskStore(join(repoPath, '.atlas', 'cas'), () => headSha(repoPath), gitSidecarTrust(repoPath)),
     gate: deps?.gate ?? defaultGate(),
     handoffTo: deps?.handoffTo ?? ((): void => {}),
     ...(deps?.budget !== undefined ? { budget: deps.budget } : {}),
@@ -279,7 +271,7 @@ export function buildControllerDeps(repoPath: string, d: MineDeps, onRefusal?: (
         // VISIBLE. Nothing was written, so returning the grounded set unchanged would report a successful
         // pass over a write that did not happen — the silent loss this seam removes.
         onRefusal?.(r.refusal);
-        throw new StagingCommitError(r.refusal);
+        throw new StagingRefusalError(r.refusal);
       }
       for (const [key, f] of r.out) grounded.set(key, f); // fold in only what actually settled
       return [...grounded.values()];
@@ -383,7 +375,7 @@ function foldVerdict(r: GenesisReport, modelWired: boolean, ceiling?: number, re
     `cost: llmCalls ${r.llmCalls} · budgetSpent ${r.budgetSpent}`,
     // NAMED, above the generic partial line: a refused staging commit wrote NOTHING, and "did not run to
     // completion" alone leaves the operator guessing between a dead model and a lost race.
-    ...(refusal !== undefined ? [`staging: REFUSED (${refusal}) — ${STAGING_REFUSAL_TEXT[refusal]}`] : []),
+    ...(refusal !== undefined ? [`staging: REFUSED (${refusal}) — ${REFUSAL_TEXT[refusal]}`] : []),
     ...(why ? [why] : []),
     ...(r.resumeToken ? [`partial: resume at rank ${r.resumeToken.lastCompletedRank}`] : []),
   ];

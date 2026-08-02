@@ -35,6 +35,7 @@ import { runGit, headSha } from './run-git.js';
 import { createDoctorSource, primaryAnchor } from './doctor-source.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
 import { gitSidecarTrust } from './store-provenance.js';
+import { readProvenanceRefusal } from './read-provenance.js';
 import { assembleHandler } from './wire.js';
 import type { WireConfig, WireSeams, WiredHandler } from './wire.js';
 
@@ -44,6 +45,18 @@ import type { WireConfig, WireSeams, WiredHandler } from './wire.js';
 export interface ComposedRuntime {
   readonly handler: WiredHandler;
   readonly doctorSource: DoctorSource;
+  /**
+   * The PROVENANCE refusal for this repo's durable store, or `undefined` when it is trustworthy
+   * (`read-provenance.ts`). PRESENT means `.atlas/` arrived by COMMIT rather than through a door, so every
+   * read serves nothing and every write refuses.
+   *
+   * It is surfaced HERE, on the composed runtime, because the refusal has to be legible on doors that the
+   * handler does not own: `atlas doctor` sub-dispatches to `DoctorApi` without touching the handler, and
+   * `atlas node` reaches `resolveNode`, which the frozen handler does NOT wrap in a try/catch. One value the
+   * entrypoint can render once covers all of them, in the entrypoint's own prose, instead of each door
+   * rediscovering the condition — and the leg-level guards stay as the backstop for every other caller.
+   */
+  readonly readRefusal?: string;
 }
 
 /** Where `composeRuntime` looks for the optional SCIP dump under a repo (empty axes if absent, per §7). */
@@ -226,7 +239,16 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
 
   // The real read-only diagnostic port — built over the SAME durable store + revIndex the governed emit
   // leg rides, so `atlas doctor` reads the very facts the write door persists (never a fresh oracle).
-  const doctorSource = createDoctorSource(store, revIndex);
+  const doctorSource = createDoctorSource(store, revIndex, trusted);
 
-  return { handler: assembleHandler(config), doctorSource };
+  // The provenance verdict, resolved ONCE (the seam memoizes its `git ls-files` for the life of the runtime)
+  // and handed to the entrypoint. Conditional spread keeps it ABSENT (not `undefined`) on a healthy repo —
+  // `exactOptionalPropertyTypes`, and the same discipline `ratifyToken` uses above.
+  const readRefusal = readProvenanceRefusal(trusted);
+
+  return {
+    handler: assembleHandler(config),
+    doctorSource,
+    ...(readRefusal !== undefined ? { readRefusal } : {}),
+  };
 }

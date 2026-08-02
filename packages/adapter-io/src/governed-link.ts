@@ -55,6 +55,9 @@ import { actorInScope } from './policy.js';
 import type { AtlasPolicy } from './policy.js';
 import type { DiskStore } from './store.js';
 import { REJECTED_CONTENDED as COMMIT_CONTENDED, REJECTED_UNREADABLE_STORE as COMMIT_UNREADABLE_STORE } from './governed-emit-reasons.js';
+// The PROVENANCE refusal — the THIRD `CommitRefusal` member, which BOTH doors used to collapse into
+// `unreadable store` (a storage fault whose remediation text sends an operator to restore from backup).
+import { REJECTED_UNTRUSTED_STORE as COMMIT_UNTRUSTED } from './read-provenance.js';
 
 /** The structured fail-closed reasons — a non-distinct, unknown-endpoint, unauthorized, OR unratified link
  *  never lands. */
@@ -250,9 +253,14 @@ export function createGovernedLink(deps: GovernedLinkDeps): { readonly link: (a:
     });
     // 6. COMMIT — its own two refusals, visible and never silent. Identical in kind to the emit door's, and
     //    deliberately the SAME vocabulary: one protocol, one set of reason names.
-    return committed.settled
-      ? committed.out
-      : { linked: false, rejected: committed.refusal === 'contended' ? REJECTED_CONTENDED : REJECTED_UNREADABLE };
+    if (committed.settled) return committed.out;
+    const commitRefusal =
+      committed.refusal === 'contended'
+        ? REJECTED_CONTENDED
+        : committed.refusal === 'untrusted'
+          ? COMMIT_UNTRUSTED
+          : REJECTED_UNREADABLE;
+    return { linked: false, rejected: commitRefusal };
   };
   return { link };
 }

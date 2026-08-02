@@ -53,6 +53,21 @@ export { composeRuntime, buildHeuristic, buildGate } from './compose.js';
 export type { ComposedRuntime } from './compose.js';
 export { createDoctorSource, regroundTemplate, retireTemplate } from './doctor-source.js';
 
+// The PROVENANCE tripwire's READ-side refusal (`read-provenance.ts`) — the half the write doors already had.
+// Exported because the CLI entrypoint renders it (`cli/src/cli.ts`) and because a test must be able to
+// assert on the DISCRIMINANT (`UntrustedStoreError.reason`) rather than on a substring of refusal prose.
+export {
+  REJECTED_UNTRUSTED_STORE,
+  UntrustedStoreError,
+  isUntrustedStore,
+  readProvenanceRefusal,
+  refuseUntrustedRead,
+} from './read-provenance.js';
+export type { ReadProvenanceReason } from './read-provenance.js';
+// The provenance SEAM itself — `mine` composes its own store and needs the same tripwire the doors ride.
+export { gitSidecarTrust, isDurableStorePath } from './store-provenance.js';
+export type { SidecarTrust } from './store-provenance.js';
+
 // The versioned governance policy (WP-POLICY): declarative `.atlas/policy.json` + fail-closed loader. The
 // WP name says "admin-locked"; the file is NOT locked by any live mechanism (see policy.ts) — the loader is.
 export { loadPolicy, defaultPolicy, actorInScope, nearDupConfig } from './policy.js';

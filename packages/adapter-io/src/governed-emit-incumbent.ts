@@ -9,7 +9,7 @@
 // It never writes, never throws, and never decides `emitted` — the door does that — so the gate ORDER, and
 // with it the increasing-disclosure rule `governed-emit.ts` pins in its header, stays readable in one place.
 
-import type { Hash } from '@atlas/contracts';
+import type { Hash, Tier } from '@atlas/contracts';
 import { isScope, isWeakerTier, strictestTier } from '@atlas/knowledge';
 import type { CurrentNode, GroundedFact } from '@atlas/knowledge';
 import { actorInScope } from './policy.js';
@@ -54,15 +54,46 @@ export interface IncumbentDeps {
 //   The projection is rehydrated ONCE here and reused by the upsert below. (An earlier version of this
 //   comment claimed it had been read TWICE before — it had not; `rehydrateProjection` appears exactly once
 //   on every ancestor of this line. Parity presented as an improvement; corrected rather than deleted.)
+/**
+ * The full outcome of stage 2.25 — a REFUSAL, or the class this stage DERIVED from the incumbent.
+ *
+ * ARCH-9 (ADR-0010) needs the second half, and it was being computed and thrown away. `incumbentTier` — the
+ * class read off the incumbent's own ROW joined with its own stored BYTES — is exactly "a value the author
+ * cannot choose", which is the definition of a gate-selecting field that satisfies ARCH-9. Returning it lets
+ * the door hand it to `route` instead of letting `route` gate on the class the REQUEST declared.
+ *
+ * Both fields absent means "no objection, and no class could be derived" (a carrier-less row whose bytes
+ * carry no class either — see the join below).
+ */
+export interface IncumbentDecision {
+  readonly refusal?: string;
+  /** ARCH-9 — the class DERIVED from the resource. Never the declared one, never a default. */
+  readonly derivedTier?: Tier;
+}
+
 /** Run the target-derived gates against the resolved incumbent. `node`/`tier` are the GATE-0 SNAPSHOT
  *  values the door validated, never raw payload fields. Returns the refusal reason, or `undefined` when
- *  the write may proceed to ratification. */
+ *  the write may proceed to ratification.
+ *
+ *  THE NAME IS KEPT because ADR-0007/ADR-0010 and the architecture reference both cite it by name as the
+ *  gate that runs before `upsert`; it is now a thin projection of {@link incumbentDecision}, which also
+ *  carries the derived class the door needs (ARCH-9). One resolution of the incumbent, two answers. */
 export function incumbentRefusal(
   deps: IncumbentDeps,
   incumbent: CurrentNode,
   node: GroundedFact,
   tier: unknown,
 ): string | undefined {
+  return incumbentDecision(deps, incumbent, node, tier).refusal;
+}
+
+/** {@link incumbentRefusal} plus the ARCH-9 derived class. The projection is read ONCE for both. */
+export function incumbentDecision(
+  deps: IncumbentDeps,
+  incumbent: CurrentNode,
+  node: GroundedFact,
+  tier: unknown,
+): IncumbentDecision {
     // AUTHORITY OVER THE TARGET, not equality of names. Gate 2 above asked "is the actor in the scope this
     // write DECLARES" — the attacker picks that. The question that actually protects the node is "is the
     // actor in the scope the NODE ALREADY LIVES IN", so it is asked here, against the incumbent's own
@@ -119,7 +150,7 @@ export function incumbentRefusal(
     const legacyRow = rowScope === undefined; // the carrier-less shape — NOT "malformed", NOT "empty"
     const authorityScope = legacyRow ? stored?.scope : rowScope;
     if (!isScope(authorityScope) || !actorInScope(deps.policy, deps.actor, authorityScope)) {
-      return REJECTED_UNAUTHORIZED_TARGET;
+      return { refusal: REJECTED_UNAUTHORIZED_TARGET };
     }
 
     // CORROBORATION, not mere presence — for a CARRIED row. The row may decide WHO IS HEARD (that is what
@@ -129,7 +160,7 @@ export function incumbentRefusal(
     // corroborate — authority came FROM the bytes — and `stored` is necessarily defined here, because
     // `isScope(authorityScope)` above could not have passed otherwise.
     if (stored === undefined || (!legacyRow && stored.scope !== rowScope)) {
-      return REJECTED_UNVERIFIABLE_TARGET;
+      return { refusal: REJECTED_UNVERIFIABLE_TARGET };
     }
 
     // The class to clear is the STRICTEST of the two carriers WHERE BOTH EXIST, same reason: a row
@@ -164,11 +195,17 @@ export function incumbentRefusal(
     // membership, so a rename degrades to an ordinary recoverable failure the admin fixes by declaring
     // both names, and the node keeps taking writes at its stored scope meanwhile.
     if (node.scope !== stored.scope) {
-      return REJECTED_RELOCATION;
+      return { refusal: REJECTED_RELOCATION };
     }
 
     if (weakerTier) {
-      return REJECTED_DOWNGRADE;
+      return { refusal: REJECTED_DOWNGRADE };
     }
-  return undefined; // no target-derived objection — the door continues to ratify + upsert
+  // No target-derived objection — the door continues to ratify + upsert, and it now does so under the class
+  // DERIVED here rather than the one the request declared (ARCH-9). `incumbentTier` is `Tier | undefined`:
+  // undefined is the carrier-less row whose BYTES also carry no class, and it is passed through as absent
+  // rather than defaulted, because a default would be exactly the "constant that pins the gate" ARCH-9
+  // forbids. (That shape cannot actually reach here — `isWeakerTier(tier, undefined)` is `true`, so it was
+  // already refused `governance-downgrade` above — but the type is honest about it rather than asserting.)
+  return incumbentTier === undefined ? {} : { derivedTier: incumbentTier };
 }

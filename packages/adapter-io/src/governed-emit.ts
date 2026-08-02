@@ -1,11 +1,12 @@
 // @atlas/adapter-io — src/governed-emit.ts  (COMPOSE-A: the governed durable emit leg)
 //
 // The runtime composition-root's governed write door. `atlas-emit` persists DURABLY only THROUGH the
-// governed path — TWELVE fail-closed refusals, in the order below, before a single byte is DURABLE.
+// governed path — THIRTEEN fail-closed refusals, in the order below, before a single byte is DURABLE.
 // The count is stated because it drifted: this header said "three" and listed four items while the body had
 // seven refusal points, and a header that under-counts the gates is how a gate gets deleted unnoticed.
 // (Ten became twelve when the durable write became an atomic COMMIT: stage 5 can refuse a write that has
-// cleared every governance gate, and a refusal is counted like any other refusal.)
+// cleared every governance gate, and a refusal is counted like any other refusal. Twelve became THIRTEEN
+// with the 2.1 anchor binding — ARCH-9 for `scope`, ADR-0010 open item 3.)
 //   0. WELL-FORMED  — the three payload fields the LATER gates route on are type-only and reach this door
 //                     unvalidated (`JSON.parse` + a cast on the CLI wire; a bare `object` schema on MCP),
 //                     so each is refused HERE or nowhere: `tier` must be one of the three real governance
@@ -16,6 +17,11 @@
 //   2. AUTHZ        — the KNOW-11 owner-scoped write gate (`actorInScope`): an actor not in the fact's
 //                     scope is rejected, nothing persisted. An empty/unset actor is in NO scope ⇒ every
 //                     write is denied (fail-closed v1 — correct behavior) (`unauthorized`).
+//   2.1 ANCHOR     — the ARCH-9 binding for `scope`: the scope a write DECLARES must be the scope the admin
+//                     policy says OWNS the code the fact is anchored in (`authz.anchors`). Authz alone gates
+//                     on a string the AUTHOR picked, while the read projection scopes a pack by the DERIVED
+//                     primary anchor — nothing bound them (`unauthorized for anchor`). Admin-declared, and
+//                     an undeclared prefix stands aside: a NARROWING, not a closure. See `policy.ts`.
 //   2.25 INCUMBENT  — FOUR gates derived from the node the write TARGETS, never from the write itself:
 //                     the actor must hold authority in the scope the target's OWN PROJECTION ROW declares
 //                     (`unauthorized for target`; a row carrying no confirmable scope authorizes nobody and
@@ -80,30 +86,29 @@
 
 import { id } from '@atlas/kernel';
 import type { CasObject } from '@atlas/kernel';
-import type { Hash } from '@atlas/contracts';
+import type { Hash, Tier } from '@atlas/contracts';
 import { upsert, normalizeCheck, primaryAnchorId, nodeKey, route, stage, ratify, isTier, isScope } from '@atlas/knowledge';
-import type { Candidate, Check, CurrentNode, GroundedFact, NodeFamily, WriteRequest, RatifyContext, RatifyToken } from '@atlas/knowledge';
+import type { Candidate, Check, CurrentNode, GroundedFact, NodeFamily, WriteRequest, RatifyToken } from '@atlas/knowledge';
 import type { EmitOut, TruthGate } from '@atlas/tools';
-import { actorInScope } from './policy.js';
+import { ratifyCtxFor } from './governed-emit-route.js';
+import { actorInScope, scopeOwnsAnchor } from './policy.js';
 import type { AtlasPolicy } from './policy.js';
 import type { DiskStore } from './store.js';
 // The structured fail-closed reasons (TOOLS-7b / KNOW-11 / KNOW-8) — the door's user-visible contract AND
 // its disclosure surface, extracted to their own module at the LOC ceiling. See that file's header.
 import {
   REJECTED_CONTENDED, REJECTED_UNREADABLE_STORE, REJECTED_MALFORMED_FAMILY, REJECTED_MALFORMED_SCOPE, REJECTED_MALFORMED_TIER,
-  REJECTED_UNAUTHORIZED, REJECTED_UNGROUNDED, REJECTED_UNRATIFIED,
+  REJECTED_UNAUTHORIZED, REJECTED_UNAUTHORIZED_ANCHOR, REJECTED_UNGROUNDED, REJECTED_UNRATIFIED,
 } from './governed-emit-reasons.js';
-import { incumbentRefusal } from './governed-emit-incumbent.js';
+import { incumbentDecision } from './governed-emit-incumbent.js';
+// The PROVENANCE refusal, shared with the read doors — one constant, so the write and read halves of the
+// tripwire cannot describe the same condition two different ways.
+import { REJECTED_UNTRUSTED_STORE } from './read-provenance.js';
 
-/** The KNOW-18 fast-path CONTEXT the door hands to `route`. `lowRisk` (the KNOW-17 door-2 threshold verdict)
- *  and `contested` (the KNOW-18b store-veto) are BOTH store/threshold-derived UPSTREAM and are NOT wired
- *  into this write door in v1 — defaulted CONSERVATIVELY to preserve the common T2-advisory auto-accept:
- *  `contested:false` (no reviewer veto asserted at the door) and `lowRisk:true` (a grounded fact that already
- *  passed the truth-door is treated as low-risk). This matches s05's intended `route(clean,{lowRisk:true,
- *  contested:false}) === 'auto-accept'`; wiring the real hits-ledger/veto verdicts here is a later WP. The
- *  T0/predicate governance teeth do NOT depend on these defaults — they route to full-ratify by their
- *  candidate-intrinsic tier/check, independent of `lowRisk`/`contested`. */
-const DOOR_RATIFY_CTX: RatifyContext = { contested: false, lowRisk: true };
+// The ratification-CONTEXT seam (which gate a write owes — ARCH-9 / ADR-0010), extracted at the LOC ceiling.
+// Read that file before changing anything about how `route` is called: it records what the derivation does
+// NOT change at this door, and why the CREATE leg is deliberately unclosed.
+
 
 /** What the governed emit leg is composed over: the durable CAS store, the truth-gate seam, the admin
  *  policy (authz scopes), and the actor identity resolved from the environment. */
@@ -232,6 +237,30 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
     // emit→query readback exposed this). The route reads the fact's REAL `tier`/`check`/`grounding` — no guess.
     const candidateView = { ...node, slot: node.predicateSlot } as unknown as Candidate;
 
+    // 2.1 ANCHOR BINDING (ARCH-9 for `scope` — ADR-0010 open item 3). Gate 2 asked whether the actor is in
+    //    the scope this write DECLARES; the author picks that string. Meanwhile the READ projection scopes
+    //    on the DERIVED `primaryAnchor` and never reads the row's scope at all
+    //    (`projection-query-index.ts`). Nothing bound the two, so an actor authorized only in `public` could
+    //    write a fact ANCHORED under `src/payments`, declare `scope:'public'`, clear authz, and have it
+    //    SERVED to `atlas query src/payments`. The incumbent gates below do NOT cover it: they stop a node
+    //    MOVING once it exists, and this is a CREATE — there is no incumbent to derive from.
+    //
+    //    The binding is admin-DECLARED (`authz.anchors` in `.atlas/policy.json`), and NOT declared is the
+    //    default, so this gate stands aside on every policy that predates it. That is a NARROWING, not a
+    //    closure, and it is written down as one: which scope owns which anchor prefix is an owner judgement
+    //    about a particular repo, and a hard rule was measured to be unshippable here (governance scopes in
+    //    this product are labels like `core` while anchors are paths like `src/a.ts` — see `policy.ts`).
+    //
+    //    ORDER: it runs immediately after authz and BEFORE any incumbent is resolved, because it discloses
+    //    nothing but the policy file the caller can already read — so it owes the increasing-disclosure rule
+    //    nothing, and putting it later would let a caller with no authority over the target learn about the
+    //    target first. `primaryAnchorId` THROWS on a degenerate anchor (`DegenerateAnchorError`), which is
+    //    the door's existing behaviour for that shape and is left exactly as it was.
+    const primaryAnchor = primaryAnchorId(candidateView) as unknown as string;
+    if (!scopeOwnsAnchor(deps.policy, scope, primaryAnchor)) {
+      return { emitted: false, rejected: REJECTED_UNAUTHORIZED_ANCHOR };
+    }
+
     // 2.25 INCUMBENT GUARD — the write's TARGET decides which gate it must clear, never the write itself.
     //    The four target-derived gates and the whole confused-deputy narrative behind them live in
     //    `./governed-emit-incumbent.ts`, extracted at the LOC ceiling. What stays HERE is the ORDER: this
@@ -259,9 +288,13 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
     // the gate it now owes. That is the confused deputy, re-entered through the back door of a retry.
     const committed = deps.store.commitProjection<EmitOut>((projection) => {
       const incumbent: CurrentNode | undefined = projection.current.get(targetKey);
+      // ARCH-9: the class the RESOURCE carries. Absent on a CREATE (nothing to derive from — ARCH-D3b, the
+      // OPEN owner DEFINE) and on a refusal (the write does not reach `route` at all).
+      let derivedTier: Tier | undefined;
       if (incumbent !== undefined) {
-        const refusal = incumbentRefusal(deps, incumbent, node, tier);
-        if (refusal !== undefined) return { out: { emitted: false, rejected: refusal } };
+        const decision = incumbentDecision(deps, incumbent, node, tier);
+        if (decision.refusal !== undefined) return { out: { emitted: false, rejected: decision.refusal } };
+        derivedTier = decision.derivedTier;
       }
 
       // 2.5 RATIFY — the KNOW-8/KNOW-18 tier-ratification gate, BETWEEN authz and upsert. The fast-path
@@ -270,7 +303,9 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
       //    ratification: it commits ONLY with a valid KNOW-8 token, and a T0 fact requires the `billy` token.
       //    The token is env-sourced by the composition root (never the payload). Absent/invalid ⇒ REJECTED
       //    fail-closed, nothing persisted — this is the door that was previously bypassing the human+billy gate.
-      if (route(candidateView, DOOR_RATIFY_CTX) === 'full-ratify') {
+      //    ARCH-9: the route is selected by `strictestTier(derived, declared)` when the door could derive a
+      //    class from the incumbent, and by the declared class alone on a CREATE. See `ratifyCtxFor`.
+      if (route(candidateView, ratifyCtxFor(derivedTier)) === 'full-ratify') {
         const token: RatifyToken = { by: deps.ratifyToken ?? '' };
         if (!ratify(stage(candidateView), token).committed) {
         return { out: { emitted: false, rejected: REJECTED_UNRATIFIED } };
@@ -291,7 +326,7 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
         // ── ADJACENCY carrier (ADDITIVE) — carry the computed primary anchor + the R3-optional slot onto
         //    the node so a later sibling-adjacency scan reads them off the projection (WP-B); NOT read here.
         //    `predicateSlot` is R3-optional; conditional spread keeps `slot` ABSENT (exactOptionalPropertyTypes).
-        primaryAnchor: primaryAnchorId(candidateView) as unknown as string,
+        primaryAnchor, // the SAME value gate 2.1 bound the declared scope against — computed once
         ...(node.predicateSlot !== undefined ? { slot: node.predicateSlot } : {}),
         // ── GOVERNANCE carrier (ADDITIVE — ADR-0007) — stamp the `(scope, tier)` pair onto the ROW so the
         //    incumbent guard above can resolve target authority off the projection instead of off the CAS
@@ -318,9 +353,20 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
     //    generation parses, so the incumbent cannot be read — refuse rather than treat "corrupt" as "empty",
     //    which is the amplification that turned a torn read into a 402-node erasure. Both rank strictly
     //    above the silent loss they replace.
-    return committed.settled
-      ? committed.out
-      : { emitted: false, rejected: committed.refusal === 'contended' ? REJECTED_CONTENDED : REJECTED_UNREADABLE_STORE };
+    //    `untrusted` (the THIRD `CommitRefusal` member) was collapsed into `unreadable store` here, and that
+    //    was not a cosmetic mislabel: `unreadable store` tells the operator to restore
+    //    `.atlas/projection.*.json` from a backup, which for a COMMITTED store is the wrong diagnosis, the
+    //    wrong fix, and hides the only thing they need to know (`git rm -r --cached .atlas/…`). The store
+    //    layer had the named refusal all along; the door threw the name away. Reported as itself now, from
+    //    the SAME constant the read doors use.
+    if (committed.settled) return committed.out;
+    const commitRefusal =
+      committed.refusal === 'contended'
+        ? REJECTED_CONTENDED
+        : committed.refusal === 'untrusted'
+          ? REJECTED_UNTRUSTED_STORE
+          : REJECTED_UNREADABLE_STORE;
+    return { emitted: false, rejected: commitRefusal };
   };
   return { emit };
 }

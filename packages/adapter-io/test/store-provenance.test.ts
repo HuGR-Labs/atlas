@@ -33,6 +33,7 @@ import { emptyStore, currentNodes } from '@atlas/knowledge';
 import { composeRuntime } from '../src/compose.js';
 import { createDiskStore, rehydrateProjection } from '../src/store.js';
 import { gitSidecarTrust } from '../src/store-provenance.js';
+import { REJECTED_UNTRUSTED_STORE } from '../src/read-provenance.js';
 
 /** The forged claim, verbatim, so an assertion can name the thing that must never be served. */
 const FORGED_CLAIM = 'ATTACKER CONTROLLED INVARIANT - no door ever saw this';
@@ -147,15 +148,23 @@ describe('the durable projection is DERIVED state — a COMMITTED one is not kno
     expect(tracked.some((p) => p.startsWith('.atlas/cas/'))).toBe(true);
   });
 
-  it('RED: a committed projection is served as a ratified T0 pack invariant, with EVERY write door denying', () => {
+  it('a committed projection is REFUSED, legibly — not silently emptied (with EVERY write door denying)', () => {
     live = poisonedRepo();
     const verdict = composeRuntime(live.repoPath).handler.handle('atlas-query', {
       scope: 'src/app.ts',
       by: 'scope',
     });
-    expect(verdict.ok).toBe(true);
-    // THE assertion. Not "the pack is empty" — the claim TEXT, so this can only be satisfied by the forged
-    // row actually being gone, never by an unrelated shape change that happens to empty the pack.
+    // AMENDED 2026-08-02 with the legible-read-refusal work. This line was `expect(verdict.ok).toBe(true)`,
+    // and it PINNED THE SILENCE: the tripwire made the read resolve to "nothing readable", so `atlas query`
+    // returned ok with an empty pack — indistinguishable from "no knowledge yet" for a user who committed
+    // `.atlas` by accident. WP-F2F5 requires fail-closed to be LEGIBLE on BOTH doors; the write door had a
+    // refusal from the start and the read door had none.
+    expect(verdict.ok).toBe(false);
+    expect(String(verdict.rejected)).toContain(REJECTED_UNTRUSTED_STORE);
+    // AND the original assertion, which is the reason this test exists. Kept, but note it is now WEAK on its
+    // own: `invariantsOf` returns [] whenever `data` is absent, so on a refusal it passes trivially. It is
+    // the `ok:false` + reason pair above that carries the discrimination; this line survives as the guard
+    // against a future shape where a refusal still leaks rows.
     expect(invariantsOf(verdict).map((i) => i.claim)).not.toContain(FORGED_CLAIM);
   });
 

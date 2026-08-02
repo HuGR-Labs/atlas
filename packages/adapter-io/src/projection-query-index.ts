@@ -15,24 +15,16 @@ import type { Hash, PackInvariant } from '@atlas/contracts';
 import type { QueryIndex } from '@atlas/tools';
 import { currentNodes } from '@atlas/knowledge';
 import type { GroundedFact } from '@atlas/knowledge';
+import { underScope } from './anchor-scope.js';
 import { factToInvariant } from './pack-shape.js';
 import type { DiskStore } from './store.js';
 import { rehydrateProjection } from './store.js';
 
-/**
- * `true` iff `anchor` lies UNDER `scope` — a SEGMENT-WISE prefix test on the anchor's FILE-PATH portion (the
- * text before the first `::`, `/`-split), NOT a raw `startsWith` (so scope `src` covers `src/foo::bar` but
- * scope `sr` does NOT). Mirrors the `read/anchor-match.ts` `isPrefix` discipline. Total: an empty scope (no
- * segments) trivially covers every anchor; an anchorless node is filtered by the caller before this runs.
- */
-export function underScope(anchor: string, scope: string): boolean {
-  const filePath = anchor.split('::')[0] ?? anchor; // the file-path portion — ancestry after the first `::`
-  const anchorSegs = filePath.split('/');
-  const scopeSegs = scope.split('/');
-  if (scopeSegs.length > anchorSegs.length) return false;
-  for (let i = 0; i < scopeSegs.length; i++) if (scopeSegs[i] !== anchorSegs[i]) return false;
-  return true;
-}
+// `underScope` MOVED to `./anchor-scope.js` (a leaf), so the WRITE door's authz can be bound to the very
+// predicate the READ projection scopes on rather than to a second copy of it (ADR-0010 open item 3). It is
+// RE-EXPORTED from here unchanged: this module is where every existing consumer and test imports it from,
+// and moving a symbol out from under its importers is how a mechanical extraction becomes a behaviour change.
+export { underScope } from './anchor-scope.js';
 
 /**
  * Wrap the pure structural `QueryIndex` with the durable projection readback. `cover(scope)` delegates the
