@@ -12,7 +12,15 @@
   the SOTA bar, and has restated that no debt or loose end is acceptable. This ADR exists so #87 is a
   *decided, sequenced* item rather than an open question — an open question is the debt.
 - **Supersedes in part:** the partial remediation in `b415eab`, which stopped `mine` from MUTATING governed
-  nodes and stamped its rows with a reserved scope. That was a containment, not the answer.
+  nodes and stamped its reserved scope onto the CAS BYTES. That was a containment, not the answer.
+  *(CORRECTED 2026-08-02: this bullet previously said the remediation "stamped its ROWS with a reserved
+  scope". It did not. `mine`'s `WriteRequest` omitted both governance halves, so every staged row recorded
+  `scope: undefined` / `tier: undefined`, while `mine.ts` claimed the stamp made the bytes and the row
+  agree. Only the bytes were stamped. Fixed in `8a78120`: the row now carries `MINED_SCOPE` and `T2` from
+  constants — never forwarded from the gate's `f.tier`, so an injected gate cannot mint a staged row
+  DECLARING `T0`. Recorded rather than quietly amended, because this is the SECOND false status claim found
+  in this ADR, and the note above already says a repo shipping a guard against overclaim must not carry
+  one.)*
 - **Relates:** ADR-0007 (governance class is a property of the node), KNOW-8, GEN-4/12.
 
 ## Context
