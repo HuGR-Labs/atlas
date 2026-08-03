@@ -105,11 +105,24 @@ export interface FastpathApi {
 
 export type FastpathRoute = 'auto-accept' | 'full-ratify';
 
-/** GROUND-2 real grounding: ≥1 entry, each carrying a non-empty `subtreeHash`. Fail-closed. */
+/**
+ * GROUND-2 real grounding: ≥1 entry, each carrying a non-empty `subtreeHash`. Fail-closed.
+ *
+ * SECURITY: this predicate is the first conjunct of `route`'s auto-accept decision (`:126`/`:137`), so a
+ * value that reads as "grounded" here reaches a write door with no human ratification. `subtreeHash`'s
+ * brand (`@atlas/contracts` `SubtreeHash = string & {brand}`) evaporates at runtime — every value reaching
+ * this function may have come through `JSON.parse`, an SDK-parsed MCP argument, or a CAS blob, none of
+ * which enforce it. A prior `String(e.anchor.subtreeHash).length > 0` coerced-before-checking, which is
+ * fail-OPEN: `String(undefined)`/`String(null)`/`String({})` are all non-empty strings, so `undefined`,
+ * `null`, `0`, `false`, and `{}` all read as grounded. The `typeof` guard below is the fix: only an actual
+ * non-empty string passes, matching the sealed `GroundApi['isGrounded']` (`@atlas/grounding` `drift.ts:73`,
+ * type-imported only — see `test/ratify/fastpath.isGrounded.parity.test.ts` for the fitness function that
+ * keeps the two predicates from diverging again).
+ */
 export function isGrounded(grounding: Grounding): boolean {
   return (
     grounding.entries.length > 0 &&
-    grounding.entries.every((e) => String(e.anchor.subtreeHash).length > 0)
+    grounding.entries.every((e) => typeof e.anchor.subtreeHash === 'string' && e.anchor.subtreeHash.length > 0)
   );
 }
 
