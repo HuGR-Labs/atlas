@@ -122,12 +122,19 @@ const LEDGER = {
   'packages/memory/src/respawn.ts': { values: 8, shipped: null, banner: false },
   'packages/memory/src/rules.ts': { values: 17, shipped: null, banner: false },
 
-  // ── @atlas/retrieval — also CLOSED: every cross-package edge into it is an `import type`. ─────────────
-  //    The pack the product actually serves is assembled by adapter-io/src/retrieval-model.ts.
+  // ── @atlas/retrieval — NO LONGER CLOSED, and the ledger is how we found out. ──────────────────────────
+  //    It was closed for the package's whole life: every cross-package edge into it was an `import type`,
+  //    so the pack the product served came from adapter-io/src/retrieval-model.ts and `own.ts` was a model
+  //    of a door nothing opened. `own-source.ts` now VALUE-imports `createOwn` / `ownToolName` to compose
+  //    `atlas own <scope>`, so `own.ts` moved dead → live and this gate FAILED with STALE LEDGER ENTRY —
+  //    exactly the direction it exists to catch, and the only reason the transition is on the record.
+  //    The REST of the package is still closed; `retrieval-model.ts` is still the pack assembler.
   'packages/retrieval/src/drop.ts': { values: 9, shipped: null, banner: false },
   'packages/retrieval/src/ledger.ts': { values: 4, shipped: null, banner: false },
   'packages/retrieval/src/offatlas.ts': { values: 1, shipped: null, banner: false },
-  'packages/retrieval/src/own.ts': { values: 7, types: true, shipped: 'packages/adapter-io/src/retrieval-model.ts', banner: false },
+  // own.ts is DELETED from this ledger, not set to zero: it has production callers and is no longer a
+  // reference model. Measured with this gate's own analyser — 54 → 53 entries, own.ts absent, every other
+  // retrieval row unchanged (drop 9, ledger 4, offatlas 1, pack 5, poke 5, relate 6).
   'packages/retrieval/src/pack.ts': { values: 5, types: true, shipped: 'packages/adapter-io/src/retrieval-model.ts', banner: false },
   'packages/retrieval/src/poke.ts': { values: 5, shipped: null, banner: false },
   'packages/retrieval/src/relate.ts': { values: 6, shipped: null, banner: false },
