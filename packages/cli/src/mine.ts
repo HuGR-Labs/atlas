@@ -46,8 +46,15 @@ import { upsert as knowledgeUpsert, normalizeCheck, primaryAnchorId, nodeKey } f
 import type { WriteRequest, StoreProjection, Candidate as KnowledgeCandidate } from '@atlas/knowledge';
 import { id, asNodeKey } from '@atlas/kernel';
 import { join } from 'node:path';
-import { StagingCommitError as StagingRefusalError, STAGING_REFUSAL_TEXT as REFUSAL_TEXT } from './mine-staging.js';
+import { StagingCommitError as StagingRefusalError } from './mine-staging.js';
+import { foldVerdict } from './mine-render.js';
+import type { MinePass } from './mine-render.js';
 import type { CliVerdict } from './render.js';
+
+/** The projection + prose of a finished pass (mine-render.ts) — RE-EXPORTED so the module surface is
+ *  unchanged by the file split. */
+export { mineOutcome, mineWhyEmpty } from './mine-render.js';
+export type { MineOutcome, MinePass } from './mine-render.js';
 
 /**
  * The injected seams the `mine` driver assembles into `ControllerDeps`. Every member is INJECTABLE
@@ -65,6 +72,18 @@ export interface MineDeps {
   readonly handoffTo: () => void; //      S4 — the born-from-work terminator (a no-op for a mine pass)
   readonly budget?: GenesisBudget; //     the hard site ceiling; omitted ⇒ the controller's defaultBudget
   readonly scope?: string; //             a subtree to seed instead of the whole repo (GEN-13)
+  /** The environment the OPERATOR config is located in (`$ATLAS_MODEL_CONFIG` / `$XDG_CONFIG_HOME`),
+   *  defaulted to `process.env`. Threaded so a test is HERMETIC: without it `runMine(repo)` reads the
+   *  developer's own `~/.config/atlas/model.json` and would execute their model binary in a unit test. */
+  readonly env?: NodeJS.ProcessEnv;
+}
+
+/** The two pass-level events the frozen `GenesisReport` has no field for: a wiring FAULT that the
+ *  controller's GEN-8c catch would otherwise swallow anonymously, and the count of structural seeds
+ *  dropped for having no path. Observers only — the driver reads no value back from either. */
+export interface PassWatch {
+  readonly onFault?: (e: Error) => void;
+  readonly onSeedsDropped?: (dropped: number) => void;
 }
 
 /** All deepening loops OFF — a mine pass is the single-pass baseline (GEN-13/14, Δ=0). */
@@ -153,12 +172,23 @@ function defaultHistory(): HistorySource {
   };
 }
 
+/** The filled seams PLUS the two facts about the S2 resolution that the seams themselves cannot answer —
+ *  see `ResolvedProposer` (mine-proposer.ts) for why `modelWired` cannot be recovered from `deps`. */
+interface ResolvedDeps {
+  readonly deps: MineDeps;
+  readonly modelWired: boolean;
+  readonly promptDigest?: string;
+}
+
 /** Fill the injectable seams: a real adapter for the store, honest fail-closed seams for the rest. */
-function withDefaults(repoPath: string, deps?: Partial<MineDeps>): MineDeps {
+function withDefaults(repoPath: string, deps?: Partial<MineDeps>): ResolvedDeps {
   const rev = deps?.rev ?? 'HEAD';
-  return {
+  // Resolved ONCE, and only when the caller injected no proposer — resolution reads the operator's config
+  // off disk, and an injected proposer means that file is none of this pass's business.
+  const resolved = deps?.proposer === undefined ? resolveProposer(repoPath, deps?.env ?? process.env) : undefined;
+  const d: MineDeps = {
     rev,
-    proposer: deps?.proposer ?? resolveProposer(repoPath),
+    proposer: deps?.proposer ?? resolved!.proposer,
     history: deps?.history ?? defaultHistory(),
     skeleton: deps?.skeleton ?? defaultSkeleton(repoPath),
     // PROVENANCE (the third seam this store takes, alongside the N11 watermark). `mine` built its store
@@ -172,7 +202,13 @@ function withDefaults(repoPath: string, deps?: Partial<MineDeps>): MineDeps {
     handoffTo: deps?.handoffTo ?? ((): void => {}),
     ...(deps?.budget !== undefined ? { budget: deps.budget } : {}),
     ...(deps?.scope !== undefined ? { scope: deps.scope } : {}),
+    ...(deps?.env !== undefined ? { env: deps.env } : {}),
   };
+  // WIRED is read off the RESOLUTION, never off `deps`: the resolved proposer is installed on the RIGHT of a
+  // `??` above, so `deps?.proposer !== undefined` is ALWAYS FALSE on the CLI path — which is how a run with
+  // `llmCalls 2` printed "no proposer model is wired" four lines away from its own cost.
+  const modelWired = deps?.proposer !== undefined || (resolved?.wired ?? false);
+  return { deps: d, modelWired, ...(resolved?.promptDigest !== undefined ? { promptDigest: resolved.promptDigest } : {}) };
 }
 
 /**
@@ -184,8 +220,12 @@ function withDefaults(repoPath: string, deps?: Partial<MineDeps>): MineDeps {
  *   - `changed`   — the INDEX-12 delta seam (unused by a single `genesis()` pass; supplied for the surface).
  *   - `handoffTo` — the S4 terminator (a no-op for a mine pass); `onRefusal` — see `MinePass`.
  */
-export function buildControllerDeps(repoPath: string, d: MineDeps, onRefusal?: (r: CommitRefusal) => void): ControllerDeps {
-  const mine = createMine({ skeleton: d.skeleton, history: d.history });
+export function buildControllerDeps(repoPath: string, d: MineDeps, onRefusal?: (r: CommitRefusal) => void, watch?: PassWatch): ControllerDeps {
+  const mine = createMine({
+    skeleton: d.skeleton,
+    history: d.history,
+    ...(watch?.onSeedsDropped !== undefined ? { onSeedsDropped: watch.onSeedsDropped } : {}),
+  });
   const scan = createScan(d.skeleton);
   // STAGING, NOT KNOWLEDGE (ADR-0008 / KNOW-8). `mine` is the explorer — no truth gate, no KNOW-11 authz, no
   // KNOW-8 ratification — so it writes only CANDIDATES, through the STAGING sidecar: the same shape at a different
@@ -258,7 +298,19 @@ export function buildControllerDeps(repoPath: string, d: MineDeps, onRefusal?: (
 
   return {
     plan: (repo, rev, _scope): Plan => ({ malformed: false, skeleton: scan.scan(repo, rev), sites: mine.mine(repo, rev) }),
-    visit: (cand): readonly Fact[] => runExtract([cand], SINGLE_SITE, { proposer: d.proposer, gate: d.gate }).facts,
+    // A `ModelCommandError` is REPORTED on its way past, then re-thrown unchanged so GEN-8c still classifies
+    // the site as an interruption. It is the one throw here that is NOT about this site: the model binary is
+    // missing / timed out / exited non-zero for the whole run, and `describeModelFailure` (llm.ts:152) has
+    // already put the command and its stderr in the message. Swallowed, it reached the user as an anonymous
+    // partial — `exit 1 · llmCalls 0 · resume at rank -1`, with nothing to act on.
+    visit: (cand): readonly Fact[] => {
+      try {
+        return runExtract([cand], SINGLE_SITE, { proposer: d.proposer, gate: d.gate }).facts;
+      } catch (e) {
+        if ((e as { name?: unknown } | null)?.name === 'ModelCommandError') watch?.onFault?.(e as Error);
+        throw e;
+      }
+    },
     upsert: (incoming): readonly Fact[] => {
       // THE CANDIDATE SIDECAR, NEVER THE KNOWLEDGE PROJECTION. An unconditional persist carries no decision
       // to re-run and so cannot be made concurrency-safe, which is why this door is the only one left.
@@ -277,21 +329,36 @@ export function buildControllerDeps(repoPath: string, d: MineDeps, onRefusal?: (
   };
 }
 
-/** One finished pass: the run's `GenesisReport` plus, when the staging commit refused, WHY. The refusal rides
- *  BESIDE the report because `run-controller` catches an interrupted site WITHOUT a cause (GEN-8c is a bare
- *  `catch`), so "contended" would otherwise reach the user as an anonymous partial run. */
-export interface MinePass {
-  readonly report: GenesisReport;
-  readonly refusal?: CommitRefusal;
-}
-
-/** Drive the frozen run-controller one governed pass, capturing any staging refusal. */
+/**
+ * Drive the frozen run-controller one governed pass, capturing what the report cannot carry.
+ *
+ * [ADR-0011] A CAPTURED `ModelCommandError` IS RE-THROWN. `createCommandClient` throws it precisely so a
+ * broken configuration cannot present itself as "this repo has no facts" — but it is thrown from inside
+ * `visit`, and GEN-8c makes that a bare `catch` in the controller, so a missing model binary reached the
+ * user as `exit 1, llmCalls 0, "resume at rank -1"` and nothing else: no command name, no stderr. Re-throwing
+ * puts it on the SAME governed-refusal path as `ModelConfigError` (cli.ts:110-116) — exit 2, message
+ * verbatim — while a genuinely partial run (a budget, a contended commit) keeps its report and exit 1.
+ */
 export function driveMinePass(repoPath: string, deps?: Partial<MineDeps>): MinePass {
-  const d = withDefaults(repoPath, deps);
+  const resolved = withDefaults(repoPath, deps);
+  const d = resolved.deps;
   let refusal: CommitRefusal | undefined;
-  const ports = buildControllerDeps(repoPath, d, (r) => void (refusal = r));
+  let fault: Error | undefined;
+  let seedsDropped = 0;
+  const watch: PassWatch = {
+    onFault: (e) => void (fault ??= e),
+    onSeedsDropped: (n) => void (seedsDropped += n),
+  };
+  const ports = buildControllerDeps(repoPath, d, (r) => void (refusal = r), watch);
   const report = makeRunController(ports).genesis(repoPath, d.rev, d.budget, d.scope);
-  return { report, ...(refusal !== undefined ? { refusal } : {}) };
+  if (fault !== undefined) throw fault; // a misconfigured model is not a mining outcome
+  return {
+    report,
+    modelWired: resolved.modelWired,
+    seedsDropped,
+    ...(refusal !== undefined ? { refusal } : {}),
+    ...(resolved.promptDigest !== undefined ? { promptDigest: resolved.promptDigest } : {}),
+  };
 }
 
 /** The `GenesisReport` alone (the write-set carrier) — the shape every existing caller and oracle uses. */
@@ -299,90 +366,13 @@ export function driveMine(repoPath: string, deps?: Partial<MineDeps>): GenesisRe
   return driveMinePass(repoPath, deps).report;
 }
 
-/**
- * The OBSERVED shape of a finished pass — every leg READ OFF the run's own `GenesisReport`, never asserted
- * about the wiring (WP-F6). This is the whole point: the "why is it 0" line below is DERIVED from what the
- * run actually did, so it cannot go stale when a seam upstream of it is wired (or unwired) later.
- *   - `sitesVisited` — `report.budgetSpent`, the sites the controller COMPLETED against the ceiling
- *     (run-controller.ts increments it once per completed site). 0 ⇒ the extractor was never reached at
- *     all, so the proposer was never consulted — a 0 that NO amount of model-wiring would change.
- *   - `complete`     — no `resumeToken` ⇒ the pass ran to its end (GEN-8); a partial 0 is not a result.
- *   - `ceiling`      — the caller's explicit `--budget` ceiling, if any. Present ONLY to keep the
- *     `sitesVisited === 0` explanation exact: with no explicit budget the controller's default ceiling is
- *     `min(frontierSize, 200)`, so a COMPLETE pass that visited 0 sites proves the frontier itself was
- *     empty; with an explicit `ceiling: 0` the frontier is unknown and the budget is the honest cause.
- */
-export interface MineOutcome {
-  readonly facts: number; //        grounded candidate facts the pass actually wrote
-  readonly sitesVisited: number; // sites completed against the ceiling (report.budgetSpent)
-  readonly complete: boolean; //    the pass ran to its end (no resumeToken)
-  readonly modelWired: boolean; //  a real S2 proposer was injected at this door
-  readonly ceiling?: number; //     the caller's explicit budget ceiling, when one was given
-}
-
-/** Project the run's own report to the observed outcome — the ONLY input the explanation below reads. */
-export function mineOutcome(r: GenesisReport, modelWired: boolean, ceiling?: number): MineOutcome {
-  return {
-    facts: r.seeded.length,
-    sitesVisited: r.budgetSpent,
-    complete: r.resumeToken === undefined,
-    modelWired,
-    ...(ceiling !== undefined ? { ceiling } : {}),
-  };
-}
-
-/**
- * WHY the pass produced nothing — COMPUTED from `MineOutcome`, never a hard-coded cause (WP-F6).
- *
- * A 0-fact pass has genuinely different causes, and naming the wrong one is a lie even when the sentence is
- * literally true. The distinction the user needs is WHERE the run stopped producing:
- *   • 0 sites visited  — the run died UPSTREAM of the model: the structural pass (skeleton → ranked
- *     frontier) handed the extractor nothing, so no proposer was ever consulted. Saying "no model is wired"
- *     here would tell the user the product is one wire from working when the model is not even reached.
- *   • N sites visited, 0 facts — the model gate IS where the 0 came from: every visited site abstained
- *     (`genesis/extract.ts:118`) or was refused by the 2-door gate. Only HERE is the absent proposer the
- *     operative cause, and only here is "abstain-by-design, never fabricated" the honest framing.
- *   • an incomplete pass — a 0 that is not a finished result at all.
- * Returns `null` when the pass seeded facts (there is nothing to explain).
- */
-export function mineWhyEmpty(o: MineOutcome): string | null {
-  if (o.facts > 0) return null;
-  if (!o.complete) {
-    return 'mine: 0 candidate facts — the pass did not run to completion, so this 0 is not a finished result';
-  }
-  if (o.sitesVisited === 0) {
-    return o.ceiling === 0
-      ? 'mine: 0 candidate facts — 0 sites visited: the run budget ceiling was 0, so nothing was ever extracted'
-      : 'mine: 0 candidate facts — 0 sites visited: the structural pass (skeleton → ranked frontier) yielded no site, so no proposer was ever consulted; wiring a model would not change this 0';
-  }
-  return o.modelWired
-    ? `mine: 0 candidate facts — ${o.sitesVisited} site(s) visited and every one abstained: nothing was proposed or admitted (facts are never fabricated)`
-    : `mine: 0 candidate facts — ${o.sitesVisited} site(s) visited and every one abstained: no proposer model is wired, so nothing could be proposed (facts are never fabricated)`;
-}
-
-/** Fold a `GenesisReport` to the CLI's process outcome. `renderVerdict` (render.ts) projects a handler
- *  `Verdict`, not a `GenesisReport`, so the fold is direct: a partial/interrupted run is a non-zero exit.
- *  An empty pass EXPLAINS itself with `mineWhyEmpty` — the cause is computed from the report, so the line
- *  stays true whether the 0 came from an empty frontier or from an unwired model (WP-F6). */
-function foldVerdict(r: GenesisReport, modelWired: boolean, ceiling?: number, refusal?: CommitRefusal): CliVerdict {
-  const why = mineWhyEmpty(mineOutcome(r, modelWired, ceiling));
-  const lines = [
-    `genesis: seeded ${r.seeded.length} candidate fact(s); ratified ${r.ratified.length}`,
-    `cost: llmCalls ${r.llmCalls} · budgetSpent ${r.budgetSpent}`,
-    // NAMED, above the generic partial line: a refused staging commit wrote NOTHING, and "did not run to
-    // completion" alone leaves the operator guessing between a dead model and a lost race.
-    ...(refusal !== undefined ? [`staging: REFUSED (${refusal}) — ${REFUSAL_TEXT[refusal]}`] : []),
-    ...(why ? [why] : []),
-    ...(r.resumeToken ? [`partial: resume at rank ${r.resumeToken.lastCompletedRank}`] : []),
-  ];
-  return { exitCode: r.resumeToken !== undefined || refusal !== undefined ? 1 : 0, stdout: `${lines.join('\n')}\n` };
-}
-
 /** Run the one-time genesis bootstrap over a repo, projecting the outcome to a `CliVerdict` (CLI-4). A pass
- *  that seeds nothing renders WHY, read off its own report — `foldVerdict`/`mineWhyEmpty`. */
+ *  that seeds nothing renders WHY, read off its own report — `foldVerdict`/`mineWhyEmpty` (mine-render.ts).
+ *
+ *  It THROWS exactly one class of error: a `ModelCommandError` the pass captured (see `driveMinePass`). A
+ *  misconfigured model is not a mining outcome, and `cli.ts` renders it as the governed refusal it is. */
 export async function runMine(repoPath: string, deps?: Partial<MineDeps>): Promise<CliVerdict> {
-  const modelWired = deps?.proposer !== undefined; // a real S2 model was injected (else honest abstain)
   const pass = driveMinePass(repoPath, deps);
-  return foldVerdict(pass.report, modelWired, deps?.budget?.ceiling, pass.refusal);
+  return foldVerdict(pass, deps?.budget?.ceiling);
 }
 

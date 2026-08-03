@@ -15,6 +15,26 @@ export function defaultProposer(): SiteProposer {
 }
 
 /**
+ * The outcome of asking for a model: the proposer to run, WHETHER it is a real one, and — when it is — the
+ * digest of the prompt artifact it will send.
+ *
+ * `wired` is a fact ABOUT THE RESOLUTION, and it has to be, because the caller cannot recover it: `mine.ts`
+ * installs the resolved proposer on the right-hand side of a `??`, so "was a model injected by the caller"
+ * (`deps?.proposer !== undefined`) is ALWAYS FALSE on the CLI path and reported "no proposer model is
+ * wired" in the same four lines as `llmCalls 2`.
+ *
+ * `promptDigest` is the ADR-0011 Decision-3 provenance leg — the hash of the prompt artifact, which
+ * `propose.md` itself relies on ("the refusal RATE is only readable as a quality signal with this prompt
+ * held fixed — which the provenance hash is what makes possible"). `PromptFactory.digest` had no reader
+ * anywhere, so the property was asserted in three texts and carried by nothing.
+ */
+export interface ResolvedProposer {
+  readonly proposer: SiteProposer;
+  readonly wired: boolean; //           a real operator-configured model, not the abstaining default
+  readonly promptDigest?: string; //    the digest of the prompt artifact (absent ⇒ no prompt was loaded)
+}
+
+/**
  * [ADR-0011] Resolve the S2 proposer from the OPERATOR's configuration.
  *
  * `loadModelConfig` reads `~/.config/atlas/model.json` (never the repo — a command named by the repository
@@ -24,15 +44,21 @@ export function defaultProposer(): SiteProposer {
  * repository that genuinely holds no groundable fact.
  *
  * ABSENT config ⇒ the fail-closed default. That is a state, not an error.
+ *
+ * `env` is THREADED, not defaulted away: `loadModelConfig` already parameterises it (model-config.ts:90),
+ * and without a seam here `runMine(repo)` with no deps reads the DEVELOPER'S OWN `~/.config/atlas/model.json`
+ * — three cli tests go red on any machine that has one, and once the source reader works a unit test would
+ * EXECUTE the operator's model binary.
  */
-export function resolveProposer(repoPath: string): SiteProposer {
-  const cfg = loadModelConfig(repoPath); // throws on malformed — never silently "no model"
+export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = process.env): ResolvedProposer {
+  const cfg = loadModelConfig(repoPath, env); // throws on malformed — never silently "no model"
   const propose = cfg?.roles.propose;
-  if (cfg === null || propose === undefined) return defaultProposer();
+  if (cfg === null || propose === undefined) return { proposer: defaultProposer(), wired: false };
   const prompts = createPromptFactory({ source: createFileSourceReader(repoPath) });
-  return createSiteProposer({
+  const proposer = createSiteProposer({
     client: createCommandClient(propose),
     budget: { costCap: cfg.costCap, timeoutMs: cfg.timeoutMs },
     buildPrompt: prompts.build,
   });
+  return { proposer, wired: true, promptDigest: String(prompts.digest) };
 }

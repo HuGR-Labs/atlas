@@ -12,7 +12,15 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { create } from '@bufbuild/protobuf';
-import { serializeSCIP, IndexSchema, MetadataSchema, ToolInfoSchema } from '@c4312/scip';
+import {
+  serializeSCIP,
+  IndexSchema,
+  MetadataSchema,
+  ToolInfoSchema,
+  DocumentSchema,
+  OccurrenceSchema,
+  SymbolRole,
+} from '@c4312/scip';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
@@ -24,12 +32,32 @@ export const DEFAULT_POLICY = JSON.stringify({
   authz: { scopes: {} },
 });
 
+/**
+ * One document in the fixture's `.atlas/index.scip` dump: which SCIP symbols it DEFINES and which it
+ * REFERENCES. A reference whose symbol is defined by some document in the same dump yields a `resolved`
+ * dep edge; one that is defined nowhere yields an `unresolved` edge (INDEX-13, declared never guessed).
+ */
+export interface IndexedDoc {
+  /** Repo-relative POSIX path — normally also a key of `FixtureSpec.files`. */
+  readonly path: string;
+  readonly defines?: readonly string[];
+  readonly references?: readonly string[];
+}
+
 /** The recipe for a fixture repo: a source tree (path → contents) plus an optional policy override. */
 export interface FixtureSpec {
   /** Source files, keyed by repo-relative POSIX path (e.g. `src/foo.ts`). Nested dirs are created. */
   readonly files: Record<string, string>;
   /** Optional policy JSON override (defaults to `DEFAULT_POLICY`). */
   readonly policy?: string;
+  /**
+   * Optional SCIP occurrences. DEFAULT (omitted) is the empty document set every existing story gets, which
+   * is why they are unaffected — and also why they cannot see the mining path at all: `build` derives dep
+   * edges from SCIP occurrences ALONE, so an empty dump means 0 edges ⇒ 0 structural seeds ⇒ 0 ranked sites
+   * ⇒ the extractor is never reached and `propose` is never called. A story about what happens AT a site
+   * has to hand the product a repo that HAS sites.
+   */
+  readonly index?: readonly IndexedDoc[];
 }
 
 /** The live handle over a real on-disk temp git repo. */
@@ -103,13 +131,24 @@ export function makeFixtureRepo(spec: FixtureSpec): FixtureRepo {
   mkdirSync(join(repoPath, '.atlas'), { recursive: true });
   writeFileSync(join(repoPath, '.atlas', 'policy.json'), spec.policy ?? DEFAULT_POLICY);
   writeTree(repoPath, spec.files);
-  // A valid minimal SCIP protobuf (empty document set) — the wire path reads this file unconditionally.
+  // A valid minimal SCIP protobuf — the wire path reads this file unconditionally. `documents` is EMPTY
+  // unless the spec names occurrences (see `FixtureSpec.index`).
   const scip = create(IndexSchema, {
     metadata: create(MetadataSchema, {
       projectRoot: `file://${repoPath}`,
       toolInfo: create(ToolInfoSchema, { name: 'atlas-e2e-blackbox', version: '0' }),
     }),
-    documents: [],
+    documents: (spec.index ?? []).map((doc) =>
+      create(DocumentSchema, {
+        relativePath: doc.path,
+        occurrences: [
+          ...(doc.defines ?? []).map((symbol) =>
+            create(OccurrenceSchema, { symbol, symbolRoles: SymbolRole.Definition }),
+          ),
+          ...(doc.references ?? []).map((symbol) => create(OccurrenceSchema, { symbol, symbolRoles: 0 })),
+        ],
+      }),
+    ),
   });
   writeFileSync(join(repoPath, '.atlas', 'index.scip'), serializeSCIP(scip));
   // THE FIXTURE MUST LOOK LIKE A REAL ATLAS REPO, and a real one ignores its own durable store — Atlas's

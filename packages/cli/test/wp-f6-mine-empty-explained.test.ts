@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import type { SiteProposer, EmitGate } from '@atlas/genesis';
 import { runMine, mineOutcome, mineWhyEmpty } from '../src/mine.js';
 import type { MineDeps } from '../src/mine.js';
-import { skeletonSource, injectedHistory, fakeStore, budget, depsOf, recordingProposer, FRONTIER, A, REPO } from './mine-fixtures.js';
+import { skeletonSource, injectedHistory, fakeStore, budget, depsOf, recordingProposer, FRONTIER, A, REPO, NO_MODEL_ENV } from './mine-fixtures.js';
 
 // ── WP-F6 — an empty mine render EXPLAINS ITSELF, and the explanation is COMPUTED, not asserted ──────────
 // FINDING (original): `atlas mine` writes 0 grounded candidates. FIX (original): make the 0 legible.
@@ -27,6 +27,7 @@ describe('WP-F6 — the empty-pass explanation is computed from the run report, 
   /** A seeded frontier with NO proposer injected — the ONLY state in which "no model is wired" is the cause. */
   const seededNoProposer: Partial<MineDeps> = {
     rev: 'HEAD',
+    env: NO_MODEL_ENV, // HERMETIC: "no model is wired" must be a fact about the run, not about this machine
     skeleton: skeletonSource, //  a real skeleton ⇒ `structuralSeeds`/`rank` DO seed sites
     history: injectedHistory,
     store: fakeStore(),
@@ -34,7 +35,7 @@ describe('WP-F6 — the empty-pass explanation is computed from the run report, 
   };
 
   it('EMPTY FRONTIER — the 0 is blamed on the structural pass, NOT on the absent model', async () => {
-    const v = await runMine(REPO); // 0 ranked sites ⇒ 0 sites visited
+    const v = await runMine(REPO, { env: NO_MODEL_ENV }); // 0 ranked sites ⇒ 0 sites visited
     expect(v.exitCode).toBe(0); //             an empty pass is honest, not an error
     expect(v.stdout).toContain('seeded 0'); // still 0 candidates (no fabricated fact)
     expect(v.stdout).toContain('0 sites visited'); //           the observed fact, read off budgetSpent
@@ -89,7 +90,7 @@ describe('WP-F6 — the empty-pass explanation is computed from the run report, 
   });
 
   it('MUTANT — a silent 0-candidate render (drops the explanation) leaves the empty pass unexplained', async () => {
-    const v = await runMine(REPO); // the real driver: legible
+    const v = await runMine(REPO, { env: NO_MODEL_ENV }); // the real driver: legible
     const silent = v.stdout.split('\n').filter((l) => !l.startsWith('mine: 0 candidate facts')).join('\n');
     expect(v.stdout).toContain('mine: 0 candidate facts'); //  the real driver EXPLAINS the 0
     expect(silent).not.toContain('mine: 0 candidate facts'); // the mutant hides WHY — the guard flips RED

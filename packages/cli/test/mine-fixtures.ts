@@ -8,9 +8,20 @@
 // Extracted from wp-9.3.6-b-mine.test.ts when the WP-F6 empty-pass suite grew into its own file and the
 // combined file crossed the 400-LOC ceiling. This is a real seam — fixtures are shared by construction,
 // and duplicating them would have let the two suites drift into testing different products.
-import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { create } from '@bufbuild/protobuf';
+import {
+  serializeSCIP,
+  IndexSchema,
+  MetadataSchema,
+  ToolInfoSchema,
+  DocumentSchema,
+  OccurrenceSchema,
+  SymbolRole,
+} from '@c4312/scip';
 import { asSubtreeHash, asHash, asNodeKey, id } from '@atlas/kernel';
 import type { StructRef, Hash } from '@atlas/contracts';
 import type { Axes, DepEdge, IndexNode, Manifest } from '@atlas/index';
@@ -197,3 +208,75 @@ export const depsOf = (over: Partial<MineDeps> = {}): MineDeps => ({
 });
 
 export const REPO = 'fix-repo';
+
+/** THE HERMETICITY PIN. `resolveProposer` locates the OPERATOR config through the environment, so a test
+ *  that leaves it to `process.env` asserts things about the machine it runs on: on a developer box with a
+ *  `~/.config/atlas/model.json` a "no model is wired" case reads a REAL model — and, once the source reader
+ *  works, would EXECUTE that operator's binary from a unit test. An empty env resolves no config anywhere:
+ *  `modelConfigPath` falls through to `<homedir>/.config/atlas/model.json`, which `homedir()` still answers,
+ *  so `XDG_CONFIG_HOME` is pinned at a path that cannot exist rather than merely left unset. */
+export const NO_MODEL_ENV: NodeJS.ProcessEnv = { XDG_CONFIG_HOME: '/atlas-no-such-config-root' };
+
+// ── a REAL indexed repo: git-tracked sources + the `.atlas/index.scip` dump `build` derives edges from ──
+// The dump is written INSIDE the repo (the production source reads `<repo>/.atlas/index.scip`, the same path
+// `composeRuntime` uses), which is why the frozen adapter-io `fix-scip` harness — it writes to its own temp
+// dir, in another package's test tree — cannot be reused verbatim here. The corpus is the controlled
+// minimum: `greet` DEFINED in util.ts, REFERENCED in app.ts (⇒ a resolved edge), plus one reference with no
+// definition anywhere (⇒ an `unresolved` edge, INDEX-13 — declared, never guessed).
+//
+// It lives HERE, not in one suite's file, because three suites now need the same repo and a second copy is
+// how two suites end up testing different products.
+export const SYM_GREET = 'util/greet().';
+export const SYM_MISSING = 'util/missingHelper().';
+
+const indexedRepos: string[] = [];
+
+/** Options for `makeIndexedRepo`. `ghostDoc` adds an INDEXED document that is NOT in the tracked tree — a
+ *  dep-graph node with no spatial counterpart, hence no path, hence nothing a model could be shown. */
+export interface IndexedRepoOpts {
+  readonly ghostDoc?: boolean;
+}
+
+export function makeIndexedRepo(opts: IndexedRepoOpts = {}): string {
+  const dir = mkdtempSync(join(tmpdir(), 'atlas-skel-cli-'));
+  indexedRepos.push(dir);
+  mkdirSync(join(dir, 'src'), { recursive: true });
+  writeFileSync(join(dir, 'src', 'util.ts'), 'export function greet(n: string): string {\n  return `hi ${n}`;\n}\n');
+  writeFileSync(join(dir, 'src', 'app.ts'), "import { greet } from './util';\n\nexport function main(): string {\n  return greet('world') + missingHelper();\n}\n");
+  const git = (...args: string[]): void => {
+    execFileSync('git', args, { cwd: dir, stdio: 'ignore' });
+  };
+  git('init', '-q');
+  git('config', 'user.email', 'fixture@atlas.test');
+  git('config', 'user.name', 'atlas fixture');
+  git('add', '-A');
+  git('-c', 'commit.gpgsign=false', 'commit', '-qm', 'fixture');
+
+  const doc = (relativePath: string, defs: readonly string[], refs: readonly string[]) =>
+    create(DocumentSchema, {
+      relativePath,
+      occurrences: [
+        ...defs.map((symbol) => create(OccurrenceSchema, { symbol, symbolRoles: SymbolRole.Definition })),
+        ...refs.map((symbol) => create(OccurrenceSchema, { symbol, symbolRoles: 0 })),
+      ],
+    });
+  const index = create(IndexSchema, {
+    metadata: create(MetadataSchema, {
+      projectRoot: 'file:///fixture',
+      toolInfo: create(ToolInfoSchema, { name: 'atlas-fixture', version: '0' }),
+    }),
+    documents: [
+      doc('src/util.ts', [SYM_GREET], []),
+      doc('src/app.ts', [], [SYM_GREET, SYM_MISSING]),
+      ...(opts.ghostDoc === true ? [doc('src/ghost.ts', [], [SYM_GREET])] : []),
+    ],
+  });
+  mkdirSync(join(dir, '.atlas'), { recursive: true });
+  writeFileSync(join(dir, '.atlas', 'index.scip'), serializeSCIP(index));
+  return dir;
+}
+
+/** Remove every repo `makeIndexedRepo` created. Call from a suite `afterAll`. */
+export function cleanupIndexedRepos(): void {
+  while (indexedRepos.length > 0) rmSync(indexedRepos.pop()!, { recursive: true, force: true });
+}

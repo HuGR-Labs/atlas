@@ -107,11 +107,18 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
     // stack trace is below this CLI's own bar. It is rendered through the SAME refusal path as every other
     // governed decline, carrying the loader's actionable message verbatim. Any OTHER throw is re-raised:
     // our own crash must not be dressed up as the caller's bad configuration (the #129 blame-shift).
+    //
+    // `ModelCommandError` (the command is missing / timed out / exited non-zero) is the THIRD name here, and
+    // it reached this catch only after `mine.ts` started re-throwing it: it is raised inside a per-site
+    // `visit`, and GEN-8c catches that bare, so the run used to end as an anonymous partial (`exit 1 ·
+    // llmCalls 0 · resume at rank -1`) with neither the command name nor its stderr. Exit 2, like the other
+    // two — a run that legitimately ran out of budget still exits 1 with its report, so the two are
+    // distinguishable from the outside.
     try {
       return emitCli(await runMine(process.cwd()));
     } catch (e) {
       const name = (e as { name?: unknown } | null)?.name;
-      if (name !== 'ModelConfigError' && name !== 'PromptError') throw e;
+      if (name !== 'ModelConfigError' && name !== 'PromptError' && name !== 'ModelCommandError') throw e;
       return emitCli(renderRefusal(refusalVerdict((e as Error).message)));
     }
   }
