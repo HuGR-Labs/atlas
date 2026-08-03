@@ -105,13 +105,32 @@ describe('COMPOSE-B — composeRuntime stands up a real WiredHandler', () => {
     // from the git-tracked tree), so a correctly-shaped init RESOLVES to a genuine ok:true projection — NOT
     // a fake, NOT a fail-closed stub. TEETH: a mutant bin/handler that never composes the real handler
     // (returns a stub) cannot produce these real territories.
-    const v = handler.handle('atlas-init', { path: tempRepo });
+    // `'.'` — the whole repo. This passed the ABSOLUTE `tempRepo` while `territories()` discarded its
+    // argument; the path is read now (adapter-io/src/index-adapter.ts) and the index is keyed by
+    // repo-RELATIVE paths, so `.` is how "the whole repo" is spelled. The assertion below is unchanged.
+    const v = handler.handle('atlas-init', { path: '.' });
     expectWellFormedVerdict(v);
     expect(v.ok).toBe(true);
     if (v.ok) {
       const names = (v.data as InitOut).territories.map((t) => t.name);
       expect(names).toContain('src'); // the real source tree became a real territory
     }
+  });
+
+  it('handle(atlas-init, { path }) HONOURS the path — a subtree, and a refusal for a path that is not there', () => {
+    // The defect this replaces: every path rendered the identical top-level block, including a path that
+    // does not exist, which reported a successful move-in of nothing.
+    const sub = handler.handle('atlas-init', { path: 'src' });
+    expect(sub.ok).toBe(true);
+    if (sub.ok) {
+      const names = (sub.data as InitOut).territories.map((t) => t.name);
+      expect(names.every((n) => n.startsWith('src/'))).toBe(true);
+      expect(names).not.toContain('src'); // `src` is what was ASKED for, not what is IN it
+    }
+
+    const miss = handler.handle('atlas-init', { path: 'no/such/path' });
+    expect(miss.ok).toBe(false);
+    expect(miss.rejected ?? '').toContain('no/such/path');
   });
 
   it('handle(atlas-query, { scope }) RESOLVES ok:true over the real composed handler', () => {

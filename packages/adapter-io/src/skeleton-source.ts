@@ -76,7 +76,7 @@ export interface SkeletonSourceDeps {
  * "rebuild twice ⇒ identical trees"), so handing back the axes already built from the SAME (tree, scip) is
  * byte-identical to letting the adapter rebuild them — it only avoids re-hashing the whole tree twice.
  */
-function manifestOf(repoPath: string, axes: Axes): Skeleton['manifest'] {
+function manifestOf(axes: Axes): Skeleton['manifest'] {
   const index = createIndexAdapter({
     fileTree: NO_TREE,
     scipOutput: NO_SCIP,
@@ -85,7 +85,12 @@ function manifestOf(repoPath: string, axes: Axes): Skeleton['manifest'] {
     createDepgraph,
     nodeHashOfPath: (p: string) => id({ file: p }),
   });
-  return { territories: createInit(index, { isCandidate: () => false }).init(repoPath).territories };
+  // `'.'` — the WHOLE repo, spelled the way the index names it. This used to pass the absolute `repoPath`,
+  // which worked only because `territories()` discarded its argument and always returned the top-level
+  // territories; now that the path is READ (index-adapter.ts), the argument has to say what was always
+  // meant. The index is keyed by repo-RELATIVE paths (`build.ts` keys every node by its tree path), so an
+  // absolute path names nothing in it and never could — the manifest is the whole repo's, not a subtree's.
+  return { territories: createInit(index, { isCandidate: () => false }).init('.').territories };
 }
 
 /** The WORKING-TREE axes: the frozen walk + the optional SCIP dump, folded exactly as `composeRuntime` folds
@@ -152,7 +157,7 @@ export function createSkeletonSource(repoPath: string, deps: SkeletonSourceDeps 
       // `canonicalizeSkeleton` (rank.ts) is applied by the genesis side (`createScan` / `createMine`) on
       // everything this port returns, so sorting is NOT duplicated here — this source is the structural
       // producer, canonicalisation is the consumer's law.
-      const sk: Skeleton = { axes, manifest: manifestOf(repo, axes) };
+      const sk: Skeleton = { axes, manifest: manifestOf(axes) };
       memo.set(key, sk);
       return sk;
     },

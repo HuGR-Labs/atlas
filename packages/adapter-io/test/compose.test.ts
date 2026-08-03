@@ -130,7 +130,9 @@ describe('COMPOSE-A — composeRuntime end-to-end (governed durable handler)', (
       expect(reasonOf(out.rejected)).toBe('unauthorized'); // EQUALITY: the WRITE's own scope, never the incumbent's
 
       // the other governance legs are still wired + resolving (not "not wired at this seam").
-      const initV = handler.handle(INIT, { path: repoPath });
+      // `'.'` — the whole repo. (Was the absolute `repoPath`, which only ever "worked" because
+      // `territories()` ignored its argument; the index is keyed by repo-RELATIVE paths.)
+      const initV = handler.handle(INIT, { path: '.' });
       expect(initV.rejected ?? '').not.toContain('not wired at this seam');
       expect(initV.ok).toBe(true);
       const queryV = handler.handle(QUERY, { scope: '.' });

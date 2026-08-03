@@ -9,7 +9,17 @@
 
 import type { Hash, NodeKey } from '@atlas/contracts';
 import type { MoveInIndex, QueryIndex } from '@atlas/tools';
-import type { Axes, AxisForest, DepEdge, DepgraphApi, FileTree, ResolveApi, ScipOutput } from '@atlas/index';
+import { pathSegments } from '@atlas/index';
+import type {
+  Axes,
+  AxisForest,
+  DepEdge,
+  DepgraphApi,
+  FileTree,
+  IndexNode,
+  ResolveApi,
+  ScipOutput,
+} from '@atlas/index';
 
 /**
  * The injected drive surface (PRE-DECIDED — exact, for SCN-5b spyability). Every `@atlas/index` entry point
@@ -31,6 +41,36 @@ export interface IndexAdapterDeps {
 const asNodeKeys = (hs: readonly Hash[]): readonly NodeKey[] => hs as unknown as readonly NodeKey[];
 
 /**
+ * Does `path` name the repository ROOT — i.e. the whole tree?
+ *
+ * `@atlas/index`'s `resolve` descends from the root by one step per path segment, so the root itself is the
+ * one node no key can name (`'.'` would have to match a CHILD called `.`). Every conventional spelling of
+ * "here" — `.`, `./`, `''`, `/` — normalises to a segment list that is empty or made only of `.`, and those
+ * are exactly the paths that mean the root. Anything else is a real descent and goes through `resolve`.
+ */
+const isRepoRoot = (path: string): boolean =>
+  typeof path === 'string' && pathSegments(path).every((s) => s === '.');
+
+/** The sub-file refinement separator (`file::item::block`, ./ast.ts `unitPath`; minted by @atlas/index
+ *  `build.ts`, which escapes every literal `:` in a real filename to `%3A` — so a `::` in a child key
+ *  beyond its parent's is unambiguously a REFINEMENT and never part of a path component). */
+const UNIT_SEP = '::';
+
+/** A node's PATH children — its directory/file children, with sub-file AST refinements excluded.
+ *  A territory is a file or a directory; `lexical_declaration:0:greet` is neither, and surfacing one as a
+ *  move-in territory would put a governance zone on half a line of code. */
+const pathChildren = (node: IndexNode): readonly IndexNode[] =>
+  node.children.filter((c) => !c.key.startsWith(`${node.key}${UNIT_SEP}`));
+
+/** The move-in projection of ONE structural unit — `{name, owner, globs}`. The `owner:''` + single glob are
+ *  the ONLY non-delegated values in this module (init.ts assigns the tier; the walk never carries one). */
+const asTerritory = (node: IndexNode): { name: string; owner: string; globs: string[] } => ({
+  name: node.key,
+  owner: '',
+  globs: [`${node.key}/**`],
+});
+
+/**
  * Build the index-backing adapter over the injected drive surface. `Axes` is built ONCE at construction
  * (the structural build is $0-LLM + idempotent); resolve / reverse-closure run PER call and are NEVER
  * memoized (the 5a/5b teeth). Returns the union of the two frozen ports.
@@ -38,17 +78,54 @@ const asNodeKeys = (hs: readonly Hash[]): readonly NodeKey[] => hs as unknown as
 export function createIndexAdapter(deps: IndexAdapterDeps): MoveInIndex & QueryIndex {
   const axes = deps.build(deps.fileTree, deps.scipOutput);
 
+  /** The three-axis view the resolver walks (the SAME forest `cover` resolves over). */
+  const forest = (): AxisForest => ({
+    spatial: axes.spatial,
+    territory: axes.territory,
+    dependency: axes.dependency,
+  });
+
   return {
-    // MoveInIndex — the raw territories structurally derived from the territory axis. The move-in shape is
-    // `{name, owner, globs}`; the tier is assigned LATER by init.ts (never carried here). owner:'' + a
-    // single glob per territory key are the ONLY non-delegated projection.
-    territories(_path: string) {
-      void _path;
-      return axes.territory.children.map((node) => ({
-        name: node.key,
-        owner: '',
-        globs: [`${node.key}/**`],
-      }));
+    // MoveInIndex — the territories structurally derived from the territory axis AT `path`. The move-in
+    // shape is `{name, owner, globs}`; the tier is assigned LATER by init.ts (never carried here).
+    //
+    // ── THE PATH IS READ (it used to be discarded) ────────────────────────────────────────────────────
+    // This method took `_path` and returned `axes.territory.children` — the repository's TOP-LEVEL
+    // territories — for every argument. Measured back-to-back in one repo state, `atlas init .`,
+    // `atlas init src` and `atlas init README.md` printed an IDENTICAL five-territory block, and
+    // `atlas init no/such/path` reported a full successful move-in of a path that does not exist. The
+    // argument was published, accepted, and inert: `atlas init <path>` told the user it had walked what
+    // they named while it walked something else.
+    //
+    // Honoured, rather than dropped from the surface, because the path is genuinely meaningful — it already
+    // selected the blast radius on the very next line, and `atlas init <subtree>` is the whole point of the
+    // command on a big repo. Resolution is DELEGATED to `@atlas/index` exactly like `cover` (this facet
+    // computes no descent of its own); the ROOT is the one node `resolve` cannot name (see `isRepoRoot`),
+    // so it is taken from the axis directly — a read, not a resolution.
+    //
+    // The reported units are the resolved node's CHILDREN, or the node ITSELF when it is a leaf: `.` yields
+    // the top-level territories exactly as before, `src` yields what lives under `src`, and `README.md`
+    // yields itself. A path that resolves to NOTHING throws — the handler renders that as a structured
+    // rejected verdict (TOOLS-2), which is the same fail-closed answer `cover` already gives a scope no
+    // territory covers. Returning an empty list instead would be indistinguishable from an empty repo, and
+    // "a failure that reads as a genuinely empty result" is the specific defect this module must not have.
+    territories(path: string) {
+      const atRoot = isRepoRoot(path);
+      const node = atRoot ? axes.territory : deps.createResolve(forest()).resolve('territory', path);
+      if (node === undefined) {
+        throw new Error(
+          `no-such-path: no structural unit at '${path}' — atlas init walks a path that exists in the ` +
+            `repository tree, spelled repo-relative (\`.\` for the whole repo, \`src\`, \`src/lib.ts\`)`,
+        );
+      }
+      // At the ROOT the territories are its children and NOTHING else — an empty tree has no territories,
+      // and naming the root itself would invent a `.` territory nobody authored. BELOW the root a leaf IS
+      // its own territory: `atlas init README.md` names one real unit, and reporting nothing for it would
+      // be the same silent-empty answer the `undefined` case above refuses. "Leaf" is measured in PATH
+      // children, so `atlas init src/greet.ts` reports the FILE rather than the `::` AST units folded
+      // under it — a territory is a file or a directory, never half a line of code.
+      const kids = pathChildren(node);
+      return (atRoot || kids.length > 0 ? kids : [node]).map(asTerritory);
     },
 
     // MoveInIndex — the reverse-dep reachability set (blast radius). A FRESH depgraph closure every call:
@@ -63,12 +140,7 @@ export function createIndexAdapter(deps: IndexAdapterDeps): MoveInIndex & QueryI
     // handler wrapper converts the throw to a rejected Verdict. invariants/stale are the raw pre-governance
     // read — the tier≥T1 bound + drift live in tools/query.ts, not here.
     cover(scope: string) {
-      const forest: AxisForest = {
-        spatial: axes.spatial,
-        territory: axes.territory,
-        dependency: axes.dependency,
-      };
-      const node = deps.createResolve(forest).resolve('territory', scope);
+      const node = deps.createResolve(forest()).resolve('territory', scope);
       if (node === undefined) throw new Error(`cover: no covering territory for scope ${scope}`);
       return {
         territory: node.key,

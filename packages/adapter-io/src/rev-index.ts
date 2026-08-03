@@ -11,12 +11,34 @@
 //
 // All git I/O flows through one seam (`execFileSync` — NO shell), mirroring git-history.ts. `build`,
 // `walkFileTree`, `foldAstUnits`, and `driftDetect` are the FROZEN ingredients — consumed, never
-// reimplemented. `foldAstUnits` is applied BEFORE `build` (the SAME transform composeRuntime/assembleHandler
-// apply at compose time), so the arbitrary-rev index carries the very `::` sub-file symbol nodes a grounded
-// fact is authored against — otherwise a symbol/file anchor's recorded (folded) `subtreeHash` could never
-// re-derive at a rev, and the drift oracle would diverge from the index the truth-gate accepted the fact on.
-// It is warmup-gated (a no-op until `initAst()` is awaited — the entrypoint bins do this once), so a caller
-// that never warms the grammar sees the identical file/dir-only snapshot as before.
+// reimplemented. `foldAstUnits` is applied BEFORE `build` — the SAME TREE transform composeRuntime /
+// assembleHandler apply at compose time — so the arbitrary-rev index carries the very `::` sub-file symbol
+// nodes a grounded fact is authored against; otherwise a symbol/file anchor's recorded (folded)
+// `subtreeHash` could never re-derive at a rev, and the drift oracle would diverge from the index the
+// truth-gate accepted the fact on. It is warmup-gated (a no-op until `initAst()` is awaited — the entrypoint
+// bins do this once), so a caller that never warms the grammar sees the identical file/dir-only snapshot.
+//
+// ── WHAT IS *NOT* SHARED WITH THE COMPOSE PATH, AND WHY IT CANNOT MOVE AN ANSWER HERE ────────────────────
+// `build` takes TWO inputs and only the TREE one is shared. compose.ts passes `readScipOrEmpty(scipPath)`;
+// every `build` in this file passes a hardcoded `{ documents: [] }` — this module never reads a `.scip` at
+// the rev it checks out. That is a real asymmetry and it used to be papered over by the sentence above, so
+// it is stated here with the measurement rather than left for a reader to assume parity.
+//
+// MEASURED (`test/rev-index-scip-parity.test.ts`, over one folded tree built both ways): the `spatial` and
+// `territory` axes come back BYTE-IDENTICAL — SCIP occurrences feed `deriveEdges` and the `dependency` axis
+// ALONE (@atlas/index src/build.ts), and the two content-committing hierarchies are a pure function of the
+// file tree. Only `dependency` differs (its root re-keys and it gains one hash-keyed leaf per participating
+// document). The consequence for each of this module's three readers:
+//   - `reDerives`          → `driftDetect`, which resolves over `spatial`/`territory` ONLY and deliberately
+//                            refuses the dependency axis (grounding/src/drift.ts). Provably unaffected.
+//   - `resolveAnchorAt`    → scans the dependency axis too, but its leaves are keyed by `id({file: p})` —
+//                            64 hex — so no path-shaped `qualifiedPath` can match one, in either build.
+//   - `resolveBySubtreeAt` → same: a dependency leaf's `subtreeHash` IS its own key (an identity, not a
+//                            content fold), a value no grounded anchor's `subtreeHash` inhabits.
+// So the empty-SCIP build is not a blind drift oracle; it is a narrower one in a region no anchor reaches.
+// Reading the rev's own `.scip` would still be the more honest build, and is a deliberate non-change here:
+// it is a behaviour change to the reconcile/doctor classifier, not a comment fix, and it belongs to whoever
+// owns that classifier. What this header must not do is claim a parity the code does not have.
 
 import { mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';

@@ -32,7 +32,8 @@ const rejectedOf = (tool: Tool, args: unknown, leg: ToolLeg = okLeg): string | u
   createHandler({ [tool]: leg }).handle(tool, args).rejected;
 
 /** A schema built for §2 — the validator takes ANY `ToolSchema`, and the five frozen ones do not exercise
- *  its whole type lattice. `additionalProperties` is irrelevant here (deliberately unenforced, see fault.ts). */
+ *  its whole type lattice. `additionalProperties:false` IS enforced now (see fault.ts), so every §2 case
+ *  below passes only properties this helper declares — the closed set is exercised in §1, on a real door. */
 const schemaOf = (props: Record<string, { type: string }>, required: string[] = []): ToolSchema => ({
   name: 'probe',
   description: 'a synthetic schema — §2 exercises the published validator, not a shipped tool',
@@ -88,11 +89,51 @@ describe('class (a) THROUGH THE DOOR — the envelope and the declared types the
     expect(rejectedOf('atlas-emit', { node: { claim: 'x' }, at: 'deadbeef' })).toBeUndefined();
   });
 
-  it('a declared `boolean` argument (atlas-reconcile `acceptReground`) rejects a non-boolean', () => {
-    expect(rejectedOf('atlas-reconcile', { mergeBase: 'abc', acceptReground: 'yes' })).toBe(
-      "malformed-args: 'atlas-reconcile' argument 'acceptReground' must be boolean; it received string",
+  it('a declared `boolean` argument (atlas-reconcile `options.acceptReground`) rejects a non-boolean', () => {
+    // NESTED, and that placement is the fix rather than an accident of this test: `acceptReground` used to be
+    // declared at the TOP level while the wired leg read `args.options.acceptReground` — so the published
+    // knob did nothing and the working one was undeclared. The schema now names the shape the CLI marshaller
+    // has always produced (`{mergeBase, options:{acceptReground}}`), and the validator descends into it.
+    expect(rejectedOf('atlas-reconcile', { mergeBase: 'abc', options: { acceptReground: 'yes' } })).toBe(
+      "malformed-args: 'atlas-reconcile' argument 'options.acceptReground' must be boolean; it received string",
     );
-    expect(rejectedOf('atlas-reconcile', { mergeBase: 'abc', acceptReground: true })).toBeUndefined();
+    expect(rejectedOf('atlas-reconcile', { mergeBase: 'abc', options: { acceptReground: true } })).toBeUndefined();
+    // …and the dead TOP-LEVEL spelling is refused rather than accepted-and-dropped.
+    expect(rejectedOf('atlas-reconcile', { mergeBase: 'abc', acceptReground: true })).toBe(
+      "malformed-args: 'atlas-reconcile' does not accept 'acceptReground' — it declares only 'mergeBase', " +
+        "'options' (the published schema is a CLOSED set, additionalProperties: false)",
+    );
+  });
+
+  it('`additionalProperties:false` is ENFORCED, and names every undeclared key at once, sorted', () => {
+    // It was declared by every governance schema and enforced by none: `{scope:'src',bogusKey:1}` was
+    // accepted and routed (measured over real MCP stdio). Sorted + all-at-once so the message does not
+    // depend on JSON key order, which belongs to the wire and not to the caller.
+    expect(rejectedOf('atlas-query', { scope: 'src', zed: 1, alpha: 2 })).toBe(
+      "malformed-args: 'atlas-query' does not accept 'alpha', 'zed' — it declares only 'by', 'scope' " +
+        '(the published schema is a CLOSED set, additionalProperties: false)',
+    );
+    // CONTROL: every declared argument still passes, at both levels.
+    expect(rejectedOf('atlas-query', { scope: 'src', by: 'dependency' })).toBeUndefined();
+    expect(rejectedOf('atlas-reconcile', { mergeBase: 'abc', options: {} })).toBeUndefined();
+  });
+
+  it('the CLOSED set is closed AT DEPTH — an undeclared key inside `options` is named by its full path', () => {
+    expect(rejectedOf('atlas-reconcile', { mergeBase: 'abc', options: { acceptRegound: true } })).toBe(
+      "malformed-args: 'atlas-reconcile' does not accept 'options.acceptRegound' under 'options' — " +
+        "it declares only 'acceptReground' (the published schema is a CLOSED set, additionalProperties: false)",
+    );
+  });
+
+  it('a declared `enum` is enforced — `atlas-query --by` has exactly three modes on BOTH transports', () => {
+    // Without this the MCP door accepted `by:'graph'` and silently served `by:'scope'`, while the CLI
+    // marshaller refused the same string outright — a transport divergence on a published argument.
+    expect(rejectedOf('atlas-query', { scope: 'src', by: 'graph' })).toBe(
+      "malformed-args: 'atlas-query' argument 'by' must be one of 'scope' | 'dependency' | 'trigger'; it received 'graph'",
+    );
+    for (const by of ['scope', 'dependency', 'trigger']) {
+      expect(rejectedOf('atlas-query', { scope: 'src', by })).toBeUndefined();
+    }
   });
 
   it('TOTALITY: a leg wired under an OFF-SURFACE tool token still returns a verdict, never a throw', () => {
@@ -100,6 +141,11 @@ describe('class (a) THROUGH THE DOOR — the envelope and the declared types the
     // one place the validator can be handed a hole, and it is reached the moment a composition root binds a
     // leg under a token that is not one of the five. `as Tool` is the point of the case: the cast is what a
     // JS caller over MCP does for free.
+    //
+    // It also declares no CLOSED SET, deliberately (handler.ts `SCHEMA_OFF_SURFACE`): now that the door
+    // enforces `additionalProperties:false`, a fallback that claimed one would refuse every argument of a
+    // wired leg on the authority of a schema nobody authored for that tool. `{anything: 1}` reaching the leg
+    // is the assertion that says so.
     const handler = createHandler({ ['atlas-delete' as Tool]: okLeg });
 
     let threw = false;
