@@ -23,10 +23,11 @@
 ### INV-GROUND-1
 method-tag: reference-model
 fspec: —
-up-property: "structural-anchor oracle: a grounding entry's drift oracle is its `subtreeHash` alone; `displayLines` never participates in drift (a `displayLines`-only change ⇒ 0 drift); a line-range-only anchor is rejected as invalid"
-down-model: "the reference anchor resolver `resolveAnchor(entry)=entry.anchor.subtreeHash` ignores `displayLines`; a `StructRef` lacking a `subtreeHash` (line-range only) is rejected; the mock asserts drift keys off `subtreeHash` and is invariant to `displayLines` edits"
-anti-rot: `grounding/ref/anchor.ts` (the reference `StructRef`/`subtreeHash` resolver) is imported as the mock in the drift unit tests; any code path that reads `displayLines` or a line-range as the oracle diverges from it and breaks the build.
+up-property: "structural-anchor oracle: a grounding entry's drift oracle is its `subtreeHash` alone; `displayLines` never participates in drift (a `displayLines`-only change ⇒ 0 drift); a line-range-only anchor is rejected as invalid; an entry's OPTIONAL `span` — a `contentHash` + byte range, never a copy of the cited text — is likewise inert in drift, and absent means UNKNOWN, never a defaulted whole-unit citation"
+down-model: "the reference anchor resolver `resolveAnchor(entry)=entry.anchor.subtreeHash` ignores `displayLines` and `span`; a `StructRef` lacking a `subtreeHash` (line-range only, or span-only) is rejected; the mock asserts drift keys off `subtreeHash` and is invariant to `displayLines`/`span` edits; the span reference verbs are mint-from-bytes / read-only-if-the-bytes-still-hash-to-`contentHash` (`grounding/src/span.ts`), both total and fail-closed"
+anti-rot: `grounding/ref/anchor.ts` (the reference `StructRef`/`subtreeHash` resolver) is imported as the mock in the drift unit tests; any code path that reads `displayLines`, a line-range or a `span` as the oracle diverges from it and breaks the build.
 <!-- Reviewed under the 2026-08-02 AMENDED wave (HONESTY-TAPROOT) and UNAFFECTED: this INV is about displayLines exclusion and line-range rejection, both delivered. Only SCN-GROUND-1a-1's witness EDIT changed (whitespace reformat → import-above). -->
+<!-- AMENDED 2026-08-02 (owner-approved SPAN amendment): the `span` clauses above are ADDITIVE — REQ-GROUND-1d/1e/1f. The INV is unchanged in kind (it is still "what may be the anchor/oracle"); no new invariant was minted, so the 13/13 behavioural count in properties-grd.md still holds. The limit that does NOT hold: a stored `span` sits in `grounding`, which KERNEL-8 excludes from the canonical preimage, so tampering it is invisible to every shipped read door — MEASURED, and recorded on REQ-GROUND-1f. -->
 
 ### INV-GROUND-2
 method-tag: reference-model

@@ -5,7 +5,7 @@
 // GateApi/AnchorApi + the InterfaceRState seam). `StructRef`/`Freshness`/`Status` are the canonical
 // layer-0 vocabulary owned by @atlas/contracts — imported, NEVER redefined here.
 
-import type { StructRef, Freshness, Status } from '@atlas/contracts';
+import type { StructRef, Freshness, Status, Hash } from '@atlas/contracts';
 import type { Axes, Rollup } from '@atlas/index';
 
 /**
@@ -19,17 +19,54 @@ export interface Grounding {
 }
 
 /**
- * One anchor in a grounding receipt. Transcribed EXACTLY from atlas-grounding:39-43:
+ * One anchor in a grounding receipt. Transcribed EXACTLY from atlas-grounding:39-43, plus the
+ * owner-ratified 2026-08-02 SPAN amendment (`span?`):
  *   - `anchor`       — THE DRIFT ORACLE: a `StructRef` whose `subtreeHash` is the hash of the
  *     normalized structural unit (GROUND-1). Owned by @atlas/contracts.
  *   - `path`         — repo-relative, for humans/navigation.
  *   - `displayLines?`— OPTIONAL nav hint ("42-50") — NEVER the drift oracle (GROUND-1). Under
  *     `exactOptionalPropertyTypes` the field is genuinely absent-or-string, never `undefined`.
+ *   - `span?`        — OPTIONAL: WHERE INSIDE the anchored unit the claim was derived from, addressed
+ *     into content-addressed bytes (`GroundingSpan`). ADDITIVE to the anchor, never a replacement for
+ *     it: GROUND-2 still requires `anchor.subtreeHash` on every entry, span or no span. ABSENT ⇒ the
+ *     location inside the unit is UNKNOWN — never "the whole unit", which would be a fabricated
+ *     default asserting a citation nobody made (the `builtAt`/`sameAs`/`derivedAt` precedent).
  */
 export interface GroundingEntry {
   readonly anchor: StructRef;
   readonly path: string;
   readonly displayLines?: string;
+  readonly span?: GroundingSpan;
+}
+
+/**
+ * WHERE, inside the cited bytes, the evidence is — a RANGE ADDRESSED INTO CONTENT-ADDRESSED BYTES, and
+ * deliberately NOT a copy of the text. (Owner-approved amendment, 2026-08-02.)
+ *
+ * WHY A SPAN AND NOT A QUOTE. A stored quote is a second, unversioned copy of the source: it drifts
+ * silently the moment the file changes, and it is UNFALSIFIABLE — nothing can check that those characters
+ * were ever really there. This shape stores no text at all. It stores the digest of the byte sequence the
+ * offsets index into, so a reader RE-DERIVES the cited text: fetch the anchor's bytes, verify they hash to
+ * `contentHash`, slice `[start, end)`. If the content moved, the hash no longer matches and the read
+ * REFUSES (`readSpan`, span.ts) — while the fact's freshness verdict is decided, exactly as before, by the
+ * existing drift machinery over `anchor.subtreeHash`.
+ *
+ *   - `contentHash` — the digest of the WHOLE byte sequence the offsets index into (@atlas/contracts
+ *     `Hash`, the CAS/dedup leg — reused, never a parallel type). Offsets without the identity of what
+ *     they index are meaningless, which is why the addressed content travels WITH the range.
+ *   - `start`/`end` — BYTE offsets into that sequence, `start` inclusive, `end` exclusive, both
+ *     non-negative integers with `start < end <= length` (an empty span cites nothing and is refused at
+ *     mint). Bytes, not characters: the digest is over bytes, so a character index would address a
+ *     different thing than the hash commits to.
+ *
+ * NOT THE DRIFT ORACLE, on the same terms as `displayLines` (GROUND-1). Nothing in `isGrounded` or
+ * `driftDetect` reads this field, and their verdicts are invariant under adding, removing or corrupting
+ * it. A span is a POINTER INTO evidence; the oracle stays `anchor.subtreeHash`.
+ */
+export interface GroundingSpan {
+  readonly contentHash: Hash;
+  readonly start: number;
+  readonly end: number;
 }
 
 // ── frozen API surface, co-located here (was ref/ground.ts · ref/drift.ts · ref/gate.ts · ref/anchor.ts) ─

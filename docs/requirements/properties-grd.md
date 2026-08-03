@@ -34,10 +34,14 @@ source:      method-tags-grd.md#INV-GROUND-1                    # ptr+digest —
 law:         ∀ entry E ∈ StructRef. resolveAnchor(E) ≡ E.anchor.subtreeHash
              ∧ ∀ edit δ touching only E.displayLines. driftDetect(E after δ) ≡ driftDetect(E before δ)   (a displayLines-only change ⇒ 0 drift)
              ∧ E.anchor.subtreeHash absent (line-range only) ⇒ reject(E) as an invalid anchor
-arbitrary:   StructRef entries {random subtreeHash, random displayLines, source}; a displayLines-only mutation class (line-shift, range-widen); a subtreeHash mutation class; line-range-only anchors (no subtreeHash)
-covers_reqs: [ req-grd.md#REQ-GROUND-1a, req-grd.md#REQ-GROUND-1b, req-grd.md#REQ-GROUND-1c ]   # ptr+digest
-witness:     [ SCN-GROUND-1a-1, SCN-GROUND-1b-1, SCN-GROUND-1c-1 ]   # goldens-grd.md
+             ∧ ∀ edit δ touching only E.span (add / remove / corrupt). driftDetect(E after δ) ≡ driftDetect(E before δ)   (SPAN amendment, 2026-08-02)
+             ∧ ∀ bytes B, ∀ legal range [s,e). readSpan(mintSpan(B,s,e), B) ≡ B[s,e)   ∧   ∀ B' ≠ B. readSpan(mintSpan(B,s,e), B') ≡ ⊥   (re-derives, never stores)
+arbitrary:   StructRef entries {random subtreeHash, random displayLines, random span, source}; a displayLines-only mutation class (line-shift, range-widen); a span-only mutation class (absent / valid / corrupt); a subtreeHash mutation class; line-range-only anchors (no subtreeHash); byte buffers with a swept range family and a same-length edited twin
+covers_reqs: [ req-grd.md#REQ-GROUND-1a, req-grd.md#REQ-GROUND-1b, req-grd.md#REQ-GROUND-1c, req-grd.md#REQ-GROUND-1d, req-grd.md#REQ-GROUND-1e, req-grd.md#REQ-GROUND-1f ]   # ptr+digest
+witness:     [ SCN-GROUND-1a-1, SCN-GROUND-1b-1, SCN-GROUND-1c-1, SCN-GROUND-1d-1, SCN-GROUND-1e-1, SCN-GROUND-1f-1 ]   # goldens-grd.md
 teeth:       breaks-on "the oracle is mutated to fold displayLines — the single witness is one line-shift, but the property flips DRIFTED across the whole displayLines-only mutation class"
+             ∧ breaks-on "the span is stored as TEXT rather than addressed — the `B' ≠ B ⇒ ⊥` leg then returns a stale quote instead of refusing, across the whole edited-twin class"
+> **AMENDED 2026-08-02 (owner-approved SPAN amendment).** The two new conjuncts are ADDITIVE renders of the `span` clauses added to `method-tags-grd.md#INV-GROUND-1`; no new INV was minted, so the header's 13/13 count is unchanged. **What this property does NOT cover, stated:** the span's STORED form. `grounding` is excluded from the canonical preimage (KERNEL-8), so a span rewritten in the store is invisible to every shipped read door — measured, and recorded on `req-grd.md#REQ-GROUND-1f`. This law is about the span↔bytes relation, not about the durability of the span itself.
 <!-- Reviewed under the 2026-08-02 AMENDED wave (HONESTY-TAPROOT) and UNAFFECTED: this law is about displayLines exclusion and line-range-only rejection, both delivered. Only SCN-GROUND-1a-1's witness EDIT changed (whitespace reformat → import-above); the law did not. The stale "/ the raw byte-hash" fragment is dropped, because the oracle IS a byte-hash of the unit's raw slice — that is the design, not a mutant. -->
 
 ### PROP-GROUND-2 — real-grounding predicate

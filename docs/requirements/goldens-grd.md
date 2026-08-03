@@ -94,6 +94,36 @@ Then it is rejected as an **invalid anchor** (fail-closed); no grounding entry i
 teeth: breaks-on "a line-range-only anchor is accepted — a fact anchored by lines survives, and every unrelated line-shift silently drifts or fails to drift it"
 gen: conformance   # `grounding/ref/anchor.ts` rejects a `StructRef` lacking a `subtreeHash`
 
+### REQ-GROUND-1d — a span addresses content-addressed bytes   (happy)   <!-- ADDED 2026-08-02, SPAN amendment -->
+
+### SCN-GROUND-1d-1 — the citation re-derives instead of being stored   (happy)
+source: REQ-GROUND-1d
+Given the bytes `B_arr` of the cited unit `U_arr` and the evidence clause `return mrr * 12;` at byte offset `AT`
+When a span is minted over `B_arr[AT, AT+16)` and the citation is read back by presenting `B_arr` again
+Then the exact clause comes back byte-for-byte, and the span itself holds only `{contentHash, start, end}` — no field of it contains any part of the source
+teeth: breaks-on "the span stores the quoted text instead of addressing it — an unversioned second copy that drifts silently and that nothing can falsify"
+gen: conformance   # mint→read round-trip through the `@atlas/kernel` Encoder seam (a stub-encoder swap is the substitution witness)
+
+### REQ-GROUND-1e — the span is additive and absent-tolerant   (guard)   <!-- ADDED 2026-08-02, SPAN amendment -->
+
+### SCN-GROUND-1e-1 — an entry minted before the amendment still reads   (guard)
+source: REQ-GROUND-1e
+Given `E_arr` carrying **no** `span` key at all, and a second entry carrying a valid span but an EMPTY `anchor.subtreeHash`
+When `isGrounded` and `driftDetect` run on each
+Then the span-less entry is grounded and `FRESH` exactly as before, its location reads as **unknown** (never a defaulted whole-unit range), and the span-with-empty-anchor entry is **not** real grounding (`DRIFTED`)
+teeth: breaks-on "an absent span defaults to `[0, length)` of the unit — a citation nobody made" AND on "a span is accepted in place of an anchor, hollowing GROUND-2"
+gen: conformance   # the reference predicate reads `anchor.subtreeHash` alone; the span is inert in it
+
+### REQ-GROUND-1f — the span is inert on the drift rail   (guard)   <!-- ADDED 2026-08-02, SPAN amendment -->
+
+### SCN-GROUND-1f-1 — wrong bytes refuse, and a corrupt span changes no verdict   (guard)
+source: REQ-GROUND-1f
+Given a span over `B_arr`, and `B_arr'` — the same unit edited `12→13`, therefore the SAME LENGTH so every offset is still in bounds
+When the citation is read against `B_arr'`, and separately when `driftDetect`/`isGrounded` run over entries that carry no span, a valid span, and a wholly corrupt span
+Then the read REFUSES (no plausible slice of the wrong content is returned), and all three drift/grounding verdicts are identical — the oracle stays `anchor.subtreeHash`
+teeth: breaks-on "the span is folded into the drift oracle — a corrupted span flips a still-anchored fact to DRIFTED" AND on "the read checks only the range's bounds, so any file of the right length yields a citation"
+gen: conformance   # the mock keys drift off `subtreeHash` and is invariant to `span` edits
+
 ---
 
 ## REQ-GROUND-2 — real-grounding predicate
@@ -592,6 +622,24 @@ Then it is rejected as an **invalid anchor** (fail-closed); no grounding entry i
 teeth: breaks-on "a line-range-only anchor is accepted — `E_lronly2` survives, and every unrelated line-shift silently drifts or fails to drift it"
 held_out: true
 gen: conformance   # independent-data leg of SCN-GROUND-1c-1 (`anchor.ts` rejects a `subtreeHash`-less `StructRef`)
+
+### SCN-GROUND-1d-2 — the citation re-derives on an independent fixture (held-out)   (happy)
+source: REQ-GROUND-1d
+Given the bytes `B_vat` of `U_tax` = `pricing.ts › computeVat()`, whose evidence is the comment `NOT 0.19 since 2021`
+When a span is minted over that clause, AND separately over every legal range of `B_vat` in a sweep
+Then every range comes back byte-identical to the corresponding slice of `B_vat`, and no minted span's serialization contains the text it addresses
+teeth: breaks-on "the round-trip is hard-coded to one offset pair" AND on "a `quote`/`excerpt` field is added — the sweep would carry the whole file back in the receipts"
+held_out: true
+gen: conformance   # independent-data leg of SCN-GROUND-1d-1 (different unit, different evidence, range sweep)
+
+### SCN-GROUND-1f-2 — an edit OUTSIDE the cited range still refuses (held-out)   (guard)
+source: REQ-GROUND-1f
+Given the span over `NOT 0.19 since 2021` in `B_vat`, and `B_vat'` — the same file with `net * 0.2` → `net * 0.3`, an edit that touches NEITHER the cited range NOR the length
+When the citation is read against `B_vat'`, against empty/truncated/appended bytes, and against a span whose digest was swapped for another real content digest
+Then every one of them REFUSES — the span addresses the WHOLE content, so nothing outside the range is exempt from the check
+teeth: breaks-on "the read verifies only the sliced bytes — an edit elsewhere in the file then reads clean and the citation silently rests on content that changed"
+held_out: true
+gen: conformance   # independent-data leg of SCN-GROUND-1f-1
 
 ### SCN-GROUND-2a-2 — real iff ≥1 entry AND every entry non-empty (held-out)   (happy)
 source: REQ-GROUND-2a

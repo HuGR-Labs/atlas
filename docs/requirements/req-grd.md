@@ -16,6 +16,24 @@ source: INV-GROUND-1 @ reference/atlas-grounding.md#ground-1
 If a grounding entry is anchored by line-ranges alone, then the grounding gate shall reject it as an invalid anchor.
 normative-clause: "Line-ranges alone are NEVER a valid anchor."
 
+### REQ-GROUND-1d — a grounding entry MAY carry a span, addressed into content-addressed bytes
+source: INV-GROUND-1 @ reference/atlas-grounding.md#ground-1
+If a grounding entry records where inside the cited unit a claim was derived from, then the grounding gate shall record it as a `span` — the digest of the byte sequence plus a byte range into it — and shall never record a copy of the cited text.
+normative-clause: "A grounding entry's `span` MUST address content-addressed bytes (`contentHash` + `[start, end)`); it MUST NOT store the cited text."
+> **ADDED by the owner-approved SPAN amendment (2026-08-02)**, on the ADR-precedent that a ratified decision may add a REQ under an existing invariant (cf. REQ-MCP-1d/1e under ADR-0006). Rationale, because the distinction is the whole point: a stored quote is a second, unversioned copy of the source — it drifts silently the moment the file changes and nothing can ever check that those characters were really there. A span addressed into content-addressed bytes RE-DERIVES: re-read the cited bytes, verify they hash to `contentHash`, slice the range. If the content moved, the hash no longer matches and the read refuses, while the fact's freshness verdict is still decided by the existing drift machinery over `anchor.subtreeHash`.
+
+### REQ-GROUND-1e — the span is additive and absent-tolerant
+source: INV-GROUND-1 @ reference/atlas-grounding.md#ground-1
+If a grounding entry carries no `span`, then the grounding gate shall read it exactly as before and shall treat the location inside the unit as unknown.
+normative-clause: "`span` is OPTIONAL. Absent MUST mean UNKNOWN — never a defaulted whole-unit citation — and an entry without one MUST still satisfy GROUND-2 on its `anchor.subtreeHash` alone."
+> **ADDED 2026-08-02 with REQ-GROUND-1d.** The same additive/absent-tolerant discipline as `builtAt`/`sameAs` (task #75) and the per-row `derivedAt` watermark: old data still reads, and an absent field is a stated unknown rather than a fabricated default. A `span` is ADDITIVE to an entry's anchor, never a replacement for it — an entry carrying a valid span and an empty `subtreeHash` is still not real grounding (REQ-GROUND-2a).
+
+### REQ-GROUND-1f — the span never participates in drift, and its stored form is not integrity-protected
+source: INV-GROUND-1 @ reference/atlas-grounding.md#ground-1
+If drift is being detected for a grounding entry, then the grounding gate shall not let `span` participate.
+normative-clause: "`span` MUST NOT participate in drift detection — the oracle stays `anchor.subtreeHash`, exactly as for `displayLines` (REQ-GROUND-1b)."
+> **ADDED 2026-08-02 with REQ-GROUND-1d — and the LIMIT is recorded here rather than implied away.** A `span` lives inside `grounding`, which KERNEL-8 EXCLUDES from the canonical preimage at every level (`packages/kernel/src/canonical.ts` `SIDE_INDEX`). MEASURED end-to-end on the built binary (2026-08-03, `atlas emit` → `atlas node <addr>` on a real fixture repo): a fact emitted with a span persisted to `.atlas/cas/19/1994bea4…`; rewriting that span in place — offsets `7,12` → `0,3` and `contentHash` `aaa…` → `bbb…` — left `atlas node <addr>` answering `status: ok`, exit 0, byte-identical output, while the control tamper of `claimNorm` (inside the preimage) answered `no-such-node`, exit 1. So: **a stored span can be tampered without any shipped surface noticing.** What `readSpan` witnesses is the CONTENT — bytes that are not the addressed bytes yield no citation — not the integrity of the offsets as stored. Anything stronger requires folding `span` into the addressed preimage, which is a KERNEL-8 amendment and is NOT claimed here.
+
 ### REQ-GROUND-2a — definition of a real grounding
 source: INV-GROUND-2 @ reference/atlas-grounding.md#ground-2
 The grounding gate shall treat a `Grounding` as real if and only if it has at least one entry and every entry carries a non-empty `subtreeHash`.
