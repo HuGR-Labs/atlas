@@ -8,17 +8,26 @@
 //     THROW. This deliberately INVERTS `loadPolicy`, which fails closed to a denying default: a denying
 //     policy is safe, whereas a silently-absent model abstains everywhere and reports a clean empty run —
 //     indistinguishable from a repo that genuinely holds no groundable fact.
+//   • EVERY KNOB IS AN INTEGER, and the resolved config therefore REACHES THE SEALED `id` SEAM. ADR-0011
+//     promises the resolved configuration is hashed into the run's provenance; the shipped default cost cap
+//     was `0.05`, which `canonical.ts` refuses outright, so the promise was unimplementable rather than
+//     merely unimplemented. The ratio is now an exact integer pair (`rank.ts`'s `DAMPING_NUM`/`DAMPING_DEN`
+//     idiom) and a float is REFUSED rather than coerced.
 
 import { mkdtempSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { id } from '@atlas/kernel';
+
 import {
   loadModelConfig,
   modelConfigPath,
   ModelConfigError,
   PROVISIONAL_COST_CAP,
+  PROVISIONAL_COST_CAP_DEN,
+  PROVISIONAL_COST_CAP_NUM,
   PROVISIONAL_TIMEOUT_MS,
 } from '../src/model-config.js';
 
@@ -38,6 +47,51 @@ const VALID = JSON.stringify({ roles: { propose: { cmd: 'some-model-cli', args: 
 
 /** Point `$ATLAS_MODEL_CONFIG` at `path` without touching the real environment. */
 const envAt = (path: string): NodeJS.ProcessEnv => ({ ATLAS_MODEL_CONFIG: path });
+
+// ── the folding probe: what this filesystem can actually reproduce ──────────────────────────────────────
+// Case folding is a property of the VOLUME, not of the platform — APFS folds ASCII case, ext4 folds nothing,
+// and CI runs on ext4 while this machine runs on APFS. The case-variant story below is only a test on a
+// volume that folds; anywhere else `…/REPO` names a different, non-existent directory, the bypass has no
+// second spelling to attack through, and a green tick would report coverage that does not exist. So it is
+// SKIPPED there, loudly and specifically, rather than passing vacuously.
+
+/** Does the KERNEL say these two spellings are the same directory? The oracle — never `toLowerCase()`,
+ *  which is a guess about a volume's folding table and the reason the string guard was wrong. */
+function sameDirectory(a: string, b: string): boolean {
+  try {
+    const x = statSync(a, { bigint: true });
+    const y = statSync(b, { bigint: true });
+    return x.dev === y.dev && x.ino === y.ino;
+  } catch {
+    return false;
+  }
+}
+
+/** Ask that same oracle, ON THE VOLUME THE FIXTURES ACTUALLY USE, whether `variant` denotes the directory
+ *  created as `name`. Probed, never inferred from `process.platform`: a case-sensitive volume mounted on
+ *  macOS folds nothing, and a probe is the only thing that knows. */
+function probeFolds(name: string, variant: string): boolean {
+  const probe = mkdtempSync(join(tmpdir(), 'atlas-fold-probe-'));
+  try {
+    mkdirSync(join(probe, name));
+    return sameDirectory(join(probe, name), join(probe, variant));
+  } catch {
+    return false;
+  } finally {
+    rmSync(probe, { recursive: true, force: true });
+  }
+}
+
+const FOLDS_CASE = probeFolds('probe', 'PROBE');
+const SKIP_SUFFIX = ' — SKIPPED: this filesystem does not fold case, so the bypass has no second spelling';
+if (!FOLDS_CASE) {
+  console.warn(
+    `[model-config.test] NOT COVERED on this filesystem (${tmpdir()}): it does not fold ASCII case, so ` +
+      '`…/repo` and `…/REPO` are two different directories and the F1 case-variant bypass of the ' +
+      'inside-repo (arbitrary-code-execution) guard cannot be reproduced here. That guard is UNTESTED on ' +
+      'this run — not passing. It is exercised on a folding volume (APFS).',
+  );
+}
 
 function refusalOf(fn: () => unknown): ModelConfigError {
   try {
@@ -105,7 +159,7 @@ describe('loadModelConfig — the security boundary (ADR-0011 D2)', () => {
     expect(loadModelConfig(repo, envAt(path))).not.toBeNull();
   });
 
-  it('a config planted inside the repo is refused through a CASE-VARIANT spelling of the repo path too', () => {
+  it.skipIf(!FOLDS_CASE)(`a config planted inside the repo is refused through a CASE-VARIANT spelling of the repo path too${FOLDS_CASE ? '' : SKIP_SUFFIX}`, () => {
     // THE F1 BYPASS. `realpathSync` is case-PRESERVING on APFS — it hands back the path as REQUESTED, not
     // the canonical on-disk name — so `…/repo` and `…/REPO`, one directory to the kernel, stayed two strings
     // to `relative()`, which returned a `..`-prefixed path and let the guard read "outside the repo".
@@ -115,9 +169,10 @@ describe('loadModelConfig — the security boundary (ADR-0011 D2)', () => {
     // teeth (breaks-on "containment is decided by string relative() again"): the refusal below disappears
     // and `loadModelConfig` returns a config naming a command `atlas mine` would then execute.
     //
-    // FILESYSTEM-CONDITIONAL, and honestly so: on a case-SENSITIVE volume (Linux CI) `…/REPO` is a different,
-    // non-existent directory, there is no second spelling of the repo and so no bypass to close. The
-    // expectation is taken from the kernel, and the folding branch asserts the refusal.
+    // FILESYSTEM-CONDITIONAL, and it SKIPS rather than asserting something else. On a case-SENSITIVE volume
+    // (CI's ext4 runner) `…/REPO` is a different, non-existent directory: the case cannot reproduce the
+    // condition, so it cannot fail, and a green tick would read as coverage that does not exist. The
+    // predicate is probed against the real filesystem below, never guessed from `process.platform`.
     const parent = tempDir('caserepo');
     const repo = join(parent, 'repo');
     mkdirSync(join(repo, '.atlas'), { recursive: true });
@@ -125,25 +180,11 @@ describe('loadModelConfig — the security boundary (ADR-0011 D2)', () => {
     writeFileSync(planted, VALID);
     const variantPath = join(parent, 'REPO', '.atlas', 'model.json');
 
-    if (!foldsCase(repo, join(parent, 'REPO'))) {
-      expect(loadModelConfig(repo, envAt(variantPath))).toBeNull(); // a different location, and it is empty
-      return;
-    }
+    // ANTI-VACUITY: the two spellings must really be one directory here, or the case proves nothing.
+    expect(sameDirectory(repo, join(parent, 'REPO'))).toBe(true);
     expect(refusalOf(() => loadModelConfig(repo, envAt(variantPath))).refusal).toBe('inside-repo');
   });
 });
-
-/** Does the KERNEL say these two spellings are the same directory? The oracle — never `toLowerCase()`,
- *  which is a guess about a volume's folding table and the reason the string guard was wrong. */
-function foldsCase(a: string, b: string): boolean {
-  try {
-    const x = statSync(a, { bigint: true });
-    const y = statSync(b, { bigint: true });
-    return x.dev === y.dev && x.ino === y.ino;
-  } catch {
-    return false;
-  }
-}
 
 describe('loadModelConfig — absent is a state, malformed is an error', () => {
   it('an ABSENT config is `null` — the honest zero-config state, not an error', () => {
@@ -189,9 +230,41 @@ describe('loadModelConfig — absent is a state, malformed is an error', () => {
     });
 
     it('a PRESENT-but-invalid `timeoutMs` is refused, never silently defaulted', () => {
-      // teeth (breaks-on "optionalPositive falls back instead of refusing on an invalid value"): a
+      // teeth (breaks-on "optionalPositiveInteger falls back instead of refusing on an invalid value"): a
       // `timeoutMs: 0` typo would silently become 60s, and the operator would never learn their cap is dead.
       expect(refusalOf(badConfig({ roles: { propose: { cmd: 'x', args: [] } }, timeoutMs: 0 })).refusal).toBe('malformed');
+    });
+
+    it('a FRACTIONAL `timeoutMs` is refused — every knob is an integer, and the canonicalizer is why', () => {
+      // teeth (breaks-on "the Number.isInteger test is relaxed back to Number.isFinite"): `1500.5` would be
+      // admitted into the resolved config, and the config could then never be canonicalized at all.
+      const err = refusalOf(badConfig({ roles: { propose: { cmd: 'x', args: [] } }, timeoutMs: 1500.5 }));
+      expect(err.refusal).toBe('malformed');
+      expect(err.message).toContain('INTEGER');
+    });
+
+    it('a FRACTIONAL `costCapNum` is refused — the ceiling is an exact ratio, never a decimal', () => {
+      // teeth (breaks-on "the Number.isInteger test is relaxed back to Number.isFinite"): the pair would
+      // carry a float, `id(cfg)` would throw `floats forbidden`, and the resolved configuration could not
+      // be hashed into the run's provenance — the exact defect the pair exists to close.
+      const err = refusalOf(badConfig({ roles: { propose: { cmd: 'x', args: [] } }, costCapNum: 0.5, costCapDen: 10 }));
+      expect(err.refusal).toBe('malformed');
+      expect(err.message).toContain('costCapNum');
+    });
+
+    it('a DECIMAL `costCap` is refused and the refusal names its replacement — never ignored, never rounded', () => {
+      // `{"costCap": 0.05}` is the spelling ADR-0011's own example JSON showed, so operators will have
+      // written it. teeth (breaks-on "the unknown key is simply ignored"): the operator would keep a config
+      // that reads as if a ceiling were set while the default silently applied.
+      const err = refusalOf(badConfig({ roles: { propose: { cmd: 'x', args: [] } }, costCap: 0.05 }));
+      expect(err.refusal).toBe('malformed');
+      expect(err.message).toContain('costCapNum');
+      expect(err.message).toContain('costCapDen');
+    });
+
+    it('HALF a ratio is refused — a numerator without a denominator is not a ceiling', () => {
+      expect(refusalOf(badConfig({ roles: { propose: { cmd: 'x', args: [] } }, costCapNum: 5 })).refusal).toBe('malformed');
+      expect(refusalOf(badConfig({ roles: { propose: { cmd: 'x', args: [] } }, costCapDen: 100 })).refusal).toBe('malformed');
     });
   });
 
@@ -202,7 +275,45 @@ describe('loadModelConfig — absent is a state, malformed is an error', () => {
     writeFileSync(path, VALID);
     const cfg = loadModelConfig(repo, envAt(path));
     expect(cfg?.timeoutMs).toBe(PROVISIONAL_TIMEOUT_MS);
+    expect(cfg?.costCapNum).toBe(PROVISIONAL_COST_CAP_NUM);
+    expect(cfg?.costCapDen).toBe(PROVISIONAL_COST_CAP_DEN);
+    // The decimal is DERIVED from the pair and is exactly the value that used to be the literal `0.05`.
     expect(cfg?.costCap).toBe(PROVISIONAL_COST_CAP);
+    expect(cfg?.costCap).toBe(0.05);
+  });
+});
+
+describe('loadModelConfig — the resolved config reaches the sealed `id` seam', () => {
+  // ADR-0011 Decision 2 promises the resolved configuration is HASHED INTO THE RUN'S PROVENANCE. That was
+  // not merely unimplemented before this suite: it was UNIMPLEMENTABLE for the value Atlas shipped, because
+  // `canonical.ts` forbids a non-integer number and the default cost cap WAS `0.05`. Measured on the base
+  // commit: `id({ roles, timeoutMs: 60000, costCap: 0.05 })` threw "canonical-form violation: floats
+  // forbidden". These cases are what stop that from coming back.
+  function loadValid(): NonNullable<ReturnType<typeof loadModelConfig>> {
+    const repo = tempDir('repo');
+    const elsewhere = tempDir('operator');
+    const path = join(elsewhere, 'model.json');
+    writeFileSync(path, VALID);
+    const cfg = loadModelConfig(repo, envAt(path));
+    if (cfg === null) throw new Error('expected a config');
+    return cfg;
+  }
+
+  it('the DEFAULT resolved config canonicalizes — no float survives into it', () => {
+    // teeth (breaks-on "a decimal cost cap is admitted into the resolved config again", by any route —
+    // a float default, a relaxed validator, or the derived decimal becoming an enumerable own key): `id`
+    // throws `floats forbidden` and this case goes red.
+    const cfg = loadValid();
+    expect(() => id(cfg as never)).not.toThrow();
+    expect(typeof id(cfg as never)).toBe('string');
+  });
+
+  it('the PAIR is what the preimage carries — the derived decimal is excluded, and identically so', () => {
+    // The exclusion is stated in source, so it is asserted here rather than left as a comment: two configs
+    // whose pairs are equal have one id, and the derived decimal is not an own enumerable key at all.
+    const cfg = loadValid();
+    expect(Object.keys(cfg).sort()).toStrictEqual(['costCapDen', 'costCapNum', 'roles', 'timeoutMs']);
+    expect(id(cfg as never)).toBe(id({ ...cfg } as never)); // a spread copy drops nothing that is hashed
   });
 });
 

@@ -5,13 +5,17 @@
 // filesystem that folds it; the predicate must answer the same way the kernel would, and a string comparison
 // cannot.
 //
-// TWO CASES ARE FILESYSTEM-CONDITIONAL, and deliberately so. APFS (macOS, default) folds case and Unicode
-// normalization; ext4 (Linux CI) folds neither. On a folding volume `…/repo` and `…/REPO` are ONE directory
-// and containment must say so; on a non-folding one they are two, and containment must say THAT. The
-// expectation is therefore taken from the kernel itself, and the folding branch carries an anti-vacuity
-// assertion proving the two spellings really do diverge as text — otherwise the case would pass merely
-// because both sides were spelled identically, which is exactly how the unit suite missed this defect the
-// first time.
+// TWO CASES ARE FILESYSTEM-CONDITIONAL, and they SKIP rather than assert something weaker. APFS (macOS,
+// default) folds case and Unicode normalization; ext4 (Linux CI) folds neither. On a folding volume
+// `…/repo` and `…/REPO` are ONE directory and containment must say so — that is the property under test. On
+// a non-folding volume there is no second spelling at all, so the case cannot reproduce its condition and
+// cannot fail: it would then be asserting "a different, non-existent directory is not contained", which the
+// `genuinely outside` case above already covers, dressed up as coverage of the bypass. A test that cannot
+// fail must SAY so, so the folding is PROBED against the real filesystem and the case is skipped with a
+// loud, specific reason naming what went uncovered. Where it does run, the folding branch carries an
+// anti-vacuity assertion proving the two spellings really do diverge as text — otherwise the case would
+// pass merely because both sides were spelled identically, which is exactly how the unit suite missed this
+// defect the first time.
 
 import { mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -41,6 +45,40 @@ function sameFile(a: string, b: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** Ask that oracle, ON THE VOLUME THE FIXTURES ACTUALLY USE, whether `variant` denotes the directory created
+ *  as `name`. PROBED, never inferred from `process.platform`: a case-sensitive volume mounted on macOS folds
+ *  nothing, and only the filesystem knows its own table. */
+function probeFolds(name: string, variant: string): boolean {
+  const probe = mkdtempSync(join(tmpdir(), 'atlas-fold-probe-'));
+  try {
+    mkdirSync(join(probe, name));
+    return sameFile(join(probe, name), join(probe, variant));
+  } catch {
+    return false;
+  } finally {
+    rmSync(probe, { recursive: true, force: true });
+  }
+}
+
+// The two probes, run once at load. Written as ESCAPES for the normalization probe, never as literal bytes:
+// an editor that normalized this file would make both spellings one string and the probe would answer about
+// nothing.
+const FOLDS_CASE = probeFolds('probe', 'PROBE');
+const FOLDS_NORMALIZATION = probeFolds('caf\u00e9', 'cafe\u0301');
+const SKIP_CASE = ' — SKIPPED: this filesystem does not fold case, so there is no second spelling';
+const SKIP_NFC = ' — SKIPPED: this filesystem does not fold Unicode normalization';
+
+if (!FOLDS_CASE || !FOLDS_NORMALIZATION) {
+  console.warn(
+    `[containment.test] NOT COVERED on this filesystem (${tmpdir()}): it folds ` +
+      `${FOLDS_CASE ? '' : 'no ASCII case'}${!FOLDS_CASE && !FOLDS_NORMALIZATION ? ' and ' : ''}` +
+      `${FOLDS_NORMALIZATION ? '' : 'no Unicode normalization'}. The skipped case(s) below are the ONLY ` +
+      'ones that exercise the F1 bypass — two spellings of one inode — and on this volume that bypass has ' +
+      'no second spelling to attack through. Those legs are UNTESTED on this run, not passing; they are ' +
+      'exercised on a folding volume (APFS).',
+  );
 }
 
 describe('isContainedIn — containment is decided by (dev, ino), not by text', () => {
@@ -82,7 +120,7 @@ describe('isContainedIn — containment is decided by (dev, ino), not by text', 
     expect(isContainedIn(root, join(sibling, 'model.json'))).toBe(false);
   });
 
-  it('a CASE VARIANT of the root resolves the way the KERNEL resolves it', () => {
+  it.skipIf(!FOLDS_CASE)(`a CASE VARIANT of the root IS contained — one inode, two spellings${FOLDS_CASE ? '' : SKIP_CASE}`, () => {
     // teeth (breaks-on "containment is decided by string relative() again", the F1 bypass): `realpathSync`
     // is case-PRESERVING on APFS — it returns the path as requested — so `…/REPO/x` and `…/repo` compare as
     // different strings while being one directory, `relative()` yields `..`, and the guard reads "outside".
@@ -90,17 +128,16 @@ describe('isContainedIn — containment is decided by (dev, ino), not by text', 
     const root = join(parent, 'repo');
     mkdirSync(root);
     const variant = join(parent, 'REPO');
-    const folds = sameFile(root, variant);
 
-    if (folds) {
-      // ANTI-VACUITY: the two spellings must really diverge as text, or this case proves nothing.
-      const rel = relative(resolve(root), resolve(variant));
-      expect(rel.startsWith('..')).toBe(true);
-    }
-    expect(isContainedIn(root, join(variant, '.atlas', 'model.json'))).toBe(folds);
+    // ANTI-VACUITY, twice: the volume must really fold these two spellings onto one directory (the probe
+    // said so; this asserts it for THIS directory), and they must really diverge as text.
+    expect(sameFile(root, variant)).toBe(true);
+    expect(relative(resolve(root), resolve(variant)).startsWith('..')).toBe(true);
+
+    expect(isContainedIn(root, join(variant, '.atlas', 'model.json'))).toBe(true);
   });
 
-  it('an NFD/NFC VARIANT of the root resolves the way the KERNEL resolves it', () => {
+  it.skipIf(!FOLDS_NORMALIZATION)(`an NFD/NFC VARIANT of the root IS contained — one inode, two spellings${FOLDS_NORMALIZATION ? '' : SKIP_NFC}`, () => {
     // The same bypass in a different alphabet: the directory is created NFC-composed and named NFD-decomposed.
     // teeth (breaks-on "spellings are compared after normalize()/toLowerCase()"): a volume's folding table is
     // the volume's, not JavaScript's — guessing it is how a guard ends up disagreeing with the filesystem.
@@ -112,12 +149,10 @@ describe('isContainedIn — containment is decided by (dev, ino), not by text', 
     const root = join(parent, nfc);
     mkdirSync(root);
     const variant = join(parent, nfd);
-    const folds = sameFile(root, variant);
 
-    if (folds) {
-      expect(resolve(root)).not.toBe(resolve(variant)); // anti-vacuity: two distinct strings, one directory
-    }
-    expect(isContainedIn(root, join(variant, 'model.json'))).toBe(folds);
+    expect(sameFile(root, variant)).toBe(true); // anti-vacuity: the volume really folds THESE two
+    expect(resolve(root)).not.toBe(resolve(variant)); // anti-vacuity: two distinct strings, one directory
+    expect(isContainedIn(root, join(variant, 'model.json'))).toBe(true);
   });
 
   it('a ~8000-segment path returns a VERDICT instead of throwing RangeError', () => {
