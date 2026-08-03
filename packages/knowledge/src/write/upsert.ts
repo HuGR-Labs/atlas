@@ -97,6 +97,30 @@ export interface CurrentNode {
   //    history the first time its class was raised.
   readonly scope?: string;
   readonly tier?: Tier;
+  // ── FRESHNESS WATERMARK carrier (ADDITIVE, OPTIONAL — N11, per-ROW) — the git HEAD sha at which THIS row's
+  //    stored per-fact freshness was last produced.
+  //
+  //    IT IS THE HALF N11 SHIPPED WITHOUT, and the failure is the same shape ADR-0007's was: the property is
+  //    per-ROW and it was recorded per-PROJECTION. `StoreProjection.builtAt` is stamped with live HEAD by
+  //    every publication, but a publication rewrites the WHOLE projection and carries almost every row
+  //    forward untouched — so one unrelated `atlas emit` re-dated every other fact in the store and a read
+  //    that had honestly said `stale: true` went back to `stale: false` while `atlas doctor why` still
+  //    printed the drift. Measured end to end through the built CLI (e2e story S26).
+  //
+  //    WHO SETS IT: nobody in this package. It is stamped at PUBLICATION, by the one place a sidecar's bytes
+  //    are ever produced (`adapter-io/src/freshness-watermark.ts`, called from `sidecar-commit.ts`), keyed on
+  //    whether the row's `contentHash` changed in that generation — because a row's stored freshness lives in
+  //    its CAS bytes, so unchanged bytes carry an unchanged, older verification date. `upsert` neither reads
+  //    nor writes it, and carries it forward with the rest of the row.
+  //
+  //    ADDITIVE/OPTIONAL, back-compat, exactly the `builtAt`/`sameAs`/`scope` discipline: a row minted before
+  //    this WP simply has none, old sidecars round-trip UNREWRITTEN (the wire serializes the whole
+  //    `CurrentNode`, so no format edit), and ABSENT falls back to the projection-level `builtAt` — absent
+  //    BOTH means the watermark is UNKNOWN, which the reader treats conservatively and never as a flag.
+  //
+  //    IT DOES NOT ENTER `nodeKey`, for the same reason `scope`/`tier` do not: a date is not an identity, and
+  //    folding one in would re-address a fact every time it was re-verified.
+  readonly derivedAt?: string;
 }
 
 /** The territory store projection: the one-current-node map + the append-only CAS retention set. */
