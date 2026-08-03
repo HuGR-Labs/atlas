@@ -29,23 +29,23 @@ atlas promote
 Every block on this page is verbatim stdout from the built binary. Two disclosures about the fixture, both
 load-bearing:
 
-1. **`atlas mine` stages nothing today**, so a run of it does not set this example up. `mine` falls back to
-   an admission gate that abstains at every site, and the gate that would admit (`makeAdmitGate`,
-   `packages/cli/src/mine.ts`) has **no production caller**. Measured on a repository with a real SCIP index
-   and a real ranked frontier:
+1. **`atlas mine` NOW stages candidates** — REQ-CLI-4d wired the admission gate at the composition root, and
+   `makeAdmitGate` has a production caller. This paragraph used to read "`atlas mine` stages nothing today";
+   it was true, and it is the defect that requirement closed. Measured on Atlas itself with a real SCIP
+   index and an operator-configured proposer:
 
    ```
    $ atlas mine .
-   genesis: seeded 0 candidate fact(s); ratified 0
-   cost: llmCalls 2 · budgetSpent 2
-   mine: 0 candidate facts — 2 site(s) visited and every one abstained: no proposer model is wired, so nothing could be proposed (facts are never fabricated)
+   genesis: seeded 200 candidate fact(s); ratified 0
+   cost: llmCalls 200 · budgetSpent 200
    # exit 0
    ```
 
-   So the candidate below was staged through the product's own staging door directly
+   The candidate below was nevertheless staged through the product's own staging door directly
    (`packages/e2e-blackbox/test/stage.ts` — the same `commitStaging` + `upsert` + `nodeKey` path `mine`
-   takes, with the same `atlas:mined` scope and `T2` class). Nothing about the promotion is faked; the
-   *proposal* is, because no shipped command can currently produce one.
+   takes, with the same `atlas:mined` scope and `T2` class), because this page's example needs ONE known
+   candidate with known bytes rather than whatever a proposer answered. Nothing about the promotion is
+   faked, and a mined candidate now reaches this door for real.
 2. `.atlas/policy.json` grants `atlas:mined` to `seat:orchestrator`. Without that grant every promotion is
    correctly refused — the last refusal block below is that state.
 
@@ -249,8 +249,10 @@ found, so a partial pass is legible as one instead of rounding to a success.
 
 ## Things worth knowing before you rely on it
 
-- **Nothing shipped produces a candidate yet.** Until the mine admission gate is wired, `atlas promote` on a
-  real repository will report `0 of 0`. That is the honest state, not a defect in this command.
+- **A candidate has to be MINED first.** This line used to read "nothing shipped produces a candidate yet";
+  the mine admission gate is wired now, so `atlas mine` on an indexed repository with a configured proposer
+  stages rows this command can promote. On a repository nobody has mined, `atlas promote` still reports
+  `0 of 0` — that is the honest state, not a defect in this command.
 - **A promoted row stays staged.** There is no delete and no marker; see the idempotence section. The
   projection is the only record of what was promoted.
 - **`ATLAS_RATIFY_TOKEN` is a name, not a credential.** It is compared as a string, with no verification of

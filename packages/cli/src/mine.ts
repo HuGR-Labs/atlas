@@ -27,7 +27,7 @@
 // It is also the ONLY staging door there is — the unconditional `persistStaging` this file used to call was
 // last-writer-wins by definition, and was deleted in task #83 once a probe showed nothing called it.
 
-import { makeRunController, createScan, createMine, runExtract, admit } from '@atlas/genesis';
+import { makeRunController, createScan, createMine, runExtract } from '@atlas/genesis';
 import type {
   ControllerDeps,
   Plan,
@@ -37,19 +37,16 @@ import type {
   Fact,
   SiteProposer,
   EmitGate,
-  EmitVerdict,
-  SeedProposal,
   HistorySource,
   SkeletonSource,
-  AdmitDeps,
-  AdvisoryProposal,
 } from '@atlas/genesis';
 import { createDiskStore, headSha, createSkeletonSource, gitSidecarTrust } from '@atlas/adapter-io';
 import { resolveProposer } from './mine-proposer.js';
+import { composedGate } from './mine-gate.js';
 import type { CommitDecision, CommitRefusal, DiskStore } from '@atlas/adapter-io';
 import { upsert as knowledgeUpsert, normalizeCheck, primaryAnchorId, nodeKey } from '@atlas/knowledge';
 import type { WriteRequest, StoreProjection, Candidate as KnowledgeCandidate } from '@atlas/knowledge';
-import { id, asNodeKey } from '@atlas/kernel';
+import { id } from '@atlas/kernel';
 import { join } from 'node:path';
 import { StagingCommitError as StagingRefusalError } from './mine-staging.js';
 import { foldVerdict } from './mine-render.js';
@@ -64,8 +61,13 @@ export type { MineOutcome, MinePass } from './mine-render.js';
 /**
  * The injected seams the `mine` driver assembles into `ControllerDeps`. Every member is INJECTABLE
  * (`runMine(repo, deps?)` takes a `Partial`); an omitted member falls back to a real adapter (proposer /
- * history / store) or an honest fail-closed default (skeleton / gate / handoff) so `runMine(repo)` alone is
+ * history / store / skeleton / GATE) or an honest fail-closed default (handoff) so `runMine(repo)` alone is
  * a valid, total call — never a live model, never a fabricated fact.
+ *
+ * `gate` MOVED SIDES in that sentence (REQ-CLI-4d). It used to fall back to an abstaining stub, and because
+ * nothing in production injected one, `atlas mine` staged ZERO candidates on every repository it was ever
+ * run against. The fallback is now the composition root's real gate over the frozen `admit` seams — see
+ * `mine-gate.ts` for the measurement and for why the driver still invents no admission.
  */
 export interface MineDeps {
   readonly rev: string; //                the git rev the pass runs at
@@ -116,35 +118,10 @@ function defaultSkeleton(repoPath: string): SkeletonSource {
 /** The advisory claim body a write carries (the KNOW-4c set-union element); a predicate carries its check. */
 const claimNormOf = (f: Fact): string => (f.kind === 'advisory' ? f.claimNorm : normalizeCheck(f.check));
 
-/**
- * Build an `EmitGate` that forwards the FROZEN `admit` verdict VERBATIM (GEN-4/12): the seed becomes an
- * advisory candidate (the driver adds NO predicate), `admit` casts the mechanical decision, and its outcome
- * maps 1:1 to the emit verdict. The driver injects NO admission of its own — admission is `admit`'s alone.
- */
-export function makeAdmitGate(deps: AdmitDeps): EmitGate {
-  return {
-    emit(seed: SeedProposal, cand: Candidate): EmitVerdict {
-      const proposal: AdvisoryProposal = {
-        kind: 'advisory',
-        site: cand,
-        nodeKey: asNodeKey(cand.site.qualifiedPath),
-        claimNorm: seed.claim,
-        grounding: { entries: [{ anchor: cand.site, path: cand.site.qualifiedPath }] } as AdvisoryProposal['grounding'],
-        tier: 'T2',
-      };
-      const verdict = admit(proposal, deps);
-      if (verdict.outcome === 'admitted') return { emitted: true, fact: verdict.fact };
-      const reason = verdict.outcome === 'dropped' ? verdict.reason : verdict.whyNot.reason;
-      return { emitted: false, whyNot: { site: cand.site, reason } };
-    },
-  };
-}
-
-/** The honest fail-closed default gate: no admission machinery is wired, so every site abstains (never a
- *  fabricated fact). A real pass injects a gate (or `makeAdmitGate` over real `admit` seams). */
-function defaultGate(): EmitGate {
-  return { emit: (_seed, cand) => ({ emitted: false, whyNot: { site: cand.site, reason: 'no admission seam wired (mine default)' } }) };
-}
+/** The admission seam resolution (mine-gate.ts) — RE-EXPORTED so the module surface is unchanged by the
+ *  file split. `makeAdmitGate` now HAS a production caller: `composedGate`, the REQ-CLI-4d supply this
+ *  driver falls back to below. */
+export { makeAdmitGate, unwiredGate, UNWIRED_GATE_REASON } from './mine-gate.js';
 
 /**
  * The reserved scope every MINED node carries — PROVENANCE plus a fail-closed default, not the boundary itself
@@ -191,11 +168,14 @@ function withDefaults(repoPath: string, deps?: Partial<MineDeps>): ResolvedDeps 
   // Resolved ONCE, and only when the caller injected no proposer — resolution reads the operator's config
   // off disk, and an injected proposer means that file is none of this pass's business.
   const resolved = deps?.proposer === undefined ? resolveProposer(repoPath, deps?.env ?? process.env) : undefined;
+  // HOISTED out of the literal below: the REQ-CLI-4d gate is built over THE SAME `SkeletonSource` this pass
+  // ranks its sites from, so the gate and the frontier can never resolve two different indexes.
+  const skeleton = deps?.skeleton ?? defaultSkeleton(repoPath);
   const d: MineDeps = {
     rev,
     proposer: deps?.proposer ?? resolved!.proposer,
     history: deps?.history ?? defaultHistory(),
-    skeleton: deps?.skeleton ?? defaultSkeleton(repoPath),
+    skeleton,
     // PROVENANCE (the third seam this store takes, alongside the N11 watermark). `mine` built its store
     // WITHOUT it, so a repo whose `.atlas/` arrived by COMMIT was staged into as though a door had produced
     // it — and `STAGING_REFUSAL_TEXT.untrusted`, which was already written, could never fire. Staging is not
@@ -203,7 +183,11 @@ function withDefaults(repoPath: string, deps?: Partial<MineDeps>): ResolvedDeps 
     // wires staging into a door would have inherited the hole rather than found it. `gitSidecarTrust` is the
     // same memoized `git ls-files` the composition root injects — one question per pass, not per write.
     store: deps?.store ?? createDiskStore(join(repoPath, '.atlas', 'cas'), () => headSha(repoPath), gitSidecarTrust(repoPath)),
-    gate: deps?.gate ?? defaultGate(),
+    // REQ-CLI-4d — THE ADMISSION SUPPLY. The fallback is no longer an abstaining stub: it is the
+    // composition root's gate over the frozen `admit` seams (`composedGate` → `buildMineAdmission`,
+    // adapter-io/src/compose.ts), built LAZILY over this pass's own skeleton axes. The driver still invents
+    // no admission (REQ-CLI-4c) — it wires a gate it does not author, exactly as it wires the store above.
+    gate: deps?.gate ?? composedGate(skeleton, repoPath, rev),
     handoffTo: deps?.handoffTo ?? ((): void => {}),
     ...(deps?.budget !== undefined ? { budget: deps.budget } : {}),
     ...(deps?.scope !== undefined ? { scope: deps.scope } : {}),

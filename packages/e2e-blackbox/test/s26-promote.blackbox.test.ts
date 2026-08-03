@@ -8,13 +8,18 @@
 //
 // TWO THINGS THIS STORY MEASURES AND REPORTS RATHER THAN HIDES:
 //
-//  (1) `atlas mine` THROUGH THE BINARY STAGES ZERO CANDIDATES, ALWAYS. `mine.ts` falls back to
-//      `defaultGate()` ("no admission seam wired"), which abstains at every site, and `makeAdmitGate` — the
-//      gate that forwards the frozen `admit` verdict — has NO production caller. So the mine→promote leg is
-//      honestly empty today and case 1 pins exactly that, with the reason. The staged candidate the rest of
-//      the story needs is placed through the product's own staging door (`test/stage.ts`), the same
-//      concession `test/author.ts` already makes one door over for the same reason. Wiring that gate is a
-//      separate WP; this story is written so it needs no edit when it lands.
+//  (1) `atlas mine` UNDER THIS FIXTURE STAGES ZERO CANDIDATES — and the reason CHANGED, which is worth more
+//      than the assertion. It used to be structural: `mine.ts` fell back to `defaultGate()` ("no admission
+//      seam wired"), so `atlas mine` staged nothing on ANY repository and `makeAdmitGate` had no production
+//      caller. REQ-CLI-4d supplies the gate at the composition root and that is no longer true — measured on
+//      Atlas itself, `atlas mine .` now stages 200 candidates. What keeps case 1 at zero is the OTHER seam:
+//      no operator model is configured for this fixture, so the proposer abstains at every site and there is
+//      nothing for the gate to judge. The prediction in the previous revision of this note held exactly —
+//      the story needed no edit when the gate landed — but the note itself would have become a lie, and a
+//      test that pins the right number for a retired reason is how a suite stops describing its product.
+//      The staged candidate the rest of the story needs is still placed through the product's own staging
+//      door (`test/stage.ts`), the same concession `test/author.ts` makes one door over: this story needs
+//      ONE candidate with known bytes, not whatever a proposer answered.
 //
 //  (2) A PROMOTED MINED FACT IS `T2`, AND `atlas query` BOUNDS `T2` OUT (TOOLS-6). So the read-back that
 //      proves durability is `atlas node <addr>`, not `atlas query`. Both are driven below and both are
@@ -83,9 +88,11 @@ afterAll(() => {
 });
 
 describe('S26 — atlas promote: the governed route out of staging', () => {
-  it('1. MEASURED TODAY — `atlas mine` visits its sites and stages NOTHING, so promote is honestly empty', () => {
+  it('1. MEASURED TODAY — with no model configured `atlas mine` visits its sites and stages NOTHING, so promote is honestly empty', () => {
     // Both halves through the real binary, in order, on one repo. teeth: breaks-on "promote fabricates a
     // count over an empty staging" and on "promote renders an empty staging as a refusal".
+    // NO `ATLAS_MODEL_CONFIG` is passed, and that is now the operative cause of the 0 — the admission gate
+    // is wired (REQ-CLI-4d), the proposer is not, so every site abstains before the gate is ever asked.
     const repo = repoWith(CURATOR_POLICY);
     const mine = runAtlas(repo.repoPath, ['mine', '.']);
     expect(mine.exitCode).toBe(0);

@@ -298,6 +298,14 @@ source: INV-CLI-4 @ reference/atlas-adapters.md#cli-4
 If admission is required, then the `mine` driver shall rely on the frozen run-controller and add none of its own.
 normative-clause: "the `mine` driver wires the parts and **invents no admission of its own**."
 
+### REQ-CLI-4d — the composition root supplies the admission gate
+source: INV-CLI-4 @ reference/atlas-adapters.md#cli-4
+The runtime composition shall supply `atlas mine` with an admission gate built from the frozen
+`admit` seams, so that a repository with a non-empty frontier can admit.
+normative-clause: "The composition root MUST supply the `mine` driver with an admission gate
+derived from the frozen `admit` seams; a run whose frontier is non-empty and whose proposer
+returns a candidate MUST reach the gate's verdict rather than an unwired-default abstention."
+
 ### REQ-CLI-7a — promote publishes only through the existing emit door
 source: INV-CLI-7 @ reference/atlas-adapters.md#cli-7
 `atlas promote` shall carry the explorer's staged candidates into governed knowledge by presenting each one to the existing `atlas-emit` governed write door, minting no new governed tool and opening no second write medium.

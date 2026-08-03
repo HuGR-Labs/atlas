@@ -816,8 +816,10 @@ exclusions: >
   `{atlas-emit, atlas-link}`, and INV-TOOLS-1 / ADR-0003 / the spec-conformance CODE-SURFACE pin are
   untouched. No new `DiskStore` member (staging is read through the store's documented read-only decision).
   No staging-side "promoted" marker and no second mutable state machine — staging has no delete and the two
-  sidecars have no shared commit. NOT this WP: wiring the mine admission gate (`makeAdmitGate` has no
-  production caller, so `atlas mine` stages nothing today), and wiring `genesis/src/align.ts` (a DECLARED
+  sidecars have no shared commit. NOT this WP: wiring the mine admission gate (that is WP-SEEDGATE.COMPOSE,
+  which closed the missing supply obligation after this card shipped; at the time this card was written
+  `makeAdmitGate` had no
+  production caller and `atlas mine` staged nothing), and wiring `genesis/src/align.ts` (a DECLARED
   reference model — that is a ledger + gate change).
 inputs:                                        # ptr+digest
   - source: ../../reference/atlas-adapters.md#cli-7    # ptr+digest
@@ -848,6 +850,69 @@ provenance:                                                 # exec — empty at 
 trace_ref:                                                  # exec — empty at S4-freeze
 rationale:                                     # ptr
   - source: ../invariant-register-adapters.md#INV-CLI-7
+
+---
+
+### WP-SEEDGATE.COMPOSE — the admission supply for `atlas mine`   (amendment card, 2026-08-03)
+epic: EPIC-6-b
+id: WP-SEEDGATE.COMPOSE
+content_hash: <filled-at-freeze>
+title: The composition root supplies the `mine` admission gate — the last blocker before a real genesis run
+intent: >
+  `atlas mine` on a real repository staged ZERO candidates, always: `withDefaults` fell back to an abstaining
+  stub (`no admission seam wired (mine default)`) and nothing in production ever injected a gate, so
+  `makeAdmitGate` — the gate that forwards the frozen `admit` — had zero production callers. THE DRIVER WAS
+  NOT THE DEFECT: REQ-CLI-4c is normative that "the `mine` driver wires the parts and invents no admission of
+  its own", so injecting nothing obeys it literally. The defect is that NO requirement obliged anyone to
+  SUPPLY the admission, so every run that admitted zero satisfied REQ-CLI-4a/4b/4c and a green suite, a
+  closed work package and a shipped binary all agreed while the product mined nothing. This card adds the
+  missing obligation (the one requirement cited below) and discharges it at the composition root, where the
+  store, drift source
+  and history source are already built. MEASURED on Atlas itself at master `1f8c117` with a real
+  489-document SCIP index: 200 sites visited, 200 model calls, 0 staged before; 200 staged after.
+source_reqs:                                  # ptr+digest
+  - source: ../requirements-adapters.md#REQ-CLI-4d  # ptr+digest
+seam-freezes: [ "the genesis `admit` harness + `TwoDoorBar`/`AdmitDeps` and the GROUND-3 `ground` anchor builder, both consumed as frozen" ]
+anchor: packages/adapter-io/src/compose.ts — `buildMineAdmission`, the supply; packages/cli/src/mine-gate.ts — the wiring
+interface_contract:                           # ptr+digest
+  - source: ../../reference/atlas-adapters.md#cli-4    # ptr+digest
+  - source: ../method-tags-adapters.md#INV-CLI-4       # ptr+digest
+exclusions: >
+  No change to the genesis run-controller's stages — `scan→rank→extract→admit→align→seed` is frozen and
+  correct, and nothing under `packages/genesis/**` is touched. No admission logic in `packages/cli/src/mine.ts`:
+  REQ-CLI-4c stands, the driver still authors no verdict and only WIRES a gate the composition root built. No
+  new governance surface — `GOVERNANCE_SURFACE` stays 5 and `WRITE_PATHS` is unchanged, because mining writes
+  to STAGING (ADR-0008) and promotion is a separate door (WP-PROMOTE.CLI). NOT this WP: the `nonObvious`
+  oracle (ADR-0012 §"What this ADR does NOT close" refuses to model it; the supply pins the score to `obvious`
+  and rejects nothing), the predicate/check-synthesis admission path (this gate proposes advisories only), and
+  the `structuralFrontier` anchor leg (see the finding recorded on this card's outputs).
+inputs:                                        # ptr+digest
+  - source: ../../reference/atlas-adapters.md#cli-4    # ptr+digest
+action: Build the `mine` admission supply at the composition root over the frozen `admit` seams and the GROUND-3 anchor builder; wire it as the `mine` driver's gate fallback over the pass's own skeleton axes; verify a repository with a NON-EMPTY frontier reaches the gate's verdict and stages the admitted set, and that the same run with the supply removed still abstains and names the wiring.
+action_surface: [ read-repo, edit(packages/adapter-io/src/compose.ts), edit(packages/cli/src/mine.ts), edit(packages/cli/src/mine-gate.ts), run(test:cli), run(test:adapter-io), typecheck ]
+guardrails: >
+  Build the gate at the composition root; the driver may only wire it. Forward the frozen `admit` verdict
+  VERBATIM — synthesize no second bar, and do not admit on a door weaker than the promotion door's truth
+  door. Do not edit `packages/genesis/**`. Do not add a governed tool or a write path. Assert the frontier is
+  non-zero BEFORE concluding anything from a run (the D5 lesson: a reachability story on a zero-site fixture
+  proves nothing). Keep every file at or under the 400-LOC ceiling.
+repair_budget: N=3 · early-stop: { repeated-identical-failure, no-change-diff, semantic-dup-edit }
+acceptance:                                    # ptr+digest = frozen goldens
+  - source: ../goldens-adapters.md#SCN-CLI-4d-1  # ptr+digest
+  - source: ../goldens-adapters.md#SCN-CLI-4d-2  # ptr+digest
+deps: [ WP-9.3.6-b.CLI, WP-9.1.1-b.SCIP ]
+exit_predicate: all acceptance SCNs green ∧ the frontier under the happy-path golden is non-zero ∧ `makeAdmitGate` has ≥1 production caller ∧ 0 admission authored in mine.ts ∧ GOVERNANCE_SURFACE == 5 ∧ WRITE_PATHS unchanged ∧ 0 files under packages/genesis/** changed ∧ module gates pass ∧ all pointer digests resolve (no STALE)
+context_refs:                                  # closed list
+  - source: ../../reference/atlas-adapters.md
+  - source: ../requirements-adapters.md
+  - source: ../goldens-adapters.md
+  - source: ../method-tags-adapters.md
+owner: charlie · builder_id: <assigned-at-dispatch>
+outputs:                                                    # exec — empty at S4-freeze
+provenance:                                                 # exec — empty at S4-freeze
+trace_ref:                                                  # exec — empty at S4-freeze
+rationale:                                     # ptr
+  - source: ../invariant-register-adapters.md#INV-CLI-4
 
 ---
 

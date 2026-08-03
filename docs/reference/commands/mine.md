@@ -139,9 +139,9 @@ repository visits one (see below).
   `unauthorized`.
 - **[`promote`](./promote.md) is the command that carries a candidate into knowledge**, through the same
   governed emit door everything else writes through, and only with a ratifier named. What you still cannot
-  plan around this page is a mine-to-**query** loop, for two separate reasons: `mine` stages nothing until
-  its admission gate is wired, and a mined candidate is `T2`, which `atlas query` bounds OUT of the pack —
-  a promoted mined fact is read back with [`node`](./node.md).
+  plan around this page is a mine-to-**query** loop, and the reason is no longer that `mine` stages nothing
+  (its admission gate is wired — REQ-CLI-4d): a mined candidate is `T2`, which `atlas query` bounds OUT of
+  the pack, so a promoted mined fact is read back with [`node`](./node.md).
 
 ## Related
 

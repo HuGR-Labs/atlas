@@ -1,15 +1,19 @@
 // @atlas/e2e-blackbox — test/stage.ts  (the candidate-STAGING helper — NOT the black-box execution harness)
 //
 // THE CRUX, and it is the same one `author.ts` records one door over. `atlas promote` reads the explorer's
-// STAGING sidecar. The only thing that writes that sidecar is `atlas mine` — and `atlas mine` through the
-// real binary stages ZERO candidates, always, for a reason that is structural rather than incidental:
-// `mine.ts` `withDefaults` falls back to `defaultGate()`, which abstains at every site ("no admission seam
-// wired"), and the CLI passes no deps, so `makeAdmitGate` — the gate that forwards the frozen `admit`
-// verdict — has NO production caller at all. MEASURED on the built binary while writing this file: a repo
-// with a real SCIP index visits its sites, spends its budget, and still stages nothing.
+// STAGING sidecar, and the only thing that writes that sidecar is `atlas mine`.
 //
-// So a story that needs a STAGED candidate must construct one, exactly as `author.ts` must construct a
-// grounded fact. This helper does it the sanctioned way — through the PRODUCT'S OWN staging door
+// [AMENDED — REQ-CLI-4d] This note used to say `atlas mine` stages ZERO candidates ALWAYS, structurally:
+// `withDefaults` fell back to `defaultGate()` ("no admission seam wired"), the CLI passed no deps, and
+// `makeAdmitGate` had NO production caller at all. That was measured and it was true. It no longer is —
+// the composition root supplies the gate, and `atlas mine .` on Atlas itself stages 200 candidates.
+//
+// The helper stays, for the reason `author.ts` gives rather than the one this file used to give: a black-box
+// story needs ONE candidate with KNOWN bytes, a known claim and a known nodeKey to assert against, and what
+// a real pass stages is whatever the operator's proposer answered at whatever the frontier ranked. Driving
+// `mine` to produce the fixture would make every promotion assertion depend on a model's output.
+//
+// It does it the sanctioned way — through the PRODUCT'S OWN staging door
 // (`DiskStore.commitStaging`) with the PRODUCT'S OWN write decision (`upsert`), the PRODUCT'S OWN identity
 // formula (`nodeKey`, with the `predicateSlot → .slot` map applied), and the PRODUCT'S OWN `MINED_SCOPE`
 // constant imported rather than retyped. Nothing about the sidecar FORMAT is written by hand here; if the

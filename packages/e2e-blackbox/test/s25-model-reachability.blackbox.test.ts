@@ -97,12 +97,13 @@ describe('S25 — a configured model is REACHED at every ranked site, and the ru
     expect(run.stdout).toContain('cost: llmCalls 2 · budgetSpent 2'); // llmCalls > 0: the model WAS called
     expect(run.stdout).not.toContain('partial: resume at rank'); //       a completed pass, not an interruption
     expect(run.exitCode).toBe(0);
-    // SEEDED-OR-ABSTAINED, and it says WHICH. Nothing is admitted here — `mine`'s default gate wires no
-    // admission machinery — so the honest outcome is "visited and abstained", with the model NOT blamed for
-    // an absence it is not responsible for. The pre-fix "no proposer model is wired" line would be a lie on
-    // a run that spent two calls on a configured command.
-    expect(run.stdout).toContain('2 site(s) visited and every one abstained');
-    expect(run.stdout).not.toContain('no proposer model is wired');
+    // SEEDED — the stronger end of the same claim. This line used to assert "2 site(s) visited and every one
+    // abstained", because `mine` supplied no admission gate at all and every site abstained whatever the
+    // model answered; REQ-CLI-4d supplies one at the composition root, so the echoed claim now travels the
+    // WHOLE path — site bytes → prompt → command → answer → the frozen `admit` verdict → a staged candidate
+    // row. Reachability that stops one step short of the store is the weaker story, and this is the step.
+    expect(run.stdout).toContain('genesis: seeded 2 candidate fact(s)');
+    expect(run.stdout).not.toContain('no proposer model is wired'); // never blamed for an absence it does not own
   });
 
   it('the run carries the PROMPT ARTIFACT DIGEST it proposed under (ADR-0011 D3 provenance)', () => {

@@ -44,6 +44,12 @@ import { readProvenanceRefusal } from './read-provenance.js';
 import { assembleHandler } from './wire.js';
 import type { WireConfig, WireSeams, WiredHandler } from './wire.js';
 
+// The `mine` ADMISSION SUPPLY (REQ-CLI-4d), split to its own file at the LOC ceiling and RE-EXPORTED here so
+// the composition root's SURFACE is unchanged — see that file's header for why the seam is real, and for the
+// measurement that made it necessary (0 candidates staged on every repository `atlas mine` was ever run on).
+export { buildMineAdmission } from './compose-mine-admission.js';
+export type { MineAdmission, Reground } from './compose-mine-admission.js';
+
 /** The composed runtime: the ONE governed durable `WiredHandler` every entrypoint drives, PLUS the real
  *  read-only `DoctorSource` `atlas doctor` reads over — both built from the SAME store + revIndex so they
  *  can never diverge (WIRE-1). The CLI passes both; the MCP entrypoint drives only the handler. */
@@ -124,6 +130,7 @@ export function buildGate(axes: Axes): TruthGate {
       real.gateHolds(node.kind === 'predicate' ? node.status : 'HOLDS', node.grounding, axes),
   };
 }
+
 
 /**
  * The LOCAL git identity (`git config user.email`) at `repoPath`, or `undefined`. TOTAL — never throws:
