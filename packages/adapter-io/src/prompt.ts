@@ -9,13 +9,22 @@
 // The template's own per-clause justification lives inside it as an HTML comment and is STRIPPED here, so
 // the reasoning is versioned next to the text without being sent to the model.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { closeSync, constants as fsConstants, existsSync, fstatSync, openSync, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { id } from '@atlas/kernel';
 import type { Hash, StructRef } from '@atlas/contracts';
 import type { Candidate } from '@atlas/genesis';
+
+import { isContainedIn } from './containment.js';
+
+/** The read-open flags of the N14 door (`store.ts`), which this reader now mirrors. `O_NOFOLLOW` ⇒ a symlink
+ *  AT the final component fails to open (ELOOP) atomically; `O_NONBLOCK` ⇒ opening a FIFO returns instead of
+ *  blocking on a writer. Declared here rather than exported from `store.ts`: the flag set is three constants,
+ *  and widening a store's public surface to share them would cost more than restating them. */
+const O_READ_NO_SYMLINK =
+  fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0) | (fsConstants.O_NONBLOCK ?? 0);
 
 /** Why a prompt could not be built. Thrown, never papered over — see `NO_SOURCE` in particular. */
 export type PromptRefusal =
@@ -131,8 +140,27 @@ export function createPromptFactory(deps: { source: SourceReader; templatePath?:
  * while being attributed to the symbol. The admission gate re-derives against the anchor regardless, so
  * this widens what may be PROPOSED, never what may be admitted. Symbol-granular slicing is the refinement.
  *
- * A path escaping the repository is refused (`null`), not read: `qualifiedPath` originates in the index,
- * but a reader that trusts its input is one index bug away from serving `/etc/passwd` to a model.
+ * **ONLY BYTES THAT REALLY LIVE IN THE REPOSITORY ARE READ**, and nothing else is (`null`). `qualifiedPath`
+ * originates in the index, but a reader that trusts its input is one index bug away from serving
+ * `/etc/passwd` to the operator's model endpoint — and that is not hypothetical: a textual `relative()` test
+ * plus a plain `readFileSync` PASSED a git-tracked symlink `src/leak.ts → /etc/passwd` and sent the target's
+ * bytes, because the string never left the repo while the read did. Three checks, in cost order:
+ *
+ *   1. the textual escape — `../` and absolutes, refused without touching the filesystem;
+ *   2. KERNEL-IDENTITY containment (`containment.ts`) — a symlinked INTERMEDIATE directory pointing out of
+ *      the tree passes (1) and passes (3), because its final component is an ordinary file;
+ *   3. an fd-pinned read mirroring the N14 door in this same package (`store.ts`): `O_NOFOLLOW` makes a
+ *      final-component symlink fail to open, `fstat` on the OPEN fd refuses anything that is not a regular
+ *      file (device / FIFO / directory / socket), and the bytes come FROM THAT fd, so a post-check swap
+ *      cannot redirect the read. The fd is always closed.
+ *
+ * **DELIBERATE BEHAVIOUR CHANGE: A SYMLINK IS NEVER READ AS SOURCE**, not even one pointing at another file
+ * inside the repository. Reading a link's target and attributing the resulting claim to the link's own path
+ * was never sound — the claim would name a unit whose bytes are somewhere else — so refusing is the safe
+ * direction, and it is the direction N14 already took for the CAS.
+ *
+ * Total: every refusal is `null` and nothing throws, because the caller (`createPromptFactory.build`) turns
+ * `null` into a stated refusal rather than a prompt without source.
  */
 export function createFileSourceReader(repoPath: string): SourceReader {
   const root = resolve(repoPath);
@@ -142,10 +170,22 @@ export function createFileSourceReader(repoPath: string): SourceReader {
       const abs = resolve(root, rel);
       const inside = relative(root, abs);
       if (inside === '' || inside.startsWith('..') || isAbsolute(inside)) return null; // escapes the repo
+      if (!isContainedIn(root, abs)) return null; // …and the bytes really live there, by (dev, ino)
+      let fd: number | undefined;
       try {
-        return readFileSync(abs, 'utf8');
+        fd = openSync(abs, O_READ_NO_SYMLINK); // final-component symlink ⇒ ELOOP ⇒ refused
+        if (!fstatSync(fd).isFile()) return null; // device / FIFO / dir / socket, decided on the pinned inode
+        return readFileSync(fd, 'utf8'); // FROM THE fd — the inode is pinned, never re-resolved
       } catch {
         return null; // deleted / unreadable / a directory — the caller REFUSES rather than prompting blind
+      } finally {
+        if (fd !== undefined) {
+          try {
+            closeSync(fd);
+          } catch {
+            /* best-effort close; the refuse/read decision above is already made */
+          }
+        }
       }
     },
   };

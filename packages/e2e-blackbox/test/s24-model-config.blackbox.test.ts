@@ -14,6 +14,15 @@
 //      sourcing it from the repository under analysis would make `atlas mine` on a clone an
 //      arbitrary-code-execution path. Asserted against a REAL repo, through the real door.
 //
+//      2b. AND IT IS REFUSED THROUGH A DIFFERENT SPELLING OF THE SAME DIRECTORY. This is the second time
+//          this boundary was evadable and the second time only a subprocess could see it. `realpathSync`
+//          canonicalizes symlinks but NOT spelling: on APFS it returns the path AS REQUESTED, so `…/repo`
+//          and `…/REPO` — one directory, one inode — stayed two strings, `relative()` returned a
+//          `..`-prefixed path, and the guard read "outside the repo". Measured against the built module:
+//          the honest spelling refused, the case variant LOADED a planted `{"cmd":"/bin/sh",…}`. The unit
+//          suite is blind to it BY CONSTRUCTION, because it spells both sides the same way; only a real
+//          path on a real volume produces the divergence. Containment is now decided on (dev, ino).
+//
 //   3. A MALFORMED CONFIG REFUSES RATHER THAN REPORTING "NO FACTS". Absent is a state; malformed is an
 //      error. Collapsing them would make a broken setup indistinguishable from a barren repository — the
 //      one failure that would invalidate a whole genesis run invisibly.
@@ -24,9 +33,9 @@
 // No live model is involved. `roles.propose.cmd` names a POSIX no-op, because what is under test is whether
 // the CONFIGURED PATH IS REACHED — never what a model would say.
 
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
@@ -40,6 +49,17 @@ const TEMPLATE_REFUSAL = /prompt template .* could not be read/;
 
 let repo: FixtureRepo;
 const scratch: string[] = [];
+
+/** Does the KERNEL say these two spellings are one directory? The oracle for the case-variant story. */
+function sameDirectory(a: string, b: string): boolean {
+  try {
+    const x = statSync(a, { bigint: true });
+    const y = statSync(b, { bigint: true });
+    return x.dev === y.dev && x.ino === y.ino;
+  } catch {
+    return false;
+  }
+}
 
 function operatorConfig(body: string): string {
   const d = mkdtempSync(join(tmpdir(), 'atlas-s24-operator-'));
@@ -79,6 +99,34 @@ describe('S24 — the operator model config, through the real `atlas mine` door'
     expect(run.exitCode).toBe(2); // a governed refusal, not a crash and not a silent pass
     expect(run.stdout).toContain('refusing to read the model command from inside the repository');
     expect(run.stdout).toContain('arbitrary-code-execution');
+    rmSync(planted, { force: true });
+  });
+
+  it('the SAME planted config is refused when the repo path is spelled in a DIFFERENT CASE', () => {
+    // teeth (breaks-on "containment is decided by string relative() again"): the refusal vanishes and the
+    // planted command is loaded — the F1 arbitrary-code-execution bypass, exactly as measured.
+    //
+    // FILESYSTEM-CONDITIONAL, and stated rather than skipped: on a case-SENSITIVE volume (Linux CI) the
+    // variant names a DIFFERENT, non-existent directory — there is no second spelling of this repo, so
+    // there is no bypass to close and the honest outcome is the zero-config run. The expectation is taken
+    // from the kernel, never from a `toLowerCase()` guess about the volume's folding table.
+    repo ??= makeFixtureRepo({ files: { 'src/charge.ts': 'export function charge(): void {}\n' } });
+    mkdirSync(join(repo.repoPath, '.atlas'), { recursive: true });
+    const planted = join(repo.repoPath, '.atlas', 'model.json');
+    writeFileSync(planted, VALID);
+    // The temp dir is `…/atlas-e2e-XXXXXX`, so uppercasing the basename always yields a different STRING.
+    const variantRepo = join(dirname(repo.repoPath), basename(repo.repoPath).toUpperCase());
+    const viaVariant = join(variantRepo, '.atlas', 'model.json');
+
+    const run = runAtlas(repo.repoPath, ['mine', '.'], { ATLAS_MODEL_CONFIG: viaVariant });
+
+    if (sameDirectory(repo.repoPath, variantRepo)) {
+      expect(run.exitCode).toBe(2);
+      expect(run.stdout).toContain('refusing to read the model command from inside the repository');
+    } else {
+      expect(run.exitCode).toBe(0); // a different location, and nothing is there
+      expect(run.stdout).toContain('mine: 0 candidate facts');
+    }
     rmSync(planted, { force: true });
   });
 
