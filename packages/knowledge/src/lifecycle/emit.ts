@@ -13,7 +13,8 @@
 // (KERNEL-1) — this module computes NO hash of its own.
 //
 // SCOPE (card exclusions): NOT defining `gateHolds`/the fail-closed grounded predicate (owned by
-// WP-4.11-a.GROUND, consumed here); NOT the 2-door usefulness admission (EPIC-11-b); NOT the
+// WP-4.11-a.GROUND, consumed here); NOT the second admission door (EPIC-11-b — since ADR-0012 that
+// door is HARMFUL-TO-STORE, not usefulness; obviousness is scored, never a veto); NOT the
 // write-decision routing / upsert (CAMPAIGN-5). The served-status recompute (KNOW-1) is `./status.ts`.
 //
 // [FLAG — simulated seal] the card `content_hash: <filled-at-freeze>` was never filled; this binding is

@@ -69,6 +69,34 @@ export const STALE = [
   /\bexactly (?:the )?five\b[^.\n]{0,60}\b(?:publishe?d|advertised|registered)\b/i,
   /\bno sixth tool\b[^.\n]{0,30}\b(?:registered|published|advertised)\b/i,
   /\bclosed five-tool\b/i,
+
+  // ── the OBVIOUSNESS-IS-SCORED amendment (ADR-0012) ────────────────────────────────────────────────
+  // The FOURTH amendment, and this file's own rule — "an amendment that is not given its own drift
+  // pattern will leave residue, every time — three for three so far" — is why this block exists BEFORE
+  // the residue does, instead of after a sweep finds it. Four for four would have been the alternative.
+  //
+  // ADR-0012 killed one sentence that ran through three ratified invariant families in three layers:
+  // "a true-but-obvious fact is rejected". Obviousness is now SCORED and stored; the only surviving
+  // rejection is HARMFUL-TO-STORE (secret / PII, where storing IS the harm). `nonObvious` kept its
+  // predicate and lost its authority to reject, so a doc re-asserting the door is describing a call site
+  // that no longer exists.
+  //
+  // NARROW on purpose, and the near-misses are named because a broad `/two-door/` flags two TRUE things:
+  // `goldens-tls.md`'s "two-door WRITE_PATHS" (the two governed WRITE doors — a different pair entirely)
+  // and `design/structure.md`'s one-door/two-door K/M partition (unrelated to admission). Both are
+  // allow-listed below rather than left to luck, since a guard broad enough to force true statements to
+  // be weakened is worse than no guard — the lesson the `exactly five` draft already paid for above.
+  // THE BAR IS STILL TWO DOORS. The first draft of this block matched `(?:2|two)-door … (bar|admission)`
+  // outright and flagged twelve sites that are TRUE — including `README.md` and `ARCHITECTURE.md`. The
+  // amendment SWAPPED the second door (obviousness → harmful-to-store); it did not remove the structure.
+  // So "clears the 2-door bar" stays true and must not be pressured into being softened. What is dead is
+  // the second door being OBVIOUSNESS, and obviousness REJECTING — these match that and nothing else.
+  /\btrue-but-obvious\b[^.\n]{0,40}\b(?:reject|blocked|noise|dropped|refused)/i,
+  /\bnon-?obviousness door\b/i,
+  /\bfails the (?:2|two)-door\b/i,
+  /\b(?:2|two)-door\b[^.\n]{0,40}\b(?:non-?obvious|usefulness)\b/i,
+  /\b(?:non-?obvious|usefulness)\b[^.\n]{0,40}\b(?:2|two)-door\b/i,
+  /\bobvious\b[^.\n]{0,24}\bseed is rejected\b/i,
 ];
 
 /** A line matching any of these is a LEGITIMATE use of the words above, not drift. */
@@ -103,6 +131,22 @@ export const ALLOW = [
   // allow the guard flags a dozen true statements and pressures a correct invariant into being softened —
   // the failure mode where a gate makes the codebase LESS honest.
   /GOVERNANCE_SURFACE/,
+  // ADR-0012 narrative + the two-doors that are NOT the admission bar. `ADR-0012` specifically, never
+  // `ADR-\d+`, for the reason stated at the top of this list. `WRITE_PATHS` clears the two GOVERNED WRITE
+  // doors (atlas-emit / atlas-link), which ADR-0012 does not touch; `K/M` and `partition` clear the
+  // structure doc's one-door/two-door split, which is about module shape, not admission. `harmful to
+  // store` is the door that SURVIVED — a line asserting it rejects is stating the amendment, not drifting.
+  /ADR-0012/, /\bscored\b/i, /\bnever gated\b/i, /\bnever a veto\b/i, /\bharmful to store\b/i,
+  /WRITE_PATHS/, /\bpartition\b/i,
+  // Sibling of `used to claim` above, and needed for the same reason: a comment that QUOTES the killed
+  // sentence in order to record that it is dead is the honest form. Without this the guard flags the
+  // amendment's own tombstone — measured on `grounding/src/emit-guard.ts`, which does exactly that.
+  /\bused to read\b/i,
+  // A `teeth:` line that NAMES the mutant is the amendment's enforcement, not its residue. `breaks-on "a
+  // resurrected obviousness veto … this true-but-obvious fact is rejected"` describes the SYMPTOM the
+  // mutant would produce — flagging it would delete the very assertion that keeps the gate from coming
+  // back. Same shape as `retired` / `superseded` in the ADR-0006 block above.
+  /\bresurrect\w*/i,
 ];
 
 /** Is this line a stale governance-count claim? Pure + total — the guard's per-line verdict, verbatim. */

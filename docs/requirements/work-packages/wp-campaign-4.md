@@ -353,7 +353,7 @@ acceptance:                              # ptr+digest = frozen goldens
   - source: ../goldens-grd.md#SCN-GROUND-12d-1  # ptr+digest
   - source: ../goldens-grd.md#SCN-GROUND-12e-1  # ptr+digest
 deps: [ WP-4.11-a.GROUND ]
-exit_predicate: all listed acceptance goldens green ∧ grounding gates pass ∧ true-but-obvious rejected ∧ untrusted excluded ∧ anchorless rule rejected.
+exit_predicate: all listed acceptance goldens green ∧ grounding gates pass ∧ true-but-obvious ADMITTED WITH A LOW SCORE (ADR-0012 — obviousness is scored, never gated) ∧ untrusted excluded ∧ anchorless rule rejected.
 context_refs:                            # closed list
   - source: ../../reference/atlas-grounding.md#ground-7
   - source: ../../reference/atlas-grounding.md#ground-8
