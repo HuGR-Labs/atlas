@@ -55,22 +55,40 @@ function ownUnchanged(pinned: readonly SubtreeHash[], current: readonly SubtreeH
   return pinned.length === current.length && pinned.every((h, i) => h === current[i]);
 }
 
+/** The multiset key for one closure member (GROUND-11b): `node` + `interfaceRState`, joined by a NUL
+ *  separator so no valid `Hash`/`InterfaceRState` pair can collide with a different pair. The
+ *  `bodySubtreeHash` is DELIBERATELY excluded from the key — a body-only refactor MUST NOT drift a
+ *  caller. */
+function memberKey(m: ClosureMember): string {
+  return `${m.node}\u0000${m.interfaceRState}`;
+}
+
 /**
- * Interface-level equality over the forward closure (GROUND-11b): the SAME membership AND every member's
- * `interfaceRState` unchanged. The `bodySubtreeHash` is DELIBERATELY not read — a body-only refactor
- * MUST NOT drift a caller. Membership is keyed by the callee `node` `Hash`; a dependency appearing or
- * vanishing is itself structural drift.
+ * Interface-level equality over the forward closure (GROUND-11b): the SAME MULTISET of
+ * (`node`, `interfaceRState`) pairs — not merely the same length plus per-member lookup, which is
+ * unsound whenever a `node` repeats (a duplicate on either side can mask a genuine membership change:
+ * pinned `[A, A]` vs current `[A, B]` has equal length and every pinned `A` resolves against current's
+ * lone `A`, so a length-plus-lookup comparison never inspects `B` at all and misreads the swap as
+ * unchanged). This compares by COUNTING occurrences of each key on both sides — order-independent,
+ * duplicate-sound. The `bodySubtreeHash` is DELIBERATELY not read — a body-only refactor MUST NOT drift
+ * a caller. A dependency appearing, vanishing, or being replaced (even under a repeated `node`) is
+ * itself structural drift.
  */
 function closureInterfaceUnchanged(
   pinned: readonly ClosureMember[],
   current: readonly ClosureMember[],
 ): boolean {
   if (pinned.length !== current.length) return false;
-  const now = new Map<Hash, InterfaceRState>(current.map((m) => [m.node, m.interfaceRState]));
+  const remaining = new Map<string, number>();
+  for (const member of current) {
+    const key = memberKey(member);
+    remaining.set(key, (remaining.get(key) ?? 0) + 1);
+  }
   for (const member of pinned) {
-    const currentIface = now.get(member.node);
-    // interface-only fold: `bodySubtreeHash` is never consulted (GROUND-11b/11d).
-    if (currentIface === undefined || currentIface !== member.interfaceRState) return false;
+    const key = memberKey(member);
+    const count = remaining.get(key) ?? 0;
+    if (count === 0) return false;
+    remaining.set(key, count - 1);
   }
   return true;
 }
