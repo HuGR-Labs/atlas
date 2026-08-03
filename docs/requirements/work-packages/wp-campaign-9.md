@@ -7,8 +7,14 @@
 > (`outputs`/`provenance`/`trace_ref`) are present-but-empty. `intent` is the one prose carve-out
 > (non-authoritative, executor-invisible).
 >
-> **Campaign coverage:** 10 leaf epics · 15 WPs · 55 REQs (ADAPTER 34 + WIRE 2 + CLI 13 + MCP 6) · REQ→WP =
-> total function (each REQ owned by exactly one WP; orphans/doubles = 0). **Seam-freezes = 6** frozen
+> **Campaign coverage:** 10 leaf epics · **16 WPs** (15 at the S4 freeze + `WP-9.1.1-b.SYMLINK`, the
+> tracked-symlink amendment of 2026-08-02) · **58 REQs counted today** (ADAPTER 35 + WIRE 2 + CLI 13 + MCP 8;
+> 55 at the freeze — +2 `MCP-1d`/`MCP-1e` by ADR-0006, +1 `ADAPTER-1e` by the symlink amendment) · REQ→WP =
+> total function over 56 of them, doubles = 0; **orphans are NOT 0** — the two post-freeze `MCP-1d`/`MCP-1e`
+> requirements are carried by no card and are ratcheted as KNOWN defects in `harness/gates/id-integrity.mjs`,
+> which is where that debt is tracked rather than here. (Written WITHOUT their full ids on purpose: that gate
+> reads consumption as a bare mention anywhere in a WP file, so spelling them here would silence its own
+> ratchet — which is exactly what a first draft of this line did.) **Seam-freezes = 6** frozen
 > cross-boundary contracts (8 declarations): 2 owned-in-ring (WiredHandler: WIRE→CLI/MCP · durable StoreApi:
 > STORE→KNOWLEDGE) + 4 consumed-from-frozen (index-inputs FS/SCIP→INDEX · kernel StoreApi core→STORE · genesis
 > run-controller+SiteProposer→mine · persist host-adapter core→FORGE). The ONE core-touching WP is
@@ -189,6 +195,67 @@ outputs:                                                    # exec — empty at 
 provenance:                                                 # exec — empty at S4-freeze
 trace_ref:                                                  # exec — empty at S4-freeze
 rationale:                                     # ptr
+  - source: ../invariant-register-adapters.md#INV-ADAPTER-1
+
+### WP-9.1.1-b.SYMLINK — tracked-symlink slice of EPIC-1-b   (amendment card, 2026-08-02)
+epic: EPIC-1-b
+id: WP-9.1.1-b.SYMLINK
+content_hash: <filled-at-freeze>
+title: A tracked symlink walks as its stored link text, and mints no unit key
+intent: >
+  A git-tracked `src/config.ts -> /etc/passwd` used to put the password file's bytes into the walked
+  `FileTree`, because the walker read every tracked path and that read FOLLOWS a link. The rule is now git's
+  own: a mode-120000 entry contributes the STORED LINK TEXT from its index blob, the target is never opened,
+  and the leaf is excluded from the AST fold so a link target that happens to parse as TypeScript mints no
+  `::` unit key. Its own card, not a retrofit: it spans the walker AND the fold, which is exactly the seam
+  `WP-9.1.1-b.FS` excludes in writing. (Non-authoritative handle.)
+source_reqs:                                  # ptr+digest
+  - source: ../requirements-adapters.md#REQ-ADAPTER-1e  # ptr+digest
+seam-freezes: [ ]
+anchor: packages/adapter-io/src/fs.ts (the walker reads the git MODE via `ls-files -s -z` and emits the link text) · packages/adapter-io/src/ast.ts (the fold returns a mode-120000 leaf unrefined) · packages/adapter-io/src/store.ts (the sibling leg of the same containment family — the CAS intermediate-component sandbox asks `isContainedIn` instead of comparing path strings). The rule is only true if the first two hold TOGETHER: link text in the tree is worthless if the fold still mints a unit key out of it.
+interface_contract:                           # ptr+digest
+  - source: ../../reference/atlas-adapters.md#adapt-fs-1  # ptr+digest
+  - source: ../method-tags-adapters.md#INV-ADAPTER-1      # ptr+digest
+  - source: ../method-tags-adapters.md#INV-ADAPTER-4      # ptr+digest
+exclusions: >
+  NOT gitlinks (mode 160000) — REQ-ADAPTER-1e names them UNSPECIFIED on purpose: none exist in this repo, the
+  mode is unexercised, and inventing a rule for it is a worse record than an honest gap. NOT the ADAPT-FS-1
+  amendment in the frozen reference/atlas-adapters.md — a frozen invariant register is amended by
+  ratification, which is with the owner, and REQ-ADAPTER-1e names that gap in place as the interim state. NOT
+  the AST fold itself (WP-9.1.2.AST owns the item/block units and their goldens); this card only excludes ONE
+  leaf kind from it. NOT the store leg's coverage: the `store.ts` change carries NO new REQ and NO new SCN —
+  it is hygiene whose witnesses are the existing N14 cases under WP-9.2.3.STORE — so it is named in the anchor
+  but is NOT what this card's acceptance list proves.
+inputs:                                        # ptr+digest
+  - source: ../../reference/atlas-adapters.md#adapt-fs-1  # ptr+digest
+action: Read the git mode with `ls-files -s -z` and emit a mode-120000 entry as a leaf whose content is the entry's index blob (never `readlink`, which fails EINVAL on a `core.symlinks=false` checkout and would drop the tracked entry); never open the link target; mark the leaf so the AST fold returns it unrefined; verify the link text is the exact content, that the target's bytes appear nowhere in the tree, that no `::` key is minted under the link while an ordinary sibling still mints one, and that a repo with NO symlink walks byte-identically to the pre-amendment tree.
+action_surface: [ read-repo, edit(packages/adapter-io/src/fs.ts), edit(packages/adapter-io/src/ast.ts), edit(packages/adapter-io/src/store.ts), run(test:adapter-io), typecheck ]
+guardrails: >
+  Edit only under packages/adapter-io/src/{fs,ast,store}.ts. The walker MUST NOT open a link target and MUST
+  NOT gain a containment predicate — resolving attacker-influenced paths stays off the boot path of both bins.
+  The link text comes from the index blob, not the working tree. MUST NOT omit the tracked entry (REQ-ADAPTER-1b
+  admits no new exception). A repo with no mode-120000 entry MUST walk byte-identically — any moved subtreeHash
+  or nodeKey on a symlink-free repo means something other than this rule was implemented. Do not touch the
+  frozen `FileTree` type in @atlas/index: the marker is a structural subtype on the adapter side, and the
+  direction adapter-io → index is not inverted for an adapter's convenience.
+repair_budget: N=3 · early-stop: { repeated-identical-failure, no-change-diff, semantic-dup-edit }
+acceptance:                                    # ptr+digest = frozen goldens
+  - source: ../goldens-adapters.md#SCN-ADAPTER-1e-1  # ptr+digest
+  - source: ../goldens-adapters.md#SCN-ADAPTER-1e-2  # ptr+digest
+  - source: ../goldens-adapters.md#SCN-ADAPTER-1e-3  # ptr+digest
+deps: [ WP-9.1.1-b.FS, WP-9.1.2.AST ]
+exit_predicate: all acceptance SCNs green ∧ link leaf content == the index blob's link text (target never opened) ∧ 0 `::` keys minted under a mode-120000 leaf with the ordinary-file control still minting its own ∧ broken link + dir link present as link-text leaves with the linked directory's file appearing once under its real path ∧ a symlink-free repo byte-identical (FileTree digest + every subtreeHash + every nodeKey unmoved) ∧ module gates pass ∧ all pointer digests resolve (no STALE)
+context_refs:                                  # closed list
+  - source: ../../reference/atlas-adapters.md
+  - source: ../requirements-adapters.md
+  - source: ../goldens-adapters.md
+  - source: ../method-tags-adapters.md
+owner: charlie · builder_id: <assigned-at-dispatch>
+outputs:                                                    # exec — empty at S4-freeze
+provenance:                                                 # exec — empty at S4-freeze
+trace_ref:                                                  # exec — empty at S4-freeze
+rationale:                                     # ptr
+  - source: ../requirements-adapters.md#REQ-ADAPTER-1e
   - source: ../invariant-register-adapters.md#INV-ADAPTER-1
 
 ### WP-9.1.1-b.SCIP — SCIP slice of EPIC-1-b
@@ -906,14 +973,19 @@ rationale:                                     # ptr
 ## Completion report
 
 - **WP-set:** `docs/requirements/work-packages/wp-campaign-9.md`
-- **WP count:** 15 (one per epic × module, over the 10 leaf epics of `roadmap-adapters.md`).
-- **REQ → WP partition (total function, orphans 0 · doubles 0 · 55/55):**
+- **WP count:** 16 — 15 at the S4 freeze (one per epic × module, over the 10 leaf epics of
+  `roadmap-adapters.md`) + `WP-9.1.1-b.SYMLINK`, which is NOT an epic × module slice: the tracked-symlink rule
+  spans the walker and the AST fold, i.e. exactly the seam `WP-9.1.1-b.FS` excludes in writing ("no sub-file
+  AST units"), so retrofitting it there would have either split one requirement's witnesses across two cards
+  or quietly broken that exclusion.
+- **REQ → WP partition (doubles 0 · 56 of the 58 REQs counted today; the 2 uncovered are named below):**
 
   | WP | epic | source_reqs | n | acceptance SCNs | n |
   |---|---|---|---|---|---|
   | WP-9.1.1-a.WIRE | EPIC-1-a | WIRE-1a/1b | 2 | WIRE-1a-1, 1b-1 | 2 |
   | WP-9.1.1-a.CLI | EPIC-1-a | CLI-1a/1b/1c, 2a/2b/2c, 3a/3b/3c/3d | 10 | CLI-1a-1,1b-1,1c-1,2a-1,2b-1,2c-1,3a-1,3b-1,3c-1,3d-1 | 10 |
   | WP-9.1.1-b.FS | EPIC-1-b | ADAPTER-1a/1b/1c/1d | 4 | ADAPTER-1a-1,1b-1,1c-1,1d-1 | 4 |
+  | WP-9.1.1-b.SYMLINK | EPIC-1-b | ADAPTER-1e | 1 | ADAPTER-1e-1,1e-2,1e-3 | 3 |
   | WP-9.1.1-b.SCIP | EPIC-1-b | ADAPTER-2a/2b/2c | 3 | ADAPTER-2a-1,2b-1,2c-1 | 3 |
   | WP-9.1.1-b.INDEX | EPIC-1-b | ADAPTER-5a/5b | 2 | ADAPTER-5a-1,5b-1 | 2 |
   | WP-9.1.2.SCIP | EPIC-2 | ADAPTER-3a/3b/3c | 3 | ADAPTER-3a-1,3b-1,3c-1 | 3 |
@@ -926,10 +998,11 @@ rationale:                                     # ptr
   | WP-9.3.6-b.CLI | EPIC-6-b | CLI-4a/4b/4c | 3 | CLI-4a-1,4b-1,4c-1 | 3 |
   | WP-9.4.7.MCP | EPIC-7 | MCP-1a/1b/1c, 2a/2b/2c | 6 | MCP-1a-1,1b-1,1c-1,2a-1,2b-1,2c-1 | 6 |
   | WP-9.4.8.FORGE | EPIC-8 | ADAPTER-10a/10b/10c | 3 | ADAPTER-10a-1,10b-1,10c-1 | 3 |
-  | **total** | | | **55** | | **56** |
+  | **total** | | | **56** | | **59** |
 
-  - **REQ coverage:** 55/55 REQs owned by exactly one WP (each REQ appears in exactly one `source_reqs` — orphans 0, doubles 0). The WP partition = the roadmap's 10-leaf-epic partition, re-sliced by module (EPIC-1-a→{WIRE,CLI}, EPIC-1-b→{FS,SCIP,INDEX}, EPIC-2→{SCIP,AST}, EPIC-6-b→{LLM,CLI}; the other 6 leaf epics are single-module).
-  - **acceptance = DoD:** each WP's `acceptance[]` = exactly the frozen SCNs of its `source_reqs` (56 SCNs total; the +1 vs REQ count is the second ADAPTER-7b witness `SCN-ADAPTER-7b-2`, the supersede-ordering golden, owned by WP-9.2.4.KNOWLEDGE).
+  - **REQ coverage:** 56 REQs owned by exactly one WP (each appears in exactly one `source_reqs` — doubles 0). **Two are owned by none: the `MCP-1d` and `MCP-1e` requirements** added by ADR-0006 after the freeze (full ids deliberately not spelled — see the header note); they are ratcheted as KNOWN defects in `harness/gates/id-integrity.mjs` (shrink-only) and closing them belongs to the MCP surface, not to the symlink amendment that recounted this table. The WP partition = the roadmap's 10-leaf-epic partition, re-sliced by module (EPIC-1-a→{WIRE,CLI}, EPIC-1-b→{FS,SCIP,INDEX}, EPIC-2→{SCIP,AST}, EPIC-6-b→{LLM,CLI}; the other 6 leaf epics are single-module) — plus the one amendment card, `WP-9.1.1-b.SYMLINK`, which spans EPIC-1-b's walker and EPIC-2's fold and is therefore not a module slice of either.
+  - **acceptance = DoD:** each WP's `acceptance[]` = exactly the frozen SCNs of its `source_reqs` (59 SCNs total; the +3 vs REQ count are `SCN-ADAPTER-7b-2` — the supersede-ordering golden owned by WP-9.2.4.KNOWLEDGE — and the two extra ADAPTER-1e witnesses, since that one requirement carries three separable properties: the link text, the unrefined fold, and the included broken/dir links).   <!-- AMENDED 2026-08-02: this table was COUNTED, not restated; the `MCP-1d-1` golden stays outside it because no card lists it -->
+
 
 - **Seam-freezes (6 frozen cross-boundary contracts · 8 declarations):**
   1. **WiredHandler** — owned-by WP-9.1.1-a.WIRE; consumed-by WP-9.1.1-a.CLI + WP-9.4.7.MCP (owned-in-ring).
@@ -947,7 +1020,7 @@ rationale:                                     # ptr
 - **Parallel groups `[P]` (deps-free foundational WPs):** WP-9.1.1-a.WIRE · WP-9.1.1-b.FS · WP-9.1.1-b.SCIP ·
   WP-9.2.3.STORE · WP-9.2.5.DRIFT · WP-9.3.6-a.HISTORY · WP-9.3.6-b.LLM (7).
 
-- **Self-check:** 15 cards in canonical column-0 syntax · every substantive field a `ptr+digest` (no prose copy;
+- **Self-check:** 16 cards in canonical column-0 syntax · every substantive field a `ptr+digest` (no prose copy;
   `intent` the sole carve-out) · `content_hash: <filled-at-freeze>` · `exec` fields present-but-empty ·
   `acceptance` = source_reqs' frozen goldens · every card carries `anchor` + `interface_contract` + `exclusions`
   + `action_surface` + `guardrails` + `repair_budget`.
