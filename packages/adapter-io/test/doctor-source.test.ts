@@ -187,8 +187,11 @@ describe('DOCTORSOURCE — the real read-only DoctorSource port', () => {
     expect(source.plan('no-such-fact')).toBeUndefined();
   });
 
-  it('regroundTemplate produces a well-formed re-grounded fact (primary anchor swapped to anchorNow)', () => {
-    const emit = regroundTemplate(driftFactV1, anchorV2);
+  it('regroundTemplate produces a well-formed re-grounded fact (its one entry re-anchored at HEAD)', () => {
+    // `resolved` is POSITIONAL over the grounding entries; this fact carries exactly one, so the whole
+    // repair is `[anchorV2]` — total, hence the earned FRESH. The multi-entry behaviour (a partial repair
+    // stamping DRIFTED, a secondary-only drift) is pinned in `doctor-entry-symmetry.test.ts`.
+    const emit = regroundTemplate(driftFactV1, [anchorV2]);
     expect(emit.kind).toBe('advisory');
     expect(emit.grounding.entries[0]!.anchor.subtreeHash).toBe(anchorV2.subtreeHash); // re-grounded at HEAD
     expect(emit.freshness).toBe('FRESH');

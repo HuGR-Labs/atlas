@@ -381,6 +381,22 @@ Then only the topic-only `greet()` change vs `mb` is in the anchor set — the s
 teeth: breaks-on "drift is computed over a fixed window `HEAD~1..HEAD` instead of across the merge-base — it misses the topic-only `greet()` drift that predates the window"
 gen: conformance
 
+### SCN-ADAPTER-9c-1 — a secondary citation's drift is classified from that citation   (happy, added 2026-08-03)
+source: REQ-ADAPTER-9c
+Given a grounded fact citing TWO anchors — `src/a-primary.ts`, which still re-derives at HEAD, and `src/b-secondary.ts`, whose content was renamed to `src/z-secondary-moved.ts`
+When the doctor classifies the fact's drift
+Then the item is `mechanical` keyed on the citation that drifted (`anchorWas = src/b-secondary.ts`, `anchorNow = src/z-secondary-moved.ts`), not on the primary
+teeth: breaks-on "classification reads `entries[0]` alone — the primary still resolves at HEAD, so the item comes back `anchorWas = anchorNow = src/a-primary.ts`, a 'move' from a path to itself, and the citation that actually drifted is never named (MEASURED pre-fix)"
+gen: conformance
+
+### SCN-ADAPTER-9d-1 — the repair re-anchors the drifted citation and earns its freshness   (happy, added 2026-08-03)
+source: REQ-ADAPTER-9d
+Given the same two-citation fact, classified `mechanical`
+When the doctor emits the re-ground plan
+Then entry 1 is re-anchored to `src/z-secondary-moved.ts`, entry 0 is passed through at its recorded anchor, the candidate is stamped `FRESH` and it re-derives end-to-end at HEAD — while a repair that leaves any entry unestablished is stamped `DRIFTED`
+teeth: breaks-on "the template rewrites `entries[0]` and stamps `freshness: 'FRESH'` unconditionally — the stale entry 1 survives into the candidate, which the truth door then refuses (`NA`, MEASURED pre-fix): a repair plan that cannot land, wearing a FRESH stamp it never earned"
+gen: conformance
+
 ---
 
 ## REQ-ADAPTER-10 — forge carries the atlas
