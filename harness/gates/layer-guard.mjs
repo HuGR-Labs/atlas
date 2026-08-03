@@ -15,13 +15,19 @@
 //                          forbidden; it fails the gate so the move to dynamic projection (ARCH-8) is a
 //                          deliberate decision rather than a drift.
 //
-// Grounding: architecture fitness functions (Ford/Parsons/Kua; ArchUnit → ArchUnitTS). Deliberately
-// dependency-free and dist-free where it can be: the LAYER + BINDING checks read source and package
-// manifests, so they work before a build. Only the SURFACE check imports the built constants.
+// Grounding: architecture fitness functions (Ford/Parsons/Kua; ArchUnit → ArchUnitTS). DIST-free where it
+// can be: the LAYER + BINDING checks read source and package manifests, so they work before a build. Only
+// the SURFACE check imports the built constants.
+//
+// It is NOT dependency-free, and the earlier revision that claimed to be paid for it: reading TypeScript
+// with regexes is what put a private comment stripper in this file, and that stripper deleted real import
+// statements. Lexing is delegated to `lexing.mjs` — the argument, and the measurement, live in its header.
 
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+// The ONE comment stripper in this repo. Keeping a private copy here is what created the hole it now closes.
+import { stripComments } from './lexing.mjs';
 
 // The repo root, OVERRIDABLE so the gate's own test can point it at a fixture tree. Without this the gate
 // could only ever be mutation-tested by hand against the live repo — which is precisely the 'trust me' the
@@ -126,6 +132,22 @@ function workspaceGraph() {
  * dynamic form heavily in type positions, so a `from`-only scan misses real edges. A dynamic specifier that
  * is NOT a literal cannot be resolved statically and is refused outright in an inner layer — that is the
  * exact shape used to smuggle the undetectable edge.
+ *
+ * ── WHAT THE SPECIFIER GRAMMAR MUST ADMIT, because two shapes it rejected were live blind spots ───────
+ * The point of scanning source at all is stated above: a source import needs no manifest edit to resolve.
+ * So the source scan MUST see at least everything the manifest scan sees, or the check it exists to
+ * perform inverts — an edge becomes easier to hide in code than in a manifest. It did not, twice, and both
+ * were reproduced on a fixture where the plain form correctly failed with 4 violations:
+ *
+ *   DIGITS. The captured name was `[a-z][a-z-]*`, which rejects `0-9`, while `shortName` (which reads the
+ *   MANIFEST) accepts any `@atlas/*`. `e2e` and `e2e-blackbox` are real ranked packages in `RING_ORDER`.
+ *   `@atlas/e2e` in a manifest was graphed and failed the gate; the SAME edge written as a source import
+ *   scored exit 0, 0 violations. That asymmetry is precisely the smuggling shape, running backwards.
+ *
+ *   SUBPATHS. The specifier was matched WHOLE against the closing quote, so any deep import —
+ *   `@atlas/adapter-io/dist/src/index.js` — matched nothing at all and the edge was invisible. The
+ *   package identity is everything up to the first `/` after the scope; whatever follows is a file within
+ *   the SAME package and cannot change which package is being coupled to.
  */
 function sourceImports(pkgDir) {
   const out = { edges: new Set(), opaque: [] };
@@ -139,9 +161,13 @@ function sourceImports(pkgDir) {
       // Strip comments FIRST. This codebase is comment-dense and routinely NAMES other packages in prose
       // ("`@atlas/contracts`-owned", "would invert the DAG"). Scanning raw text turns every such mention
       // into a phantom edge — an earlier revision of this scanner reported 68 violations, all false.
-      const src = readFileSync(p, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-      // Only real module-specifier positions count as an edge.
-      const SPECIFIER = /(?:\bfrom\s*|\bimport\s*|\brequire\s*\(\s*|\bimport\s*\(\s*)['"]@atlas\/([a-z][a-z-]*)['"]/g;
+      //
+      // The stripper is the SHARED, parser-backed one. The two-regex form that used to sit on this line
+      // deleted real imports — see `lexing.mjs`; pinned by fixture in layer-guard.test.mjs.
+      const src = stripComments(readFileSync(p, 'utf8'), entry.name);
+      // Only real specifier positions count. `[a-z0-9-]` and the `(?:\/…)?` tail: see DIGITS/SUBPATHS above.
+      const SPECIFIER =
+        /(?:\bfrom\s*|\bimport\s*|\brequire\s*\(\s*|\bimport\s*\(\s*)['"]@atlas\/([a-z][a-z0-9-]*)(?:\/[^'"]*)?['"]/g;
       for (const m of src.matchAll(SPECIFIER)) out.edges.add(m[1]);
       // A dynamic import whose specifier is not a string literal is statically unresolvable. HEURISTIC, and
       // stated as one: a captured `:` means this is a TypeScript signature for a METHOD NAMED `import`
@@ -214,13 +240,32 @@ function boundLegs() {
     note(`ARCH-3 composition root missing: ${COMPOSITION_ROOT} — there MUST be exactly one leg-binding site`);
     return null;
   }
-  const src = readFileSync(COMPOSITION_ROOT, 'utf8');
+  // STRIP FIRST, THEN LOCATE. The order is the whole point and it used to be the other way round: the
+  // literal was found and brace-matched over RAW text and only the resulting SLICE was stripped, so the
+  // comment above the strip claimed a protection the code did not have. A `}` in prose inside the literal
+  // — `// the handler dispatches on legs[tool] } and never checks membership` is the shape wire.ts invites —
+  // drove the depth counter to zero early, `end` landed on the comment, and every leg BELOW that line fell
+  // outside the block. A bound-but-undeclared ghost leg there is invocable over MCP and invisible here:
+  // exit 0. Reproduced on a fixture where the same ghost leg without the comment correctly fails.
+  //
+  // Blanking is offset-preserving, so `src` and the located offsets still describe the same bytes; the only
+  // thing that changed is that braces, quotes and `...` inside comments are no longer read as syntax. The
+  // `indexOf` anchor is stripped too, which is a second small gain: a commented-out `const legs: ToolLegs`
+  // can no longer be mistaken for the binding site.
+  const src = stripComments(readFileSync(COMPOSITION_ROOT, 'utf8'), 'wire.ts');
   const start = src.indexOf('const legs: ToolLegs = {');
   if (start < 0) {
     note(`ARCH-3 composition root has no \`const legs: ToolLegs = {\` binding block (${COMPOSITION_ROOT})`);
     return null;
   }
   // Brace-match from the literal's opening brace so nested objects/arrow bodies do not truncate the scan.
+  //
+  // STILL UNCOVERED, and stated rather than left to be discovered: this counter is comment-aware now but
+  // not STRING-aware. A `}` inside a string or template INSIDE the legs literal can still close the block
+  // early. Measured on the real wire.ts today: the located block is byte-identical before and after this
+  // change and no leg hides behind such a brace, so it is a latent gap, not a live one. Closing it needs
+  // the object literal to come from the AST rather than from a bracket count — a different change from
+  // this one, and not one to smuggle in alongside a correctness fix.
   const open = src.indexOf('{', start);
   let depth = 0;
   let end = -1;
@@ -232,13 +277,9 @@ function boundLegs() {
     note('ARCH-3 composition root: unbalanced braces in the legs binding block');
     return null;
   }
-  // Strip comments and template/string bodies BEFORE scanning: `wire.ts` is ~70% comment by volume, and a
-  // lone `}` in a comment truncates the block (false FAIL) while a lone `{` extends it past the literal
-  // (false PASS). Demonstrated on this tree.
-  const block = src
-    .slice(open, end)
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/\/\/[^\n]*/g, '');
+  // Already stripped above, so this is a plain cut. `wire.ts` is ~70% comment by volume, which is why every
+  // scan below — bracket walk, `^\s*` key anchor, computed-key probe — needs prose to have stopped being syntax.
+  const block = src.slice(open, end);
 
   // A SPREAD or a COMPUTED key AT THE TOP LEVEL of the literal hides a leg from this scan while leaving it
   // fully invocable — the handler dispatches on `legs[tool]` with no membership check, so a spread-in leg is
@@ -260,7 +301,13 @@ function boundLegs() {
   if (/^\s*\[[^\]]+\]\s*:/m.test(block)) {
     note('ARCH-3 the leg binding block contains a COMPUTED key (`[expr]:`): the bound set cannot be determined statically. Bind every leg with a literal quoted key.');
   }
-  return new Set([...block.matchAll(/^\s*['"](atlas-[a-z-]+)['"]\s*:/gm)].map((m) => m[1]));
+  // `[a-z0-9-]`, not `[a-z-]`. The digit-blind class was the SAME defect as the specifier grammar one
+  // function away, with the same consequence in the same direction: `'atlas-v2'` bound here matched nothing,
+  // so the leg was absent from the returned set, absent from ARCH-3/5's bound-but-undeclared check, and
+  // fully invocable — `legs[tool]` dispatches with no membership test. Exit 0 on a ghost. (The other
+  // direction is loud and was never the risk: a SURFACE tool with a digit would have been reported as
+  // typed-but-unbound.)
+  return new Set([...block.matchAll(/^\s*['"](atlas-[a-z0-9-]+)['"]\s*:/gm)].map((m) => m[1]));
 }
 
 async function checkSurface(legs) {

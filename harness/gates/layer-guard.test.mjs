@@ -44,7 +44,9 @@ function pkg(name, deps, sources = {}) {
   for (const [file, body] of Object.entries(sources)) writeFileSync(join(dir, 'src', file), body);
 }
 
-beforeEach(() => {
+/** Build a clean miniature Atlas in a fresh temp root. Extracted from `beforeEach` so the ASYMMETRY test
+ *  can plant the same edge twice — once via manifest, once via source — inside ONE `it`. */
+function freshFixture() {
   root = mkdtempSync(join(tmpdir(), 'layer-guard-'));
   // The canonical diagram the gate derives its ranking FROM.
   writeFileSync(
@@ -63,9 +65,12 @@ beforeEach(() => {
   pkg('adapter-io', ['tools'], {
     'wire.ts': ["export function assemble() {", "  const legs: ToolLegs = {", "    'atlas-init': () => ({}),", "  };", '  return legs;', '}', ''].join('\n'),
   });
-});
+}
 
-afterEach(() => rmSync(root, { recursive: true, force: true }));
+const dropFixture = () => rmSync(root, { recursive: true, force: true });
+
+beforeEach(freshFixture);
+afterEach(dropFixture);
 
 describe('layer-guard — the gate can be falsified', () => {
   it('PASSES the clean fixture (it does not fire on everything)', () => {
@@ -133,5 +138,246 @@ describe('layer-guard — the gate can be falsified', () => {
     });
     const { out } = runGate();
     expect(out).not.toContain('✗');
+  });
+});
+
+// ── LEXING: the stripper that deleted real code ──────────────────────────────────────────────────────
+//
+// The gate strips comments before scanning, for the good reason two tests above. It did so with a BLOCK
+// replace chained onto a LINE replace, in that order. A line comment containing a glob — `packages/*/src`,
+// which this repo's prose uses constantly — holds the byte pair slash-then-star; the block pass ran first,
+// read it as a comment OPENER, and deleted everything down to the next real closer. Any import in between
+// vanished, and the gate reported clean over code it never parsed.
+//
+// DIRECTION MATTERS: in this gate the class produces MISSED EDGES, i.e. a false PASS. Measured on master,
+// 11 real `@atlas/*` import statements across 7 files were invisible to the shipped gate for this reason.
+// The fix is the shared parser-backed `stripComments` from reachability.mjs — not a fourth hand-written
+// stripper; that file's header records three rounds of exactly that mistake.
+describe('layer-guard — comment stripping does not swallow code', () => {
+  // TEETH: breaks-on "the naive two-regex strip returns". Restore
+  // `.replace(BLOCK,'').replace(LINE,'')` in sourceImports and this goes green-on-a-hole (exit 0).
+  // The trailing block comment is LOAD-BEARING: the block regex needs a closing `*/` somewhere later or it
+  // matches nothing and the bug does not fire. That is exactly why the bug is real HERE — every file in
+  // this comment-dense tree has a later block comment.
+  it('sees a forbidden import sitting under a line comment that contains a glob', () => {
+    pkg('tools', ['knowledge'], {
+      'probe.ts': [
+        '// Nothing in `packages/*/src` calls this — verified by probe.',
+        "import { x } from '@atlas/adapter-io';",
+        'export const y = x;',
+        '/* closes the phantom block the naive stripper opened above. */',
+        '',
+      ].join('\n'),
+    });
+    const { code, out } = runGate();
+    expect(out).toMatch(/ARCH-2 forbidden edge: @atlas\/tools MUST NOT depend on @atlas\/adapter-io/);
+    expect(code).toBe(1);
+  });
+
+  // The SECOND strip site: the leg-binding block at the composition root. Same defect, and here it hides a
+  // GHOST LEG — bound, invocable over MCP, in no surface constant. The naive stripper deletes the
+  // `'atlas-backdoor'` line along with the phantom block and the gate exits 0.
+  // TEETH: breaks-on "the naive two-regex strip returns" (boundLegs).
+  it('sees a bound leg sitting under a line comment that contains a glob', () => {
+    pkg('adapter-io', ['tools'], {
+      'wire.ts': [
+        'export function assemble() {',
+        '  const legs: ToolLegs = {',
+        "    'atlas-init': () => ({}),",
+        '    // legs are discovered by walking packages/*/src at build time',
+        "    'atlas-backdoor': () => ({}),",
+        '    /* end of legs */',
+        '  };',
+        '  return legs;',
+        '}',
+        '',
+      ].join('\n'),
+    });
+    const { code, out } = runGate();
+    expect(out).toMatch(/ARCH-3\/5 leg 'atlas-backdoor' is bound at the composition root but is in NO surface constant/);
+    expect(code).toBe(1);
+  });
+
+  // CONTROL — the fix must not have been "stop stripping". A glob and a package name in the SAME comment
+  // is still prose, not an edge. Without this, deleting the stripper outright passes the two tests above.
+  it('still ignores a package named in a comment that also contains a glob', () => {
+    pkg('kernel', ['contracts'], {
+      'c.ts': [
+        '// Nothing in `packages/*/src` may import @atlas/tools or @atlas/adapter-io.',
+        '/* @atlas/cli lives in the ring. */',
+        'export const z = 1;',
+        '',
+      ].join('\n'),
+    });
+    const { code, out } = runGate();
+    expect(out).not.toContain('✗');
+    expect(code).toBe(0);
+  });
+
+  // CONTROL — a package name inside a STRING or a template is code the gate reads, but it is not an import
+  // POSITION, so it is still not an edge. Pins that the parser-backed stripper left literals alone.
+  it('still ignores a package name inside a string literal', () => {
+    pkg('kernel', ['contracts'], {
+      'c.ts': ["export const HELP = 'run @atlas/adapter-io from the ring';\nexport const T = `see @atlas/tools`;\n"].join('\n'),
+    });
+    const { code, out } = runGate();
+    expect(out).not.toContain('✗');
+    expect(code).toBe(0);
+  });
+});
+
+// ── THE SPECIFIER GRAMMAR: two shapes the source scan could not see ──────────────────────────────────
+//
+// PRE-EXISTING, not a regression. The source scan exists because "a source import needs no manifest edit
+// to resolve" — so it must see AT LEAST what the manifest scan sees. It did not, and the gap ran the wrong
+// way: `shortName` accepts any `@atlas/*` from a manifest, while the source regex captured
+// `[a-z][a-z-]*` matched against the closing quote. Digits and subpaths were therefore invisible IN SOURCE
+// ONLY — an edge was easier to hide in code than in a manifest, which inverts the whole point of the scan.
+describe('layer-guard — the source scan sees every specifier shape the manifest scan sees', () => {
+  // TEETH: breaks-on "the specifier is matched whole instead of split after the scope". Remove the
+  // `(?:\/[^'"]*)?` tail and this returns exit 0 / 0 violations.
+  it('catches a forbidden import written as a DEEP SUBPATH', () => {
+    pkg('tools', ['knowledge'], {
+      'probe.ts': "import type { W } from '@atlas/adapter-io/dist/src/index.js';\nexport type Z = W;\n",
+    });
+    const { code, out } = runGate();
+    expect(out).toMatch(/ARCH-2 forbidden edge: @atlas\/tools MUST NOT depend on @atlas\/adapter-io/);
+    expect(code).toBe(1);
+  });
+
+  // TEETH: breaks-on "the character class drops 0-9". Revert `[a-z][a-z0-9-]*` to `[a-z][a-z-]*` and this
+  // returns exit 0 / 0 violations. `e2e` is not hypothetical: it and `e2e-blackbox` are ranked members of
+  // RING_ORDER, so a digit in a package name is this repo's normal state, not an edge case.
+  it('catches a forbidden import from a package with a DIGIT in its name', () => {
+    pkg('e2e', ['tools']);
+    pkg('tools', ['knowledge'], { 'probe.ts': "import type { W } from '@atlas/e2e';\nexport type Z = W;\n" });
+    const { code, out } = runGate();
+    expect(out).toMatch(/ARCH-1 layer inversion: @atlas\/tools \(L7\) depends on @atlas\/e2e/);
+    expect(code).toBe(1);
+  });
+
+  // THE ASYMMETRY, asserted directly rather than as a variant of the test above — this is the shape that
+  // let the bug live, so it gets its own test. The SAME `tools → e2e` edge is planted twice: once in a
+  // MANIFEST, once as a SOURCE IMPORT. On master the manifest form failed with 2 violations and the source
+  // form exited 0. A gate whose source scan is weaker than its manifest scan is not a stricter check on
+  // code; it is an instruction on where to put the edge you do not want seen.
+  it('catches the SAME edge whether it arrives via manifest or via source import', () => {
+    pkg('e2e', ['tools']);
+    pkg('tools', ['knowledge', 'e2e']); // manifest-declared
+    const viaManifest = runGate();
+
+    dropFixture();
+    freshFixture();
+    pkg('e2e', ['tools']);
+    pkg('tools', ['knowledge'], { 'probe.ts': "import type { W } from '@atlas/e2e';\nexport type Z = W;\n" }); // source only
+    const viaSource = runGate();
+
+    const INVERSION = /ARCH-1 layer inversion: @atlas\/tools \(L7\) depends on @atlas\/e2e \(L11\)/;
+    expect(viaManifest.out).toMatch(INVERSION);
+    expect(viaSource.out).toMatch(INVERSION);
+    expect(viaManifest.code).toBe(1);
+    expect(viaSource.code).toBe(1);
+  });
+
+  // CONTROL — subpath support must not make every deep import a violation. A LEGAL deep import (inner
+  // layer, correct direction) still passes. Without this, "split on the slash" could have been achieved by
+  // firing on anything containing one.
+  it('does NOT fire on a LEGAL deep-subpath import', () => {
+    pkg('kernel', ['contracts'], {
+      'a.ts': "import type { X } from '@atlas/contracts/dist/src/index.js';\nexport type Y = X;\n",
+    });
+    const { code, out } = runGate();
+    expect(out).not.toContain('✗');
+    expect(code).toBe(0);
+  });
+
+  // CONTROL — a non-`@atlas` scope with a subpath is not a workspace edge at all.
+  it('does NOT invent an edge from a third-party subpath import', () => {
+    pkg('kernel', ['contracts'], { 'a.ts': "import { pipe } from 'lodash/fp/pipe.js';\nexport const p = pipe;\n" });
+    const { code, out } = runGate();
+    expect(out).not.toContain('✗');
+    expect(code).toBe(0);
+  });
+});
+
+// ── THE COMPOSITION ROOT: two more ways a GHOST LEG stayed invisible ─────────────────────────────────
+//
+// A ghost leg is the sharpest failure this gate has, because `legs[tool]` dispatches with NO membership
+// test: a leg bound at the composition root and named in no surface constant is invocable over MCP and
+// pinned by nothing. The plain case has been caught for a while. Two shapes were not, and both are false
+// PASSES — the same class as the import-scan holes above, one function further down.
+describe('layer-guard — the leg scan cannot be blinded by prose or by a digit', () => {
+  /** The clean fixture's wire.ts, with the leg lines swapped in. */
+  const wire = (...legLines) =>
+    ['export function assemble() {', '  const legs: ToolLegs = {', ...legLines, '  };', '  return legs;', '}', ''].join('\n');
+
+  // CONTROL, stated first because the two tests after it are only meaningful against it: the plain ghost
+  // leg IS caught. Without this, "the gate now fires" proves nothing about what made it fire.
+  it('CONTROL — a plain ghost leg is caught', () => {
+    pkg('adapter-io', ['tools'], { 'wire.ts': wire("    'atlas-init': () => ({}),", "    'atlas-backdoor': () => ({}),") });
+    const { code, out } = runGate();
+    expect(out).toMatch(/ARCH-3\/5 leg 'atlas-backdoor' is bound at the composition root but is in NO surface constant/);
+    expect(code).toBe(1);
+  });
+
+  // TEETH: breaks-on "the binding site is located and brace-matched over RAW source". The literal used to
+  // be found and brace-counted BEFORE anything was stripped — the strip ran on the resulting slice, so the
+  // comment above it claimed an ordering the code did not have. A lone `}` in prose drove the counter to
+  // zero early, `end` landed on the comment, and every leg below it fell outside the block. Exit 0.
+  it('a stray `}` in a COMMENT cannot truncate the block and hide the leg below it', () => {
+    pkg('adapter-io', ['tools'], {
+      'wire.ts': wire(
+        "    'atlas-init': () => ({}),",
+        '    // the handler dispatches on legs[tool] } and never checks membership',
+        "    'atlas-backdoor': () => ({}),",
+      ),
+    });
+    const { code, out } = runGate();
+    expect(out).toMatch(/ARCH-3\/5 leg 'atlas-backdoor' is bound at the composition root but is in NO surface constant/);
+    expect(code).toBe(1);
+  });
+
+  // TEETH: breaks-on "the leg-key character class drops 0-9". Identical shape to the specifier-grammar hole
+  // one function away, identical direction: the key matched nothing, the leg was absent from the returned
+  // set, and ARCH-3/5's bound-but-undeclared check had nothing to complain about.
+  it('a DIGIT in a leg name does not make the leg invisible', () => {
+    pkg('adapter-io', ['tools'], { 'wire.ts': wire("    'atlas-init': () => ({}),", "    'atlas-v2': () => ({}),") });
+    const { code, out } = runGate();
+    expect(out).toMatch(/ARCH-3\/5 leg 'atlas-v2' is bound at the composition root but is in NO surface constant/);
+    expect(code).toBe(1);
+  });
+
+  // CONTROL — the real wire.ts shape, and the reason master got the right answer by luck rather than by
+  // construction. Measured on master: the raw and stripped depth counters DIVERGED three times inside the
+  // legs literal, first at wire.ts:186 (`{ pack, subsumes }` in prose), and re-converged every time only
+  // because the prose braces happened to be BALANCED. Balanced braces must keep locating the same block.
+  it('does NOT fire on BALANCED braces in prose inside the literal (the real wire.ts shape)', () => {
+    pkg('adapter-io', ['tools'], {
+      'wire.ts': wire(
+        '    // the query leg returns the `{ pack, subsumes }` observability envelope',
+        "    'atlas-init': () => ({}),",
+      ),
+    });
+    const { code, out } = runGate();
+    expect(out).not.toContain('✗');
+    expect(code).toBe(0);
+  });
+
+  // CONTROL — and the second thing stripping first buys. A commented-out binding site used to win the
+  // `indexOf` race: the gate located the DEAD literal, found no keys in it, and reported the real
+  // `atlas-init` as typed-but-unbound. A false FAIL rather than a false PASS, but the same blindness.
+  it('is not fooled by a COMMENTED-OUT binding site earlier in the file', () => {
+    pkg('adapter-io', ['tools'], {
+      'wire.ts': [
+        '// Kept for the reader — this is what the binding used to look like:',
+        '//   const legs: ToolLegs = {',
+        "//     'atlas-ghost': () => ({}),",
+        '//   };',
+        wire("    'atlas-init': () => ({}),"),
+      ].join('\n'),
+    });
+    const { code, out } = runGate();
+    expect(out).not.toContain('✗');
+    expect(code).toBe(0);
   });
 });
