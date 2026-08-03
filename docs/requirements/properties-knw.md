@@ -120,11 +120,11 @@ covers_reqs: [ REQ-KNOW-10a, REQ-KNOW-10b ]                 # ptr+digest
 witness:     [ SCN-KNOW-10a-1, SCN-KNOW-10b-1, SCN-KNOW-10b-2 ]
 teeth:       breaks-on "the validator drops the cap check or a required-field check for SOME field/size — the full product exposes any single-axis omission (a 700 B body, a receiptless node) the 3 cell witnesses only sample"
 
-### PROP-KNOW-11 — owner-scoped write, universal read
+### PROP-KNOW-11 — scope-owned write, universal read ⚠️ **AMENDED 2026-08-03 (owner-ratified)** — reverses the `owner` fence added by #178/PR#105; see req-knw.md#REQ-KNOW-11a.
 inv:         INV-KNOW-11
 source:      method-tags-knw.md#INV-KNOW-11                  # ptr+digest
-law:         ∀ op, actor, fact. authz(op, actor, fact) = (op == read) ? allow : inScope(actor, fact.scope); every fact carries `owner` + `scope`; ∀ read ⇒ allow (100%), ∀ out-of-scope write ⇒ reject
-arbitrary:   facts with arbitrary owner/scope × op∈(read,write) × actor-scope∈(in-scope,out-of-scope)
+law:         ∀ op, actor, fact. authz(op, actor, fact) = (op == read) ? allow : inScope(actor, fact.scope); every fact carries `scope`; ∀ read ⇒ allow (100%), ∀ out-of-scope write ⇒ reject
+arbitrary:   facts with arbitrary scope × op∈(read,write) × actor-scope∈(in-scope,out-of-scope)
 covers_reqs: [ REQ-KNOW-11a, REQ-KNOW-11b, REQ-KNOW-11c ]   # ptr+digest
 witness:     [ SCN-KNOW-11a-1, SCN-KNOW-11b-1, SCN-KNOW-11c-1 ]
 teeth:       breaks-on "the write path skips the scope check for SOME actor/scope pairing, OR the read path applies one — quantified over the scope cross-product it kills both the leaky-write and the non-universal-read the single witnesses only pin once each"

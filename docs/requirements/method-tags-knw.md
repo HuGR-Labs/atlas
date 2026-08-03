@@ -96,11 +96,11 @@ up-property: "template-validation routing is total + mutually-exclusive: a fact 
 down-model: "enumerate the finite validity product {required-field∈(present,missing) × size∈(≤cap,>cap) × slot∈(in-vocab-12, out)}; assert the reject/persist route per cell, and that the closed slot set has exactly the 12 enumerated members (adding one is a `cv` bump)"
 anti-rot: `knowledge/ref/template.ts` (the per-kind template + closed-slot validator) is the mock in the emit unit tests; a free-text-slot or missing-field path that persists diverges from the enumerated table.
 
-### INV-KNOW-11
+### INV-KNOW-11 ⚠️ **AMENDED 2026-08-03 (owner-ratified)** — reverses the `owner` fence added by #178/PR#105; see req-knw.md#REQ-KNOW-11a for the measurement.
 method-tag: reference-model
 fspec: —
-up-property: "owner-scoped write, universal read: every fact carries `owner` + `scope`; a write outside the owner's scope is rejected; a read of any scope succeeds for any caller (100%)"
-down-model: "reference `authz(op,actor,fact) = op==read ? allow : inScope(actor, fact.scope)`; a unit asserts out-of-scope write ⇒ reject and any read ⇒ allow"
+up-property: "scope-owned write, universal read: every fact carries `scope`; a write outside the actor's scope is rejected; a read of any scope succeeds for any caller (100%). Producer identity is carried by `ClaimProvenance.source` (KNOW-14), not by a separate `owner` field — `owner` is not part of this up-property and was never a gate input."
+down-model: "reference `authz(op,actor,fact) = op==read ? allow : inScope(actor, fact.scope)`; a unit asserts out-of-scope write ⇒ reject and any read ⇒ allow. (Unchanged by the amendment — this down-model was always scope-only; #178/PR#105 folded an `owner` leg into `authz()` itself without updating this down-model, which is why it never drifted.)"
 anti-rot: `knowledge/ref/authz.ts` is the mock; a write path that skips the scope check fails the out-of-scope rejection.
 
 ### INV-KNOW-12
