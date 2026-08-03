@@ -16,79 +16,23 @@
 // `MINE_ABSTAIN_LINE` — that is the CORRECT result, and no admission check was weakened to move a number.
 
 import { describe, it, expect, afterAll } from 'vitest';
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { create } from '@bufbuild/protobuf';
-import {
-  serializeSCIP,
-  IndexSchema,
-  MetadataSchema,
-  ToolInfoSchema,
-  DocumentSchema,
-  OccurrenceSchema,
-  SymbolRole,
-} from '@c4312/scip';
 import { createSkeletonSource } from '@atlas/adapter-io';
 import { runExtract } from '@atlas/genesis';
 import type { GenesisBudget, HistorySource, MinedSignals, SiteProposer } from '@atlas/genesis';
 import { runMine, driveMine, buildControllerDeps } from '../src/mine.js';
 import type { MineDeps } from '../src/mine.js';
+import { NO_MODEL_ENV, makeIndexedRepo, cleanupIndexedRepos } from './mine-fixtures.js';
 
-// ── a REAL indexed repo: git-tracked sources + the `.atlas/index.scip` dump `build` derives edges from ──
-// The dump is written INSIDE the repo (the production source reads `<repo>/.atlas/index.scip`, the same path
-// `composeRuntime` uses), which is why the frozen adapter-io `fix-scip` harness — it writes to its own temp
-// dir, in another package's test tree — cannot be reused verbatim here. The corpus is the same controlled
-// minimum: `greet` DEFINED in util.ts, REFERENCED in app.ts (⇒ a resolved edge), plus one reference with no
-// definition anywhere (⇒ an `unresolved` edge, INDEX-13 — declared, never guessed).
-const SYM_GREET = 'util/greet().';
-const SYM_MISSING = 'util/missingHelper().';
+// HERMETICITY (`env: NO_MODEL_ENV`, threaded to `loadModelConfig`): every case below is about the DEFAULT
+// pass, and "default" must not mean "whatever model this developer happens to have configured". Left to
+// `process.env`, cases 1/2/4 read the operator's own `~/.config/atlas/model.json`, execute the binary it
+// names from a unit test, and case 4's "no proposer model is wired" becomes a fact about the machine. The
+// env is the ONLY seam pinned — every other seam is still the production default, which is the point.
+//
+// THE REPO fixture (`makeIndexedRepo`) moved to ./mine-fixtures.ts when a third suite needed it; it is the
+// same tree and the same `.atlas/index.scip` dump, imported rather than copied.
 
-const temps: string[] = [];
-
-function makeIndexedRepo(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'atlas-skel-cli-'));
-  temps.push(dir);
-  mkdirSync(join(dir, 'src'), { recursive: true });
-  writeFileSync(join(dir, 'src', 'util.ts'), 'export function greet(n: string): string {\n  return `hi ${n}`;\n}\n');
-  writeFileSync(join(dir, 'src', 'app.ts'), "import { greet } from './util';\n\nexport function main(): string {\n  return greet('world') + missingHelper();\n}\n");
-  const git = (...args: string[]): void => {
-    execFileSync('git', args, { cwd: dir, stdio: 'ignore' });
-  };
-  git('init', '-q');
-  git('config', 'user.email', 'fixture@atlas.test');
-  git('config', 'user.name', 'atlas fixture');
-  git('add', '-A');
-  git('-c', 'commit.gpgsign=false', 'commit', '-qm', 'fixture');
-
-  const index = create(IndexSchema, {
-    metadata: create(MetadataSchema, {
-      projectRoot: 'file:///fixture',
-      toolInfo: create(ToolInfoSchema, { name: 'atlas-fixture', version: '0' }),
-    }),
-    documents: [
-      create(DocumentSchema, {
-        relativePath: 'src/util.ts',
-        occurrences: [create(OccurrenceSchema, { symbol: SYM_GREET, symbolRoles: SymbolRole.Definition })],
-      }),
-      create(DocumentSchema, {
-        relativePath: 'src/app.ts',
-        occurrences: [
-          create(OccurrenceSchema, { symbol: SYM_GREET, symbolRoles: 0 }),
-          create(OccurrenceSchema, { symbol: SYM_MISSING, symbolRoles: 0 }),
-        ],
-      }),
-    ],
-  });
-  mkdirSync(join(dir, '.atlas'), { recursive: true });
-  writeFileSync(join(dir, '.atlas', 'index.scip'), serializeSCIP(index));
-  return dir;
-}
-
-afterAll(() => {
-  while (temps.length > 0) rmSync(temps.pop()!, { recursive: true, force: true });
-});
+afterAll(cleanupIndexedRepos);
 
 // NOTE: this suite used to pin the literal constant
 //   'mine: 0 candidates — no proposer model wired (abstain-by-design; facts are never fabricated)'
@@ -102,7 +46,7 @@ afterAll(() => {
 describe('SKEL — the default `atlas mine` S0 seam is the REAL structural skeleton', () => {
   it('1. THE BITE: a default pass VISITS sites on an indexed repo (0 under the old emptySkeleton default)', () => {
     const repo = makeIndexedRepo();
-    const report = driveMine(repo); // NO deps injected — this is the production default path
+    const report = driveMine(repo, { env: NO_MODEL_ENV }); // production defaults; only the config lookup is pinned
 
     // Both counters are incremented once per VISITED site (run-controller.ts drive()). Under the previous
     // `emptySkeleton()` default they were 0 because `rank` produced no candidate to visit at all.
@@ -114,7 +58,7 @@ describe('SKEL — the default `atlas mine` S0 seam is the REAL structural skele
 
   it('2. sites are visited and STILL zero facts are seeded — the null proposer abstains (never fabricates)', () => {
     const repo = makeIndexedRepo();
-    const report = driveMine(repo);
+    const report = driveMine(repo, { env: NO_MODEL_ENV });
     expect(report.budgetSpent).toBeGreaterThan(0); // sites WERE visited…
     expect(report.seeded.length).toBe(0); // …and produced nothing: abstain, not fabricate
     expect(report.ratified.length).toBe(0); // candidate-only stays structural
@@ -166,7 +110,7 @@ describe('SKEL — the default `atlas mine` S0 seam is the REAL structural skele
 
   it('4. SEEDED by the real skeleton ⇒ the empty pass now correctly blames the ABSENT MODEL', async () => {
     const repo = makeIndexedRepo();
-    const v = await runMine(repo);
+    const v = await runMine(repo, { env: NO_MODEL_ENV });
     expect(v.exitCode).toBe(0);
     expect(v.stdout).toContain('seeded 0');
     // the cost line is now HONEST about the work actually done (it read `llmCalls 0 · budgetSpent 0` before).
@@ -179,7 +123,7 @@ describe('SKEL — the default `atlas mine` S0 seam is the REAL structural skele
   });
 
   it('5. TOTALITY preserved: a non-existent repo path is a clean, empty pass that blames the STRUCTURE', async () => {
-    const v = await runMine('no-such-repo-anywhere');
+    const v = await runMine('no-such-repo-anywhere', { env: NO_MODEL_ENV });
     expect(v.exitCode).toBe(0);
     expect(v.stdout).toContain('seeded 0');
     expect(v.stdout).toContain('cost: llmCalls 0 · budgetSpent 0'); // fail-closed ⇒ nothing to visit
