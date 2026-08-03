@@ -31,6 +31,35 @@ a hashed structural index (BLAKE3-merkle CAS) resolved by scope, dependency blas
   write-door", which stopped being true when `atlas-link` was ratified on 2026-07-21). Reads carry no
   write authority; the doors are the frozen `WRITE_PATHS` constant in `packages/tools/src/handler.ts`.
 
+## Commands
+
+The CLI is `atlas` (`packages/cli/package.json` `bin` → `packages/cli/dist/src/bin.js`). The workspace is
+not published, so build it from a checkout — `npm ci && npm run build` — and note that a workspace install
+does **not** put `atlas` on your `PATH`; alias it or invoke the file. **Exactly these eight commands exist**
+(`COMMANDS` in `packages/cli/src/map.ts`); one reference page each, every example on them executed against
+the real binary.
+
+| command | what it does | page |
+| --- | --- | --- |
+| `atlas init <path>` | structural `$0`-LLM move-in; installs the `.gitignore` rule for `.atlas/` | [reference](./docs/reference/commands/init.md) |
+| `atlas query <scope> [--by …]` | the bounded read: a scope's `tier≥T1` invariants, with a `stale` flag | [reference](./docs/reference/commands/query.md) |
+| `atlas emit <fact.json> --at <sha>` | governed write door — admits a grounded fact, or says which gate refused it | [reference](./docs/reference/commands/emit.md) |
+| `atlas reconcile <mergeBase> [--accept-reground]` | the merge gate: classifies drift, exits `2` on any semantic flip | [reference](./docs/reference/commands/reconcile.md) |
+| `atlas doctor <archive\|why\|hotset\|reground>` | read-only diagnosis and repair *proposals*; persists nothing | [reference](./docs/reference/commands/doctor.md) |
+| `atlas mine <repo>` | the genesis bootstrap; writes candidates only, and abstains loudly with no model | [reference](./docs/reference/commands/mine.md) |
+| `atlas node <addr>` | read one fact whole, by content address | [reference](./docs/reference/commands/node.md) |
+| `atlas link <a> <b> [--retract]` | governed write door — asserts (or withdraws) `a ≡ b`; never a merge | [reference](./docs/reference/commands/link.md) |
+
+**Exit codes are a designed surface**, uniform across all eight (`EXIT` / `deriveStatus`,
+`packages/cli/src/map.ts`): `0` ok · `1` **usage or wiring error — your invocation was wrong** · `2`
+**governed refusal — your invocation was fine and a gate declined it**, so re-running it unchanged will not
+help. A refusal always carries the reason and the invariant it enforced.
+
+Task guides: [move a repository in](./docs/how-to/move-a-repo-in.md) ·
+[emit a grounded fact](./docs/how-to/emit-a-grounded-fact.md) ·
+[find and fix drifted knowledge](./docs/how-to/find-and-fix-drift.md) ·
+[get a territory's knowledge](./docs/how-to/query-the-atlas.md).
+
 ## Layout
 
 Fifteen packages: the ten-package layered CORE, the productization RING you actually run, and the two
