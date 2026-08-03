@@ -13,6 +13,11 @@
 //   • the SEED GATE (`seedGate`) — the genesis-owned admission decision. It reads NO proposer
 //     self-assessment (`self_score`/`importance` are present on the candidate but NEVER consulted); the sole
 //     mechanical input is grounding (GEN-4). A grounded candidate with 0 hits is STILL seeded (loose-but-thin).
+//     ADR-0012 makes it the CONSUMER of the harness's obviousness score: the score rides through onto the
+//     decision so ranking can read it, and the ADMIT/REJECT branch is untouched — `grounded` remains the sole
+//     input. That is deliberate and load-bearing, not conservatism: `self_score`/`importance` exist here
+//     PRECISELY so the gate can be witnessed ignoring them (GEN-16a), and a gate that started reading a new
+//     input for its verdict would destroy that witness. The score is a RANKING signal, never an admission one.
 //   • CONSULT/DECAY are DELEGATED to the injected KNOW-17 `HitsApi` — a hit is a LOGGED CITED event
 //     (`logHit`), NEVER a self-assessed counter genesis keeps of its own; decay is the KNOW-17 pass.
 //   • the admission threshold is `calibrate(observedHits)` — `calibrate` is the parametric OPEN-DEFINE
@@ -21,7 +26,7 @@
 // No hashing, no clock, no IO here; node identity is the sealed @atlas/kernel `NodeKey` (minted by callers).
 
 import type { NodeKey, StructRef } from '@atlas/contracts';
-import type { DecayConfig, LedgerEntry, HitsApi } from '@atlas/knowledge';
+import type { DecayConfig, LedgerEntry, HitsApi, ObviousnessScore } from '@atlas/knowledge';
 
 /**
  * A proposer candidate presented to the genesis seed gate (GENESIS-HOME). It MAY carry the proposer's own
@@ -36,10 +41,18 @@ export interface SeedCandidate {
   readonly importance?: number; // proposer self-assessment alias — also NEVER read (GEN-16a)
 }
 
-/** The genesis seed-gate decision (GEN-16a/16b). `loose-but-thin` = seeded, usefulness deferred to hits. */
+/**
+ * The genesis seed-gate decision (GEN-16a/16b). `loose-but-thin` = seeded, usefulness deferred to hits.
+ *
+ * `obviousness` (ADR-0012) is carried THROUGH, never consulted: it is present on a `seeded` decision so the
+ * ranker downstream has the cold-start prior, and its presence or value can never move `seeded`. Optional
+ * because the score arrives from the admit harness, and a caller that has not computed one yet gets an
+ * honest absence rather than a fabricated default.
+ */
 export interface SeedDecision {
   readonly seeded: boolean;
   readonly reason: 'loose-but-thin' | 'ungrounded';
+  readonly obviousness?: ObviousnessScore;
 }
 
 /**
@@ -49,11 +62,19 @@ export interface SeedDecision {
  * and its usefulness is judged later by logged consults (KNOW-17). An ungrounded candidate is not a fact
  * (GEN-4/GEN-6) and is not seeded.
  */
-export function seedGate(candidate: SeedCandidate): SeedDecision {
+export function seedGate(candidate: SeedCandidate, obviousness?: ObviousnessScore): SeedDecision {
   // GEN-16a: the decision is a pure function of `grounded` — INDEPENDENT of any proposer self-assessment.
   // GEN-16b: no strict a-priori usefulness bar; a grounded 0-hit candidate is admitted (loose-but-thin).
+  //
+  // ADR-0012: `obviousness` is the HARNESS-computed score, and it appears on NEITHER branch condition. It is
+  // a second parameter rather than a `SeedCandidate` field on purpose — putting it on the candidate would sit
+  // it beside `self_score`/`importance`, where the next reader has to work out which of the three the
+  // proposer authored. Here the shape says it: the candidate is what the proposer sent, the second argument
+  // is what the harness measured.
   if (!candidate.grounded) return { seeded: false, reason: 'ungrounded' };
-  return { seeded: true, reason: 'loose-but-thin' };
+  return obviousness === undefined
+    ? { seeded: true, reason: 'loose-but-thin' }
+    : { seeded: true, reason: 'loose-but-thin', obviousness };
 }
 
 /**
@@ -81,8 +102,9 @@ export interface SeedGateDeps {
  * KNOW-17's pass, the threshold is `calibrate(observedHits)`).
  */
 export interface SeedGate {
-  /** GEN-16a/16b — seed loose-but-thin; reads no proposer self-assessment. */
-  seed(candidate: SeedCandidate): SeedDecision;
+  /** GEN-16a/16b — seed loose-but-thin; reads no proposer self-assessment. The optional ADR-0012 score is
+   *  carried onto the decision for ranking and never enters the seeded/ungrounded verdict. */
+  seed(candidate: SeedCandidate, obviousness?: ObviousnessScore): SeedDecision;
   /** GEN-16c — a wave consults a seeded fact ⇒ accrue one LOGGED CITED hit (KNOW-17 `logHit`). Returns the
    *  minimal ledger record; its `hits` is the observed count the threshold calibrates against. */
   consult(nodeId: NodeKey): LedgerEntry;

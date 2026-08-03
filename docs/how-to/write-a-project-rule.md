@@ -28,7 +28,11 @@ clear before it earns its slot.
    Grounding earns the rule its place and lets CI flag it if the code moves out from under it.
 
 6. **Check the usefulness bar: actionable AND non-obvious.** If a competent member would already do it
-   without being told, it is not worth a token. Reject the obvious.
+   without being told, it is not worth a token. Reject the obvious. *(This is a **Memory** project rule under a
+   hard per-member token cap, where a slot spent is a slot denied — not a Knowledge fact. Knowledge admission
+   does the opposite: obviousness is scored, never gated, per
+   [ADR-0012](../adr/ADR-0012-obviousness-is-scored-never-gated.md). The bar differs because the constraint
+   differs — Memory is capped and rival, the Atlas is not.)*
 
 7. **Dedupe and fit the cap.** Confirm no existing entry already says it. Confirm the addition keeps the
    member's total injected `project` memory `≤` cap ([MEM-3](../reference/atlas-memory.md#invariants)). If

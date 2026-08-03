@@ -3,7 +3,7 @@
 // The BUDGETED, RANKED-SITE S2 driver: the LLM fires only on ranked sites, HIGHEST-PPR-FIRST, ONE bounded
 // call per site, under a HARD budget ceiling (default `min(frontier_size, 200)`, GEN-2), halting at the
 // marginal-value floor (trailing-20 admit-rate `< 20%`). Every candidate is routed through the 2-door bar
-// at atlas-emit (grounding re-derives ∧ non-obvious, GEN-4); admission is the gate's MECHANICAL verdict —
+// at atlas-emit (grounding re-derives, GEN-4; obviousness SCORED not gated, ADR-0012); admission is the gate's MECHANICAL verdict —
 // a seed's self-declaration is NEVER consulted (GEN-4d). The ranking, the 2-door gate, and the escalation
 // defaults are CALLED through the injected `ExtractDeps` seams, never authored here.
 
@@ -53,7 +53,7 @@ export type EmitVerdict =
   | { readonly emitted: false; readonly whyNot: WhyNot };
 
 /**
- * The 2-door bar at atlas-emit (truth: grounding re-derives FRESH by subtreeHash; usefulness: non-obvious
+ * The admission bar at atlas-emit (truth: grounding re-derives FRESH by subtreeHash; usefulness: non-obvious
  * ∧ actionable) — CALLED, never defined here (CAMPAIGN-4). Admission depends ONLY on this verdict; the
  * seed's own self-declaration is never an input (GEN-4d). An un-admitted seed yields a grounded `WhyNot`.
  */
@@ -115,7 +115,7 @@ export function runExtract(
     let admitted = false;
     if (seed === null) {
       // GEN-12: abstention is first-class — a site that yields no proposal yields a grounded WhyNot.
-      abstained.push({ site: cand.site, reason: 'model abstained: no non-obvious grounded fact at site' });
+      abstained.push({ site: cand.site, reason: 'model abstained: no grounded fact at site' });
     } else {
       // GEN-4: admission is the mechanical 2-door verdict alone (self-declaration on `seed` is NOT read).
       const verdict = deps.gate.emit(seed, cand);

@@ -60,6 +60,37 @@ export type Check =
 export type GroundedFact = AdvisoryNode | PredicateNode;
 
 /**
+ * The ORDINAL leg of the obviousness score (ADR-0012). Two-point on purpose, and the honesty matters:
+ * the harness's obviousness predicate is a BOOLEAN (`TwoDoorBar.nonObvious`), so a two-point ordinal is
+ * exactly what it can produce today. Inventing a real-valued scale here would be inventing a number, which
+ * ADR-0011's Decision-4 discipline forbids and which ADR-0012 §"What this ADR does NOT close" declines
+ * twice over (the predicate is not mechanical, and the retrieval weight is a decision on real data).
+ * Widening this union later is additive.
+ */
+export type ObviousnessRank = 'obvious' | 'non-obvious';
+
+/**
+ * The STORED, AUDITABLE obviousness score (GEN-4 / GROUND-7, ADR-0012 — owner-ratified 2026-08-02).
+ *
+ * Obviousness never rejects. It is measured at mine time — the one moment the source bytes and the model
+ * are both in hand — and kept, so that the filter's own accuracy can be audited after the fact and
+ * re-thresholded at zero cost. A rejected candidate leaves no record; a gate therefore destroys exactly the
+ * evidence needed to audit the gate.
+ *
+ * `by` is a CLOSED single-literal union, and that is the load-bearing part rather than a formality. GEN-16
+ * forbids the usefulness judgment from resting on the proposer's self-assessment, and ADR-0011 makes it
+ * structural by never passing `Candidate.signals` into the prompt. Pinning the only legal provenance to
+ * `'harness-predicate'` means a proposer-authored score is not merely ignored — it is UNSPELLABLE in the
+ * stored type. "Computed at mine time, when the model is in hand" must never be read as "ask the model how
+ * non-obvious its own claim is."
+ */
+export interface ObviousnessScore {
+  readonly rank: ObviousnessRank;
+  /** Provenance. The harness's predicate over the SOURCE BYTES — never a field the proposer wrote. */
+  readonly by: 'harness-predicate';
+}
+
+/**
  * The flat, honest default (a grounded claim, no verdict). Transcribed EXACTLY from
  * atlas-knowledge:21-22:
  *   `AdvisoryNode = { kind:'advisory', id, tier, claimNorm, grounding, freshness,
@@ -90,6 +121,12 @@ export interface AdvisoryNode {
   readonly owner?: string; // R3 — KNOW-11a (authz keys inScope(actor, scope); nominal seat/owner id)
   readonly scope?: string; // R3 — KNOW-11a (territory scope id)
   readonly predicateSlot?: PredicateSlot; // R3 — KNOW-15b nodeKey leg / KNOW-4g read-side grouping
+  /** ADR-0012 — the stored obviousness score. ADDITIVE + absent-tolerant, exactly as the N11 `builtAt` /
+   *  `sameAs` widening (task #75): old data stays readable, no migration, no default fabricated. TOTALITY
+   *  ("every emitted fact carries a score") is enforced BEHAVIOURALLY at the emit path + its goldens, the
+   *  same way KNOW-11's "every fact MUST carry owner+scope" is — not by the type, because ~17 merged
+   *  `GroundedFact` literals predate the field and a required field would make them unreadable. */
+  readonly obviousness?: ObviousnessScore;
 }
 
 /**
@@ -120,6 +157,7 @@ export interface PredicateNode {
   readonly owner?: string; // R3 — KNOW-11a (see AdvisoryNode)
   readonly scope?: string; // R3 — KNOW-11a
   readonly predicateSlot?: PredicateSlot; // R3 — KNOW-15b nodeKey leg / KNOW-4g grouping
+  readonly obviousness?: ObviousnessScore; // ADR-0012 — the stored obviousness score (see AdvisoryNode)
 }
 
 // [FLAG — `ClaimEntry` reference divergence] atlas-knowledge:26 defines a Knowledge-local

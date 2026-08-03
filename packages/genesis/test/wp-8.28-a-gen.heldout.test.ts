@@ -15,12 +15,18 @@ const idOf = (c: Candidate): string => c.site.qualifiedPath.split('::')[1]!;
 const cand = (id: string, ppr: number, rank: number, s: MinedSignals = ZERO, st?: string): Candidate => ({ site: siteOf(id, st), signals: s, ppr, rank });
 const OFF = { enabled: false, maxDepth: 0, epsilon: 0 } as const;
 const budgetOf = (n: number): GenesisBudget => ({ ceiling: defaultCeiling(n), deepening: { review: OFF, enrich: OFF, expand: OFF } });
-const factFor = (c: Candidate, claim: string): Fact => ({ kind: 'advisory', id: asNodeKey(`nk-${c.site.qualifiedPath}`), tier: 'T2', claimNorm: claim, grounding: { entries: [{ anchor: c.site, path: c.site.qualifiedPath }] }, freshness: 'FRESH', claims: [], authoring: 'ADVISORY' }) as unknown as Fact;
+const factFor = (c: Candidate, claim: string): Fact => ({ kind: 'advisory', id: asNodeKey(`nk-${c.site.qualifiedPath}`), tier: 'T2', claimNorm: claim, grounding: { entries: [{ anchor: c.site, path: c.site.qualifiedPath }] }, freshness: 'FRESH', claims: [], authoring: 'ADVISORY', obviousness: { rank: 'non-obvious', by: 'harness-predicate' } }) as unknown as Fact;
 const rec = () => ({ calls: [] as string[] });
 const seedProposer = (r: { calls: string[] }, extra?: Partial<SeedProposal>): SiteProposer => ({ propose(c) { r.calls.push(idOf(c)); return { cand: c, claim: `claim@${idOf(c)}`, ...extra }; } });
 const abstainProposer = (r: { calls: string[] }): SiteProposer => ({ propose(c) { r.calls.push(idOf(c)); return null; } });
 const emitAll = (): EmitGate => ({ emit: (s, c) => ({ emitted: true, fact: factFor(c, s.claim) }) });
-const rejectAll = (): EmitGate => ({ emit: (_s, c) => ({ emitted: false, whyNot: { site: c.site, reason: 'ungrounded/obvious' } }) });
+const rejectAll = (): EmitGate => ({ emit: (_s, c) => ({ emitted: false, whyNot: { site: c.site, reason: 'ungrounded — the truth door' } }) });
+/** ADR-0012 — the truth door rejects; an OBVIOUS seed emits carrying `rank:'obvious'`. */
+const truthDoorOnly = (ungrounded: ReadonlySet<string>, obvious: ReadonlySet<string>): EmitGate => ({
+  emit: (s, c) => ungrounded.has(idOf(c))
+    ? { emitted: false, whyNot: { site: c.site, reason: 'ungrounded — the truth door' } }
+    : { emitted: true, fact: { ...(factFor(c, s.claim) as unknown as Record<string, unknown>), obviousness: { rank: obvious.has(idOf(c)) ? 'obvious' : 'non-obvious', by: 'harness-predicate' } } as unknown as Fact },
+});
 const emitFor = (ids: ReadonlySet<string>): EmitGate => ({ emit: (s, c) => ids.has(idOf(c)) ? { emitted: true, fact: factFor(c, s.claim) } : { emitted: false, whyNot: { site: c.site, reason: 'no invariant' } } });
 
 const beacon = (): Candidate[] => [cand('h1', 0.88, 1), cand('h2', 0.63, 2), cand('h3', 0.61, 3), cand('h4', 0.12, 4), cand('h5', 0.10, 5)];
@@ -73,14 +79,16 @@ describe('GEN-4 held-out (-2 beacon)', () => {
     const out = runExtract([c], budgetOf(1), { proposer: seedProposer(rec()), gate: emitAll() });
     expect(out.facts[0]!.grounding.entries[0]!.anchor.subtreeHash).toBe(asSubtreeHash('st-e50'));
   });
-  it('SCN-GEN-4b-2: grounded ∧ non-obvious beacon seed emitted', () => {
+  it('SCN-GEN-4b-2: beacon seed clears the truth door and CARRIES a score (ADR-0012 totality)', () => {
     const out = runExtract([cand('reverse', 0.9, 1, ZERO, 'st-f61')], budgetOf(1), { proposer: seedProposer(rec()), gate: emitAll() });
     expect(out.facts.length).toBe(1);
+    expect((out.facts[0] as unknown as { obviousness?: unknown }).obviousness).toBeDefined();
   });
-  it('SCN-GEN-4c-2: ungrounded/obvious beacon seed → emitted:false', () => {
-    const out = runExtract([cand('U2', 0.9, 1), cand('O2', 0.8, 2)], budgetOf(2), { proposer: seedProposer(rec()), gate: rejectAll() });
-    expect(out.facts.length).toBe(0);
-    expect(out.abstained.length).toBe(2);
+  it('SCN-GEN-4c-2: ungrounded beacon seed → emitted:false; the obvious one → emitted, scored', () => {
+    const out = runExtract([cand('U2', 0.9, 1), cand('O2', 0.8, 2)], budgetOf(2), { proposer: seedProposer(rec()), gate: truthDoorOnly(new Set(['U2']), new Set(['O2'])) });
+    expect(out.facts.length).toBe(1);
+    expect(out.abstained.length).toBe(1);
+    expect((out.facts[0] as unknown as { obviousness: { rank: string } }).obviousness.rank).toBe('obvious');
   });
   it('SCN-GEN-4d-2: beacon seed cannot self-declare true', () => {
     const out = runExtract([cand('renew', 0.9, 1)], budgetOf(1), { proposer: seedProposer(rec(), { selfAsserted: true, confidence: 1.0 }), gate: rejectAll() });

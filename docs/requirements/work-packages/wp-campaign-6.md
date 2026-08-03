@@ -103,7 +103,7 @@ id: WP-6.18.GEN
 content_hash: <filled-at-freeze>
 title: genesis seeds loose-but-thin, hits-calibrated (not self-assessed), decay
 intent: >
-  Genesis does not rest the non-obvious/actionable gate on proposer self-assessment; it seeds loose-but-thin, each seeded fact accrues logged hits (KNOW-17), an unconsulted seed decays out (archived, re-enterable), and the admission threshold calibrates against observed hits. (non-authoritative)
+  Genesis does not rest the non-obvious/actionable gate on proposer self-assessment; it seeds loose-but-thin, each seeded fact accrues logged hits (KNOW-17), an unconsulted seed decays out (archived, re-enterable), and the ranking threshold calibrates against observed hits. UNAMENDED by ADR-0012, which adds the a-priori obviousness score as the cold-start prior composing with — never replacing — hits-decay. (non-authoritative)
 source_reqs:                             # ptr+digest
   - source: ../req-gen.md#REQ-GEN-16a  # ptr+digest
   - source: ../req-gen.md#REQ-GEN-16b  # ptr+digest

@@ -79,20 +79,22 @@ source: INV-GROUND-6 @ reference/atlas-grounding.md#ground-6
 If a fact is ungrounded, then the grounding gate shall not let it enter at `emit`.
 normative-clause: "ungrounded facts do not enter"
 
-### REQ-GROUND-7a — admit iff both doors pass
+### REQ-GROUND-7a — admit iff true and not harmful to store
 source: INV-GROUND-7 @ reference/atlas-grounding.md#ground-7
-The grounding gate shall admit a fact if and only if it passes both the truth door and the usefulness door.
-normative-clause: "A fact is admitted iff it passes **both**: (1) **truth** — its grounding re-checks FRESH (GROUND-4); and (2) **usefulness** — it is actionable AND non-obvious."
+amendment: **AMENDED + RE-RATIFIED 2026-08-02** (owner) — [ADR-0012](../adr/ADR-0012-obviousness-is-scored-never-gated.md): obviousness is SCORED, never gated; the rejection line moves to harm (secret / PII).
+The grounding gate shall admit a fact if and only if it passes the truth door and is not harmful to store.
+normative-clause: "A fact is admitted iff it passes **both**: (1) **truth** — its grounding re-checks FRESH (GROUND-4); and (2) **not harmful to store** — it is not a secret / PII, the one class where storing IS the harm (ADR-0012)."
 
-### REQ-GROUND-7b — reject the true-but-obvious
+### REQ-GROUND-7b — admit the true-but-obvious, with a low score
 source: INV-GROUND-7 @ reference/atlas-grounding.md#ground-7
-If a fact is true but obvious, then the grounding gate shall reject it.
-normative-clause: "A true-but-obvious fact is noise and MUST be rejected."
+amendment: **AMENDED + RE-RATIFIED 2026-08-02** (owner) — [ADR-0012](../adr/ADR-0012-obviousness-is-scored-never-gated.md): obviousness is SCORED, never gated; the rejection line moves to harm (secret / PII).
+If a fact is true but obvious, then the grounding gate shall admit it carrying a low obviousness score, and shall not reject it.
+normative-clause: "A true-but-obvious fact is **admitted with a low score**; the usefulness judgment `actionable ∧ non-obvious` is **computed and stored as a score**, never a veto, and the ranking decision is taken a-posteriori at retrieval (ADR-0012)."
 
 ### REQ-GROUND-7c — failing either door blocks admission
 source: INV-GROUND-7 @ reference/atlas-grounding.md#ground-7
-If a fact fails either door, then the grounding gate shall block its admission.
-normative-clause: "Failing either door blocks admission."
+If a fact fails either the truth door or the harm door, then the grounding gate shall block its admission.
+normative-clause: "Failing either door — truth, or harmful-to-store — blocks admission. Obviousness is not a door and blocks nothing."
 
 ### REQ-GROUND-8 — untrusted source excluded from gate
 source: INV-GROUND-8 @ reference/atlas-grounding.md#ground-8

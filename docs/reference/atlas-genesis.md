@@ -1,7 +1,7 @@
 # atlas-genesis — Reference
 
 > owner: jimmy (COMPASS — mining/genesis domain) · grounding: builds on `atlas-init` (KNOW-6, TOOLS-5), born-from-work (KNOW-13),
-> the 2-door bar + propose→ratify (KNOW-7/8), the write-decision (KNOW-15), the predicate evaluator
+> the admission bar + propose→ratify (KNOW-7/8), the write-decision (KNOW-15), the predicate evaluator
 > (KNOW-16) · status: draft
 
 ## Purpose
@@ -74,9 +74,10 @@ The log is a free, high-signal corpus. Each signal below is a **ranking heuristi
   AST + data-flow + CFG relational DB) or **Semgrep** (AST-pattern) query — a real, deterministic,
   re-runnable query, which is exactly the predicate evaluator KNOW-16 requires (no arbitrary code, no
   sandbox). A candidate needing runtime execution stays `advisory`.
-- Every candidate passes the **2-door bar** (truth: grounding re-derives fresh; usefulness: actionable **and**
-  non-obvious) and the **budget cap** with a **marginal-value stop** — spend until candidates stop clearing
-  the bar, then halt.
+- Every candidate passes the **truth door** (grounding re-derives fresh) and is **scored** for usefulness
+  (actionable **and** non-obvious) — the score is stored, never a veto ([ADR-0012](../adr/ADR-0012-obviousness-is-scored-never-gated.md)).
+  The **budget cap** with a **marginal-value stop** still applies — spend until candidates stop clearing the
+  truth door, then halt.
 
 > The **propose→verify reasoning loop in depth** (PROPOSE→VERIFY→REFINE→CORROBORATE→ABSTAIN, the teeth gate,
 > the Daikon analogy, the honest limit) is in
@@ -115,11 +116,14 @@ unratified), `constitution` from the **ratified T0 manifest** the S3 interview p
 - **GEN-2 Rationed intelligence.** LLM MUST be spent only on **ranked** sites, highest-first, **one bounded
   call per site**, under a **hard budget** (default `--budget = min(frontier_size, 200)` sites/run) with a
   **numeric marginal-value stop**: halt when the **trailing-20-site admit-rate `< 20%`** (fewer than 4 of the
-  last 20 sites clear the 2-door bar). No repo-wide LLM sweep; no embedding/vectorization pass anywhere (A-14).
+  last 20 sites clear the admission bar). No repo-wide LLM sweep; no embedding/vectorization pass anywhere (A-14).
 - **GEN-3 Cost tracks importance-surface, not size.** LLM-call count MUST be a function of the PPR frontier
   (`hotspot × SZZ × blast`), never of file/line count. Adding un-churned code MUST NOT raise LLM spend.
-- **GEN-4 Grounded from birth.** Every seeded fact MUST be grounded (`subtreeHash`) and pass the 2-door bar
-  at `atlas-emit`; an ungrounded/obvious seed is rejected (KNOW-2). No seed self-declares true.
+- **GEN-4 Grounded from birth.** Every seeded fact MUST be grounded (`subtreeHash`) and pass the **truth door**
+  at `atlas-emit`; an **ungrounded** seed is rejected (KNOW-2). No seed self-declares true. Obviousness **never**
+  rejects — every emitted seed MUST carry a mechanically-computed **obviousness score**, and the score is
+  **total**: an emitted fact without one is a defect, not a default
+  ([ADR-0012](../adr/ADR-0012-obviousness-is-scored-never-gated.md), owner-ratified 2026-08-02).
 - **GEN-5 Propose; human ratifies the contested.** Genesis MAY write only **candidates**; `T0` and any
   contested fact MUST be human-ratified (KNOW-7/8) via a batched, ranked interview — never auto-promoted,
   never one question at a time.
@@ -144,7 +148,8 @@ unratified), `constitution` from the **ratified T0 manifest** the S3 interview p
 - **GEN-12 Proposer-in-a-harness, never an oracle.** In S2 the LLM MUST only *propose* typed candidates;
   admission MUST be mechanical. A **predicate** candidate MUST be admitted only if its synthesized `check`
   **compiles and returns `HOLDS` on the current code** (a failing check is a counterexample → REFINE ≤K,
-  then drop — never force); an **advisory** candidate MUST pass grounding + the non-obviousness door.
+  then drop — never force); an **advisory** candidate MUST pass grounding (the truth door) and MUST carry a
+  harness-computed obviousness score — obviousness never blocks it (ADR-0012).
   Chain-of-thought MUST be scratch — never persisted as a fact. **Abstention MUST be a valid outcome** (a
   grounded why-not); the model MUST NOT be pressured to emit a fact. A predicate MUST be labeled a
   *machine-checked likely invariant*, never a proof. **Teeth (anti-vacuity):** a synthesized `check` MUST
@@ -162,7 +167,7 @@ unratified), `constitution` from the **ratified T0 manifest** the S3 interview p
   **hard budget ceiling** with the marginal-value stop (GEN-2) and **report cost per stage**.
 - **GEN-14 Deepening loops are governed, not free-running.** The REVIEW / ENRICH / EXPAND loops MUST each be
   **opt-in or default-shallow**, budget-gated, and carry a **diminishing-returns / fixpoint stop** (a
-  no-revision round; marginal value `< ε`; loop-until-dry on the 2-door bar). No loop may run unbounded, and
+  no-revision round; marginal value `< ε`; loop-until-dry on the admission bar). No loop may run unbounded, and
   genesis with all loops off MUST equal the single cheap pass (GEN-13) — the loops are the **depth dial**,
   never a change to the default cost. They MUST reuse existing machinery (propose→verify, `relate()`), add
   no new subsystem, and MUST NOT duplicate born-from-work's free lazy enrichment.
@@ -171,10 +176,15 @@ unratified), `constitution` from the **ratified T0 manifest** the S3 interview p
   structural signals** (PPR without history seeding + type/API-surface density). History MUST be a ranking
   *booster*, never a dependency — genesis MUST degrade to structural centrality, never rank noise.
 - **GEN-16 Usefulness is graded a-posteriori, not at admission.** The one non-mechanical gate — "non-obvious
-  ∧ actionable" — MUST NOT rest on the proposer's self-assessment. Genesis MUST seed **loose-but-thin** and
+  ∧ actionable" — MUST NOT rest on the proposer's self-assessment (UNAMENDED by ADR-0012, and load-bearing under
+  it: the obviousness score is computed by the **harness's** predicate over the source bytes, never read off a
+  field the proposer wrote; ADR-0011 makes this structural by never passing `Candidate.signals` into the prompt). Genesis MUST seed **loose-but-thin** and
   let **downstream use** be the judge: a seeded fact accrues logged `hits` (KNOW-17), and a fact **no wave
   ever consults decays out** of the served set (archived, re-enterable); the admission threshold calibrates
-  against observed hits. Genesis is the seed; born-from-work (KNOW-13) prunes by real usage. This converts
+  against observed hits. Genesis is the seed; born-from-work (KNOW-13) prunes by real usage. Hits-decay is **not
+  replaced** by the a-priori obviousness score — the two **compose**: the score is the **cold-start prior** (on a
+  cold graph every fact has 0 hits, so decay is a no-op and a trivial fact would rank identically to a brilliant
+  one), hits-decay is the **warm update**. This converts
   "useful" from an LLM opinion at write-time into a measured outcome — the honest floor under usefulness,
   since no mechanism can prove usefulness a-priori.
 
@@ -219,7 +229,7 @@ GenesisReport = { seeded, ratified, open, llmCalls, budgetSpent, resumeToken? }
 10. **GEN-11** — A predicate `check` produced by `extract` is a runnable CodeQL/Semgrep query that evaluates
     to `HOLDS/BROKEN/NA` deterministically (KNOW-16), with no runtime execution.
 11. **GEN-12** — A predicate whose synthesized `check` does not return `HOLDS` on current code is repaired
-    within `K` retries or dropped — never admitted; a site with no non-obvious grounded fact yields a
+    within `K` retries or dropped — never admitted; a site with no grounded fact yields a
     `why-not`, not a manufactured fact; no persisted fact contains raw chain-of-thought.
 12. **GEN-12 teeth** — A synthesized `check` that returns `HOLDS` but survives **every** mutant of its
     anchored subtree (breaks on none) is vacuous and is dropped; a type-expressible slot prefers the

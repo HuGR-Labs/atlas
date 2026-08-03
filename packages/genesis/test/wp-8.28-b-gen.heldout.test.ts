@@ -57,9 +57,15 @@ describe('GEN-12 held-out (-2 beacon)', () => {
     expect(a.outcome).toBe('dropped');
     expect(calls.teeth).toBe(0);
   });
-  it('SCN-GEN-12e-2: obvious advisory not admitted', () => {
+  it('SCN-GEN-12e-2: obvious beacon advisory IS admitted, carrying a low score (ADR-0012)', () => {
     const obvious: TwoDoorBar = { grounded: () => true, nonObvious: () => false };
-    expect(admit(advProposal(), makeDeps({ doors: obvious })).outcome).toBe('dropped');
+    const a = admit(advProposal(), makeDeps({ doors: obvious }));
+    expect(a.outcome).toBe('admitted');
+    if (a.outcome !== 'admitted') throw new Error('unreachable');
+    expect(a.fact.obviousness).toStrictEqual({ rank: 'obvious', by: 'harness-predicate' });
+    // the truth door is what still rejects (independent beacon leg of SCN-GEN-12e-1).
+    const ungrounded: TwoDoorBar = { grounded: () => false, nonObvious: () => true };
+    expect(admit(advProposal(), makeDeps({ doors: ungrounded })).outcome).toBe('dropped');
   });
   it('SCN-GEN-12f-2: chain-of-thought scratch never persisted', () => {
     const a = admit(predProposal({ scratch: 'BEACON-COT-refund-bug-2021' }), makeDeps());

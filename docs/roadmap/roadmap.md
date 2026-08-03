@@ -139,12 +139,12 @@ reqs: [ REQ-GROUND-4, REQ-GROUND-6, REQ-GROUND-9, REQ-KNOW-1, REQ-KNOW-2, REQ-TO
 campaign: CAMPAIGN-4
 split: Rules (the truth-gate rule) from EPIC-11
 
-### EPIC-11-b — 2-door admission (grounded AND useful)
-goal-trace: "the atlas never becomes a landfill of true-but-obvious facts → admission requires both the truth door and the usefulness door → the 2-door admission rule"
-vertical: GROUND (admit iff both doors pass · reject the true-but-obvious · either door fails blocks · untrusted source excluded from the gate · repo-wide rule grounds to a policy artifact, anchored to a section block, anchorless rejected) → KNOW (every claim carries provenance · untrusted marked advisory & excluded from the gate) — demoable: a true-but-obvious candidate is rejected at door 2; an untrusted-source claim is admitted only as advisory, outside the gate
+### EPIC-11-b — admission: grounded AND not harmful; obviousness scored
+goal-trace: "the atlas never becomes a landfill of true-but-obvious facts → obviousness is measured and ranked rather than vetoed, because a veto destroys the evidence needed to audit it → the stored obviousness score + the a-posteriori ranking decision (ADR-0012)"
+vertical: GROUND (admit iff the truth door passes ∧ the fact is not harmful to store · the true-but-obvious is ADMITTED with a low score · either door failing blocks · untrusted source excluded from the gate · repo-wide rule grounds to a policy artifact, anchored to a section block, anchorless rejected) → KNOW (every claim carries provenance · untrusted marked advisory & excluded from the gate) — demoable: a true-but-obvious candidate is admitted carrying a low obviousness score and ranks below a non-obvious one; an untrusted-source claim is admitted only as advisory, outside the gate
 reqs: [ REQ-GROUND-7a, REQ-GROUND-7b, REQ-GROUND-7c, REQ-GROUND-8, REQ-GROUND-12a, REQ-GROUND-12b, REQ-GROUND-12c, REQ-GROUND-12d, REQ-GROUND-12e, REQ-KNOW-14a, REQ-KNOW-14b, REQ-KNOW-14c ]
 campaign: CAMPAIGN-4
-split: Rules (the 2-door admission rule) from EPIC-11
+split: Rules (the admission rule) from EPIC-11
 
 ### EPIC-12-a — classify drift: mechanical vs semantic
 goal-trace: "drift is triaged, not blanket-blocked → the drifted subset splits into a mechanical arm and a semantic arm, advisory resolving to STALE → the drift-classification route"
@@ -290,8 +290,8 @@ reqs: [ REQ-TOOLS-5a, REQ-TOOLS-5b, REQ-TOOLS-5c, REQ-TOOLS-5d, REQ-TOOLS-5e, RE
 campaign: CAMPAIGN-8
 
 ### EPIC-28-a — budgeted, grounded LLM proposal
-goal-trace: "the LLM spends only where it earns, on grounded candidates → spend is highest-first under a hard ceiling and every seed passes the grounded 2-door bar → the budgeted-proposal route"
-vertical: GEN (no LLM on un-ranked sites · spend highest-first · one bounded call per site · hard budget ceiling · marginal-value halt · no repo-wide sweep · grounded by subtreeHash · pass the 2-door bar · reject ungrounded/obvious · no self-declared truth · signals only as ranking heuristics, a signal is not a fact until grounded, churn alone mints no fact) — demoable: run genesis under a budget, LLM fires only on ranked sites highest-first and halts at marginal value; a churn signal alone mints no fact
+goal-trace: "the LLM spends only where it earns, on grounded candidates → spend is highest-first under a hard ceiling and every seed passes the grounded truth door and carries an obviousness score → the budgeted-proposal route"
+vertical: GEN (no LLM on un-ranked sites · spend highest-first · one bounded call per site · hard budget ceiling · marginal-value halt · no repo-wide sweep · grounded by subtreeHash · pass the truth door · carry an obviousness score · reject the ungrounded, never the obvious · no self-declared truth · signals only as ranking heuristics, a signal is not a fact until grounded, churn alone mints no fact) — demoable: run genesis under a budget, LLM fires only on ranked sites highest-first and halts at marginal value; a churn signal alone mints no fact
 reqs: [ REQ-GEN-2a, REQ-GEN-2b, REQ-GEN-2c, REQ-GEN-2d, REQ-GEN-2e, REQ-GEN-2f, REQ-GEN-4a, REQ-GEN-4b, REQ-GEN-4c, REQ-GEN-4d, REQ-GEN-6a, REQ-GEN-6b, REQ-GEN-6c ]
 campaign: CAMPAIGN-8
 split: Rules (the budgeted-proposal route) from EPIC-28

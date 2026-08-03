@@ -139,7 +139,7 @@
 %%{init: {'theme':'base','themeVariables':{'background':'#EAE5D8','primaryColor':'#EAE5D8','primaryTextColor':'#201D15','primaryBorderColor':'#4E7A46','lineColor':'#8f846a','fontFamily':'ui-monospace, Menlo, monospace','fontSize':'12px'}}}%%
 flowchart LR
   S0["S0 · scan<br/>$0 · estrutural<br/>3 eixos + CAS"] --> S1["S1 · mine<br/>$0 · git-history<br/>sites RANQUEADOS"]
-  S1 --> S2["S2 · extract<br/>LLM racionado<br/>1 call/site · 2 portas"]
+  S1 --> S2["S2 · extract<br/>LLM racionado<br/>1 call/site · porta da verdade + score"]
   S2 --> S3["S3 · interview<br/>humano · batched<br/>owner/tier/contestado"]
   S3 --> S4["S4 · handoff<br/>born-from-work<br/>assume daqui"]
   S2 -.->|"barra parou de passar"| S4
@@ -155,7 +155,7 @@ flowchart LR
     <h2>Fase por fase</h2>
     <div class="stage free"><span class="s">S0</span><span class="cost">$0 · no LLM</span><span class="t"><b>scan — esqueleto estrutural.</b> AST + tags def/ref via <b>tree-sitter</b>; resolução precisa cross-file/língua via <b>SCIP</b> ou <b>stack-graphs</b> (tree-sitter é parser, não resolvedor). Content-address de todo nó (CAS). <b>Zero fatos</b> — T2/advisory, T0 só flagado.</span></div>
     <div class="stage free"><span class="s">S1</span><span class="cost">$0 · mecânico</span><span class="t"><b>mine — o git-history vira ranking.</b> Sinais MSR nomeados (SZZ, hotspots, coupling, ownership) alimentam um <b>PageRank personalizado</b> sobre o grafo def→ref → <b>sites ranqueados</b>, nunca fatos (tabela abaixo).</span></div>
-    <div class="stage llm"><span class="s">S2</span><span class="cost">LLM · racionado</span><span class="t"><b>extract — a única despesa de LLM.</b> Anda do maior-PPR pro menor; <b>1 call bounded por site</b>. Fato aterrado por <code>subtreeHash</code>, pela <b>porta dupla</b>. Quando é checável, o <code>check</code> vira query <b>CodeQL/Semgrep</b> determinística (= o avaliador do KNOW-16). Budget-capped.</span></div>
+    <div class="stage llm"><span class="s">S2</span><span class="cost">LLM · racionado</span><span class="t"><b>extract — a única despesa de LLM.</b> Anda do maior-PPR pro menor; <b>1 call bounded por site</b>. Fato aterrado por <code>subtreeHash</code>, pela <b>porta da verdade</b>; obviedade <b>vira score armazenado, nunca veto</b> (ADR-0012). Quando é checável, o <code>check</code> vira query <b>CodeQL/Semgrep</b> determinística (= o avaliador do KNOW-16). Budget-capped.</span></div>
     <div class="stage human"><span class="s">S3</span><span class="cost">humano · batched</span><span class="t"><b>interview — a porta de desambiguação.</b> Owner/tier de território, T0, invariante contestado, <em>intencional-ou-bug</em> → entrevista <b>curta e ranqueada</b> (T0/alto-blast primeiro, <b>nunca 1-a-1</b>). Resposta vira fato <code>human-ratified</code>.</span></div>
     <div class="stage"><span class="s">S4</span><span class="cost">handoff</span><span class="t"><b>handoff — vira self-hosting.</b> Genesis é seeding <b>único</b>: acabou, entrega pro loop born-from-work (init → enrich-by-blast → wave-close). <b>Nunca</b> fica varrendo em background.</span></div>
   </div>
@@ -188,7 +188,7 @@ flowchart LR
 <pre class="mermaid">
 %%{init: {'theme':'base','themeVariables':{'background':'#EAE5D8','primaryColor':'#EAE5D8','primaryTextColor':'#201D15','primaryBorderColor':'#4E7A46','lineColor':'#8f846a','fontFamily':'ui-monospace, Menlo, monospace','fontSize':'12px'}}}%%
 flowchart LR
-  P["PROPOSE<br/>candidato tipado<br/>(bug-primed via SZZ)"] --> V{"VERIFY<br/>ground · check · non-obvious"}
+  P["PROPOSE<br/>candidato tipado<br/>(bug-primed via SZZ)"] --> V{"VERIFY<br/>ground · check · SCORE obviedade"}
   V -->|"check falha = contraexemplo"| R["REFINE ≤K<br/>CEGIS"]
   R --> V
   V -->|"passa"| C{"incerto ou T1+?"}
@@ -246,6 +246,6 @@ flowchart LR
 
 <footer>
   <div class="wrap">
-    <p class="fnote">Atlas · Genesis — bootstrap sobre repo existente. Spec: <code>reference/atlas-genesis.md</code> (GEN-1..8). Estende <code>atlas-init</code> (S0) · entrega ao born-from-work (S4, KNOW-13) · toda seed passa a porta dupla (KNOW-2/10).</p>
+    <p class="fnote">Atlas · Genesis — bootstrap sobre repo existente. Spec: <code>reference/atlas-genesis.md</code> (GEN-1..8). Estende <code>atlas-init</code> (S0) · entrega ao born-from-work (S4, KNOW-13) · toda seed passa a porta da verdade (KNOW-2/10) e carrega um score de obviedade (ADR-0012).</p>
   </div>
 </footer>

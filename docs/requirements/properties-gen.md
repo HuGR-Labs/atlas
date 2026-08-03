@@ -52,12 +52,14 @@ teeth:       breaks-on "a size-coupled accountant (count reads file/line totals)
 
 ### PROP-GEN-4 — grounded from birth
 inv:         INV-GEN-4
+amendment: **AMENDED + RE-RATIFIED 2026-08-02** (owner) — [ADR-0012](../adr/ADR-0012-obviousness-is-scored-never-gated.md): obviousness is SCORED, never gated; the rejection line moves to harm (secret / PII).
 source:      method-tags-gen.md#INV-GEN-4   # ptr+digest
-law:         ∀ seed s. emitted(s) ⟺ ( rederives(s.citation, source@sha) ∧ nonObvious(s) )  ∧  emitted(s) ⊥ s.self_asserted [self-declaration ignored]
-arbitrary:   `arbSeed` — the 2×2×2 grid grounded/ungrounded × obvious/non-obvious × self_asserted∈{T,F}; citations at valid & stale sha.
+law:         ∀ seed s. emitted(s) ⟺ ( rederives(s.citation, source@sha) ∧ ¬harmfulToStore(s) )  ∧  emitted(s) ⊥ s.self_asserted [self-declaration ignored]
+             ∀ seed s. emitted(s) ⟹ hasScore(s.obviousness)                    [TOTALITY — no emitted fact lacks a score]
+arbitrary:   `arbSeed` — the 2×2×2 grid grounded/ungrounded × obvious/non-obvious × self_asserted∈{T,F}; citations at valid & stale sha. **RE-POINTED (ADR-0012):** the obvious/non-obvious axis no longer discriminates `emitted` — it discriminates the **stored score**. Holding the other two axes fixed and flipping this one MUST move `s.obviousness` and MUST leave `emitted` unchanged. Retiring the axis instead of re-pointing it would make the generator vacuous on that dimension (task #114).
 covers_reqs: [ req-gen.md#REQ-GEN-4a, req-gen.md#REQ-GEN-4b, req-gen.md#REQ-GEN-4c, req-gen.md#REQ-GEN-4d ]   # ptr+digest
 witness:     [ goldens-gen.md#SCN-GEN-4a-1, goldens-gen.md#SCN-GEN-4b-1, goldens-gen.md#SCN-GEN-4c-1, goldens-gen.md#SCN-GEN-4d-1 ]
-teeth:       breaks-on "a downgraded-door warning (ungrounded seed emits), an inverted non-obviousness door, or a `self_asserted`-sufficient gate — the ∀ covers the full truth table the 4 witnesses only sample."
+teeth:       breaks-on "a **resurrected obviousness gate** (any path where an obvious seed yields `emitted:false`), a **scoreless emitted fact** (totality violated), a downgraded truth door (an ungrounded seed emits), or a `self_asserted`-sufficient gate." — the ∀ covers the full truth table the 4 witnesses only sample. The retired clause named "an inverted non-obviousness door"; under ADR-0012 there is no door, so that mutant would have pointed at code that no longer exists (task #151).
 
 ### PROP-GEN-5 — propose; the contested is human-ratified
 inv:         INV-GEN-5
@@ -164,6 +166,7 @@ inv:         INV-GEN-16
 source:      method-tags-gen.md#INV-GEN-16   # ptr+digest
 law:         ∀ candidate c. admit(c) ⊥ any proposer self-assessment field (self_score / importance)  ∧  ∀ fact f. ( hits(f, window) = 0 ⟹ decay(f) → archived ∧ re-enterable )  ∧  threshold = f(observed hits)
              FLAG (non-mechanical core, no pure ∀-form — not forced): the usefulness *judgment* itself — "is this seed non-obvious ∧ actionable / actually useful" — has **no write-time ∀-property**: usefulness is a **measured a-posteriori outcome** via `hits`/decay, not a correctness oracle (`method-tags-gen.md` §Refuse-to-model "usefulness a-priori"). Only the mechanical sub-laws above are rendered; the graded judgment is deliberately left un-quantified per the frozen tag.
+             NOT REPLACED BY ADR-0012 — the two COMPOSE (ADR-0012 §"KNOW-17 hits-decay survives"): the a-priori obviousness score is the **cold-start prior** (on a cold graph every fact has 0 hits, so hits-decay is a no-op and a trivial fact would rank identically to a brilliant one), and hits-decay is the **warm update** (the only signal reflecting what readers actually consulted). Neither subsumes the other, and the first law above — `admit(c) ⊥ any proposer self-assessment field` — is untouched: the score is computed by the HARNESS's predicate over the source bytes, never read off a field the proposer wrote.
 arbitrary:   `arbCandidate` (with / without `self_score`) × `arbHitStream` (0..N consults over a window) — reuses the KNOW-17 hits/decay shape.
 covers_reqs: [ req-gen.md#REQ-GEN-16a, req-gen.md#REQ-GEN-16b, req-gen.md#REQ-GEN-16c, req-gen.md#REQ-GEN-16d, req-gen.md#REQ-GEN-16e ]   # ptr+digest
 witness:     [ goldens-gen.md#SCN-GEN-16a-1, goldens-gen.md#SCN-GEN-16b-1, goldens-gen.md#SCN-GEN-16c-1, goldens-gen.md#SCN-GEN-16d-1, goldens-gen.md#SCN-GEN-16e-1 ]

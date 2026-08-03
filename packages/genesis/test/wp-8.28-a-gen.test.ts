@@ -64,6 +64,8 @@ const factFor = (c: Candidate, claim: string): Fact =>
     freshness: 'FRESH',
     claims: [],
     authoring: 'ADVISORY',
+    // ADR-0012 TOTALITY — an emitted fact always carries its harness-computed obviousness score.
+    obviousness: { rank: 'non-obvious', by: 'harness-predicate' },
   }) as unknown as Fact;
 
 interface Recorder {
@@ -88,7 +90,20 @@ const abstainProposer = (rec: Recorder): SiteProposer => ({
 
 const gateEmitAll = (): EmitGate => ({ emit: (seed, c) => ({ emitted: true, fact: factFor(c, seed.claim) }) });
 const gateRejectAll = (): EmitGate => ({
-  emit: (_seed, c) => ({ emitted: false, whyNot: { site: c.site, reason: 'ungrounded or obvious' } }),
+  emit: (_seed, c) => ({ emitted: false, whyNot: { site: c.site, reason: 'ungrounded — the truth door' } }),
+});
+/** ADR-0012 — the amended gate: the TRUTH door rejects; an OBVIOUS seed emits with a low score. */
+const gateTruthDoorOnly = (ungrounded: ReadonlySet<string>, obvious: ReadonlySet<string>): EmitGate => ({
+  emit: (seed, c) =>
+    ungrounded.has(idOf(c))
+      ? { emitted: false, whyNot: { site: c.site, reason: 'ungrounded — the truth door' } }
+      : {
+          emitted: true,
+          fact: {
+            ...(factFor(c, seed.claim) as unknown as Record<string, unknown>),
+            obviousness: { rank: obvious.has(idOf(c)) ? 'obvious' : 'non-obvious', by: 'harness-predicate' },
+          } as unknown as Fact,
+        },
 });
 const gateEmitFor = (ids: ReadonlySet<string>): EmitGate => ({
   emit: (seed, c) =>
@@ -181,23 +196,39 @@ describe('GEN-4 — every seed is grounded and passes the 2-door bar; nothing se
     expect(out.facts[0]!.grounding.entries[0]!.anchor.subtreeHash).toBe(c.site.subtreeHash);
   });
 
-  it('SCN-GEN-4b-1: a grounded ∧ non-obvious seed is emitted (both doors pass)', () => {
+  it('SCN-GEN-4b-1: a seed clearing the truth door is emitted CARRYING an obviousness score', () => {
     const out = runExtract([cand('s1', 0.9, 1)], budgetOf(1), {
       proposer: seedProposer(recorder()),
       gate: gateEmitAll(),
     });
     expect(out.facts.length).toBe(1);
     expect(out.abstained.length).toBe(0);
+    // ADR-0012 TOTALITY — teeth (breaks-on "a scoreless emitted fact"): the driver forwards the score the
+    // gate attached; an emitted fact without one is a defect, not a default.
+    expect((out.facts[0] as unknown as { obviousness?: unknown }).obviousness).toBeDefined();
   });
 
-  it('SCN-GEN-4c-1: an ungrounded / obvious seed is rejected — never reaches the fact set', () => {
+  it('SCN-GEN-4c-1: the UNGROUNDED seed is rejected; the OBVIOUS one is emitted with a low score', () => {
+    // ADR-0012. The retired assertion was `facts.length === 0` for BOTH `U` and `O`. Obviousness never
+    // rejects: `O` reaches the fact set carrying `rank:'obvious'` and loses at ranking instead.
     const frontier = [cand('U', 0.9, 1), cand('O', 0.8, 2)];
     const out = runExtract(frontier, budgetOf(frontier.length), {
       proposer: seedProposer(recorder()),
+      gate: gateTruthDoorOnly(new Set(['U']), new Set(['O'])),
+    });
+    expect(out.facts.length).toBe(1); // only the truth door rejected — `U`
+    expect(out.abstained.length).toBe(1);
+    expect(out.abstained[0]!.site.qualifiedPath).toContain('U');
+    // teeth (breaks-on "a resurrected obviousness gate — `O` is dropped to emitted:false"):
+    expect((out.facts[0] as unknown as { obviousness: { rank: string } }).obviousness.rank).toBe('obvious');
+
+    // CONTROL — a gate that fails the truth door on BOTH still admits neither (the door is real).
+    const both = runExtract(frontier, budgetOf(frontier.length), {
+      proposer: seedProposer(recorder()),
       gate: gateRejectAll(),
     });
-    expect(out.facts.length).toBe(0); // both doors fail ⇒ emitted:false for each
-    expect(out.abstained.length).toBe(2);
+    expect(both.facts.length).toBe(0);
+    expect(both.abstained.length).toBe(2);
   });
 
   it('SCN-GEN-4d-1: a seed cannot self-declare true — self_asserted is ignored, only the gate admits', () => {

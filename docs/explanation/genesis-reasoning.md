@@ -40,7 +40,7 @@ bug-introducing commits that touched it, its churn, and the messages of past fix
 **The loop (bounded, per site):**
 
 ```
-PROPOSE → VERIFY(ground · check · non-obvious) → [counterexample?] REFINE ≤K → CORROBORATE? → ADMIT | ABSTAIN
+PROPOSE → VERIFY(ground · check · SCORE obviousness) → [counterexample?] REFINE ≤K → CORROBORATE? → ADMIT | ABSTAIN
 ```
 
 1. **PROPOSE.** Draft typed candidate(s) `{ slot∈closed-vocab, primaryAnchor, claim, check?, tierHint }`.
@@ -52,7 +52,11 @@ PROPOSE → VERIFY(ground · check · non-obvious) → [counterexample?] REFINE 
    (KNOW-2). **check** *(the crux)*: for a predicate, **compile & run** the synthesized CodeQL/Semgrep
    `check` on current code — it MUST return `HOLDS`; a failing check is a **counterexample**, not a warning.
    **teeth:** it MUST also **flip to `BROKEN` on a mutated counterfactual** of the subtree — a check no mutant
-   breaks is vacuous and dropped. **non-obvious:** reject a claim entailed by the signature/types alone.
+   breaks is vacuous and dropped. **obviousness:** a claim entailed by the signature/types alone is **scored at
+   the floor — never rejected** ([ADR-0012](../adr/ADR-0012-obviousness-is-scored-never-gated.md)). A rejected
+   candidate leaves no record, so the filter's own accuracy could never be measured: you cannot count the good
+   facts it discarded, because discarding them is what it did. A stored score is auditable after the fact and
+   re-thresholdable at zero cost.
 3. **REFINE (counterexample-guided, ≤K retries).** On a failing check, feed the violating fragment back and
    let the model repair claim+check (CEGIS / SpecGen two-phase). Still failing ⇒ **drop, never force**.
 4. **CORROBORATE (uncertainty-gated).** Default: one sample. Only for **uncertain or `tier≥T1`** candidates,
@@ -64,8 +68,13 @@ PROPOSE → VERIFY(ground · check · non-obvious) → [counterexample?] REFINE 
 **The honest limit.** A passing `check` proves the property holds on **current** code and is re-checked on
 drift — it is **not** a proof for all future inputs (that needs a theorem prover, out of scope). Like
 Daikon's "likely invariants," genesis facts are **machine-checked likely invariants**, not proofs. And
-because usefulness (non-obvious ∧ actionable) is the *one* gate no mechanism can prove a-priori, it is graded
-**a-posteriori by downstream use** (`GEN-16` / KNOW-17): seed loose-but-thin, let unused facts decay.
+because usefulness (non-obvious ∧ actionable) is the *one* judgment no mechanism can prove a-priori, the
+**decision** is taken **a-posteriori by downstream use** (`GEN-16` / KNOW-17): seed loose-but-thin, let unused
+facts decay. The obviousness **score**, by contrast, is computed a-priori at mine time — the one moment the
+source bytes and the model are both in hand — and the two **compose** rather than replace each other: genesis
+builds the entire graph before any usage exists, so on a cold graph every fact has zero hits and hits-decay is
+a no-op; the score is the cold-start prior, hits-decay the warm update. The score is computed by the
+**harness's** predicate over the source bytes, never asked of the proposer (GEN-16, ADR-0011).
 
 ## Cost model (why cheaper than embedding)
 

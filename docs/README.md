@@ -20,7 +20,7 @@ grounded (the docs dogfood the Atlas: reference is pinned to `source@sha` and dr
 
 ### Reference — *what exactly* (per crate; migrates into `packages/atlas-*/` when it lands)
 - [reference/atlas-kernel.md](./reference/atlas-kernel.md) — CAS · BLAKE3 · event log
-- [reference/atlas-grounding.md](./reference/atlas-grounding.md) — StructRef/subtreeHash · truth-gate · 2-door admission
+- [reference/atlas-grounding.md](./reference/atlas-grounding.md) — StructRef/subtreeHash · truth-gate · admission (truth ∧ ¬harmful; obviousness scored)
 - [reference/atlas-index.md](./reference/atlas-index.md) — hashed structural tree · drift oracle · no-RAG
 - [reference/atlas-knowledge.md](./reference/atlas-knowledge.md) — GroundedFact · tiers · upsert/supersede
 - [reference/atlas-memory.md](./reference/atlas-memory.md) — task/pr/project/logbook + Orientation

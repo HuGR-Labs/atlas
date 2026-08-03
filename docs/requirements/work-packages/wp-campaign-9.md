@@ -693,7 +693,7 @@ title: SiteProposer.propose — the single bounded, non-authoritative model entr
 intent: >
   `SiteProposer.propose` is the ONLY place a model is invoked in the whole system; it makes one bounded call
   per site honoring the cost/timeout budget and returns a candidate proposal that is never auto-trusted (the
-  2-door admission + ratification still gate it). The core stays `$0`-LLM. (Non-authoritative handle.)
+  admission bar + ratification still gate it). The core stays `$0`-LLM. (Non-authoritative handle.)
 source_reqs:                                  # ptr+digest
   - source: ../requirements-adapters.md#REQ-ADAPTER-11a  # ptr+digest
   - source: ../requirements-adapters.md#REQ-ADAPTER-11b  # ptr+digest
@@ -713,7 +713,7 @@ action_surface: [ read-repo, edit(packages/adapter-io/src/llm.ts), run(test:adap
 guardrails: >
   Edit only under packages/adapter-io/src/llm.ts. This MUST be the sole model call site in the system. Exactly
   one bounded call per site (honor cost/timeout budget — no retries past budget). Return a candidate — never
-  write to the ratified store / bypass the 2-door gate. No live model in CI. Do not touch other modules/core.
+  write to the ratified store / bypass the admission gate. No live model in CI. Do not touch other modules/core.
 repair_budget: N=3 · early-stop: { repeated-identical-failure, no-change-diff, semantic-dup-edit }
 acceptance:                                    # ptr+digest = frozen goldens
   - source: ../goldens-adapters.md#SCN-ADAPTER-11a-1  # ptr+digest

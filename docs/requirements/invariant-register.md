@@ -84,7 +84,7 @@ anchor: `reference/atlas-grounding.md#ground-N`.
 | GROUND-4 truth-gate | FR-4 | COUPLED | PBT | HOLDS only if grounded∧FRESH else NA (spec A-1) | — | behavioural | — | **RATIFIED** |
 | GROUND-5 non-touching edits only | FR-5 | COUPLED | PBT (P=edit class) | edit that does not TOUCH the cited unit (import/header above, unrelated rename elsewhere) ⇒ FRESH; real change ⇒ DRIFTED; **reformat OF the cited unit ⇒ DRIFTED (a false alarm, accepted)** | false alarms on in-unit reformat ACCEPTED, not eliminated | behavioural | — | **RATIFIED** · **AMENDED + RE-RATIFIED 2026-08-02** (owner-delegated) |
 | GROUND-6 fail-closed write | FR-5 | COUPLED | PBT | ungrounded emit ⇒ nothing persisted (spec A-2) | — | behavioural | — | **RATIFIED** |
-| GROUND-7 two-door admission | FR-5 | COUPLED | PBT | obvious ⇒ rejected; ungrounded ⇒ rejected; admit iff both | recall (obvious rejected) | behavioural | ADR-G7 two-door | **RATIFIED** |
+| GROUND-7 admission (truth ∧ ¬harmful); obviousness scored | FR-5 | COUPLED | PBT | ungrounded ⇒ rejected; harmful-to-store (secret/PII) ⇒ rejected; **obvious ⇒ ADMITTED with a low score, never rejected** | recall (nothing is lost to an obviousness veto; the score is auditable and re-thresholdable) | behavioural | ADR-G7 two-door · **ADR-0012** | **RATIFIED** · **AMENDED + RE-RATIFIED 2026-08-02** (owner) |
 | GROUND-8 provenance | FR-5 | COUPLED | PBT (P=untrusted) | untrusted source ⇒ advisory, absent from gate (spec A-9) | — | behavioural | — | **RATIFIED** |
 | GROUND-9 templated write | FR-5 | COUPLED | PBT | missing field/over cap ⇒ rejected; 0 free-prose (spec A-13) | prose↔machine-check | behavioural | — | **RATIFIED** |
 | GROUND-10 hash via seam | FR-5 | decoupled-after KERNEL-2 | PBT | only hash call routes through the seam; 0 inlined | — | behavioural | ADR-G10 hash-via-seam | **RATIFIED** |
@@ -326,7 +326,7 @@ anchor: `reference/atlas-genesis.md#gen-N`.
 | GEN-1 deterministic skeleton | FR-9 | decoupled-after init | scan+mine twice ⇒ byte-identical; $0 LLM in S0/S1 | behavioural | — | **RATIFIED** |
 | GEN-2 rationed intelligence | FR-9 | on-diag (extract leg) | 1 call/site, budget min(frontier,200); halt trailing-20 admit <20% | behavioural | via ADR-G13 | **RATIFIED** |
 | GEN-3 cost tracks importance | FR-9 | on-diag | +10k un-churned lines ⇒ Δ=0 calls | behavioural | via ADR-G13 | **RATIFIED** |
-| GEN-4 grounded from birth | FR-9 | decoupled-after KNOW-2 | non-re-deriving seed ⇒ rejected; 0 ungrounded admitted | behavioural | — | **RATIFIED** |
+| GEN-4 grounded from birth | FR-9 | decoupled-after KNOW-2 | non-re-deriving seed ⇒ rejected; 0 ungrounded admitted; **0 emitted facts without an obviousness score** (totality); an obvious seed is never rejected | behavioural | **ADR-0012** | **RATIFIED** · **AMENDED + RE-RATIFIED 2026-08-02** (owner) |
 | GEN-5 propose; human ratifies | FR-9 | decoupled-after KNOW-7/8 (DP-11) | T0-site ⇒ candidate; interview cap 20 Q; never 1-by-1 | behavioural | — | **RATIFIED** |
 | GEN-6 history is seed not truth | FR-2 | on-diag (S1 mining) | high-churn no-invariant file ⇒ 0 facts | behavioural | — | **RATIFIED** |
 | GEN-7 one-time then hand off | FR-9 | decoupled-after KNOW-13/15 | re-run upserts (0 dup), re-indexes only changed | behavioural | — | **RATIFIED** |

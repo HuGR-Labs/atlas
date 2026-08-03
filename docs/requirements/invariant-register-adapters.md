@@ -90,8 +90,8 @@ method-tag:
 behavioural: true
 anchor: reference/atlas-adapters.md#adapt-llm-1
 text: "SiteProposer.propose MUST be the only place a model is invoked; it MUST make one bounded call per site, honor the cost/timeout budget, and return a candidate proposal that is never auto-trusted; the core stays $0-LLM"
-clauses: [ "SiteProposer.propose is the ONLY place a model is invoked in the whole system", "one bounded call per site, honoring the cost/timeout budget", "returns a candidate never auto-trusted (2-door + ratification still gate it)", "the core stays $0-LLM (GEN S0/S1 determinism unaffected)" ]
-unwanted: [ "a model is invoked outside this port", "a proposal is auto-trusted without the 2-door/ratification gate", "more than one model call is made for a single site" ]
+clauses: [ "SiteProposer.propose is the ONLY place a model is invoked in the whole system", "one bounded call per site, honoring the cost/timeout budget", "returns a candidate never auto-trusted (the admission bar + ratification still gate it)", "the core stays $0-LLM (GEN S0/S1 determinism unaffected)" ]
+unwanted: [ "a model is invoked outside this port", "a proposal is auto-trusted without the admission-bar/ratification gate", "more than one model call is made for a single site" ]
 method-tag:
 
 ### INV-ADAPTER-12
