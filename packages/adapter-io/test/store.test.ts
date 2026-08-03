@@ -14,7 +14,7 @@
 // ROOT — value files land at `<casPath>/<H[0:2]>/<H>` and the projection sidecar beside it (outside cas/).
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync, existsSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, renameSync, rmSync, symlinkSync, writeFileSync, existsSync, readFileSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -198,6 +198,49 @@ describe('createDiskStore — ADAPT-STORE-1 durable, tamper-safe disk CAS', () =
     // teeth: pre-N14 the path-based statSync/realpath/readFileSync chain SERVED `C` (all three gates passed);
     // the fd O_NOFOLLOW open refuses the final-component symlink itself ⇒ a plain miss.
     expect(s.get(asHash(H))).toBeUndefined();
+  });
+
+  it('N14(4) — an INTERMEDIATE component symlinked OUT of the CAS root is still a miss (the sandbox, now by inode)', () => {
+    const dir = freshCasDir();
+    const s = createDiskStore(dir);
+    // O_NOFOLLOW covers only the FINAL component, so the shard dir `<cas>/<xx>` is the remaining lever: point
+    // it at a directory OUTSIDE the root holding a regular file named `<H>` whose bytes re-hash to `H`. Every
+    // fd-based check passes (regular file, right size, right hash) — only the containment check refuses it.
+    const C = { kind: 'advisory', tier: 'T1', freshness: 'FRESH', body: 'INTERMEDIATE-ESCAPE' };
+    const H = id(C) as string;
+    const outsideShard = join(tmp!, 'outside-shard');
+    mkdirSync(outsideShard, { recursive: true });
+    writeFileSync(join(outsideShard, H), JSON.stringify(C), 'utf8');
+    mkdirSync(dir, { recursive: true });
+    symlinkSync(outsideShard, join(dir, H.slice(0, 2)));
+    // teeth: deleting the intermediate-component check serves `C` from outside the CAS root.
+    expect(s.get(asHash(H))).toBeUndefined();
+  });
+
+  it('N14(4) — an in-CAS object reached through a CASE-VARIANT spelling of the root is a HIT (the string check false-missed it)', () => {
+    // HONEST SCOPE: this is HYGIENE, not a bypass. `valuePath(casPath, h)` is a literal extension of
+    // `casPath`, so the two realpaths had no independent source and no attacker-reachable divergence; the one
+    // divergence a probe of the built module found is THIS one, and it fails CLOSED (a real object read as
+    // absent) and needs write access inside the CAS root to set up at all. It is fixed because one question
+    // should have one answer — `isContainedIn`, the same predicate the two real doors ask — and that answer
+    // has no false miss to explain: containment is decided on (dev, ino), and `realpathSync` PRESERVES the
+    // spelling it was asked for, so two spellings of one directory are two strings but one inode.
+    const dir = freshCasDir(); // `<tmp>/cas`
+    const s = createDiskStore(dir);
+    const C = { kind: 'advisory', tier: 'T1', freshness: 'FRESH', body: 'IN-CAS-VIA-CASE-VARIANT' };
+    const H = s.put(C) as string;
+    const upperRoot = join(tmp!, 'CAS'); // the SAME directory on a case-insensitive volume, spelled otherwise
+    if (!existsSync(join(upperRoot, H.slice(0, 2), H))) return; // case-SENSITIVE volume → the case has no subject
+    // Move the real shard aside and point `<cas>/<xx>` at it through the case-variant spelling of the root.
+    // Nothing leaves the CAS root: the bytes are the same inode, reached by a different name.
+    const shard = join(dir, H.slice(0, 2));
+    const moved = join(dir, 'realshard');
+    renameSync(shard, moved);
+    symlinkSync(join(upperRoot, 'realshard'), shard);
+    // teeth: the previous `real !== realCas && !real.startsWith(realCas + sep)` string comparison read
+    // `<tmp>/CAS/realshard/<H>` as an escape from `<tmp>/cas` and returned undefined for a value that is
+    // inside the root. The inode climb answers the question that was actually asked.
+    expect(s.get(asHash(H))).toEqual(C);
   });
 
   it('N14 — a FIFO AT the CAS final component is a FAST fd-based miss (O_NONBLOCK non-block + fstat-on-fd non-regular)', () => {

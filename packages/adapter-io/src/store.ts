@@ -43,15 +43,15 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
-  realpathSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join, sep } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { Hash } from '@atlas/contracts';
 import { asHash, id } from '@atlas/kernel';
 import type { CasObject, StoreApi } from '@atlas/kernel';
 import { emptyStore } from '@atlas/knowledge';
 import type { StoreProjection } from '@atlas/knowledge';
+import { isContainedIn } from './containment.js';
 import { readSidecarSet } from './sidecar.js';
 import type { SidecarTrust } from './store-provenance.js';
 import { commitSidecar, persistSidecar } from './sidecar-commit.js';
@@ -252,10 +252,15 @@ export function createDiskStore(
         const st = fstatSync(fd); // on the pinned inode, not a re-resolved path
         if (!st.isFile() || st.size > MAX_CAS_BYTES) return undefined; // non-regular / oversized ⇒ never read
         // intermediate-component sandbox: the final component is provably NOT a symlink (O_NOFOLLOW opened it),
-        // so any symlink `realpathSync` resolves is an intermediate dir — its real path must stay inside cas.
-        const realCas = realpathSync(casPath);
-        const real = realpathSync(path);
-        if (real !== realCas && !real.startsWith(realCas + sep)) return undefined; // intermediate escapes ⇒ miss
+        // so any symlink resolved on the way to it is an intermediate dir — the bytes must still live inside cas.
+        // Asked of `isContainedIn`, the ONE containment predicate (containment.ts), rather than the string
+        // comparison `real !== realCas && !real.startsWith(realCas + sep)` this used to be. NOT a live bypass
+        // here and not described as one: `path` is `valuePath(casPath, h)`, a literal extension of `casPath`, so
+        // there is no second source and no spelling that can diverge — probing the built module found exactly one
+        // divergence and it was a FALSE MISS (a case-variant CAS root read as an escape, i.e. fail-closed, and
+        // reachable only with write access inside the CAS root already). It changes for one reason: one question
+        // deserves one answer, and the inode predicate has no false miss to explain.
+        if (!isContainedIn(casPath, path)) return undefined; // intermediate escapes ⇒ miss
         const raw = readFileSync(fd, 'utf8'); // FROM THE fd — the inode is pinned, no re-resolve
         let parsed: CasObject;
         try {
