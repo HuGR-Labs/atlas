@@ -124,11 +124,14 @@ reason: untrusted-store: […]
 
 ## Transport differences
 
-- `--by dependency|trigger` is **not in the published `atlas-query` schema** (which declares only `scope`).
-  Measured over real MCP stdio: `{"scope":"src","by":"dependency"}` is nevertheless accepted and routed —
-  the door type-checks declared properties that are present and does not enforce
-  `additionalProperties:false`. Treat `--by` as a CLI feature; relying on it over MCP relies on undeclared
-  behaviour.
+- `by` **is** in the published `atlas-query` schema, with its three modes as a JSON-Schema `enum`. It was
+  not: the schema declared only `scope`, and `{"scope":"src","by":"dependency"}` worked anyway because
+  nothing enforced `additionalProperties:false`. Both sides of that are now closed — the mode is declared,
+  and an undeclared property (`{"scope":"src","bogusKey":1}`, which used to be accepted and routed) is
+  refused as `malformed-args`.
+- An unknown mode is refused on **both** doors. The CLI marshaller refuses `--by graph` (transcript above);
+  over MCP `{"scope":"src","by":"graph"}` is now a `malformed-args` error result, where it previously
+  slipped through the schema and was served as `by: scope`.
 - Over MCP the pack arrives as JSON (`{"data":{"pack":{…},"subsumes":[],"sameAs":[]}}`); the CLI renders the
   same content as the `data:` block above.
 

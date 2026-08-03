@@ -180,34 +180,69 @@ function satisfies(type: string, v: unknown): boolean {
   }
 }
 
-/** The declared `{ properties: { k: { type } } }` map of a published input schema, structurally. */
-function declaredTypes(schema: ToolSchema): ReadonlyMap<string, string> {
-  const props = (schema.inputSchema as { properties?: unknown }).properties;
-  const out = new Map<string, string>();
-  if (typeof props !== 'object' || props === null) return out;
-  for (const [key, spec] of Object.entries(props as Record<string, unknown>)) {
-    const type = (spec as { type?: unknown } | null)?.type;
-    if (typeof type === 'string') out.set(key, type);
-  }
+/** A JSON-Schema object node, structurally — the envelope AND every declared `object` property share it. */
+type SchemaNode = Readonly<Record<string, unknown>>;
+
+/** Is `v` a JSON object (not null, not an array) — the shape a schema node and an argument bag must have. */
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+/** The declared `{ properties: { k: <sub-schema> } }` map of a schema node, structurally. Sub-schemas are
+ *  kept WHOLE (not flattened to their `type`) because the closed-set and enum constraints live on them and
+ *  a declared `object` property carries a nested `properties` map of its own. */
+function declaredProps(node: SchemaNode): ReadonlyMap<string, SchemaNode> {
+  const props = node['properties'];
+  const out = new Map<string, SchemaNode>();
+  if (!isPlainObject(props)) return out;
+  for (const [key, spec] of Object.entries(props)) if (isPlainObject(spec)) out.set(key, spec);
   return out;
+}
+
+/** The declared property names of a schema node, rendered for the operator (deterministic, sorted). */
+function declaredList(props: ReadonlyMap<string, SchemaNode>): string {
+  const names = [...props.keys()].sort();
+  return names.length === 0
+    ? 'it declares no arguments at all'
+    : `it declares only ${names.map((n) => `'${n}'`).join(', ')}`;
+}
+
+/** A JSON scalar rendered back to the operator exactly as they wrote it (for the `enum` message). */
+function literal(v: unknown): string {
+  return typeof v === 'string' ? `'${v}'` : String(v);
 }
 
 /**
  * Class (a), decided by the door: the `malformed-args` reason, or `undefined` when the arguments parse.
  *
- * TWO checks, and the boundary between them is deliberate:
+ * THE CHECKS, and the boundary between them is deliberate:
  *   - the ENVELOPE — a schema of `type:'object'` demands an object. `undefined` / a bare string / an array
  *     arriving over MCP is the literal "the arguments did not parse", and it is the shape that used to
  *     produce `Cannot read properties of undefined (reading 'scope')` under the caller's name.
- *   - the DECLARED TYPE of each property that is PRESENT.
+ *   - the CLOSED PROPERTY SET, when (and only when) the node says `additionalProperties: false`.
+ *   - the DECLARED TYPE of each property that is PRESENT, and its `enum` when one is declared.
+ *   - the same three, RECURSIVELY, inside every declared `object` property that is present.
  *
- * REQUIRED-PRESENCE IS DELIBERATELY NOT CHECKED HERE, and the reason is measured rather than aesthetic:
- * `cli/test/wp-9.1.1-a-cli.test.ts` SCN-CLI-3b pins the status derivation over `handle('atlas-emit', {})`,
- * `handle('atlas-reconcile', {})` and `handle('atlas-init', {})` — canned legs that ignore their arguments —
- * at exit 2 / 2 / 0. Enforcing `required` here re-classifies all three as usage errors and MOVES those
- * shipped goldens. `additionalProperties` is likewise unenforced: the composed query leg reads a `by` mode
- * the published schema does not declare, so enforcing it would refuse `--by dependency` outright.
- * Both gaps are stated, not closed, because closing either is a golden change and not this seat's to make.
+ * ── WHY `additionalProperties` IS NOW ENFORCED (it was declared and dead) ─────────────────────────────────
+ * Every governance schema in handler.ts declares `additionalProperties: false` and the door checked only the
+ * properties it recognised, so `{scope:'src', bogusKey:1}` was accepted and routed — measured over real MCP
+ * stdio. A published constraint that nothing enforces is the same class of defect as an argument that is
+ * accepted and ignored: in both cases the surface tells the caller something untrue, and in both the caller
+ * finds out by the result being silently wrong rather than by a refusal.
+ *
+ * It was NOT enforceable before, and that is worth recording rather than glossing: the composed query leg
+ * read a `by` mode the published schema did not declare, so switching it on would have refused a WORKING
+ * `atlas query --by dependency`. The fix was to publish `by` (handler.ts), not to keep the constraint dead —
+ * an UNDER-declared schema is the same lie pointing the other way. The `enum` leg exists for the same
+ * reason: only three `by` values do anything, and a validator that accepted a fourth would have MCP silently
+ * serve `--by scope` where the CLI marshaller refuses outright.
+ *
+ * REQUIRED-PRESENCE IS STILL DELIBERATELY NOT CHECKED HERE, and the reason is measured rather than
+ * aesthetic: `cli/test/wp-9.1.1-a-cli.test.ts` SCN-CLI-3b pins the status derivation over
+ * `handle('atlas-emit', {})`, `handle('atlas-reconcile', {})` and `handle('atlas-init', {})` — canned legs
+ * that ignore their arguments — at exit 2 / 2 / 0. Enforcing `required` here re-classifies all three as
+ * usage errors and MOVES those shipped goldens. That gap is stated, not closed; `missingRequiredReason`
+ * below covers the case that actually reaches a caller.
  */
 export function malformedArgsReason(tool: string, schema: ToolSchema, args: unknown): string | undefined {
   return envelopeOrTypeReason(tool, schema, args);
@@ -235,18 +270,74 @@ export function missingRequiredReason(tool: string, schema: ToolSchema, args: un
   return `${FAULT_MALFORMED_ARGS}: '${tool}' requires ${missing.map((k) => `'${k}'`).join(', ')}; not supplied`;
 }
 
-/** The two up-front checks — the envelope, then the declared type of each property that is present. */
+/** The up-front checks — the envelope, then the schema node's own constraints over the argument bag. */
 function envelopeOrTypeReason(tool: string, schema: ToolSchema, args: unknown): string | undefined {
-  const wantsObject = (schema.inputSchema as { type?: unknown }).type === 'object';
-  if (wantsObject && (typeof args !== 'object' || args === null || Array.isArray(args))) {
+  const envelope = schema.inputSchema as SchemaNode;
+  const wantsObject = envelope['type'] === 'object';
+  if (wantsObject && !isPlainObject(args)) {
     return `${FAULT_MALFORMED_ARGS}: '${tool}' takes a JSON object of arguments; it received ${kindOf(args)}`;
   }
-  if (typeof args !== 'object' || args === null) return undefined;
-  const bag = args as Record<string, unknown>;
-  for (const [key, type] of declaredTypes(schema)) {
+  if (!isPlainObject(args)) return undefined;
+  return objectReason(tool, envelope, args, '');
+}
+
+/**
+ * One object level: the closed property set, then each declared property that is PRESENT — type, `enum`,
+ * and (for a declared `object`) the same checks one level down.
+ *
+ * `at` is the dotted path prefix of this level (`''` at the envelope, `'options.'` inside `options`), so a
+ * refusal NAMES the argument the caller actually wrote: `'options.acceptReground' must be boolean` rather
+ * than a bare `'acceptReground'` the caller cannot locate in the object they sent.
+ *
+ * Order is CLOSED-SET FIRST and undeclared names are reported SORTED and ALL AT ONCE: a caller who
+ * misspelled two keys should learn both, and the message must not depend on JSON key order (which is the
+ * wire's, not theirs). Everything after that reports the first violation, which is the existing behaviour.
+ */
+function objectReason(
+  tool: string,
+  node: SchemaNode,
+  bag: Record<string, unknown>,
+  at: string,
+): string | undefined {
+  const props = declaredProps(node);
+
+  // The CLOSED SET — only when the node itself claims one. A node that does not say
+  // `additionalProperties: false` (the off-surface fallback schema, and any schema whose argument shape is
+  // genuinely open) is left open: this validator narrows, it never invents a constraint (see `satisfies`).
+  if (node['additionalProperties'] === false) {
+    const undeclared = Object.keys(bag)
+      .filter((k) => !props.has(k))
+      .sort();
+    if (undeclared.length > 0) {
+      const named = undeclared.map((k) => `'${at}${k}'`).join(', ');
+      return (
+        `${FAULT_MALFORMED_ARGS}: '${tool}' does not accept ${named}` +
+        `${at === '' ? '' : ` under '${at.slice(0, -1)}'`} — ${declaredList(props)}` +
+        ' (the published schema is a CLOSED set, additionalProperties: false)'
+      );
+    }
+  }
+
+  for (const [key, spec] of props) {
     if (!(key in bag)) continue; // absent ⇒ the leg's business (see the note above)
-    if (satisfies(type, bag[key])) continue;
-    return `${FAULT_MALFORMED_ARGS}: '${tool}' argument '${key}' must be ${type}; it received ${kindOf(bag[key])}`;
+    const value = bag[key];
+    const type = spec['type'];
+    if (typeof type === 'string') {
+      if (!satisfies(type, value)) {
+        return `${FAULT_MALFORMED_ARGS}: '${tool}' argument '${at}${key}' must be ${type}; it received ${kindOf(value)}`;
+      }
+      // A declared OBJECT carries its own property map + closed-set claim; check it at the same standard,
+      // or a nested constraint is exactly as decorative as the top-level one used to be.
+      if (type === 'object' && isPlainObject(value)) {
+        const nested = objectReason(tool, spec, value, `${at}${key}.`);
+        if (nested !== undefined) return nested;
+      }
+    }
+    const allowed = spec['enum'];
+    if (Array.isArray(allowed) && !allowed.includes(value)) {
+      const list = allowed.map(literal).join(' | ');
+      return `${FAULT_MALFORMED_ARGS}: '${tool}' argument '${at}${key}' must be one of ${list}; it received ${literal(value)}`;
+    }
   }
   return undefined;
 }

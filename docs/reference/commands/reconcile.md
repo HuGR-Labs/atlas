@@ -81,20 +81,30 @@ which `deriveStatus` (`packages/cli/src/map.ts`) maps to `rejected`. That is why
 - **`--accept-reground` is unobservable from the CLI.** It is parsed, marshalled and passed to the door,
   but its only effect is `regroundedCount`, which the CLI does not render. Measured over MCP:
   `{"mergeBase":…,"options":{"acceptReground":true}}` returns `regroundedCount: 1` where the same call
-  without it returns `0`.
+  without it returns `0`. This is a rendering gap, not a dead flag — the flag reaches the door and works;
+  the CLI simply prints no `data:` block for reconcile (see the worked example above).
 - **Drift is measured against the base you name, not against "is my store fresh".** Re-grounding a fact
   clears `stale` on [`query`](./query.md) but does not make the anchor un-move relative to an older base,
   so `reconcile <oldBase>` can still report drift afterwards. Measured in the demo repo.
 
 ## Transport differences
 
-The published `atlas-reconcile` schema declares a top-level `acceptReground` boolean. The wired leg reads
-`args.options.acceptReground` (`packages/adapter-io/src/wire.ts`). Measured over real MCP stdio: the
-schema-declared spelling `{"mergeBase":…,"acceptReground":true}` returns `regroundedCount: 0` — it is
-accepted and then ignored — while the undeclared `{"mergeBase":…,"options":{"acceptReground":true}}` returns
-`regroundedCount: 1`. The CLI's `--accept-reground` marshals into the `options` shape and therefore works.
-**Over MCP the documented knob does nothing.** This is recorded here as a fact about the product; it is not
-fixed by this page.
+The MCP tool takes the option in an `options` bag — the same shape the CLI's `--accept-reground` marshals
+into, and the same shape the frozen leg signature `reconcile(mergeBase, options?)` names:
+
+```json
+{"mergeBase":"20ff947…","options":{"acceptReground":true}}
+```
+
+`{"mergeBase":…,"acceptReground":true}` — the option at the TOP level — is **refused** as `malformed-args`.
+That spelling used to be the one the schema declared while the wired leg read `args.options.acceptReground`,
+so it was accepted and silently ignored (`regroundedCount: 0`) while the working spelling was undeclared.
+Both halves are closed: the schema names the shape the door reads, and the door refuses the shape it does
+not read rather than dropping it. If you have a caller sending the flat form, move the option into
+`options`.
+
+Otherwise there is no difference: the CLI and MCP route through the same handler and the same classifier.
+Only the RENDERING differs — the CLI prints the exit code and MCP returns the whole `ReconcileOut`.
 
 ## Related
 

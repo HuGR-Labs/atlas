@@ -115,8 +115,15 @@ const isFailClosedWrite = (data: ToolData): boolean =>
 /** THE one published input schema per governance tool (TOOLS-3) — CLI and MCP share it byte-for-byte; the
  *  schema carries NO transport parameter, so the same bytes back every surface (the divergence this seam
  *  prevents). Each `inputSchema` is a JSON-Schema object (the external MCP schema DSL, kept structural). The
- *  arg names mirror the frozen per-tool signatures: `init(path)` / `query(scope)` / `emit(node,at)` /
- *  `reconcile(mergeBase, {acceptReground})`. */
+ *  arg names mirror the frozen per-tool signatures: `init(path)` / `query(scope, by?)` / `emit(node,at)` /
+ *  `reconcile(mergeBase, options?)`.
+ *
+ *  WHAT A SCHEMA HERE PROMISES, now that the door ENFORCES it (./fault.ts): the property set is CLOSED
+ *  (`additionalProperties: false` refuses an undeclared name), a declared `type` is checked on every present
+ *  property at every depth, and a declared `enum` is checked against the value. So a property NOT written
+ *  here cannot reach a leg, and a property a leg reads MUST be written here — the two directions of one
+ *  honesty, and BOTH were open before: a declared-and-dead `acceptReground` and an undeclared-and-live `by`.
+ *  Adding an argument to a leg without adding it here is now a refused call, not a silent success. */
 const SCHEMAS: Record<Tool, ToolSchema> = {
   'atlas-init': {
     name: 'atlas-init',
@@ -133,7 +140,19 @@ const SCHEMAS: Record<Tool, ToolSchema> = {
     description: 'bounded read projection — resolves a scope to the merged covering pack of tier>=T1 invariants, stale-flagged (TOOLS-6)',
     inputSchema: {
       type: 'object',
-      properties: { scope: { type: 'string', description: 'file/folder/module/crate scope to resolve' } },
+      properties: {
+        scope: { type: 'string', description: 'file/folder/module/crate scope to resolve' },
+        // [N2 / INDEX-6] the retrieval MODE. It was read by the composed leg (adapter-io/src/wire.ts) and
+        // marshalled by the CLI (`--by`) while being ABSENT from this schema — an UNDER-declared surface, so
+        // over MCP `--by dependency` worked only by relying on `additionalProperties:false` being dead.
+        // Declared here with its CLOSED value set, so both transports refuse an unknown mode identically
+        // (the CLI marshaller already did; MCP silently served `scope`).
+        by: {
+          type: 'string',
+          enum: ['scope', 'dependency', 'trigger'],
+          description: 'retrieval mode — defaults to `scope` when absent (CLI: `atlas query <scope> --by dependency`)',
+        },
+      },
       required: ['scope'],
       additionalProperties: false,
     },
@@ -158,7 +177,27 @@ const SCHEMAS: Record<Tool, ToolSchema> = {
       type: 'object',
       properties: {
         mergeBase: { type: 'string', description: 'the merge-base sha to classify drift against' },
-        acceptReground: { type: 'boolean', description: 'auto-re-ground the mechanical subset in one pass (TOOLS-13)' },
+        // [SURFACE-LIE, CLOSED] `acceptReground` was declared HERE, at the TOP level, and the wired leg read
+        // `args.options.acceptReground` (adapter-io/src/wire.ts). Measured over real MCP stdio: the DECLARED
+        // spelling returned `regroundedCount: 0` and the UNDECLARED `{options:{acceptReground:true}}`
+        // returned `1` — the published knob did nothing and the working one was invisible.
+        //
+        // The `options` bag is canonical because it is what already EXISTED on both sides of the seam: the
+        // frozen signature is `reconcile(mergeBase, options?)` (./reconcile.ts) and the CLI marshaller has
+        // always produced `{mergeBase, options:{acceptReground}}` (cli/src/marshal.ts). Moving the schema to
+        // the leg removes the divergence without inventing a third shape, and the old top-level spelling is
+        // now REFUSED by the closed-set check rather than accepted and dropped.
+        options: {
+          type: 'object',
+          description: 'the reconcile options bag — the frozen `reconcile(mergeBase, options?)` second argument',
+          properties: {
+            acceptReground: {
+              type: 'boolean',
+              description: 'auto-re-ground the mechanical subset in one pass (TOOLS-13; CLI: `--accept-reground`)',
+            },
+          },
+          additionalProperties: false,
+        },
       },
       required: ['mergeBase'],
       additionalProperties: false,
@@ -187,11 +226,17 @@ const SCHEMAS: Record<Tool, ToolSchema> = {
   },
 };
 
-/** Fallback schema for an off-surface tool token — still a well-formed `ToolSchema` (totality). */
+/** Fallback schema for an off-surface tool token — still a well-formed `ToolSchema` (totality).
+ *
+ *  It declares NO `additionalProperties: false`, and that is deliberate now that the door ENFORCES the
+ *  constraint (./fault.ts). This schema knows the tool's NAME and nothing else — it cannot know the argument
+ *  shape of a leg some composition root bound under an off-surface token — so claiming a closed property set
+ *  here would refuse every argument of a wired leg on the authority of a schema that was never authored.
+ *  The envelope demand (`type: 'object'`) is a real thing this fallback does know, and it stays. */
 const SCHEMA_OFF_SURFACE = (tool: Tool): ToolSchema => ({
   name: tool,
   description: 'not one of the five governance tools (TOOLS-1)',
-  inputSchema: { type: 'object', additionalProperties: false },
+  inputSchema: { type: 'object' },
 });
 
 /**
