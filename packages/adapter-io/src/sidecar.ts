@@ -150,10 +150,31 @@ export interface SidecarCtx {
 export const mirrorPath = (dir: string, base: SidecarBase): string => join(dir, `${base}.json`);
 export const genPath = (dir: string, base: SidecarBase, g: number): string => join(dir, `${base}.${g}.json`);
 
-/** Every published generation NUMBER present on disk, descending — including ones that fail to parse (a
- *  corrupt generation still OCCUPIES its name, so the next commit must aim ABOVE it or link forever onto
- *  EEXIST). Total: an absent directory is "no generations", never a throw. */
-export function generations(dir: string, base: SidecarBase): number[] {
+/** One published generation NAME matched on disk, carrying BOTH the parsed number (for ordering/pruning) and
+ *  the exact filename the regex matched (for opening). Kept together on purpose: `genPath(dir, base, g)` is
+ *  the WRITER's canonical (unpadded) namer, and `Number(m[1])` does not invert it — `"007"` parses to `7` but
+ *  `genPath(…, 7)` renders `"7"`, a DIFFERENT string. A reader that lists names, keeps only the number, and
+ *  re-derives a path from that number can therefore try to open a file it never saw (ENOENT on a byte-intact
+ *  generation). {@link listGenerations} exists so `readSidecarSet` below opens the name it actually matched,
+ *  never a name it recomputed — one derivation, so listing and opening cannot disagree. */
+interface GenEntry {
+  readonly g: number;
+  readonly name: string;
+}
+
+/** The one implementation behind both {@link generations} and the read path: every `<base>.<digits>.json`
+ *  name on disk, descending by the parsed number — including ones that fail to parse as JSON later (a corrupt
+ *  generation still OCCUPIES its name, so the next commit must aim ABOVE it or link forever onto EEXIST).
+ *  Total: an absent directory is "no generations", never a throw.
+ *
+ *  THE SORT IS A TOTAL ORDER ON THE ENTRY, NOT JUST ON `g` — `b.g - a.g` alone is only a total order on the
+ *  NUMBER, and two distinct filenames can carry the same number (`"7.json"` and `"007.json"` both parse to
+ *  `7`). Without a tiebreak, which of the two sorts first is decided by `readdirSync`'s return order —
+ *  filesystem- and inode-dependent, not a property of the store — so `readSidecarSet` below (which returns
+ *  the FIRST entry that parses) could serve either one nondeterministically. The lexicographic tiebreak on
+ *  `name`, same shape as `git-history.ts`'s `byPath`, makes the answer a pure function of the bytes on disk
+ *  again; it is NOT a claim that one name is more authoritative than the other. */
+function listGenerations(dir: string, base: SidecarBase): GenEntry[] {
   let names: string[];
   try {
     names = readdirSync(dir);
@@ -161,12 +182,26 @@ export function generations(dir: string, base: SidecarBase): number[] {
     return [];
   }
   const re = new RegExp(`^${base}\\.(\\d{1,15})\\.json$`);
-  const out: number[] = [];
+  const out: GenEntry[] = [];
   for (const name of names) {
     const m = re.exec(name);
-    if (m !== null) out.push(Number(m[1]));
+    if (m !== null) out.push({ g: Number(m[1]), name });
   }
-  return out.sort((a, b) => b - a);
+  return out.sort((a, b) => b.g - a.g || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+}
+
+/** Every published generation NUMBER present on disk, descending — including ones that fail to parse (a
+ *  corrupt generation still OCCUPIES its name, so the next commit must aim ABOVE it or link forever onto
+ *  EEXIST). Total: an absent directory is "no generations", never a throw.
+ *
+ *  NUMBERS ONLY, on purpose: `sidecar-commit.ts`'s callers (aiming the next `link`, pruning old ones) only
+ *  ever need the ORDER, and every name this protocol itself publishes is canonical (`genPath`, unpadded) — so
+ *  re-deriving `genPath(dir, base, g)` from one of these numbers is safe THERE, because the writer is
+ *  re-deriving its OWN naming convention. It is not safe for a READER facing a generation file this protocol
+ *  did not name (a hand copy, a restore, a padded rename) — see {@link listGenerations}, which the read path
+ *  uses instead so it never re-derives a second path from a number this function already discarded. */
+export function generations(dir: string, base: SidecarBase): number[] {
+  return listGenerations(dir, base).map((e) => e.g);
 }
 
 // THE GOVERNANCE CARRIER (ADR-0007: `CurrentNode.scope` / `.tier`) NEEDS NO LINE HERE, and that is worth
@@ -311,8 +346,8 @@ export interface SidecarRead {
  * it, which is exactly one governed write behind rather than a total loss.
  */
 export function readSidecarSet(dir: string, base: SidecarBase, trusted?: SidecarTrust): SidecarRead {
-  const gens = generations(dir, base);
-  const top = gens.length > 0 ? gens[0]! : undefined;
+  const gens = listGenerations(dir, base);
+  const top = gens.length > 0 ? gens[0]!.g : undefined;
   // PROVENANCE FIRST — before a single byte of the store is parsed. A committed store must not be able to
   // influence anything, including which error the caller sees, so this returns BEFORE `readOne`. `top` is
   // still reported honestly (it is a directory listing, not store content) so no caller has to special-case
@@ -323,8 +358,13 @@ export function readSidecarSet(dir: string, base: SidecarBase, trusted?: Sidecar
     // able to influence which refusal a caller sees. The provenance answer is the only one on offer.
     return { projection: undefined, top: top ?? 0, unreadable: false, untrusted: true, identity: 'current' };
   }
-  for (const g of gens) {
-    const hit = readOne(genPath(dir, base, g));
+  for (const entry of gens) {
+    // OPEN THE NAME JUST MATCHED, not a name re-derived from its number: `join(dir, entry.name)`, never
+    // `genPath(dir, base, entry.g)`. A non-canonical on-disk name (e.g. zero-padded `"007"`, parsed to the
+    // same `7`) round-trips through `Number()` but not back through `genPath` — re-deriving would ENOENT on a
+    // generation file whose every byte is intact. One derivation (the regex match above), so listing and
+    // opening can never disagree.
+    const hit = readOne(join(dir, entry.name));
     if (hit !== undefined) return { ...withIdentity(hit.identity), projection: hit.projection, top: top!, unreadable: false, untrusted: false };
   }
   const legacy = readOne(mirrorPath(dir, base));
