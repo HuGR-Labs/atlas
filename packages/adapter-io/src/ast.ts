@@ -20,6 +20,7 @@ import { createRequire } from 'node:module';
 import Parser from 'web-tree-sitter';
 import { escapeKeyComponent } from '@atlas/index';
 import type { FileTree } from '@atlas/index';
+import { isSymlinkLeaf } from './fs.js';
 
 const require = createRequire(import.meta.url);
 
@@ -211,6 +212,12 @@ function itemsOf(filePath: string, src: string, grammar: TsLanguage): FileTree[]
  *  its parsed item children. Every existing node is preserved (path + content untouched); only children
  *  are additively refined. */
 function refine(node: FileTree): FileTree {
+  // A mode-120000 leaf is NOT source and is never parsed. Its `content` is a link target path — text the
+  // author of the link chose freely — so parsing it would mint sub-file unit keys out of something that is
+  // not a program: `ln -s 'const x = 1' src/leak.ts` yields `src/leak.ts::lexical_declaration:0:x`, and a
+  // node key is what retrieval hands out. Returned UNCHANGED (marker included): an honest empty refinement,
+  // the same answer the fold already gives a file with no grammar.
+  if (isSymlinkLeaf(node)) return node;
   // A file leaf = has `content` and no existing children. Parse-refine it; everything else recurses.
   if (node.content !== undefined && node.children.length === 0) {
     const grammar = grammarFor(node.path);
