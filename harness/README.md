@@ -12,6 +12,12 @@ The machinery of governed execution, independent of any one product:
 - **Quality gates** — `harness/gates/`. The standing bars enforced on every seat and on the
   build itself. Today: `godfile-guard.mjs` (the ≤400-LOC ceiling per source file). Same
   doctrine as the CI: the bar Orchestra enforces on seats is enforced on Orchestra itself.
+- **Instruments** — `harness/probes/`. Deliberately NOT gates: a probe judges one RUN against a written
+  contract and is invoked by hand, so nothing here is wired into `ci.yml` and `package.json` exposes no
+  script for it. The distinction is load-bearing — a gate whose input is absent on CI exits 0 having
+  checked nothing, which reads exactly like coverage. Today: `genesis-output-probe.mjs` (with
+  `atlas-store-read.mjs`, `mine-report.mjs`) — the instrument for
+  `docs/design/genesis-output-contract.md`.
 - **The execution method** — the governed pipeline `S0 → S1 → S2 → S3 → C → S4` plus the
   per-work-package execution loop `BIND → RED → GREEN → REFACTOR → GATE → SEAL`. These live
   as prompt + protocol docs under `docs/` (see the inventory below); they are harness-owned
