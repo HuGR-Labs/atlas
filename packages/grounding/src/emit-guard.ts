@@ -39,8 +39,10 @@ import type { Grounding, GateApi } from './types.js';
  * [NOT ENFORCED HERE — stated so this is not read as a control that exists] `AdmitApi` is a DECLARED
  * surface with no implementation in this module (only `truthDoorHolds` + `validateTemplate` ship from
  * here). The harm door's predicate is the credential-scrub family in `@atlas/persist`; whether that is the
- * COMPLETE definition of harm is not settled — ADR-0012 §"What this ADR does NOT close" says so. Wiring an
- * admission path at all is tracked separately: `makeAdmitGate` has zero production callers today.
+ * COMPLETE definition of harm is not settled — ADR-0012 §"What this ADR does NOT close" says so. The
+ * admission path is now WIRED (`packages/cli/src/mine-gate.ts` → `buildMineAdmission` → `makeAdmitGate`),
+ * so this module's declared surface has a shipped consumer; what is still unwired is the harm predicate's
+ * completeness, not the path.
  *
  * [Refuse-to-model] The "non-obvious" predicate has NO finite/mechanical oracle (method-tags-grd:119) —
  * only the admission WIRING (the conjunction) and the truth door are modeled. ADR-0012 decides what the

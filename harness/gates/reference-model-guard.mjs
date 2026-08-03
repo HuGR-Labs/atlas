@@ -166,10 +166,14 @@ const LEDGER = {
   'packages/genesis/src/seed.ts': { values: 5, shipped: null, banner: false },
   'packages/genesis/src/usefulness.ts': { values: 2, shipped: null, banner: false },
 
-  // ── @atlas/grounding — PARTLY wired: `driftDetect` / `bindGate` / `isGrounded` reach adapter-io. ──────
+  // ── @atlas/grounding — PARTLY wired: `driftDetect` / `bindGate` / `isGrounded` / `ground` reach ────────
+  //    adapter-io. `ground` joined them when the mine admission supply landed: the GROUND-3 anchor builder
+  //    re-derives each mined receipt against the pass's own axes, which is what lets a structural seed's
+  //    dep-axis identity reach a verdict `driftDetect` will accept. Its entry is DELETED, not amended —
+  //    a shipped module is not a reference model, and leaving the row would make the ledger lie in the
+  //    direction that hides real code.
   'packages/grounding/src/emit-guard.ts': { values: 2, shipped: 'packages/adapter-io/src/governed-emit.ts', banner: false },
   'packages/grounding/src/freshness.ts': { values: 2, shipped: null, banner: false },
-  'packages/grounding/src/ground.ts': { values: 1, shipped: null, banner: false },
   'packages/grounding/src/subtree.ts': { values: 1, shipped: null, banner: false },
 
   // ── @atlas/index — PARTLY wired: build / createResolve / createDepgraph / nodeHashOfPath reach wire.ts.
