@@ -97,6 +97,16 @@ covers_reqs: [ req-gen.md#REQ-GEN-8a, req-gen.md#REQ-GEN-8b, req-gen.md#REQ-GEN-
 witness:     [ goldens-gen.md#SCN-GEN-8a-1, goldens-gen.md#SCN-GEN-8b-1, goldens-gen.md#SCN-GEN-8c-1 ]
 teeth:       breaks-on "a corrupt-object path that throws an uncaught exception or a fabricated-*full* skeleton on a malformed rev — the fuzz ∀ reaches corners no fixed witness enumerates."
 
+### PROP-GEN-8b — the run's site set CLOSES over its own frontier
+inv:         INV-GEN-8 (with INV-GEN-12's abstention leg — a valid outcome is one that is RECORDED)
+source:      method-tags-gen.md#INV-GEN-8   # ptr+digest
+law:         ∀ frontier F, budget b, kill-point k. the report of genesis(F,b) [or of its resume] carries EXACTLY ONE per-site outcome for EVERY site in F — |rows| = |F| ∧ no site recorded twice — and each row is one of {seeded(facts), abstained(WhyNot), unrecorded(reason-unavailable), interrupted, unvisited(cause)}; and |{seeded,abstained,unrecorded}| = budgetSpent
+arbitrary:   `arbFrontier` × `arbCeiling` (including 0 and > |F|) × `arbKillPoint` (including none) × a `visit` port drawn from {wide `ExtractResult`, narrow `Fact[]`}, over `genesis` and `genesis→resume`. Asserted directly on the implementation (no executable reference — see the header's reconciliation).
+covers_reqs: [ req-gen.md#REQ-GEN-8a, req-gen.md#REQ-GEN-12g ]   # ptr+digest
+witness:     [ goldens-gen.md#SCN-GEN-8a-3, goldens-gen.md#SCN-GEN-12g-3, goldens-gen.md#SCN-GEN-12g-4 ]
+teeth:       breaks-on "the budget ceiling stops the drive and records nothing for the cold tail, so a DROPPED site and an ABSTAINING site produce the same empty record — and `|rows| = |F|` is what catches it, never `|F| − |facts|`, because one site may yield more than one fact."
+note:        the ∀ is over the DECLARED frontier, not over the repository. This property says the run accounts for every site it was HANDED; whether the ranked frontier is the right set of sites is INDEX/GEN-11's question and is not claimed here.
+
 ### PROP-GEN-9 — seeds the self-model (Awareness sources)
 inv:         INV-GEN-9
 source:      method-tags-gen.md#INV-GEN-9   # ptr+digest

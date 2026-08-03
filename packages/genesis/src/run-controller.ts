@@ -8,7 +8,18 @@
 // bucket-bounded `rerun`, hand control to born-from-work). Sibling stages are CALLED via `ControllerDeps`.
 
 import type { Delta } from '@atlas/index';
-import type { Candidate, Fact, GenesisBudget, GenesisReport, ResumeToken, Skeleton } from './types.js';
+import type {
+  Candidate,
+  ExtractResult,
+  Fact,
+  GenesisBudget,
+  GenesisReport,
+  ResumeToken,
+  RunCoverage,
+  SiteOutcome,
+  Skeleton,
+} from './types.js';
+import { classifyVisit, interruptedAt, NO_FRONTIER, readVisit, unvisited } from './coverage.js';
 
 export interface GenesisApi {
   /** The TOTAL composition-root entry (GEN-8): `atlas-genesis <repo> --at <rev> [--budget N]
@@ -79,7 +90,13 @@ export interface Plan {
  */
 export interface ControllerDeps {
   plan(repo: string, rev: string, scope?: string): Plan;
-  visit(cand: Candidate): readonly Fact[];
+  /** The S2 per-site driver. The return type is a UNION and the wide arm is the EXISTING frozen S2 surface:
+   *  a port may hand back the bare `Fact[]` it always did, or the `ExtractResult` (`{ facts, abstained }`,
+   *  atlas-genesis:188) that `runExtract` already returns — in which case the site's grounded GEN-12
+   *  `WhyNot` survives into the run ledger instead of being dropped here. Widened, never replaced: every
+   *  existing driver compiles and behaves identically, and one that drops `.facts` from its call gains the
+   *  abstention record for free. MAY throw (an interruption, GEN-8c). */
+  visit(cand: Candidate): readonly Fact[] | ExtractResult;
   upsert(incoming: readonly Fact[]): readonly Fact[];
   changed(prior: Skeleton, rev: string): Delta;
   handoffTo(): void;
@@ -97,6 +114,7 @@ interface DriveResult {
   readonly interrupted: boolean; // a site threw mid-run ⇒ resumable partial (never propagated — GEN-8c)
   readonly llmCalls: number;
   readonly budgetSpent: number;
+  readonly outcomes: readonly SiteOutcome[]; // one row per site this drive was handed — the GEN-8/12g ledger
 }
 
 interface PendingRun {
@@ -105,9 +123,14 @@ interface PendingRun {
   readonly llmCalls: number;
   readonly budgetSpent: number;
   readonly budget: GenesisBudget;
+  /** The ledger SO FAR. Carried across `resume` for the same reason `seeded` is: a resumed run's report
+   *  describes the WHOLE run, so its coverage must account for the sites the first leg already drove —
+   *  otherwise the site set would appear to shrink at exactly the moment the run was interrupted. */
+  readonly outcomes: readonly SiteOutcome[];
 }
 
-/** An honest empty/partial report — the total degrade shape (GEN-8b/8c). */
+/** An honest empty/partial report — the total degrade shape (GEN-8b/8c). The ledger says `unavailable`:
+ *  no frontier was ever obtained, which is a different claim from "the frontier was empty". */
 function emptyReport(token?: ResumeToken): GenesisReport {
   return {
     seeded: [],
@@ -115,6 +138,7 @@ function emptyReport(token?: ResumeToken): GenesisReport {
     open: [],
     llmCalls: 0,
     budgetSpent: 0,
+    coverage: NO_FRONTIER,
     ...(token ? { resumeToken: token } : {}),
   };
 }
@@ -128,6 +152,11 @@ function emptyReport(token?: ResumeToken): GenesisReport {
  *     and the last completed rank becomes the resume cursor.
  *   • IDEMPOTENT (GEN-7b): every write routes through the injected upsert (dedup by id) — the returned
  *     grounded set is the report's `seeded`.
+ *   • ACCOUNTED (GEN-8/12g): EVERY site handed to this drive gets exactly one ledger row, including the ones
+ *     no call was spent on. The ceiling used to `break` and the cold tail simply vanished — which is how a
+ *     dropped site and an abstaining site became indistinguishable. It now records the tail and keeps going,
+ *     spending nothing: `continue` rather than `break` costs no call (`budgetSpent` never decreases) and
+ *     buys the one thing a coverage claim needs, which is a row for the sites that were NOT visited.
  */
 function drive(
   sites: readonly Candidate[],
@@ -143,36 +172,61 @@ function drive(
   let llmCalls = startCalls;
   let budgetSpent = startSpent;
   let interrupted = false;
+  const outcomes: SiteOutcome[] = [];
 
   const ordered = [...sites].sort((a, b) => a.rank - b.rank);
-  for (const cand of ordered) {
-    // GEN-2 hard ceiling — the cold tail is born-from-work's, not a resumable interruption.
-    if (budgetSpent >= budget.ceiling) break;
+  let i = 0;
+  for (; i < ordered.length; i++) {
+    const cand = ordered[i]!;
+    // GEN-2 hard ceiling — the cold tail is born-from-work's, not a resumable interruption. No call is
+    // spent here; the site is RECORDED as never visited, with the ceiling named as the cause.
+    if (budgetSpent >= budget.ceiling) {
+      outcomes.push(unvisited(cand, 'ceiling'));
+      continue;
+    }
     try {
-      const facts = deps.visit(cand); // S2 per-site (WP-8.28); may throw = interruption
-      seeded = deps.upsert(facts); // KNOW-15 idempotent upsert — 0 duplicates on re-run (GEN-7b)
+      const visited = deps.visit(cand); // S2 per-site (WP-8.28); may throw = interruption
+      const record = readVisit(visited); // normalize the union — `abstained` present only if the port sent it
+      seeded = deps.upsert(record.facts); // KNOW-15 idempotent upsert — 0 duplicates on re-run (GEN-7b)
       llmCalls += 1;
       budgetSpent += 1;
       lastCompletedRank = cand.rank; // checkpoint the last completed ranked site (GEN-8a)
+      // The ledger row is written from what the site ACTUALLY produced — the seeded facts by id, or the
+      // grounded GEN-12 `WhyNot` the port carried. It is never derived by subtracting counts.
+      outcomes.push(classifyVisit(cand, record));
     } catch {
       interrupted = true; // GEN-8c: never propagate — resume continues from lastCompletedRank
+      outcomes.push(interruptedAt(cand)); // the site is visited-but-not-completed, and says so
+      i += 1;
       break;
     }
   }
-  return { seeded, lastCompletedRank, interrupted, llmCalls, budgetSpent };
+  // Everything past an interruption was never reached. Recorded rather than omitted: a silent tail is
+  // exactly the shape a dropped site would take.
+  for (; i < ordered.length; i++) outcomes.push(unvisited(ordered[i]!, 'after-interrupt'));
+
+  return { seeded, lastCompletedRank, interrupted, llmCalls, budgetSpent, outcomes };
 }
 
-/** Fold a drive result into a `GenesisReport`. A `resumeToken` rides ONLY a partial/interrupted or
- *  malformed run (GEN-8); a complete run carries none. `ratified`/`open` (S3, WP-8.29) are not this
- *  facet's stage — empty here. */
-function toReport(res: DriveResult, malformed: boolean): GenesisReport {
+/**
+ * Fold a drive result into a `GenesisReport`. A `resumeToken` rides ONLY a partial/interrupted or
+ * malformed run (GEN-8); a complete run carries none. `ratified`/`open` (S3, WP-8.29) are not this
+ * facet's stage — empty here.
+ *
+ * `planned` is passed in rather than read off `res.outcomes.length`, and that is the point: the two are
+ * compared by `reconcile`, so deriving one from the other would make the check vacuous. `planned` is the
+ * size of the frontier the controller was HANDED; the rows are what it managed to account for.
+ */
+function toReport(res: DriveResult, malformed: boolean, planned: number, prior: readonly SiteOutcome[] = []): GenesisReport {
   const partial = res.interrupted || malformed;
+  const coverage: RunCoverage = { frontier: 'planned', planned, sites: [...prior, ...res.outcomes] };
   return {
     seeded: res.seeded,
     ratified: [],
     open: [],
     llmCalls: res.llmCalls,
     budgetSpent: res.budgetSpent,
+    coverage,
     ...(partial ? { resumeToken: { lastCompletedRank: res.lastCompletedRank } } : {}),
   };
 }
@@ -194,8 +248,15 @@ export function makeRunController(deps: ControllerDeps): GenesisApi & HandoffApi
       llmCalls: res.llmCalls,
       budgetSpent: res.budgetSpent,
       budget,
+      // ONLY the rows for sites the resume will NOT re-drive. `resume` re-drives every site past the
+      // cursor, so carrying THEIR rows too would double-count them in the resumed report's ledger — a
+      // duplicate overstates coverage exactly as a gap understates it, and `reconcile` fails both.
+      // It also fails LOUD in the right direction: a resume handed a cursor further ahead than this run
+      // actually reached genuinely skips the sites in between, and dropping their stale rows here is what
+      // makes that resumed run's ledger refuse to close instead of closing over sites nobody visited.
+      outcomes: res.outcomes.filter((o) => o.rank <= res.lastCompletedRank),
     };
-    const report = toReport(res, plan.malformed);
+    const report = toReport(res, plan.malformed, plan.sites.length);
     // S4 hand-off (GEN-7a) only on a COMPLETE run — a partial/interrupted or malformed run is not done.
     if (!res.interrupted && !plan.malformed) deps.handoffTo();
     return report;
@@ -228,8 +289,22 @@ export function makeRunController(deps: ControllerDeps): GenesisApi & HandoffApi
         pending.seeded,
         deps,
       );
-      pending = { ...pending, seeded: res.seeded, llmCalls: res.llmCalls, budgetSpent: res.budgetSpent };
-      const report = toReport(res, false);
+      const planned = pending.sites.length;
+      // The carried rows are cut to the SAME cursor `remaining` was cut to. Read off the TOKEN, not off
+      // `pending`: resuming twice from one token re-drives the same sites, and a carried row for a site
+      // about to be re-driven would land in the ledger twice.
+      const prior = pending.outcomes.filter((o) => o.rank <= token.lastCompletedRank);
+      pending = {
+        ...pending,
+        seeded: res.seeded,
+        llmCalls: res.llmCalls,
+        budgetSpent: res.budgetSpent,
+        outcomes: [...prior, ...res.outcomes.filter((o) => o.rank <= res.lastCompletedRank)],
+      };
+      // The resumed report's ledger is the WHOLE run's: the rows the first leg completed, plus this leg's.
+      // `planned` stays the size of the original frontier, so the set the reconciliation closes over is the
+      // one the run was actually handed — not the remainder it happened to be restarted with.
+      const report = toReport(res, false, planned, prior);
       if (!res.interrupted) deps.handoffTo(); // the resumed run completed ⇒ hand off (GEN-7a)
       return report;
     } catch {
@@ -254,7 +329,10 @@ export function makeRunController(deps: ControllerDeps): GenesisApi & HandoffApi
       const buckets = new Set(delta.changedBuckets);
       const incremental = plan.sites.filter((s) => buckets.has(bucketOf(s)));
       const res = drive(incremental, defaultBudget(incremental.length), -1, 0, 0, [], deps);
-      const report = toReport(res, false);
+      // `planned` is the INCREMENTAL set, not `plan.sites`: an incremental re-run is scoped to the buckets
+      // the INDEX-12 delta names, and the sites outside it were not dropped — they were never in scope.
+      // Charging them to this run's coverage would report a gap that does not exist.
+      const report = toReport(res, false, incremental.length);
       // Control returns to born-from-work after the incremental pass (GEN-7a); writes were idempotent (7b).
       if (!res.interrupted) deps.handoffTo();
       return report;

@@ -34,6 +34,7 @@ import type {
   GenesisBudget,
   GenesisReport,
   Candidate,
+  ExtractResult,
   Fact,
   SiteProposer,
   EmitGate,
@@ -292,9 +293,15 @@ export function buildControllerDeps(repoPath: string, d: MineDeps, onRefusal?: (
     // missing / timed out / exited non-zero for the whole run, and `describeModelFailure` (llm.ts:152) has
     // already put the command and its stderr in the message. Swallowed, it reached the user as an anonymous
     // partial — `exit 1 · llmCalls 0 · resume at rank -1`, with nothing to act on.
-    visit: (cand): readonly Fact[] => {
+    // The WHOLE `ExtractResult` is returned, not `.facts`. Picking the facts off here is what made the run's
+    // coverage unfalsifiable: each site's grounded `WhyNot` died in this expression, one layer above the
+    // controller, so a site that ABSTAINED and a site that was silently DROPPED reached the report
+    // identically — and `mineWhyEmpty` printed "every one abstained" from `facts === 0` alone, a word the run
+    // had no grounds for. `ControllerDeps.visit` accepts either arm; handing back the wide one is the only
+    // change needed for the per-site ledger to carry real abstentions instead of `unrecorded`.
+    visit: (cand): ExtractResult => {
       try {
-        return runExtract([cand], SINGLE_SITE, { proposer: d.proposer, gate: d.gate }).facts;
+        return runExtract([cand], SINGLE_SITE, { proposer: d.proposer, gate: d.gate });
       } catch (e) {
         if ((e as { name?: unknown } | null)?.name === 'ModelCommandError') watch?.onFault?.(e as Error);
         throw e;

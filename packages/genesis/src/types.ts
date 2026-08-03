@@ -127,6 +127,78 @@ export interface ResumeToken {
 }
 
 /**
+ * What ONE site on the planned frontier came to. The RUN LEDGER's row (GEN-8 + GEN-12g).
+ *
+ * The five arms are the outcomes the run controller can actually distinguish, and they are deliberately
+ * NOT collapsed: `abstained` (a site was visited and the grounded GEN-12 `WhyNot` came back) and
+ * `unvisited` (the run never spent a call there) are different facts about coverage, and a ledger that
+ * cannot tell them apart is the defect this row exists to remove. `unrecorded` is the honest third case —
+ * the site WAS visited and produced no fact, but the `visit` port returned bare facts, so the `WhyNot` it
+ * had is not reachable from here. It reports that it cannot report, rather than manufacturing an
+ * abstention reason nothing grounded.
+ *
+ * GENESIS-HOME, and built from vocabulary that already exists: the site is the anchored `StructRef` the
+ * `Candidate` already carries, the abstention is the `WhyNot` GEN-12 already defines, and `facts` names the
+ * seeded `Fact`s by their own `id`. No parallel record of a site, a fact or an abstention is introduced.
+ */
+export type SiteOutcome =
+  | {
+      readonly outcome: 'seeded';
+      readonly rank: number; //          the GEN-2/11 rank position this site was driven at
+      readonly site: StructRef; //       the anchored site (grounded — the same ref the Candidate carried)
+      readonly facts: readonly string[]; // the seeded facts, by their own `id` — WITH WHAT, not just how many
+    }
+  | {
+      readonly outcome: 'abstained';
+      readonly rank: number;
+      readonly site: StructRef;
+      readonly whyNot: WhyNot; //        the grounded GEN-12 abstention, kept — not re-derived, not invented
+    }
+  | {
+      readonly outcome: 'unrecorded';
+      readonly rank: number;
+      readonly site: StructRef;
+      readonly note: string; //          WHY the outcome could not be recorded — about the port, not the site
+    }
+  | {
+      readonly outcome: 'interrupted';
+      readonly rank: number;
+      readonly site: StructRef; //       `visit` threw (GEN-8c catches it WITHOUT a cause) — the site is not done
+    }
+  | {
+      readonly outcome: 'unvisited';
+      readonly rank: number;
+      readonly site: StructRef;
+      /** WHY no call was spent: the GEN-2 hard ceiling was already reached (the cold tail born-from-work
+       *  inherits), or the run stopped at an earlier interrupted site and never got here. */
+      readonly cause: 'ceiling' | 'after-interrupt';
+    };
+
+/**
+ * The RUN LEDGER (GEN-8 + GEN-12g): one `SiteOutcome` per PLANNED site, so a run's coverage of its own
+ * frontier can be reconciled from what the run produced instead of inferred from a count.
+ *
+ * A COUNT IS NOT A LEDGER. "N abstained" does not let anyone establish that no site was dropped; only a row
+ * per site does, and only rows let a dropped site be told from an abstaining one. `sites − facts` is not a
+ * residual either — one site may yield more than one fact — which is why `facts` rides on the row.
+ *
+ * ADDITIVE + ABSENT-TOLERANT, the `builtAt`/`sameAs`/`derivedAt` precedent: `GenesisReport.coverage` is
+ * OPTIONAL and a report that predates the ledger simply has none. An ABSENT ledger means "this run recorded
+ * no coverage" — it never means "this run covered nothing".
+ */
+export interface RunCoverage {
+  /** Where the row set came from. `'planned'` — `plan` returned a frontier and every row below accounts for
+   *  one of its sites. `'unavailable'` — planning itself failed (GEN-8b/8c), so the run never HAD a frontier:
+   *  this ledger claims no coverage, and in particular does not claim the repository was empty. */
+  readonly frontier: 'planned' | 'unavailable';
+  /** Sites the run was handed by `plan`. Compared against `sites.length`, this is the check itself: a gap
+   *  means the controller drove a frontier it did not account for. */
+  readonly planned: number;
+  /** One row per planned site — the ledger. Ordered by the GEN-2/11 rank the run drove them in. */
+  readonly sites: readonly SiteOutcome[];
+}
+
+/**
  * The total run report (GEN-8). Transcribed EXACTLY from atlas-genesis:195 —
  *   `GenesisReport = { seeded, ratified, open, llmCalls, budgetSpent, resumeToken? }`.
  * `atlas-genesis` is TOTAL: a malformed rev returns a partial report + `resumeToken`, never a throw.
@@ -150,6 +222,11 @@ export interface GenesisReport {
   readonly budgetSpent: number;
   readonly cost?: CostReport; // [FLAG] GEN-13/A-13 require per-stage cost; §Surface literal omits it
   readonly resumeToken?: ResumeToken; // present only on a partial/interrupted run (GEN-8)
+  /** The per-site run ledger (GEN-8/12g). OPTIONAL for the same reason `cost` is: the §Surface literal
+   *  (:195) lists six fields and none of them is a site ledger, while GEN-12g requires abstention to be a
+   *  valid RECORDED outcome — which, dropped, it was not. Absent ⇒ this run recorded no coverage (an
+   *  artifact from before the ledger); it never means the run covered nothing. */
+  readonly coverage?: RunCoverage;
 }
 
 // ── GEN-13 / GEN-14 cost-discipline surface, co-located here (was ref/budget.ts) ──────────────────────
