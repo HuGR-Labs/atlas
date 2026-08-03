@@ -1,20 +1,29 @@
-// @atlas/cli — src/doctor.ts  (WP-DOCTOR — CLI-1a: `atlas doctor <sub>` sub-dispatch over the DoctorApi)
+// @atlas/cli — src/doctor.ts  (WP-DOCTOR — CLI-1a: `atlas doctor <sub>` sub-dispatch)
 //
-// `atlas doctor` fans out to the FOUR read/advisory legs of the frozen `DoctorApi` (archive / why /
-// hotset / reground), built over an INJECTED read-only `DoctorSource` (dependency-inverted — tests pass a
-// fake; the real source is assembled at the composition-root WP). Doctor is READ-ONLY + advisory: every
-// leg renders a `DoctorOut` deterministically to stdout with exit 0, `reground` renders a PROPOSAL only
-// (the store changes solely when it runs through `atlas-emit`), and NO leg carries write authority. TOTAL:
-// an unknown subcommand / a missing arg / a not-yet-wired source fails CLOSED to a structured error +
-// guidance + non-zero exit — never a throw (mirrors the CLI-1b parser totality).
+// `atlas doctor` fans out to the read/advisory legs of the frozen `DoctorApi` (archive / why / hotset /
+// reground), built over an INJECTED read-only `DoctorSource` (dependency-inverted — tests pass a fake; the
+// real source is assembled at the composition-root WP). Doctor is READ-ONLY + advisory: every leg renders a
+// `DoctorOut` deterministically to stdout with exit 0, `reground` renders a PROPOSAL only (the store changes
+// solely when it runs through `atlas-emit`), and NO leg carries write authority. TOTAL: an unknown
+// subcommand / a missing arg / a not-yet-wired source fails CLOSED to a structured error + guidance +
+// non-zero exit — never a throw (mirrors the CLI-1b parser totality).
+//
+// `index` is the ONE leg that is not a `DoctorApi` leg: it reads the FILE TREE and the SCIP dump rather than
+// the durable store, so it is dispatched here over its own injected provider and the frozen `DoctorApi`
+// (four read legs, no more) is untouched. It is here because `doctor` is where a user goes when a command
+// returned nothing, and until now the surface could not tell them that the reason `mine` visited 0 sites is
+// a missing `.atlas/index.scip` (`doctor-index.ts`).
 
 import { DOCTOR_GUIDANCE, createDoctor } from '@atlas/tools';
 import type { DoctorOut, DoctorSource } from '@atlas/tools';
+import type { IndexPlanReport } from '@atlas/adapter-io';
+import { INDEX_NEXT, renderIndexPlan } from './doctor-index.js';
 import type { CliVerdict } from './render.js';
 import { renderVerdict } from './render.js';
 
-/** The finite doctor sub-command surface — EXACTLY these four read/advisory legs, no more (TOOLS-12). */
-export const DOCTOR_SUBCOMMANDS = ['archive', 'why', 'hotset', 'reground'] as const;
+/** The finite doctor sub-command surface — EXACTLY these five read/diagnostic legs, no more (TOOLS-12).
+ *  Four read the durable store through the `DoctorApi`; `index` reads the tree + the dump. */
+export const DOCTOR_SUBCOMMANDS = ['archive', 'why', 'hotset', 'reground', 'index'] as const;
 export type DoctorSub = (typeof DOCTOR_SUBCOMMANDS)[number];
 
 function isDoctorSub(s: string | undefined): s is DoctorSub {
@@ -29,7 +38,7 @@ function doctorError(next: string): CliVerdict {
 
 /** Deterministically render one leg's payload — keyed by the SUBCOMMAND (not by whichever field happens to
  *  be present), so a mis-routed leg (`why` → archive) renders the wrong shape and a golden bites. */
-function renderPayload(sub: DoctorSub, out: DoctorOut): string {
+function renderPayload(sub: Exclude<DoctorSub, 'index'>, out: DoctorOut): string {
   switch (sub) {
     case 'archive':
       return `archive: [${(out.archive ?? []).join(', ')}]`;
@@ -52,14 +61,22 @@ function renderPayload(sub: DoctorSub, out: DoctorOut): string {
 
 /** Render a `DoctorOut` to a process outcome. READ-ONLY ⇒ exit 0; carries the doctor guidance on every
  *  path (the reground follow-up is ALWAYS the governed write door atlas-emit). */
-function renderDoctorOut(sub: DoctorSub, out: DoctorOut): CliVerdict {
-  const stdout =
-    `status: ok\n` +
-    `doctor: ${sub}\n` +
-    `${renderPayload(sub, out)}\n` +
-    `next: ${DOCTOR_GUIDANCE.next}\n` +
-    `invariant: ${DOCTOR_GUIDANCE.invariant}\n`;
-  return { exitCode: 0, stdout };
+function renderDoctorOut(sub: Exclude<DoctorSub, 'index'>, out: DoctorOut): CliVerdict {
+  return doctorVerdict(sub, renderPayload(sub, out), DOCTOR_GUIDANCE.next);
+}
+
+/** The ONE doctor envelope every leg renders through — status · leg · payload · next · invariant. Shared so
+ *  a new leg cannot invent its own frame; only `next` varies, because only the follow-up differs. */
+function doctorVerdict(sub: DoctorSub, payload: string, next: string): CliVerdict {
+  return {
+    exitCode: 0,
+    stdout:
+      `status: ok\n` +
+      `doctor: ${sub}\n` +
+      `${payload}\n` +
+      `next: ${next}\n` +
+      `invariant: ${DOCTOR_GUIDANCE.invariant}\n`,
+  };
 }
 
 /**
@@ -68,7 +85,11 @@ function renderDoctorOut(sub: DoctorSub, out: DoctorOut): CliVerdict {
  * structured error + guidance + non-zero exit — never a throw. Persists NOTHING (no write door is opened):
  * `reground` returns a `RegroundPlan` proposal that the caller runs through `atlas-emit`.
  */
-export function runDoctor(positionals: readonly string[], source?: DoctorSource): CliVerdict {
+export function runDoctor(
+  positionals: readonly string[],
+  source?: DoctorSource,
+  indexPlan?: () => IndexPlanReport,
+): CliVerdict {
   const sub = positionals[0];
   const arg = positionals[1];
 
@@ -77,6 +98,22 @@ export function runDoctor(positionals: readonly string[], source?: DoctorSource)
     return doctorError(
       `unknown doctor subcommand '${sub ?? ''}': expected one of ${DOCTOR_SUBCOMMANDS.join('|')}`,
     );
+  }
+
+  // `index` reads the file tree + the dump, NOT the durable store — so it is answered BEFORE the
+  // `DoctorSource` guard below. Gating it on a store port it never touches would make the one leg that
+  // explains an empty repository unavailable on exactly the repositories that are empty. Its own provider
+  // is injected the same way (the entrypoint supplies the real one over `process.cwd()`); absent ⇒ the same
+  // fail-closed structured error every other unwired seam produces, never a throw.
+  if (sub === 'index') {
+    if (!indexPlan) {
+      return doctorError('atlas doctor index has no repository source — the index planner is wired at the entrypoint');
+    }
+    try {
+      return doctorVerdict('index', renderIndexPlan(indexPlan()), INDEX_NEXT);
+    } catch (e) {
+      return doctorError(e instanceof Error ? e.message : String(e));
+    }
   }
 
   // fail CLOSED with guidance when the read-only DoctorSource is not injected — the real source is

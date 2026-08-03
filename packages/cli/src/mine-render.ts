@@ -75,6 +75,11 @@ export function mineOutcome(r: GenesisReport, modelWired: boolean, ceiling?: num
  *   • 0 sites visited  — the run died UPSTREAM of the model: the structural pass (skeleton → ranked
  *     frontier) handed the extractor nothing, so no proposer was ever consulted. Saying "no model is wired"
  *     here would tell the user the product is one wire from working when the model is not even reached.
+ *     Naming what would NOT fix it is only half a diagnosis, so this case now also names where the answer
+ *     is: `atlas doctor index`. `axes.edges` comes from SCIP alone and the frontier ranks by dep-graph
+ *     degree, so the usual cause of a structurally empty frontier is an absent `.atlas/index.scip` — which
+ *     that leg reports, along with the command that produces one. It POINTS, it does not promise: an
+ *     indexed repository can still have an empty frontier, and the leg says which case this is.
  *   • N sites visited, 0 facts — the model gate IS where the 0 came from: every visited site abstained
  *     (`genesis/extract.ts:118`) or was refused by the 2-door gate. Only HERE is the absent proposer the
  *     operative cause, and only here is "abstain-by-design, never fabricated" the honest framing.
@@ -89,7 +94,7 @@ export function mineWhyEmpty(o: MineOutcome): string | null {
   if (o.sitesVisited === 0) {
     return o.ceiling === 0
       ? 'mine: 0 candidate facts — 0 sites visited: the run budget ceiling was 0, so nothing was ever extracted'
-      : 'mine: 0 candidate facts — 0 sites visited: the structural pass (skeleton → ranked frontier) yielded no site, so no proposer was ever consulted; wiring a model would not change this 0';
+      : 'mine: 0 candidate facts — 0 sites visited: the structural pass (skeleton → ranked frontier) yielded no site, so no proposer was ever consulted; wiring a model would not change this 0. Run `atlas doctor index` to see whether this repository has the SCIP index the frontier is derived from';
   }
   return o.modelWired
     ? `mine: 0 candidate facts — ${o.sitesVisited} site(s) visited and every one abstained: nothing was proposed or admitted (facts are never fabricated)`

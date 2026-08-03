@@ -28,7 +28,11 @@ behaviour**: every adapter clause is bounded by the port it realizes; the core s
 
 ```
 LangId       = 'ts' | 'py' | 'go' | 'java' | 'rust' | …        // a language the ring can index
-IndexerPlan  = { lang: LangId, tool: string, args: string[] }  // which SCIP indexer runs for a language
+IndexerPlan  = { lang: LangId, tool: string, args: string[], version?: string }
+                                                               // which SCIP indexer runs for a language, and
+                                                               // the pinned release it runs at (REQ-INDEX-3a);
+                                                               // `version` is absent for the honest-hole
+                                                               // sentinel, which names no binary
 CasPath      = string                                          // on-disk CAS location (Decisions §D2)
 CliVerdict   = { exitCode: number, stdout: string }            // deterministic render of a tool Verdict
 WiredHandler = ReturnType<createHandler>                       // the ONE 5-leg handler both entrypoints share
@@ -49,6 +53,13 @@ WiredHandler = ReturnType<createHandler>                       // the ONE 5-leg 
   per-language SCIP indexer (`IndexerPlan` by `LangId`) and merge their `.scip` outputs. A language with **no
   configured indexer** MUST contribute its files to the `FileTree` only (an honest structural hole), and MUST
   NOT cause a fabricated or dropped edge for any other language (INDEX-13 honesty preserved cross-language).
+  SHIPPED STATE, stated because "MUST run" reads like a claim about behaviour that does not exist: Atlas
+  **plans** the invocation and the OPERATOR runs it. `atlas doctor index` derives the repo's languages from
+  the tracked tree, routes them through `planIndexers`, and prints the pinned command per language; no code
+  path spawns an indexer, by decision (security posture + a visible `$0`-LLM dependency —
+  `docs/reference/commands/doctor.md`). The merge half is likewise unrealized in production: `mergeScip`
+  exists and has no shipped caller, and every reader opens exactly ONE dump at `.atlas/index.scip`, so in a
+  two-language repository the second indexer run overwrites the first. `doctor index` says so in its output.
 - **ADAPT-AST-1 Deterministic sub-file units (additive).** The `web-tree-sitter` layer, when enabled, MUST fold
   sub-file structural units (item/block) into the `FileTree` spatial rail deterministically (same bytes ⇒ same
   units). It is an **additive refinement**: with it absent, the index is file-level and still valid.

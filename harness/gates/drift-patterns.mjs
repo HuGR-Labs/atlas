@@ -78,8 +78,15 @@ export const ALLOW = [
   // re-assert a retired count merely by citing an ADR nearby.
   /ADR-0003/, /\bformer\b/i, /\bamend/i, /\baccidental\b/i, /\bevolves\b/i, /\bwording\b/i, // amendment narrative
   /single-write-door structural/i,            // INV-TOOLS-15 term-of-art (store-row medium)
-  /four read legs?/i, /ALL FOUR legs/i, /the four legs, no more/i, /exactly the four legs/i, // doctor read legs
-  /GATE's four legs/i, /the four legs route/i, /DOCTOR_SUBCOMMANDS/,
+  // Doctor's READ legs. The `DoctorApi` port still has exactly four (`packages/tools/src/doctor.ts`) and
+  // saying so is true, so `four read legs` stays. What was REMOVED is the pair that cleared claims about the
+  // CLI SUBCOMMAND surface — `the four legs, no more` and `exactly the four legs` — because that surface is
+  // five as of `atlas doctor index`, and an allow-list entry that outlives the fact it was written for is a
+  // standing licence to re-assert a retired count. `DOCTOR_SUBCOMMANDS` went with them: it was the broadest
+  // entry in this list, clearing ANY count claim on any line that merely NAMED the constant, which is how
+  // "Exactly four subcommands (`DOCTOR_SUBCOMMANDS`)" sat in the shipped command reference unflagged.
+  /four read legs?/i, /ALL FOUR legs/i, // doctor read legs (the port, not the CLI surface)
+  /GATE's four legs/i, /the four legs route/i,
   // Unenforced-control narrative: a line that NAMES the mechanism in order to say it is absent, aspirational
   // or historical is the honest form and must survive. Kept deliberately narrow — these are words that
   // negate or hypothesise, never words that assert.

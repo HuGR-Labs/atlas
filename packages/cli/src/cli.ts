@@ -8,7 +8,8 @@
 import type { Hash } from '@atlas/contracts';
 import { asHash } from '@atlas/kernel';
 import { headSha } from '@atlas/adapter-io';
-import type { PromoteOut, WiredHandler } from '@atlas/adapter-io';
+import { reportIndexPlan } from '@atlas/adapter-io';
+import type { IndexPlanReport, PromoteOut, WiredHandler } from '@atlas/adapter-io';
 import type { DoctorSource, Guidance, Tool, Verdict } from '@atlas/tools';
 import { runDoctor } from './doctor.js';
 import { ensureAtlasIgnored } from './gitignore.js';
@@ -56,6 +57,13 @@ export interface CliDeps {
    * routed command gives, never a silent success over nothing.
    */
   readonly promote?: (at: Hash) => PromoteOut;
+  /**
+   * The `atlas doctor index` provider. DEFAULTED (not deferred): production reads `process.cwd()` through
+   * the real `reportIndexPlan`, so the leg is REACHABLE from the shipped bin the day it lands — the seam
+   * exists so a test can hand it a fixture report without a repository, not so the wiring can be postponed.
+   * It is deliberately NOT part of the composed runtime: the leg touches neither the store nor the handler.
+   */
+  readonly indexPlan?: () => IndexPlanReport;
 }
 
 /** A structured error verdict for a CLI-layer failure (parse / unwired command) — guidance always present. */
@@ -162,10 +170,13 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
   }
 
   if (command === 'doctor') {
-    // CLI-1a: `doctor` sub-dispatches to the four read/advisory `DoctorApi` legs over the INJECTED read-only
+    // CLI-1a: `doctor` sub-dispatches to the read/advisory `DoctorApi` legs over the INJECTED read-only
     // `DoctorSource` — it NEVER touches `deps.handler` (opens no write door; carries no write authority).
     // Fails closed (no source / unknown subcommand) with guidance + non-zero exit, never a throw.
-    const dv = runDoctor(positionals, deps.doctorSource);
+    // `index` is the one leg outside the `DoctorApi`: it diagnoses the SCIP index of the repository at the
+    // cwd (which is the repository the entrypoint composes over) and, like every other leg, it only READS —
+    // it prints the indexer command for the operator to run and never spawns one.
+    const dv = runDoctor(positionals, deps.doctorSource, deps.indexPlan ?? (() => reportIndexPlan(process.cwd())));
     process.stdout.write(dv.stdout);
     return dv.exitCode;
   }

@@ -24,7 +24,9 @@ import type { FixtureRepo } from '../src/harness.js';
 /** The exact bytes the product emits for a COMPLETE pass that visited 0 sites (mine.ts `mineWhyEmpty`) —
  *  pinned as a LITERAL here (not imported) so this black-box test never touches in-process product source. */
 const NO_SITES_LINE =
-  'mine: 0 candidate facts — 0 sites visited: the structural pass (skeleton → ranked frontier) yielded no site, so no proposer was ever consulted; wiring a model would not change this 0';
+  'mine: 0 candidate facts — 0 sites visited: the structural pass (skeleton → ranked frontier) yielded no site, ' +
+  'so no proposer was ever consulted; wiring a model would not change this 0. Run `atlas doctor index` to see ' +
+  'whether this repository has the SCIP index the frontier is derived from';
 
 /** The bytes for a pass that DID visit sites but seeded nothing — the only state in which the absent model
  *  is the operative cause. `N` is the observed site count, so this is matched, not compared byte-for-byte. */

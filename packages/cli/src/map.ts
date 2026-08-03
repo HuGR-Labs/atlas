@@ -22,8 +22,9 @@ export type Leg = Tool | 'genesis run-controller';
 /**
  * CLI-1a: the TOTAL + MUTUALLY-EXCLUSIVE command→leg map — the enumeration oracle. `doctor` binds a READ
  * leg (`atlas-query`) so the authority partition (CLI-2) classifies it read — but at runtime `doctor`
- * SUB-DISPATCHES to the four read/advisory `DoctorApi` legs (see src/doctor.ts), never through the wired
- * handler; the leg here is the authority oracle, not the dispatch target. `mine` binds the genesis entry
+ * SUB-DISPATCHES to the read/advisory `DoctorApi` legs, plus the `index` leg that reads the file tree and
+ * the SCIP dump instead of the store (see src/doctor.ts), never through the wired handler; the leg here is
+ * the authority oracle, not the dispatch target. `mine` binds the genesis entry
  * (data-only). Every command maps to EXACTLY one leg.
  *
  * `promote` binds `atlas-emit`, and that is the HONEST classification rather than a convenient one: it is

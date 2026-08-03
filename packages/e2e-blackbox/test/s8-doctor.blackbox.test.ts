@@ -218,7 +218,7 @@ describe('S8 — atlas doctor: four read/advisory legs + CLI totality (read-only
     expect(bogus.exitCode).toBe(1);
     expect(bogus.stdout).toContain('status: error');
     expect(bogus.stdout).toContain("unknown doctor subcommand 'bogus-sub'");
-    expect(bogus.stdout).toContain('archive|why|hotset|reground'); // the finite surface is named
+    expect(bogus.stdout).toContain('archive|why|hotset|reground|index'); // the finite surface is named
     expect(bogus.stderr).toBe(''); // no thrown stack leaked to stderr
 
     // A missing required numeric arg ⇒ structured error (arity is met by `hotset`, so runDoctor guards it).
