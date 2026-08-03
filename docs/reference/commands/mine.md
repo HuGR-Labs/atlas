@@ -29,7 +29,7 @@ recommended — see *What it refuses*.
 $ atlas mine .
 genesis: seeded 0 candidate fact(s); ratified 0
 cost: llmCalls 0 · budgetSpent 0
-mine: 0 candidate facts — 0 sites visited: the structural pass (skeleton → ranked frontier) yielded no site, so no proposer was ever consulted; wiring a model would not change this 0
+mine: 0 candidate facts — 0 sites visited: the structural pass (skeleton → ranked frontier) yielded no site, so no proposer was ever consulted; wiring a model would not change this 0. Run `atlas doctor index` to see whether this repository has the SCIP index the frontier is derived from
 # exit 0
 ```
 
@@ -37,7 +37,11 @@ mine: 0 candidate facts — 0 sites visited: the structural pass (skeleton → r
 which one from the run's own report rather than guessing:
 
 - `0 sites visited` — the run stopped *upstream* of the model. The structural frontier was empty, so no
-  proposer was ever consulted. Wiring a model changes nothing.
+  proposer was ever consulted. Wiring a model changes nothing; run
+  [`atlas doctor index`](./doctor.md#doctor-index--why-mine-found-nothing), which reports whether this
+  repository has the SCIP index the frontier is derived from and prints the command that produces one. It
+  points, it does not promise — an indexed repository can still have an empty frontier, and that leg says
+  which case you are in.
 - `N site(s) visited and every one abstained: no proposer model is wired` — *this* is the abstention case.
   No model is configured, so nothing could be proposed. Facts are never fabricated.
 - `N site(s) visited and every one abstained` with a model wired — the model was asked and declined, or the
@@ -55,7 +59,7 @@ $ atlas mine .
 genesis: seeded 0 candidate fact(s); ratified 0
 cost: llmCalls 0 · budgetSpent 0
 prompt: 170c27cd1ec1854cb7a5af59ea0186ea1c3ddf78e6f25554bd920eb2d1dcaf57 — the artifact every proposal on this run was built from
-mine: 0 candidate facts — 0 sites visited: the structural pass (skeleton → ranked frontier) yielded no site, so no proposer was ever consulted; wiring a model would not change this 0
+mine: 0 candidate facts — 0 sites visited: the structural pass (skeleton → ranked frontier) yielded no site, so no proposer was ever consulted; wiring a model would not change this 0. Run `atlas doctor index` to see whether this repository has the SCIP index the frontier is derived from
 # exit 0
 ```
 
@@ -124,6 +128,11 @@ repository visits one (see below).
   `packages/adapter-io/src/skeleton-source.ts` states this in its header as an honest hole. Measured: two
   demo repositories, one of them with real TypeScript `import` edges between three files, both reported
   `0 sites visited`.
+  **Atlas does not build that index for you** — it plans it. Run
+  [`atlas doctor index`](./doctor.md#doctor-index--why-mine-found-nothing) to get the exact pinned command
+  for the languages in your repository, run it yourself, then re-run `mine`. Measured on this repository:
+  `0 sites visited` before, `200` after (`llmCalls 200 · budgetSpent 200`, still 0 facts because no model
+  was wired — the frontier is what changed).
 - **Everything `mine` writes is a candidate**, in `.atlas/staging.json`, stamped with the reserved scope
   `atlas:mined`. Granting that scope in `.atlas/policy.json` is what APPOINTS a curator; this repository
   grants it to `seat:orchestrator`, and without the grant every promotion is correctly refused
@@ -138,3 +147,5 @@ repository visits one (see below).
 
 - [`emit`](./emit.md) — the governed door a fact must pass to become knowledge.
 - [`query`](./query.md) — reads governed knowledge only; staged candidates do not appear.
+- [`doctor index`](./doctor.md#doctor-index--why-mine-found-nothing) — whether this repository is
+  SCIP-indexed, and the command that indexes it.

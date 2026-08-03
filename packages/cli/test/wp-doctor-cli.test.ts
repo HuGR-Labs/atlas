@@ -1,8 +1,9 @@
 // @atlas/cli — test/wp-doctor-cli.test.ts  (WP-DOCTOR — `atlas doctor <sub>` sub-dispatch)
 //
-// RED→GREEN goldens for the FOUR read/advisory `DoctorApi` legs wired behind `atlas doctor`, driven over an
-// INJECTED FAKE `DoctorSource` (the real source is the composition-root WP). The suite proves:
-//   • each subcommand (archive/why/hotset/reground) routes to the CORRECT leg and renders deterministically;
+// RED→GREEN goldens for the read/advisory `DoctorApi` legs wired behind `atlas doctor`, driven over an
+// INJECTED FAKE `DoctorSource` (the real source is the composition-root WP), plus the `index` leg, which is
+// dispatched over its OWN injected provider and reads no store at all. The suite proves:
+//   • each subcommand (archive/why/hotset/reground/index) routes to the CORRECT leg and renders deterministically;
 //   • doctor is READ-ONLY — exit 0, opens NO write door (the wired handler is a spy, NEVER called), and
 //     `reground` renders a PROPOSAL only (persists nothing → the follow-up is atlas-emit);
 //   • TOTALITY — an unknown subcommand / a missing arg / a not-yet-wired source fails CLOSED to a
@@ -16,7 +17,7 @@ import type { StructRef } from '@atlas/contracts';
 import { DOCTOR_GUIDANCE, WRITE_PATHS, createDoctor } from '@atlas/tools';
 import type { DoctorSource, DriftItem, Verdict } from '@atlas/tools';
 import type { GroundedFact } from '@atlas/knowledge';
-import type { WiredHandler } from '@atlas/adapter-io';
+import type { IndexPlanReport, WiredHandler } from '@atlas/adapter-io';
 import { main } from '../src/cli.js';
 import { runDoctor, DOCTOR_SUBCOMMANDS } from '../src/doctor.js';
 import { authorityOf, COMMAND_LEG } from '../src/map.js';
@@ -53,7 +54,7 @@ afterEach(() => vi.restoreAllMocks());
 const out = (): string => writes.join('');
 
 // ── SCN-DOCTOR-1 — each subcommand routes to the correct leg + renders deterministically ───────────────
-describe('SCN-DOCTOR-1 — the four legs route + render', () => {
+describe('SCN-DOCTOR-1 — every leg routes + renders', () => {
   it('1a: `doctor archive` → archive(scope?) renders the monotone lineage (exit 0)', async () => {
     const code = await main(['doctor', 'archive'], { doctorSource: fakeSource() });
     expect(code).toBe(0);
@@ -116,11 +117,13 @@ describe('SCN-DOCTOR-2 — doctor carries NO write authority', () => {
     expect((WRITE_PATHS as readonly string[]).includes(COMMAND_LEG.doctor)).toBe(false);
   });
 
-  it('2b: createDoctor(source) exposes EXACTLY the four read legs — no fifth write method', () => {
+  it('2b: createDoctor(source) exposes the read legs it always did — and no write method', () => {
     const keys = Object.keys(createDoctor(fakeSource())).sort();
     expect(keys).toEqual(['archive', 'hotSet', 'reground', 'whyBroken']);
-    // and the subcommand surface is exactly the four legs, no more (no write subcommand).
-    expect([...DOCTOR_SUBCOMMANDS]).toEqual(['archive', 'why', 'hotset', 'reground']);
+    // The CLI surface is WIDER than the `DoctorApi` by exactly one leg: `index` reads the file tree + the
+    // SCIP dump, never the store, so it is dispatched in the CLI and adds NO method to the frozen port
+    // above — which is why the assertion on `createDoctor` is unchanged. Still no write subcommand.
+    expect([...DOCTOR_SUBCOMMANDS]).toEqual(['archive', 'why', 'hotset', 'reground', 'index']);
   });
 
   it('TEETH (write-door): NO doctor subcommand ever touches the wired handler (the write door)', async () => {
@@ -180,5 +183,61 @@ describe('SCN-DOCTOR-3 — totality', () => {
     const code = await main(['doctor'], { doctorSource: fakeSource() });
     expect(code).not.toBe(0);
     expect(out().length).toBeGreaterThan(0);
+  });
+
+  it('3e: the `index` leg fails CLOSED when its provider THROWS — a diagnosis never crashes the bin', () => {
+    const v = runDoctor(['index'], undefined, () => {
+      throw new Error('walk exploded');
+    });
+    expect(v.exitCode).not.toBe(0);
+    expect(v.stdout).toContain('status: error');
+    expect(v.stdout).toContain('walk exploded'); // the reason survives verbatim to the user door
+  });
+});
+
+// ── SCN-DOCTOR-4 — the `index` leg: plans the SCIP index, runs NOTHING ─────────────────────────────────
+// `axes.edges` comes from SCIP alone, so a repo with no `.atlas/index.scip` visits 0 mine sites. Before this
+// leg, `doctor` — the surface a user reaches for when a command returned nothing — could not say so, and
+// `planIndexers` (the whole per-language dispatch) had ZERO production callers.
+describe('SCN-DOCTOR-4 — doctor index', () => {
+  /** A report with one configured language and one honest hole — the shape `reportIndexPlan` returns. */
+  const REPORT: IndexPlanReport = {
+    scipRel: '.atlas/index.scip',
+    scip: { kind: 'absent' },
+    configured: [
+      { plan: { lang: 'ts', tool: 'scip-typescript', version: '9.9.9', args: ['index', '--output', '.atlas/index.scip'] }, files: 3 },
+    ],
+    holes: [{ plan: { lang: 'rb', tool: 'honest-hole', args: [] }, files: 1 }],
+  };
+
+  it('4a: renders the dump state, the PINNED command, and NAMES the honest hole (exit 0, read-only)', async () => {
+    const { handler, handle } = spyHandler();
+    const code = await main(['doctor', 'index'], { handler, doctorSource: fakeSource(), indexPlan: () => REPORT });
+    expect(code).toBe(0);
+    const s = out();
+    expect(s).toContain('doctor: index');
+    expect(s).toContain('scip: ABSENT at .atlas/index.scip'); // why the frontier is empty
+    expect(s).toContain('run:    scip-typescript index --output .atlas/index.scip'); // copy-pasteable
+    expect(s).toContain('scip-typescript --version'); // how to check what is INSTALLED
+    expect(s).toContain('pinned 9.9.9'); //             REQ-INDEX-3a: version-pinned per language
+    // TEETH: the hole is NAMED. "Atlas has no indexer for rb" must not render as "Atlas found nothing".
+    expect(s).toContain('lang: rb');
+    expect(s).toContain('honest-hole');
+    // and it is a DIAGNOSIS, not an execution: no write door is touched, and nothing is spawned.
+    expect(handle).not.toHaveBeenCalled();
+  });
+
+  it('4b: with NO provider injected it fails CLOSED with guidance (never a throw, never a default report)', () => {
+    const v = runDoctor(['index']);
+    expect(v.exitCode).not.toBe(0);
+    expect(v.stdout).toContain('status: error');
+    expect(v.stdout).toContain('atlas doctor index has no repository source');
+  });
+
+  it('4c: `index` needs NO DoctorSource — the leg that explains an empty repo must work on an empty repo', async () => {
+    const code = await main(['doctor', 'index'], { indexPlan: () => REPORT }); // no doctorSource at all
+    expect(code).toBe(0);
+    expect(out()).toContain('doctor: index');
+    expect(out()).not.toContain('composition-root WP'); // NOT the unwired-source refusal
   });
 });

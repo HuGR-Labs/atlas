@@ -1,8 +1,9 @@
 # `atlas doctor`
 
 Diagnose the knowledge base: browse the archive, explain why a fact broke, check the hot set against a
-budget, and get a proposed repair. Read-only and advisory — every leg is built over a port with no write
-method, so `doctor` **cannot** persist anything, including its own repair plans.
+budget, get a proposed repair — and find out whether this repository is SCIP-indexed at all. Read-only and
+advisory — the four knowledge legs are built over a port with no write method, `index` reads the file tree
+and runs nothing, so `doctor` **cannot** persist anything, including its own repair plans.
 
 This page describes the **CLI** command `atlas doctor`. There is **no `atlas-doctor` MCP tool** — see
 *Transport differences*.
@@ -14,13 +15,19 @@ atlas doctor archive  [scope]
 atlas doctor why      <nodeKey>
 atlas doctor hotset   <budget>
 atlas doctor reground <nodeKey>
+atlas doctor index
 ```
 
-- Exactly four subcommands (`DOCTOR_SUBCOMMANDS` in `packages/cli/src/doctor.ts`). Anything else is refused.
+- Five subcommands (`DOCTOR_SUBCOMMANDS` in `packages/cli/src/doctor.ts`). Anything else is refused.
 - `archive`'s `[scope]` is optional and filters on the fact's declared `scope` field, not on a path.
 - `why` and `reground` take a **nodeKey** — the identifier `atlas query` prints on its `inv` lines.
 - `hotset` takes a number.
+- `index` takes nothing — it reports on the repository you are standing in.
 - No flags on any subcommand.
+
+The first four read the durable store through the frozen `DoctorApi` (still four read legs, unchanged).
+`index` is not one of them: it reads the git-tracked file tree and the SCIP dump, and needs no store, which
+is why it works on a repository that has never had a fact emitted into it.
 
 ## Worked examples
 
@@ -77,6 +84,92 @@ invariant: TOOLS-12: read/advisory-only diagnosis, persists nothing, carries no 
 
 A fact that is fine reports so rather than erroring — `whyBroken: none`, `plan: none`.
 
+## `doctor index` — why `mine` found nothing
+
+`axes.edges` is derived from SCIP occurrences and from nothing else, and the structural frontier ranks by
+dependency-graph degree. So a repository with no `.atlas/index.scip` has zero edges, zero seeds and zero
+sites, and [`mine`](./mine.md) reports `0 sites visited` no matter what model you wire. Atlas consumes that
+index; it does not produce one. `doctor index` is where it tells you so, and hands you the command.
+
+Run against **this repository** (Atlas itself), after the index had been built:
+
+```
+$ atlas doctor index
+status: ok
+doctor: index
+scip: present at .atlas/index.scip — 470 indexed document(s)
+lang: ts — 485 tracked file(s) — indexer scip-typescript, pinned 0.4.0
+  verify: scip-typescript --version    # must print 0.4.0
+  run:    scip-typescript index --output .atlas/index.scip
+next: Atlas does NOT run indexers — run the command(s) above yourself from the repository root, then re-run atlas mine
+invariant: TOOLS-12: read/advisory-only diagnosis, persists nothing, carries no write authority
+# exit 0
+```
+
+Before that index existed, the same repository reported `scip: ABSENT` and `atlas mine .` visited **0**
+sites. After running exactly the `run:` line above, it visited **200**. That is the whole point of the leg.
+
+The languages are **derived**, never asked for — from `git ls-files`, so an ignored or untracked file counts
+in neither the plan nor the index. A four-language repository with nothing indexed yet:
+
+```
+$ atlas doctor index
+status: ok
+doctor: index
+scip: ABSENT at .atlas/index.scip — axes.edges is derived from SCIP occurrences and nothing else, so this repository has 0 edges, 0 structural seeds and `atlas mine` visits 0 sites
+lang: py — 1 tracked file(s) — indexer scip-python, pinned 0.6.6
+  verify: scip-python --version    # must print 0.6.6
+  run:    scip-python index --output .atlas/index.scip
+lang: ts — 1 tracked file(s) — indexer scip-typescript, pinned 0.4.0
+  verify: scip-typescript --version    # must print 0.4.0
+  run:    scip-typescript index --output .atlas/index.scip
+lang: go — 1 tracked file(s) — honest-hole: NO indexer is configured for this language. Its files are in the FileTree; it contributes NO edges, and nothing you install changes that
+lang: rb — 1 tracked file(s) — honest-hole: NO indexer is configured for this language. Its files are in the FileTree; it contributes NO edges, and nothing you install changes that
+note: Atlas reads exactly ONE dump (.atlas/index.scip), so the second command above OVERWRITES the first — no shipped path merges per-language dumps (mergeScip has no production caller)
+next: Atlas does NOT run indexers — run the command(s) above yourself from the repository root, then re-run atlas mine
+invariant: TOOLS-12: read/advisory-only diagnosis, persists nothing, carries no write authority
+# exit 0
+```
+
+Read that output as four separate statements:
+
+- **`honest-hole` is a diagnosis, not an error.** Atlas has an indexer for TypeScript/JavaScript and Python
+  and for nothing else. Go and Ruby files are in the `FileTree` — they are grounded, they can carry facts —
+  and they contribute **no edges**, so nothing in them will ever be a structural seed. Nothing you install
+  changes that; only a new entry in `REAL_INDEXER` would. It is printed by name precisely so that "Atlas has
+  no indexer for this language" cannot be mistaken for "Atlas found nothing here".
+- **The pin is half the requirement.** REQ-INDEX-3a asks for "a separate installed, **version-pinned** binary
+  per language". The `pinned` field is the release the plan was written against and measured with; the
+  `verify:` line is how you check the one you have. Install them yourself —
+  `npm i -g @sourcegraph/scip-typescript@0.4.0` and `npm i -g @sourcegraph/scip-python@0.6.6` are the
+  releases these pins name. A mismatch is not refused anywhere; the output is your only warning.
+- **The `note:` is a real limitation.** There is one dump, so in a repository with two indexed languages the
+  second command overwrites the first. `mergeScip` exists in the adapter and no shipped path calls it.
+- **`--output` is relative to the working directory** in both binaries, so run them from the repository root
+  or the dump lands where nothing reads it.
+
+### Atlas does not run the indexer, on purpose
+
+The leg prints a command and stops. Two reasons, both load-bearing:
+
+**Security.** Shelling out to an external binary over your repository is the same class as the model-command
+path, where Atlas's rule is that it names no vendor command of its own and runs only what the operator
+explicitly configured. Printing the line keeps what executes on your machine your decision.
+
+**Honesty.** The claim is `$0`-LLM, deterministic, operator-owns-the-environment. A visible SCIP dependency
+is truer than one hidden behind an automatic invocation that fails opaquely the moment the binary is absent.
+
+This is observable, not just asserted: run `doctor index` on an unindexed repository on a machine where
+`scip-typescript` is installed, and `.atlas` is byte-identical afterwards and still has no dump
+(`packages/e2e-blackbox/test/s26-doctor-index.blackbox.test.ts`, story 3).
+
+`index` also reports a dump it cannot read, rather than folding it into "absent" — the readers degrade a
+corrupt dump to a files-only index silently, and a diagnosis is the one place that must not:
+
+```
+scip: UNREADABLE at .atlas/index.scip — illegal tag: field no 12 wire type 7; the readers degrade to a files-only index (0 edges)
+```
+
 ## Exit codes
 
 | code | meaning |
@@ -87,14 +180,14 @@ A fact that is fine reports so rather than erroring — `whyBroken: none`, `plan
 
 ## What it refuses, and why
 
-**An unknown subcommand** — the surface is exactly the four legs (`DOCTOR_SUBCOMMANDS`) and it names them:
+**An unknown subcommand** — the surface is the five legs (`DOCTOR_SUBCOMMANDS`) and it names them:
 
 ```
 $ atlas doctor bogus
 status: error
-next: unknown doctor subcommand 'bogus': expected one of archive|why|hotset|reground
+next: unknown doctor subcommand 'bogus': expected one of archive|why|hotset|reground|index
 invariant: TOOLS-12: read/advisory-only diagnosis, persists nothing, carries no write authority
-reason: unknown doctor subcommand 'bogus': expected one of archive|why|hotset|reground
+reason: unknown doctor subcommand 'bogus': expected one of archive|why|hotset|reground|index
 # exit 1
 ```
 
@@ -115,20 +208,25 @@ reason: command 'doctor' requires 1 positional argument(s), got 0
 **A committed durable store.** This one matters: without it, `atlas doctor hotset` would report
 `size=0 … over=false` — "your knowledge base is empty and healthy" — about a store the read doors had just
 refused to serve. Reporting health for state you have declined to read is worse than reporting nothing, so
-the refusal is raised at the entrypoint and exits `2`. See [`query`](./query.md) for the full text.
+the refusal is raised at the entrypoint and exits `2`. See [`query`](./query.md) for the full text. Note that
+it is raised before dispatch, so it takes `doctor index` down with the rest even though that leg reads no
+store at all — `init` is the only exemption. Stated because it is a real edge, not a claim that it is ideal.
 
-**Writing anything.** Not a runtime check — a structural one. `doctor` never touches the wired handler and
-its source port exposes no mutation, so there is no write path to refuse.
+**Writing anything.** Not a runtime check — a structural one. The four knowledge legs never touch the wired
+handler and their source port exposes no mutation; `index` holds neither, and spawns no process either. There
+is no write path to refuse.
 
 ## Transport differences
 
-`doctor` is **CLI-only**. The MCP server advertises `GOVERNANCE_SURFACE ∪ READ_SURFACE`, and `READ_SURFACE`
-has no export site yet, so the advertised list is the five governance tools. Verified against the real
-stdio server: `tools/list` returns `atlas-init`, `atlas-query`, `atlas-emit`, `atlas-reconcile`,
-`atlas-link` — no `atlas-doctor`. Closing that gap is campaign 10, which is not built.
+`doctor` is **CLI-only**, `index` included. The MCP server advertises `GOVERNANCE_SURFACE ∪ READ_SURFACE`,
+and `READ_SURFACE` has no export site yet, so the advertised list is the five governance tools. Verified
+against the real stdio server: `tools/list` returns `atlas-init`, `atlas-query`, `atlas-emit`,
+`atlas-reconcile`, `atlas-link` — no `atlas-doctor`. Closing that gap is campaign 10, which is not built;
+`index` deliberately did not open a second front there.
 
 ## Related
 
 - [`node`](./node.md) — read a fact whole, using an address `doctor archive` printed.
+- [`mine`](./mine.md) — the command whose `0 sites visited` sends you to `doctor index`.
 - [`reconcile`](./reconcile.md) — the merge-gate view of the same drift.
 - How-to: [find and fix drifted knowledge](../../how-to/find-and-fix-drift.md).

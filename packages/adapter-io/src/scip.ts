@@ -10,11 +10,22 @@ import type { ScipOutput } from '@atlas/index';
 /** The languages the indexer planner knows about (ring shape — constitution D2). */
 export type LangId = 'ts' | 'py' | 'go' | 'java' | 'rust' | 'rb';
 
-/** One planned per-language SCIP indexer invocation (ring shape — constitution D2). */
+/**
+ * One planned per-language SCIP indexer invocation (ring shape — constitution D2).
+ *
+ * `args` USED TO BE EMPTY on every plan, which made this a name and not a command. REQ-INDEX-3a requires the
+ * axes to be derived "via a per-language SCIP indexer (SCIP-primary; a separate installed, version-pinned
+ * binary per language)", and a plan that names a tool with no arguments and no version discharges neither
+ * half: nobody can run it, and nobody can tell whether what they DID run is the release it was written
+ * against. Both are now carried, so `atlas doctor index` can print a line an operator pastes verbatim.
+ */
 export interface IndexerPlan {
   readonly lang: LangId;
   readonly tool: string;
   readonly args: readonly string[];
+  /** The PINNED release of `tool` this plan was written against and MEASURED with. ABSENT for the
+   *  `honest-hole` sentinel, which names no binary and therefore pins no version. */
+  readonly version?: string;
 }
 
 /**
@@ -93,18 +104,49 @@ export function readScipOrEmpty(scipPath: string): ScipOutput {
   }
 }
 
-/** The real per-language SCIP indexer tools the ring knows how to run (constitution adapt-scip-2, D1:
- *  web-tree-sitter + SCIP only — deliberately NO 'stack-graphs', which the stale core `MECHANISMS`
- *  constant still lists; this dispatch is the live selector and supersedes it). A `LangId` absent from
- *  this map has no configured indexer ⇒ the honest-hole sentinel (files-only structural hole). */
-const REAL_INDEXER: Partial<Record<LangId, string>> = {
-  ts: 'scip-typescript',
-  py: 'scip-python',
+/**
+ * Where EVERY reader in the ring looks for the dump, repo-relative and POSIX-slashed
+ * (`compose.ts` / `skeleton-source.ts` / `wire.ts` all resolve `join(repoPath, '.atlas', 'index.scip')`).
+ * It is declared HERE because the planned `--output` argument below has to name the SAME path the reader
+ * opens, and a planned command that writes the dump anywhere else is worse than no plan at all: the
+ * indexer succeeds, the operator believes the repository is indexed, and `axes.edges` stays empty.
+ */
+export const SCIP_INDEX_REL = '.atlas/index.scip';
+
+/** One CONFIGURED per-language indexer: the binary, the release it is pinned to, and the arguments that
+ *  make it a runnable command. ONE row per language — the tool, its pin and its arguments cannot drift
+ *  apart because there is nowhere for them to drift to. */
+interface ConfiguredIndexer {
+  readonly tool: string;
+  readonly version: string;
+  readonly args: readonly string[];
+}
+
+/**
+ * The real per-language SCIP indexer tools the ring knows how to run (constitution adapt-scip-2, D1:
+ * web-tree-sitter + SCIP only — deliberately NO 'stack-graphs', which the stale core `MECHANISMS`
+ * constant still lists; this dispatch is the live selector and supersedes it). A `LangId` absent from
+ * this map has no configured indexer ⇒ the honest-hole sentinel (files-only structural hole).
+ *
+ * THE PINS ARE MEASURED, not looked up: both binaries were installed at these versions and probed with
+ * `--version` and `index --help` while this table was written, and the `ts` row was RUN over this
+ * repository end-to-end (`.atlas/index.scip`, 11 MB, 200 mine sites where there had been 0). `--output` is
+ * resolved relative to the process working directory in BOTH tools — `scip-python --help` says so
+ * outright — so the command is documented to be run from the repository root, which is also the only
+ * directory from which `SCIP_INDEX_REL` denotes the path the reader opens.
+ *
+ * ATLAS NEVER RUNS THESE. The row is a PLAN that `atlas doctor index` prints for the operator to run; no
+ * code path in this repository spawns an indexer, deliberately (see `docs/reference/commands/doctor.md`).
+ */
+const REAL_INDEXER: Partial<Record<LangId, ConfiguredIndexer>> = {
+  ts: { tool: 'scip-typescript', version: '0.4.0', args: ['index', '--output', SCIP_INDEX_REL] },
+  py: { tool: 'scip-python', version: '0.6.6', args: ['index', '--output', SCIP_INDEX_REL] },
 };
 
 /** The sentinel tool for a language with no configured indexer: it contributes its files to the
- *  `FileTree` only (an honest structural hole), never routed to another language's indexer. */
-const HONEST_HOLE = 'honest-hole';
+ *  `FileTree` only (an honest structural hole), never routed to another language's indexer. Exported so a
+ *  caller can split a plan list on the DISCRIMINANT rather than on a substring of a rendered line. */
+export const HONEST_HOLE = 'honest-hole';
 
 /**
  * Plan which indexer to run for each requested language (ADAPT-SCIP-2). TOTAL dispatch: every input
@@ -113,7 +155,12 @@ const HONEST_HOLE = 'honest-hole';
  * 'stack-graphs'. Order + arity mirror the input (one plan per input lang, in order).
  */
 export function planIndexers(langs: LangId[]): IndexerPlan[] {
-  return langs.map((lang) => ({ lang, tool: REAL_INDEXER[lang] ?? HONEST_HOLE, args: [] }));
+  return langs.map((lang) => {
+    const configured = REAL_INDEXER[lang];
+    return configured === undefined
+      ? { lang, tool: HONEST_HOLE, args: [] }
+      : { lang, tool: configured.tool, args: configured.args, version: configured.version };
+  });
 }
 
 /**

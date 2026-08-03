@@ -15,7 +15,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createDiskStore, createDoctorSource, gitSidecarTrust } from '@atlas/adapter-io';
+import { createDiskStore, createDoctorSource, gitSidecarTrust, reportIndexPlan } from '@atlas/adapter-io';
 import type { RevIndex } from '@atlas/adapter-io';
 import { runDoctor, DOCTOR_SUBCOMMANDS } from '../src/doctor.js';
 
@@ -48,18 +48,47 @@ function committedStoreRepo(): string {
   return p;
 }
 
+/**
+ * The surface, PARTITIONED by whether the leg reads the durable store — because the refusal below is the
+ * STORE's, and a leg that never opens it cannot honestly repeat it.
+ *
+ * The partition is asserted total against `DOCTOR_SUBCOMMANDS` in the first test, so this keeps the property
+ * the original loop had ("a leg added later inherits this or turns it red"): a new leg is unclassified, the
+ * totality assertion goes red, and someone has to decide which half it is in. What it no longer does is
+ * force a leg to name a refusal it did not receive.
+ */
+const STORE_LEGS = ['archive', 'why', 'hotset', 'reground'] as const;
+const NO_STORE_LEGS = ['index'] as const; // reads the file tree + the SCIP dump; holds no store port
+
 describe('runDoctor stays TOTAL over a refusing DoctorSource', () => {
-  it('EVERY doctor sub-command renders a structured non-zero outcome carrying the reason — never a throw', () => {
+  it('EVERY store-reading sub-command renders a structured non-zero outcome carrying the reason — never a throw', () => {
+    // the partition is TOTAL over the closed surface — an unclassified new leg fails HERE, deliberately.
+    expect([...STORE_LEGS, ...NO_STORE_LEGS].sort()).toEqual([...DOCTOR_SUBCOMMANDS].sort());
+
     repoPath = committedStoreRepo();
     const trusted = gitSidecarTrust(repoPath);
     const source = createDoctorSource(createDiskStore(join(repoPath, '.atlas', 'cas'), undefined, trusted), DEAD_REV, trusted);
-    // The whole closed surface, not a sample: a leg added later inherits this or turns it red.
-    for (const sub of DOCTOR_SUBCOMMANDS) {
+    for (const sub of STORE_LEGS) {
       const arg = sub === 'hotset' ? '5' : 'k:whatever';
       const cv = runDoctor([sub, arg], source);
       expect(cv.exitCode, `doctor ${sub} exited 0 over a refused store`).not.toBe(0);
       expect(cv.stdout, `doctor ${sub} did not name the refusal`).toContain('untrusted-store');
     }
+  });
+
+  it('`index` reads NO store, so it answers — and the ENTRYPOINT is what refuses the invocation (exit 2)', () => {
+    repoPath = committedStoreRepo();
+    // Same refused repository. `doctor index` walks the tree and reads the dump; it holds no store port, so
+    // repeating "untrusted-store" here would be a leg reporting on state it never touched — the mirror image
+    // of the sin this file exists to prevent (a leg reporting a healthy store it was refused).
+    const cv = runDoctor(['index'], undefined, () => reportIndexPlan(repoPath!));
+    expect(cv.exitCode).toBe(0);
+    expect(cv.stdout).toContain('doctor: index');
+    expect(cv.stdout).not.toContain('untrusted-store');
+    // In PRODUCTION the whole invocation is refused before dispatch (`cli.ts`, `deps.readRefusal`, `init` the
+    // only exemption), so a user on this repo sees the refusal and exit 2 — measured, not assumed:
+    // `atlas doctor index` on a committed-store repo exits 2 with `status: rejected`. This is the backstop
+    // layer, where the leg must merely stay TOTAL.
   });
 
   it('CONTROL: with no provenance seam the same legs answer normally — an honest empty store', () => {
