@@ -49,14 +49,38 @@ const nulPaths = (out: string): string[] => out.split('\0').filter((p) => p.leng
 /** The single canonical string order used for every emitted list (determinism / SCN-8b). */
 const byPath = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
-/** Message-based SZZ: a bug-fixing commit subject (Śliwerski–Zimmermann–Zeller). One definition, used by
- *  BOTH `signals().szzBugCommits` and the SZZ leg of the frontier — never two drifting copies. */
+/** Message-based SZZ: a bug-fixing commit subject (Śliwerski–Zimmermann–Zeller). The ONE definition,
+ *  consumed by `signals().szzBugCommits` — the frontier no longer has an SZZ leg (see below). */
 const FIX_SUBJECT = /^fix/i;
 
 /** Hotspot bar: a file must have been CHANGED after introduction (≥2 touching commits). A file added once
  *  and never touched again has change-frequency 0 — it is un-churned code, which REQ-GEN-3b forbids from
  *  raising spend (`frontierBudget` IS the ranked-site count, genesis/rank.ts:370). */
 const HOTSPOT_MIN_CHURN = 2;
+
+/**
+ * NO SZZ LEG HERE — deleted (#181 fixup), not merely retuned. The single-pass walk below bumps `churn`
+ * unconditionally per touching commit and bumps `szz` ONLY inside the `isFix` branch of that SAME loop,
+ * so `szz(f) ≤ churn(f)` holds for every file by construction. Consequently a `szz >= T` leg is either:
+ *   - REDUNDANT, for any `T >= HOTSPOT_MIN_CHURN` (whatever it admits, churn already admits — provably
+ *     dead code, verified empirically: the admitted frontier at `szz >= 2` was byte-identical, member for
+ *     member, to `churn >= 2 || coupling >= 2` alone, on both Atlas itself and a synthetic fixture); or
+ *   - a BYPASS of the recurrence bar, for any `T < HOTSPOT_MIN_CHURN` (`T = 1`, the original defect: one
+ *     `fix:`-subject commit touching a file admitted it on that single touch, collapsing the frontier
+ *     toward "every file a `fix:` commit ever touched" in a conventional-commits repo).
+ * Every value of the threshold is therefore either dead or wrong — there is no `T` that adds a file the
+ * churn bar wouldn't. Rather than ship a constant that provably cannot do anything, the leg is gone.
+ *
+ * What is actually lost: `reference/atlas-genesis.md:56-58` describes the GEN-11 personalization vector
+ * as the union of the hotspot / SZZ / coupling frontiers. There is no SZZ frontier now, and there never
+ * validly could be one shaped like this — this is not SZZ. Real Śliwerski–Zimmermann–Zeller identifies
+ * bug-INTRODUCING commits by blaming the lines a later fix touched; that selects a set that is largely
+ * DISJOINT from the fix commits themselves (often a low-churn file nobody would otherwise mine — the
+ * whole point of the algorithm). A message-match over a file's OWN commits (what this module can cheaply
+ * compute from one `git log` pass) can only ever describe a SUBSET of that file's churn — never a
+ * different file. Real SZZ (blame-based, cross-file) is a capability this repo does not have; it is named
+ * here precisely so the gap is recoverable by design, not quietly rebuilt as a weaker same-file proxy.
+ */
 
 /** Coupling bar: association-rule MINIMUM SUPPORT over commit baskets — a file must co-change with at
  *  least one other file in ≥2 distinct commits. A one-shot import that happens to land beside other files
@@ -160,33 +184,29 @@ export function createHistorySource(repoPath: string, rev: string): HistorySourc
       return top / total;
     },
 
-    // The GEN-11 personalization vector: the UNION of the hotspot / SZZ / coupling frontiers
-    // (reference/atlas-genesis.md:56-58), NOT every tracked file. A whole-repo frontier makes LLM spend a
-    // function of FILE COUNT — exactly what REQ-GEN-3a/3b forbid ("adding un-churned code MUST NOT raise
-    // LLM spend"), since `frontierBudget` is the ranked-site count. Ordered churn-desc then path-asc; the
-    // three legs are computed from ONE log pass so a fixed rev is byte-identical.
+    // The GEN-11 personalization vector: the UNION of the hotspot / coupling frontiers (no SZZ leg — see
+    // the comment beside `HOTSPOT_MIN_CHURN`; `reference/atlas-genesis.md:56-58` describes a third leg
+    // this module cannot honestly compute), NOT every tracked file. A whole-repo frontier makes LLM spend
+    // a function of FILE COUNT — exactly what REQ-GEN-3a/3b forbid ("adding un-churned code MUST NOT
+    // raise LLM spend"), since `frontierBudget` is the ranked-site count. Ordered churn-desc then
+    // path-asc; both legs are computed from ONE log pass so a fixed rev is byte-identical.
     frontier(repo, r) {
       const tracked = new Set(trackedAt(repo, r));
       if (tracked.size === 0) return [];
       const churn = new Map<string, number>();
-      const szz = new Map<string, number>();
       const coupling = new Map<string, number>();
       const bump = (m: Map<string, number>, f: string): void => {
         m.set(f, (m.get(f) ?? 0) + 1);
       };
       for (const commit of commitBaskets(repo, r)) {
         const basket = commit.files.filter((f) => tracked.has(f));
-        const isFix = FIX_SUBJECT.test(commit.subject);
         for (const f of basket) {
           bump(churn, f);
-          if (isFix) bump(szz, f);
           if (basket.length >= 2) bump(coupling, f);
         }
       }
       const inFrontier = (f: string): boolean =>
-        (churn.get(f) ?? 0) >= HOTSPOT_MIN_CHURN ||
-        (szz.get(f) ?? 0) >= 1 ||
-        (coupling.get(f) ?? 0) >= COUPLING_MIN_SUPPORT;
+        (churn.get(f) ?? 0) >= HOTSPOT_MIN_CHURN || (coupling.get(f) ?? 0) >= COUPLING_MIN_SUPPORT;
       return [...tracked]
         .filter(inFrontier)
         .sort((a, b) => (churn.get(b) ?? 0) - (churn.get(a) ?? 0) || byPath(a, b))
