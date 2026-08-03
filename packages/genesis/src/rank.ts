@@ -5,9 +5,9 @@
 // a cheap history pre-check that degrades thin/degenerate history back to STRUCTURAL centrality (GEN-15).
 // Co-locates the frozen S1 surfaces `HistoryProbe`/`MineApi` (was ref/mine.ts) + `RankApi` (was ref/rank.ts).
 
-import { asSubtreeHash } from '@atlas/kernel';
 import type { StructRef } from '@atlas/contracts';
 import type { Axes, IndexNode, Manifest } from '@atlas/index';
+import { cmp, correspondence, resolveSiteKey, structuralFrontier } from './seeds.js';
 import type { Candidate, CostReport, MinedSignals, ScanApi, Skeleton } from './types.js';
 
 /**
@@ -64,12 +64,19 @@ export interface RankApi {
 // the same pins on the same rev ⇒ an identical ranking. Ranking carries NO RNG seed — a personalized
 // PageRank is seedless-deterministic; the "seed" of GEN-11 is the pinned teleport vector, not an RNG. The
 // power iteration runs a PINNED, fixed number of rounds and is evaluated in INTEGER fixed-point.
-export const DAMPING = 0.85 as const;
+/** The damping ratio — the SINGLE declaration, an exact integer pair because the power iteration is
+ *  evaluated in fixed-point (byte-identical across machines). It was previously declared twice, and the
+ *  second copy guarded nothing: see ADR-0011 and `test/ppr-damping-teeth.test.ts`, which pins the ranking
+ *  OUTPUT rather than the constant. */
+export const DAMPING_NUM = 85n;
+export const DAMPING_DEN = 100n;
+
+/** The canonical PageRank damping (Brin & Page 1998), **derived** from the ratio above — never an
+ *  independent literal. Exported because `pinned(damping=0.85, seed)` speaks in decimals. */
+export const DAMPING = Number(DAMPING_NUM) / Number(DAMPING_DEN);
 export const PPR_ITERATIONS = 64 as const;
 
 const FP = 1_000_000_000n; // fixed-point scale (1e9) — integer arithmetic ⇒ byte-identical across machines
-const D_NUM = 85n; // damping numerator   (0.85)
-const D_DEN = 100n; // damping denominator (1.00)
 
 // ── GEN-15 history-thin pre-check thresholds (PINNED) ────────────────────────────────────────────────
 export const MIN_COMMITS = 2 as const; // below ⇒ young/greenfield → low-commit-count
@@ -111,51 +118,18 @@ export interface HistorySource {
   signals(site: StructRef): MinedSignals; // the mined ranking heuristics for a site (GEN-6)
 }
 
-/** The seams the S1 `mine` driver composes (both consumed). */
+/** The seams the S1 `mine` driver composes (both consumed), plus one OPTIONAL diagnostic observer. */
 export interface MineDeps {
   readonly skeleton: SkeletonSource;
   readonly history: HistorySource;
+  /** Called once per pass that fell back to the STRUCTURAL frontier, with the number of dep-graph nodes
+   *  dropped for having no path (`StructuralFrontier.droppedNoPath`). NOT a seam — the driver never reads a
+   *  value back from it; it exists because a bounded set that is silently truncated reads as "we covered
+   *  everything" (#130), and `MineApi.mine` is frozen at `readonly Candidate[]` with nowhere to carry it. */
+  readonly onSeedsDropped?: (dropped: number) => void;
 }
 
 // ── S0 — the structural skeleton (GEN-1) ─────────────────────────────────────────────────────────────
-
-const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
-
-// ── node-identity ↔ subtreeHash correspondence (the F1/F2 bridge) ─────────────────────────────────────
-// The dep-graph keys edge endpoints by NODE IDENTITY (`DepEdge.from/to: Hash` = `IndexNode.key`, the
-// reconciliation pinned in @atlas/index src/fold.ts:116-122). A mined frontier site joins by its CONTENT
-// `StructRef.subtreeHash: SubtreeHash` — a DELIBERATELY ORTHOGONAL identity space (contracts/hash.ts:5,
-// 22-25; KNOW-15: conflating them is how an Atlas rots). The two legs CANNOT be compared as raw strings.
-// But every `IndexNode` carries BOTH legs (`key` + `subtreeHash`), so the frozen `Skeleton.axes` already
-// exposes the bridge: match a frontier site's subtreeHash to a node's subtreeHash (SAME brand — legit),
-// then read that node's identity `key` (the edge-endpoint space). This resolver builds both directions
-// deterministically (min-key tie-break, walk-order-independent) — no invented port, no fabricated map.
-function correspondence(graph: Skeleton): {
-  readonly keyOfSubtree: ReadonlyMap<string, string>; // subtreeHash → node-identity key (edge space)
-  readonly subtreeOfKey: ReadonlyMap<string, string>; // node-identity key → subtreeHash (StructRef leg)
-} {
-  const pairs: Array<readonly [string, string]> = []; // [subtreeHash, key]
-  const collect = (n: IndexNode): void => {
-    pairs.push([n.subtreeHash, n.key]);
-    n.children.forEach(collect);
-  };
-  collect(graph.axes.dependency);
-  collect(graph.axes.spatial);
-  collect(graph.axes.territory);
-  const keyOfSubtree = new Map<string, string>();
-  for (const [st, key] of [...pairs].sort((a, b) => cmp(a[0], b[0]) || cmp(a[1], b[1])))
-    if (!keyOfSubtree.has(st)) keyOfSubtree.set(st, key);
-  const subtreeOfKey = new Map<string, string>();
-  for (const [st, key] of [...pairs].sort((a, b) => cmp(a[1], b[1]) || cmp(a[0], b[0])))
-    if (!subtreeOfKey.has(key)) subtreeOfKey.set(key, st);
-  return { keyOfSubtree, subtreeOfKey };
-}
-
-/** Resolve a frontier site's CONTENT subtreeHash to its NODE-IDENTITY key (the edge-endpoint space) via
- *  the index correspondence. A site with NO node in the index stays a disconnected island under its own
- *  synthetic identity — NEVER brand-laundered into the node space by a raw-string coincidence. */
-const resolveSiteKey = (keyOfSubtree: ReadonlyMap<string, string>, site: StructRef): string =>
-  keyOfSubtree.get(site.subtreeHash) ?? `unresolved:${site.subtreeHash}`;
 
 /** Canonicalise an axis node: children sorted by key, objects sorted — recursively. This is where the
  *  GEN-1 byte-identity is EARNED: the walk's order (mtime, hash-map iteration) is discarded for a stable
@@ -253,8 +227,8 @@ function pprScores(
       const teleport = isPers ? teleVal : 0n;
       const extra = isPers ? danglingShare : 0n;
       const inV = inflow.get(node) ?? 0n;
-      const base = ((D_DEN - D_NUM) * teleport) / D_DEN;
-      const walk = (D_NUM * (inV + extra)) / D_DEN;
+      const base = ((DAMPING_DEN - DAMPING_NUM) * teleport) / DAMPING_DEN;
+      const walk = (DAMPING_NUM * (inV + extra)) / DAMPING_DEN;
       next.set(node, base + walk);
     }
     score = next;
@@ -315,28 +289,10 @@ export function probeHistory(history: HistorySource, repo: string, rev: string):
   return { thin: false };
 }
 
-/** The STRUCTURAL personalization vector (GEN-15c): the def→ref graph's structurally-central sites (highest
- *  degree = type/API-surface density), ordered deterministically. Used when history is thin OR absent — a
- *  non-uniform, non-random frontier, NEVER rank noise. */
-export function structuralSeeds(graph: Skeleton): readonly StructRef[] {
-  // `h` iterates over dep-graph NODE-IDENTITY keys (edge endpoints). A StructRef's `subtreeHash` is the
-  // CONTENT leg, NOT the identity leg (F2) — so resolve each node key back to its real subtreeHash via the
-  // index correspondence, rather than re-branding a node-identity Hash as a SubtreeHash (KNOW-15).
-  const { subtreeOfKey } = correspondence(graph);
-  const degree = new Map<string, number>();
-  const bump = (h: string): void => {
-    degree.set(h, (degree.get(h) ?? 0) + 1);
-  };
-  for (const e of graph.axes.edges) {
-    bump(e.from);
-    if (e.to !== null) bump(e.to);
-  }
-  const ids = [...degree.entries()].filter(([, d]) => d > 0).map(([h]) => h);
-  const seeds = ids.length > 0 ? ids : [...degree.keys()];
-  return seeds
-    .sort((a, b) => (degree.get(b) ?? 0) - (degree.get(a) ?? 0) || cmp(a, b))
-    .map((h) => ({ kind: 'file', qualifiedPath: h, subtreeHash: asSubtreeHash(subtreeOfKey.get(h) ?? h) }));
-}
+/** The GEN-15c structural frontier + its drop count (src/seeds.ts) — RE-EXPORTED so the package surface is
+ *  unchanged by the file split: `structuralSeeds` is imported from here by tests and by adapter-io. */
+export { structuralSeeds, structuralFrontier } from './seeds.js';
+export type { StructuralFrontier } from './seeds.js';
 
 // ── S1 — the `mine` driver: rank the frontier, attach signals, degrade thin history (GEN-6 / GEN-15) ──
 
@@ -350,9 +306,13 @@ export function createMine(deps: MineDeps): MineApi {
   const mine = (repo: string, rev: string): readonly Candidate[] => {
     const sk = canonicalizeSkeleton(deps.skeleton.skeleton(repo, rev));
     const probe = probeHistory(deps.history, repo, rev);
-    let personalization = probe.thin ? structuralSeeds(sk) : deps.history.frontier(repo, rev);
-    if (personalization.length === 0) personalization = structuralSeeds(sk); // GEN-15b booster-not-dependency
-    const structural = probe.thin || deps.history.frontier(repo, rev).length === 0;
+    const mined = probe.thin ? [] : deps.history.frontier(repo, rev);
+    // GEN-15b booster-not-dependency: thin history OR an empty mined frontier ⇒ the structural fallback.
+    // Computed ONCE (it used to be built twice, and the second build would re-fire the drop observer).
+    const structural = mined.length === 0;
+    const fallback = structural ? structuralFrontier(sk) : undefined;
+    if (fallback !== undefined && fallback.droppedNoPath > 0) deps.onSeedsDropped?.(fallback.droppedNoPath);
+    const personalization = fallback?.seeds ?? mined;
     const ranked = rank(sk, personalization);
     return ranked.map((c) => ({
       ...c,
