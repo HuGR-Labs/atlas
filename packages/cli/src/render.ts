@@ -22,6 +22,11 @@ interface InvRow {
   readonly nodeId: string;
   readonly tier: string;
   readonly claim: string;
+  /** The row's OWN freshness verdict (ADR-0013 clause 5). Typed optional HERE and only here, because this
+   *  renderer reads an `unknown` verdict payload rather than a `Pack`: a shape guard that assumed the field
+   *  would make a pack from an older door render nothing at all. Rendered as `?` when absent — never
+   *  silently as `FRESH`, which is the one value that would read as a verification that did not happen. */
+  readonly freshness?: string;
 }
 
 /** A `broader ⊃ narrower` coverage edge inside the query envelope (Seam-3). */
@@ -40,8 +45,10 @@ interface SameRow {
  * Render the DETERMINISTIC `data:` block for a known `ok` verdict data shape, or `''` when the shape is
  * unknown/absent (back-compat: no block ⇒ existing output byte-unchanged). PURE — every byte is a function
  * of `data` alone, in a fixed field order (CLI-3c). The recognised shapes, in guard order:
- *   - query envelope `{ pack, subsumes }` → `  inv <tier> <nodeId>: <claim>` per (pre-sorted) invariant,
- *     `  stale: <bool>`, then `  subsumes <broader> ⊃ <narrower>` per (pre-sorted) edge.
+ *   - query envelope `{ pack, subsumes }` → `  inv <tier> <nodeId> [<freshness>]: <claim>` per (pre-sorted)
+ *     GOVERNING invariant, then `  advisory <tier> <nodeId> [<freshness>]: <claim>` per ADVISORY row (its own
+ *     verb, never interleaved — ADR-0013), `  advisoryDropped: <n>`, `  stale: <bool>`, then
+ *     `  subsumes <broader> ⊃ <narrower>` per (pre-sorted) edge.
  *   - emit `{ id }` (a Hash) → `  id: <hash>`.
  *   - init `{ territories }` → `  territory: <name>` per territory, sorted by name.
  */
@@ -50,16 +57,28 @@ function renderData(data: unknown): string {
   const d = data as Record<string, unknown>;
 
   // query envelope { pack, subsumes } — the observability readback (Seam-1+3).
-  const pack = d.pack as { invariants?: unknown; stale?: unknown; tokenEstimate?: unknown } | undefined;
+  const pack = d.pack as
+    | { invariants?: unknown; advisory?: unknown; advisoryDropped?: unknown; stale?: unknown; tokenEstimate?: unknown }
+    | undefined;
   if (pack && typeof pack === 'object' && Array.isArray(pack.invariants)) {
     const invs = pack.invariants as readonly InvRow[];
+    const adv = Array.isArray(pack.advisory) ? (pack.advisory as readonly InvRow[]) : [];
+    const advDropped = typeof pack.advisoryDropped === 'number' ? pack.advisoryDropped : 0;
     const subs = Array.isArray(d.subsumes) ? (d.subsumes as readonly SubRow[]) : [];
     const sames = Array.isArray(d.sameAs) ? (d.sameAs as readonly SameRow[]) : [];
     // N12 CLI/MCP parity: surface `tokenEstimate` (the advisory pack size) on the CLI too — MCP already ships
     // it in the pack JSON, so dropping it here was a real CLI-vs-MCP asymmetry. Deterministic (a number field).
     const tokenEstimate = typeof pack.tokenEstimate === 'number' ? pack.tokenEstimate : 0;
     const lines = [
-      ...invs.map((i) => `  inv ${i.tier} ${i.nodeId}: ${i.claim}`),
+      // ADR-0013 clause 3 — the GOVERNING band keeps the `inv` verb it has always had, now carrying the row's
+      // own freshness verdict. The ADVISORY band below gets its OWN verb (`advisory`) and is never
+      // interleaved: a reader must not have to parse a tier letter to know nobody ratified a claim.
+      ...invs.map((i) => `  inv ${i.tier} ${i.nodeId} [${i.freshness ?? '?'}]: ${i.claim}`),
+      ...adv.map((i) => `  advisory ${i.tier} ${i.nodeId} [${i.freshness ?? '?'}]: ${i.claim}`),
+      // The truncation ledger rides out BESIDE the data (#130) — a bounded set that was cut and does not say
+      // so reads as "we covered everything". Printed unconditionally, so `0` is a measured fact and not a
+      // line the reader has to notice is missing.
+      `  advisoryDropped: ${advDropped}`,
       `  stale: ${pack.stale === true}`,
       `  tokenEstimate: ${tokenEstimate}`,
       ...subs.map((s) => `  subsumes ${s.broader} ⊃ ${s.narrower}`),

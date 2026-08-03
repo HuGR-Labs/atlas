@@ -302,7 +302,7 @@ anchor: `reference/atlas-tools.md#tools-N`. *(pure-reach/robustness invariants g
 | TOOLS-3 CLI+MCP parity | FR-13 | on-diag | one schema, 0 divergence | behavioural | ADR-T3 | **RATIFIED** |
 | TOOLS-4 guidance shipped | FR-13 | on-diag | 100% results carry next+invariant | behavioural | — | **RATIFIED** |
 | TOOLS-5 init auto-promotes nothing | FR-9 | on-diag (projects DP-8/11) | init ⇒ 0 invariants, all T2; T0-keyword ⇒ candidate not promote | behavioural | — | **RATIFIED** |
-| TOOLS-6 query bounded pack | FR-3 | decoupled-after M-Retrieval | pack tier≥T1 ≤ ~2K; stale ⇒ re-ground | behavioural | — | **RATIFIED** |
+| TOOLS-6 query bounded pack | FR-3 | decoupled-after M-Retrieval | governing band tier≥T1 ≤ ~2K + advisory band T2 ≤ 2000 (AMENDED 2026-08-03, ADR-0013); stale ⇒ re-ground (unchanged); every row carries its own freshness | behavioural | — | **RATIFIED** |
 | TOOLS-7 emit fails closed | FR-5 | on-diag (seam #4; consumes GRD) | no citation ⇒ 0 persisted; changed ⇒ supersede 0 dup | behavioural | — | **RATIFIED** |
 | TOOLS-8 reconcile blocks SEMANTIC only | FR-6 | decoupled-after GRD (KNOW-5) | semantic ⇒ exit2, reauthor==|semantic|; mechanical ⇒ exit0 | behavioural | ADR-T8 | **RATIFIED** |
 | TOOLS-9 absorb-driven write | FR-9 | on-diag (seam #4) | seal w/o absorb+why-not ⇒ violation, 0 silent | behavioural | — | **RATIFIED** |

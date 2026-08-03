@@ -29,7 +29,7 @@ import {
 /** A minimal, valid `OwnPack` (RETR-12 shape) tagged by `marker` so FRESH vs STALE is observable. */
 const ownPack = (marker: string): OwnPack => ({
   unit: `role:${marker}`,
-  invariants: [{ nodeId: asNodeKey(`n:${marker}`), tier: 'T1', claim: `claim ${marker}` }],
+  invariants: [{ nodeId: asNodeKey(`n:${marker}`), tier: 'T1', claim: `claim ${marker}`, freshness: 'FRESH' }],
   shape: { contents: [], owner: 'team', tier: 'T1' },
   edges: { dependents: [], dependencies: [] },
   gotchas: [],
@@ -43,7 +43,7 @@ const OWN_GROUNDING: SeatGrounding = { via: 'own', unit: UNIT };
 /** A fresh-pack source whose CURRENT own-pack is `v2` — the fresh materialization at the boundary. */
 const freshSource = (): FreshPackSource => ({
   own: () => ownPack('v2'),
-  pack: () => ({ territory: 'T', axisHash: 'h' as never, invariants: [], tokenEstimate: 0, stale: false }),
+  pack: () => ({ territory: 'T', axisHash: 'h' as never, invariants: [], advisory: [], advisoryDropped: 0, tokenEstimate: 0, stale: false }),
 });
 
 // ── EPIC-22 §a — a phase boundary injects a fresh pack ────────────────────────────────────────────

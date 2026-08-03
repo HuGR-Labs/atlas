@@ -190,8 +190,8 @@ describe('S12A — symbol + file both resolve & readback; drift contrast (mechan
 
   it('BOTH kinds READ BACK through `atlas query` — two rows, correct claims, fresh (stale:false)', () => {
     const rows = invLines(preDriftQuery);
-    expect(rows).toContain(`  inv T1 ${symFact.id}: foo is 1`);
-    expect(rows).toContain(`  inv T1 ${fileFact.id}: rot exists`);
+    expect(rows).toContain(`  inv T1 ${symFact.id} [FRESH]: foo is 1`);
+    expect(rows).toContain(`  inv T1 ${fileFact.id} [FRESH]: rot exists`);
     expect(rows.length).toBe(2);
     expect(preDriftQuery).toContain('  stale: false'); // pre-drift: the whole pack reads fresh
   });
@@ -270,7 +270,7 @@ describe('S12B — identity is symbol-only: a non-symbol grounding detail never 
     // governed-emit.ts RECOMPUTES nodeKey from content server-side — it never trusts combinedA/B's `.id`. If
     // the real router disagreed with the prediction above, this would show TWO nodes, not one merged claim.
     const rows = invLines(runAtlas(repo.repoPath, ['query', 'src']).stdout);
-    expect(rows).toEqual([`  inv T1 ${combinedA.id}: K1; K2`]); // ONE node, claims set-unioned (advisory UPDATE)
+    expect(rows).toEqual([`  inv T1 ${combinedA.id} [FRESH]: K1; K2`]); // ONE node, claims set-unioned (advisory UPDATE)
   });
 
   it('the fileOnly contrast fact (no symbol anchor) mints its OWN, separate node', () => {
@@ -278,8 +278,8 @@ describe('S12B — identity is symbol-only: a non-symbol grounding detail never 
     expect(r.exitCode).toBe(0);
     const rows = invLines(runAtlas(repo.repoPath, ['query', 'src']).stdout);
     // now TWO nodes: the symbol-anchored merged pair, and the file-only node — distinct identities.
-    expect(rows).toContain(`  inv T1 ${fileOnly.id}: K1`);
-    expect(rows).toContain(`  inv T1 ${combinedA.id}: K1; K2`);
+    expect(rows).toContain(`  inv T1 ${fileOnly.id} [FRESH]: K1`);
+    expect(rows).toContain(`  inv T1 ${combinedA.id} [FRESH]: K1; K2`);
     expect(rows.length).toBe(2);
   });
 });

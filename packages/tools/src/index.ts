@@ -24,6 +24,7 @@ export * from './guard.js';       // WP-7.26-a.TOOLS — INV-TOOLS-15 single-wri
 export * from './fault.js';      // ERROR ATTRIBUTION — the three fault classes at the one handler (malformed-args / refusal / internal-fault) + faultOf
 export * from './handler.js';     // WP-7.26-a/-b/-c.TOOLS — one pure+total handler (GOVERNANCE_SURFACE.length === 5, WRITE_PATHS === ['atlas-emit','atlas-link']) + schema + resolveNode
 export * from './query.js';       // WP-7.26-b.TOOLS — atlas-query read projection
+export * from './bands.js';       // WP-per-fact-freshness — ADR-0013 two-band pack split + ADVISORY_CAP (the ONE definition; @atlas/adapter-io imports it)
 export * from './doctor.js';      // WP-7.26-b.TOOLS — read/advisory-only doctor (persists nothing; reground → plan via atlas-emit)
 export * from './transport.js';   // WP-7.26-c.TOOLS — tri-transport addressability + spawn ladder (one contract across MCP/poke/CLI, CLI-floor)
 export * from './diff.js';        // WP-7.32.TOOLS — atlas-diff read-only version-delta projection; NOT a member of GOVERNANCE_SURFACE

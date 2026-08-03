@@ -61,7 +61,7 @@ describe('S15 — N11 honest freshness watermark (query.stale reflects behind-HE
   it('AT HEAD: the fact is served and the pack is HONESTLY fresh (builtAt == HEAD ⇒ stale: false)', () => {
     const r = runAtlas(repo.repoPath, ['query', 'src']);
     expect(r.exitCode).toBe(0);
-    expect(invLines(r.stdout)).toEqual([`  inv T1 ${factId}: foo is one`]); // the fact IS present
+    expect(invLines(r.stdout)).toEqual([`  inv T1 ${factId} [FRESH]: foo is one`]); // the fact IS present
     expect(r.stdout).toContain('  stale: false'); // watermark == HEAD ⇒ verified fresh, not a false alarm
   });
 
@@ -75,7 +75,7 @@ describe('S15 — N11 honest freshness watermark (query.stale reflects behind-HE
 
     const r = runAtlas(repo.repoPath, ['query', 'src']);
     expect(r.exitCode).toBe(0);
-    expect(invLines(r.stdout)).toEqual([`  inv T1 ${factId}: foo is one`]); // STILL served — behind ≠ gone
+    expect(invLines(r.stdout)).toEqual([`  inv T1 ${factId} [FRESH]: foo is one`]); // STILL served — behind ≠ gone
     expect(r.stdout).toContain('  stale: true'); // N11: the view is behind HEAD ⇒ honestly re-ground first
   });
 

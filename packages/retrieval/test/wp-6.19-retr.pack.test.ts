@@ -165,7 +165,9 @@ describe('REQ-RETR-2 — the bounded pack', () => {
   it('SCN-RETR-2f-1 — a pack carries no free prose, only 1-line PackInvariants', () => {
     const p = packerA.pack(T_BILLING);
     for (const inv of p.invariants) {
-      expect(Object.keys(inv).sort()).toEqual(['claim', 'nodeId', 'tier']); // exactly the PackInvariant shape
+      // [ADR-0013] `freshness` joins the shape: a row served without its own verdict is a defect, not a
+      // default. The assertion stays EXACT — a fifth key would still flip it red.
+      expect(Object.keys(inv).sort()).toEqual(['claim', 'freshness', 'nodeId', 'tier']);
       expect(inv.claim).not.toContain('\n'); // a single structured line — 0 prose blobs
     }
   });

@@ -79,6 +79,8 @@ const buildPack = (o: { stale: boolean; territory?: string; tokenEstimate?: numb
   territory: o.territory ?? 'crate:billing',
   axisHash: asHash('axis-billing') as Hash,
   invariants: [],
+  advisory: [],
+  advisoryDropped: 0,
   tokenEstimate: o.tokenEstimate ?? 1760,
   stale: o.stale,
 });

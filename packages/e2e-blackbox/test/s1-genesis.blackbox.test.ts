@@ -68,7 +68,7 @@ describe('S1 — genesis: init → grounded emit → query sees it', () => {
     expect(r.exitCode).toBe(0);
     const rows = invLines(r.stdout);
     // exactly the one fact we emitted, at its real nodeKey, tier T1, with our claim body.
-    expect(rows).toEqual([`  inv T1 ${fact.id}: ${CLAIM}`]);
+    expect(rows).toEqual([`  inv T1 ${fact.id} [FRESH]: ${CLAIM}`]);
     // a non-drifted pack is served fresh.
     expect(r.stdout).toContain('  stale: false');
   });

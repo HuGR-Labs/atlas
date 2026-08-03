@@ -47,6 +47,8 @@ const pack = (o: Partial<Pack> & { stale: boolean }): Pack => ({
   territory: o.territory ?? 'crate:billing',
   axisHash: o.axisHash ?? asHash('axis-billing'),
   invariants: o.invariants ?? [],
+  advisory: o.advisory ?? [],
+  advisoryDropped: o.advisoryDropped ?? 0,
   tokenEstimate: o.tokenEstimate ?? 1760,
   stale: o.stale,
 });

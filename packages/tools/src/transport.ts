@@ -209,6 +209,10 @@ const emptyPack: Pack = {
   territory: '',
   axisHash: '' as Pack['axisHash'],
   invariants: [],
+  // ADR-0013 — both bands are EMPTY here, and `advisoryDropped: 0` says so honestly: nothing was truncated,
+  // as opposed to "nothing was looked at". An empty pack is the stub's whole point.
+  advisory: [],
+  advisoryDropped: 0,
   tokenEstimate: 0,
   stale: false,
 };

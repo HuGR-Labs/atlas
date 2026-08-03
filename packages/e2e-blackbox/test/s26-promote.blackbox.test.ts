@@ -137,16 +137,23 @@ describe('S26 — atlas promote: the governed route out of staging', () => {
     expect(addr).not.toBe(key); // the content address and the routing identity are distinct by construction
   });
 
-  it('3. `atlas query` does NOT serve the promoted fact — TOOLS-6 bounds `T2` out of the pack', () => {
-    // TRUE, and the easiest result in this story to misread. A mined candidate is T2 by construction, and
-    // the read pack bounds T2 OUT, so promotion makes the fact addressable and doctor-visible without making
-    // it SERVED. Pinned so it cannot silently flip in either direction: a query that started serving T2
-    // would widen the pack past its ratified bound, and the `atlas node` hit above is what separates "bounded
-    // out" from "never written".
+  it('3. `atlas query` serves the promoted fact in the ADVISORY band ONLY — never on the governing line', () => {
+    // [AMENDED — ADR-0013, owner-ratified 2026-08-03] This test used to assert `not.toContain(CLAIM)`: a
+    // mined candidate is T2 by construction, and the pack bounded T2 OUT entirely. The amendment does not
+    // relax that bound, it SPLITS it — the T2 row is served in a separately capped, separately rendered
+    // ADVISORY band, and the GOVERNING band is byte-for-byte what it was.
+    //
+    // So the property this test defends is unchanged in substance and sharper in form: a machine proposal no
+    // ratifier saw must never be readable as a ratified invariant. The teeth are now on the LINE VERB, which
+    // is the thing a reader actually parses, rather than on the claim's absence.
     const q = runAtlas(promoted.repoPath, ['query', 'src'], CURATOR_ENV);
     expect(q.exitCode).toBe(0);
-    expect(q.stdout).not.toContain(CLAIM);
-    expect(q.stdout).toContain('data:'); // the pack rendered — it is bounded, not broken
+    expect(q.stdout).toContain('data:'); // the pack rendered — it is banded, not broken
+    const rows = q.stdout.split('\n').filter((l) => l.includes(CLAIM));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatch(/^ {2}advisory T2 /); // the advisory verb + the advisory class, both explicit
+    // AND NOT on the governing verb — the direction that would be a real widening of the ratified bound.
+    expect(q.stdout.split('\n').filter((l) => l.startsWith('  inv ') && l.includes(CLAIM))).toEqual([]);
   });
 
   it('4. NO RATIFIER NAMED ⇒ refused `unratified`, exit 2, nothing durable', () => {

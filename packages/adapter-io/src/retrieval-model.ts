@@ -20,6 +20,7 @@ import type { Axes, AxisForest, Fact, RetrievalModel } from '@atlas/index';
 import { currentNodes } from '@atlas/knowledge';
 import type { CurrentNode, GroundedFact } from '@atlas/knowledge';
 import { mintPack } from './pack-shape.js';
+import type { FreshnessOracle } from './pack-shape.js';
 import { rehydrateProjection } from './store.js';
 import type { DiskStore } from './store.js';
 
@@ -98,8 +99,9 @@ export function retrievalPack(
   mode: RetrievalMode,
   target: string,
   store: DiskStore,
+  freshness: FreshnessOracle,
 ): RetrievalEnvelope {
-  return packFromModel(buildRetrievalModel(axes, store), mode, target, store); // FRESH per query
+  return packFromModel(buildRetrievalModel(axes, store), mode, target, store, freshness); // FRESH per query
 }
 
 /**
@@ -111,16 +113,19 @@ export function retrievalPack(
  *
  * Each returned fact is shaped + BOUNDED + minted by the shared `mintPack` (pack-shape.ts): the projection
  * `CurrentNode` is recovered for a fact by its CAS contentHash (`id(fact)`), so the trusted (recomputed)
- * nodeKey + claim set are used, not the untrusted author payload; `mintPack` then applies the TOOLS-6
- * `tier≥T1` bound (a `T2`, or an off-lattice `T3` from a committed projection, is bounded OUT — it is NOT
- * pack-eligible on ANY mode) and the deterministic `nodeId` sort. `subsumes`/`sameAs` are `[]` (scope-only
- * derived relations); `stale: false` (the non-scope modes carry no drift flag). Pure + total.
+ * nodeKey + claim set are used, not the untrusted author payload; `mintPack` then applies the deterministic
+ * `nodeId` sort and the ADR-0013 two-band split (a `T2` lands in the separately capped ADVISORY band; an
+ * off-lattice `T3` from a committed projection lands in NEITHER band and is still served on no mode).
+ * `subsumes`/`sameAs` are `[]` (scope-only derived relations); `stale: false` (the non-scope modes carry no
+ * pack-level drift flag — but every row still carries its OWN `freshness`, resolved through the injected
+ * oracle, which is what makes that `false` survivable). Pure + total.
  */
 export function packFromModel(
   model: RetrievalModel,
   mode: RetrievalMode,
   target: string,
   store: DiskStore,
+  freshness: FreshnessOracle,
 ): RetrievalEnvelope {
   const api = createRetrieval(model);
   const facts = (mode === 'dependency' ? api.byDependency(target) : api.byTrigger(target)) as readonly GroundedFact[];
@@ -135,7 +140,7 @@ export function packFromModel(
 
   // the model's axis hash — the spatial axis root identity of the snapshot the pack was built from.
   const axisHash = model.forest.spatial.subtreeHash as unknown as Hash;
-  const pack = mintPack({ territory: target, axisHash, stale: false }, pairs);
+  const pack = mintPack({ territory: target, axisHash, stale: false }, pairs, freshness);
   // `subsumes`/`sameAs` are `[]` here — both are scope-only derived relations; the non-scope dependency/
   // trigger modes carry neither (WP-SAMEAS: parity with the pre-existing empty `subsumes`).
   return { pack, subsumes: [], sameAs: [] };

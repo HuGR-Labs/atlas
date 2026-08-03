@@ -73,7 +73,10 @@ const KNOWN = new Map(
         // then reported the entry STALE on its own, which is the ledger proving it cannot rot into a
         // permanent exemption.)
         ['ID-3 REQ-TOOLS-1e', 'ADR-0003 sameAs door; placed in EPIC-26-a by roadmap.md but carried by no WP card'],
-        ['ID-3 REQ-TOOLS-6d', 'ADR-0002 freshness watermark (N11); added after S4, carried by no WP card'],
+        // (An ID-3 entry for `REQ-TOOLS-6d` lived here — "added after S4, carried by no WP card". It is now
+        // carried by `work-packages/wp-per-fact-freshness.md`, the WP that amends its prohibition clause,
+        // so the ledger reported it STALE on its own. Removed at the source: the shrink-only rule working
+        // exactly as designed, and the second entry this ledger has proved cannot rot into an exemption.)
         ['ID-3 REQ-MCP-1d', 'added by ADR-0006; has a golden (SCN-MCP-1d-1) but no WP card'],
         ['ID-3 REQ-MCP-1e', 'added by ADR-0006; carried by no WP card'],
         ['ID-3 SCN-MCP-1d-1', 'the golden for the orphaned REQ-MCP-1d; not held-out, and in no WP acceptance list'],

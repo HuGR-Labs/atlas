@@ -86,15 +86,50 @@ source: INV-TOOLS-6 @ reference/atlas-tools.md#tools-6
 The `atlas-query` tool shall return a `≤ ~2K` pack of `tier≥T1` invariants.
 normative-clause: "return a `≤ ~2K` pack of `tier≥T1` invariants"
 
+<!-- SCOPE OF THIS CLAUSE AFTER ADR-0013 (owner-ratified 2026-08-03), stated here because the sentence above
+     is now about ONE of two bands rather than about the whole pack. `invariants` — the GOVERNING band — is
+     bounded exactly as written, and REQ-TOOLS-6f adds the separately capped ADVISORY band beside it. The
+     governing band's content, order and budget are unchanged: `splitBands` (@atlas/tools src/bands.ts) caps
+     only the advisory side, so for a covering set with no `T2` row this door returns byte-identically what
+     it returned before (pinned by SCN-TOOLS-6f-3 and by the `wp-per-fact-freshness.test.ts` band tests).
+     OPEN, and deliberately not closed here: `INV-TOOLS-6` (`reference/atlas-tools.md#tools-6`) and the
+     guidance string still read "a `≤ ~2K` pack of `tier≥T1` invariants" as a statement about the WHOLE pack.
+     Amending a ratified INVARIANT is ADR-0013's own declared surface, not this WP's; it is recorded as a
+     live REQ-vs-INV divergence rather than straddled silently. -->
+
 ### REQ-TOOLS-6c — stale pack must be re-grounded
 source: INV-TOOLS-6 @ reference/atlas-tools.md#tools-6
 If a returned pack carries `stale:true`, then `atlas-query` shall require re-grounding before the pack is trusted.
 normative-clause: "`stale:true` MUST mean re-ground before trusting"
 
 ### REQ-TOOLS-6d — stale is an honest freshness watermark (N11)
-source: INV-TOOLS-6 @ reference/atlas-tools.md#tools-6 (N11, ADR-0002)
-The `atlas-query` pack shall set `stale:true` when ANY under-scope fact's stored freshness is `DRIFTED` OR the projection's persist-time `builtAt` HEAD differs from live HEAD (the view is behind HEAD), computed via a cheap `git rev-parse HEAD` with no worktree; `atlas-query` shall NOT re-derive per-fact drift on the read path (the live oracle stays `atlas-reconcile`/`atlas-doctor`).
-normative-clause: "query freshness is a read-model watermark — never a silent `fresh` when the view is provably behind HEAD; conservative on the unknown (no false alarm); NOT a live per-query re-derivation"
+source: INV-TOOLS-6 @ reference/atlas-tools.md#tools-6 (N11, ADR-0002; prohibition clause AMENDED by ADR-0013, owner-ratified 2026-08-03)
+The `atlas-query` pack shall set `stale:true` when ANY under-scope fact's stored freshness is `DRIFTED` OR the projection's persist-time `builtAt` HEAD differs from live HEAD (the view is behind HEAD), computed via a cheap `git rev-parse HEAD` with no worktree; `atlas-query` shall NOT put GIT I/O — a worktree checkout or a per-fact `HEAD`-vs-`builtAt` tree diff — on the read path (the live git-rev oracle stays `atlas-reconcile`/`atlas-doctor`).
+normative-clause: "query freshness is a read-model watermark — never a silent `fresh` when the view is provably behind HEAD; conservative on the unknown (no false alarm); NO git I/O per query"
+
+<!-- AMENDMENT, owner-ratified 2026-08-03 (ADR-0002 amended, ADR-0013 unblocked). The struck clause read
+     "`atlas-query` shall NOT re-derive per-fact drift on the read path". It was ratified against a COST:
+     ADR-0002's rejected alternative is stated as "puts a git-worktree checkout — the exact #73 contention
+     surface — on EVERY query", and its Consequences name the deferred scope-scoped answer as "a per-query
+     HEAD-vs-`builtAt` TREE DIFF on the read path, against the point of the cheap watermark".
+     Both descriptions are of a GIT mechanism. The mechanism now used is `driftDetect` (GROUND-1,
+     packages/grounding/src/drift.ts) over the built-index `Axes` the composition root ALREADY builds once
+     per process — the SAME oracle the write door's truth-gate runs (`compose.ts` `buildGate(axes)`). It
+     makes NO git call, opens NO worktree and reads NO `builtAt`. MEASURED on the real 199-fact graph mined
+     from Atlas at `8ada771b`, read at `origin/master` `44026ae`: 78-89 ms cold / ~11 ms warm-median for all
+     199 facts, no git I/O, on axes the composition root already builds.
+     The amendment therefore narrows the prohibition to what was actually priced (git I/O) and leaves every
+     other clause — above all the `stale` watermark's own normative clause — intact and in force. -->
+
+### REQ-TOOLS-6e — every pack row carries its own freshness verdict
+source: INV-TOOLS-6 @ reference/atlas-tools.md#tools-6 (ADR-0013 clause 5, owner-ratified 2026-08-03)
+Every `PackInvariant` the `atlas-query` pack serves, in either band, shall carry its OWN `freshness` verdict in the canonical `Freshness` vocabulary, re-derived per read through the GROUND-1 oracle over the built-index axes; where that oracle is unavailable or raises, the row shall read `DRIFTED` (fail-closed) and shall never fall back to the stored write-time `freshness`.
+normative-clause: "a row served without its own freshness verdict is a defect, not a default; a verdict that cannot be derived is DRIFTED, never FRESH"
+
+### REQ-TOOLS-6f — the pack is two separately bounded bands
+source: INV-TOOLS-6 @ reference/atlas-tools.md#tools-6 (ADR-0013 clauses 1-4, owner-ratified 2026-08-03)
+The `atlas-query` pack shall carry a GOVERNING band of `tier≥T1` invariants and a separate ADVISORY band of `T2` rows under its own `2000`-token cap; both bands shall be stated as tier MEMBERSHIP, so a row whose tier is off the lattice lands in NEITHER; the advisory band shall be rendered under its own line verb, never interleaved with the governing band; and where the advisory cap truncates, the pack shall report the dropped count.
+normative-clause: "two separately bounded, separately rendered bands; an unrecognized tier is in neither; 0 silent drops — a truncated advisory band reports what it dropped"
 
 ### REQ-TOOLS-7a — re-derive citation at source@sha
 source: INV-TOOLS-7 @ reference/atlas-tools.md#tools-7

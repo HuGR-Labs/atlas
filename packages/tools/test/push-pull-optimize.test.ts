@@ -25,7 +25,7 @@ import type { FreshInjection, FreshPackSource, Harness, PullPort, SeatGrounding 
  *  value in the result rather than something the test has to assume. */
 const ownPack = (marker: string): OwnPack => ({
   unit: `role:${marker}`,
-  invariants: [{ nodeId: asNodeKey(`n:${marker}`), tier: 'T1', claim: `claim ${marker}` }],
+  invariants: [{ nodeId: asNodeKey(`n:${marker}`), tier: 'T1', claim: `claim ${marker}`, freshness: 'FRESH' }],
   shape: { contents: [], owner: 'team', tier: 'T1' },
   edges: { dependents: [], dependencies: [] },
   gotchas: [],
@@ -38,7 +38,7 @@ const GROUNDING: SeatGrounding = { via: 'own', unit: UNIT };
 
 const PUSH_SOURCE: FreshPackSource = {
   own: () => ownPack('from-push'),
-  pack: () => ({ territory: 'T', axisHash: 'h' as never, invariants: [], tokenEstimate: 0, stale: false }),
+  pack: () => ({ territory: 'T', axisHash: 'h' as never, invariants: [], advisory: [], advisoryDropped: 0, tokenEstimate: 0, stale: false }),
 };
 
 const OFFERS_PULL: Harness = { id: 'H_native', nativePull: 'available' };

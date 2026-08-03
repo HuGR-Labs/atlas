@@ -58,7 +58,7 @@ const N1 = { kind: 'advisory', id: asNodeKey('claim:acme-arr-2024'), claimNorm: 
 /** A pack-grained read-only node source (X1: node access is a DRILL-DOWN within its pack). No mutator. */
 const nodes: NodeSource = { resolve: (addr) => (addr === A ? N1 : undefined) };
 
-const financePack: Pack = { territory: 'finance/', axisHash: 'axis-finance-01' as Hash, invariants: [], tokenEstimate: 0, stale: false };
+const financePack: Pack = { territory: 'finance/', axisHash: 'axis-finance-01' as Hash, invariants: [], advisory: [], advisoryDropped: 0, tokenEstimate: 0, stale: false };
 const pushSource: PhasePushSource = (_seat, scope): Poke => ({ scope, pack: financePack, notice: 'fresh finance pack — pushed with no tool grant' });
 
 const shaA = 'cas:aaaa' as Hash;
