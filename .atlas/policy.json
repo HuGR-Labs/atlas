@@ -9,9 +9,10 @@
     "keywords": ["invariant", "security-property"]
   },
   "authz": {
-    "$comment": "Owner-scoped write (KNOW-11): scope => actor ids authorized to write it. Reads are universal regardless. An unlisted scope or actor is fail-closed (no write). Replace the placeholder seat with real actor ids.",
+    "$comment": "Owner-scoped write (KNOW-11): scope => actor ids authorized to write it. Reads are universal regardless. An unlisted scope or actor is fail-closed (no write). THE RULE THIS FILE IS EDITED BY: a scope is listed here only once something actually writes it. Listing a scope GRANTS power; an unlisted one is the safe state, not an omission. `core/knowledge` was removed on 2026-08-02 for exactly that reason — it held a placeholder actor, no production code ever wrote it (its only other occurrences are test fixtures that declare their own policy), and no projection existed. A grant with no user is a standing hole, not a convenience.",
+    "$comment-atlas-mined": "NOTE THE PLACEMENT: this sits beside `scopes`, never inside it. `scopes` is a Record<string, string[]> and policy.ts:183 returns undefined for ANY entry whose value is not an array of strings — which fail-closes the WHOLE policy to empty scopes, i.e. nobody may write anything. A comment written inside `scopes` would therefore brick governance silently and present as an unexplained `unauthorized`. — Facts MINED by genesis land at scope `atlas:mined` (packages/cli/src/mine.ts). Granting it APPOINTS A CURATOR: it is what lets the promotion door write at all, and without it every promotion is correctly refused `unauthorized`. It is held by the ORCHESTRATOR, not by a human, because this goal runs on the MACHINE path — the explorer proposes and the ratifier promotes, with no human writing a fact. WHAT THIS GRANT DOES AND DOES NOT BUY, so nobody assumes more: it decides WHO MAY WRITE THIS NAMESPACE, not whether a fact is TRUE. Truth is decided by the truth gate, which re-derives every claim against its anchor mechanically and refuses what does not hold, whoever wrote it. And the honest limit: the ratifier's own decision is only `token non-empty` plus `T0 requires billy`, so a T2 fact written by the holder of this scope with a valid token is effectively self-certified — the protection is the grounding gate, not this line.",
     "scopes": {
-      "core/knowledge": ["seat:atlas-owner-placeholder"]
+      "atlas:mined": ["seat:orchestrator"]
     }
   }
 }
