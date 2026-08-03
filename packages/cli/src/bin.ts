@@ -14,12 +14,15 @@ import { main } from './cli.js';
 // yet still index `::` sub-file symbol nodes, so a symbol grounding is groundable and `subsumes` fires.
 void (async () => {
   await initAst();
-  const { handler, doctorSource, readRefusal } = composeRuntime(process.cwd());
+  const { handler, doctorSource, promote, readRefusal } = composeRuntime(process.cwd());
   // The provenance refusal rides the same injected-deps seam as the handler (conditional spread keeps it
-  // ABSENT on a healthy repo — exactOptionalPropertyTypes), so prod and tests share ONE surface.
+  // ABSENT on a healthy repo — exactOptionalPropertyTypes), so prod and tests share ONE surface. `promote`
+  // (the KNOW-8 governed promotion leg) rides that same seam: it is not a `Tool`, so it cannot arrive through
+  // the handler, and threading it here is what makes `atlas promote` REACHED rather than a reference model.
   process.exitCode = await main(process.argv.slice(2), {
     handler,
     doctorSource,
+    promote,
     ...(readRefusal !== undefined ? { readRefusal } : {}),
   });
 })();

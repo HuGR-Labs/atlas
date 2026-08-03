@@ -553,6 +553,58 @@ gen: conformance
 
 ---
 
+## REQ-CLI-7 — promote curates through the existing write door
+
+### SCN-CLI-7a-1 — a promoted candidate is published by the emit door, and the surface does not move   (happy)
+source: REQ-CLI-7a
+Given a repo whose staging sidecar holds one grounded candidate and whose admin policy appoints a curator over the mined scope
+When `atlas promote` runs under that curator with a ratifier named
+Then the candidate is durable in the governed projection, `GOVERNANCE_SURFACE` is still the five governed tools, `WRITE_PATHS` is still `{atlas-emit, atlas-link}`, and the CLI leg `promote` binds a member of `WRITE_PATHS`
+teeth: breaks-on "promotion is given its own governed tool (`atlas-promote`) or its own write medium — the frozen `WRITE_PATHS` no longer equals the set of legs the write commands funnel into"
+gen: conformance
+
+### SCN-CLI-7b-1 — a staged candidate does not auto-accept   (guard)
+source: REQ-CLI-7b
+Given a staged candidate that is grounded, `T2` and advisory — the exact shape the confidence fast path auto-accepts — and no ratifier named
+When `atlas promote` runs
+Then the candidate is refused `unratified`, nothing is persisted, and the SAME candidate through an authored emit leg auto-accepts with no ratifier at all
+teeth: breaks-on "the promotion path uses the write door's DEFAULT ratify context — the candidate fast-paths to auto-accept, `ratify` is never called, and the row lands with no ratifier consulted"
+gen: conformance
+
+### SCN-CLI-7c-1 — the fast-path derivation forges no store state   (guard)
+source: REQ-CLI-7c
+Given the ratification context the promotion door builds for a staged candidate
+When that context is inspected field by field
+Then it reports the candidate as neither contested nor high-risk, and states the promotion origin instead
+teeth: breaks-on "the promotion route is obtained by setting `contested: true` (or `lowRisk: false`) — the route is correct and the record now asserts a reviewer veto / threshold verdict that nobody computed"
+gen: conformance
+
+### SCN-CLI-7d-1 — one unpromotable row does not end the pass   (guard)
+source: REQ-CLI-7d
+Given a staging sidecar holding one row whose CAS bytes are absent, one row whose grounding names no single containing unit, and one healthy candidate
+When `atlas promote` runs
+Then each bad row is refused by its own named reason, the healthy candidate is promoted, and every row appears in the report
+teeth: breaks-on "an unrehydratable row is skipped (it vanishes from the report and the candidate count under-counts) or throws (the pass dies and the healthy candidate is lost)"
+gen: conformance
+
+### SCN-CLI-7e-1 — the count is what settled   (guard)
+source: REQ-CLI-7e
+Given a staging sidecar holding several candidates of which exactly one can clear the gates
+When `atlas promote` runs
+Then the reported promoted count is one, it equals the number of rows the governed projection gained, and promoted plus refused equals the candidates found
+teeth: breaks-on "the pass reports the number of rows it ATTEMPTED — the measured shape of 40 candidates reported committed against 5 durable"
+gen: conformance
+
+### SCN-CLI-7f-1 — a refused staging read is reported as a refusal   (guard)
+source: REQ-CLI-7f
+Given a staging sidecar whose read refuses (unreadable, untrusted or contended) while candidates are still on disk
+When `atlas promote` runs
+Then the outcome is a named refusal with a non-zero exit, and it is distinguishable from a staging that is honestly empty
+teeth: breaks-on "a refused staging read degrades to the empty projection — the pass reports a clean, complete promotion of nothing over candidates that were never read"
+gen: conformance
+
+---
+
 ## REQ-MCP-1 — the published set is the closed tool union   (amended ADR-0006)
 
 ### SCN-MCP-1a-1 — the published set is exactly the closed `Tool` union, with schemas   (happy, amended ADR-0006)

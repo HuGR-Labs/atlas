@@ -33,6 +33,9 @@ import type { AtlasPolicy } from './policy.js';
 import { createRevIndex } from './rev-index.js';
 import { runGit, headSha } from './run-git.js';
 import { createDoctorSource, primaryAnchor } from './doctor-source.js';
+import { createGovernedEmit } from './governed-emit.js';
+import { createGovernedPromote } from './governed-promote.js';
+import type { PromoteOut } from './governed-promote.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
 import { gitSidecarTrust } from './store-provenance.js';
 import { readProvenanceRefusal } from './read-provenance.js';
@@ -45,6 +48,17 @@ import type { WireConfig, WireSeams, WiredHandler } from './wire.js';
 export interface ComposedRuntime {
   readonly handler: WiredHandler;
   readonly doctorSource: DoctorSource;
+  /**
+   * The governed PROMOTION leg (KNOW-8) — `promote(at)` lifts the explorer's staged candidates into governed
+   * knowledge THROUGH the emit door. It rides beside the handler for the same reason `doctorSource` does: it
+   * opens no new governed surface (`GOVERNANCE_SURFACE` stays 5, `WRITE_PATHS` stays `{atlas-emit,
+   * atlas-link}`) so it is not a `Tool` and has no leg to dispatch to — ADR-0008 pre-decided that a curator
+   * door is an ordinary USE of the existing emit door. It is built over the SAME durable store PATH and the
+   * SAME seams the handler's emit leg and query readback ride — a `DiskStore` holds no state of its own (all
+   * of it is the sidecar + CAS files it names), which is why `driftFacts` above can already read back what
+   * the handler wrote — so a promoted fact is visible to the very next `atlas query`.
+   */
+  readonly promote: (at: Hash) => PromoteOut;
   /**
    * The PROVENANCE refusal for this repo's durable store, or `undefined` when it is trustworthy
    * (`read-provenance.ts`). PRESENT means `.atlas/` arrived by COMMIT rather than through a door, so every
@@ -246,9 +260,35 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
   // `exactOptionalPropertyTypes`, and the same discipline `ratifyToken` uses above.
   const readRefusal = readProvenanceRefusal(trusted);
 
+  // THE GOVERNED PROMOTION LEG (KNOW-8). It is composed from the SAME parts the `atlas-emit` leg above is —
+  // this store, this policy, this truth-gate, this actor, this ratify token — and differs in EXACTLY one
+  // field: `origin: 'promoted'`, which the door DERIVES from the fact that it read the row out of staging.
+  // Without it a staged candidate (T2 ∧ advisory ∧ grounded) fast-paths to `auto-accept` and the KNOW-8 token
+  // is never consulted, i.e. the one path built to run through the ratifier would be the one path that skips
+  // it. See `governed-emit-route.ts` for the measurement and `RatifyContext.origin` for why this is a new
+  // field rather than a forged `contested`/`lowRisk`.
+  //
+  // A SECOND `createGovernedEmit` INSTANCE IS NOT A SECOND DOOR: `createGovernedEmit` is a pure factory over
+  // its deps (no module state, no cache), and both instances publish through the SAME durable files by the
+  // SAME atomic `commitProjection` protocol — which is exactly the concurrency case that protocol was written
+  // for, since two `atlas emit` PROCESSES are already two instances. What would be a second door is a second
+  // gate ladder or a second write medium; neither exists here.
+  const promoteLeg = createGovernedPromote({
+    store,
+    emit: createGovernedEmit({
+      store,
+      gate: seams.gate,
+      policy,
+      actor,
+      origin: 'promoted',
+      ...(ratifyToken !== undefined ? { ratifyToken } : {}),
+    }).emit,
+  });
+
   return {
     handler: assembleHandler(config),
     doctorSource,
+    promote: promoteLeg.promote,
     ...(readRefusal !== undefined ? { readRefusal } : {}),
   };
 }

@@ -7,6 +7,7 @@
   "references": [
     { "path": "../adapter-io" },
     { "path": "../tools" },
-    { "path": "../genesis" }
+    { "path": "../genesis" },
+    { "path": "../contracts" }
   ]
 }

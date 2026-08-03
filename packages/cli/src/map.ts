@@ -6,9 +6,12 @@
 import { WRITE_PATHS } from '@atlas/tools';
 import type { Tool, Verdict } from '@atlas/tools';
 
-/** The finite command surface — EXACTLY these eight, no more (CLI-1a). Order fixed; membership load-bearing.
- *  [EXTENDED — WP-SAMEAS] `link` joins as the CLI door of the governed sameAs write (routes to `atlas-link`). */
-export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link'] as const;
+/** The finite command surface — EXACTLY these nine, no more (CLI-1a). Order fixed; membership load-bearing.
+ *  [EXTENDED — WP-SAMEAS] `link` joins as the CLI door of the governed sameAs write (routes to `atlas-link`).
+ *  [EXTENDED — WP-PROMOTE] `promote` joins as the CLI door of the governed promotion of staged candidates. It
+ *  binds `atlas-emit`, the door it actually publishes through (ADR-0008: a curator door is an ordinary USE of
+ *  the existing emit door), so it is not a sixth tool and `WRITE_PATHS` does not move. */
+export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote'] as const;
 export type Command = (typeof COMMANDS)[number];
 
 /** The leg a command routes to — a governance `Tool`, or the genesis entry (data-only; NOT executed here —
@@ -22,6 +25,13 @@ export type Leg = Tool | 'genesis run-controller';
  * SUB-DISPATCHES to the four read/advisory `DoctorApi` legs (see src/doctor.ts), never through the wired
  * handler; the leg here is the authority oracle, not the dispatch target. `mine` binds the genesis entry
  * (data-only). Every command maps to EXACTLY one leg.
+ *
+ * `promote` binds `atlas-emit`, and that is the HONEST classification rather than a convenient one: it is
+ * intercepted before the handler (like `node`), but unlike `node` it really does write, and the leg it writes
+ * through IS `atlas-emit` (`createGovernedEmit`, the same factory `wire.ts` binds). So CLI-2 classifies it
+ * `write` — which is true — while `WRITE_PATHS` stays `{atlas-emit, atlas-link}`, because a third COMMAND
+ * funnelling into an existing door is not a third DOOR. Binding it to the genesis entry (as `mine` is) would
+ * have read `read` and understated a command that publishes durable governed knowledge.
  */
 export const COMMAND_LEG: Record<Command, Leg> = {
   init: 'atlas-init',
@@ -33,6 +43,9 @@ export const COMMAND_LEG: Record<Command, Leg> = {
   node: 'atlas-query', // READ authority oracle (TOOLS-10 per-node read); intercepted before the handler (cli.ts),
   //                      resolves via handler.resolveNode over the read-only NodeSource — carries NO write authority
   link: 'atlas-link', // WRITE authority oracle (WP-SAMEAS governed sameAs door); routes through the one handler
+  promote: 'atlas-emit', // WRITE authority oracle (KNOW-8 governed promotion); intercepted before the handler
+  //                        (cli.ts) and driven over the composition root's promotion leg, which publishes
+  //                        through THIS leg's own door — the same `createGovernedEmit` `wire.ts` binds
 };
 
 export type Authority = 'read' | 'write';
@@ -40,8 +53,11 @@ export type Authority = 'read' | 'write';
 /**
  * CLI-2: a command carries WRITE authority IFF its leg is a `WRITE_PATHS` door. Asserted against the frozen
  * `WRITE_PATHS` constant (@atlas/tools) — NOT a re-typed list — so the read/write partition cannot drift
- * here. Today that is `emit` and `link` (ADR-0003 ratified the second governed door); this comment used to
- * say "the single-door partition (`atlas-emit` only)", which the constant it points at already contradicted.
+ * here. Today that is `emit`, `link` and `promote` (ADR-0003 ratified the second governed door); this comment
+ * used to say "the single-door partition (`atlas-emit` only)", which the constant it points at already
+ * contradicted. THREE write COMMANDS over TWO write DOORS: `promote` funnels into `atlas-emit`, so the set of
+ * write-authority commands and the set of governed write doors are deliberately not the same size, and this
+ * function is what keeps the first derived from the second instead of transcribed beside it.
  * Read XOR write, total over the whole surface.
  */
 export function authorityOf(command: Command): Authority {

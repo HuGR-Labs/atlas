@@ -105,8 +105,11 @@ alternative to it.
 - Two findings were **deferred, not solved**, and were recorded as open DEFINE items (A-D3, A-D4).
   **A-D3 is now DECIDED and BUILT** (task #83): `sameAs` retraction ships as a MODE of the existing
   `atlas-link` door, so it needed no third write door and no amendment — see ADR-0003 §Retraction.
-  **A-D4 remains OPEN**, and the measurement has since sharpened it: `stage()` is a pure in-memory wrapper
-  whose only production callers are the two governed doors (`governed-emit.ts`, `governed-link.ts`), so it is
-  not the explorer's write path at all; the explorer's real durable path is `commitStaging` (driven by
-  `atlas mine`), and `persistStaging`/`loadStaging` have ZERO production callers. What is missing is not the
-  staging medium but a governed PROMOTION path out of it.
+  **A-D4 is now CLOSED and BUILT** (WP-PROMOTE), after a measurement that first sharpened it: `stage()` is a
+  pure in-memory wrapper whose only production callers are the two governed doors (`governed-emit.ts`,
+  `governed-link.ts`), so it is not the explorer's write path at all; the explorer's real durable path is
+  `commitStaging` (driven by `atlas mine`), and `persistStaging`/`loadStaging` had ZERO production callers.
+  What was missing was not the staging medium but a governed PROMOTION path out of it. `atlas promote` is
+  that path, and — exactly as A-D3 needed no third write door — it needed no sixth tool: it publishes through
+  the existing `atlas-emit` door, which ADR-0008 had already pre-decided was the right shape for a curator
+  door. `GOVERNANCE_SURFACE` stays 5; `WRITE_PATHS` stays `{atlas-emit, atlas-link}`.

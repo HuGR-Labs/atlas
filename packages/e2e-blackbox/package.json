@@ -15,8 +15,10 @@
   },
   "devDependencies": {
     "@atlas/adapter-io": "*",
+    "@atlas/cli": "*",
     "@atlas/contracts": "*",
     "@atlas/index": "*",
+    "@atlas/kernel": "*",
     "@atlas/knowledge": "*"
   }
 }

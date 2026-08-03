@@ -55,6 +55,12 @@ export { createGovernedEmit } from './governed-emit.js';
 export type { GovernedEmitDeps } from './governed-emit.js';
 // The governed sameAs link leg (WP-SAMEAS) — the second governed write door (authz + ratifier). `LinkOut` is
 // re-exported FROM @atlas/tools (its owner) so consumers can pull the whole door surface from this barrel.
+// The governed PROMOTION leg (KNOW-8): staging → knowledge THROUGH the emit door. NOT new governed surface —
+// it publishes only via `createGovernedEmit`, so `GOVERNANCE_SURFACE`/`WRITE_PATHS` are untouched (ADR-0008).
+// The two per-row refusal texts are exported as CONSTANTS for the same reason the link door's are: a test and
+// an embedder must compare a refusal by EQUALITY on a named value, never by matching a substring of prose.
+export { createGovernedPromote, REJECTED_CANDIDATE_UNREADABLE, REJECTED_DEGENERATE_CANDIDATE } from './governed-promote.js';
+export type { GovernedPromoteDeps, PromoteOut, PromotedRow } from './governed-promote.js';
 export { createGovernedLink } from './governed-link.js';
 export type { GovernedLinkDeps } from './governed-link.js';
 export type { LinkOut } from '@atlas/tools';

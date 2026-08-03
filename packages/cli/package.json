@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@atlas/adapter-io": "*",
+    "@atlas/contracts": "*",
     "@atlas/genesis": "*",
     "@atlas/kernel": "*",
     "@atlas/knowledge": "*",

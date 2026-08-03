@@ -154,6 +154,16 @@ WiredHandler = ReturnType<createHandler>                       // the ONE 5-leg 
   own count claim. The static surface is bounded by a measured budget instead of a fixed count — ARCH-7.)*
 - **MCP-2 Fail-closed transport.** A tool error MUST surface as a structured rejected `Verdict` carried in the
   MCP result; the server MUST NOT crash or drop the fail-closed verdict (TOOLS-2 across the transport).
+- **CLI-7 The `promote` driver curates through the EXISTING write door.** <a id="cli-7"></a> `atlas promote`
+  MUST carry the explorer's STAGED candidates into governed knowledge by presenting each one to the existing
+  `atlas-emit` governed write door — it MUST NOT mint a new governed tool and MUST NOT open a second write
+  medium, so `GOVERNANCE_SURFACE` and `WRITE_PATHS` are unchanged (ADR-0008: a curator door is an ordinary
+  use of the existing emit door). Every staged candidate MUST face FULL ratification: the door MUST supply a
+  ratification context it DERIVED (the write came out of staging), never one the payload chose, and MUST NOT
+  express that by asserting a store-state verdict that is not true of the candidate. A refusal MUST be
+  PER-ROW — one unpromotable candidate MUST NOT end the pass — and the count reported MUST be what SETTLED
+  durably, never what was attempted. A staging read that REFUSES MUST be reported as a refusal and MUST NOT
+  degrade to "0 candidates".
 - **CLI-4 The `mine` driver composes, it does not admit.** `atlas mine` MUST drive the **already-frozen**
   `genesis` run-controller (`→ genesis` run-controller, atlas-genesis reference) as a single governed pass over a
   real repo, minting **candidate-only** writes (never ratified). This clause is **ring-scoped composition only**:

@@ -93,7 +93,7 @@
 import type { CasObject } from '@atlas/kernel';
 import type { Hash, Tier } from '@atlas/contracts';
 import { upsert, normalizeCheck, primaryAnchorId, nodeKey, route, stage, ratify, isTier, isScope } from '@atlas/knowledge';
-import type { Candidate, Check, CurrentNode, GroundedFact, NodeFamily, WriteRequest, RatifyToken } from '@atlas/knowledge';
+import type { Candidate, Check, CurrentNode, GroundedFact, NodeFamily, WriteRequest, RatifyToken, WriteOrigin } from '@atlas/knowledge';
 import type { EmitOut, TruthGate } from '@atlas/tools';
 import { ratifyCtxFor } from './governed-emit-route.js';
 // The ADDRESSABILITY gate + the commit-leg re-file (#136) — that file carries the measurement + the decision.
@@ -117,7 +117,6 @@ import { REJECTED_UNTRUSTED_STORE } from './read-provenance.js';
 // Read that file before changing anything about how `route` is called: it records what the derivation does
 // NOT change at this door, and why the CREATE leg is deliberately unclosed.
 
-
 /** What the governed emit leg is composed over: the durable CAS store, the truth-gate seam, the admin
  *  policy (authz scopes), and the actor identity resolved from the environment. */
 export interface GovernedEmitDeps {
@@ -130,6 +129,8 @@ export interface GovernedEmitDeps {
    *  payload (the spoof-guard). ABSENT ⇒ `''` ⇒ a full-ratify fact fails closed; a T0 fact commits ONLY with
    *  the `billy` token. A fast-pathed (auto-accept) fact ignores it entirely. */
   readonly ratifyToken?: string;
+  /** ARCH-9 — where this write came from, DERIVED by the door that built this leg, never by the payload. ABSENT ⇒ `authored` ⇒ behaviour unchanged (`wire.ts` sets none); `promoted` removes the KNOW-18 fast path so every staged row faces the ratifier. Why a new field and not a forged `contested`/`lowRisk`: `governed-emit-route.ts` + `RatifyContext.origin`. */
+  readonly origin?: WriteOrigin;
 }
 
 /** Is `v` a well-formed `Check` (KNOW-16)? The tagged union with a STRING body — total over `unknown`, so
@@ -326,11 +327,9 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
         //    fail-closed, nothing persisted — this is the door that was previously bypassing the human+billy gate.
         //    ARCH-9: the route is selected by `strictestTier(derived, declared)` when the door could derive a
         //    class from the incumbent, and by the declared class alone on a CREATE. See `ratifyCtxFor`.
-        if (route(candidateView, ratifyCtxFor(derivedTier)) === 'full-ratify') {
+        if (route(candidateView, ratifyCtxFor(derivedTier, deps.origin)) === 'full-ratify') {
           const token: RatifyToken = { by: deps.ratifyToken ?? '' };
-          if (!ratify(stage(candidateView), token).committed) {
-          return { out: { emitted: false, rejected: REJECTED_UNRATIFIED } };
-        }
+          if (!ratify(stage(candidateView), token).committed) return { out: { emitted: false, rejected: REJECTED_UNRATIFIED } };
         }
 
         // 3. ROUTE + UPSERT — the KNOW-15 write-decision over the rehydrated projection (mine.ts parity).

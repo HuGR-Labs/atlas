@@ -150,6 +150,14 @@ clauses: [ "a tool error surfaces as a structured rejected Verdict in the MCP re
 unwanted: [ "a tool error crashes the server", "the fail-closed verdict is dropped (empty/ok result on error)" ]
 method-tag:
 
+### INV-CLI-7
+behavioural: true
+anchor: reference/atlas-adapters.md#cli-7
+text: "atlas promote MUST carry STAGED candidates into governed knowledge through the EXISTING atlas-emit door (no new governed tool, no second write medium — GOVERNANCE_SURFACE and WRITE_PATHS unchanged); every staged candidate MUST face FULL ratification under a context the DOOR derived, never one the payload chose and never a store-state verdict asserted falsely; a refusal MUST be per-row; the count reported MUST be what SETTLED durably; a staging read that refuses MUST NOT degrade to 0 candidates"
+clauses: [ "promote publishes only through the existing atlas-emit governed write door (ADR-0008)", "every promoted candidate takes full ratification, under a door-DERIVED context (ARCH-9)", "the derivation is expressed as a true field, never by forging contested/lowRisk", "one unpromotable candidate is that row's refusal, never the batch's", "the reported count is SETTLED, never attempted", "a refused staging read is reported as a refusal, never as 0 candidates" ]
+unwanted: [ "a sixth governed tool or a third write door is minted for promotion", "a staged candidate auto-accepts and reaches the store with no ratifier consulted", "the promotion route is obtained by declaring the candidate contested or not-low-risk", "one bad staged row ends the pass", "the pass reports rows it attempted rather than rows that settled", "an unreadable staging sidecar is rendered as an empty one" ]
+method-tag:
+
 ### INV-CLI-4
 behavioural: true
 anchor: reference/atlas-adapters.md#cli-4

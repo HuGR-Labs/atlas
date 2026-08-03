@@ -24,7 +24,16 @@ export const REJECTED_UNAUTHORIZED_ANCHOR =
   'by the fact\'s computed primary anchor and never looks at the declared scope, so an unbound declaration ' +
   'let an actor publish into a territory it holds no scope in. Declare the owning scope, or ask an admin to ' +
   'rebind the prefix — this is a re-classification-shaped act (ADR-0009), not a field to retry with';
-export const REJECTED_UNRATIFIED = 'unratified: T0/contested fact requires human+billy ratification (KNOW-8)';
+// AMENDED (KNOW-8 promotion door): this read `T0/contested fact requires human+billy ratification`, and that
+// enumeration is no longer the whole set of writes that reach this gate. A PROMOTED candidate routes to full
+// ratification because of where it came from — the door derived `origin:'promoted'` — and is typically
+// neither `T0` nor contested, so the old text told a curator their T2 advisory was a contested T0. The
+// reason now names the ROUTE (full ratification was owed) and lists what owes it, which is what the caller
+// can act on; `billy` stays named because it is still the T0-only requirement.
+export const REJECTED_UNRATIFIED =
+  'unratified: this write owed FULL ratification and no valid ratifier was named (KNOW-8) — set ATLAS_RATIFY_TOKEN. ' +
+  'A write owes full ratification when it is T0, a predicate, contested, or a PROMOTION of a staged candidate ' +
+  '(the fast path does not apply to a machine-proposed fact no human has read). A T0 fact additionally requires the billy token';
 export const REJECTED_DOWNGRADE =
   'governance-downgrade: this write declares a weaker tier than the node it targets — re-classification is ' +
   'a separate governed act, never a side effect of emitting a fact (KNOW-8: a T0 class is human-ratified)';

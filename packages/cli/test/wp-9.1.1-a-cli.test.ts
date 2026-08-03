@@ -50,9 +50,9 @@ afterEach(() => vi.restoreAllMocks());
 // ── REQ-CLI-1 — total command surface ─────────────────────────────────────────────────────────────
 
 describe('SCN-CLI-1a — every command maps to exactly one leg', () => {
-  it('is total (8 keys) and mutually-exclusive over the ratified table', () => {
+  it('is total (9 keys) and mutually-exclusive over the ratified table', () => {
     // totality: every command in the finite surface has exactly one leg.
-    expect(COMMANDS).toEqual(['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link']);
+    expect(COMMANDS).toEqual(['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote']);
     expect(Object.keys(COMMAND_LEG).sort()).toEqual([...COMMANDS].sort());
     expect(COMMAND_LEG).toEqual({
       init: 'atlas-init',
@@ -63,6 +63,7 @@ describe('SCN-CLI-1a — every command maps to exactly one leg', () => {
       mine: 'genesis run-controller',
       node: 'atlas-query', // READ authority oracle (like doctor) — intercepted before the handler, no write authority
       link: 'atlas-link', // WRITE authority oracle (WP-SAMEAS governed sameAs door)
+      promote: 'atlas-emit', // WRITE authority oracle (KNOW-8 governed promotion) — publishes THROUGH atlas-emit
     });
     // teeth: a command bound to zero legs (totality) or two legs (uniqueness) — each key resolves to one string.
     for (const c of COMMANDS) {
@@ -128,12 +129,18 @@ describe('SCN-CLI-2a/2b/2c — command × authority partition', () => {
     }
   });
 
-  it('2b: the write doors are {emit, link}, funneling atlas-emit + atlas-link (asserted vs WRITE_PATHS)', () => {
+  it('2b: three write COMMANDS funnel into the TWO governed write doors (asserted vs WRITE_PATHS)', () => {
     expect([...WRITE_PATHS].sort()).toEqual(['atlas-emit', 'atlas-link']); // the two governed write doors (WP-SAMEAS)
     const writers = COMMANDS.filter((c) => authorityOf(c) === 'write');
-    expect([...writers].sort()).toEqual(['emit', 'link']); // exactly the two governed write commands
+    expect([...writers].sort()).toEqual(['emit', 'link', 'promote']); // exactly the three write commands
     expect(COMMAND_LEG.emit).toBe('atlas-emit');
     expect(COMMAND_LEG.link).toBe('atlas-link');
+    expect(COMMAND_LEG.promote).toBe('atlas-emit'); // KNOW-8 promotion publishes through the EXISTING emit door
+    // THE PROPERTY, not the count: the doors the write commands funnel into ARE `WRITE_PATHS`, exactly — no
+    // more (a command reaching a door nobody ratified) and no fewer (a ratified door nothing can reach). A
+    // third write COMMAND is not a third write DOOR, and this is the assertion that keeps those two apart.
+    // teeth: bind `promote` to a leg outside WRITE_PATHS (or mint a sixth tool for it) and the set diverges.
+    expect([...new Set(writers.map((c) => COMMAND_LEG[c]))].sort()).toEqual([...WRITE_PATHS].sort());
   });
 
   it('2c: read XOR write is total over the surface (every command classified, exactly one)', () => {

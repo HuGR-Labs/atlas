@@ -5,13 +5,17 @@
 // handler is assembled LAZILY (only after a successful, non-`mine` parse) so `main([])` — the `bin.ts`
 // smoke path — returns a structured error WITHOUT touching the (WIRE-deferred) assembler.
 
-import type { WiredHandler } from '@atlas/adapter-io';
+import type { Hash } from '@atlas/contracts';
+import { asHash } from '@atlas/kernel';
+import { headSha } from '@atlas/adapter-io';
+import type { PromoteOut, WiredHandler } from '@atlas/adapter-io';
 import type { DoctorSource, Guidance, Tool, Verdict } from '@atlas/tools';
 import { runDoctor } from './doctor.js';
 import { ensureAtlasIgnored } from './gitignore.js';
 import { COMMAND_LEG } from './map.js';
 import { marshalArgs } from './marshal.js';
 import { runMine } from './mine.js';
+import { runPromote } from './promote.js';
 import { parse } from './parse.js';
 import { renderRefusal, renderVerdict } from './render.js';
 import type { CliVerdict } from './render.js';
@@ -38,6 +42,20 @@ export interface CliDeps {
    * handler would mislabel it.
    */
   readonly readRefusal?: string;
+  /**
+   * The composition root's governed PROMOTION leg (`ComposedRuntime.promote`) — KNOW-8's route out of
+   * staging. Injected on the SAME seam as `handler` and for the same reason: the CLI must never stand up a
+   * second runtime, or the store it promotes INTO stops being the store `atlas query` reads back.
+   *
+   * It is NOT reached through `handler.handle`, because it is not a `Tool`: `GOVERNANCE_SURFACE` stays 5 and
+   * `WRITE_PATHS` stays `{atlas-emit, atlas-link}` — ADR-0008 pre-decided that a curator door is an ordinary
+   * USE of the existing emit door, not new surface. `promote` publishes through `createGovernedEmit`, the
+   * very leg `atlas-emit` binds; what it does not have is a tool token to dispatch on.
+   *
+   * ABSENT ⇒ `atlas promote` fails closed with the same "runtime is not composed yet" guidance every other
+   * routed command gives, never a silent success over nothing.
+   */
+  readonly promote?: (at: Hash) => PromoteOut;
 }
 
 /** A structured error verdict for a CLI-layer failure (parse / unwired command) — guidance always present. */
@@ -121,6 +139,26 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
       if (name !== 'ModelConfigError' && name !== 'PromptError' && name !== 'ModelCommandError') throw e;
       return emitCli(renderRefusal(refusalVerdict((e as Error).message)));
     }
+  }
+
+  if (command === 'promote') {
+    // CLI-7: `atlas promote` drives the composition root's governed PROMOTION leg ONE pass over the repo at
+    // cwd — read the explorer's staging sidecar, present every staged candidate to the governed emit door,
+    // fold the per-row outcomes into ONE verdict. Like `mine`, it does not route through `deps.handler`
+    // (there is no `Tool` token: it opens no new governed surface, ADR-0008) but its rendered `CliVerdict`
+    // reaches the console over the SAME emit/exit path as every other command (uniform bytes).
+    //
+    // It is a WRITE command, so it fails closed on an uncomposed runtime exactly as the routed ones do.
+    if (!deps.promote) {
+      return emit(
+        errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'),
+      );
+    }
+    // The anchor rev: the repo's LIVE HEAD, read through the shared no-shell git seam. `headSha` is total
+    // (no git / no commit ⇒ `undefined`), and the composed truth-gate ignores this value today — it
+    // re-derives freshness against the built `Axes`, not against a sha (compose.ts `buildGate`). It is still
+    // the true HEAD rather than a placeholder, so a gate that later starts reading it gets a fact.
+    return emitCli(runPromote(deps.promote, asHash(headSha(process.cwd()) ?? '')));
   }
 
   if (command === 'doctor') {
