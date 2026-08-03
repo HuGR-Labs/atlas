@@ -22,7 +22,7 @@ import { createGovernedStore } from '../src/guard.js';
 import { createHandler, GOVERNANCE_SURFACE } from '../src/handler.js';
 import type { ToolLeg } from '../src/handler.js';
 import type { DriftItem, ToolData } from '../src/types.js';
-import { createQuery, QUERY_GUIDANCE } from '../src/query.js';
+import { createQuery } from '../src/query.js';
 import type { QueryIndex } from '../src/query.js';
 import { createDoctor, DOCTOR_GUIDANCE } from '../src/doctor.js';
 import type { DoctorSource } from '../src/doctor.js';
@@ -107,6 +107,12 @@ describe('WP-7.26-b.TOOLS — guidance rides every result', () => {
     const rejResult = handler.handle('atlas-emit', { node: {}, at: 'a1b2c3' }); // rejects (rejected)
 
     // teeth (breaks-on "the rejected path ships `guidance:{}`"): guidance non-empty on BOTH paths.
+    // `okResult.guidance` IS the SHIPPED atlas-query envelope — handler.handle() -> guidanceFor('atlas-query')
+    // -> the GUIDANCE['atlas-query'] row in handler.ts. This doubles as the INV-TOOLS-4 witness for the
+    // query surface: it goes RED if that row's `next`/`invariant` is ever blanked (proven at the gate; see
+    // wp-fix-query-guidance.md). Previously this scenario ALSO asserted the same shape against a second,
+    // hand-maintained `QUERY_GUIDANCE` constant in query.ts that no production path read — a duplicate
+    // witness that could drift from the shipped row and never notice. Deleted with the constant (#180).
     expect(okResult.ok).toBe(true);
     expect(okResult.guidance.next).not.toBe('');
     expect(okResult.guidance.invariant).not.toBe('');
@@ -116,9 +122,9 @@ describe('WP-7.26-b.TOOLS — guidance rides every result', () => {
     expect(rejResult.guidance.next).not.toBe(''); // emptyGuidance == 0
     expect(rejResult.guidance.invariant).not.toBe('');
 
-    // the read surface's own guidance envelope is likewise non-empty (extend guidance to query/doctor).
-    expect(QUERY_GUIDANCE.next).not.toBe('');
-    expect(QUERY_GUIDANCE.invariant).not.toBe('');
+    // `atlas-doctor`'s own guidance envelope is likewise non-empty. `DOCTOR_GUIDANCE` stays: unlike
+    // `QUERY_GUIDANCE`, it has a REAL production caller (cli/src/doctor.ts renders it on the CLI door), so
+    // this is not the same shape and is not touched by #180's rule.
     expect(DOCTOR_GUIDANCE.next).not.toBe('');
     expect(DOCTOR_GUIDANCE.invariant).not.toBe('');
   });

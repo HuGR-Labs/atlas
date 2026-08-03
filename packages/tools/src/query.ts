@@ -6,7 +6,7 @@
 
 import { isTier } from '@atlas/knowledge';
 import type { Hash, Pack, PackInvariant } from '@atlas/contracts';
-import type { Guidance, QueryOut } from './types.js';
+import type { QueryOut } from './types.js';
 
 export interface QueryApi {
   /** Resolve any scope (file/folder/module/crate) → the merged covering bounded `Pack` of `tier≥T1`
@@ -35,13 +35,6 @@ export interface QueryIndex {
     readonly stale: boolean;
   };
 }
-
-/** The `next + invariant` guidance the query read surface ships on its result envelope (INV-TOOLS-4). The
- *  same intent the handler stamps for `atlas-query`; co-located here so the read surface carries its own. */
-export const QUERY_GUIDANCE: Guidance = {
-  next: 're-ground a stale pack before trusting it; scope must be a path string (file/folder/module/crate)',
-  invariant: 'TOOLS-6: bounded read projection (tier>=T1, stale-flagged) — never a global dump',
-};
 
 /**
  * The pack bound: every invariant is `tier≥T1` (T0 or T1); a `T2`/below-T1 node is bounded OUT (TOOLS-6).
