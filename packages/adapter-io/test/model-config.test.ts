@@ -9,7 +9,7 @@
 //     policy is safe, whereas a silently-absent model abstains everywhere and reports a clean empty run —
 //     indistinguishable from a repo that genuinely holds no groundable fact.
 
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -104,7 +104,46 @@ describe('loadModelConfig — the security boundary (ADR-0011 D2)', () => {
 
     expect(loadModelConfig(repo, envAt(path))).not.toBeNull();
   });
+
+  it('a config planted inside the repo is refused through a CASE-VARIANT spelling of the repo path too', () => {
+    // THE F1 BYPASS. `realpathSync` is case-PRESERVING on APFS — it hands back the path as REQUESTED, not
+    // the canonical on-disk name — so `…/repo` and `…/REPO`, one directory to the kernel, stayed two strings
+    // to `relative()`, which returned a `..`-prefixed path and let the guard read "outside the repo".
+    // Measured against the built module before the fix: the honest spelling was refused, and the case
+    // variant LOADED `{"cmd":"/bin/sh","args":["-c","echo PLANTED-COMMAND-RAN"]}`.
+    //
+    // teeth (breaks-on "containment is decided by string relative() again"): the refusal below disappears
+    // and `loadModelConfig` returns a config naming a command `atlas mine` would then execute.
+    //
+    // FILESYSTEM-CONDITIONAL, and honestly so: on a case-SENSITIVE volume (Linux CI) `…/REPO` is a different,
+    // non-existent directory, there is no second spelling of the repo and so no bypass to close. The
+    // expectation is taken from the kernel, and the folding branch asserts the refusal.
+    const parent = tempDir('caserepo');
+    const repo = join(parent, 'repo');
+    mkdirSync(join(repo, '.atlas'), { recursive: true });
+    const planted = join(repo, '.atlas', 'model.json');
+    writeFileSync(planted, VALID);
+    const variantPath = join(parent, 'REPO', '.atlas', 'model.json');
+
+    if (!foldsCase(repo, join(parent, 'REPO'))) {
+      expect(loadModelConfig(repo, envAt(variantPath))).toBeNull(); // a different location, and it is empty
+      return;
+    }
+    expect(refusalOf(() => loadModelConfig(repo, envAt(variantPath))).refusal).toBe('inside-repo');
+  });
 });
+
+/** Does the KERNEL say these two spellings are the same directory? The oracle — never `toLowerCase()`,
+ *  which is a guess about a volume's folding table and the reason the string guard was wrong. */
+function foldsCase(a: string, b: string): boolean {
+  try {
+    const x = statSync(a, { bigint: true });
+    const y = statSync(b, { bigint: true });
+    return x.dev === y.dev && x.ino === y.ino;
+  } catch {
+    return false;
+  }
+}
 
 describe('loadModelConfig — absent is a state, malformed is an error', () => {
   it('an ABSENT config is `null` — the honest zero-config state, not an error', () => {

@@ -11,7 +11,7 @@
 //   • THE DIGEST COVERS THE ARTIFACT AS SHIPPED, comment included — provenance answers "which artifact
 //     produced this fact", and editing the reasoning edits the artifact.
 
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -20,7 +20,7 @@ import { asSubtreeHash } from '@atlas/kernel';
 import type { StructRef } from '@atlas/contracts';
 import type { Candidate, MinedSignals } from '@atlas/genesis';
 
-import { createPromptFactory, PromptError, shippedTemplatePath } from '../src/prompt.js';
+import { createFileSourceReader, createPromptFactory, PromptError, shippedTemplatePath } from '../src/prompt.js';
 import type { SourceReader } from '../src/prompt.js';
 
 const created: string[] = [];
@@ -176,5 +176,108 @@ describe('createPromptFactory — anchor naming', () => {
     const out = createPromptFactory({ source: reader(CODE) }).build(candidateAt('src/a.ts::'));
     expect(out).not.toContain('name=""');
     expect(out).toContain('name="src/a.ts::"');
+  });
+});
+
+// ── createFileSourceReader ──────────────────────────────────────────────────────────────────────────────
+// THIS FUNCTION HAD NO TESTS AT ALL until now, and a mutation deleting its entire repo-escape guard survived
+// the whole suite. What it feeds is the operator's model endpoint, so anything it reads leaves the machine.
+//
+// The bytes it produced were decided by a purely textual `relative()` and a `readFileSync` that FOLLOWS
+// symlinks — measured before the fix: a git-tracked `src/leak.ts → /etc/passwd` was READ and its contents
+// interpolated into the prompt, because the NAME never left the repository while the READ did.
+//
+// Assertions are on EXACT values (`toBe`), never substrings: `toContain` cannot tell one file's bytes from
+// another's when one is a prefix of the other, and that blindness has already let a mutant survive here.
+
+describe('createFileSourceReader — only bytes that really live in the repository are read', () => {
+  const repos: string[] = [];
+  afterEach(() => {
+    while (repos.length > 0) rmSync(repos.pop()!, { recursive: true, force: true });
+  });
+  function repoDir(label: string): string {
+    const d = mkdtempSync(join(tmpdir(), `atlas-reader-${label}-`));
+    repos.push(d);
+    return d;
+  }
+  /** A `StructRef` built DIRECTLY, as the helpers above do — this suite tests the reader, not the producer. */
+  const siteAt = (qualifiedPath: string): StructRef => candidateAt(qualifiedPath).site;
+
+  const BYTES = 'export function charge(): void { /* the real unit */ }\n';
+
+  it('a plain regular file inside the repo IS read, byte for byte', () => {
+    // The control. Every refusal below is only meaningful because this one reads.
+    const repo = repoDir('happy');
+    mkdirSync(join(repo, 'src'), { recursive: true });
+    writeFileSync(join(repo, 'src', 'a.ts'), BYTES);
+    expect(createFileSourceReader(repo).read(siteAt('src/a.ts::charge'))).toBe(BYTES);
+  });
+
+  it('a `../` escape is refused', () => {
+    // teeth (breaks-on "both path guards are removed"): `../outside.txt` resolves to a real readable file
+    // one level up, and the reader would ship it to the model. The textual test and the containment test
+    // each refuse it independently, so removing EITHER alone leaves the other holding the door.
+    const parent = repoDir('escape');
+    const repo = join(parent, 'repo');
+    mkdirSync(repo, { recursive: true });
+    writeFileSync(join(parent, 'outside.txt'), 'not yours\n');
+    expect(createFileSourceReader(repo).read(siteAt('../outside.txt'))).toBeNull();
+  });
+
+  it('an ABSOLUTE path is refused', () => {
+    const repo = repoDir('abs');
+    expect(createFileSourceReader(repo).read(siteAt('/etc/passwd'))).toBeNull();
+  });
+
+  it('the repo ROOT itself is refused — an empty relative path is not a source file', () => {
+    // teeth (breaks-on "the `inside === ''` arm is dropped"): the root is a directory, and a reader that
+    // accepted it would hand the caller whatever `readFileSync` does with a directory instead of refusing.
+    const repo = repoDir('root');
+    expect(createFileSourceReader(repo).read(siteAt(''))).toBeNull();
+  });
+
+  it('a SYMLINK to a file OUTSIDE the repo is refused — the name was inside, the bytes were not', () => {
+    // The measured F2 defect, with a portable target standing in for `/etc/passwd`.
+    // teeth (breaks-on "the fd read is replaced by readFileSync(abs)" AND on "the containment call is
+    // dropped"): either alone still refuses this one; the point of the case is that the OUTCOME is a refusal.
+    const outside = repoDir('leaktarget');
+    const secret = join(outside, 'passwd');
+    writeFileSync(secret, '##\n# User Database\nroot:*:0:0\n');
+    const repo = repoDir('leak');
+    mkdirSync(join(repo, 'src'), { recursive: true });
+    symlinkSync(secret, join(repo, 'src', 'leak.ts'));
+    expect(createFileSourceReader(repo).read(siteAt('src/leak.ts'))).toBeNull();
+  });
+
+  it('a SYMLINK to a file INSIDE the repo is ALSO refused — the documented behaviour change', () => {
+    // teeth (breaks-on "the O_NOFOLLOW fd read is replaced by readFileSync(path)"): this link is contained by
+    // every other check — its target is a repo file — so the fd door is the ONLY thing refusing it, and a
+    // plain path read returns `real.ts`'s bytes. Refusing is deliberate: reading a link's target and
+    // attributing the claim to the link's own path names a unit whose bytes live somewhere else.
+    const repo = repoDir('inlink');
+    mkdirSync(join(repo, 'src'), { recursive: true });
+    writeFileSync(join(repo, 'src', 'real.ts'), BYTES);
+    symlinkSync(join(repo, 'src', 'real.ts'), join(repo, 'src', 'alias.ts'));
+    expect(createFileSourceReader(repo).read(siteAt('src/alias.ts'))).toBeNull();
+    expect(createFileSourceReader(repo).read(siteAt('src/real.ts'))).toBe(BYTES); // the target still reads
+  });
+
+  it('a symlinked INTERMEDIATE directory pointing out of the repo is refused', () => {
+    // teeth (breaks-on "the isContainedIn call is dropped"): the final component here is an ORDINARY FILE,
+    // so `O_NOFOLLOW` opens it happily, and the textual test sees `src/out/secret.txt` — no `..`, not
+    // absolute. Kernel-identity containment is the ONLY check that refuses this one.
+    const outside = repoDir('dirtarget');
+    writeFileSync(join(outside, 'secret.txt'), 'not yours\n');
+    const repo = repoDir('dirlink');
+    mkdirSync(join(repo, 'src'), { recursive: true });
+    symlinkSync(outside, join(repo, 'src', 'out'));
+    expect(createFileSourceReader(repo).read(siteAt('src/out/secret.txt'))).toBeNull();
+  });
+
+  it('a DIRECTORY and a MISSING file are refused, not thrown — the reader is total', () => {
+    const repo = repoDir('total');
+    mkdirSync(join(repo, 'src'), { recursive: true });
+    expect(createFileSourceReader(repo).read(siteAt('src'))).toBeNull();
+    expect(createFileSourceReader(repo).read(siteAt('src/gone.ts'))).toBeNull();
   });
 });

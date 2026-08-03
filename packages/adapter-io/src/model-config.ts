@@ -15,10 +15,11 @@
 //   ABSENT   ⇒ `null`  — no model wired. The honest zero-config state; `mine` abstains and SAYS so.
 //   MALFORMED⇒ THROW   — a stated, actionable error. Never a silent fall-back to `null`.
 
-import { readFileSync, realpathSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 
+import { isContainedIn } from './containment.js';
 import type { ModelCommand } from './llm.js';
 
 /** The mechanism a model call is issued FOR (GEN-13's closed `Mechanism` set, minus the non-model ones).
@@ -163,32 +164,24 @@ function optionalPositive(v: unknown, fallback: number, refuse: () => never): nu
 /**
  * Is `candidate` the repo directory itself, or anything beneath it?
  *
- * SYMLINKS ARE RESOLVED FIRST, and that is the whole difficulty. Pure textual containment is evadable: on
- * macOS `/var` is a symlink to `/private/var`, so a repo the shell reports as `/var/folders/x` has a real
- * path of `/private/var/folders/x`, and `relative()` between the two spellings yields a `..`-prefixed path —
- * the guard reads "outside the repo" and the planted config is READ. Found by the S24 black-box story on
- * its first run, against a real temp repo; the unit suite could not see it because both sides there are
- * spelled the same way.
+ * SYMLINKS ARE RESOLVED, and that leg is real: on macOS `/var` is a symlink to `/private/var`, so a repo the
+ * shell reports as `/var/folders/x` has a real path of `/private/var/folders/x`. Comparing those two
+ * spellings textually yields a `..`-prefixed relative path, the guard reads "outside the repo", and the
+ * planted config is READ. Found by the S24 black-box story on its first run against a real temp repo; any
+ * repo reached through a symlinked parent is the general case, macOS temp dirs merely the one that surfaced.
  *
- * Any symlinked path exhibits it, not just macOS temp dirs — a repo reached through a symlinked parent is
- * the general case.
+ * BUT RESOLVING SYMLINKS IS NOT ENOUGH, WHICH IS WHY THIS DELEGATES. `realpathSync` does not canonicalize
+ * SPELLING — on APFS it is case-preserving and normalization-preserving, so it returns the path AS
+ * REQUESTED. Two spellings of the SAME directory (`…/repo` vs `…/REPO`, NFC vs NFD) therefore still compare
+ * as different strings, and the same "outside the repo" verdict loads the same attacker config. Measured
+ * against the built module: honest spelling refused, case variant LOADED.
+ *
+ * So identity is decided on (dev, ino) — the kernel's own answer — by `containment.ts`, and there is exactly
+ * ONE implementation of it. A string comparison kept alongside as belt-and-braces would only be a second,
+ * wrong answer for the next reader to trust.
  */
 function isInside(repoPath: string, candidate: string): boolean {
-  const rel = relative(realish(repoPath), realish(candidate));
-  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
-}
-
-/** `realpathSync` for a path that MAY NOT EXIST: resolve the deepest existing ancestor and re-append what
- *  is left. The security check must run BEFORE the file is opened, so it cannot require the file to be
- *  there — and a non-existent path under a symlinked parent must still resolve through that parent. */
-function realish(p: string): string {
-  const abs = resolve(p);
-  try {
-    return realpathSync(abs);
-  } catch {
-    const parent = dirname(abs);
-    return parent === abs ? abs : join(realish(parent), basename(abs)); // bounded by the filesystem root
-  }
+  return isContainedIn(repoPath, candidate);
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
