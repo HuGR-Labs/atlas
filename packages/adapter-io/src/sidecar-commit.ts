@@ -32,6 +32,7 @@ import type { StoreProjection } from '@atlas/knowledge';
 import { generations, genPath, mirrorPath, readSidecarSet } from './sidecar.js';
 import type { CommitDecision, CommitResult, SidecarBase, SidecarCtx, WireProjection } from './sidecar.js';
 import { IDENTITY_SCHEMA, refuseForeignIdentityWrite } from './identity-schema.js';
+import { stampGeneration } from './freshness-watermark.js';
 
 /** How many times a contended writer re-reads and re-decides before refusing. Bounded so a pathological
  *  writer cannot spin forever; the size is MEASURED, not guessed. At 16 an 8-process TIGHT COMMIT LOOP
@@ -86,11 +87,23 @@ type PublishOutcome = 'published' | 'superseded' | 'lost';
 
 /** Serialize + publish ONE generation — see {@link PublishOutcome} for the three answers. Every failure that
  *  is NOT contention (ENOSPC, EACCES, EROFS) PROPAGATES: a broken disk is not a lost race, and reporting it
- *  as "retry" would spin `MAX_ATTEMPTS` times and then lie about why the write did not land. */
-function publish(ctx: SidecarCtx, projection: StoreProjection, gen: number): PublishOutcome {
+ *  as "retry" would spin `MAX_ATTEMPTS` times and then lie about why the write did not land.
+ *
+ *  `prev` is the snapshot this generation is published OVER — the one this attempt read. It is here for ONE
+ *  reason: the N11 freshness watermark is a property of each ROW, not of the file, and only a comparison
+ *  against the previous generation can tell a row this generation actually produced from the overwhelming
+ *  majority that were carried forward untouched. See `freshness-watermark.ts` for the measured defect. */
+function publish(
+  ctx: SidecarCtx,
+  projection: StoreProjection,
+  gen: number,
+  prev: StoreProjection | undefined,
+): PublishOutcome {
   const builtAt = ctx.headSha?.();
   const wire: WireProjection = {
-    current: [...projection.current.entries()],
+    // N11 — PER-ROW. Each row is stamped with the HEAD its OWN stored freshness reflects; a carried-forward
+    // row keeps its own, older stamp. `builtAt` below stays for back-compat and is no longer load-bearing.
+    current: stampGeneration(projection.current, prev?.current, builtAt),
     cas: [...projection.cas],
     gen,
     // #112 — THE IDENTITY STAMP, written UNCONDITIONALLY and from the constant, never from what was read
@@ -99,6 +112,9 @@ function publish(ctx: SidecarCtx, projection: StoreProjection, gen: number): Pub
     // publishes was minted by this build's rules, so it says so, once, here — the single place a sidecar's
     // bytes are ever produced.
     identity: IDENTITY_SCHEMA,
+    // The PROJECTION-level watermark. KEPT — it is the back-compat fallback the reader applies to a row that
+    // carries no stamp of its own, which is every row in every store written before the per-row stamp existed.
+    // It is no longer what `stale` is decided on: as the ONLY signal it was laundered by any write at all.
     ...(builtAt !== undefined ? { builtAt } : {}),
   };
   mkdirSync(ctx.dir, { recursive: true });
@@ -330,7 +346,12 @@ function commitLoop<T>(
     // `superseded` SETTLES. The decision's bytes are durable (see {@link PublishOutcome}), so the ONLY
     // honest answers are this call's own `out` — the one belonging to the attempt that actually published —
     // or a re-run that cannot see it wrote. Re-running is what produced a truthful `next` and a false `out`.
-    if (publish(ctx, decision.next, read.top + 1) !== 'lost') return { settled: true, out: decision.out };
+    // `read.projection` is handed on as the PREVIOUS generation so the per-row watermark can tell a row this
+    // decision produced from one it merely carried forward. It is the same snapshot `decide` just ran over,
+    // so on a retry the comparison is re-made against the NEW snapshot — never a stale baseline.
+    if (publish(ctx, decision.next, read.top + 1, read.projection) !== 'lost') {
+      return { settled: true, out: decision.out };
+    }
   }
   return { settled: false, refusal: 'contended' };
 }

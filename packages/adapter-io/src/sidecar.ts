@@ -81,7 +81,12 @@ export type SidecarBase = 'projection' | 'staging';
 export interface WireProjection {
   readonly current: ReadonlyArray<readonly [string, CurrentNode]>;
   readonly cas: readonly string[];
-  readonly builtAt?: string; // N11 freshness watermark (HEAD sha at persist); absent ⇒ unknown (old sidecars)
+  /** N11 PROJECTION-level freshness watermark (HEAD sha at persist); absent ⇒ unknown (old sidecars).
+   *  NO LONGER THE LOAD-BEARING SIGNAL — the watermark is per ROW (`CurrentNode.derivedAt`, which rides
+   *  inside `current` and needs no line here). This field survives as the reader's back-compat FALLBACK for a
+   *  row carrying no stamp of its own, which is every row of every store written before that. As the only
+   *  signal it was laundered by any write at all — see `freshness-watermark.ts` for the measured repro. */
+  readonly builtAt?: string;
   readonly gen?: number; // the generation these bytes were published as; absent ⇒ 0 (pre-protocol sidecars)
   /**
    * #112 — the IDENTITY SCHEMA these bytes' hashes and anchor keys were minted under (`identity-schema.ts`
@@ -170,6 +175,10 @@ export function generations(dir: string, base: SidecarBase): number[] {
 // this format — and an OLD sidecar that carries neither round-trips UNREWRITTEN: JSON simply has no key,
 // which reads back as `undefined`, which is the ABSENT the doors treat as "authority unconfirmable". The
 // same is true of `gen`, added below: absent ⇒ 0, and a pre-protocol sidecar is generation 0 by definition.
+// AND OF `CurrentNode.derivedAt` (N11 per-row freshness watermark), added later on the same terms and named
+// here so the absence of a line is a recorded decision rather than an omission: it rides inside the row, so
+// an old sidecar round-trips UNREWRITTEN and reads back `undefined`, which the reader resolves to the
+// projection-level `builtAt` fallback. Nothing in the format changed to carry it.
 //
 // NOR IS THERE A READ-SIDE VALIDATOR FOR THEM, DELIBERATELY. `isKeyedEntry` below rejects the WHOLE file on
 // a bad row, which is right for the representation invariant (a row whose key is not its own `nodeKey` is a

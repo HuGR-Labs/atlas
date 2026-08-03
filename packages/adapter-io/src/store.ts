@@ -156,11 +156,20 @@ export interface DiskStore extends StoreApi {
  *
  * `headSha` (N11, OPTIONAL) is the injected freshness-watermark seam — a pure `() => currentHEAD | undefined`
  * supplied by the composition root (which owns git; the store stays git-ignorant). When present, every
- * `persistProjection` STAMPS the projection with the HEAD its stored per-fact freshness reflects, so a later
- * query can cheaply detect a behind-HEAD (⇒ unverified ⇒ honestly `stale`) read. Absent (tests / non-git) ⇒
- * no stamp ⇒ `builtAt` stays `undefined` and the reader treats the watermark as "unknown" (never a false
- * flag). Injected here (not at each write door) so EVERY persist site — governed emit onto the projection,
- * the mine driver onto staging — stamps uniformly with zero change to their code.
+ * publication STAMPS EACH ROW IT ACTUALLY PRODUCED with the HEAD that row's stored per-fact freshness
+ * reflects, so a later query can cheaply detect a behind-HEAD (⇒ unverified ⇒ honestly `stale`) read.
+ *
+ * PER ROW, and the sentence that stood here said "STAMPS the projection", which was true of one row and
+ * applied to all of them. A publication rewrites the WHOLE projection and carries almost every row forward
+ * untouched, so a single projection-level stamp meant ANY write re-dated every fact in the store: one
+ * unrelated `atlas emit` turned an honest `stale: true` back into `stale: false` while `atlas doctor why`
+ * still printed the drift. The code now matches the sentence rather than the sentence being softened —
+ * `freshness-watermark.ts` owns the rule (a row is re-stamped iff its `contentHash` changed) and the measured
+ * repro. `StoreProjection.builtAt` is still written, as the back-compat fallback for an unstamped row.
+ *
+ * Absent (tests / non-git) ⇒ no stamp ⇒ the reader treats the watermark as "unknown" (never a false flag).
+ * Injected here (not at each write door) so EVERY persist site — governed emit onto the projection, the mine
+ * driver onto staging — stamps uniformly with zero change to their code.
  *
  * `trusted` (OPTIONAL) is the PROVENANCE seam (`store-provenance.ts`), injected the same way and for the
  * same reason: this module must stay git-ignorant, and only the composition root knows about git. It answers

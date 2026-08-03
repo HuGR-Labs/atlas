@@ -17,6 +17,10 @@ export type { CasPath, DiskStore } from './store.js';
 export type { CommitDecision, CommitRefusal, CommitResult } from './sidecar.js';
 export { createHistorySource } from './git-history.js';
 export { createDriftSource } from './git-drift.js';
+// The merge-gate refusal `driftAt` raises when the base it was handed names no commit. Exported so a consumer
+// can recognise it as a VALUE (`instanceof` / `.name`) rather than by matching the reason prose — an empty
+// drift set used to be the only thing this condition could say, which is a green merge gate.
+export { UnresolvableMergeBaseError } from './git-drift.js';
 export { createForge } from './git-forge.js';
 // The cheap `headSha` freshness-watermark reader (N11, no worktree) — the ONLY member of the shared no-shell
 // git seam (#74, `run-git.ts`) that crosses the package boundary (the mine driver injects it). `runGit` + the
