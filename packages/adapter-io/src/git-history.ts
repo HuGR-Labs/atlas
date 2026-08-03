@@ -58,6 +58,15 @@ const FIX_SUBJECT = /^fix/i;
  *  raising spend (`frontierBudget` IS the ranked-site count, genesis/rank.ts:370). */
 const HOTSPOT_MIN_CHURN = 2;
 
+/** SZZ bar — SYMMETRIC to `HOTSPOT_MIN_CHURN`, on purpose. The bar exists to tie spend to HOTSPOT DENSITY,
+ *  not repo size: a file touched by exactly one `fix:` commit in its life is one data point, not evidence
+ *  of recurrence. Without this bar the SZZ leg (`szz.get(f) >= 1`) SHORT-CIRCUITS the churn bar entirely —
+ *  in a conventional-commits repo, every file ever touched by a single `fix:` enters the frontier, which
+ *  reinstates the file-count-proportional spend REQ-GEN-3a/3b forbids. SZZ still composes as its own
+ *  admission leg (fix-proneness is a real signal) — it just has to clear the SAME "happened more than
+ *  once" bound the churn leg already enforces, rather than bypassing it on a single touch. */
+const HOTSPOT_MIN_SZZ = 2;
+
 /** Coupling bar: association-rule MINIMUM SUPPORT over commit baskets — a file must co-change with at
  *  least one other file in ≥2 distinct commits. A one-shot import that happens to land beside other files
  *  has support 1 and is NOT a logical dependency. */
@@ -185,7 +194,7 @@ export function createHistorySource(repoPath: string, rev: string): HistorySourc
       }
       const inFrontier = (f: string): boolean =>
         (churn.get(f) ?? 0) >= HOTSPOT_MIN_CHURN ||
-        (szz.get(f) ?? 0) >= 1 ||
+        (szz.get(f) ?? 0) >= HOTSPOT_MIN_SZZ ||
         (coupling.get(f) ?? 0) >= COUPLING_MIN_SUPPORT;
       return [...tracked]
         .filter(inFrontier)
