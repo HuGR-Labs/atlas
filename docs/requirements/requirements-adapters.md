@@ -9,7 +9,7 @@
 
 ### REQ-ADAPTER-1a — faithful file tree
 source: INV-ADAPTER-1 @ reference/atlas-adapters.md#adapt-fs-1
-The filesystem walker shall produce the exact FileTree — paths, nesting, and leaf content — for a real repo path in a deterministic order, honoring the repo's `.gitignore` rules.
+The filesystem walker shall produce the exact FileTree — paths, nesting, and leaf content — for a real repo path in a deterministic order, honoring the repo's `.gitignore` rules, with leaf `content` being the tracked file's working-tree bytes EXCEPT for a mode-120000 (symlink) entry, whose `content` is its stored link text (REQ-ADAPTER-1e).   <!-- AMENDED 2026-08-02 with REQ-ADAPTER-1e: "leaf content" read as "the bytes at that path" was FALSE for a symlink, and the walker followed the link -->
 normative-clause: "The filesystem walker MUST produce the exact `FileTree` (`→ FileTree@index/types.ts`) for a real repo path — paths, nesting, and leaf `content` — in a deterministic order, honoring the repo's ignore rules (`.gitignore`)."
 
 ### REQ-ADAPTER-1b — no omitted tracked file
@@ -26,6 +26,52 @@ normative-clause: "It MUST NOT fabricate or omit a tracked file."
 source: INV-ADAPTER-1 @ reference/atlas-adapters.md#adapt-fs-1
 If the same repo tree is walked more than once, then the walker shall yield identical order and content.
 normative-clause: "in a deterministic order"
+
+### REQ-ADAPTER-1e — a tracked symlink contributes its stored link text, never its target
+source: SECURITY AMENDMENT 2026-08-02 (the tracked-symlink rule in `adapter-io/src/fs.ts`) — NOT a lift from INV-ADAPTER-1
+If a tracked entry's git mode is 120000, then the walker shall include it as a leaf whose `content` is the stored link text taken from the entry's index blob, shall never open the link target, and that leaf shall be excluded from the sub-file AST fold.
+normative-clause: — none. This clause is NOT recovered from `reference/atlas-adapters.md#adapt-fs-1`; that frozen text predates the rule and is silent on symlinks (see the note).
+
+> **AMENDED 2026-08-02 (the containment family), ADDING a clause the frozen register does not carry.** Every
+> other REQ here is a brownfield lift of one frozen invariant clause. This one is not, and saying so is the
+> point: it records a DECISION taken to close a defect, so a later reader does not go looking for an
+> invariant that was never written. Reproduced before the fix: a git-tracked `src/config.ts -> /etc/passwd`
+> put the password file's contents into the walked `FileTree`, because the walker `readFileSync`'d every
+> tracked path and that call FOLLOWS a symlink. Four things this clause fixes in the record:
+>
+> 1. **The `content` is the stored link text, and the target is never read.** The rule is git's own: under
+>    `core.symlinks=false` (Windows, some CI) git already checks a mode-120000 entry out as a regular file
+>    holding exactly that text, so the walk reproduces what such a checkout yields rather than inventing a
+>    convention. REQ-ADAPTER-1b still holds with NO new exception — the tracked entry is INCLUDED, carrying
+>    what the repo says it is — and REQ-ADAPTER-1d gets stronger: the content behind a link to an absolute
+>    outside path was a fact about the HOST, so two machines could walk one commit to different content.
+>    They no longer can. The walker asks NO containment predicate and resolves NO attacker-influenced path;
+>    that business stays out of the boot path of both binaries, which is where the two `isContainedIn` fixes
+>    put it back on the doors that genuinely need it.
+> 2. **The source is the INDEX BLOB, not `readlink` — deliberately, and on the record.** A
+>    `core.symlinks=false` checkout has no link to read: `readlink` fails EINVAL there and the tracked entry
+>    would be silently DROPPED, violating REQ-ADAPTER-1b on exactly those hosts. So the bytes come from the
+>    object database. This means the walk has a MIXED SOURCE — symlink leaves from the index, regular files
+>    from the working tree — which is stated here rather than left to be discovered by whoever next asks why
+>    a dirty symlink walks to its staged text.
+> 3. **A symlink leaf is excluded from `foldAstUnits` and mints no unit key.** A link target is
+>    attacker-chosen TEXT: `ln -s 'const leaked = 1' src/leak.ts` is a legal symlink whose stored blob parses
+>    as TypeScript, and folding it would mint `src/leak.ts::lexical_declaration:0:leaked` — a first-class
+>    node key minted from something that is not a program, and node keys are what retrieval hands out.
+> 4. **A broken link and a directory link are INCLUDED as link-text leaves — this is the behaviour that
+>    changed.** Both used to be dropped, but by ACCIDENT rather than by decision: the walker's read swallowed
+>    the ENOENT of a dangling target and the EISDIR of a directory target, and the mode never reached it. A
+>    directory link stays a LEAF and contributes none of the linked directory's entries (a tracked file under
+>    the real directory appears exactly once, under its real path).
+>
+> **UNSPECIFIED, and left that way on purpose: mode 160000 (gitlinks/submodules).** There are none in this
+> repo, the mode is unexercised, and inventing a rule for it would be a worse record than an honest gap. A
+> gitlink today falls to the working-tree read leg and is skipped; that is a consequence, not a decision.
+>
+> **NOT AMENDED HERE: the frozen reference.** `reference/atlas-adapters.md#adapt-fs-1` (ADAPT-FS-1) is
+> consumed at `freeze/adapters-v0` and still reads "paths, nesting, and leaf `content`" with no symlink
+> clause. It is not edited by this seat: a frozen invariant register is amended by ratification, not by the
+> seat that discovered the gap. Flagged for that decision.
 
 ### REQ-ADAPTER-2a — SCIP is read into ScipOutput
 source: INV-ADAPTER-2 @ reference/atlas-adapters.md#adapt-scip-1

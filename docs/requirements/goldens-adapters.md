@@ -1,7 +1,8 @@
 # Goldens — Block ADAPTERS (Campaign-9 · the productization ring) · S3 generate-from-method-tag
 
 > **state:** S3 · **protocol:** [`goldens`](../../.claude/skills/goldens/SKILL.md) + [`completeness`](../../.claude/skills/completeness/SKILL.md) Gate-3 teeth ·
-> **axiom:** S1 frozen (`requirements-adapters.md`; 55 REQs) + S2 frozen (`method-tags-adapters.md`; every
+> **axiom:** S1 frozen (`requirements-adapters.md`; 55 REQs at the freeze, **58 counted today** — +REQ-MCP-1d/1e
+> by the governed-write-doors amendment, +REQ-ADAPTER-1e by the tracked-symlink amendment 2026-08-02) + S2 frozen (`method-tags-adapters.md`; every
 > behavioural INV method-tagged, **0 `formal`** in the ring — the sole `formal` cluster `FSPEC-merge` lives one
 > layer down and is unchanged, consumed via frozen seams) · **owner:** charlie (FORGE).
 >
@@ -47,6 +48,23 @@
 Reference tree `T_ref` = the deterministic sorted walk of the 5 tracked paths with leaf `content`; `dist/` and
 `*.log` excluded by `.gitignore`. `LangId → IndexerPlan` dispatch: `ts → scip-typescript`, `py → scip-python`,
 `rb → honest-hole` (total over the repo's languages).
+
+### `link-repo` — a committed repo whose tracked set contains SYMLINKS (the REQ-ADAPTER-1e oracle)
+
+A SECOND fixture, deliberately not folded into `fix-repo`: `fix-repo` and its `T_ref` are the symlink-FREE
+oracle, and they are what proves the tracked-symlink rule moves no hash on a repo that has no symlinks.
+
+| path | git mode | tracked | role |
+|---|---|---|---|
+| `src/real.ts` | 100644 | yes | an ordinary TS file — the CONTROL that the walk and the AST fold really ran |
+| `secrets/token.txt` | 100644 | yes | the target of the link below; its bytes must appear only under THIS path |
+| `src/config.ts` | **120000** | yes | link text `../secrets/token.txt` (and, in the `/etc/passwd` witness, the absolute path of a file outside the repo) |
+| `src/leak.ts` | **120000** | yes | link text `const leaked = 1` — a target name that is legal TypeScript |
+| `src/gone.ts` | **120000** | yes | link text `./nowhere.ts` — a BROKEN link (target absent) |
+| `src/dirlink` | **120000** | yes | link text `../sub` — a link to a DIRECTORY |
+| `sub/keep.ts` | 100644 | yes | the file inside the linked directory (must appear once, under its real path) |
+
+Mode is read from `git ls-files -s`, i.e. what the REPO DECLARES; the link text is the entry's index blob.
 
 ### `fix.scip` — a recorded SCIP protobuf index (the SCIP-reader oracle)
 
@@ -117,6 +135,34 @@ Given `fix-repo` unchanged between two invocations
 When `walk(fix-repo)` runs twice → `w1`, `w2`
 Then `w1` ≡ `w2` byte-identically (identical sibling order and leaf `content`)
 teeth: breaks-on "a walker that stamps each `FileTree` node with a per-walk value (the wall-clock at visit time / a fresh nonce) instead of deriving the node purely from bytes — so `w1` and `w2` differ on that field across the two runs (`readdir` order alone is stable across consecutive walks and would not diverge)"
+gen: conformance
+
+---
+
+## REQ-ADAPTER-1e — a tracked symlink contributes its stored link text   (amended 2026-08-02, the containment family)
+
+### SCN-ADAPTER-1e-1 — a tracked symlink's leaf carries the LINK TEXT, and the target is never read   (guard)
+source: REQ-ADAPTER-1e
+Given `link-repo` where `src/config.ts` is tracked at mode 120000 with link text `../secrets/token.txt`, and the target file holds bytes that appear nowhere else
+When `walk(link-repo)` runs
+Then the `FileTree` INCLUDES `src/config.ts` (REQ-ADAPTER-1b, no new exception) as a leaf whose `content` is exactly `../secrets/token.txt`, and — for the `-> /etc/passwd` witness — not one byte of the target file appears anywhere in the tree
+teeth: breaks-on "a walker that reads the path again (`readFileSync`, which FOLLOWS a symlink) instead of the entry's index blob — the target's bytes become the leaf `content`, which is how `/etc/passwd` reached the skeleton"
+gen: conformance
+
+### SCN-ADAPTER-1e-2 — a mode-120000 leaf mints NO sub-file unit key   (guard)
+source: REQ-ADAPTER-1e
+Given `link-repo` where `src/leak.ts` is tracked at mode 120000 with link text `const leaked = 1` (legal TypeScript), alongside the ordinary `src/real.ts` defining `realFn()`
+When `foldAstUnits(walk(link-repo))` runs and the index is built
+Then `src/real.ts::function_declaration:0:realFn` is minted (the CONTROL — the fold really ran) and NO key beginning `src/leak.ts::` exists — the link leaf is returned unrefined, with no children
+teeth: breaks-on "the fold exclusion is dropped — the link text is parsed as source and `src/leak.ts::lexical_declaration:0:leaked` becomes a first-class node key, i.e. retrieval hands out a key minted from a file name"
+gen: conformance
+
+### SCN-ADAPTER-1e-3 — a broken link and a directory link are INCLUDED as link-text leaves   (guard, the behaviour that changed)
+source: REQ-ADAPTER-1e
+Given `link-repo` where `src/gone.ts` is tracked at mode 120000 with link text `./nowhere.ts` (target absent) and `src/dirlink` at mode 120000 with link text `../sub` (a directory), and `sub/keep.ts` is tracked
+When `walk(link-repo)` runs
+Then both are present as leaves with `content` exactly `./nowhere.ts` and `../sub`, both with `children: []`, and `sub/keep.ts` appears once under its real path while `src/dirlink/keep.ts` does not appear at all
+teeth: breaks-on "the mode is discarded again and the read decides — the dangling target's ENOENT and the directory target's EISDIR are swallowed, so both tracked entries vanish from the `FileTree` (the pre-amendment behaviour, which was an ACCIDENT of the swallow, not a decision)"
 gen: conformance
 
 ---
@@ -671,18 +717,28 @@ gen: conformance
 
 ## Coverage ledger (S3 completeness facet)
 
-- **REQ coverage:** 55/55 REQ have ≥1 SCN.
-- **SCN count:** 56 (one extra under REQ-ADAPTER-7b: the supersede-ordering witness in both delivery orders,
-  distinct from the idempotence witness).
+- **REQ coverage:** 57/58 REQ have ≥1 SCN — every REQ except **REQ-MCP-1e**.   <!-- AMENDED 2026-08-02 -->
+  <!-- COUNTED, not restated: this ledger read "55/55" while the two files already held 57 REQs and 57 SCNs
+       before the amendment below — REQ-MCP-1d/1e and SCN-MCP-1d-1 landed with the governed-write-doors
+       amendment (8cd1cb9) and the ledger was not recounted, leaving REQ-MCP-1e with no SCN here. That gap is
+       NOT this seat's to close (it belongs to the tools/MCP surface, whose own ledger states its coverage is
+       carried by e2e/white-box teeth); it is named rather than absorbed into a fresh number. -->
+- **SCN count:** 60 — 56 as frozen, +1 `SCN-MCP-1d-1` (the write-doors amendment), +3 `SCN-ADAPTER-1e-1/2/3`
+  (the tracked-symlink amendment). Two extras sit under one REQ each: REQ-ADAPTER-7b (the supersede-ordering
+  witness in both delivery orders, distinct from the idempotence witness) and REQ-ADAPTER-1e (three
+  properties of one rule: the link text, the unrefined fold, the included broken/dir links).
 - **Guard coverage:** every guard/`If-then` REQ has a guard SCN with an interesting witness —
-  ADAPTER-1b/1c, 2b/2c, 3b/3c, 4c, 5b, 6c, 7c, 8c, 9b, 10b/10c, 11a/11c, 12b, WIRE-1b, CLI-1b/1c, 2b/2c,
+  ADAPTER-1b/1c, **1e**, 2b/2c, 3b/3c, 4c, 5b, 6c, 7c, 8c, 9b, 10b/10c, 11a/11c, 12b, WIRE-1b, CLI-1b/1c, 2b/2c,
   4b/4c, MCP-1b, 2a/2b/2c. No antecedent-failure vacuity: each guard SCN non-trivially enters the guarded
   state (a real dangling ref, a real un-indexed language adjacent to real edges, a real supersede in both
   orders, a real rebase that changes the sha, a tool that genuinely throws).
-- **Teeth (Gate 3):** 56/56 SCN name the exact mutant of their REQ they flip to BROKEN on; none vacuous. The
+- **Teeth (Gate 3):** 60/60 SCN name the exact mutant of their REQ they flip to BROKEN on (counted: 60 `teeth:`
+  lines for 60 SCN headings); none vacuous. The three ADAPTER-1e teeth are not hypothetical — the walker
+  mutants they name were APPLIED to the shipped source and killed by the suite. The
   durable-store teeth (ADAPTER-6b/6c/7a/7b/12a/12b) bite the flush→fresh-process→read-back seam a memory-only
   golden cannot see (per the ADAPTER-7 anti-rot). **100% teeth coverage.**
-- **gen histogram:** conformance 43 · exhaustive 7 (CLI-1a, CLI-2a/2b/2c, MCP-1a/1b/1c) · PBT 6
+- **gen histogram:** conformance 46 (counted; 43 frozen + SCN-MCP-1d-1 + the three ADAPTER-1e SCNs, whose
+  oracle is the `link-repo` fixture above) · exhaustive 7 (CLI-1a, CLI-2a/2b/2c, MCP-1a/1b/1c) · PBT 6
   (ADAPTER-7a/7b-idempotence/7b-supersede/7c + CLI-1b/1c malformed-argv fuzz arm) · residue 0.
 - **Method-tag → gen mapping (audit):** all 15 `reference-model` INVs → `conformance`; the `PBT` INV (ADAPTER-7)
   → `PBT`. The 3 `exhaustive` INVs → `exhaustive` for their finite-enumeration SCNs; CLI-1's malformed-`argv`
