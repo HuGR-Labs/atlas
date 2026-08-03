@@ -1,29 +1,33 @@
 // @atlas/adapter-io — test/git-history-frontier-szz.test.ts
 //
-// Regression coverage for the SZZ-composes-with-churn fix (`git-history.ts` frontier admission). Before
-// the fix, `(szz.get(f) ?? 0) >= 1` short-circuited `HOTSPOT_MIN_CHURN`: a file touched by exactly ONE
-// `fix:` commit entered the frontier on that single touch, collapsing the frontier toward "every file
-// ever fixed" in a conventional-commits repo — the file-count-proportional LLM spend REQ-GEN-3a/3b
-// forbid (`frontierBudget` IS the ranked-site count). The fix adds `HOTSPOT_MIN_SZZ = 2`, symmetric to
-// `HOTSPOT_MIN_CHURN`, so the SZZ leg requires the same evidence-of-recurrence.
+// Regression coverage for #181 (`git-history.ts` frontier admission). The original defect: the SZZ leg
+// admitted a file on `szz.get(f) >= 1` — a SINGLE `fix:`-subject commit touching a file, short-circuiting
+// `HOTSPOT_MIN_CHURN` entirely. In a conventional-commits repo that collapses the frontier toward "every
+// file ever touched by a `fix:` commit" — the file-count-proportional LLM spend REQ-GEN-3a/3b forbid
+// (`frontierBudget` IS the ranked-site count). The FIRST fix retuned the leg to `szz >= HOTSPOT_MIN_SZZ`
+// (symmetric to `HOTSPOT_MIN_CHURN`); that threshold was then PROVEN redundant (`szz(f) <= churn(f)` for
+// every file, by construction of the single-pass walk — a `szz >= T` leg can only ever be dead-weight for
+// `T >= HOTSPOT_MIN_CHURN` or a bypass for `T < HOTSPOT_MIN_CHURN`) and the leg was DELETED outright — see
+// the comment beside `HOTSPOT_MIN_CHURN` in `git-history.ts` for the proof. `frontier()` is now
+// `churn >= HOTSPOT_MIN_CHURN || coupling >= COUPLING_MIN_SUPPORT`, no SZZ term.
 //
 // This suite owns a SMALL, LOCAL fixture (not the shared `git-sbx`/`fix-repo` oracles other WPs consume —
 // those aren't shaped to isolate a single-fix-touch file from a two-fix-touch file at the frontier
-// boundary). Every commit here touches exactly ONE file, so `churn`/`szz` per file are exact and no
-// `coupling` leg (which needs a ≥2-file basket) can interfere.
+// boundary). Every commit here touches exactly ONE file, so `churn` per file is exact and the `coupling`
+// leg (which needs a ≥2-file basket) never interferes.
 //
 // Fixture topology (4 files, each with its own commit history):
-//   fileA.ts — ONE commit total, subject `fix: …`     → churn=1, szz=1  (the single-fix-touch file)
-//   fileB.ts — TWO commits, BOTH `fix: …`               → churn=2, szz=2  (the two-fix-touch file)
-//   fileC.ts — TWO commits, one `chore:` one `fix:`      → churn=2, szz=1  (churn-leg control, SZZ-agnostic)
-//   fileD.ts — ONE commit, `chore: …` (never a fix)      → churn=1, szz=0  (negative control)
+//   fileA.ts — ONE commit total, subject `fix: …`     → churn=1  (the single-fix-touch file)
+//   fileB.ts — TWO commits, BOTH `fix: …`               → churn=2  (the two-fix-touch file)
+//   fileC.ts — TWO commits, one `chore:` one `fix:`      → churn=2  (churn-leg control, fix-subject-agnostic)
+//   fileD.ts — ONE commit, `chore: …` (never a fix)      → churn=1  (negative control)
 //
-// Expected frontier — pinned as OUTPUT, not as a re-assertion of the constant (a constant test guards
+// Expected frontier — pinned as OUTPUT, not as a re-assertion of any constant (a constant test guards
 // nothing; the arithmetic that consumes it is what must be pinned):
-//   fileA.ts is ADMITTED pre-fix (szz=1 >= old bound 1) and EXCLUDED post-fix (szz=1 < HOTSPOT_MIN_SZZ=2,
-//   churn=1 < HOTSPOT_MIN_CHURN=2) — this is the assertion that must fail against the pre-fix source.
-//   fileB.ts and fileC.ts stay admitted throughout (both clear churn>=2 independent of the SZZ leg).
-//   fileD.ts is never admitted (churn=1, szz=0 — not a hotspot by any leg).
+//   fileA.ts is ADMITTED against the pre-#181-fixup source (`szz >= 1`, szz=1) and EXCLUDED after (no SZZ
+//   term at all now; churn=1 < HOTSPOT_MIN_CHURN=2) — this is the assertion that must fail there.
+//   fileB.ts and fileC.ts stay admitted throughout (both clear churn>=2, independent of any fix: subject).
+//   fileD.ts is never admitted (churn=1, no leg reaches it).
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { execFileSync } from 'node:child_process';
@@ -87,10 +91,28 @@ describe('git-history frontier — SZZ composes with the churn bar', () => {
 
   it('does not admit a solo fix: touch on its own (the exact bug this closes)', () => {
     // A fixture with ONLY the single-fix-touch file (no other file to satisfy churn/coupling), so the
-    // frontier is empty iff the SZZ leg genuinely requires HOTSPOT_MIN_SZZ, not just >=1.
+    // frontier is empty iff there is genuinely no SZZ term left, not just a raised threshold.
     sbx = makeSzzSbx([['solo.ts', 'export const solo = 1;\n', 'fix: solo bug fix']]);
     const { repoPath, rev } = sbx;
     const hist = createHistorySource(repoPath, rev);
     expect(hist.frontier(repoPath, rev)).toEqual([]);
+  });
+
+  // Pins the property the #181 fixup arithmetic proof rests on, directly: a file whose sole touching
+  // commit HAS a `fix:` subject is excluded on churn=1 alone — the fix-subject is not a distinct signal
+  // in `frontier()` at all anymore. `control.ts` (two `chore:` touches, never a `fix:`) proves the harness
+  // genuinely admits SOMETHING at churn>=2, so the exclusion above is not vacuous (an always-empty
+  // frontier would pass the prior test for the wrong reason).
+  it('a churn=1 file whose one commit IS a fix: is excluded — churn alone decides, no SZZ term', () => {
+    sbx = makeSzzSbx([
+      ['onlyFix.ts', 'export const onlyFix = 1;\n', 'fix: introduced with the patch'], // churn=1
+      ['control.ts', 'export const control = 1;\n', 'chore: add control'], // churn=1 so far
+      ['control.ts', 'export const control = 2;\n', 'chore: bump control'], // churn=2, never a fix:
+    ]);
+    const { repoPath, rev } = sbx;
+    const hist = createHistorySource(repoPath, rev);
+    const frontierPaths = hist.frontier(repoPath, rev).map((r) => r.qualifiedPath);
+    expect(frontierPaths).toEqual(['control.ts']);
+    expect(frontierPaths).not.toContain('onlyFix.ts');
   });
 });
