@@ -116,8 +116,8 @@ export type FastpathRoute = 'auto-accept' | 'full-ratify';
  * fail-OPEN: `String(undefined)`/`String(null)`/`String({})` are all non-empty strings, so `undefined`,
  * `null`, `0`, `false`, and `{}` all read as grounded. The `typeof` guard below is the fix: only an actual
  * non-empty string passes, matching the sealed `GroundApi['isGrounded']` (`@atlas/grounding` `drift.ts:73`,
- * type-imported only — see `test/ratify/fastpath.isGrounded.parity.test.ts` for the fitness function that
- * keeps the two predicates from diverging again).
+ * type-imported only — see `test/fastpath-isgrounded-parity.test.ts` for the fitness function that keeps
+ * the two predicates from diverging again).
  */
 export function isGrounded(grounding: Grounding): boolean {
   return (
