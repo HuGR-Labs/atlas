@@ -19,9 +19,11 @@
 >
 > **Refusal note (load-bearing for teeth scope, from `method-tags-grd.md` §Refuse-to-model):** grounding proves
 > the cited structure is **unchanged** (FRESH), NOT that the claim is **true** (`FRESH ≠ true`). The
-> **non-obvious** door of GROUND-7 has no mechanical oracle. In the goldens below, **truth** and **obviousness**
-> are therefore **labelled inputs on the fixture**, never computed outcomes — only the door **wiring** and the
-> **structural** verdict are asserted.
+> **non-obvious** predicate of GROUND-7 has no mechanical oracle. In the goldens below, **truth**, **obviousness**
+> and **harmful-to-store** are therefore **labelled inputs on the fixture**, never computed outcomes — only the
+> admission **wiring** and the **structural** verdict are asserted. Since [ADR-0012](../adr/ADR-0012-obviousness-is-scored-never-gated.md)
+> the obviousness label is a **stored score**, not a veto: it is asserted to leave `admit` unchanged, which is a
+> stronger statement about the wiring than the retired "obvious ⇒ blocked" was.
 
 Concrete fixture universe reused across the block (structural nodes hashed via the `@orchestra/kernel` encoder seam):
 
@@ -244,36 +246,38 @@ gen: conformance   # `grounding/ref/admit.ts` truth-door (persistence-side enfor
 
 ---
 
-## REQ-GROUND-7 — two-door admission
+## REQ-GROUND-7 — admission (truth ∧ ¬harmful); obviousness scored
 
-### REQ-GROUND-7a — admit iff both doors pass   (happy)
+### REQ-GROUND-7a — admit iff true and not harmful to store   (happy)
+amendment: **AMENDED + RE-RATIFIED 2026-08-02** (owner) — [ADR-0012](../adr/ADR-0012-obviousness-is-scored-never-gated.md): obviousness is SCORED, never gated; the rejection line moves to harm (secret / PII).
 
-### SCN-GROUND-7a-1 — both doors pass ⇒ admitted   (happy)
+### SCN-GROUND-7a-1 — truth passes ∧ not harmful ⇒ admitted   (happy)
 source: REQ-GROUND-7a
-Given two facts: `F_both` re-checks `FRESH` ∧ is **labelled** actionable ∧ non-obvious (both doors pass); `F_truth` re-checks `FRESH` but is **labelled** obvious (truth door passes, usefulness door fails)
+Given two facts: `F_both` re-checks `FRESH` ∧ is **labelled** not-harmful-to-store (both doors pass); `F_harm` re-checks `FRESH` but is **labelled** harmful to store (a secret — the truth door passes, the harm door fails)
 When `admit()` runs on each
-Then `F_both` is **admitted** and `F_truth` is **blocked** — `admit = truthDoor ∧ usefulDoor`
-teeth: breaks-on "`admit` is wired as `truthDoor ∨ usefulDoor` — the truth-only fact `F_truth` (which must be blocked) is then wrongly **admitted**"
-gen: conformance   # `grounding/ref/admit.ts` two-door conjunction (non-obvious is a **labelled input**, refused-to-model)
+Then `F_both` is **admitted** and `F_harm` is **blocked** — `admit = truthDoor ∧ ¬harmfulToStore`
+teeth: breaks-on "`admit` is wired as `truthDoor ∨ ¬harmfulToStore` — the secret-bearing fact `F_harm` (which must be blocked) is then wrongly **admitted**"
+gen: conformance   # `grounding/ref/admit.ts` admission conjunction (obviousness is NOT an input — ADR-0012)
 
-### REQ-GROUND-7b — reject the true-but-obvious   (guard)
+### REQ-GROUND-7b — admit the true-but-obvious, with a low score   (guard)
+amendment: **AMENDED + RE-RATIFIED 2026-08-02** (owner) — [ADR-0012](../adr/ADR-0012-obviousness-is-scored-never-gated.md): obviousness is SCORED, never gated; the rejection line moves to harm (secret / PII).
 
-### SCN-GROUND-7b-1 — a true-but-obvious fact is rejected   (guard)
+### SCN-GROUND-7b-1 — a true-but-obvious fact is admitted with a low score   (guard)
 source: REQ-GROUND-7b
-Given a fact that passes the truth door (grounded ∧ FRESH ⇒ `HOLDS`) but is **labelled** obvious (usefulness door fails)
+Given a fact that passes the truth door (grounded ∧ FRESH ⇒ `HOLDS`), is **labelled** obvious, and is not harmful to store
 When `admit(fact)` runs
-Then the fact is **rejected** — blocked at the usefulness door despite being true
-teeth: breaks-on "the usefulness door is dropped (`admit = truthDoor` only) — a true-but-obvious fact is admitted as noise"
+Then the fact is **admitted** and carries a **low obviousness score** — obviousness is scored, never a veto (ADR-0012); the ranking decision is taken a-posteriori at retrieval
+teeth: breaks-on "a **resurrected obviousness veto** (`admit = truthDoor ∧ nonObvious`) — this true-but-obvious fact is rejected and its evidence is destroyed, which is exactly the evidence needed to audit the filter"
 gen: conformance
 
 ### REQ-GROUND-7c — failing either door blocks admission   (guard)
 
-### SCN-GROUND-7c-1 — failing either door blocks   (guard)
+### SCN-GROUND-7c-1 — failing either door blocks; obviousness blocks nothing   (guard)
 source: REQ-GROUND-7c
-Given fact `A` failing only the **truth** door (ungrounded, but labelled useful) and fact `B` failing only the **usefulness** door (grounded ∧ FRESH, but labelled obvious)
+Given fact `A` failing only the **truth** door (ungrounded, but not harmful), fact `B` failing only the **harm** door (grounded ∧ FRESH, but a secret), and fact `B_obv` failing **neither** door while labelled obvious
 When `admit` runs on each
-Then both are **blocked** — failing either door alone is sufficient to block admission
-teeth: breaks-on "`admit` ignores a single failed door — fact `A` (failed truth door) is admitted"
+Then `A` and `B` are **blocked** — failing either door alone is sufficient to block admission — and `B_obv` is **admitted**, because obviousness is not a door
+teeth: breaks-on "`admit` ignores a single failed door — fact `A` (failed truth door) is admitted — or treats the obvious axis as a door, blocking `B_obv`"
 gen: conformance
 
 ---
@@ -661,30 +665,30 @@ teeth: breaks-on "`admit` returns true when `isGrounded(fact.grounding)` is fals
 held_out: true
 gen: conformance   # independent-data leg of SCN-GROUND-6-1 (`admit.ts` truth-door)
 
-### SCN-GROUND-7a-2 — both doors pass ⇒ admitted (held-out)   (happy)
+### SCN-GROUND-7a-2 — truth passes ∧ not harmful ⇒ admitted (held-out)   (happy)
 source: REQ-GROUND-7a
-Given two facts: `G_both` re-checks `FRESH` ∧ is **labelled** actionable ∧ non-obvious (both doors pass); `G_truth` re-checks `FRESH` but is **labelled** obvious (truth door passes, usefulness door fails)
+Given two facts: `G_both` re-checks `FRESH` ∧ is **labelled** not-harmful-to-store (both doors pass); `G_harm` re-checks `FRESH` but is **labelled** harmful to store (PII — the truth door passes, the harm door fails)
 When `admit()` runs on each
-Then `G_both` is **admitted** and `G_truth` is **blocked** — `admit = truthDoor ∧ usefulDoor`
-teeth: breaks-on "`admit` is wired as `truthDoor ∨ usefulDoor` — the truth-only fact `G_truth` (which must be blocked) is then wrongly **admitted**"
+Then `G_both` is **admitted** and `G_harm` is **blocked** — `admit = truthDoor ∧ ¬harmfulToStore`
+teeth: breaks-on "`admit` is wired as `truthDoor ∨ ¬harmfulToStore` — the PII-bearing fact `G_harm` (which must be blocked) is then wrongly **admitted**"
 held_out: true
-gen: conformance   # independent-data leg of SCN-GROUND-7a-1 (two-door conjunction; non-obvious is a labelled input)
+gen: conformance   # independent-data leg of SCN-GROUND-7a-1 (admission conjunction; obviousness is not an input)
 
-### SCN-GROUND-7b-2 — a true-but-obvious fact is rejected (held-out)   (guard)
+### SCN-GROUND-7b-2 — a true-but-obvious fact is admitted with a low score (held-out)   (guard)
 source: REQ-GROUND-7b
-Given a fact that passes the truth door (grounded ∧ FRESH ⇒ `HOLDS`) but is **labelled** obvious (usefulness door fails)
+Given a fact that passes the truth door (grounded ∧ FRESH ⇒ `HOLDS`), is **labelled** obvious, and is not harmful to store
 When `admit(fact)` runs
-Then the fact is **rejected** — blocked at the usefulness door despite being true
-teeth: breaks-on "the usefulness door is dropped (`admit = truthDoor` only) — this true-but-obvious fact is admitted as noise"
+Then the fact is **admitted** carrying a **low obviousness score** — obviousness is scored, never a veto (ADR-0012)
+teeth: breaks-on "a resurrected obviousness veto (`admit = truthDoor ∧ nonObvious`) — this true-but-obvious fact is rejected"
 held_out: true
 gen: conformance   # independent-data leg of SCN-GROUND-7b-1
 
 ### SCN-GROUND-7c-2 — failing either door blocks (held-out)   (guard)
 source: REQ-GROUND-7c
-Given fact `C` failing only the **truth** door (ungrounded via `g_partial2`, but labelled useful) and fact `D` failing only the **usefulness** door (grounded ∧ FRESH, but labelled obvious)
+Given fact `C` failing only the **truth** door (ungrounded via `g_partial2`, but not harmful), fact `D` failing only the **harm** door (grounded ∧ FRESH, but PII-bearing), and fact `D_obv` failing neither while labelled obvious
 When `admit` runs on each
-Then both are **blocked** — failing either door alone is sufficient to block admission
-teeth: breaks-on "`admit` ignores a single failed door — fact `C` (failed truth door) is admitted"
+Then `C` and `D` are **blocked** — failing either door alone is sufficient — and `D_obv` is **admitted**, because obviousness is not a door
+teeth: breaks-on "`admit` ignores a single failed door — fact `C` (failed truth door) is admitted — or treats the obvious axis as a door, blocking `D_obv`"
 held_out: true
 gen: conformance   # independent-data leg of SCN-GROUND-7c-1
 

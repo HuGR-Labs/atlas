@@ -25,7 +25,7 @@
 //    (widened signature `writeDecision(candidate, store, cfg)`): the `StoreProjection` is held
 //    caller-side / session-internal (cf. index/src/fold.ts `createDriftFold`, and the `upsert(store, req)`
 //    idiom), never an invented frozen `StoreApi` field — so no OWNER-DEFINE composed store is invented.
-//  • REJECT (the 2-door admission bar, KNOW-2) is emit.ts's facet — the upsert route never
+//  • REJECT (the admission bar — grounding by KNOW-2, harm by GROUND-7) is emit.ts's facet — the upsert route never
 //    returns REJECT.
 
 import { asNodeKey, canonicalForm, defaultEncoder, id } from '@atlas/kernel';
@@ -44,7 +44,13 @@ import type { StoreProjection } from './upsert.js';
  *   - `CREATE`    — `nodeKey` miss (new `(anchor, slot[, check])`), OR a DIFFERENT predicate `check`.
  *   - `UPDATE`    — `nodeKey` hit, advisory family; claim SET-UNION in place (git keeps prior, KNOW-4/12).
  *   - `SUPERSEDE` — `nodeKey` hit, predicate, SAME `check` re-evidenced; mint new + `supersededBy` pointer.
- *   - `REJECT`    — fails the 2-door bar (ungrounded, or obvious/useless) — KNOW-2.
+ *   - `REJECT`    — fails the admission bar: **ungrounded** (KNOW-2), or **harmful to store** (a secret /
+ *                   PII — GROUND-7). MISATTRIBUTION CORRECTED (ADR-0012): this line used to read "ungrounded,
+ *                   or obvious/useless — KNOW-2". INV-KNOW-2's up-property is grounding ONLY ("a fact with no
+ *                   resolvable grounding — 0 entries, or any empty `subtreeHash` — is rejected"); it carries no
+ *                   usefulness clause at all, so the comment was handing KNOW-2 an authority it never had.
+ *                   KNOW-2 is NOT amended — it is a grounding invariant and always was. Separately: nothing is
+ *                   rejected for being obvious; obviousness is a stored score (ADR-0012).
  */
 export type WriteDecision = 'DEDUP' | 'CREATE' | 'UPDATE' | 'SUPERSEDE' | 'REJECT';
 

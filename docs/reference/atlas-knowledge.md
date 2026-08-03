@@ -78,7 +78,7 @@ Each is falsifiable and maps to a spec axiom. `MUST` / `MUST NOT` are normative.
 | **KNOW-14** Provenance | Every claim has a receipt. | → see spec **A-9**; enforced in atlas-knowledge (untrusted source ⇒ advisory, excluded from the gate). | A-9 |
 | **KNOW-15** Deterministic write-decision | Create-vs-update is computed, never judged. | Whether a candidate **DEDUPs / UPDATEs / CREATEs / SUPERSEDEs** MUST be a pure function of three hashes (see *The write decision*): the candidate's **content hash**; the **`nodeKey`** — `hash(primaryAnchorId ‖ predicateSlot)` for advisory, `hash(primaryAnchorId ‖ predicateSlot ‖ normalize(check))` for predicate (so a distinct `check` is a distinct node, never a sibling-supersede); and the anchor's **`subtreeHash`**. `primaryAnchorId` MUST be **computed mechanically** as the tightest structural unit containing every symbol the claim references — **never an LLM-chosen anchor** (an LLM-picked anchor is the one landfill leak: anchor-granularity drift + slot-overlap fork `nodeKey` across runs for the same real fact). It is move-aware (rename/move never orphans into a spurious CREATE); secondary citations feed drift only, never identity. A `claimNorm` collision at CREATE MUST be **reported** as a deterministic signal (exact NFC+trim, no fuzzy τ) but MUST NOT force a write-time MERGE — write-time dedup is `contentHash`/`nodeKey` only, and structural near-duplication is the **derived-on-read `subsumes` relation** (see `docs/design/dedup-identity.md`). `predicateSlot` MUST come from the closed vocabulary. No step may consult an LLM. | A-12 |
 | **KNOW-16** Predicate check = deterministic index-query | "HOLDS/BROKEN" needs a real, pure machine — not code. | A `PredicateNode.check` MUST be a **deterministic query over the Atlas index** (structural / dependency axes) or a pinned declarative assertion, evaluated mechanically to `HOLDS/BROKEN/NA` — **no arbitrary code execution, no sandbox**. A check needing runtime/behavioral execution is **out of scope for v0** and MUST stay `advisory`. The evaluator MUST be pure (same index state ⇒ same verdict, no clock/IO) and its verdict feeds `atlas-reconcile`. | §3.2 |
-| **KNOW-17** Usefulness is a-posteriori | Kept because *consumed*, not because *proposed*. | A served fact MUST accrue **`hits`** — a logged event each time it governs a decision (a seat or cold-reviewer cites its node-id as "fact applied" in the event log). Door-2 (non-obvious ∧ actionable) MUST calibrate its admission threshold against **observed downstream hits**, never the proposer's self-assessment. A served fact that **no wave ever consults** MUST **decay** out of the served/pack set (archived to CAS, never deleted — KNOW-12) and MAY re-enter on a later hit. Genesis starts loose-but-thin; born-from-work (KNOW-13) prunes by real usage. | A-10, A-16 |
+| **KNOW-17** Usefulness is a-posteriori | Kept because *consumed*, not because *proposed*. | A served fact MUST accrue **`hits`** — a logged event each time it governs a decision (a seat or cold-reviewer cites its node-id as "fact applied" in the event log). The usefulness judgment (non-obvious ∧ actionable) MUST calibrate its **ranking** threshold against **observed downstream hits**, never the proposer's self-assessment; it is never an admission veto (ADR-0012). Hits-decay is the **warm update** and composes with the a-priori obviousness score, which is the **cold-start prior** — neither replaces the other. A served fact that **no wave ever consults** MUST **decay** out of the served/pack set (archived to CAS, never deleted — KNOW-12) and MAY re-enter on a later hit. Genesis starts loose-but-thin; born-from-work (KNOW-13) prunes by real usage. | A-10, A-16 |
 | **KNOW-18** Confidence fast-path | Human review is spent on risk, not rubber-stamp. | A candidate that is **grounded ∧ low-risk ∧ `T2` advisory** MAY **auto-accept** (fast-path, no human), backstopped by the KNOW-17 hits-decay — anything the fast-path over-admits decays out. `T0`, **contested** (reviewer veto / conflicting node), and **all predicate** candidates MUST route to full human ratification (KNOW-8; billy for `T0`). | A-6, A-7 |
 
 ## Surface / API
@@ -155,7 +155,7 @@ relation** (broader ⊃ narrower coverage over the projection), never a merge. T
 | `nodeKey` **hit**, family = `advisory`, new claim | same `(anchor, slot)` | **UPDATE** — claim **set-union** in place (git keeps prior — KNOW-4/12) |
 | `nodeKey` **hit**, family = `predicate`, same `check`, grounding/claim moved | the *same* check, re-evidenced | **SUPERSEDE** — mint new, `supersededBy` pointer, old kept in CAS |
 | a **different** predicate `check` on the same `(anchor, slot)` | different `nodeKey` ⇒ **miss** | **CREATE** — coexists; a sibling check is **never** retired |
-| any of the above, but fails the 2-door bar | ungrounded **or** obvious/useless | **REJECT** (KNOW-2) |
+| any of the above, but fails the admission bar | **ungrounded** (KNOW-2), or **harmful to store** (secret / PII) — obviousness is scored, never a reason to reject (ADR-0012) | **REJECT** |
 
 - **The sibling-retire bug this fixes:** because `normalize(check)` is *in* the predicate key, two distinct
   checks on one `(anchor, slot)` are two nodes (both CREATE) — a new check can no longer SUPERSEDE a
@@ -168,13 +168,16 @@ relation** (broader ⊃ narrower coverage over the projection), never a merge. T
   The enumerated table (below) + the typed template (KNOW-10) make the slot decidable.
 - Legs are orthogonal: leg 3 (drift) decides `FRESH/DRIFTED`, **not** create/update — a drifted fact is
   re-checked (KNOW-5), not re-created.
-- **The 2-door bar (now partly mechanical).** Door-1 = grounded (KNOW-2). Door-2 = non-obvious ∧
-  actionable, and the LLM no longer self-certifies it: **obviousness** is signaled by a deterministic
-  `claimNorm` collision **report** against an existing `(anchor,*)` node (a colliding claim is, by
-  construction, not novel) — a **signal, not a write-time merge** (`docs/design/dedup-identity.md`); the
-  colliding candidate still mints its own node and structural coverage is the derived-on-read `subsumes`
-  relation. **Usefulness is judged a-posteriori by `hits`** (KNOW-17) — a served fact no wave consults decays
-  out; the threshold calibrates on observed hits, never the proposer's score.
+- **The admission bar (now partly mechanical).** Door-1 = grounded (KNOW-2). Door-2 = **harmful to store**
+  (secret / PII — the one class where storing IS the harm). **Obviousness is no longer a door**
+  ([ADR-0012](../adr/ADR-0012-obviousness-is-scored-never-gated.md)): it is a stored, auditable **score**, and
+  the LLM never self-certifies it — **obviousness** is signaled by a deterministic `claimNorm` collision
+  **report** against an existing `(anchor,*)` node (a colliding claim is, by construction, not novel) — a
+  **signal, not a write-time merge** (`docs/design/dedup-identity.md`); the colliding candidate still mints its
+  own node and structural coverage is the derived-on-read `subsumes` relation. **Usefulness is judged
+  a-posteriori by `hits`** (KNOW-17) — a served fact no wave consults decays out; the threshold calibrates on
+  observed hits, never the proposer's score. The two signals **compose**: the a-priori score is the cold-start
+  prior (on a cold graph every fact has 0 hits), hits-decay is the warm update.
 
 ### The closed `predicateSlot` vocabulary (normative)
 

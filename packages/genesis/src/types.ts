@@ -69,7 +69,7 @@ export interface Candidate {
 }
 
 /**
- * A grounded ABSTENTION (GEN-12). When S2 `extract` finds no non-obvious grounded fact at a site, it
+ * A grounded ABSTENTION (GEN-12). When S2 `extract` finds no grounded fact at a site, it
  * emits a `WhyNot` — abstention is a VALID outcome, never a manufactured fact. GENESIS-HOME (frozen
  * nowhere below).
  *
@@ -238,7 +238,7 @@ export interface BudgetApi {
  * The S2 output. Transcribed EXACTLY from atlas-genesis:188 —
  *   `extract(...): { facts: Fact[], abstained: WhyNot[] }`.
  * `facts` = the grounded candidates that cleared the 2-door bar (GEN-4); `abstained` = the grounded
- * why-nots where no non-obvious grounded fact was found (GEN-12). Abstention is first-class — a site
+ * why-nots where no grounded fact was found (GEN-12). Abstention is first-class — a site
  * that yields no fact yields a `WhyNot`, never a forced fact.
  */
 export interface ExtractResult {
@@ -250,7 +250,7 @@ export interface ExtractApi {
   /** S2 propose→verify (GEN-2, the ONLY LLM entry). Consumes the RANKED `Candidate[]`, spends ≤1 bounded
    *  call per site highest-PPR-first under `budget`, and HALTS at the budget ceiling or the marginal-value
    *  stop. NEVER calls an un-ranked site (GEN-2). GEN-12: the model only proposes; admission is mechanical
-   *  (grounding re-derives ∧ the non-obviousness door; a predicate additionally passes the teeth gate).
+   *  (grounding re-derives; obviousness is scored, never a door — ADR-0012; a predicate additionally passes the teeth gate).
    *  Returns grounded facts + grounded abstentions.
    *
    *  [FLAG — `budget` carrier] the surface `extract(cands, budget)` (atlas-genesis:188) leaves `budget`

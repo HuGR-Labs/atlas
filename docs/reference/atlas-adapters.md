@@ -132,7 +132,7 @@ WiredHandler = ReturnType<createHandler>                       // the ONE 5-leg 
 - **ADAPT-LLM-1 The one model call, bounded, non-authoritative.** `SiteProposer.propose`
   (`→ genesis/extract.ts`) MUST be the **only** place a model is invoked in the whole system; it MUST make one
   bounded call per site, honor the cost/timeout budget, and return a **candidate** proposal that is never
-  auto-trusted (the 2-door admission + ratification still gate it). The core stays `$0`-LLM (GEN S0/S1
+  auto-trusted (the admission bar + ratification still gate it). The core stays `$0`-LLM (GEN S0/S1
   determinism is unaffected — the LLM enters at S2 extraction only).
 
 ### Entrypoints (CLI + MCP — one wired handler, two transports)

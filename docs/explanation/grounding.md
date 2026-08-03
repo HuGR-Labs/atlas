@@ -64,14 +64,18 @@ identical queries, identical results), `$0` retrieval (no embedding model), an i
 stale, and answers you can audit. For a knowledge layer whose whole job is to be trustworthy about code,
 that is the right side of the trade.
 
-There is also a second admission cost. Truth alone isn't enough to enter: a fact must be **actionable
-and non-obvious** as well as grounded-fresh — the two-door bar (GROUND-7). A true-but-obvious fact is
-noise, and noise erodes trust in the layer as surely as a lie does. Rejecting obvious facts means the
-Atlas holds less; that is deliberate.
+There is also a second admission cost, and it is narrower than it used to be. Truth alone isn't enough to
+enter: a fact must also not be **harmful to store** — a secret or PII, the one class where storing IS the
+harm (GROUND-7). Being merely **obvious** is *not* a reason to refuse: obviousness is computed and kept as an
+auditable **score**, and the ranking decision is taken later, at retrieval
+([ADR-0012](../adr/ADR-0012-obviousness-is-scored-never-gated.md)). The reason is that a rejected candidate
+leaves no record — a gate destroys exactly the evidence needed to audit the gate — while a stored score can be
+re-thresholded for free. A true-but-obvious fact still costs retrieval precision; it is now paid for at
+ranking, where it is recoverable, rather than at admission, where a wrongly-refused fact is not.
 
 ## Where it fits
 
-- The anchor, the truth-gate, and the two-door admission bar: [`atlas-grounding`](../reference/atlas-grounding.md).
+- The anchor, the truth-gate, and the admission bar: [`atlas-grounding`](../reference/atlas-grounding.md).
 - The Merkle tree, path resolution, and the three retrieval modes: [`atlas-index`](../reference/atlas-index.md).
 - The CAS, the BLAKE3 encoder seam, and the append-only event log everything folds from:
   [`atlas-kernel`](../reference/atlas-kernel.md).

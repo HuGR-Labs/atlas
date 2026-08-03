@@ -4,12 +4,13 @@
 // LLM ONLY proposes typed candidates; admission is mechanical. A PREDICATE candidate is admitted only if its
 // synthesized `check` (a) compiles + returns `HOLDS` on current code AND (b) flips to `BROKEN` on ≥1
 // mechanically-mutated counterfactual (the TEETH / anti-vacuity — a check no mutant can break → DROP). An
-// ADVISORY candidate passes the 2-door bar (grounding ∧ non-obviousness); abstention is a valid grounded
-// why-not. SOUND ORACLE FIRST for type-expressible slots. Co-locates the frozen `PredicateApi` + `Check`
-// re-export; the check-engine / 2-door semantics are consumed as injected ports, never defined here.
+// ADVISORY candidate passes the TRUTH door (grounding) alone and is SCORED for obviousness — never rejected
+// for it (ADR-0012, owner-ratified 2026-08-02); abstention is a valid grounded why-not. SOUND ORACLE FIRST
+// for type-expressible slots. Co-locates the frozen `PredicateApi` + `Check` re-export; the check-engine /
+// admission semantics are consumed as injected ports, never defined here.
 
 import type { NodeKey, Status, StructRef, Tier } from '@atlas/contracts';
-import type { AdvisoryNode, Check, GroundedFact, PredicateNode, PredicateSlot } from '@atlas/knowledge';
+import type { AdvisoryNode, Check, GroundedFact, ObviousnessScore, PredicateNode, PredicateSlot } from '@atlas/knowledge';
 import type { IndexNode } from '@atlas/index';
 import type { Candidate, WhyNot } from './types.js';
 
@@ -88,12 +89,35 @@ export type Proposal = PredicateProposal | AdvisoryProposal | Abstention;
 // ---- the injected mechanical seams (defined elsewhere; consumed here) ----------------------------------
 
 /**
- * The 2-door bar (CAMPAIGN-4). An advisory is admitted only through BOTH doors: `grounded` (truth — the
- * citation re-derives) ∧ `nonObvious` (usefulness — non-obvious AND actionable, not a restated signature).
+ * The admission bar (CAMPAIGN-4, amended by ADR-0012).
+ *
+ * `grounded` (truth — the citation re-derives) is the door: it still REJECTS.
+ *
+ * `nonObvious` (usefulness — non-obvious AND actionable, not a restated signature) KEEPS ITS PREDICATE and
+ * LOSES ITS AUTHORITY TO REJECT. It is the part of this seam that knows how to judge obviousness, so it is
+ * the part that computes the stored score; it is no longer consulted for the admit/reject decision. An
+ * earlier lead note said `nonObvious` dies — that was wrong, and ADR-0012 corrects it.
+ *
+ * The name is kept deliberately. The predicate's polarity is `true ⇒ non-obvious`, and renaming it while
+ * inverting nothing would silently re-point every existing implementation (`() => true`, `() => false`) in
+ * the tests and the e2e fixtures.
  */
 export interface TwoDoorBar {
   grounded(grounding: FactGrounding, indexState: IndexNode): boolean;
   nonObvious(claimNorm: string): boolean;
+}
+
+/**
+ * Compute the STORED obviousness score from the HARNESS's predicate (ADR-0012, GEN-16).
+ *
+ * The input is `claimNorm` — the claim text derived from the source bytes — routed through the injected
+ * harness predicate. It is NEVER read off a field the proposer wrote: `Proposal` carries no score field to
+ * read, `ObviousnessScore.by` admits only `'harness-predicate'`, and ADR-0011 keeps `Candidate.signals` out
+ * of the prompt so the model cannot self-score even if asked to. Module-private on purpose — every emitted
+ * node gets its score through `buildAdvisory` / `buildPredicate`, so there is no second way to mint one.
+ */
+function scoreObviousness(doors: TwoDoorBar, claimNorm: string): ObviousnessScore {
+  return { rank: doors.nonObvious(claimNorm) ? 'non-obvious' : 'obvious', by: 'harness-predicate' };
 }
 
 /**
@@ -133,7 +157,10 @@ const DROP_NOT_HOLDS = 'synthesized check does not compile ∧ HOLDS on current 
 const DROP_VACUOUS = 'synthesized check survives every mutant — vacuous / toothless (GEN-12j)';
 const DROP_TYPE_BROKEN = 'sound type-checker / LSP verdict is not HOLDS on the type-expressible slot (GEN-12k)';
 const DROP_UNGROUNDED = 'advisory fails the truth door — the citation does not ground (GEN-12e)';
-const DROP_OBVIOUS = 'advisory fails the non-obviousness door — restates an obvious/public fact (GEN-12e)';
+// There is deliberately NO obviousness drop reason. ADR-0012: nothing is ever rejected for being obvious —
+// an obvious claim is emitted carrying `obviousness.rank === 'obvious'` and loses at ranking, where the
+// decision is recoverable. The retired `DROP_OBVIOUS` is not commented out anywhere; it is gone, so a
+// resurrected gate cannot reach for a ready-made reason string.
 
 // ---- the harness ---------------------------------------------------------------------------------------
 
@@ -158,11 +185,14 @@ export function admit(p: Proposal, deps: AdmitDeps): Admission {
   }
 }
 
-/** GEN-12e — an advisory passes ONLY through both doors: grounding (truth) ∧ non-obviousness (usefulness). */
+/**
+ * GEN-12e (as amended by ADR-0012) — an advisory passes the TRUTH door alone. Obviousness is computed and
+ * attached, never consulted: the score is taken AFTER the only rejecting branch, so no reordering of this
+ * function can turn it back into a gate without deleting the `return` below.
+ */
 function admitAdvisory(p: AdvisoryProposal, deps: AdmitDeps): Admission {
   if (!deps.doors.grounded(p.grounding, deps.indexState)) return { outcome: 'dropped', reason: DROP_UNGROUNDED };
-  if (!deps.doors.nonObvious(p.claimNorm)) return { outcome: 'dropped', reason: DROP_OBVIOUS };
-  return { outcome: 'admitted', fact: buildAdvisory(p) };
+  return { outcome: 'admitted', fact: buildAdvisory(p, scoreObviousness(deps.doors, p.claimNorm)) };
 }
 
 /**
@@ -173,7 +203,7 @@ function admitPredicate(p: PredicateProposal, deps: AdmitDeps): Admission {
   // GEN-12k — a type-expressible slot uses the SOUND `$0` type-checker / LSP, not a synthesized query.
   if (deps.typeOracle.expressible(p.slot)) {
     if (deps.typeOracle.diagnose(p.site, p.slot) !== 'HOLDS') return { outcome: 'dropped', reason: DROP_TYPE_BROKEN };
-    return { outcome: 'admitted', fact: buildPredicate(p, soundCheck(p.slot)), label: LIKELY_INVARIANT };
+    return { outcome: 'admitted', fact: buildPredicate(p, soundCheck(p.slot), scoreObviousness(deps.doors, p.claimNorm)), label: LIKELY_INVARIANT };
   }
 
   // synthesized-check path (CodeQL/Semgrep, KNOW-16).
@@ -193,7 +223,7 @@ function admitPredicate(p: PredicateProposal, deps: AdmitDeps): Admission {
   // GEN-12j TEETH — admit ONLY if the check flips to BROKEN on ≥1 mutant; a survivor is vacuous → drop.
   if (!deps.predicate.teeth(check, p.site.site)) return { outcome: 'dropped', reason: DROP_VACUOUS };
 
-  return { outcome: 'admitted', fact: buildPredicate(p, check), label: LIKELY_INVARIANT };
+  return { outcome: 'admitted', fact: buildPredicate(p, check, scoreObviousness(deps.doors, p.claimNorm)), label: LIKELY_INVARIANT };
 }
 
 /** The SOUND declarative check for a type-expressible slot (GEN-12k) — the `assertion` leg, not a query. */
@@ -201,10 +231,16 @@ function soundCheck(slot: PredicateSlot): Check {
   return { kind: 'assertion', expr: `type-checker/LSP diagnostics: ${slot}` };
 }
 
-/** Construct the emitted predicate node. The chain-of-thought is structurally absent (GEN-12f). */
-function buildPredicate(p: PredicateProposal, check: Check): PredicateNode {
+/**
+ * Construct the emitted predicate node. The chain-of-thought is structurally absent (GEN-12f), and the
+ * obviousness score is REQUIRED here rather than optional (ADR-0012 TOTALITY: an emitted fact without a
+ * score is a defect, not a default — the field is optional on the stored shape only so that pre-ADR data
+ * stays readable, exactly as with `builtAt`/`sameAs`).
+ */
+function buildPredicate(p: PredicateProposal, check: Check, obviousness: ObviousnessScore): PredicateNode {
   return {
     kind: 'predicate',
+    obviousness,
     id: p.nodeKey,
     tier: p.tier,
     check,
@@ -216,10 +252,14 @@ function buildPredicate(p: PredicateProposal, check: Check): PredicateNode {
   };
 }
 
-/** Construct the emitted advisory node. The chain-of-thought is structurally absent (GEN-12f). */
-function buildAdvisory(p: AdvisoryProposal): AdvisoryNode {
+/**
+ * Construct the emitted advisory node. The chain-of-thought is structurally absent (GEN-12f); the
+ * obviousness score is REQUIRED (ADR-0012 TOTALITY — see `buildPredicate`).
+ */
+function buildAdvisory(p: AdvisoryProposal, obviousness: ObviousnessScore): AdvisoryNode {
   return {
     kind: 'advisory',
+    obviousness,
     id: p.nodeKey,
     tier: p.tier,
     claimNorm: p.claimNorm,

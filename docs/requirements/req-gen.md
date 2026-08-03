@@ -60,15 +60,17 @@ source: INV-GEN-4 @ reference/atlas-genesis.md#gen-4
 Genesis shall ground every seeded fact by subtreeHash.
 normative-clause: "Every seeded fact MUST be grounded (`subtreeHash`)"
 
-### REQ-GEN-4b — pass the 2-door bar
+### REQ-GEN-4b — pass the truth door and carry an obviousness score
 source: INV-GEN-4 @ reference/atlas-genesis.md#gen-4
-Genesis shall make every seeded fact pass the 2-door bar at atlas-emit.
-normative-clause: "pass the 2-door bar at `atlas-emit`"
+amendment: **AMENDED + RE-RATIFIED 2026-08-02** (owner) — [ADR-0012](../adr/ADR-0012-obviousness-is-scored-never-gated.md): obviousness is SCORED, never gated; the rejection line moves to harm (secret / PII).
+Genesis shall make every seeded fact pass the truth door at atlas-emit, and shall attach a mechanically-computed obviousness score to every emitted seed.
+normative-clause: "pass the **truth door** at `atlas-emit`; every emitted seed MUST carry a mechanically-computed **obviousness score** (TOTALITY — a scoreless emitted fact is a defect, not a default; ADR-0012)"
 
-### REQ-GEN-4c — reject ungrounded or obvious seed
+### REQ-GEN-4c — reject the ungrounded; never reject the obvious
 source: INV-GEN-4 @ reference/atlas-genesis.md#gen-4
-If a seed is ungrounded or obvious, then genesis shall reject it.
-normative-clause: "an ungrounded/obvious seed is rejected (KNOW-2)"
+amendment: **AMENDED + RE-RATIFIED 2026-08-02** (owner) — [ADR-0012](../adr/ADR-0012-obviousness-is-scored-never-gated.md): obviousness is SCORED, never gated; the rejection line moves to harm (secret / PII).
+If a seed is ungrounded, then genesis shall reject it; if a seed is obvious, genesis shall emit it carrying a low obviousness score, never reject it.
+normative-clause: "an **ungrounded** seed is rejected (KNOW-2); an **obvious** seed MUST NOT be rejected — it is emitted with a low obviousness score, and the ranking decision is taken a-posteriori at retrieval (ADR-0012)"
 
 ### REQ-GEN-4d — no self-declared truth
 source: INV-GEN-4 @ reference/atlas-genesis.md#gen-4
@@ -205,10 +207,10 @@ source: INV-GEN-12 @ reference/atlas-genesis.md#gen-12
 If a predicate's synthesized check fails, then genesis shall refine it up to K times and then drop it rather than force it.
 normative-clause: "a failing check is a counterexample → REFINE ≤K, then drop — never force"
 
-### REQ-GEN-12e — advisory passes two doors
+### REQ-GEN-12e — advisory passes the truth door, and is scored for obviousness
 source: INV-GEN-12 @ reference/atlas-genesis.md#gen-12
-If an advisory candidate does not pass grounding and the non-obviousness door, then genesis shall not admit it.
-normative-clause: "an **advisory** candidate MUST pass grounding + the non-obviousness door"
+If an advisory candidate does not pass grounding, then genesis shall not admit it; if it passes grounding, genesis shall admit it carrying a harness-computed obviousness score, whether or not the claim is obvious.
+normative-clause: "an **advisory** candidate MUST pass grounding (the truth door) and MUST carry a harness-computed **obviousness score**; obviousness MUST NOT block admission (ADR-0012)"
 
 ### REQ-GEN-12f — chain-of-thought never persisted
 source: INV-GEN-12 @ reference/atlas-genesis.md#gen-12
@@ -353,7 +355,7 @@ normative-clause: "genesis MUST degrade to structural centrality, never rank noi
 ### REQ-GEN-16a — gate not on self-assessment
 source: INV-GEN-16 @ reference/atlas-genesis.md#gen-16
 Genesis shall not rest the non-obvious-and-actionable gate on the proposer's self-assessment.
-normative-clause: "MUST NOT rest on the proposer's self-assessment"
+normative-clause: "MUST NOT rest on the proposer's self-assessment" — UNAMENDED by ADR-0012 and load-bearing under it: the obviousness score is computed by the HARNESS's predicate over the source bytes, never read off a field the proposer wrote.
 
 ### REQ-GEN-16b — seed loose-but-thin
 source: INV-GEN-16 @ reference/atlas-genesis.md#gen-16

@@ -433,8 +433,8 @@ gen: conformance
 source: REQ-ADAPTER-11c
 Given `spyProposer` returns proposal `P0` for `S_greet`
 When `P0` enters the pipeline
-Then it enters as a **candidate** gated by the 2-door admission + ratification — never auto-trusted
-teeth: breaks-on "`propose`'s return is written straight to the ratified store, skipping the 2-door admission — an auto-trusted proposal lands (the ratification gate is bypassed)"
+Then it enters as a **candidate** gated by the admission bar + ratification — never auto-trusted
+teeth: breaks-on "`propose`'s return is written straight to the ratified store, skipping the admission bar — an auto-trusted proposal lands (the ratification gate is bypassed)"
 gen: conformance
 
 ---

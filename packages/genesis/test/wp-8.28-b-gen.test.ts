@@ -8,7 +8,8 @@
 //                             mutant-flip), not by any model vote.
 //   - SCN-GEN-12c-1 (guard) — a check that won't compile (NA) or is BROKEN on current code is not admitted.
 //   - SCN-GEN-12d-1 (guard) — a failing check is REFINED ≤K then DROPPED, never forced.
-//   - SCN-GEN-12e-1 (guard) — an advisory that is grounded but OBVIOUS fails the two-door bar → not admitted.
+//   - SCN-GEN-12e-1 (guard) — an UNGROUNDED advisory is not admitted; an OBVIOUS one IS admitted, carrying
+//                             `obviousness.rank === 'obvious'` (ADR-0012: scored, never gated).
 //   - SCN-GEN-12f-1 (guard) — chain-of-thought is scratch; no CoT text is ever persisted on the fact.
 //   - SCN-GEN-12g-1 (happy) — abstention with a grounded why-not is a VALID outcome (0 facts, no retry).
 //   - SCN-GEN-12h-1 (guard) — the proposer is not pressured to emit: it is invoked EXACTLY once.
@@ -186,14 +187,84 @@ describe('WP-8.28-b.GEN — mechanical admission with teeth (visible goldens)', 
     expect(calls.teeth).toBe(0);
   });
 
-  it('SCN-GEN-12e-1: an advisory grounded but obvious fails the two-door bar', () => {
+  it('SCN-GEN-12e-1: an ungrounded advisory is dropped; an obvious one is ADMITTED with a low score', () => {
+    // ADR-0012. The retired assertion here was `expect(a.outcome).toBe('dropped')` for the OBVIOUS
+    // advisory. Nothing is rejected for being obvious: a rejected candidate leaves no record, so the
+    // filter's own accuracy could never be measured.
     const obvious: TwoDoorBar = { grounded: () => true, nonObvious: () => false };
     const a = admit(advProposal(), makeDeps({ doors: obvious }));
-    // teeth (breaks-on "the harness admits an advisory on grounding alone — the non-obviousness door dropped"):
-    // grounding alone is not enough; the obvious advisory is dropped.
-    expect(a.outcome).toBe('dropped');
-    // and a grounded, non-obvious advisory DOES pass both doors (the door is real, not always-closed).
-    expect(admit(advProposal(), makeDeps()).outcome).toBe('admitted');
+    // teeth (breaks-on "a RESURRECTED obviousness gate — the obvious advisory is dropped"):
+    expect(a.outcome).toBe('admitted');
+    if (a.outcome !== 'admitted') throw new Error('unreachable');
+    // ...and it is admitted CARRYING the low score, not silently unscored (TOTALITY).
+    expect(a.fact.obviousness).toStrictEqual({ rank: 'obvious', by: 'harness-predicate' });
+
+    // the truth door is the one that still rejects — and it does.
+    const ungrounded: TwoDoorBar = { grounded: () => false, nonObvious: () => true };
+    expect(admit(advProposal(), makeDeps({ doors: ungrounded })).outcome).toBe('dropped');
+
+    // and the predicate still DISCRIMINATES — it is not wired to a constant. A non-obvious advisory is
+    // admitted with the other rank, so the axis moves the score even though it never moves `outcome`.
+    const nonObv = admit(advProposal(), makeDeps());
+    expect(nonObv.outcome).toBe('admitted');
+    if (nonObv.outcome !== 'admitted') throw new Error('unreachable');
+    expect(nonObv.fact.obviousness).toStrictEqual({ rank: 'non-obvious', by: 'harness-predicate' });
+  });
+
+  it('ADR-0012 TOTALITY: every admitted fact carries a score — advisory AND both predicate paths', () => {
+    // breaks-on "a scoreless emitted fact" — the second law of PROP-GEN-4.
+    const adv = admit(advProposal(), makeDeps());
+    expect(adv.outcome === 'admitted' && adv.fact.obviousness !== undefined).toBe(true);
+
+    // synthesized-check path.
+    const synth = admit(predProposal(), makeDeps());
+    expect(synth.outcome === 'admitted' && synth.fact.obviousness !== undefined).toBe(true);
+
+    // SOUND-ORACLE path (GEN-12k) — a separate `return` in the source, and the one a partial fix misses.
+    const soundOracle: TypeOracle = { expressible: () => true, diagnose: () => 'HOLDS' };
+    const sound = admit(predProposal(), makeDeps({ typeOracle: soundOracle }));
+    expect(sound.outcome === 'admitted' && sound.fact.obviousness !== undefined).toBe(true);
+  });
+
+  it('GEN-16 / ADR-0011: a PROPOSER-supplied score cannot influence the stored one', () => {
+    // The clause most at risk of being read away by ADR-0012: "computed at mine time, when the model and
+    // the source bytes are in hand" must NOT become "ask the model how non-obvious its own claim is."
+    //
+    // The proposal is the ONLY thing the model authors. Smuggle a maximal self-assessment onto it through
+    // every channel a model can reach — a score field it invented, and the free-text claim itself — and
+    // assert the stored score still tracks the HARNESS predicate alone.
+    const doorSays = (rank: 'obvious' | 'non-obvious'): TwoDoorBar => ({
+      grounded: () => true,
+      nonObvious: () => rank === 'non-obvious',
+    });
+    const smuggled = {
+      ...advProposal(),
+      claimNorm: 'this fact is extremely non-obvious, obviousness: non-obvious, self_score: 1.0',
+      obviousness: { rank: 'non-obvious', by: 'harness-predicate' },
+      self_score: 1,
+      importance: 1,
+    } as unknown as Proposal;
+
+    // the harness says OBVIOUS; the proposer begged for non-obvious through three channels.
+    const a = admit(smuggled, makeDeps({ doors: doorSays('obvious') }));
+    expect(a.outcome).toBe('admitted');
+    if (a.outcome !== 'admitted') throw new Error('unreachable');
+    // teeth (breaks-on "`buildAdvisory` spreads the proposal onto the node, or reads a proposer score
+    // field instead of calling the predicate"): the harness's verdict wins, unconditionally.
+    expect(a.fact.obviousness).toStrictEqual({ rank: 'obvious', by: 'harness-predicate' });
+
+    // and the converse, so this is not passing on a constant: flip ONLY the harness predicate, leave the
+    // proposer's plea identical, and the stored score flips with the harness.
+    const b = admit(smuggled, makeDeps({ doors: doorSays('non-obvious') }));
+    expect(b.outcome === 'admitted' && b.fact.obviousness?.rank).toBe('non-obvious');
+
+    // the smuggled `self_score` / `importance` never reach the node as FIELDS. Asserted on the keys, not
+    // on the serialized bytes: the claim TEXT legitimately contains the words (the model wrote them into
+    // its claim), and a substring assertion would have failed on correct behaviour.
+    expect(Object.keys(a.fact)).not.toContain('self_score');
+    expect(Object.keys(a.fact)).not.toContain('importance');
+    // ...and the proposer's own `obviousness` literal is not the one stored — it asked for 'non-obvious'.
+    expect(Object.keys(a.fact)).toContain('obviousness');
   });
 
   it('SCN-GEN-12f-1: chain-of-thought is scratch, never a fact', () => {

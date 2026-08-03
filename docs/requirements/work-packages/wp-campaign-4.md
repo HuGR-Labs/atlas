@@ -192,7 +192,7 @@ rationale:                               # ptr
   - source: ../invariant-register.md#INV-GROUND-11
 ---
 
-## EPIC-11 — truth-gate (11-a) · 2-door admission (11-b)
+## EPIC-11 — truth-gate (11-a) · admission, obviousness scored (11-b)
 
 ### WP-4.11-a.GROUND — grounding slice of EPIC-11-a
 epic: EPIC-11-a
@@ -211,7 +211,7 @@ interface_contract:                      # ptr+digest
   - source: ../../reference/atlas-grounding.md#ground-4  # ptr+digest
   - source: ../../reference/atlas-grounding.md#ground-6  # ptr+digest
   - source: ../../reference/atlas-grounding.md#ground-9  # ptr+digest
-exclusions: the usefulness/2-door admission (owned by WP-4.11-b.GROUND); atlas-emit re-derivation surface (owned by WP-4.11-a.TOOLS); the HOLDS→NA downgrade and missing-field/over-cap reject guards (flagged [NEEDS RECONCILIATION] in req-grd.md, not yet a REQ — out of scope until lifted).
+exclusions: the harm door / admission composition (owned by WP-4.11-b.GROUND); atlas-emit re-derivation surface (owned by WP-4.11-a.TOOLS); the HOLDS→NA downgrade and missing-field/over-cap reject guards (flagged [NEEDS RECONCILIATION] in req-grd.md, not yet a REQ — out of scope until lifted).
 inputs:                                  # ptr+digest
   - source: ../req-grd.md#REQ-GROUND-2a  # ptr+digest
   - source: ../req-grd.md#REQ-GROUND-5a  # ptr+digest
@@ -254,7 +254,7 @@ interface_contract:                      # ptr+digest
   - source: ../../reference/atlas-grounding.md#ground-4  # ptr+digest
   - source: ../../reference/atlas-knowledge.md#know-1  # ptr+digest
   - source: ../../reference/atlas-knowledge.md#know-2  # ptr+digest
-exclusions: defining `gateHolds`/emit fail-closed (owned by WP-4.11-a.GROUND); the 2-door usefulness door (EPIC-11-b); the write-decision routing (CAMPAIGN-5).
+exclusions: defining `gateHolds`/emit fail-closed (owned by WP-4.11-a.GROUND); the harm door + obviousness score (EPIC-11-b); the write-decision routing (CAMPAIGN-5).
 inputs:                                  # ptr+digest
   - source: ../req-grd.md#REQ-GROUND-4  # ptr+digest
 action: make store admission reject self-declared-truth and ungrounded facts by deferring to the grounding gate; verify against the referenced goldens.
@@ -316,9 +316,9 @@ rationale:                               # ptr
 epic: EPIC-11-b
 id: WP-4.11-b.GROUND
 content_hash: <filled-at-freeze>
-title: 2-door admission (grounded AND useful); untrusted excluded; repo-wide rule anchored to a policy block
+title: admission (grounded AND not harmful to store); obviousness scored; untrusted excluded; repo-wide rule anchored to a policy block
 intent: >
-  Admit a fact iff both doors pass (truth = re-checks FRESH; usefulness = actionable ∧ non-obvious); reject the true-but-obvious; exclude untrusted-source claims from `gateHolds`; ground a repo-wide rule to a policy artifact's section-block subtreeHash (never whole-file byte-hash unless non-parseable), rejecting an anchorless rule. This WP owns the 2-door gate consumed by KNOW. (non-authoritative handle)
+  Admit a fact iff both doors pass (truth = re-checks FRESH; harm = not a secret / PII); ADMIT the true-but-obvious carrying a low obviousness score, never reject it (ADR-0012); exclude untrusted-source claims from `gateHolds`; ground a repo-wide rule to a policy artifact's section-block subtreeHash (never whole-file byte-hash unless non-parseable), rejecting an anchorless rule. This WP owns the admission gate consumed by KNOW. (non-authoritative handle)
 source_reqs:                             # ptr+digest
   - source: ../req-grd.md#REQ-GROUND-7a  # ptr+digest
   - source: ../req-grd.md#REQ-GROUND-7b  # ptr+digest
@@ -329,13 +329,13 @@ source_reqs:                             # ptr+digest
   - source: ../req-grd.md#REQ-GROUND-12c  # ptr+digest
   - source: ../req-grd.md#REQ-GROUND-12d  # ptr+digest
   - source: ../req-grd.md#REQ-GROUND-12e  # ptr+digest
-seam-freezes: [ "2-door admission gate + untrusted-source exclusion owned-by GROUND, consumed-by KNOW" ]
-anchor: packages/grounding/src/ — the two-door admission (`gateHolds` truth door + usefulness door) + untrusted-source exclusion + policy-artifact anchoring
+seam-freezes: [ "admission gate (truth ∧ ¬harmful) + obviousness score + untrusted-source exclusion owned-by GROUND, consumed-by KNOW" ]
+anchor: packages/grounding/src/ — the admission gate (`gateHolds` truth door + harmful-to-store door; obviousness SCORED, never a door) + untrusted-source exclusion + policy-artifact anchoring
 interface_contract:                      # ptr+digest
   - source: ../../reference/atlas-grounding.md#ground-7  # ptr+digest
   - source: ../../reference/atlas-grounding.md#ground-8  # ptr+digest
   - source: ../../reference/atlas-grounding.md#ground-12  # ptr+digest
-exclusions: provenance-receipt authorship (owned by WP-4.11-b.KNOW); the truth-door FRESH re-check internals (frozen from WP-4.11-a.GROUND); calibration of the door-2 threshold on hits (EPIC-18, CAMPAIGN-6).
+exclusions: provenance-receipt authorship (owned by WP-4.11-b.KNOW); the truth-door FRESH re-check internals (frozen from WP-4.11-a.GROUND); calibration of the obviousness/hits ranking threshold (EPIC-18, CAMPAIGN-6 — and per ADR-0012 the retrieval weight is deliberately NOT pinned here).
 inputs:                                  # ptr+digest
   - source: ../req-grd.md#REQ-GROUND-4  # ptr+digest
 action: implement both admission doors, the untrusted-source exclusion, and policy-artifact section-block anchoring per the GROUND-7/8/12 clauses; reject anchorless rules; verify against the referenced goldens.
@@ -353,7 +353,7 @@ acceptance:                              # ptr+digest = frozen goldens
   - source: ../goldens-grd.md#SCN-GROUND-12d-1  # ptr+digest
   - source: ../goldens-grd.md#SCN-GROUND-12e-1  # ptr+digest
 deps: [ WP-4.11-a.GROUND ]
-exit_predicate: all listed acceptance goldens green ∧ grounding gates pass ∧ true-but-obvious rejected ∧ untrusted excluded ∧ anchorless rule rejected.
+exit_predicate: all listed acceptance goldens green ∧ grounding gates pass ∧ true-but-obvious ADMITTED WITH A LOW SCORE (ADR-0012 — obviousness is scored, never gated) ∧ untrusted excluded ∧ anchorless rule rejected.
 context_refs:                            # closed list
   - source: ../../reference/atlas-grounding.md#ground-7
   - source: ../../reference/atlas-grounding.md#ground-8
@@ -380,7 +380,7 @@ anchor: packages/knowledge/src/ — claim provenance-receipt attach + advisory-m
 interface_contract:                      # ptr+digest
   - source: ../../reference/atlas-knowledge.md#know-14  # ptr+digest
   - source: ../../reference/atlas-grounding.md#ground-8  # ptr+digest
-exclusions: the gate's exclusion mechanism itself (owned by WP-4.11-b.GROUND); the 2-door usefulness logic (owned by WP-4.11-b.GROUND); write-decision/upsert (CAMPAIGN-5).
+exclusions: the gate's exclusion mechanism itself (owned by WP-4.11-b.GROUND); the harm-door / obviousness-score logic (owned by WP-4.11-b.GROUND); write-decision/upsert (CAMPAIGN-5).
 inputs:                                  # ptr+digest
   - source: ../req-grd.md#REQ-GROUND-8  # ptr+digest
 action: attach a provenance receipt to every claim; mark untrusted-source claims advisory and route them out of the gate; verify against the referenced goldens.

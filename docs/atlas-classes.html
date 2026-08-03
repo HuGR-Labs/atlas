@@ -176,19 +176,19 @@
           <p>Cita <code>source@sha</code> que re-checa agora (grounding). Sem isso → NA, não entra. <i>(já é lei do atlas)</i></p>
         </div>
         <div class="door g2">
-          <div class="n">porta 2 · utilidade</div>
-          <div class="t">Vale a pena lembrar?</div>
-          <p>Muda uma decisão, e não é derivável de só olhar. Verdade não basta — utilidade é a porta que impede o lixo.</p>
+          <div class="n">porta 2 · dano</div>
+          <div class="t">Guardar isso já é o dano?</div>
+          <p>Segredo / PII — a única classe em que <b>armazenar É o dano</b>. Utilidade não é porta: obviedade vira <b>score armazenado e auditável</b>, e a decisão de ranking é a-posteriori, na recuperação (ADR-0012). Um portão destrói exatamente a evidência necessária para auditar o portão.</p>
         </div>
       </div>
       <div class="crit">
         <div class="cr"><span class="k">actionable</span><span class="v">muda o que alguém faz. <b>Se ninguém age diferente por causa dela, é ruído.</b></span></div>
-        <div class="cr"><span class="k">non-obvious</span><span class="v">não é derivável de ler o código. <b>"retorna string" = lixo; "valida Idempotency-Key ou cobra 2×" = ouro.</b></span></div>
+        <div class="cr"><span class="k">non-obvious</span><span class="v">não é derivável de ler o código. <b>"retorna string" = piso do score; "valida Idempotency-Key ou cobra 2×" = topo.</b> <em>Pontua, nunca barra</em> — o obvio entra com score baixo.</span></div>
         <div class="cr"><span class="k">grounded</span><span class="v">cita <code>source@sha</code> — porta 1.</span></div>
         <div class="cr"><span class="k">owned + scoped</span><span class="v">tem dono e vale em algum lugar específico. Sem escopo = generalidade vazia.</span></div>
         <div class="cr"><span class="k">earns its slot</span><span class="v">se ninguém consulta, <b>decai do set ativo</b> (arquiva, não deleta) — o hits mede.</span></div>
       </div>
-      <div class="verdict">Verdadeiro + inútil = ruído. As duas portas, ou não entra.</div>
+      <div class="verdict">Verdadeiro + nocivo de guardar = não entra. Verdadeiro + óbvio = <b>entra com score baixo</b> e perde no ranking — nada é rejeitado por ser óbvio (ADR-0012).</div>
     </div>
   </div>
 </section>

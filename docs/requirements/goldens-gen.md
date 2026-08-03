@@ -171,24 +171,26 @@ Then `F` is grounded and **carries the re-derived `subtreeHash` `st-a10`** in it
 teeth: breaks-on "the emit-gate stores the fact with an **unpopulated/stale** subtreeHash (skips the recompute) — `F` is emitted carrying `∅`/`st-OLD` instead of `st-a10`, so its later drift-check is broken"
 gen: conformance   # oracle = `genesis/ref/emit-gate.ts` (reuses the KNOW-2 grounding reference)
 
-### REQ-GEN-4b — pass the 2-door bar   (happy)
+### REQ-GEN-4b — pass the truth door and carry an obviousness score   (happy)
+amendment: **AMENDED + RE-RATIFIED 2026-08-02** (owner) — [ADR-0012](../adr/ADR-0012-obviousness-is-scored-never-gated.md): obviousness is SCORED, never gated; the rejection line moves to harm (secret / PII).
 
-### SCN-GEN-4b-1 — a seed clears both the grounding and non-obvious doors   (happy)
+### SCN-GEN-4b-1 — a seed clears the truth door and is emitted carrying a score   (happy)
 source: REQ-GEN-4b
 Given a seed that is grounded (`st-a10` re-derives) **and** non-obvious (does not merely restate a type signature)
-When `atlas-emit` applies the 2-door bar
-Then the seed is emitted (`emitted:true`) — both doors pass
-teeth: breaks-on "the non-obviousness door is **inverted** (it rejects non-obvious seeds and admits obvious ones) — this valid non-obvious seed is wrongly `emitted:false`"
+When `atlas-emit` applies the truth door and the harness's obviousness predicate
+Then the seed is emitted (`emitted:true`) and its stored record **carries an obviousness score** (TOTALITY)
+teeth: breaks-on "the emitted seed carries **no** obviousness score (totality violated — the score defaults to absent instead of being computed), or a resurrected obviousness gate drops it"
 gen: conformance
 
-### REQ-GEN-4c — reject ungrounded or obvious seed   (guard)
+### REQ-GEN-4c — reject the ungrounded; never reject the obvious   (guard)
+amendment: **AMENDED + RE-RATIFIED 2026-08-02** (owner) — [ADR-0012](../adr/ADR-0012-obviousness-is-scored-never-gated.md): obviousness is SCORED, never gated; the rejection line moves to harm (secret / PII).
 
-### SCN-GEN-4c-1 — ungrounded / obvious seed → emitted:false   (guard)
+### SCN-GEN-4c-1 — ungrounded seed → emitted:false; obvious seed → emitted with a low score   (guard)
 source: REQ-GEN-4c
-Given seed `U` whose citation does **not** re-derive at `source@sha`, and seed `O` that is obvious (restates that `lpad(s,n)` pads to `n`)
-When `atlas-emit` applies the 2-door bar to each
-Then both are rejected — `emitted:false`; neither reaches the fact set
-teeth: breaks-on "the gate downgrades a failed door to a warning — the ungrounded seed `U` is emitted anyway"
+Given seed `U` whose citation does **not** re-derive at `source@sha`, and seed `O` that is obvious (restates that `lpad(s,n)` pads to `n`) but grounds cleanly
+When `atlas-emit` applies the truth door to each
+Then `U` is rejected — `emitted:false`, never reaching the fact set — and `O` **is emitted**, carrying a low obviousness score (ADR-0012: obviousness is scored, never gated)
+teeth: breaks-on "the gate downgrades a failed truth door to a warning — the ungrounded seed `U` is emitted anyway — or a **resurrected obviousness gate** drops `O` to `emitted:false`, destroying the very evidence needed to audit the filter"
 gen: conformance
 
 ### REQ-GEN-4d — no self-declared truth   (guard)
@@ -197,7 +199,7 @@ gen: conformance
 source: REQ-GEN-4d
 Given a candidate carrying `self_asserted:true` / `confidence:1.0` and **no** external grounding
 When the emit-gate evaluates it
-Then the self-declaration is ignored — admission depends only on the mechanical 2-door bar; the seed is rejected
+Then the self-declaration is ignored — admission depends only on the mechanical truth door; the seed is rejected
 teeth: breaks-on "the gate reads the candidate's own `self_asserted` flag as sufficient — the ungrounded seed self-promotes to a fact"
 gen: conformance
 
@@ -493,14 +495,14 @@ Then it refines `P` at most once; if still BROKEN it is **dropped** — `P` is n
 teeth: breaks-on "on a persistent BROKEN check the harness disables the check and admits `P` anyway (forces the fact) instead of dropping it"
 gen: conformance
 
-### REQ-GEN-12e — advisory passes two doors   (guard)
+### REQ-GEN-12e — advisory passes the truth door, and is scored for obviousness   (guard)
 
-### SCN-GEN-12e-1 — an advisory failing grounding or non-obviousness is not admitted   (guard)
+### SCN-GEN-12e-1 — an ungrounded advisory is not admitted; an obvious one is admitted with a low score   (guard)
 source: REQ-GEN-12e
-Given advisory candidate `A` that is grounded but **obvious** (restates a public type signature)
-When the admit-harness applies the 2-door bar
-Then `A` is **not** admitted — an advisory must pass grounding ∧ non-obviousness
-teeth: breaks-on "the harness admits an advisory on grounding alone — the obvious advisory passes with the non-obviousness door dropped"
+Given advisory candidate `A` that is grounded but **obvious** (restates a public type signature), and advisory candidate `A_ung` whose citation does not ground
+When the admit-harness applies the truth door and the harness's obviousness predicate
+Then `A_ung` is **not** admitted (the truth door blocks it), while `A` **is** admitted carrying a **low obviousness score** — obviousness is scored, never gated (ADR-0012)
+teeth: breaks-on "a **resurrected obviousness gate** — the obvious advisory `A` is dropped, so the filter's own accuracy can never be measured — or the admitted advisory carries no score at all (totality violated)"
 gen: conformance
 
 ### REQ-GEN-12f — chain-of-thought never persisted   (guard)
@@ -707,7 +709,7 @@ gen: conformance
 source: REQ-GEN-14c
 Given REVIEW running until a no-revision round
 When a round produces 0 revisions
-Then REVIEW stops (fixpoint reached) — or on marginal value `< ε`, or loop-until-dry on the 2-door bar
+Then REVIEW stops (fixpoint reached) — or on marginal value `< ε`, or loop-until-dry on the admission bar
 teeth: breaks-on "REVIEW has no fixpoint predicate — it keeps looping after a no-revision round"
 gen: conformance
 
@@ -805,8 +807,8 @@ gen: conformance
 source: REQ-GEN-16a
 Given a candidate carrying a high `self_score` / `importance` field from the proposer
 When the admission gate evaluates it
-Then admission reads **no** proposer self-assessment input — the decision is independent of `self_score`
-teeth: breaks-on "admission is gated on the proposer's `self_score ≥ 0.8` — the gate rests on self-assessment"
+Then admission reads **no** proposer self-assessment input — the decision is independent of `self_score`; and the STORED obviousness score is likewise independent of it, being computed by the harness's predicate over the source bytes (ADR-0012 does not amend this clause)
+teeth: breaks-on "admission is gated on the proposer's `self_score ≥ 0.8` — the gate rests on self-assessment — or the stored obviousness score is read off a proposer-written field instead of computed"
 gen: conformance   # oracle = `genesis/ref/usefulness.ts` (reuses the KNOW-17 decay reference)
 
 ### REQ-GEN-16b — seed loose-but-thin   (happy)
@@ -988,22 +990,22 @@ Then `G` is grounded and **carries the re-derived `subtreeHash` `st-e50`** in it
 teeth: breaks-on "the emit-gate stores `G` with an **unpopulated/stale** subtreeHash (skips the recompute) — `G` is emitted carrying `∅`/`st-OLD` instead of `st-e50`, breaking its later drift-check"
 gen: conformance
 
-### SCN-GEN-4b-2 — a beacon seed clears both grounding and non-obvious doors   (held-out · happy)
+### SCN-GEN-4b-2 — a beacon seed clears the truth door and carries a score   (held-out · happy)
 source: REQ-GEN-4b
 held_out: true
 Given a seed on `billing/credit.ts::reverse` that is grounded (`st-f61` re-derives) **and** non-obvious (it does not merely restate a type signature)
-When `atlas-emit` applies the 2-door bar
-Then the seed is emitted (`emitted:true`) — both doors pass
-teeth: breaks-on "the non-obviousness door is **inverted** (it rejects non-obvious seeds and admits obvious ones) — this valid non-obvious seed is wrongly `emitted:false`"
+When `atlas-emit` applies the truth door and the harness's obviousness predicate
+Then the seed is emitted (`emitted:true`) and its stored record **carries an obviousness score** (TOTALITY)
+teeth: breaks-on "the emitted beacon seed carries **no** obviousness score (totality violated), or a resurrected obviousness gate drops it"
 gen: conformance
 
-### SCN-GEN-4c-2 — ungrounded / obvious beacon seed → emitted:false   (held-out · guard)
+### SCN-GEN-4c-2 — ungrounded beacon seed → emitted:false; obvious one → scored   (held-out · guard)
 source: REQ-GEN-4c
 held_out: true
-Given seed `U2` whose citation does **not** re-derive at `source@sha`, and seed `O2` that is obvious (restates that `rtrim(s)` strips trailing whitespace)
-When `atlas-emit` applies the 2-door bar to each
-Then both are rejected — `emitted:false`; neither reaches the fact set
-teeth: breaks-on "the gate downgrades a failed grounding door to a warning — the ungrounded seed `U2` is emitted anyway"
+Given seed `U2` whose citation does **not** re-derive at `source@sha`, and seed `O2` that is obvious (restates that `rtrim(s)` strips trailing whitespace) but grounds cleanly
+When `atlas-emit` applies the truth door to each
+Then `U2` is rejected — `emitted:false` — and `O2` **is emitted**, carrying a low obviousness score (ADR-0012)
+teeth: breaks-on "the gate downgrades a failed grounding door to a warning — the ungrounded seed `U2` is emitted anyway — or a resurrected obviousness gate drops `O2`"
 gen: conformance
 
 ### SCN-GEN-4d-2 — a beacon seed cannot self-declare true   (held-out · guard)
@@ -1011,7 +1013,7 @@ source: REQ-GEN-4d
 held_out: true
 Given a candidate on `session/key.ts::renew` carrying `self_asserted:true` / `confidence:1.0` and **no** external grounding
 When the emit-gate evaluates it
-Then the self-declaration is ignored — admission depends only on the mechanical 2-door bar; the seed is rejected
+Then the self-declaration is ignored — admission depends only on the mechanical truth door; the seed is rejected
 teeth: breaks-on "the gate reads the candidate's own `self_asserted` flag as sufficient — the ungrounded seed self-promotes to a fact"
 gen: conformance
 
@@ -1222,13 +1224,13 @@ Then it refines `P2` at most once; if still BROKEN it is **dropped** — `P2` is
 teeth: breaks-on "on a persistent BROKEN check the harness disables the check and admits `P2` anyway (forces the fact) instead of dropping it"
 gen: conformance
 
-### SCN-GEN-12e-2 — an obvious beacon advisory is not admitted   (held-out · guard)
+### SCN-GEN-12e-2 — an obvious beacon advisory is admitted with a low score   (held-out · guard)
 source: REQ-GEN-12e
 held_out: true
 Given advisory candidate `A2` on `format/trim.ts::rtrim` that is grounded but **obvious** (restates a public type signature)
-When the admit-harness applies the 2-door bar
-Then `A2` is **not** admitted — an advisory must pass grounding ∧ non-obviousness
-teeth: breaks-on "the harness admits an advisory on grounding alone — the obvious advisory `A2` passes with the non-obviousness door dropped"
+When the admit-harness applies the truth door and the harness's obviousness predicate
+Then `A2` **is** admitted, carrying a **low obviousness score** — an advisory is blocked only by the truth door (ADR-0012)
+teeth: breaks-on "a resurrected obviousness gate — `A2` is dropped — or `A2` is admitted with no obviousness score (totality violated)"
 gen: conformance
 
 ### SCN-GEN-12f-2 — beacon chain-of-thought is scratch, never a fact   (held-out · guard)
@@ -1407,7 +1409,7 @@ source: REQ-GEN-14c
 held_out: true
 Given EXPAND running until a no-new-node round
 When a round produces 0 new nodes
-Then EXPAND stops (fixpoint reached) — or on marginal value `< ε`, or loop-until-dry on the 2-door bar
+Then EXPAND stops (fixpoint reached) — or on marginal value `< ε`, or loop-until-dry on the admission bar
 teeth: breaks-on "EXPAND has no fixpoint predicate — it keeps looping after a no-new-node round"
 gen: conformance
 

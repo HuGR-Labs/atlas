@@ -16,9 +16,13 @@ justification travels with the prompt without being sent to it.
     Note the standing caveat: an abstention signal is partly an artifact of phrasing (arXiv 2507.16199), so
     the refusal RATE is only readable as a quality signal with this prompt held fixed — which the provenance
     hash is what makes possible.
-  · NOT A RESTATED SIGNATURE — door 2 of the admission bar is "non-obvious AND actionable, not a restated
-    signature" (admit-harness.ts:92). The prompt states the bar the gate will apply, so a refusal is
-    informative rather than arbitrary.
+  · NOT A RESTATED SIGNATURE — "non-obvious AND actionable, not a restated signature" is the harness's
+    obviousness predicate (`TwoDoorBar.nonObvious`, admit-harness.ts). Since ADR-0012 it SCORES rather than
+    rejects: a restated signature is stored with `obviousness.rank === 'obvious'` and loses at ranking. The
+    prompt states what the harness measures, so a refusal is informative rather than arbitrary. Note the
+    asymmetry this clause must NOT cross: the model is steered toward non-obvious facts, and is never asked
+    how non-obvious its own claim is — GEN-16 forbids resting the judgment on the proposer's self-assessment,
+    and the score is computed by the harness over the source bytes.
   · NO CONFIDENCE, NO REASONING, ONE LINE — GEN-4d: a self-declaration is never read, so it is never asked
     for. GEN-12: chain-of-thought is scratch and MUST NOT be persisted as a fact, so it is never requested.
     The output contract is `claim: string | null` (llm.ts), and empty output means abstention.

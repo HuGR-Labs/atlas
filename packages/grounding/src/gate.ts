@@ -12,7 +12,8 @@
 // `@atlas/knowledge` `bindFreshness`. No hashing here (the subtreeHash compute is 4.10's / the sealed
 // kernel seam) — SEAM: consume-only.
 //
-// SCOPE (card exclusions): NOT the 2-door usefulness admission (owned by WP-4.11-b.GROUND); NOT the
+// SCOPE (card exclusions): NOT the second admission door (owned by WP-4.11-b.GROUND — since ADR-0012
+// that door is HARMFUL-TO-STORE, not usefulness; obviousness is scored, never a veto); NOT the
 // atlas-emit re-derivation surface (owned by WP-4.11-a.TOOLS); NOT the A-1 `Θ_A1` HOLDS→NA downgrade
 // THRESHOLD (SCN-GROUND-4-3, DEFINE-parametric residue, [NEEDS RECONCILIATION]) — the gate encodes the
 // downgrade, the concrete threshold REQ is pending the A-1 lift and is NOT fabricated here.

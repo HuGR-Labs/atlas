@@ -300,7 +300,7 @@ normative-clause: "A served fact MUST accrue **`hits`** — a logged event each 
 ### REQ-KNOW-17b — door-2 threshold calibrates on hits
 source: INV-KNOW-17 @ reference/atlas-knowledge.md#know-17
 The knowledge module shall calibrate the Door-2 admission threshold against observed downstream hits, never the proposer's self-assessment.
-normative-clause: "Door-2 (non-obvious ∧ actionable) MUST calibrate its admission threshold against **observed downstream hits**, never the proposer's self-assessment"
+normative-clause: "the usefulness judgment (non-obvious ∧ actionable) MUST calibrate its **ranking** threshold against **observed downstream hits**, never the proposer's self-assessment; it is never an admission veto (ADR-0012), and it composes with — never replaces — the a-priori obviousness score, which is the cold-start prior"
 
 ### REQ-KNOW-17c — unconsulted fact decays out
 source: INV-KNOW-17 @ reference/atlas-knowledge.md#know-17

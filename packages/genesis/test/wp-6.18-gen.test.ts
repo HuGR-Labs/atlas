@@ -25,7 +25,7 @@
 import { describe, it, expect } from 'vitest';
 import { asNodeKey, asSubtreeHash } from '@atlas/kernel';
 import type { NodeKey, StructRef } from '@atlas/contracts';
-import { bindHits, type Calibrate } from '@atlas/knowledge';
+import { bindHits, type Calibrate, type ObviousnessScore } from '@atlas/knowledge';
 import { seedGate, bindSeedGate, type SeedCandidate } from '../src/usefulness.js';
 
 // ── fixtures ─────────────────────────────────────────────────────────────────────────────────────────
@@ -62,6 +62,30 @@ describe('WP-6.18.GEN — usefulness graded a-posteriori · the seed side (GEN-1
     const modest = seedGate(cand({ self_score: 0.01, importance: 0 })); //   proposer under-rates it
     expect(modest.seeded).toBe(true); // teeth: a gate on `self_score >= 0.8` would REJECT this low one
     expect(boastful).toEqual(modest); // the decision reads no self-assessment — identical either way
+  });
+
+  // ADR-0012 — seedGate is the CONSUMER of the score, and the SCN-GEN-16a-1 witness above must survive it.
+  it('ADR-0012: the score rides onto the decision for ranking and NEVER moves the verdict', () => {
+    const OBV: ObviousnessScore = { rank: 'obvious', by: 'harness-predicate' };
+    const NON: ObviousnessScore = { rank: 'non-obvious', by: 'harness-predicate' };
+    const c = cand({ self_score: 0.99, importance: 1 });
+
+    // 1. the score is CARRIED — ranking downstream can read the cold-start prior off the decision.
+    expect(seedGate(c, OBV).obviousness).toStrictEqual(OBV);
+
+    // 2. it is NOT consulted. teeth (breaks-on "seedGate starts gating on `obviousness.rank`"): the
+    //    verdict is byte-identical across the whole score domain AND across its absence.
+    const verdict = (d: { seeded: boolean; reason: string }) => ({ seeded: d.seeded, reason: d.reason });
+    expect(verdict(seedGate(c, OBV))).toStrictEqual(verdict(seedGate(c, NON)));
+    expect(verdict(seedGate(c, OBV))).toStrictEqual(verdict(seedGate(c)));
+    expect(seedGate(c, OBV).seeded).toBe(true); // an OBVIOUS candidate is still seeded — never gated
+
+    // 3. and the GEN-16a witness is intact underneath: `grounded` is still the only mechanical input, so
+    //    the ungrounded candidate is refused no matter how flattering its score.
+    expect(seedGate(cand({ grounded: false }), NON).seeded).toBe(false);
+
+    // 4. absent score ⇒ absent field. No default is fabricated (exactOptionalPropertyTypes-honest).
+    expect('obviousness' in seedGate(c)).toBe(false);
   });
 
   // SCN-GEN-16b-1 — genesis seeds loose-but-thin.

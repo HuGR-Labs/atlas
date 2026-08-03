@@ -210,8 +210,8 @@ normative-clause: "it MUST make one bounded call per site, honor the cost/timeou
 
 ### REQ-ADAPTER-11c — proposal is a candidate, never auto-trusted
 source: INV-ADAPTER-11 @ reference/atlas-adapters.md#adapt-llm-1
-If `propose` returns a proposal, then it shall be a candidate gated by the 2-door admission and ratification, never auto-trusted.
-normative-clause: "return a **candidate** proposal that is never auto-trusted (the 2-door admission + ratification still gate it)."
+If `propose` returns a proposal, then it shall be a candidate gated by the admission bar and ratification, never auto-trusted.
+normative-clause: "return a **candidate** proposal that is never auto-trusted (the admission bar + ratification still gate it)."
 
 ### REQ-ADAPTER-12a — rehydrate the session projection
 source: INV-ADAPTER-12 @ reference/atlas-adapters.md#adapt-store-3

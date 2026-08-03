@@ -6,8 +6,8 @@
 
 Grounding is the Atlas's trust primitive: the content-addressed receipt that anchors a fact to a
 **structural unit** of the code. It supplies the truth-gate (a fact serves `HOLDS` only while its
-grounding re-checks FRESH) and the admission bar (a fact enters only if it is both true and useful).
-This module owns the structural anchor, drift detection, and the two-door gate — no storage, no index.
+grounding re-checks FRESH) and the admission bar (a fact enters only if it is true and not harmful to store).
+This module owns the structural anchor, drift detection, and the admission gate — no storage, no index.
 
 ### Scope & honest limit — structure, not truth
 
@@ -106,9 +106,13 @@ Status         = 'HOLDS' | 'BROKEN' | 'NA' | 'advisory'
        pending owner ratification. -->
 - **GROUND-6 Fail-closed write.** → see spec **A-2**; enforced at `emit` (atlas-tools TOOLS-7) — ungrounded
   facts do not enter.
-- **GROUND-7 Admission — two doors.** A fact is admitted iff it passes **both**: (1) **truth** — its
-  grounding re-checks FRESH (GROUND-4); and (2) **usefulness** — it is actionable AND non-obvious. A
-  true-but-obvious fact is noise and MUST be rejected. Failing either door blocks admission.
+- **GROUND-7 Admission, and the score.** A fact is admitted iff it passes **both**: (1) **truth** — its
+  grounding re-checks FRESH (GROUND-4); and (2) **not harmful to store** — it is not a secret / PII, the one
+  class where storing IS the harm. The usefulness judgment (actionable AND non-obvious) is **computed and
+  stored as a score**, never a veto; a true-but-obvious fact is **admitted with a low score**, and the ranking
+  decision is taken a-posteriori at retrieval
+  ([ADR-0012](../adr/ADR-0012-obviousness-is-scored-never-gated.md), owner-ratified 2026-08-02). Failing either
+  door blocks admission; obviousness is not a door and blocks nothing.
 - **GROUND-8 Provenance.** → see spec **A-9**; enforced in atlas-grounding — an `untrusted`-source claim is
   excluded from `gateHolds`.
 - **GROUND-9 Templated write.** → see spec **A-13**; enforced at `emit` — no free-prose fact persists.
@@ -149,7 +153,7 @@ ground(node, src): Grounding          // re-derive the anchor@src; ANY unresolva
 driftDetect(grounding, src): Freshness// FRESH iff every anchor's subtreeHash matches AND the forward-closure INTERFACE rState is unchanged (GROUND-11); an advisory fact's drift resolves to STALE not DRIFTED (GROUND-13); else DRIFTED
 isGrounded(g): boolean                // ≥1 entry ∧ every entry has a non-empty subtreeHash (GROUND-2)
 gateHolds(candidate, grounding, src): Status  // HOLDS only if grounded ∧ FRESH, else NA (GROUND-4)
-admit(fact): boolean                  // both doors: truth (gateHolds FRESH) ∧ useful (actionable+non-obvious)
+admit(fact): boolean                  // both doors: truth (gateHolds FRESH) ∧ ¬harmfulToStore (secret/PII); obviousness is SCORED, never an input (ADR-0012)
 ```
 
 - All five MUST be pure and total: no clock, no IO, no global state, no throw-for-logic.

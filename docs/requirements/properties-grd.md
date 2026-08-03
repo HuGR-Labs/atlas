@@ -102,16 +102,18 @@ covers_reqs: [ req-grd.md#REQ-GROUND-6 ]   # ptr+digest
 witness:     [ SCN-GROUND-6-1 ]
 teeth:       breaks-on "admit returns true when isGrounded is false — the property covers every ungrounded shape (empty / partial), not just the one `g_partial` witness; a mutant that leaks only the empty-set case is caught"
 
-### PROP-GROUND-7 — two-door admission
+### PROP-GROUND-7 — admission (truth ∧ ¬harmful), obviousness scored
 inv:         INV-GROUND-7
+amendment: **AMENDED + RE-RATIFIED 2026-08-02** (owner) — [ADR-0012](../adr/ADR-0012-obviousness-is-scored-never-gated.md): obviousness is SCORED, never gated; the rejection line moves to harm (secret / PII).
 source:      method-tags-grd.md#INV-GROUND-7                    # ptr+digest
-law:         ∀ fact f (truth-door outcome + labelled actionable/non-obvious inputs). admit(f) ≡ truthDoor(f) ∧ usefulDoor(f),  truthDoor(f) := (gateHolds(...) = HOLDS)
-             ⇒ f is admitted iff BOTH doors pass; a true-but-obvious fact is rejected; failing either door alone blocks admission
-             (non-obvious is a labelled fixture input, refused-to-model — only the door **wiring** + truth door are asserted)
-arbitrary:   facts over {truthDoor: pass/fail} × {usefulDoor labelled: pass/fail} — all four cells, biased to the (truth-pass ∧ useful-fail) true-but-obvious cell
+law:         ∀ fact f (truth-door outcome + labelled harmful/obvious inputs). admit(f) ≡ truthDoor(f) ∧ ¬harmfulToStore(f),  truthDoor(f) := (gateHolds(...) = HOLDS)
+             ⇒ f is admitted iff the truth door passes AND storing f is not itself the harm; failing either alone blocks admission
+             ∧ ∀ fact f. admit(f) ⊥ obvious(f)   [ADR-0012 — obviousness is stored as a SCORE, never a veto; a true-but-obvious fact is admitted with a low score]
+             (non-obvious is a labelled fixture input, refused-to-model — only the admission **wiring** + truth door are asserted)
+arbitrary:   facts over {truthDoor: pass/fail} × {harmfulToStore: yes/no} × {obvious labelled: yes/no} — all eight cells, biased to the (truth-pass ∧ not-harmful ∧ obvious) true-but-obvious cell, which MUST admit
 covers_reqs: [ req-grd.md#REQ-GROUND-7a, req-grd.md#REQ-GROUND-7b, req-grd.md#REQ-GROUND-7c ]   # ptr+digest
 witness:     [ SCN-GROUND-7a-1, SCN-GROUND-7b-1, SCN-GROUND-7c-1 ]
-teeth:       breaks-on "the wiring is OR (truthDoor ∨ usefulDoor) or a single door — the property enumerates all four door cells, killing the OR-gate / dropped-door mutant on the exact cell (truth-pass, useful-fail) a conjunction alone blocks"
+teeth:       breaks-on "the wiring is OR (truthDoor ∨ harm door), a dropped truth door, or a **resurrected obviousness veto** (the obvious axis moves `admit`) — the property enumerates all eight cells, so the veto is killed on the exact cell (truth-pass, not-harmful, obvious) that must admit"
 
 ### PROP-GROUND-8 — provenance filter
 inv:         INV-GROUND-8

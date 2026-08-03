@@ -157,11 +157,12 @@ Single-module epic (GEN only) → exactly one WP, no seam-freeze.
 epic: EPIC-28-a
 id: WP-8.28-a.GEN
 content_hash: <filled-at-freeze>
-title: budgeted grounded proposal — spend highest-first under a hard ceiling, every seed passes the 2-door bar
+title: budgeted grounded proposal — spend highest-first under a hard ceiling, every seed passes the truth door and carries an obviousness score
 intent: >
   The LLM fires only on ranked sites, highest-first, one bounded call per site, under a hard budget
   (default min(frontier,200)), halting at marginal value; no repo-wide sweep. Every seeded fact is
-  grounded by subtreeHash, passes the 2-door bar at atlas-emit, self-declares nothing; mined signals
+  grounded by subtreeHash, passes the truth door at atlas-emit and carries a harness-computed obviousness
+  score (never rejected for being obvious — ADR-0012), self-declares nothing; mined signals
   are ranking heuristics only and churn alone mints no fact.
 source_reqs:                             # ptr+digest
   - source: ../req-gen.md#REQ-GEN-2a  # ptr+digest
@@ -178,13 +179,13 @@ source_reqs:                             # ptr+digest
   - source: ../req-gen.md#REQ-GEN-6b  # ptr+digest
   - source: ../req-gen.md#REQ-GEN-6c  # ptr+digest
 seam-freezes: [ ]
-anchor: atlas-genesis module · S2 proposal driver (budgeted, ranked-site LLM call + 2-door gate call)
+anchor: atlas-genesis module · S2 proposal driver (budgeted, ranked-site LLM call + admission-gate call + obviousness scoring)
 interface_contract:                      # ptr+digest
   - source: ../../reference/atlas-genesis.md#gen-2  # ptr+digest
 exclusions: >
   does not compute the ranking (consumed from EPIC-27's PPR frontier); does not perform admission or
   the teeth check (EPIC-28-b); does not set escalation defaults (EPIC-28-c); does not define the
-  2-door gate itself (CAMPAIGN-4) or the write-decision (CAMPAIGN-5) — it calls them.
+  admission gate itself (CAMPAIGN-4) or the write-decision (CAMPAIGN-5) — it calls them.
 inputs:                                  # ptr+digest
   - source: repo@rev  # ptr+digest
   - source: ../../reference/atlas-genesis.md#gen-11  # ptr+digest
@@ -193,7 +194,7 @@ inputs:                                  # ptr+digest
 action: >
   Drive S2 proposals over the ranked frontier highest-first, one bounded call per site, enforcing the
   hard budget ceiling and the trailing-admit-rate halt; ground each candidate by subtreeHash and route
-  it through the 2-door bar at atlas-emit; treat mined signals as ranking heuristics only. Satisfy each
+  it through the truth door at atlas-emit, attaching the harness-computed obviousness score; treat mined signals as ranking heuristics only. Satisfy each
   source_req's golden.
 action_surface: [ Read, Edit, Write, Bash(build + test + gate-runner only) ]
 guardrails:

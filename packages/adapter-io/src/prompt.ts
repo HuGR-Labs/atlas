@@ -2,7 +2,8 @@
 //
 // Builds the one S2 proposal prompt from a template that SHIPS AS A FILE (`prompts/propose.md`), rather
 // than from a string literal. The template carries GEN-12 (abstention is valid), GEN-4d (no
-// self-declaration), GEN-6 (a mined signal is not a fact) and door-2 (non-obvious ∧ actionable). A prompt
+// self-declaration), GEN-6 (a mined signal is not a fact) and the obviousness SCORE (non-obvious ∧
+// actionable — scored by the harness, never a rejection: ADR-0012). A prompt
 // that is freely editable AND invisible turns those invariants into suggestions, so the resolved template
 // is DIGESTED and the digest travels with the run: an override is recorded, never silent.
 //

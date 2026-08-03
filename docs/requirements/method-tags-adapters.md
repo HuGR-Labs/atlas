@@ -94,7 +94,7 @@ anti-rot: the PERSIST host-adapter reference is the mock; a forge that loses tra
 ### INV-ADAPTER-11
 method-tag: reference-model
 fspec: —
-up-property: "the single bounded non-authoritative model call: a model is invoked only via SiteProposer.propose, exactly once per site within the cost/timeout budget, returning a candidate that the 2-door + ratification still gate — 0 out-of-band model calls, 0 auto-trusted proposals, ≤1 call/site"
+up-property: "the single bounded non-authoritative model call: a model is invoked only via SiteProposer.propose, exactly once per site within the cost/timeout budget, returning a candidate that the admission bar + ratification still gate — 0 out-of-band model calls, 0 auto-trusted proposals, ≤1 call/site"
 down-model: "a recorded/spy SiteProposer is the oracle (no live model in CI); a call-counter asserts exactly one propose() per site, a budget stub asserts the cost/timeout cap, and the admission path asserts the proposal enters as a candidate (never ratified without the gate)"
 anti-rot: the spy proposer is the mock reused across genesis tests; a second model entry point, a >1-call/site path, or an auto-trust bypass fails the counter/admission assertions.
 
