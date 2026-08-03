@@ -397,6 +397,22 @@ Then entry 1 is re-anchored to `src/z-secondary-moved.ts`, entry 0 is passed thr
 teeth: breaks-on "the template rewrites `entries[0]` and stamps `freshness: 'FRESH'` unconditionally — the stale entry 1 survives into the candidate, which the truth door then refuses (`NA`, MEASURED pre-fix): a repair plan that cannot land, wearing a FRESH stamp it never earned"
 gen: conformance
 
+### SCN-ADAPTER-9e-1 — a rotted non-primary citation blocks the merge gate   (happy, added 2026-08-03)
+source: REQ-ADAPTER-9e
+Given a durable knowledge base holding a fact whose grounding cites TWO anchors — a primary renamed with a byte-identical body (mechanically re-groundable) and a secondary whose content was REWRITTEN at HEAD — driven end-to-end through the real `composeRuntime` handler at `mergeBase = A`
+When `atlas-reconcile` classifies the run
+Then that fact is `semantic`, `reauthorCount == 1` and `exitCode == 2` — the merge is blocked and exactly the fact a human must re-author is named
+teeth: breaks-on "the composition root inlines its own classifier over `entries[0]` — the renamed primary re-derives by content at HEAD, the fact reads `mechanical`, and the gate reports `semantic: [], exitCode: 0` over a knowledge base holding a dead citation (MEASURED pre-fix through the shipped path)"
+gen: conformance
+
+### SCN-ADAPTER-9e-2 — a knowledge base with no rotted citation still merges   (guard, added 2026-08-03)
+source: REQ-ADAPTER-9e
+Given the SAME repository and the SAME merge base, with the rotted-secondary fact absent from the durable projection
+When `atlas-reconcile` classifies the run
+Then the primary-only mechanical drift is `mechanical`, `semantic` is empty, `reauthorCount == 0` and `exitCode == 0`
+teeth: breaks-on "the shared classifier answers `semantic` when NO entry drifted, or keys semantic on anything other than a citation that re-derives nowhere — either turns the merge gate into a blanket block on drifted-but-alive facts"
+gen: conformance
+
 ---
 
 ## REQ-ADAPTER-10 — forge carries the atlas

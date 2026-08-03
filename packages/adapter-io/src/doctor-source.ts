@@ -32,6 +32,14 @@
 // index, never reading the node's own `freshness` field, so the stamp is inert at the door. The live defect
 // was therefore a MISCLASSIFICATION plus a repair plan that could not land, not a false FRESH in the store.
 //
+// ── ONE CLASSIFIER, NOT TWO COPIES (`isMechanicalAt`) ────────────────────────────────────────────────────
+// `doctor` is advisory and exits 0. `atlas reconcile` is a MERGE GATE (`exitCode = |semantic| > 0 ? 2 : 0`).
+// Both ask the same mechanical-vs-semantic question, and they used to ask it from two separate bodies — this
+// one, and a copy inlined at the composition root. The copy with teeth was not the copy anyone was reading:
+// it stayed keyed on `entries[0]`, so a fact carrying a citation that had rotted away classified `mechanical`
+// and the gate reported a clean merge (MEASURED end to end in `test/reconcile-entry-symmetry.test.ts`:
+// `exitCode 0`, `semantic []`). `isMechanicalAt` below is now the single body both consume.
+//
 // TOTAL + READ-ONLY: an unknown fact, an absent anchor, a missing HEAD resolution ⇒ `undefined`/empty,
 // NEVER a throw and NEVER a write. Every read rides the total store/revIndex seams (both fail-closed).
 
@@ -51,22 +59,6 @@ import type { SidecarTrust } from './store-provenance.js';
  *  the built `Axes` by rev), so `drift` compares the RECORDED anchor vs HEAD-at-compose-time. */
 const HEAD: Hash = asHash('HEAD');
 
-/** The RECORDED primary grounding anchor — the first entry's `StructRef` (entries sorted by anchor). It is
- *  the fact's IDENTITY anchor (KNOW-15g: `nodeKey` keys on it), and here that is now ALL it is: `drift` and
- *  `plan` below no longer key on it, because DETECTION never did. `undefined` when the grounding carries no
- *  entries (fail-closed — never a throw).
- *
- *  EXPORTED for its ONE production caller, the reconcile classifier in compose.ts — and the asymmetry that
- *  leaves is STATED rather than implied. That classifier still asks its mechanical/semantic question about
- *  entry 0 ALONE, exactly as `drift` used to: it is a second copy of the defect fixed below, living in the
- *  composition root, which this seam does not own (recorded as the open item on
- *  `docs/requirements/work-packages/wp-fix-doctor-entries.md`). What this comment must NOT keep saying is
- *  that the two classifiers are "one shared pick" — after the fix they are not, and the sentence that
- *  claimed they were is precisely what kept the second copy invisible. */
-export function primaryAnchor(fact: GroundedFact): StructRef | undefined {
-  return fact.grounding.entries[0]?.anchor;
-}
-
 /** The fact restricted to ONE grounding entry — the unit a per-entry drift verdict is taken on.
  *
  *  This is a DECOMPOSITION of the detection oracle, not a second oracle. `reDerives` reads only
@@ -79,6 +71,74 @@ export function primaryAnchor(fact: GroundedFact): StructRef | undefined {
 function restrictTo(fact: GroundedFact, entry: GroundingEntry): GroundedFact {
   const grounding = { entries: [entry] };
   return fact.kind === 'predicate' ? { ...fact, grounding } : { ...fact, grounding };
+}
+
+/** One drifted citation: the recorded entry, its POSITION in the grounding, and where its CONTENT lives at
+ *  the target rev (`now`; `undefined` = nowhere, or at ≥2 distinct paths, which `resolveBySubtreeAt` REFUSES
+ *  rather than guesses — either way not mechanically re-groundable). */
+interface DriftedEntry {
+  readonly index: number;
+  readonly entry: GroundingEntry;
+  readonly now: StructRef | undefined;
+}
+
+/** EVERY recorded entry that no longer re-derives at `at`, in recorded order. It spans the whole grounding
+ *  because DETECTION does — the two used to disagree, and that asymmetry was the defect. Total: every leg
+ *  rides the fail-closed revIndex seams, so a bad rev or an absent unit yields "drifted, not re-groundable",
+ *  never a throw. */
+function driftedEntries(revIndex: RevIndex, fact: GroundedFact, at: Hash): readonly DriftedEntry[] {
+  return fact.grounding.entries.flatMap((entry, index) =>
+    revIndex.reDerives(restrictTo(fact, entry), at)
+      ? []
+      : [{ index, entry, now: revIndex.resolveBySubtreeAt(String(at), String(entry.anchor.subtreeHash)) }],
+  );
+}
+
+/**
+ * THE KNOW-5 verdict, and the ONE place in the system where mechanical-vs-semantic is decided.
+ *
+ * SEMANTIC IF *ANY* DRIFTED CITATION'S CONTENT RE-DERIVES NOWHERE at `at`. That is the fail-closed
+ * direction: no automatic re-ground can make such a fact whole (the repair would rewrite the movable
+ * citations and leave that one broken — an emit the truth door refuses), so the honest verdict is "a human
+ * must re-author this". `keyedOn` is the ROTTED entry, i.e. the citation that has to be re-authored — not
+ * position zero, whatever happened to it.
+ *
+ * MECHANICAL otherwise, `keyedOn` the FIRST drifted entry (the one `DriftItem`'s single frozen anchor pair
+ * reports). VACUOUSLY mechanical when NO entry drifted: `[].every(…)` is true, and that is deliberate and
+ * load-bearing at the merge gate. `reconcile` calls this for facts its own detector declared drifted; if the
+ * per-entry oracle disagrees and sees no drift at all, there is no citation to re-author, and answering
+ * `semantic` there would BLOCK A MERGE over a fact nothing is wrong with. Non-blocking is the correct answer
+ * to "nothing drifted", and it is also what the entry-0 predicate answered, so no gate moves on this path.
+ */
+function classifyDrift(
+  revIndex: RevIndex,
+  fact: GroundedFact,
+  at: Hash,
+): { readonly class: 'mechanical' | 'semantic'; readonly keyedOn: DriftedEntry | undefined } {
+  const drifted = driftedEntries(revIndex, fact, at);
+  const rotted = drifted.find((d) => d.now === undefined);
+  return rotted !== undefined
+    ? { class: 'semantic', keyedOn: rotted }
+    : { class: 'mechanical', keyedOn: drifted[0] };
+}
+
+/**
+ * THE classification predicate — `true` ⇔ the drift is MECHANICAL (auto-re-groundable), `false` ⇔ SEMANTIC.
+ *
+ * EXPORTED BECAUSE IT HAS TWO CONSUMERS AND MUST NEVER HAVE TWO IMPLEMENTATIONS. `drift` below reads
+ * `classifyDrift` for the doctor's advisory verdict; `compose.ts` feeds this predicate to `bindReconcile`,
+ * whose `exitCode = |semantic| > 0 ? 2 : 0` IS the merge gate. Those two used to be separate copies of the
+ * same question — doctor's, and one inlined at the composition root — and the copy with teeth was the one
+ * nobody was reading: it kept asking about `entries[0]`, so a fact carrying a citation that had rotted away
+ * classified `mechanical` and the gate reported a clean merge. A second CORRECT copy would still be two
+ * copies, free to diverge again, which is why this is a shared export and not a repeated body.
+ *
+ * Pure w.r.t. the store and total: `revIndex` is the injected fail-closed seam, so an unreadable rev makes
+ * every entry read drifted-and-unresolvable ⇒ `semantic` ⇒ the gate BLOCKS rather than waving a merge
+ * through on a rev it could not read.
+ */
+export function isMechanicalAt(revIndex: RevIndex, fact: GroundedFact, at: Hash): boolean {
+  return classifyDrift(revIndex, fact, at).class === 'mechanical';
 }
 
 /**
@@ -162,19 +222,6 @@ export function createDoctorSource(store: DiskStore, revIndex: RevIndex, trusted
     return [...new Set(chain)].sort() as Hash[]; // canonical (dedup + lexicographic) order
   };
 
-  /** EVERY recorded entry that no longer re-derives at HEAD, in recorded order, each paired with its
-   *  POSITION and with where its CONTENT lives at HEAD (`now`; `undefined` = nowhere, or at ≥2 distinct
-   *  paths, which `resolveBySubtreeAt` REFUSES rather than guesses — either way not mechanically
-   *  re-groundable). This spans the whole grounding because detection does; the two used to disagree. */
-  const driftedAt = (
-    fact: GroundedFact,
-  ): readonly { readonly index: number; readonly entry: GroundingEntry; readonly now: StructRef | undefined }[] =>
-    fact.grounding.entries.flatMap((entry, index) =>
-      revIndex.reDerives(restrictTo(fact, entry), HEAD)
-        ? []
-        : [{ index, entry, now: revIndex.resolveBySubtreeAt(String(HEAD), String(entry.anchor.subtreeHash)) }],
-    );
-
   const drift = (fact: string): DriftItem | undefined => {
     const node = nodes().find((n) => n.nodeKey === fact);
     const grounded = node && factOf(node.contentHash);
@@ -185,17 +232,15 @@ export function createDoctorSource(store: DiskStore, revIndex: RevIndex, trusted
     // qualifiedPath gone at HEAD) AND a changed unit (same path, new subtreeHash) — never a self-compare of
     // the recorded hash against itself, and never a look at entry 0 alone.
     if (revIndex.reDerives(grounded, HEAD)) return undefined;
-    // CLASSIFY (KNOW-5, mirrors bindReconcile) over the entries that ACTUALLY drifted — matching detection.
-    const drifted = driftedAt(grounded);
-    // Semantic FIRST, because it is the fail-closed answer: if ANY drifted citation's content re-derives
-    // NOWHERE at HEAD, no automatic re-ground can make this fact whole again (the reground would rewrite the
-    // movable entries and leave that one broken — an emit the truth door refuses, i.e. a plan that cannot
-    // land). Keying the item on the ROTTED entry names the citation a human actually has to re-author,
-    // instead of naming entry 0 whatever happened. `anchorNow` names what that entry's recorded path holds
-    // now, or — when the path itself is gone — its recorded anchor (a total, honest pointer; never a throw).
-    const rotted = drifted.find((d) => d.now === undefined);
-    if (rotted !== undefined) {
-      const anchorWas = rotted.entry.anchor;
+    // CLASSIFY through the SHARED verdict — the same call `compose.ts` gives the merge gate, so doctor's
+    // advisory answer and `atlas reconcile`'s exit code can never disagree about the same fact.
+    const verdict = classifyDrift(revIndex, grounded, HEAD);
+    const keyed = verdict.keyedOn;
+    if (keyed === undefined) return undefined; // totality: a DRIFTED fact has ≥1 drifted entry
+    const anchorWas = keyed.entry.anchor;
+    if (verdict.class === 'semantic') {
+      // `anchorNow` names what the ROTTED entry's recorded path holds now, or — when the path itself is gone
+      // — its recorded anchor (a total, honest pointer; never a throw).
       const anchorNow = revIndex.resolveAnchorAt(String(HEAD), anchorWas.qualifiedPath) ?? anchorWas;
       return { fact, class: 'semantic', anchorWas, anchorNow };
     }
@@ -203,9 +248,8 @@ export function createDoctorSource(store: DiskStore, revIndex: RevIndex, trusted
     // carries ONE anchor pair (atlas-tools:24, frozen), so it reports the FIRST drifted entry's move; the
     // repair below is not limited to it. When only the primary drifted — the case that already worked — this
     // is byte-for-byte the item the entry-0 classifier produced.
-    const moved = drifted[0];
-    if (moved?.now === undefined) return undefined; // totality: a DRIFTED fact has ≥1 drifted entry
-    return { fact, class: 'mechanical', anchorWas: moved.entry.anchor, anchorNow: moved.now };
+    if (keyed.now === undefined) return undefined; // totality: mechanical ⇒ every drifted entry resolved
+    return { fact, class: 'mechanical', anchorWas, anchorNow: keyed.now };
   };
 
   const plan = (fact: string): { readonly action: 'reground' | 'retire'; readonly emit: GroundedFact } | undefined => {
@@ -221,7 +265,7 @@ export function createDoctorSource(store: DiskStore, revIndex: RevIndex, trusted
     // classifier only reaches here when every drifted entry resolved, so the template's FRESH stamp is
     // EARNED — the emitted fact re-derives at HEAD end to end, and `regroundTemplate` would stamp DRIFTED if
     // it did not.
-    const drifted = driftedAt(grounded);
+    const drifted = driftedEntries(revIndex, grounded, HEAD);
     const resolved = grounded.grounding.entries.map((e, i) => {
       const d = drifted.find((x) => x.index === i);
       return d === undefined ? e.anchor : d.now; // a drifted-and-unresolved entry stays `undefined` ⇒ PARTIAL

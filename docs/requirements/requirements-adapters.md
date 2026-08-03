@@ -200,6 +200,16 @@ normative-clause: "The re-ground candidate MUST re-anchor EVERY drifted citation
 `freshness` MUST be DERIVED — `FRESH` only when every entry was established at the target rev, otherwise `DRIFTED`;
 a template whose own re-derivation was partial MUST NOT claim FRESH."
 
+### REQ-ADAPTER-9e — one classification, shared by the advisory surface and the merge gate   (added 2026-08-03, WP-FIX-DOCTOR-ENTRIES)
+source: INV-ADAPTER-9 @ reference/atlas-adapters.md#adapt-git-2
+The mechanical-vs-semantic classification shall have exactly one implementation, consumed both by the read-only
+doctor surface and by the `atlas-reconcile` exit-code gate at the composition root.
+normative-clause: "The KNOW-5 classification MUST have exactly ONE implementation. `atlas doctor` (advisory,
+exit 0) and `atlas-reconcile` (a merge gate, `exitCode == 2` iff any semantic) MUST consume that one
+implementation, never a second copy of the question — two copies are free to diverge, and the copy carrying the
+exit code is the one a merge depends on. A drifted citation that re-derives NOWHERE therefore blocks the gate
+(exit 2) whichever entry of the grounding carries it."
+
 ### REQ-ADAPTER-10a — forge carries the atlas
 source: INV-ADAPTER-10 @ reference/atlas-adapters.md#adapt-git-3
 The Forge shall write the provenance trailer, a `refs/notes/orchestra` note, and the PR projection onto a real host.
