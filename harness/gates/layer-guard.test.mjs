@@ -299,3 +299,85 @@ describe('layer-guard — the source scan sees every specifier shape the manifes
     expect(code).toBe(0);
   });
 });
+
+// ── THE COMPOSITION ROOT: two more ways a GHOST LEG stayed invisible ─────────────────────────────────
+//
+// A ghost leg is the sharpest failure this gate has, because `legs[tool]` dispatches with NO membership
+// test: a leg bound at the composition root and named in no surface constant is invocable over MCP and
+// pinned by nothing. The plain case has been caught for a while. Two shapes were not, and both are false
+// PASSES — the same class as the import-scan holes above, one function further down.
+describe('layer-guard — the leg scan cannot be blinded by prose or by a digit', () => {
+  /** The clean fixture's wire.ts, with the leg lines swapped in. */
+  const wire = (...legLines) =>
+    ['export function assemble() {', '  const legs: ToolLegs = {', ...legLines, '  };', '  return legs;', '}', ''].join('\n');
+
+  // CONTROL, stated first because the two tests after it are only meaningful against it: the plain ghost
+  // leg IS caught. Without this, "the gate now fires" proves nothing about what made it fire.
+  it('CONTROL — a plain ghost leg is caught', () => {
+    pkg('adapter-io', ['tools'], { 'wire.ts': wire("    'atlas-init': () => ({}),", "    'atlas-backdoor': () => ({}),") });
+    const { code, out } = runGate();
+    expect(out).toMatch(/ARCH-3\/5 leg 'atlas-backdoor' is bound at the composition root but is in NO surface constant/);
+    expect(code).toBe(1);
+  });
+
+  // TEETH: breaks-on "the binding site is located and brace-matched over RAW source". The literal used to
+  // be found and brace-counted BEFORE anything was stripped — the strip ran on the resulting slice, so the
+  // comment above it claimed an ordering the code did not have. A lone `}` in prose drove the counter to
+  // zero early, `end` landed on the comment, and every leg below it fell outside the block. Exit 0.
+  it('a stray `}` in a COMMENT cannot truncate the block and hide the leg below it', () => {
+    pkg('adapter-io', ['tools'], {
+      'wire.ts': wire(
+        "    'atlas-init': () => ({}),",
+        '    // the handler dispatches on legs[tool] } and never checks membership',
+        "    'atlas-backdoor': () => ({}),",
+      ),
+    });
+    const { code, out } = runGate();
+    expect(out).toMatch(/ARCH-3\/5 leg 'atlas-backdoor' is bound at the composition root but is in NO surface constant/);
+    expect(code).toBe(1);
+  });
+
+  // TEETH: breaks-on "the leg-key character class drops 0-9". Identical shape to the specifier-grammar hole
+  // one function away, identical direction: the key matched nothing, the leg was absent from the returned
+  // set, and ARCH-3/5's bound-but-undeclared check had nothing to complain about.
+  it('a DIGIT in a leg name does not make the leg invisible', () => {
+    pkg('adapter-io', ['tools'], { 'wire.ts': wire("    'atlas-init': () => ({}),", "    'atlas-v2': () => ({}),") });
+    const { code, out } = runGate();
+    expect(out).toMatch(/ARCH-3\/5 leg 'atlas-v2' is bound at the composition root but is in NO surface constant/);
+    expect(code).toBe(1);
+  });
+
+  // CONTROL — the real wire.ts shape, and the reason master got the right answer by luck rather than by
+  // construction. Measured on master: the raw and stripped depth counters DIVERGED three times inside the
+  // legs literal, first at wire.ts:186 (`{ pack, subsumes }` in prose), and re-converged every time only
+  // because the prose braces happened to be BALANCED. Balanced braces must keep locating the same block.
+  it('does NOT fire on BALANCED braces in prose inside the literal (the real wire.ts shape)', () => {
+    pkg('adapter-io', ['tools'], {
+      'wire.ts': wire(
+        '    // the query leg returns the `{ pack, subsumes }` observability envelope',
+        "    'atlas-init': () => ({}),",
+      ),
+    });
+    const { code, out } = runGate();
+    expect(out).not.toContain('✗');
+    expect(code).toBe(0);
+  });
+
+  // CONTROL — and the second thing stripping first buys. A commented-out binding site used to win the
+  // `indexOf` race: the gate located the DEAD literal, found no keys in it, and reported the real
+  // `atlas-init` as typed-but-unbound. A false FAIL rather than a false PASS, but the same blindness.
+  it('is not fooled by a COMMENTED-OUT binding site earlier in the file', () => {
+    pkg('adapter-io', ['tools'], {
+      'wire.ts': [
+        '// Kept for the reader — this is what the binding used to look like:',
+        '//   const legs: ToolLegs = {',
+        "//     'atlas-ghost': () => ({}),",
+        '//   };',
+        wire("    'atlas-init': () => ({}),"),
+      ].join('\n'),
+    });
+    const { code, out } = runGate();
+    expect(out).not.toContain('✗');
+    expect(code).toBe(0);
+  });
+});

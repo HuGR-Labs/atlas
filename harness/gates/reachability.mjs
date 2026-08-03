@@ -105,68 +105,6 @@ export function productionModules(pkgsDir) {
   return out.sort();
 }
 
-/**
- * Blank every COMMENT in `text`, byte-for-byte, leaving code, strings, templates and regex literals intact.
- *
- * EXPORTED FOR REUSE, and that is the whole point. `layer-guard.mjs` carried its own two-regex stripper —
- * a block-comment replace chained onto a line-comment replace — which is hole (1) from this file's header
- * verbatim: a line comment holding a glob like `packages/<star>/src` contains the byte pair slash-then-star,
- * the BLOCK pass runs FIRST and reads it as a comment opener, and everything down to the next real closer is
- * deleted. In THIS file that class fails open by dropping edges; in layer-guard it fails open by dropping
- * IMPORTS, so a forbidden edge sitting under such a line is a false PASS. Reproduced on a live fixture.
- *
- * (Written without a literal regex in this paragraph on purpose: the first draft of this very comment
- * embedded the two-regex form, whose `[^\n]*` followed by `/g` puts a star-then-slash in the text and closed
- * the comment early. The bug is not exotic — it bit its own postmortem.)
- *
- * Writing a third hand-written stripper was the option NOT taken. The header above records three rounds of
- * exactly that, each correct about its case and wrong about its class. So the TOKEN BOUNDARIES come from the
- * real parser: `node.pos` includes preceding trivia, `node.getStart()` does not, so the gap between them is
- * trivia BY CONSTRUCTION — whitespace and comments, nothing else. Inside a region the parser has already
- * certified as trivia there is no regex-versus-division question and no unterminated-literal question left
- * to get wrong, so the two-line comment recogniser below is total.
- *
- * Comments are BLANKED (spaces), not deleted, so every byte offset in the result still addresses the same
- * byte of the input — layer-guard's leg-binding scan brace-matches by index and `^\s*`-anchors by line.
- * Newlines are preserved for the same reason.
- */
-export function stripComments(text, fileName = 'in-memory.ts') {
-  const kind = /\.tsx$/.test(fileName) ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
-  const sf = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, kind);
-  const out = [...text];
-  const blank = (from, to) => {
-    for (let i = from; i < to; i++) if (out[i] !== '\n' && out[i] !== '\r') out[i] = ' ';
-  };
-  const trivia = (from, to) => {
-    let i = from;
-    while (i < to) {
-      if (text[i] === '/' && text[i + 1] === '/') {
-        let j = i + 2;
-        while (j < to && text[j] !== '\n' && text[j] !== '\r') j++;
-        blank(i, j);
-        i = j;
-      } else if (text[i] === '/' && text[i + 1] === '*') {
-        const close = text.indexOf('*/', i + 2);
-        const j = close < 0 ? to : Math.min(close + 2, to);
-        blank(i, j);
-        i = j;
-      } else i++;
-    }
-  };
-  const walk = (node) => {
-    const kids = node.getChildren(sf);
-    if (kids.length === 0) {
-      trivia(node.pos, node.getStart(sf));
-      return;
-    }
-    for (const kid of kids) walk(kid);
-  };
-  walk(sf);
-  // The EndOfFileToken carries the file's trailing trivia; `getChildren` on SourceFile yields it, so the
-  // walk above already covers a comment that closes the file with no code after it. Asserted by fixture.
-  return out.join('');
-}
-
 /** `'./x.js'` → the sibling `x.ts`; `'@atlas/pkg'` → that package's barrel. Every workspace package
  *  publishes exactly one entry (`exports: { "." : … }`), so there is no subpath case to handle. */
 function resolveSpecifier(pkgsDir, fromFile, spec) {

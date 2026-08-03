@@ -18,7 +18,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { referenceModels, productionModules, analyse, stripComments } from './reachability.mjs';
+import { referenceModels, productionModules, analyse } from './reachability.mjs';
 
 let root;
 
@@ -229,58 +229,6 @@ describe('LEXING — the class of hole that killed three hand-written revisions'
   it('an interpolation that ENDS lets the code after it be read normally', () => {
     pkg('a', { 'model.ts': MODEL, 'caller.ts': 'export const H = `a ${ 1 } b`;\n' + IMP + '\nexport const n = build();\n' });
     expect(paths()).not.toContain('packages/a/src/model.ts');
-  });
-});
-
-// `stripComments` is exported from this module so `layer-guard.mjs` stops carrying its own copy. It gets
-// fixtures HERE, next to the battery whose whole subject is reading TypeScript correctly, because that is
-// the mistake it exists to prevent being made a fourth time. Every case below is the exact shape that broke
-// one of the three hand-written scanners, plus the two properties layer-guard depends on structurally:
-// LENGTH-PRESERVATION (its leg-binding scan brace-matches by index) and LINE-PRESERVATION (it `^\s*`-anchors).
-describe('stripComments — the ONE stripper, reused instead of rewritten', () => {
-  const s = (t) => stripComments(t, 'f.ts');
-
-  // THE HOLE THIS FILE'S HEADER CALLS (1), now in the form that broke layer-guard: a glob in a line comment
-  // is slash-then-star, the naive BLOCK-before-LINE order reads it as an opener, and the import below is
-  // deleted. On master this hid 11 real import statements across 7 files.
-  it('a glob in a LINE comment does not open a phantom block comment', () => {
-    const out = s('// nothing in packages/*/src calls this\nimport { x } from "@atlas/adapter-io";\n/* later */\n');
-    expect(out).toContain('import { x } from "@atlas/adapter-io";');
-    expect(out).not.toContain('packages');
-  });
-
-  it('a real BLOCK comment is still removed', () => {
-    expect(s('/* import { q } from "@atlas/cli"; */\nconst a = 1;\n')).not.toContain('@atlas/cli');
-  });
-
-  it('a regex literal containing slash-star is not a comment opener', () => {
-    const out = s('const S = /a\\/*b/;\nimport { x } from "@atlas/adapter-io";\n');
-    expect(out).toContain('@atlas/adapter-io');
-    expect(out).toContain('/a\\/*b/');
-  });
-
-  it('a comment inside a TEMPLATE literal is text, not a comment', () => {
-    expect(s('const T = `\n// kept\n/* kept */\n`;\n')).toContain('// kept');
-  });
-
-  it('a `//` inside a STRING is not a comment', () => {
-    expect(s('const u = "http://example.com";\n')).toContain('http://example.com');
-  });
-
-  it('a comment with no code after it — the EOF trivia case — is still removed', () => {
-    expect(s('const a = 1;\n// tail @atlas/cli\n')).not.toContain('@atlas/cli');
-  });
-
-  // STRUCTURAL, not cosmetic: layer-guard slices the composition root at offsets computed on the RAW text
-  // and then brace-matches by index. Deleting comments instead of blanking them shifts every offset after
-  // the first one, and the slice lands somewhere else entirely.
-  it('preserves length and line count exactly', () => {
-    const src = '/* a */ const x = 1; // b\n/**\n * c\n */\nconst y = 2;\n';
-    const out = s(src);
-    expect(out.length).toBe(src.length);
-    expect(out.split('\n').length).toBe(src.split('\n').length);
-    expect(out).toContain('const x = 1;');
-    expect(out).toContain('const y = 2;');
   });
 });
 
