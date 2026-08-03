@@ -124,9 +124,19 @@ describe('TOOLS-6 — the tier bound holds on EVERY mode that returns a Pack, no
     const served = invariantsOf(verdict);
     expect(served.map((i) => i.nodeId)).toEqual(KEPT);
     expect(served.map((i) => i.tier)).toEqual(['T0', 'T1']);
-    // the token estimate is derived from the BOUNDED set — a dropped invariant must not inflate the budget
-    const pack = (verdict.data as { pack: { tokenEstimate: number } }).pack;
-    expect(pack.tokenEstimate).toBe(served.reduce((n, i) => n + i.claim.length, 0));
+    // [AMENDED — ADR-0013 clause 4] The estimate is the size of what was RETURNED, i.e. BOTH bands. It used
+    // to be asserted equal to the governing band alone, which was the same statement while `T2` was dropped
+    // outright; now a `T2` row is genuinely SERVED (in the advisory band) and genuinely costs the reader
+    // tokens, so an estimate that excluded it would under-report the pack the caller actually received.
+    // The property the original assertion defended is unchanged and is asserted directly below it: a row
+    // served on NEITHER band — the off-lattice `T3` — contributes nothing.
+    const pack = (verdict.data as { pack: { tokenEstimate: number; advisory: readonly { claim: string }[] } }).pack;
+    const governingChars = served.reduce((n, i) => n + i.claim.length, 0);
+    const advisoryChars = pack.advisory.reduce((n, i) => n + i.claim.length, 0);
+    expect(pack.tokenEstimate).toBe(governingChars + advisoryChars);
+    expect(pack.advisory.map((i) => (i as unknown as { nodeId: string }).nodeId)).toEqual(['k:T2']);
+    // the off-lattice `k:T3` row is in neither band, so it inflates neither the pack nor the budget
+    expect(pack.tokenEstimate).toBe(governingChars + 'claim k:T2'.length);
   });
 
   it('--by trigger (the dormant leg, driven with a populated triggers map): T2 + off-lattice OUT, T0/T1 through', () => {
@@ -149,9 +159,14 @@ describe('TOOLS-6 — the tier bound holds on EVERY mode that returns a Pack, no
     // sanity: the tag really does reach all four facts — the bound, not an empty lookup, is what drops two
     expect(base.store.size).toBe(ROWS.length);
 
-    const envelope = packFromModel(model, 'trigger', 'security', store);
+    // [ADR-0013] the oracle is a stub returning FRESH: this test is about the tier BOUND, not about drift,
+    // and a real `driftDetect` here would make a governance assertion depend on the fixture tree's bytes.
+    const envelope = packFromModel(model, 'trigger', 'security', store, () => 'FRESH');
     expect(envelope.pack.invariants.map((i) => i.nodeId)).toEqual(KEPT);
     expect(envelope.pack.invariants.map((i) => i.tier)).toEqual(['T0', 'T1']);
+    // The GOVERNING band still holds exactly T0/T1; the T2 moved to the ADVISORY band (never dropped, never
+    // interleaved) and every off-lattice spelling is in NEITHER — see the membership block below.
+    expect(envelope.pack.advisory.map((i) => i.tier)).toEqual(['T2']);
   });
 
   it('the production trigger mode stays empty — no trigger-axis producer exists (documented non-behavior)', () => {
@@ -177,6 +192,8 @@ describe('the bound is MEMBERSHIP (`isTier(t) && t !== T2`), never the bare `t !
   const node = (key: string): CurrentNode =>
     ({ nodeKey: key, family: 'advisory', contentHash: `h:${key}`, claims: [`claim ${key}`] }) as CurrentNode;
   const fact = (tier: string): GroundedFact => ({ kind: 'advisory', tier } as unknown as GroundedFact);
+  const inv = (tier: string): PackInvariant =>
+    ({ nodeId: 'n', tier, claim: 'c', freshness: 'FRESH' }) as unknown as PackInvariant;
 
   // Every one of these is `!== 'T2'` and would have been SERVED by the negative form. `hasOwnProperty` on
   // the lattice makes prototype members and near-misses miss byte-exactly (no trim, no case-fold).
@@ -184,18 +201,22 @@ describe('the bound is MEMBERSHIP (`isTier(t) && t !== T2`), never the bare `t !
 
   it('refuses every off-lattice spelling and T2, admits exactly T0/T1', () => {
     for (const t of OFF_LATTICE) {
-      expect(atLeastT1({ nodeId: 'n' as PackInvariant['nodeId'], tier: t as PackInvariant['tier'], claim: 'c' })).toBe(false);
+      expect(atLeastT1(inv(t))).toBe(false);
     }
-    expect(atLeastT1({ nodeId: 'n' as PackInvariant['nodeId'], tier: 'T2', claim: 'c' })).toBe(false);
-    expect(atLeastT1({ nodeId: 'n' as PackInvariant['nodeId'], tier: 'T1', claim: 'c' })).toBe(true);
-    expect(atLeastT1({ nodeId: 'n' as PackInvariant['nodeId'], tier: 'T0', claim: 'c' })).toBe(true);
+    expect(atLeastT1(inv('T2'))).toBe(false);
+    expect(atLeastT1(inv('T1'))).toBe(true);
+    expect(atLeastT1(inv('T0'))).toBe(true);
   });
 
   it('mintPack — the ONE pack-assembly seam in this package — applies the bound and sorts deterministically', () => {
     const pairs = [...OFF_LATTICE, 'T2', 'T1', 'T0'].map((t) => [node(`k:${t}`), fact(t)] as const);
-    const pack = mintPack({ territory: 'src', axisHash: 'ax' as Hash, stale: false }, pairs);
+    const pack = mintPack({ territory: 'src', axisHash: 'ax' as Hash, stale: false }, pairs, () => 'FRESH');
     expect(pack.invariants.map((i) => i.tier)).toEqual(['T0', 'T1']);
     expect(pack.invariants.map((i) => i.nodeId)).toEqual(['k:T0', 'k:T1']);
+    // [ADR-0013] the T2 is BANDED, not dropped; every off-lattice spelling is in NEITHER band, which is the
+    // property this block exists for — the advisory band must not become the hole facing the other way.
+    expect(pack.advisory.map((i) => i.nodeId)).toEqual(['k:T2']);
+    expect(pack.advisoryDropped).toBe(0);
     expect(pack.territory).toBe('src');
     expect(pack.stale).toBe(false); // the caller's freshness flag is carried, never downgraded here
   });

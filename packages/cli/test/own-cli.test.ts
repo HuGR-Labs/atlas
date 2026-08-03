@@ -92,7 +92,7 @@ describe('CLI-8 — the rendered briefing carries the facts, the budget and the 
     const v = ownVerdict(
       DISPATCH({
         unit: 'the greeting service',
-        invariants: [{ nodeId: 'n1' as never, tier: 'T1', claim: 'greet returns non-empty' }],
+        invariants: [{ nodeId: 'n1' as never, tier: 'T1', claim: 'greet returns non-empty', freshness: 'FRESH' }],
         gotchas: [
           { kind: 'advisory', id: 'g1' as never, tier: 'T0', claimNorm: 'greet does not escape', grounding: { entries: [] }, freshness: 'FRESH', claims: [], authoring: 'ADVISORY' },
         ],
@@ -127,7 +127,7 @@ describe('CLI-8 — the rendered briefing carries the facts, the budget and the 
   it('0 SILENT DROPS — a capped-out fact is NAMED, and the guidance points at a door that takes a nodeKey', () => {
     const v = ownVerdict(
       DISPATCH({
-        invariants: [{ nodeId: 'n1' as never, tier: 'T1', claim: 'fits' }],
+        invariants: [{ nodeId: 'n1' as never, tier: 'T1', claim: 'fits', freshness: 'FRESH' }],
         pullReachable: ['n2' as never, 'n3' as never],
       }),
     );
@@ -164,7 +164,7 @@ describe('CLI-8 — the rendered briefing carries the facts, the budget and the 
   });
 
   it('PURE — the same briefing renders byte-identically (no clock, no nonce, CLI-3c)', () => {
-    const d = DISPATCH({ invariants: [{ nodeId: 'n1' as never, tier: 'T1', claim: 'c' }], tokenEstimate: 1 });
+    const d = DISPATCH({ invariants: [{ nodeId: 'n1' as never, tier: 'T1', claim: 'c', freshness: 'FRESH' }], tokenEstimate: 1 });
     expect(ownVerdict(d).stdout).toBe(ownVerdict(d).stdout);
   });
 });

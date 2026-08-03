@@ -39,7 +39,7 @@ function rf(
 }
 
 function pi(id: string, tier: Tier = 'T1'): PackInvariant {
-  return { nodeId: nk(id), tier, claim: id };
+  return { nodeId: nk(id), tier, claim: id, freshness: 'FRESH' };
 }
 
 function axesOf(

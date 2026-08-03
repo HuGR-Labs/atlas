@@ -337,6 +337,11 @@ gen: conformance   # held-out · different territory (`kernel/`), same flag-only
 
 ### REQ-TOOLS-6a — query resolves scope to covering territories   (happy)
 
+<!-- REQ-TOOLS-6 family AMENDED 2026-08-03 (owner-ratified; ADR-0013 + the ADR-0002 amendment). The 6a/6b/6c
+     goldens below are UNCHANGED and still correct: they witness the GOVERNING band, which this amendment does
+     not move. The new SCN-TOOLS-6e-* / SCN-TOOLS-6f-* goldens at the end of this section witness the per-fact
+     freshness verdict and the two-band split. -->
+
 ### SCN-TOOLS-6a-1 — a file scope resolves through the index to its territory   (happy)
 source: REQ-TOOLS-6a
 Given `atlas-query(scope="src/finance/arr.rs")` over the reference `tools/ref/query.ts` with the index reference
@@ -391,6 +396,62 @@ When the pack is delivered
 Then `stale:true` is surfaced on the pack and the contract requires re-grounding before the pack is trusted — a stale pack is never served as fresh truth
 teeth: breaks-on "the `stale:true` flag on `claim:acme-ceo` is dropped and the stale pack is served as fresh — trusted without re-grounding"
 gen: conformance   # held-out · different stale node (`claim:acme-ceo`), same stale-surfacing behaviour vs `tools/ref/query.ts`
+
+### SCN-TOOLS-6e-1 — a changed unit drifts ONE row; the untouched row stays fresh   (happy)
+source: REQ-TOOLS-6e
+Given two grounded facts under one scope, anchored at two different files, both stored `freshness: FRESH`
+When the file under ONE of them changes and `atlas-query` resolves the scope
+Then that row's `freshness` reads `DRIFTED` and the other row's reads `FRESH` — the verdict is per fact, not per pack
+teeth: breaks-on "the row's verdict is read from the stored write-time `freshness` (which never moves) or is folded to one pack-wide value"
+gen: conformance
+
+### SCN-TOOLS-6e-2 — nothing moved ⇒ every row fresh (no false alarm)   (guard)
+source: REQ-TOOLS-6e
+Given grounded facts under a scope and a tree that has not changed since they were authored
+When `atlas-query` resolves the scope
+Then EVERY row reads `freshness: FRESH`
+teeth: breaks-on "the oracle flags everything, which passes the positive case and is not a signal"
+gen: conformance
+
+### SCN-TOOLS-6e-3 — the pack-level `stale` watermark is unchanged by the per-fact verdict   (guard)
+source: REQ-TOOLS-6e
+Given a row whose per-fact verdict is `DRIFTED` while the N11 watermark has nothing it can prove
+When `atlas-query` resolves the scope
+Then the row reads `DRIFTED` and the pack still reports `stale:false` — the two signals answer different questions and neither is computed from the other
+teeth: breaks-on "the per-fact verdict is folded into `stale`, silently replacing ADR-0002's watermark with a live recompute"
+gen: conformance
+
+### SCN-TOOLS-6e-4 — an underivable verdict fails closed to DRIFTED   (guard)
+source: REQ-TOOLS-6e
+Given a pack producer with no freshness oracle wired, over facts whose stored `freshness` is `FRESH`
+When `atlas-query` resolves the scope
+Then every row reads `DRIFTED`, never the stored `FRESH`
+teeth: breaks-on "the row falls back to the stored write-time freshness and reports a verification that never happened"
+gen: conformance
+
+### SCN-TOOLS-6f-1 — an off-lattice tier lands in NEITHER band   (guard)
+source: REQ-TOOLS-6f
+Given a covering set carrying a row with `tier:'T3'` (reachable from a committed `.atlas/` projection no write door saw)
+When `atlas-query` mints the pack
+Then the row is in neither `invariants` nor `advisory`, and `advisoryDropped` does not count it — it was refused, not truncated
+teeth: breaks-on "the advisory band is stated as `!atLeastT1` instead of `isTier(t) && t === 'T2'`, reopening the off-lattice hole facing the other way"
+gen: conformance
+
+### SCN-TOOLS-6f-2 — the advisory cap truncates deterministically and reports the drop   (guard)
+source: REQ-TOOLS-6f
+Given more `T2` rows than the ratified 2000-token advisory cap admits
+When `atlas-query` mints the pack
+Then the advisory band is the cap-wins PREFIX of the caller's order, `advisoryDropped` equals the remainder, served + dropped equals offered, and two runs are byte-identical
+teeth: breaks-on "the band is silently truncated with no ledger, or a best-fit fill lets a later smaller row displace an earlier one"
+gen: conformance
+
+### SCN-TOOLS-6f-3 — the governing band's budget is reserved   (guard)
+source: REQ-TOOLS-6f
+Given a governing band far larger than the advisory cap, beside an over-cap advisory band
+When `atlas-query` mints the pack
+Then the governing band is served whole and the advisory band is bounded exactly as it would be alone
+teeth: breaks-on "one shared budget lets an advisory proposal displace a ratified invariant"
+gen: conformance
 
 ---
 

@@ -208,7 +208,7 @@ describe('S28 — atlas own <scope>: the RETR-12 briefing composed over the gove
     // …and it is NOT double-counted into the invariants section.
     expect(ownInvRows(own.stdout).join('\n')).not.toContain(CLAIM_GOTCHA);
     // The same fact in the query pack is an ordinary `inv` row — the two doors project one store differently.
-    expect(runAtlas(repo.repoPath, ['query', 'src']).stdout).toContain(`inv T1 ${factGotcha.id}: ${CLAIM_GOTCHA}`);
+    expect(runAtlas(repo.repoPath, ['query', 'src']).stdout).toContain(`inv T1 ${factGotcha.id} [FRESH]: ${CLAIM_GOTCHA}`);
   });
 
   it('the blast summary is REAL — the dependent fact rides the SAME closure `query --by dependency` serves', () => {
@@ -226,13 +226,19 @@ describe('S28 — atlas own <scope>: the RETR-12 briefing composed over the gove
     expect(byDep.stdout).toContain(String(factDep.id)); // the same identity, out of the same closure
   });
 
-  it('TOOLS-6 holds on this door too — the T2 fact is bounded OUT of the briefing, as it is out of the pack', () => {
+  it('TOOLS-6 on this door: the T2 fact is OUT of the briefing, and in `query` only on the ADVISORY verb', () => {
     // A read door with a laxer bound than the one beside it is a route around it. The T2 fact was ACCEPTED by
-    // the write door (it is in the store, addressable) and must appear in NEITHER read projection.
+    // the write door (it is in the store, addressable) and must never reach a GOVERNING surface.
     const own = runAtlas(repo.repoPath, ['own', 'src']);
     expect(own.stdout).not.toContain(CLAIM_T2);
     expect(own.stdout).not.toContain(String(factT2.id));
-    expect(runAtlas(repo.repoPath, ['query', 'src']).stdout).not.toContain(CLAIM_T2);
+    // [AMENDED — ADR-0013] `atlas query` now SERVES a T2 row, in the separately capped ADVISORY band. This
+    // assertion used to read `not.toContain(CLAIM_T2)` and is re-pointed at the property that actually
+    // matters: it must not arrive on the governing `inv` verb. `atlas own` is UNCHANGED and still bounds T2
+    // out entirely — the briefing composer applies `atLeastT1` and this WP did not touch that.
+    const q = runAtlas(repo.repoPath, ['query', 'src']).stdout.split('\n');
+    expect(q.filter((l) => l.startsWith('  inv ') && l.includes(CLAIM_T2))).toEqual([]);
+    expect(q.filter((l) => l.startsWith('  advisory ') && l.includes(CLAIM_T2))).toHaveLength(1);
   });
 
   it('the D1 availability manifest is CONTENT-FREE — it names surfaces and how to pull them, never content', () => {

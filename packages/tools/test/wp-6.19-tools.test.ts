@@ -30,10 +30,10 @@ const financeIndex: QueryIndex = {
       territory,
       axisHash: 'axis-finance-01' as Hash,
       invariants: [
-        { nodeId: 'claim:acme-arr' as NodeKey, tier: 'T1', claim: 'ACME ARR 2024 = $4.2M' },
-        { nodeId: 'claim:acme-ceo' as NodeKey, tier: 'T0', claim: 'ACME CEO = Jane Roe' },
+        { nodeId: 'claim:acme-arr' as NodeKey, tier: 'T1', claim: 'ACME ARR 2024 = $4.2M', freshness: 'FRESH' },
+        { nodeId: 'claim:acme-ceo' as NodeKey, tier: 'T0', claim: 'ACME CEO = Jane Roe', freshness: 'FRESH' },
         // a T2 (below-T1) node the bounded read surface MUST drop out of the pack:
-        { nodeId: 'note:desk-layout' as NodeKey, tier: 'T2', claim: 'finance desk is on floor 3' },
+        { nodeId: 'note:desk-layout' as NodeKey, tier: 'T2', claim: 'finance desk is on floor 3', freshness: 'FRESH' },
       ],
       stale: false,
     };
@@ -94,8 +94,8 @@ const staleIndex: QueryIndex = {
       territory,
       axisHash: 'axis-finance-01' as Hash,
       invariants: [
-        { nodeId: 'claim:acme-arr' as NodeKey, tier: 'T1', claim: 'ACME ARR 2024 = $4.2M' },
-        { nodeId: 'N2' as NodeKey, tier: 'T1', claim: 'ACME headcount 2024 = 120' },
+        { nodeId: 'claim:acme-arr' as NodeKey, tier: 'T1', claim: 'ACME ARR 2024 = $4.2M', freshness: 'FRESH' },
+        { nodeId: 'N2' as NodeKey, tier: 'T1', claim: 'ACME headcount 2024 = 120', freshness: 'DRIFTED' },
       ],
       stale: true, // the backing grounding drifted — the whole pack is stale
     };

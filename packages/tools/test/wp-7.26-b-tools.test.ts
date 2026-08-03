@@ -44,10 +44,10 @@ const financeIndex: QueryIndex = {
       territory,
       axisHash: 'axis-finance-01' as Hash,
       invariants: [
-        { nodeId: 'claim:acme-arr' as NodeKey, tier: 'T1', claim: 'ACME ARR 2024 = $4.2M' },
-        { nodeId: 'claim:acme-ceo' as NodeKey, tier: 'T0', claim: 'ACME CEO = Jane Roe' },
+        { nodeId: 'claim:acme-arr' as NodeKey, tier: 'T1', claim: 'ACME ARR 2024 = $4.2M', freshness: 'FRESH' },
+        { nodeId: 'claim:acme-ceo' as NodeKey, tier: 'T0', claim: 'ACME CEO = Jane Roe', freshness: 'FRESH' },
         // a T2 (below-T1) node the read surface MUST bound out of the pack:
-        { nodeId: 'note:desk-layout' as NodeKey, tier: 'T2', claim: 'finance desk is on floor 3' },
+        { nodeId: 'note:desk-layout' as NodeKey, tier: 'T2', claim: 'finance desk is on floor 3', freshness: 'FRESH' },
       ],
       stale: false,
     };

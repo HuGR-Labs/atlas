@@ -69,7 +69,7 @@ describe('S26 — an unrelated write cannot LAUNDER the freshness watermark (it 
   it('AT HEAD: fact A is served and the pack is honestly fresh', () => {
     const r = runAtlas(repo.repoPath, ['query', 'src']);
     expect(r.exitCode).toBe(0);
-    expect(invLines(r.stdout)).toEqual([`  inv T1 ${factA}: foo is one`]);
+    expect(invLines(r.stdout)).toEqual([`  inv T1 ${factA} [FRESH]: foo is one`]);
     expect(staleOf(r.stdout)).toBe('stale: false');
   });
 
@@ -102,8 +102,12 @@ describe('S26 — an unrelated write cannot LAUNDER the freshness watermark (it 
 
     const q = runAtlas(repo.repoPath, ['query', 'src']);
     expect(q.exitCode).toBe(0);
+    // [ADR-0013] MEASURED through the binary: the two rows now disagree, per fact, and correctly. Fact A's
+    // anchored unit really did move at C2 — `doctor why` says `class=semantic` three lines up — and the READ
+    // door finally says the same thing on A's own row. Fact B, derived at HEAD, says FRESH. Before this WP
+    // the read door had no way to say either: it had one pack-wide boolean and both rows looked alike.
     expect(invLines(q.stdout)).toEqual([
-      ...[`  inv T1 ${factA}: foo is one`, `  inv T1 ${factB}: other is two`].sort(),
+      ...[`  inv T1 ${factA} [DRIFTED]: foo is one`, `  inv T1 ${factB} [FRESH]: other is two`].sort(),
     ]);
     // BEFORE THE FIX this read said `stale: false` — one unrelated emit laundered the whole projection's
     // watermark, so the drifted fact A was served as verified-fresh while doctor printed its drift.
@@ -113,12 +117,12 @@ describe('S26 — an unrelated write cannot LAUNDER the freshness watermark (it 
   it('PER-SCOPE ACCURACY: the drifted sub-tree is stale, the just-verified sub-tree is not', () => {
     const app = runAtlas(repo.repoPath, ['query', 'src/app']);
     expect(app.exitCode).toBe(0);
-    expect(invLines(app.stdout)).toEqual([`  inv T1 ${factA}: foo is one`]);
+    expect(invLines(app.stdout)).toEqual([`  inv T1 ${factA} [DRIFTED]: foo is one`]);
     expect(staleOf(app.stdout)).toBe('stale: true'); // A's row was derived at C1, HEAD is C2
 
     const lib = runAtlas(repo.repoPath, ['query', 'src/lib']);
     expect(lib.exitCode).toBe(0);
-    expect(invLines(lib.stdout)).toEqual([`  inv T1 ${factB}: other is two`]);
+    expect(invLines(lib.stdout)).toEqual([`  inv T1 ${factB} [FRESH]: other is two`]);
     // B's row was derived AT the current HEAD, and nothing under src/lib drifted — a projection-wide flag
     // could not say this without also saying it about src/app.
     expect(staleOf(lib.stdout)).toBe('stale: false');

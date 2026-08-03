@@ -21,7 +21,8 @@ describe('renderVerdict — Seam-2 deterministic data: block', () => {
       data: {
         pack: {
           territory: 't', axisHash: 'a', tokenEstimate: 0, stale: false,
-          invariants: [{ tier: 'T1', nodeId: 'n1', claim: 'claim one' }, { tier: 'T0', nodeId: 'n2', claim: 'claim two' }],
+          advisory: [{ tier: 'T2', nodeId: 'n3', claim: 'a proposal' }], advisoryDropped: 4,
+          invariants: [{ tier: 'T1', nodeId: 'n1', claim: 'claim one', freshness: 'FRESH' }, { tier: 'T0', nodeId: 'n2', claim: 'claim two', freshness: 'DRIFTED' }],
         },
         subsumes: [{ broader: 'b1', narrower: 'q1' }],
       } as unknown,
@@ -32,7 +33,10 @@ describe('renderVerdict — Seam-2 deterministic data: block', () => {
     // N12: `tokenEstimate` now rides the CLI query block too (CLI/MCP parity), after `stale`, before subsumes.
     expect(stdout).toBe(
       PREFIX +
-        'data:\n  inv T1 n1: claim one\n  inv T0 n2: claim two\n  stale: false\n  tokenEstimate: 0\n  subsumes b1 ⊃ q1\n',
+        // [ADR-0013] the GOVERNING band keeps the `inv` verb and gains its per-row verdict; the ADVISORY band
+        // gets its OWN verb and is never interleaved; the truncation ledger rides out beside the data (#130).
+        'data:\n  inv T1 n1 [FRESH]: claim one\n  inv T0 n2 [DRIFTED]: claim two\n' +
+        '  advisory T2 n3 [?]: a proposal\n  advisoryDropped: 4\n  stale: false\n  tokenEstimate: 0\n  subsumes b1 ⊃ q1\n',
     );
   });
 

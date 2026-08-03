@@ -70,8 +70,11 @@ const GUIDANCE: Record<Tool, Guidance> = {
     invariant: 'TOOLS-5: $0-LLM structural move-in, no auto-promotion above T2',
   },
   'atlas-query': {
-    next: 're-ground stale packs before trusting; scope must be a path string',
-    invariant: 'TOOLS-6: bounded read projection (tier>=T1)',
+    // ADR-0013 (owner-ratified 2026-08-03): the pack is TWO bands. This is the string the user actually
+    // sees on every invocation — the one ADR-0013 named as the place any implementation of the amendment
+    // must land — so it says which band is which and that an advisory row passed no ratifier.
+    next: 're-ground stale packs before trusting; an advisory row is a machine proposal no ratifier saw — check its per-row freshness; scope must be a path string',
+    invariant: 'TOOLS-6: bounded read projection, two bands (governing tier>=T1 + separately capped advisory T2), every row carrying its own freshness',
   },
   'atlas-emit': {
     next: 'a rejected write did not re-derive at source@sha — fix the citation and re-emit',

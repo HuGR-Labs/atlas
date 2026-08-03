@@ -51,6 +51,8 @@ const financePack: Pack = {
   territory: 'finance/',
   axisHash: 'axis-finance-01' as Hash,
   invariants: [],
+  advisory: [],
+  advisoryDropped: 0,
   tokenEstimate: 0,
   stale: false,
 };

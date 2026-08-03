@@ -10,6 +10,25 @@
 //
 // The wrapped index-adapter is NOT modified — its purity/spy invariant is preserved; this readback is a
 // strictly additive composition layer over it.
+//
+// ── PER-FACT FRESHNESS (ADR-0013 / REQ-TOOLS-6d amended, owner-ratified 2026-08-03) ────────────────────
+// Every row now carries its OWN structural verdict, resolved through the injected `freshness` oracle — the
+// composition root binds it to `driftDetect` over the `Axes` it ALREADY builds once per process, so this is
+// the SAME oracle the write door's truth-gate runs (`compose.ts` `buildGate`), not a second freshness idea.
+//
+// THIS IS ADDITIVE TO `stale`, NEVER A REPLACEMENT FOR IT, and the measurement is why. On the real 199-fact
+// graph, one commit touching only a file NO fact is anchored at flips `stale` to `true` for every row
+// (correct and conservative: the view IS behind HEAD) while the per-fact oracle flags ZERO facts (correct
+// and precise: nothing a fact cites moved). Two questions, two answers, both true. `stale` is computed
+// below EXACTLY as it was — from the stored `DRIFTED` fold and the N11 per-row watermark — and no line of
+// it reads the per-fact verdict. Folding one into the other would destroy whichever property it collapsed.
+//
+// What ADR-0002 rejected, and what it did not: it rejected a LIVE GIT re-derivation ("puts a git-worktree
+// checkout on every query"). `driftDetect` against already-built axes is not that — no git call, no
+// worktree, no per-row I/O. Measured on the same graph, for all 199 facts: 78-89 ms on the FIRST call in a
+// fresh process (what a CLI invocation actually pays) and ~11 ms warm-median over 12 repeats. Against a
+// whole `atlas query` that takes ~5 s — dominated by the AST fold + axes build `composeRuntime` ALREADY
+// does — the added work is inside the run-to-run noise of the command.
 
 import type { Hash, PackInvariant } from '@atlas/contracts';
 import type { QueryIndex } from '@atlas/tools';
@@ -17,7 +36,8 @@ import { currentNodes } from '@atlas/knowledge';
 import type { GroundedFact } from '@atlas/knowledge';
 import { underScope } from './anchor-scope.js';
 import { rowBehindHead } from './freshness-watermark.js';
-import { factToInvariant } from './pack-shape.js';
+import { factToInvariant, resolveFreshness } from './pack-shape.js';
+import type { FreshnessOracle } from './pack-shape.js';
 import type { DiskStore } from './store.js';
 import { rehydrateProjection } from './store.js';
 
@@ -64,6 +84,7 @@ export function createProjectionQueryIndex(
   structural: QueryIndex,
   store: DiskStore,
   headSha?: () => string | undefined,
+  freshness?: FreshnessOracle,
 ): QueryIndex {
   return {
     cover(scope: string) {
@@ -78,7 +99,8 @@ export function createProjectionQueryIndex(
         if (!underScope(node.primaryAnchor, scope)) continue; // out-of-scope facts never leak into the pack
         const fact = store.get(node.contentHash as Hash) as GroundedFact | undefined;
         if (fact === undefined) continue; // the CAS bytes ARE the fact; a miss ⇒ skip (never a throw)
-        invariants.push(factToInvariant(node, fact)); // the ONE shared shaping (shared with retrieval-model.ts)
+        // The ONE shared shaping (shared with retrieval-model.ts), now carrying this row's OWN verdict.
+        invariants.push(factToInvariant(node, fact, resolveFreshness(freshness, fact)));
         if (fact.freshness === 'DRIFTED') stale = true; // any drifted backing grounding ⇒ re-ground signal
         // N11 per-ROW: this row's own stamp (falling back to the projection watermark for an unstamped row)
         // against live HEAD. Placed beside the DRIFTED leg deliberately — both answer "must this PACK be

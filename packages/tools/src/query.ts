@@ -1,17 +1,19 @@
 // @atlas/tools — src/query.ts   (WP-7.26-b.TOOLS — TOOLS-6, INV-TOOLS-6; guidance INV-TOOLS-4)
 //
 // `atlas-query` — the read-only discovery entry point + the frozen `QueryApi`. Resolves any scope through an
-// injected index port to the MERGED covering bounded `Pack` — `tier≥T1` only, stale-flagged (a stale pack
-// is a re-ground SIGNAL, not served truth). Pure + total; the concrete index resolution is @atlas/index.
+// injected index port to the MERGED covering bounded `Pack` — TWO bands (governing `tier≥T1` + advisory
+// `T2` under its own cap, ADR-0013), stale-flagged (a stale pack is a re-ground SIGNAL, not served truth)
+// AND per-fact freshness-flagged. Pure + total; the concrete index resolution is @atlas/index.
 
-import { isTier } from '@atlas/knowledge';
 import type { Hash, Pack, PackInvariant } from '@atlas/contracts';
+import { packTokens, splitBands } from './bands.js';
 import type { QueryOut } from './types.js';
 
 export interface QueryApi {
-  /** Resolve any scope (file/folder/module/crate) → the merged covering bounded `Pack` of `tier≥T1`
-   *  invariants (`≤ ~2K`); `stale:true` MUST mean re-ground before trusting (TOOLS-6, §6.1). Pure + total.
-   *  (method-tags-tls:58)
+  /** Resolve any scope (file/folder/module/crate) → the merged covering bounded `Pack`: the GOVERNING band
+   *  of `tier≥T1` invariants (`≤ ~2K`) plus the separately capped ADVISORY band of `T2` rows (ADR-0013,
+   *  owner-ratified 2026-08-03); `stale:true` MUST mean re-ground before trusting (TOOLS-6, §6.1), and
+   *  every row carries its OWN `freshness` verdict beside it. Pure + total. (method-tags-tls:58)
    *
    *  [PINNED — `scope` arg] atlas-tools:125 names `atlas-query <scope>`; no `Scope`/`Path` brand is
    *  frozen at this seam (cf retrieval `Path = string`). Pinned to `string`, NOT a brand.
@@ -37,38 +39,31 @@ export interface QueryIndex {
 }
 
 /**
- * The pack bound: every invariant is `tier≥T1` (T0 or T1); a `T2`/below-T1 node is bounded OUT (TOOLS-6).
- *
- * Stated as MEMBERSHIP, not as `!== 'T2'`. The negative form admitted every value that was not the literal
- * string `'T2'` — including every off-lattice one — so a row carrying `tier:'T3'` was served as though it
- * were ratified `T1`-or-stricter. That is reachable without any write door: `.atlas/` is a COMMITTED
- * artifact (only `.atlas/policy.json` is CODEOWNER-gated), so a repository can ship a projection and a CAS
- * blob that never passed a gate, and the content re-hash on read confirms the bytes, not their governance.
- * The write doors were made total on `tier`; a read door that is not total is the same hole facing the
- * other way. An unrecognized class is not `≥T1` — it is not a class at all, and is bounded OUT.
- */
-const atLeastT1 = (inv: PackInvariant): boolean => isTier(inv.tier) && inv.tier !== 'T2';
-
-/** The advisory `≤ ~2K` token estimate — a deterministic char-count proxy over the merged claims. It is an
- *  ADVISORY size bound (verified by a size test), never a correctness oracle (method-tags-tls:158). */
-const tokenEstimate = (invariants: readonly PackInvariant[]): number =>
-  invariants.reduce((n, inv) => n + inv.claim.length, 0);
-
-/**
  * Build `atlas-query` over an injected structural index port. The returned `query` conforms EXACTLY to the
  * frozen `QueryApi.query(scope)` signature. Pure + total and READ-ONLY: it resolves the scope through the
- * index, BOUNDS the covering invariants to `tier≥T1`, and assembles the merged `Pack` carrying the `stale`
- * flag and the advisory token estimate. It never mutates a store and never opens a write path.
+ * index, SPLITS the covering invariants into the two bands (`./bands.ts` — governing `tier≥T1`, advisory
+ * `T2` under its own cap, off-lattice in neither), and assembles the merged `Pack` carrying the `stale`
+ * flag and the token estimate. It never mutates a store and never opens a write path.
+ *
+ * THE GOVERNING BAND IS RESERVED, NOT MERELY PRESERVED: `splitBands` caps only the advisory side, so for a
+ * covering set with no `T2` row this function returns exactly the invariants it returned before ADR-0013,
+ * in the same order. `stale` is passed through untouched — the per-fact `PackInvariant.freshness` rides
+ * BESIDE the pack-level watermark and is never folded into it (ADR-0002 amended, not reversed).
  */
 export function createQuery(index: QueryIndex): QueryApi {
   const query = (scope: string): QueryOut => {
     const cover = index.cover(scope); // resolve the scope → its covering territory (may throw on malformed)
-    const invariants = cover.invariants.filter(atLeastT1); // tier≥T1 bound — below-T1 noise is dropped
+    const { governing, advisory, advisoryDropped } = splitBands(cover.invariants);
     const pack: Pack = {
       territory: cover.territory,
       axisHash: cover.axisHash,
-      invariants,
-      tokenEstimate: tokenEstimate(invariants),
+      invariants: governing,
+      advisory,
+      advisoryDropped,
+      // ADR-0013 clause 4 — the size of what was actually RETURNED, i.e. BOTH bands. The dropped advisory
+      // tail is not counted: it was not returned, and counting it would make the estimate describe a pack
+      // the caller did not receive.
+      tokenEstimate: packTokens(governing) + packTokens(advisory),
       stale: cover.stale, // a stale pack is surfaced, NOT served as fresh truth (TOOLS-6c)
     };
     return pack;

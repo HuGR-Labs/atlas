@@ -51,12 +51,15 @@ import type {
   SizedInvariant,
 } from '@atlas/retrieval';
 import { createResolve } from '@atlas/index';
+// The GROUND-1 per-fact drift oracle — the SAME function the write door's truth-gate and the query readback
+// run, over the SAME composition-root `axes` this feed already receives. Never a second freshness notion.
+import { driftDetect } from '@atlas/grounding';
 import type { Axes, AxisForest, IndexNode } from '@atlas/index';
 import { currentNodes, tierRank } from '@atlas/knowledge';
 import type { CurrentNode, GroundedFact, PredicateSlot } from '@atlas/knowledge';
-import type { Hash, NodeKey, Tier } from '@atlas/contracts';
+import type { Freshness, Hash, NodeKey, Tier } from '@atlas/contracts';
 import { underScope } from './anchor-scope.js';
-import { atLeastT1, factToInvariant } from './pack-shape.js';
+import { atLeastT1, factToInvariant, resolveFreshness } from './pack-shape.js';
 import type { AtlasPolicy } from './policy.js';
 import { buildRetrievalModel } from './retrieval-model.js';
 import { rehydrateProjection } from './store.js';
@@ -244,6 +247,12 @@ export interface OwnSourceDeps {
 export function buildOwnSources(deps: OwnSourceDeps): OwnSources {
   const { axes, store, policy } = deps;
   const forest: AxisForest = { spatial: axes.spatial, territory: axes.territory, dependency: axes.dependency };
+  // This feed's per-fact freshness oracle (ADR-0013). Bound HERE rather than injected because `axes` is
+  // already a declared dep — the briefing is composed over the same snapshot the pack is.
+  // TOTAL, via the one shared entry point: a fact whose CAS bytes carry no `grounding` at all (reachable —
+  // `.atlas/` is committed) makes `driftDetect` raise, and a briefing door must degrade, never throw.
+  const freshnessOf = (fact: GroundedFact): Freshness =>
+    resolveFreshness((f) => driftDetect(f.grounding, axes), fact);
 
   /** The rows under one unit's scope, off ONE live read of the projection. */
   const scopeRows = (unit: OwnUnit): readonly Row[] => underScopeRows(allRows(store), unit.id);
@@ -268,7 +277,7 @@ export function buildOwnSources(deps: OwnSourceDeps): OwnSources {
       const out: SizedInvariant[] = [];
       for (const row of scopeRows(unit)) {
         if (GOTCHA_SLOTS.has(slotOf(row) as PredicateSlot)) continue; // routed to `gotchas` instead
-        const inv = factToInvariant(row.node, row.fact);
+        const inv = factToInvariant(row.node, row.fact, freshnessOf(row.fact));
         if (!atLeastT1(inv)) continue; // TOOLS-6, applied at this feed exactly as `mintPack` applies it
         out.push({ inv, ppr: 0, hits: 0, cost: inv.claim.length });
       }
@@ -283,7 +292,10 @@ export function buildOwnSources(deps: OwnSourceDeps): OwnSources {
         // for byte-stability. A scope that is not an index unit contributes none.
         contents: (node?.children ?? []).map((c) => asNodeKey(c.key)).sort(),
         owner: terrainOwner(policy, unit.id),
-        tier: terrainTier(rows.filter((r) => atLeastT1(factToInvariant(r.node, r.fact)))),
+        // The verdict is irrelevant to a TIER test, so the oracle is not run here: this line asks which
+        // governance classes are present, and paying a drift re-derivation per row to answer it would be
+        // cost with no reader. `'FRESH'` is a placeholder for a field this predicate never reads.
+        tier: terrainTier(rows.filter((r) => atLeastT1(factToInvariant(r.node, r.fact, 'FRESH')))),
       };
     },
 
@@ -297,7 +309,9 @@ export function buildOwnSources(deps: OwnSourceDeps): OwnSources {
     gotchas: (unit): readonly SizedGotcha[] =>
       scopeRows(unit)
         .filter((r) => GOTCHA_SLOTS.has(slotOf(r) as PredicateSlot))
-        .filter((r) => atLeastT1(factToInvariant(r.node, r.fact))) // same bound the pack carries — see above
+        // Tier test only — same non-reading placeholder as `terrain` above (`gotchas` carries whole facts,
+        // not `PackInvariant`s, so no freshness field of this row is ever served).
+        .filter((r) => atLeastT1(factToInvariant(r.node, r.fact, 'FRESH'))) // same bound the pack carries
         .map((r) => ({ fact: r.fact, cost: r.node.claims.join('; ').length })),
 
     // L6 memory has no production instance; `OwnPack.memory` is `unknown` so retrieval never names a memory

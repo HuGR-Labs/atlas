@@ -35,7 +35,9 @@ function pack(territory: string, ids: readonly string[]): Pack {
   return {
     territory,
     axisHash: HASH,
-    invariants: ids.map((id) => ({ nodeId: nk(id), tier: 'T1' as const, claim: id })),
+    invariants: ids.map((id) => ({ nodeId: nk(id), tier: 'T1' as const, claim: id, freshness: 'FRESH' as const })),
+    advisory: [],
+    advisoryDropped: 0,
     tokenEstimate: 100 * ids.length,
     stale: false,
   };

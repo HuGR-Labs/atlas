@@ -13,6 +13,8 @@ import { createHandler, createInit, createQuery, createReconcile } from '@atlas/
 import type { ToolLegs, ToolLeg, NodeSource } from '@atlas/tools';
 import { build, createResolve, createDepgraph, nodeHashOfPath } from '@atlas/index';
 import type { Axes } from '@atlas/index';
+// The GROUND-1 per-fact drift oracle — the SAME import the composition root's truth-gate uses (compose.ts).
+import { driftDetect } from '@atlas/grounding';
 import { currentNodes, deriveSameAs, deriveSubsumes } from '@atlas/knowledge';
 import type { GroundedFact } from '@atlas/knowledge';
 import type { Hash } from '@atlas/contracts';
@@ -176,9 +178,20 @@ export function assembleHandler(config: WireConfig): WiredHandler {
     ...(config.ratifyToken !== undefined ? { ratifyToken: config.ratifyToken } : {}),
   });
 
+  // THE PER-FACT FRESHNESS ORACLE (ADR-0013 / REQ-TOOLS-6d amended). `driftDetect` over the composition
+  // root's ALREADY-BUILT `Axes` — the very oracle over the very axes the WRITE door's truth-gate rides
+  // (`compose.ts` `buildGate(axes)`), never a second freshness notion and never a git call on the read path.
+  //
+  // ABSENT `config.axes` (the bare WIRE fake assembly — no composition root) ⇒ the seam is NOT wired and
+  // every row reads `DRIFTED`, fail-closed (`resolveFreshness`, pack-shape.ts). It does NOT fall back to the
+  // stored `fact.freshness`, which no read path writes back and which therefore says `FRESH` forever.
+  const axes = config.axes;
+  const freshnessOracle =
+    axes === undefined ? undefined : (fact: GroundedFact) => driftDetect(fact.grounding, axes);
+
   // Seam-1: wrap the pure structural index-adapter with the durable projection readback, so a scope resolves
   // to its covering territory skeleton (from @atlas/index) FOLDED with the emitted facts under it (from CAS).
-  const queryIndex = createProjectionQueryIndex(index, store, currentHead);
+  const queryIndex = createProjectionQueryIndex(index, store, currentHead, freshnessOracle);
 
   const legs: ToolLegs = {
     'atlas-init': ((args) =>
@@ -201,13 +214,16 @@ export function assembleHandler(config: WireConfig): WiredHandler {
       // pre-existing projection path below. The mode is marshal-validated ∈ {scope,dependency,trigger} (CLI).
       const by = a.by;
       if (by === 'dependency' || by === 'trigger') {
-        if (config.axes === undefined) {
+        if (axes === undefined || freshnessOracle === undefined) {
           // No structural axes wired at this seam (bare WIRE fake assembly) — fail closed; the handler wraps
           // this throw into a structured rejected Verdict (TOOLS-2), never a raw throw at the user door.
+          // The oracle is checked in the SAME breath because it is derived from the very same `axes`: this
+          // branch is the one place a row could otherwise be served with the fail-closed default verdict,
+          // and refusing is better than serving a whole pack of rows marked `DRIFTED` for a wiring reason.
           throw new Error('atlas query --by dependency|trigger needs the composition-root axes');
         }
         // retrievalPack rebuilds the read model FRESH from the live store each call — freshness parity w/ scope.
-        return retrievalPack(config.axes, by, a.scope, store);
+        return retrievalPack(axes, by, a.scope, store, freshnessOracle);
       }
       const scope = a.scope;
       const pack = createQuery(queryIndex).query(scope);

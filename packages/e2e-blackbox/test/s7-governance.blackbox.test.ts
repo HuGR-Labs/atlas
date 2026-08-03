@@ -91,7 +91,7 @@ describe('S7a — owner-scoped authz (KNOW-11): allow in-scope, deny everyone el
     // nothing persisted: the denied node is ABSENT from a subsequent read (fail-closed left NO durable node).
     const q = runAtlas(r.repoPath, ['query', 'src']);
     expect(q.exitCode).toBe(0);
-    expect(invLines(q.stdout)).not.toContain(`  inv T1 ${f.id}: stranger tries to write foo`);
+    expect(invLines(q.stdout)).not.toContain(`  inv T1 ${f.id} [FRESH]: stranger tries to write foo`);
     expect(invLines(q.stdout)).toEqual([]);
   });
 

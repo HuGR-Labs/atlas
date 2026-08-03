@@ -62,7 +62,7 @@ describe('S3 — dedup / update / non-destructive identity (ordered — durable 
     expect(first.exitCode).toBe(0);
     expect(second.exitCode).toBe(0);
     expect(idOf(second.stdout)).toBe(idOf(first.stdout)); // idempotent — same bytes, same id (KERNEL-1)
-    expect(invLines(query(repo))).toEqual([`  inv T1 ${F.id}: C1`]); // exactly ONE node
+    expect(invLines(query(repo))).toEqual([`  inv T1 ${F.id} [FRESH]: C1`]); // exactly ONE node
   });
 
   it('D1 UNION: a reworded claim at the SAME (anchor,slot) collides on the real nodeKey → ONE node, merged', () => {
@@ -70,7 +70,7 @@ describe('S3 — dedup / update / non-destructive identity (ordered — durable 
     const r = emitFact(repo, Frew);
     expect(r.exitCode).toBe(0);
     // still ONE node at the same nodeKey; the two claim bodies are set-unioned (prose-independent identity).
-    expect(invLines(query(repo))).toEqual([`  inv T1 ${F.id}: C1; C1-reworded`]);
+    expect(invLines(query(repo))).toEqual([`  inv T1 ${F.id} [FRESH]: C1; C1-reworded`]);
   });
 
   it('A2 NON-DESTRUCTIVE: the SAME claim at a DISTINCT anchor mints its OWN node — NO write-time merge', () => {
@@ -79,8 +79,8 @@ describe('S3 — dedup / update / non-destructive identity (ordered — durable 
     expect(r.exitCode).toBe(0);
     // TWO nodes now coexist — each keeps its own grounding; neither was folded into the other (A2).
     expect(invLines(query(repo))).toEqual([
-      `  inv T1 ${Gbar.id}: C1`, // src/bar.ts node (nodeKey sorts first)
-      `  inv T1 ${F.id}: C1; C1-reworded`, // src/foo.ts node
+      `  inv T1 ${Gbar.id} [FRESH]: C1`, // src/bar.ts node (nodeKey sorts first)
+      `  inv T1 ${F.id} [FRESH]: C1; C1-reworded`, // src/foo.ts node
     ]);
   });
 

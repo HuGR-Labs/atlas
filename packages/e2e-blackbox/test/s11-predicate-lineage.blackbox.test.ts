@@ -162,7 +162,7 @@ describe('S11 — predicate facts (grounded-or-rejected, ratify-gated) + SUPERSE
     const q = runAtlas(repo.repoPath, ['query', 'src']);
     expect(q.exitCode).toBe(0);
     // claimNormOf(predicate) = normalizeCheck(check) — computed through the REAL function, not hand-guessed.
-    expect(invLines(q.stdout)).toEqual([`  inv T1 ${P1.id}: ${EXPECTED_CLAIM}`]);
+    expect(invLines(q.stdout)).toEqual([`  inv T1 ${P1.id} [FRESH]: ${EXPECTED_CLAIM}`]);
   });
 
   it("3. `doctor archive src` lists the ONE current contentHash (no lineage yet — nothing superseded)", () => {
@@ -188,7 +188,7 @@ describe('S11 — predicate facts (grounded-or-rejected, ratify-gated) + SUPERSE
     const q = runAtlas(repo.repoPath, ['query', 'src']);
     expect(q.exitCode).toBe(0);
     // one-current-node-per-key holds through SUPERSEDE too — never TWO rows for the same predicate identity.
-    expect(invLines(q.stdout)).toEqual([`  inv T1 ${P1.id}: ${EXPECTED_CLAIM}`]);
+    expect(invLines(q.stdout)).toEqual([`  inv T1 ${P1.id} [FRESH]: ${EXPECTED_CLAIM}`]);
   });
 
   it('6. `doctor archive src` now lists BOTH the current AND the superseded contentHash (append-only CAS lineage)', () => {

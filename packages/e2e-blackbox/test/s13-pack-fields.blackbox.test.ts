@@ -80,7 +80,7 @@ describe('S13a — stale: a pure function of the CURRENT fact set (projection-qu
 
     const r = runAtlas(staleRepo.repoPath, ['query', 'src']);
     expect(r.exitCode).toBe(0);
-    expect(invLines(r.stdout)).toEqual([`  inv T1 ${fact.id}: foo baseline`]);
+    expect(invLines(r.stdout)).toEqual([`  inv T1 ${fact.id} [FRESH]: foo baseline`]);
     expect(r.stdout).toContain('  stale: false');
   });
 
@@ -102,7 +102,7 @@ describe('S13a — stale: a pure function of the CURRENT fact set (projection-qu
     // BOTH facts are present — the prior FRESH baseline (still individually fine) and the new DRIFTED one —
     // but the pack-level flag is an ANY-fold over the whole under-scope set: one drifted fact is enough to
     // flip the WHOLE envelope stale (never a per-invariant flag on the rendered row itself).
-    expect(r.stdout).toContain(`inv T1 ${drifted.id}: foo drifted-signal`);
+    expect(r.stdout).toContain(`inv T1 ${drifted.id} [FRESH]: foo drifted-signal`);
     expect(r.stdout).toContain(': foo baseline'); // the prior test's FRESH fact is still served individually
     expect(r.stdout).toContain('  stale: true');
   });
@@ -120,7 +120,7 @@ describe('S13b — tokenEstimate: an ADVISORY char-sum proxy, NEVER truncated on
     // parity; before the fix the CLI omitted it, a real surface gap this story originally documented).
     const cli = runAtlas(tokenRepo.repoPath, ['query', 'src']);
     expect(cli.exitCode).toBe(0);
-    expect(invLines(cli.stdout)).toEqual([`  inv T1 ${fact.id}: ${claim}`]);
+    expect(invLines(cli.stdout)).toEqual([`  inv T1 ${fact.id} [FRESH]: ${claim}`]);
     expect(cli.stdout).toContain(`tokenEstimate: ${claim.length}`); // N12 parity: CLI now renders it (= MCP)
 
     // MCP door: the raw verdict `data.pack` DOES carry `tokenEstimate` (`server.ts` JSON-stringifies the
@@ -130,7 +130,7 @@ describe('S13b — tokenEstimate: an ADVISORY char-sum proxy, NEVER truncated on
       const res = await session.client.callTool({ name: 'atlas-query', arguments: { scope: 'src' } });
       expect(res.isError).toBeFalsy();
       const pack = textOf(res as { content: Array<{ text?: string }> }).data?.pack;
-      expect(pack?.invariants).toEqual([{ nodeId: fact.id, tier: 'T1', claim }]);
+      expect(pack?.invariants).toEqual([{ nodeId: fact.id, tier: 'T1', claim, freshness: 'FRESH' }]);
       expect(pack?.tokenEstimate).toBe(claim.length); // = sum of invariant claim.length (tools/query.ts:50-51)
       expect(pack?.tokenEstimate).toBeGreaterThan(0);
     } finally {
@@ -149,7 +149,7 @@ describe('S13b — tokenEstimate: an ADVISORY char-sum proxy, NEVER truncated on
     // CLI: the full 2500-char claim rides the rendered inv line byte-for-byte — no ellipsis, no head/tail.
     const cli = runAtlas(tokenRepo.repoPath, ['query', 'src']);
     expect(cli.exitCode).toBe(0);
-    expect(cli.stdout).toContain(`inv T1 ${fact.id}: ${bigClaim}`);
+    expect(cli.stdout).toContain(`inv T1 ${fact.id} [FRESH]: ${bigClaim}`);
     expect(cli.stdout).not.toContain('…');
 
     // MCP: the claim is served whole (length unchanged) and the advisory tokenEstimate now exceeds the ~2K
@@ -179,7 +179,7 @@ describe('S13c — underScope: a SEGMENT-WISE boundary, NOT raw startsWith (proj
   it('scope `src` covers the `src/foo.ts`-anchored fact (exact segment match)', () => {
     const r = runAtlas(scopeRepo.repoPath, ['query', 'src']);
     expect(r.exitCode).toBe(0);
-    expect(invLines(r.stdout)).toEqual([`  inv T1 ${anchored.id}: anchored under src`]);
+    expect(invLines(r.stdout)).toEqual([`  inv T1 ${anchored.id} [FRESH]: anchored under src`]);
   });
 
   it('scope `sr` — a REAL sibling territory that is a substring PREFIX of `src` — does NOT leak the src-anchored fact', () => {

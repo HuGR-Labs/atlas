@@ -33,7 +33,9 @@ afterEach(() => {
 const FAKE_PACK: Pack = {
   territory: 'atlas/tools',
   axisHash: 'h_axis_01' as Pack['axisHash'],
-  invariants: [{ nodeId: 'atlas/tools:push' as Pack['invariants'][number]['nodeId'], tier: 'T1', claim: 'push reaches a Read-only seat with no grant' }],
+  invariants: [{ nodeId: 'atlas/tools:push' as Pack['invariants'][number]['nodeId'], tier: 'T1', claim: 'push reaches a Read-only seat with no grant', freshness: 'FRESH' }],
+  advisory: [],
+  advisoryDropped: 0,
   tokenEstimate: 42,
   stale: false,
 };
@@ -49,8 +51,19 @@ const fakePokeSource: PhasePushSource = (_seat, _scope) => ({
 const fakePackSource: PhasePushSource = (_seat, _scope) => FAKE_PACK;
 
 // ── NAMED goldens (the EXACT canonical preimage bytes — sorted keys; reorder/drop MUST flip these) ──────────
+// [ADR-0013] `advisory` + `advisoryDropped` join the Pack contract, so they join the canonical preimage —
+// sorted first, before `axisHash`. Updating the golden IS the point of a named golden: the shape moved by a
+// ratified amendment, and the bytes say so instead of a matcher quietly tolerating it.
+//
+// `PackInvariant.freshness` DOES NOT appear, and that is not an omission — it is KERNEL-8 (`canonical.ts`
+// `SIDE_INDEX`), which strips `grounding` / `status` / `freshness` from the canonical preimage AT EVERY
+// LEVEL because they are mutable side-indexes, recomputed and never part of identity. So a poke FILE, whose
+// bytes ARE the canonical preimage, carries the two bands but NOT the per-row verdict. That is coherent —
+// a pack's content address must not change because a cited unit moved — and it is a REAL limit of this one
+// transport, recorded here rather than discovered later: the per-row verdict reaches the CLI and MCP doors
+// (which render/serialize the live `Pack`), and stops at the content-addressed one.
 const G_PACK_CANONICAL =
-  '{"axisHash":"h_axis_01","invariants":[{"claim":"push reaches a Read-only seat with no grant","nodeId":"atlas/tools:push","tier":"T1"}],"stale":false,"territory":"atlas/tools","tokenEstimate":42}';
+  '{"advisory":[],"advisoryDropped":0,"axisHash":"h_axis_01","invariants":[{"claim":"push reaches a Read-only seat with no grant","nodeId":"atlas/tools:push","tier":"T1"}],"stale":false,"territory":"atlas/tools","tokenEstimate":42}';
 const G_POKE_CANONICAL =
   '{"notice":"poke: push tier is poke-as-file","pack":' + G_PACK_CANONICAL + ',"scope":"atlas/tools/transport"}';
 

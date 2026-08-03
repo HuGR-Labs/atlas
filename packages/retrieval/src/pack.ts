@@ -134,7 +134,23 @@ export function capFor(kind: InjectionKind): number {
 }
 
 // ── the bounded fill (RETR-2a/2b/2c) ─────────────────────────────────────────────────────────────────────
-const toInvariant = (c: PackCandidate): PackInvariant => ({ nodeId: c.nodeKey, tier: c.tier, claim: c.claim });
+/**
+ * [ADR-0013 — REFERENCE MODEL, NOT AMENDED] `PackCandidate` carries the index's per-candidate drift as a
+ * BOOLEAN (`stale`), so the row's `Freshness` is projected from it: `true → 'DRIFTED'`, `false → 'FRESH'`.
+ *
+ * The projection is lossless with respect to what the boolean actually holds, and it is a NARROWING with
+ * respect to the 3-state vocabulary: a candidate feed cannot express `STALE` (GROUND-13 advisory drift)
+ * through one bit, and this seam invents nothing to cover that. Widening `PackCandidate` to carry the real
+ * verdict belongs to whoever wires this facet — measured through the built binary, `fill()` below is
+ * unreachable from `atlas query` / `atlas own` (only the module-load `_packBind` line runs), so a change
+ * here would move no shipped byte. The SHIPPED two-band split lives at `@atlas/tools` src/bands.ts.
+ */
+const toInvariant = (c: PackCandidate): PackInvariant => ({
+  nodeId: c.nodeKey,
+  tier: c.tier,
+  claim: c.claim,
+  freshness: c.stale ? 'DRIFTED' : 'FRESH',
+});
 
 /**
  * Greedy fill under one shared `cap`: all T0 IN FULL, then T1 by the shared rank until the next candidate
@@ -172,6 +188,12 @@ function assemble(name: string, axisHash: Hash, axes: readonly PackAxis[], cap: 
     territory: name,
     axisHash,
     invariants: emitted.map(toInvariant),
+    // [ADR-0013 — REFERENCE MODEL, NOT AMENDED] `fill()` above still drops `T2` outright, so this facet has
+    // no advisory rows TO band and reports an empty band with an honest zero ledger — an under-implementation
+    // of the amendment, never a claim that the advisory band is always empty. Stated rather than left for a
+    // reader to infer from a literal.
+    advisory: [],
+    advisoryDropped: 0,
     tokenEstimate: emitted.reduce((s, c) => s + c.tokenEstimate, 0),
     stale: axes.some((a) => a.stale) || emitted.some((c) => c.stale), // true iff any backing drifted (RETR-3)
     truncated: tail.length > 0,
@@ -181,7 +203,7 @@ function assemble(name: string, axisHash: Hash, axes: readonly PackAxis[], cap: 
 
 const EMPTY_HASH: Hash = asHash(''); // the sealed-seam zero identity for an uncovered/malformed scope
 function emptyPack(name: string): BoundedPack {
-  return { territory: name, axisHash: EMPTY_HASH, invariants: [], tokenEstimate: 0, stale: false, truncated: false, tail: [] };
+  return { territory: name, axisHash: EMPTY_HASH, invariants: [], advisory: [], advisoryDropped: 0, tokenEstimate: 0, stale: false, truncated: false, tail: [] };
 }
 const nameOf = (t: Territory): string => (t && typeof t.name === 'string' ? t.name : '');
 

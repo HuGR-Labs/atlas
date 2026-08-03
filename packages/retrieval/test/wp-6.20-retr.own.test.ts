@@ -34,7 +34,7 @@ const nk = (s: string): NodeKey => asNodeKey(s);
 
 function si(id: string, o: { tier?: Tier; ppr?: number; hits?: number; cost?: number } = {}): SizedInvariant {
   return {
-    inv: { nodeId: nk(id), tier: o.tier ?? 'T1', claim: id },
+    inv: { nodeId: nk(id), tier: o.tier ?? 'T1', claim: id, freshness: 'FRESH' },
     ppr: o.ppr ?? 0.5,
     hits: o.hits ?? 0,
     cost: o.cost ?? 100,
@@ -128,7 +128,9 @@ function pack(territory: string, ids: readonly string[]): Pack {
   return {
     territory,
     axisHash: HASH,
-    invariants: ids.map((id): PackInvariant => ({ nodeId: nk(id), tier: 'T1', claim: id })),
+    invariants: ids.map((id): PackInvariant => ({ nodeId: nk(id), tier: 'T1', claim: id, freshness: 'FRESH' })),
+    advisory: [],
+    advisoryDropped: 0,
     tokenEstimate: 100 * ids.length,
     stale: false,
   };

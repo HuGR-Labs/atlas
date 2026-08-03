@@ -74,7 +74,7 @@ describe('S5 — MCP stdio parity with the CLI over the one governed core', () =
   it('SOTA transport parity: MCP `atlas-query` returns the SAME governed verdict the CLI does', { timeout: 20000 }, async () => {
     // the CLI verdict for the same input (rendered rows).
     const cli = runAtlas(repo.repoPath, ['query', 'src']);
-    expect(invLines(cli.stdout)).toEqual([`  inv T1 ${fact.id}: foo is 1`]);
+    expect(invLines(cli.stdout)).toEqual([`  inv T1 ${fact.id} [FRESH]: foo is 1`]);
 
     const session = await mcpSession(repo.repoPath);
     try {
@@ -82,8 +82,11 @@ describe('S5 — MCP stdio parity with the CLI over the one governed core', () =
       expect(res.isError).toBeFalsy();
       const body = textOf(res as { content: Array<{ text?: string }> });
       const pack = (body.data as { pack?: { invariants?: unknown } }).pack;
-      // the SAME semantic invariant (nodeId/tier/claim) the CLI rendered — parity across the two doors.
-      expect(pack?.invariants).toEqual([{ nodeId: fact.id, tier: 'T1', claim: 'foo is 1' }]);
+      // the SAME semantic invariant (nodeId/tier/claim/freshness) the CLI rendered — parity across the two
+      // doors. [ADR-0013] `freshness` is part of that parity: MCP JSON-stringifies the live `Pack`, so the
+      // per-row verdict crosses stdio exactly as it reaches the CLI row (unlike the content-addressed poke
+      // file, where KERNEL-8 strips it — see adapter-io/test/poke-file.test.ts).
+      expect(pack?.invariants).toEqual([{ nodeId: fact.id, tier: 'T1', claim: 'foo is 1', freshness: 'FRESH' }]);
     } finally {
       await session.close();
     }
@@ -112,6 +115,6 @@ describe('S5 — MCP stdio parity with the CLI over the one governed core', () =
 
   it('fail-closed did not persist: a subsequent CLI query still shows only the ONE grounded fact', () => {
     const r = runAtlas(repo.repoPath, ['query', 'src']);
-    expect(invLines(r.stdout)).toEqual([`  inv T1 ${fact.id}: foo is 1`]); // the bad MCP emit left nothing
+    expect(invLines(r.stdout)).toEqual([`  inv T1 ${fact.id} [FRESH]: foo is 1`]); // the bad MCP emit left nothing
   });
 });
