@@ -102,12 +102,22 @@ export interface ObviousnessScore {
  * (the create/update identity leg), NOT a `Hash` — flagged for the two lines to reconcile which leg the
  * stored `id` field carries.
  *
- * [RESOLVED — R3 data-model reconciliation, owner-authorized 2026-07-19] The `owner`/`scope` (KNOW-11a)
- * and `predicateSlot` (KNOW-15b nodeKey leg / KNOW-4g read-side grouping) fields are now SURFACED on both
- * node shapes — OPTIONALLY. Optional because ~17 merged `GroundedFact` literals (src+test) omit them; the
- * KNOW-11 "every fact MUST carry owner+scope" stays enforced BEHAVIORALLY by the WP-5.14 emit/authz facet +
+ * [RESOLVED — R3 data-model reconciliation, owner-authorized 2026-07-19] The `scope` (KNOW-11a) and
+ * `predicateSlot` (KNOW-15b nodeKey leg / KNOW-4g read-side grouping) fields are now SURFACED on both node
+ * shapes — OPTIONALLY. Optional because ~17 merged `GroundedFact` literals (src+test) omit them; the
+ * KNOW-11 "every fact MUST carry a scope" stays enforced BEHAVIORALLY by the WP-5.14 emit/authz facet +
  * the conformance goldens, not by the type. Grounded shapes (`string`, closed `PredicateSlot`) — not
- * invented. Discharges the former [FLAG — no stored slot/owner/scope].
+ * invented. Discharges the former [FLAG — no stored slot/scope].
+ *
+ * [REMOVED — `owner`, #187 owner-ratified 2026-08-03] R3 (above) originally also surfaced an `owner?:
+ * string` field (KNOW-11a read "every fact MUST carry an `owner` + `scope`"). That MUST is AMENDED (see
+ * `req-knw.md#REQ-KNOW-11a`): measured on the built binary, nothing supplies `owner` on any shipped write
+ * path (`atlas emit`, `atlas mine` both stamp `scope`, never `owner`), and it is not a gate input — the
+ * write door keys on `scope` alone via `inScope(actor, fact.scope)`. Producer identity is already carried
+ * on every claim by `provenance.source` (`ClaimProvenance`, KNOW-14, MUST-required). Grepped repo-wide
+ * (source, tests, `dist/`) before removal: the only reads of `fact.owner` were the now-reverted `authz()`
+ * write-branch leg (#178/PR#105) and its pinning test, both removed by this same amendment — so nothing
+ * reads `owner` after this change, and the field is deleted rather than kept-but-unused.
  */
 export interface AdvisoryNode {
   readonly kind: 'advisory';
@@ -118,13 +128,12 @@ export interface AdvisoryNode {
   readonly freshness: KnowledgeFreshness;
   readonly claims: readonly ClaimEntry[]; // [FLAG] kernel `ClaimEntry` — see the union note below
   readonly authoring: 'ADVISORY' | 'SUPERSEDED';
-  readonly owner?: string; // R3 — KNOW-11a (authz keys inScope(actor, scope); nominal seat/owner id)
   readonly scope?: string; // R3 — KNOW-11a (territory scope id)
   readonly predicateSlot?: PredicateSlot; // R3 — KNOW-15b nodeKey leg / KNOW-4g read-side grouping
   /** ADR-0012 — the stored obviousness score. ADDITIVE + absent-tolerant, exactly as the N11 `builtAt` /
    *  `sameAs` widening (task #75): old data stays readable, no migration, no default fabricated. TOTALITY
    *  ("every emitted fact carries a score") is enforced BEHAVIOURALLY at the emit path + its goldens, the
-   *  same way KNOW-11's "every fact MUST carry owner+scope" is — not by the type, because ~17 merged
+   *  same way KNOW-11's "every fact MUST carry a scope" is — not by the type, because ~17 merged
    *  `GroundedFact` literals predate the field and a required field would make them unreadable. */
   readonly obviousness?: ObviousnessScore;
 }
@@ -154,7 +163,6 @@ export interface PredicateNode {
   readonly freshness: KnowledgeFreshness;
   readonly claims: readonly ClaimEntry[]; // [FLAG] kernel `ClaimEntry` — see the union note below
   readonly authoring: 'PREDICATED' | 'SUPERSEDED';
-  readonly owner?: string; // R3 — KNOW-11a (see AdvisoryNode)
   readonly scope?: string; // R3 — KNOW-11a
   readonly predicateSlot?: PredicateSlot; // R3 — KNOW-15b nodeKey leg / KNOW-4g grouping
   readonly obviousness?: ObviousnessScore; // ADR-0012 — the stored obviousness score (see AdvisoryNode)

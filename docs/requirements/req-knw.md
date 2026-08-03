@@ -151,10 +151,11 @@ source: INV-KNOW-10 @ reference/atlas-knowledge.md#know-10
 If a fact is missing a required template field or is over its cap, then the knowledge module shall reject it.
 normative-clause: "A fact missing a required template field, or over its cap, is rejected"
 
-### REQ-KNOW-11a — every fact carries owner and scope
+### REQ-KNOW-11a — every fact carries a scope
 source: INV-KNOW-11 @ reference/atlas-knowledge.md#know-11
-The knowledge module shall make every fact carry an owner and a scope.
-normative-clause: "Every fact MUST carry an `owner` + `scope`"
+amendment: **AMENDED 2026-08-03** (owner-ratified) — reverses the `owner` fence added by #178/PR#105 (`fix(knowledge): enforce KNOW-11a owner fence in authz() write branch`, master `44026ae`). `owner` is REMOVED from this MUST; `scope` stands unchanged as the sole ownership anchor. Measured on the built binary: nothing supplies `owner` on any shipped write path (`atlas emit`, `atlas mine` both stamp `scope`, never `owner`), and `authz()` — the function #178 wired the owner leg into — has zero production callers; the live write door (`adapter-io/src/governed-emit.ts`) gates through `actorInScope` in `adapter-io/src/policy.ts`, keyed on `scope` alone, and always was. `owner` was never a gate input: authorization is `inScope(actor, fact.scope)`. Producer identity is already carried on every claim by `provenance.source` (`ClaimProvenance`, KNOW-14, MUST-required) — `owner` was a second, optional, unpopulated answer to the question `provenance.source` already answers.
+The knowledge module shall make every fact carry a scope.
+normative-clause: "Every fact MUST carry a `scope`"
 
 ### REQ-KNOW-11b — read is universal
 source: INV-KNOW-11 @ reference/atlas-knowledge.md#know-11

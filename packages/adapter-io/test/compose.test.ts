@@ -45,13 +45,17 @@ function makeGovernedRepo() {
 
 /** A grounded advisory fact whose anchor resolves FRESH against the built index root (so the real gate
  *  serves HOLDS), scoped to `scope`. An optional `owner` label is carried on the fact WITHOUT affecting
- *  authorization (the KNOW-11 gate keys on the actor + `scope`, never the payload's owner) — used by the
- *  spoof-guard golden to prove the actor is NOT sourced from the fact. */
+ *  authorization (the KNOW-11 gate keys on the actor + `scope`, never a payload-carried owner label) —
+ *  used by the spoof-guard golden to prove the actor is NOT sourced from the fact. `owner` is NOT a
+ *  declared `GroundedFact` field (#187, owner-ratified 2026-08-03, removed it from the KNOW-11a fence —
+ *  see `req-knw.md#REQ-KNOW-11a`); it is attached here as an arbitrary FOREIGN property via an explicit
+ *  cast, which is the stronger form of this teeth — the gate must ignore it even though nothing in the
+ *  schema even names it. */
 function groundedFact(repoPath: string, scope: string, owner?: string): GroundedFact {
   const axes = build(walkFileTree(repoPath), readScip(join(repoPath, '.atlas', 'index.scip')));
   const root = axes.spatial; // the repo-level unit — non-empty subtreeHash, resolves to itself (FRESH)
   const anchor: StructRef = { kind: 'repo', qualifiedPath: root.key, subtreeHash: root.subtreeHash };
-  return {
+  const fact = {
     kind: 'advisory',
     id: asNodeKey(`nk-${scope}`),
     tier: 'T2',
@@ -61,8 +65,9 @@ function groundedFact(repoPath: string, scope: string, owner?: string): Grounded
     claims: [],
     authoring: 'ADVISORY',
     scope,
-    ...(owner !== undefined ? { owner } : {}),
+    ...(owner !== undefined ? { owner } : {}), // foreign property, not schema — see doc comment above
   };
+  return fact as GroundedFact;
 }
 
 /** A governed repo whose LOCAL git identity is `email` and whose policy grants scope `core` to `member`

@@ -504,22 +504,22 @@ Then the route is **REJECT** — over-cap
 teeth: breaks-on "the cap check is dropped — a 700 B claim body persists (unbounded prose leaks in past the cap)"
 gen: exhaustive   # cell F3
 
-## REQ-KNOW-11 — owner-scoped write, universal read
+## REQ-KNOW-11 — scope-owned write, universal read
 
-### SCN-KNOW-11a-1 — every fact carries owner and scope   (happy)
+### SCN-KNOW-11a-1 — every fact carries a scope   (happy)   ⚠️ **AMENDED 2026-08-03 (owner-ratified)** — was "every fact carries owner and scope" before #178/PR#105 was reverted; `owner` dropped, see req-knw.md#REQ-KNOW-11a.
 source: REQ-KNOW-11a
 Given a fact emitted through `knowledge/ref/authz.ts`
 When the persisted node is inspected
-Then it carries both an `owner` and a `scope`
+Then it carries a `scope`
 teeth: breaks-on "a fact persists with `scope` unset — the ownership fence has no anchor"
 gen: conformance
 
-### SCN-KNOW-11a-2 — a fact emitted at territory `queue/` carries owner and scope   (happy · held-out)
+### SCN-KNOW-11a-2 — a fact emitted at territory `queue/` carries a scope   (happy · held-out)   ⚠️ **AMENDED 2026-08-03 (owner-ratified)** — was "carries owner and scope"; `owner` dropped, see req-knw.md#REQ-KNOW-11a.
 source: REQ-KNOW-11a
 held_out: true
 Given a different fact emitted through `knowledge/ref/authz.ts` at territory `queue/`
 When the persisted node is inspected
-Then it carries both an `owner` and a `scope`
+Then it carries a `scope`
 teeth: breaks-on "the `queue/` fact persists with `scope` unset — the ownership fence has no anchor"
 gen: conformance
 

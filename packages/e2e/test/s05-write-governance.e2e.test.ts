@@ -53,8 +53,9 @@ const grounding = (n: string): Grounding => ({
 });
 const UNGROUNDED: Grounding = { entries: [] }; // 0 entries — GROUND-2: never grounded
 
-/** A persisted advisory fact, `owner`/`scope` R3-optional (the KNOW-11 ownership fence). */
-const advisoryFact = (opts: { owner?: string; scope?: string } = {}): AdvisoryNode => ({
+/** A persisted advisory fact, `scope` R3-optional (the KNOW-11 ownership fence; #187 owner-ratified
+ *  2026-08-03 removed `owner` from this fence — see `req-knw.md#REQ-KNOW-11a`). */
+const advisoryFact = (opts: { scope?: string } = {}): AdvisoryNode => ({
   kind: 'advisory',
   id: asNodeKey('fact:payments.charge'),
   tier: 'T2',
@@ -63,7 +64,6 @@ const advisoryFact = (opts: { owner?: string; scope?: string } = {}): AdvisoryNo
   freshness: 'FRESH',
   claims: [],
   authoring: 'ADVISORY',
-  ...(opts.owner !== undefined ? { owner: opts.owner } : {}),
   ...(opts.scope !== undefined ? { scope: opts.scope } : {}),
 });
 
@@ -95,13 +95,13 @@ const predicateNode = (nk: string, q: string): PredicateNode => ({
 });
 
 describe('S5 · write governance — authorization + the human-in-the-loop T0 bar (fail-closed)', () => {
-  // ── 1. AUTHZ FAIL-CLOSED — owner-scoped write, universal read ──────────────────────────────────────
-  it('refuses an out-of-scope OR scope-less write, admits the owner, and reads are universal', () => {
-    const factInScope = advisoryFact({ owner: 'seat/forge', scope: 'payments' });
-    const factOutOfScope = advisoryFact({ owner: 'seat/forge', scope: 'payments' });
-    const scopeless = advisoryFact({ owner: 'seat/forge' }); // no scope ⇒ no ownership anchor
+  // ── 1. AUTHZ FAIL-CLOSED — scope-owned write, universal read ────────────────────────────────────────
+  it('refuses an out-of-scope OR scope-less write, admits the in-scope actor, and reads are universal', () => {
+    const factInScope = advisoryFact({ scope: 'payments' });
+    const factOutOfScope = advisoryFact({ scope: 'payments' });
+    const scopeless = advisoryFact(); // no scope ⇒ no ownership anchor
 
-    expect(authz('write', 'payments', factInScope)).toBe(true); // the owner writes
+    expect(authz('write', 'payments', factInScope)).toBe(true); // the in-scope actor writes
     // teeth (breaks-on "an out-of-scope or scope-less write is authorized"):
     expect(authz('write', 'ui', factOutOfScope)).toBe(false); // a foreign scope cannot mutate
     expect(authz('write', 'payments', scopeless)).toBe(false); // fail-closed: absent scope ⇒ refuse

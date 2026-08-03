@@ -9,14 +9,15 @@
 //
 // BIND note (template.ts FLAG resolved): the frozen signature gates the staging `Candidate` (it carries the
 // proposed `slot` + claim body), so the required-field check runs over the Candidate-carried template fields
-// {claimText, claimNorm, provenance, grounding, slot}. `owner`/`scope` (also in `RequiredAdvisoryField`) are
-// the KNOW-11 ownership fence, and NEITHER is re-checked here — but say precisely where each actually IS
-// checked, because that used to be overstated (#178): `scope` is enforced fail-closed by the sibling
-// `inScope` predicate (authz.ts); `owner` is enforced fail-closed by the sibling `authz()` write branch
-// (authz.ts `isOwner`, #178) — a DIFFERENT leg of the same facet, because `inScope`'s frozen signature is
-// scope-only. Both fire only on a WRITE (`authz('write', …)`); neither runs against a `Candidate` in
-// staging, which is what this validator gates — a staged candidate carries no `owner`/`scope` at all (see
-// `Candidate` in types.ts) until it is promoted through the governed write door. No field invented.
+// {claimText, claimNorm, provenance, grounding, slot}. `scope` (also in `RequiredAdvisoryField`) is the
+// KNOW-11 ownership fence — `scope` alone, enforced fail-closed by the sibling `inScope` predicate
+// (authz.ts), NOT re-checked here — and it fires only on a WRITE (`authz('write', …)`), never against a
+// `Candidate` in staging, which is what this validator gates. Producer identity is a SEPARATE concern,
+// carried by `provenance.source` (KNOW-14, required on every claim), not by this fence. (#187,
+// owner-ratified 2026-08-03: an `owner` leg was folded into `authz()`'s write branch at #178/PR#105 and
+// this comment was rewritten to describe it; #187 reverses that fold — `owner` was never a gate input, and
+// this comment is rewritten again to say so.) A staged candidate carries no `scope` at all (see `Candidate`
+// in types.ts) until it is promoted through the governed write door. No field invented.
 
 import type { Candidate, PredicateSlot } from '../types.js';
 

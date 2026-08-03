@@ -1,3 +1,16 @@
+> ⚠️ **REVERTED 2026-08-03 by WP-OWNER-NOT-REQUIRED (#187, owner-ratified).** The code change this card
+> describes (`isOwner` folded into `authz()`'s write branch) landed as PR#105 (master `44026ae`) and was
+> REVERTED, not merely superseded — `packages/knowledge/src/write/authz.ts` no longer defines `isOwner` or
+> checks `fact.owner`, and `packages/knowledge/src/types.ts` no longer declares an `owner` field on
+> `GroundedFact` at all. The "Measurement" and "What the framing got wrong" sections below are KEPT verbatim
+> because they are exactly the evidence that produced the reversal: nothing supplies `owner` on any shipped
+> write path, and `authz()`/`inScope` have zero production callers of their own (the live door gates via a
+> separate `actorInScope`, `adapter-io/src/policy.ts`). See
+> [`wp-owner-not-required.md`](./wp-owner-not-required.md) for the reversal itself, and
+> [`req-knw.md#REQ-KNOW-11a`](../req-knw.md#REQ-KNOW-11a) for the amended requirement. This file is kept, not
+> deleted, as the historical record — the decision documented here was correct GIVEN what was known at cold
+> review; it changed only after this WP's own measurement was read further downstream.
+
 # Work Packages — SECURITY/CORRECTNESS HOTFIX (out-of-band, not S4-campaign)
 
 > A single standalone WP card for a defect found in adversarial cold review, not authored fresh from a

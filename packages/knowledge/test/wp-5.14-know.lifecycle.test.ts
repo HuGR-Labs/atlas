@@ -4,7 +4,7 @@
 // upserts, prior versions deduped in CAS) against the FROZEN oracles {template,authz,archive}.ts:
 //   KNOW-10  templated write, no free prose — SCN-KNOW-10a-1 (free-prose reject), 10b-1 (missing field),
 //            10b-2 (over-cap); plus the closed-slot + totality teeth of INV-KNOW-10.
-//   KNOW-11  owner-scoped write, universal read — SCN-KNOW-11a-1 (carries owner+scope, fail-closed),
+//   KNOW-11  scope-owned write, universal read — SCN-KNOW-11a-1 (carries scope, fail-closed),
 //            11b-1 (universal read), 11c-1 (out-of-scope write rejected); plus INV-KNOW-11 teeth.
 //   KNOW-12  nothing dies — SCN-KNOW-12a-1 (prior re-spawnable), 12b-1 (deduped priors), 12c-1 (advisory
 //            edit keeps NO pointer), 12d-1 (supersede adds ONLY a pointer), 12e-1 (working store lean).
@@ -12,10 +12,12 @@
 // NOT referenced here.
 //
 // SEAM (sealed @atlas/kernel CAS; no raw hashing): the archive's dedup/re-spawn uses `createStore()` — the
-// single content-addressed store — exactly as the card pins. `authz`'s `owner`/`scope` read the R3-surfaced
-// optional fields on the frozen `GroundedFact`. The `slot`/`predicateSlot` divergence, the missing-field
-// cells (a Candidate typed-required field omitted at runtime), and the off-vocab slot are expressed by casts
-// — the only way to reach the `missing`/`out` cells of the enumerated validity product past the frozen type.
+// single content-addressed store — exactly as the card pins. `authz`'s `scope` reads the R3-surfaced
+// optional field on the frozen `GroundedFact` (#187, owner-ratified 2026-08-03: `owner` was removed from
+// this fence — see `req-knw.md#REQ-KNOW-11a` — so this suite no longer constructs one). The
+// `slot`/`predicateSlot` divergence, the missing-field cells (a Candidate typed-required field omitted at
+// runtime), and the off-vocab slot are expressed by casts — the only way to reach the `missing`/`out` cells
+// of the enumerated validity product past the frozen type.
 //
 // MODELING NOTE (SCN-KNOW-12e-1, flagged — cf. router.ts MODELING NOTE): the "hot working set" and the
 // KNOW-17 `decay` are UPSTREAM of this facet; here they are modeled as a caller-maintained `Map` and a plain
@@ -47,7 +49,7 @@ const wellFormed = (): Candidate => ({
   tier: 'T2',
 });
 
-const advisoryNode = (nk: string, opts: { owner?: string; scope?: string } = {}): AdvisoryNode => ({
+const advisoryNode = (nk: string, opts: { scope?: string } = {}): AdvisoryNode => ({
   kind: 'advisory',
   id: asNodeKey(nk),
   tier: 'T2',
@@ -56,7 +58,6 @@ const advisoryNode = (nk: string, opts: { owner?: string; scope?: string } = {})
   freshness: 'FRESH',
   claims: [],
   authoring: 'ADVISORY',
-  ...(opts.owner !== undefined ? { owner: opts.owner } : {}),
   ...(opts.scope !== undefined ? { scope: opts.scope } : {}),
 });
 
@@ -114,29 +115,28 @@ describe('WP-5.14.KNOW — templated write, 0 free prose (KNOW-10 visible golden
   });
 });
 
-// ── KNOW-11: owner-scoped write, universal read ──────────────────────────────
+// ── KNOW-11: scope-owned write, universal read ──────────────────────────────
 
-describe('WP-5.14.KNOW — owner-scoped write, universal read (KNOW-11 visible goldens)', () => {
-  it('SCN-KNOW-11a-1 — a write-authorized fact carries both owner and scope; a scope-less fact fails closed', () => {
-    const fact = advisoryNode('nk-a', { owner: 'seat/forge', scope: 'A' });
+describe('WP-5.14.KNOW — scope-owned write, universal read (KNOW-11 visible goldens)', () => {
+  it('SCN-KNOW-11a-1 — a write-authorized fact carries a scope; a scope-less fact fails closed', () => {
+    const fact = advisoryNode('nk-a', { scope: 'A' });
     expect(authz('write', 'A', fact)).toBe(true); // in-scope write admitted
-    expect(fact.owner).toBeDefined();
-    expect(fact.scope).toBeDefined(); // every persisted fact carries owner + scope
+    expect(fact.scope).toBeDefined(); // every persisted fact carries a scope
     // teeth: a fact persists with `scope` unset — the ownership fence has no anchor
-    const anchorless = advisoryNode('nk-a', { owner: 'seat/forge' }); // no scope
+    const anchorless = advisoryNode('nk-a'); // no scope
     expect(authz('write', 'A', anchorless)).toBe(false); // fail closed — never persists
   });
 
   it('SCN-KNOW-11b-1 — any caller may read any fact (read is universal)', () => {
-    const factA = advisoryNode('nk-a', { owner: 'seat/forge', scope: 'A' });
-    expect(authz('read', 'B', factA)).toBe(true); // caller in unrelated scope B reads an A-owned fact
+    const factA = advisoryNode('nk-a', { scope: 'A' });
+    expect(authz('read', 'B', factA)).toBe(true); // caller in unrelated scope B reads an A-scoped fact
     // teeth: the read path must NOT apply the scope check — even a scope-less fact reads
     expect(authz('read', 'Z', advisoryNode('nk-a'))).toBe(true);
   });
 
   it('SCN-KNOW-11c-1 — an out-of-scope write is rejected (inScope(B, A.scope) is false)', () => {
-    const factA = advisoryNode('nk-a', { owner: 'seat/forge', scope: 'A' });
-    expect(authz('write', 'B', factA)).toBe(false); // scope-B writer cannot mutate an A-owned fact
+    const factA = advisoryNode('nk-a', { scope: 'A' });
+    expect(authz('write', 'B', factA)).toBe(false); // scope-B writer cannot mutate an A-scoped fact
     expect(inScope('B', 'A')).toBe(false);
     // teeth: the in-scope writer IS admitted (kills the always-reject mutant)
     expect(authz('write', 'A', factA)).toBe(true);
@@ -170,7 +170,7 @@ describe('WP-5.14.KNOW — nothing dies: CAS retention, dedup, pointer-not-copy 
   it('SCN-KNOW-12c-1 — an advisory edit-in-place keeps NO lineage pointer (git is the archive)', () => {
     // an advisory UPDATE never enters the predicate-only archive; the frozen AdvisoryNode carries no
     // `supersededBy` field at all — the advisory family accretes zero in-store lineage.
-    const editedAdvisory = advisoryNode('nk-adv', { owner: 'seat/forge', scope: 'A' });
+    const editedAdvisory = advisoryNode('nk-adv', { scope: 'A' });
     expect('supersededBy' in editedAdvisory).toBe(false);
   });
 
@@ -191,8 +191,8 @@ describe('WP-5.14.KNOW — nothing dies: CAS retention, dedup, pointer-not-copy 
 
     // an advisory edited in place (W3, UPDATE): the edit REPLACES the hot slot; the prior does not enter hot.
     const advKey = asNodeKey('nk-adv');
-    hot.set(advKey, advisoryNode('nk-adv', { owner: 'seat/forge', scope: 'A' }));
-    hot.set(advKey, advisoryNode('nk-adv', { owner: 'seat/forge', scope: 'A' })); // edit-in-place, same key
+    hot.set(advKey, advisoryNode('nk-adv', { scope: 'A' }));
+    hot.set(advKey, advisoryNode('nk-adv', { scope: 'A' })); // edit-in-place, same key
     expect(hot.size).toBe(1); // one hot slot — the working store does not grow on edit
 
     // a predicate supersede routes the prior to COLD CAS (re-spawnable) and keeps only the superseder hot.
@@ -205,7 +205,7 @@ describe('WP-5.14.KNOW — nothing dies: CAS retention, dedup, pointer-not-copy 
 
     // a fact decayed by KNOW-17 (upstream) drops from the hot set.
     const decayed = asNodeKey('nk-decayed');
-    hot.set(decayed, advisoryNode('nk-decayed', { owner: 'seat/forge', scope: 'A' }));
+    hot.set(decayed, advisoryNode('nk-decayed', { scope: 'A' }));
     hot.delete(decayed); // KNOW-17 decay
     expect(hot.has(decayed)).toBe(false);
     expect(hot.size).toBe(2); // { nk-adv (edited), nk-prd (superseder) } — lean, no accreted priors
