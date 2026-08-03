@@ -32,7 +32,7 @@ import { loadPolicy } from './policy.js';
 import type { AtlasPolicy } from './policy.js';
 import { createRevIndex } from './rev-index.js';
 import { runGit, headSha } from './run-git.js';
-import { createDoctorSource, primaryAnchor } from './doctor-source.js';
+import { createDoctorSource, isMechanicalAt } from './doctor-source.js';
 import { createGovernedEmit } from './governed-emit.js';
 import { createGovernedPromote } from './governed-promote.js';
 import type { PromoteOut } from './governed-promote.js';
@@ -233,24 +233,25 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
   const seams: WireSeams = {
     heuristic: buildHeuristic(policy),
     gate: buildGate(axes),
-    // N10 — the reconcile classifier is CONTENT-ADDRESSED (mirrors the shipped N9 doctor fix,
-    // doctor-source.ts:106-108): a drifted fact is MECHANICAL iff its RECORDED primary-anchor content
-    // re-derives SOMEWHERE at the new sha (`resolveBySubtreeAt`), not just at the SAME qualifiedPath. The
-    // former `reDerives` predicate was PATH-KEYED — it asked "does the recorded content re-derive at the
-    // recorded PATH", so a genuinely moved-but-alive fact (its content now at a NEW path) read `false` ⇒
-    // was ALWAYS classified `semantic`, making `mechanical` structurally unreachable for real drift (the
-    // exact self-compare N9 killed for doctor). Keying on `subtreeHash` (GROUND-1) instead: a rename ⇒
-    // mechanical (re-groundable to its new location, exit 0); a content rewrite (content truly gone) ⇒ still
-    // `undefined` ⇒ semantic (exit 2). `primaryAnchor` is the SHARED pick doctor uses (never a second copy).
-    classifier: {
-      reconcile: bindReconcile((fact, newSha) => {
-        const a = primaryAnchor(fact);
-        return (
-          a !== undefined &&
-          revIndex.resolveBySubtreeAt(String(newSha), String(a.subtreeHash)) !== undefined
-        );
-      }),
-    },
+    // N10 — the reconcile classifier is CONTENT-ADDRESSED: a drifted fact is MECHANICAL iff its recorded
+    // content re-derives SOMEWHERE at the new sha (`resolveBySubtreeAt`), not just at the SAME
+    // qualifiedPath. The original predicate was PATH-KEYED, so a genuinely moved-but-alive fact read `false`
+    // ⇒ was ALWAYS `semantic`, making `mechanical` structurally unreachable for real drift.
+    //
+    // IT IS NOW THE SAME BODY DOCTOR RUNS, not a second copy of it, and that is the whole point of the
+    // import. This site used to inline its own predicate over `primaryAnchor(fact)` — `entries[0]` alone —
+    // while doctor's classifier spanned every drifted citation. Two copies of one question, free to
+    // diverge, and they had: a fact whose NON-PRIMARY citation had rotted away resolved its primary anchor
+    // at the new sha, classified `mechanical`, and this gate — `exitCode = |semantic| > 0 ? 2 : 0`, the
+    // answer a CI job merges on — reported CLEAN over a knowledge base holding a dead citation. MEASURED
+    // end to end through this composition root (`test/reconcile-entry-symmetry.test.ts`): `exitCode 0`,
+    // `semantic []` before; `exitCode 2`, `semantic ['mixed']` after.
+    //
+    // BLAST RADIUS, STATED BECAUSE IT IS A MERGE GATE MOVING: a repo whose grounding is multi-entry and
+    // whose non-primary citation has rotted will now FAIL `atlas reconcile` (exit 2, re-author) where it
+    // used to pass. A single-entry grounding, and a multi-entry one whose drifted citations all re-derive
+    // somewhere, are UNCHANGED (exit 0) — pinned in both directions by that test.
+    classifier: { reconcile: bindReconcile((fact, newSha) => isMechanicalAt(revIndex, fact, newSha)) },
     driftFacts,
     resolveAnchorAt: revIndex.resolveAnchorAt,
     // N10 secondary — the DETECTION half needs the content-addressed resolver too, so `driftAt` can surface a
