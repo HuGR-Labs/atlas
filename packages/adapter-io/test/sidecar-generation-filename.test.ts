@@ -19,6 +19,14 @@
 // mirror fallback exists precisely because generation files get pruned or hand-deleted), but it is not a
 // standing brick either. Every case below builds a store with NO mirror on purpose, so the fallback cannot
 // mask the assertion in either direction.
+//
+// ADDENDUM (cold review, cfde63f): the first fix introduced a NARROWER defect of the same class — two
+// distinct filenames sharing one parsed generation number (`"7.json"` / `"007.json"`) made
+// `listGenerations`'s sort order-of-`readdirSync`-dependent, so which projection `readSidecarSet` served
+// could depend on the filesystem rather than on the store's content. Fixed by a lexicographic tiebreak on the
+// filename (`git-history.ts`'s `byPath` shape). The DETERMINISM case below pins that property; unlike every
+// case above it has NO red/green proof, because the defect it guards is an UNSPECIFIED result — one that can
+// come out "right" by luck on a single read — so a red-before-fix run would not be a reliable read either way.
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
@@ -29,9 +37,12 @@ import { readSidecarSet } from '../src/sidecar.js';
 import { IDENTITY_SCHEMA } from '../src/identity-schema.js';
 
 let dir: string | undefined;
+let extraDirs: string[] = [];
 afterEach(() => {
   if (dir !== undefined) rmSync(dir, { recursive: true, force: true });
   dir = undefined;
+  for (const d of extraDirs) rmSync(d, { recursive: true, force: true });
+  extraDirs = [];
 });
 
 const row = (key: string): [string, CurrentNode] => [
@@ -95,5 +106,36 @@ describe('SIDECAR — the read path opens the FILENAME it enumerated, never a re
     expect(read.unreadable).toBe(false);
     expect(read.projection).toBeUndefined();
     expect(read.top).toBe(0);
+  });
+
+  // ── DETERMINISM — pins a property, does NOT reproduce a failure (see the ADDENDUM above) ────────────────
+  it('DETERMINISM: two names sharing one generation number ("projection.7.json" / "projection.007.json") always resolve the SAME winner, regardless of write order', () => {
+    const N = 20;
+    extraDirs = Array.from({ length: N }, () => mkdtempSync(join(tmpdir(), 'atlas-sidecar-tie-')));
+    const winners = extraDirs.map((d, i) => {
+      const unpadded = join(d, 'projection.7.json');
+      const padded = join(d, 'projection.007.json');
+      // Alternate the WRITE order across trials — the one axis a readdir-order-dependent sort could latch
+      // onto. Neither order is meant to be more "correct" than the other; the property under test is that
+      // the OUTCOME does not move when this axis moves.
+      if (i % 2 === 0) {
+        writeWire(unpadded, ['from-unpadded']);
+        writeWire(padded, ['from-padded']);
+      } else {
+        writeWire(padded, ['from-padded']);
+        writeWire(unpadded, ['from-unpadded']);
+      }
+      const read = readSidecarSet(d, 'projection');
+      return [...read.projection!.current.keys()][0];
+    });
+    // MUTANT: drop the `|| (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)` tiebreak from `listGenerations`'s
+    // sort and this CAN flip between 'from-padded' and 'from-unpadded' across trials — not reliably (an
+    // unspecified result can come out the same way by luck on any given filesystem/run), which is exactly why
+    // this assertion is written over 20 independent directories with the write order alternated, rather than
+    // over one directory once. The specific winner below is the tiebreak's ascending-by-name choice
+    // (`"007" < "7"` lexicographically, char-by-char from `'0' < '7'`) — a fixed answer, not a claim that
+    // either filename is more authoritative than the other.
+    expect(new Set(winners).size).toBe(1);
+    expect(winners[0]).toBe('from-padded');
   });
 });

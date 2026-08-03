@@ -51,20 +51,45 @@ writer is re-deriving its own naming convention, not an external one.
 - the mirror's own counter keeps the sequence monotone — untouched; the mirror fallback path is unchanged.
 
 **Verification (new file, not a golden — see the header):**
-`packages/adapter-io/test/sidecar-generation-filename.test.ts` — 5 cases. 2 are the regression pin (padded
-name readable, padded name wins ordering); 1 is the canonical-name control (no regression on the common
-shape); 2 are the negative direction (genuinely unparseable generation still refuses; a genuinely empty
-directory is not corruption). Confirmed RED on the pre-fix code by restoring the prior
+`packages/adapter-io/test/sidecar-generation-filename.test.ts` — 5 cases at first landing. 2 are the
+regression pin (padded name readable, padded name wins ordering); 1 is the canonical-name control (no
+regression on the common shape); 2 are the negative direction (genuinely unparseable generation still refuses;
+a genuinely empty directory is not corruption). Confirmed RED on the pre-fix code by restoring the prior
 `readOne(genPath(dir, base, g))` derivation byte-for-byte (`git show origin/master:…` diffed back in, verified
 `diff -q` identical to the fixed file before and after) and watching the 2 padded-name cases fail with the
 predicted `ENOENT`-shaped symptom (`unreadable: true` where `false` was expected); confirmed GREEN again after
 restoring the fix, `diff -q` against the pre-restore fixed file reporting identical.
+
+**COLD REVIEW FINDING (`cfde63f`) — a narrower defect of the same class, addressed in the same file:**
+`listGenerations`'s sort, `(a, b) => b.g - a.g`, is a total order on the parsed number but not on the
+`{g, name}` entry — two distinct on-disk names can share one number (`"projection.7.json"` and
+`"projection.007.json"` both parse to `7`). On a tie the sort is stable, so which entry lands first — and
+therefore which one `readSidecarSet` opens, since it returns the first that parses — was decided by
+`readdirSync`'s return order: filesystem-dependent, not a property of the store. The pre-fix code did not have
+this (it computed one deterministic path from the integer); the first fix's rewrite introduced it as a side
+effect of carrying the name at all. Fixed by a lexicographic tiebreak on `name`, same shape as
+`git-history.ts`'s `byPath`, so the array order — and the entry `readSidecarSet` opens — is a pure function of
+the bytes on disk again. The tiebreak names no preference between the two filenames; it only fixes an answer
+that was previously free to vary.
+
+**Verification of the tiebreak — pins a property, does NOT reproduce a failure, stated plainly per the
+reviewer's instruction:** a 6th case, `DETERMINISM: …`, writes `projection.7.json` and `projection.007.json`
+with distinguishable content across 20 freshly-created directories, alternating the write order between the
+two files, and asserts every one of the 20 reads returns the SAME winner. This case has no red/green proof: the
+defect it guards is an *unspecified* result, and an unspecified result can come out "right" by luck on any
+given filesystem/run — confirmed empirically during authoring, where the pre-tiebreak sort passed this exact
+case 5/5 times on the authoring machine despite being genuinely order-dependent. A single-directory,
+single-read assertion could therefore pass on the buggy code by accident; running it across 20 directories with
+the write order alternated is the closest available approximation to forcing the dependency to show, not a
+guarantee that it would. The property itself — same input bytes, same answer, independent of `readdirSync`
+order — is what is asserted and is what genuinely holds post-fix.
 
 **Exclusions:** does not touch `sidecar-commit.ts` (the write-side retry/prune logic, another seat's file),
 `git-history.ts`, `doctor-source.ts`, or any package outside `adapter-io`. Does not change the on-disk
 filename convention the writer emits (`genPath` is unchanged and still unpadded) — only the reader's second
 derivation is removed. Does not address generation names carrying more than 15 digits or names outside the
 `^<base>\.(\d{1,15})\.json$` shape; those were already excluded from `generations()` before this fix and
-remain excluded (not a generation name at all, by the pre-existing regex).
+remain excluded (not a generation name at all, by the pre-existing regex). Does not assert which of two
+same-number filenames is "more correct" — the protocol has no such preference; only that the answer is fixed.
 
 **Owner:** ad-hoc dispatch, branch `fix/sidecar-generation`.

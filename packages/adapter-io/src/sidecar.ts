@@ -165,7 +165,15 @@ interface GenEntry {
 /** The one implementation behind both {@link generations} and the read path: every `<base>.<digits>.json`
  *  name on disk, descending by the parsed number — including ones that fail to parse as JSON later (a corrupt
  *  generation still OCCUPIES its name, so the next commit must aim ABOVE it or link forever onto EEXIST).
- *  Total: an absent directory is "no generations", never a throw. */
+ *  Total: an absent directory is "no generations", never a throw.
+ *
+ *  THE SORT IS A TOTAL ORDER ON THE ENTRY, NOT JUST ON `g` — `b.g - a.g` alone is only a total order on the
+ *  NUMBER, and two distinct filenames can carry the same number (`"7.json"` and `"007.json"` both parse to
+ *  `7`). Without a tiebreak, which of the two sorts first is decided by `readdirSync`'s return order —
+ *  filesystem- and inode-dependent, not a property of the store — so `readSidecarSet` below (which returns
+ *  the FIRST entry that parses) could serve either one nondeterministically. The lexicographic tiebreak on
+ *  `name`, same shape as `git-history.ts`'s `byPath`, makes the answer a pure function of the bytes on disk
+ *  again; it is NOT a claim that one name is more authoritative than the other. */
 function listGenerations(dir: string, base: SidecarBase): GenEntry[] {
   let names: string[];
   try {
@@ -179,7 +187,7 @@ function listGenerations(dir: string, base: SidecarBase): GenEntry[] {
     const m = re.exec(name);
     if (m !== null) out.push({ g: Number(m[1]), name });
   }
-  return out.sort((a, b) => b.g - a.g);
+  return out.sort((a, b) => b.g - a.g || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
 /** Every published generation NUMBER present on disk, descending — including ones that fail to parse (a
