@@ -460,7 +460,9 @@ title: resume & robustness — resume from last site, partial skeleton on malfor
 intent: >
   Genesis hands the cold tail to born-from-work; a re-run upserts already-grounded facts idempotently
   and proceeds incrementally. An interrupted run resumes from the last completed ranked site; a malformed
-  repo/rev yields an honest empty/partial skeleton with a resumeToken, never a throw.
+  repo/rev yields an honest empty/partial skeleton with a resumeToken, never a throw. The run also RECORDS
+  what it covered: one per-site outcome for every planned site (seeded with what, or the grounded GEN-12g
+  why-not, or never visited with the cause), so a dropped site is distinguishable from an abstaining one.
 source_reqs:                             # ptr+digest
   - source: ../req-gen.md#REQ-GEN-7a  # ptr+digest
   - source: ../req-gen.md#REQ-GEN-7b  # ptr+digest
@@ -468,6 +470,7 @@ source_reqs:                             # ptr+digest
   - source: ../req-gen.md#REQ-GEN-8a  # ptr+digest
   - source: ../req-gen.md#REQ-GEN-8b  # ptr+digest
   - source: ../req-gen.md#REQ-GEN-8c  # ptr+digest
+  - source: ../req-gen.md#REQ-GEN-12g  # ptr+digest — abstention is a valid outcome only if the RUN records it
 seam-freezes: [ ]
 anchor: atlas-genesis module · run-controller (checkpoint/resume + malformed-input degrade + born-from-work hand-off)
 interface_contract:                      # ptr+digest
@@ -496,6 +499,9 @@ acceptance:                              # ptr+digest = frozen goldens
   - source: ../goldens-gen.md#SCN-GEN-8a-1  # ptr+digest
   - source: ../goldens-gen.md#SCN-GEN-8b-1  # ptr+digest
   - source: ../goldens-gen.md#SCN-GEN-8c-1  # ptr+digest
+  - source: ../goldens-gen.md#SCN-GEN-8a-3  # ptr+digest — the resumed run's site set closes over the ORIGINAL frontier
+  - source: ../goldens-gen.md#SCN-GEN-12g-3  # ptr+digest — the run REPORTS the grounded why-not, per site
+  - source: ../goldens-gen.md#SCN-GEN-12g-4  # ptr+digest — a dropped site is distinguishable from an abstaining one
 deps: [ ]   parallel_group: [P]
 exit_predicate: all acceptance SCN green ∧ all method gates pass ∧ totality holds (malformed → value, never throw) ∧ every ptr+digest resolves
 context_refs:                            # closed list

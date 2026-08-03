@@ -39,8 +39,18 @@ load-bearing:
    genesis: seeded 0 candidate fact(s); ratified 0
    cost: llmCalls 2 · budgetSpent 2
    mine: 0 candidate facts — 2 site(s) visited and every one abstained: no proposer model is wired, so nothing could be proposed (facts are never fabricated)
+   coverage: coverage CLOSES — all 2 planned site(s) accounted for: 0 seeded, 0 abstained, 2 unrecorded, 0 interrupted, 0 never visited
+   site: {"rank":1,"outcome":"unrecorded","kind":"file","path":"src/m0.ts","note":"the `visit` port returned facts only (a bare Fact[], not the ExtractResult `runExtract` produces), so this site's grounded WhyNot never reached the run — outcome not recorded rather than guessed"}
+   site: {"rank":2,"outcome":"unrecorded","kind":"file","path":"src/m1.ts","note":"the `visit` port returned facts only (a bare Fact[], not the ExtractResult `runExtract` produces), so this site's grounded WhyNot never reached the run — outcome not recorded rather than guessed"}
    # exit 0
    ```
+
+   Read the `site:` rows next to the line above them. The prose says "every one abstained"; the LEDGER says
+   `unrecorded`, and the ledger is the one that is entitled to. Both sites really did abstain — but the
+   run's `visit` port (`packages/cli/src/mine.ts`) picks `.facts` off the `ExtractResult`, so the grounded
+   `WhyNot` each site produced never reaches the report and the run cannot evidence the claim its own prose
+   makes. That is the honest state, and it is one token wide: hand back the whole `ExtractResult` and every
+   row above becomes `"outcome":"abstained"` carrying its reason.
 
    So the candidate below was staged through the product's own staging door directly
    (`packages/e2e-blackbox/test/stage.ts` — the same `commitStaging` + `upsert` + `nodeKey` path `mine`

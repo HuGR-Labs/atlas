@@ -23,6 +23,7 @@ export * from './admit-harness.js';  // WP-8.28-b.GEN — mechanical admission (
 export * from './cost-policy.js';    // WP-8.28-c.GEN — tiered escalation defaults (1 sample/advisory/CEGIS≤1; refuter T0-only)
 export * from './align.js';          // WP-8.29.GEN   — candidate-only writes + one batched ratification pass
 export * from './seed.js';           // WP-8.29.GEN   — seed from ratified manifest; Awareness sources never fabricated
+export * from './coverage.js';       // WP-8.30.GEN   — the per-site RUN LEDGER (GEN-8/12g) + its reconciliation
 export * from './run-controller.js'; // WP-8.30.GEN   — resume/checkpoint + malformed-degrade + born-from-work hand-off
 export * from './loops.js';          // WP-8.31.GEN   — governed deepening loops (opt-in, budget-gated, fixpoint-stopping)
 export * from './rank.js';           // WP-8.27.GEN   — deterministic $0-LLM S0/S1 (scan canonicalize + integer fixed-point PPR + degenerate-history fallback)

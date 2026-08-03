@@ -30,6 +30,7 @@ $ atlas mine .
 genesis: seeded 0 candidate fact(s); ratified 0
 cost: llmCalls 0 · budgetSpent 0
 mine: 0 candidate facts — 0 sites visited: the structural pass (skeleton → ranked frontier) yielded no site, so no proposer was ever consulted; wiring a model would not change this 0. Run `atlas doctor index` to see whether this repository has the SCIP index the frontier is derived from
+coverage: coverage CLOSES — all 0 planned site(s) accounted for: 0 seeded, 0 abstained, 0 unrecorded, 0 interrupted, 0 never visited
 # exit 0
 ```
 
@@ -52,6 +53,52 @@ The first of those four is the one printed above. The other three are the remain
 `mineWhyEmpty` (`packages/cli/src/mine-render.ts`) and need a non-empty frontier, which this repository does
 not have; they are listed so a `0` is never read as "the tool is broken".
 
+## The coverage ledger — what the run actually covered
+
+The last block a run prints is its **site ledger**: a verdict line, then one `site:` row per **planned**
+site. The rows are single-line JSON after a fixed `site: ` prefix, because a `WhyNot` reason is free text a
+model wrote and can contain the same delimiters the prose lines use.
+
+Measured on a repository with a real SCIP index and a two-site ranked frontier — **verbatim**, paths as the
+binary printed them:
+
+```
+$ atlas mine .
+genesis: seeded 0 candidate fact(s); ratified 0
+cost: llmCalls 2 · budgetSpent 2
+mine: 0 candidate facts — 2 site(s) visited and every one abstained: no proposer model is wired, so nothing could be proposed (facts are never fabricated)
+coverage: coverage CLOSES — all 2 planned site(s) accounted for: 0 seeded, 0 abstained, 2 unrecorded, 0 interrupted, 0 never visited
+site: {"rank":1,"outcome":"unrecorded","kind":"file","path":"src/m0.ts","note":"the `visit` port returned facts only (a bare Fact[], not the ExtractResult `runExtract` produces), so this site's grounded WhyNot never reached the run — outcome not recorded rather than guessed"}
+site: {"rank":2,"outcome":"unrecorded","kind":"file","path":"src/m1.ts","note":"the `visit` port returned facts only (a bare Fact[], not the ExtractResult `runExtract` produces), so this site's grounded WhyNot never reached the run — outcome not recorded rather than guessed"}
+# exit 0
+```
+
+**Read the rows against the line above them, because they disagree and the rows are right.** The prose says
+"every one abstained" — and both sites did — but the run's `visit` port (`packages/cli/src/mine.ts`) picks
+`.facts` off the `ExtractResult`, so each site's grounded `WhyNot` never reaches the report. The ledger will
+not upgrade "produced no fact" into "abstained" on the strength of a reason it never saw, so it records
+`unrecorded` and names the port. This is the honest current state and it is one token wide: return the whole
+`ExtractResult` from that port and every row becomes `"outcome":"abstained"` carrying its reason.
+
+| outcome | means |
+| --- | --- |
+| `seeded` | the site produced facts, and the row names **which** — one site may yield more than one |
+| `abstained` | the site was visited and produced no fact, and the grounded `WhyNot` (GEN-12) says why |
+| `unrecorded` | the site was visited and produced no fact, and the run could **not** obtain its `WhyNot`. Not an abstention: nothing grounded it. The row names the reason it could not |
+| `interrupted` | `visit` threw at this site. It is not completed, and the run carries a `resumeToken` |
+| `unvisited` | no call was spent here — `cause: ceiling` (the budget cold tail, left to born-from-work) or `cause: after-interrupt` |
+
+**Why per-site and not a count.** "N abstained" does not let anyone establish that no site was **dropped**,
+and until this ledger existed nothing could: `GenesisReport` carried no abstention field and the run
+controller discarded every `WhyNot`, so a site that abstained and a site that vanished produced the same
+artifact — which made *"Atlas mined this repository completely"* unfalsifiable. The verdict line is computed
+by `reconcile` (`packages/genesis/src/coverage.ts`) and it does **not** subtract: one site may yield more
+than one fact, so `sites − facts` is not a residual. It compares the row set against the frontier the run
+was handed, and refuses to close on a gap **or** on a duplicate.
+
+**An absent ledger reads `UNEVALUABLE`.** A report produced before this existed carries no `coverage`, and
+that is reported as "not recorded" — never as "covered nothing", and never as "covered everything".
+
 With a model configured, the run also prints its prompt provenance:
 
 ```
@@ -60,6 +107,7 @@ genesis: seeded 0 candidate fact(s); ratified 0
 cost: llmCalls 0 · budgetSpent 0
 prompt: 170c27cd1ec1854cb7a5af59ea0186ea1c3ddf78e6f25554bd920eb2d1dcaf57 — the artifact every proposal on this run was built from
 mine: 0 candidate facts — 0 sites visited: the structural pass (skeleton → ranked frontier) yielded no site, so no proposer was ever consulted; wiring a model would not change this 0. Run `atlas doctor index` to see whether this repository has the SCIP index the frontier is derived from
+coverage: coverage CLOSES — all 0 planned site(s) accounted for: 0 seeded, 0 abstained, 0 unrecorded, 0 interrupted, 0 never visited
 # exit 0
 ```
 
