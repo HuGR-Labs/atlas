@@ -9,13 +9,14 @@ import type { Hash } from '@atlas/contracts';
 import { asHash } from '@atlas/kernel';
 import { headSha } from '@atlas/adapter-io';
 import { reportIndexPlan } from '@atlas/adapter-io';
-import type { IndexPlanReport, PromoteOut, WiredHandler } from '@atlas/adapter-io';
+import type { IndexPlanReport, OwnLeg, PromoteOut, WiredHandler } from '@atlas/adapter-io';
 import type { DoctorSource, Guidance, Tool, Verdict } from '@atlas/tools';
 import { runDoctor } from './doctor.js';
 import { ensureAtlasIgnored } from './gitignore.js';
 import { COMMAND_LEG } from './map.js';
 import { marshalArgs } from './marshal.js';
 import { runMine } from './mine.js';
+import { runOwn } from './own.js';
 import { runPromote } from './promote.js';
 import { parse } from './parse.js';
 import { renderRefusal, renderVerdict } from './render.js';
@@ -64,6 +65,19 @@ export interface CliDeps {
    * It is deliberately NOT part of the composed runtime: the leg touches neither the store nor the handler.
    */
   readonly indexPlan?: () => IndexPlanReport;
+  /**
+   * The composition root's `own_<scope>` READ leg (`ComposedRuntime.own`) — RETR-12's curated briefing.
+   * Injected on the SAME seam as `handler` and `promote`, and for the same reason: the CLI must never stand
+   * up a second runtime, or the store it briefs from stops being the store `atlas query` reads back.
+   *
+   * It is NOT reached through `handler.handle`, because it is not a `Tool`: `GOVERNANCE_SURFACE` stays 5,
+   * and this door writes nothing at all — it is a read, composed by index reads over the durable projection.
+   *
+   * ABSENT ⇒ `atlas own` fails closed with the same "runtime is not composed yet" guidance every other
+   * routed command gives, never a silent empty briefing over nothing — which is the failure mode that
+   * matters most for THIS door, since an empty briefing is also a legitimate answer.
+   */
+  readonly own?: OwnLeg;
 }
 
 /** A structured error verdict for a CLI-layer failure (parse / unwired command) — guidance always present. */
@@ -167,6 +181,23 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
     // re-derives freshness against the built `Axes`, not against a sha (compose.ts `buildGate`). It is still
     // the true HEAD rather than a placeholder, so a gate that later starts reading it gets a fact.
     return emitCli(runPromote(deps.promote, asHash(headSha(process.cwd()) ?? '')));
+  }
+
+  if (command === 'own') {
+    // CLI-8: `atlas own <scope>` composes the RETR-12 curated briefing for one scope-unit through the
+    // composition root's `own` leg — `@atlas/retrieval`'s `createOwn` over the SAME durable store + built
+    // axes the query readback rides. Like `node` it is intercepted before the handler (it is not a `Tool`:
+    // it opens no governed surface, and `GOVERNANCE_SURFACE` stays 5), and like every other command its
+    // rendered `CliVerdict` reaches the console over the SAME emit/exit path (uniform bytes).
+    //
+    // It fails closed on an uncomposed runtime for the same reason the READ commands do: composing a second
+    // runtime here would brief from a store that is not the one `atlas query` reads.
+    if (!deps.own) {
+      return emit(
+        errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'),
+      );
+    }
+    return emitCli(runOwn(deps.own, positionals[0] ?? ''));
   }
 
   if (command === 'doctor') {

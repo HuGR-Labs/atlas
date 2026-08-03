@@ -86,6 +86,12 @@ export {
 } from './governed-link-retract.js';
 export { composeRuntime, buildHeuristic, buildGate } from './compose.js';
 export type { ComposedRuntime } from './compose.js';
+// The `own_<scope>` READ leg (RETR-12) — the production feed that gives `@atlas/retrieval`'s `createOwn` its
+// first caller outside its own test file. Exported because the CLI entrypoint threads it on the same injected
+// seam `promote` rides, and because a test must be able to drive the FEED (`buildOwnSources`) directly rather
+// than only through the composed runtime. It opens no governed surface: it is a read.
+export { buildOwnSources, createOwnLeg } from './own-source.js';
+export type { OwnDispatch, OwnLeg, OwnSourceDeps } from './own-source.js';
 export { createDoctorSource, regroundTemplate, retireTemplate } from './doctor-source.js';
 
 // The PROVENANCE tripwire's READ-side refusal (`read-provenance.ts`) — the half the write doors already had.

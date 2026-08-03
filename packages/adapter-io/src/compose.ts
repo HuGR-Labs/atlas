@@ -36,6 +36,8 @@ import { createDoctorSource, primaryAnchor } from './doctor-source.js';
 import { createGovernedEmit } from './governed-emit.js';
 import { createGovernedPromote } from './governed-promote.js';
 import type { PromoteOut } from './governed-promote.js';
+import { createOwnLeg } from './own-source.js';
+import type { OwnLeg } from './own-source.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
 import { gitSidecarTrust } from './store-provenance.js';
 import { readProvenanceRefusal } from './read-provenance.js';
@@ -59,6 +61,25 @@ export interface ComposedRuntime {
    * the handler wrote — so a promoted fact is visible to the very next `atlas query`.
    */
   readonly promote: (at: Hash) => PromoteOut;
+  /**
+   * The `own_<scope>` READ leg (RETR-12) — `own(scope)` composes the curated, mechanically-ranked briefing
+   * for a scope-unit through `@atlas/retrieval`'s `createOwn`, over the feed in `own-source.ts`.
+   *
+   * IT IS BUILT FROM `store` AND `axes`, THE SAME TWO OBJECTS THE HANDLER'S QUERY LEG READS, and that is the
+   * whole reason it is composed here rather than in the CLI: a briefing assembled over a second store would
+   * be a different repository's knowledge wearing this repository's scope name. `DiskStore` holds no state of
+   * its own (all of it is the sidecar + CAS files it names), so a fact emitted through the handler in the
+   * same process is visible to the very next `own` — the feed re-reads the live projection per call.
+   *
+   * It rides BESIDE the handler for the same reason `doctorSource` and `promote` do: it is not a `Tool`.
+   * `GOVERNANCE_SURFACE` stays 5 and `WRITE_PATHS` stays `{atlas-emit, atlas-link}` — this is a READ door,
+   * it opens no write path, and there is nothing for `WiredHandler.handle` to route.
+   *
+   * NO AUTHZ GATE, DELIBERATELY (KNOW-11b): reads are universal in Atlas. The actor is a self-asserted
+   * string (see the posture note on {@link composeRuntime}), so gating a read on it would refuse an honest
+   * caller and stop a dishonest one for exactly as long as it takes to set one environment variable.
+   */
+  readonly own: OwnLeg;
   /**
    * The PROVENANCE refusal for this repo's durable store, or `undefined` when it is trustworthy
    * (`read-provenance.ts`). PRESENT means `.atlas/` arrived by COMMIT rather than through a door, so every
@@ -289,6 +310,11 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     handler: assembleHandler(config),
     doctorSource,
     promote: promoteLeg.promote,
+    // THE `own_<scope>` READ LEG. `store` and `axes` here are the very objects the handler's query leg reads
+    // — passed, not rebuilt — so `atlas own <scope>` and `atlas query <scope>` are two projections of ONE
+    // store, and `policy` is the same loaded `.atlas/policy.json` the write door gates on (it supplies the
+    // terrain OWNER, which is the declared scope membership, not a second notion of ownership).
+    own: createOwnLeg({ axes, store, policy }),
     ...(readRefusal !== undefined ? { readRefusal } : {}),
   };
 }

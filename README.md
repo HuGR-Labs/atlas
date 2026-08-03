@@ -35,8 +35,9 @@ a hashed structural index (BLAKE3-merkle CAS) resolved by scope, dependency blas
 
 The CLI is `atlas` (`packages/cli/package.json` `bin` → `packages/cli/dist/src/bin.js`). The workspace is
 not published, so build it from a checkout — `npm ci && npm run build` — and note that a workspace install
-does **not** put `atlas` on your `PATH`; alias it or invoke the file. **Exactly these nine commands exist**
-(`COMMANDS` in `packages/cli/src/map.ts`); one reference page each, every example on them executed against
+does **not** put `atlas` on your `PATH`; alias it or invoke the file. **Exactly these ten commands exist**
+(`COMMANDS` in `packages/cli/src/map.ts` — the oracle; `command-doc-guard` fails the build if this table and
+that array disagree in either direction); one reference page each, every example on them executed against
 the real binary.
 
 | command | what it does | page |
@@ -50,8 +51,9 @@ the real binary.
 | `atlas node <addr>` | read one fact whole, by content address | [reference](./docs/reference/commands/node.md) |
 | `atlas link <a> <b> [--retract]` | governed write door — asserts (or withdraws) `a ≡ b`; never a merge | [reference](./docs/reference/commands/link.md) |
 | `atlas promote` | carries staged candidates into knowledge THROUGH the emit door; needs a ratifier | [reference](./docs/reference/commands/promote.md) |
+| `atlas own <scope>` | the briefing for a scope: role, invariants, gotchas, terrain, dependents, what else is reachable | [reference](./docs/reference/commands/own.md) |
 
-**Exit codes are a designed surface**, uniform across all nine (`EXIT` / `deriveStatus`,
+**Exit codes are a designed surface**, uniform across every one of them (`EXIT` / `deriveStatus`,
 `packages/cli/src/map.ts`): `0` ok · `1` **usage or wiring error — your invocation was wrong** · `2`
 **governed refusal — your invocation was fine and a gate declined it**, so re-running it unchanged will not
 help. A refusal always carries the reason and the invariant it enforced.
