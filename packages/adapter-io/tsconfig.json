@@ -11,6 +11,7 @@
     { "path": "../grounding" },
     { "path": "../knowledge" },
     { "path": "../persist" },
+    { "path": "../retrieval" },
     { "path": "../genesis" },
     { "path": "../tools" }
   ]

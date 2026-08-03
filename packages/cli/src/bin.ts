@@ -14,15 +14,19 @@ import { main } from './cli.js';
 // yet still index `::` sub-file symbol nodes, so a symbol grounding is groundable and `subsumes` fires.
 void (async () => {
   await initAst();
-  const { handler, doctorSource, promote, readRefusal } = composeRuntime(process.cwd());
+  const { handler, doctorSource, promote, own, readRefusal } = composeRuntime(process.cwd());
   // The provenance refusal rides the same injected-deps seam as the handler (conditional spread keeps it
   // ABSENT on a healthy repo — exactOptionalPropertyTypes), so prod and tests share ONE surface. `promote`
   // (the KNOW-8 governed promotion leg) rides that same seam: it is not a `Tool`, so it cannot arrive through
   // the handler, and threading it here is what makes `atlas promote` REACHED rather than a reference model.
+  // `own` (the RETR-12 briefing leg) rides it for exactly the same reason, and this line is the entire
+  // difference between `@atlas/retrieval` being running code and being a well-tested library nothing calls:
+  // before it, EVERY import of that package from another package's `src` was `import type`.
   process.exitCode = await main(process.argv.slice(2), {
     handler,
     doctorSource,
     promote,
+    own,
     ...(readRefusal !== undefined ? { readRefusal } : {}),
   });
 })();

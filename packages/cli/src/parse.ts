@@ -38,9 +38,10 @@ const ARITY: Record<Command, number> = {
   // under that one composed store. A path argument would let the two disagree (read one repo's candidates,
   // publish into another's knowledge), which is a confusion no gate downstream is positioned to catch.
   promote: 0,
+  own: 1, // own <scope> — the scope-unit path the briefing is composed for (RETR-12)
 };
 
-const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine|node|link|promote';
+const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine|node|link|promote|own';
 
 function isCommand(s: string): s is Command {
   return Object.prototype.hasOwnProperty.call(COMMAND_LEG, s);

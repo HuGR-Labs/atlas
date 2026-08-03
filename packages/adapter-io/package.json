@@ -19,6 +19,7 @@
     "@atlas/kernel": "*",
     "@atlas/knowledge": "*",
     "@atlas/persist": "*",
+    "@atlas/retrieval": "*",
     "@atlas/tools": "*",
     "@c4312/scip": "^0.1.0",
     "tree-sitter-typescript": "^0.23.2",
