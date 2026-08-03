@@ -329,6 +329,14 @@ Then it resumes at **s3** — s1,s2 are not re-called (resume from the last comp
 teeth: breaks-on "restart ignores the `resumeToken` and re-processes from s1 — s1,s2 get a second LLM call (no resume)"
 gen: conformance
 
+### SCN-GEN-8a-3 — the resumed run's site set still closes over the ORIGINAL frontier   (happy)
+source: REQ-GEN-8a
+Given a run over `[s1,s2,s3,s4]` interrupted at s2, then restarted with its `resumeToken`
+When the resumed `GenesisReport` is inspected
+Then its per-site outcomes account for all **4** planned sites exactly once — the first leg's completed rows carried forward, the remainder re-driven, no site counted twice and none unaccounted; and a resume handed a cursor AHEAD of where the run stopped genuinely skips sites, which the report reports as unaccounted rather than closing over
+teeth: breaks-on "the resumed report accounts only for the sites the resume itself re-drove, so the frontier appears to shrink at exactly the moment the run was interrupted"
+gen: conformance   # oracle = the run controller across `genesis` → `resume`
+
 ### REQ-GEN-8b — malformed yields partial skeleton   (guard)
 
 ### SCN-GEN-8b-1 — a malformed rev yields an honest empty/partial skeleton   (guard)
@@ -524,6 +532,22 @@ When the harness records the outcome
 Then abstention is accepted as a **valid outcome** — 0 facts, a recorded grounded why-not, no retry-forcing
 teeth: breaks-on "abstention is treated as failure and the site is retried until it emits a fact — abstention is not a valid outcome"
 gen: conformance
+
+### SCN-GEN-12g-3 — the RUN reports the grounded why-not, per site   (happy)
+source: REQ-GEN-12g
+Given a run over the ranked frontier `[s1,s2,s3]` where `s2` yields no grounded fact and the S2 driver returns its grounded why-not
+When the finished `GenesisReport` is inspected
+Then `s2` carries a per-site outcome `abstained` holding that **same** `WhyNot` verbatim (site + reason), and a seeded site names **which** facts it produced — a valid outcome is one that is RECORDED, not one that is discarded
+teeth: breaks-on "the run keeps only `.facts` and the why-not is dropped, so the report shows `s2` exactly as it shows a site that was never visited"
+gen: conformance   # oracle = the run controller over injected `plan`/`visit`/`upsert` seams
+
+### SCN-GEN-12g-4 — a DROPPED site is distinguishable from an abstaining one   (guard)
+source: REQ-GEN-12g
+Given a ranked frontier of 4 sites under a hard budget ceiling of 2, where every visited site abstains
+When the finished `GenesisReport` is inspected
+Then the 2 visited sites read `abstained` with their grounded why-nots and the 2 cold-tail sites read `unvisited` with cause `ceiling` — never visited is a **different** outcome from abstained, and both are accounted for
+teeth: breaks-on "the ceiling stops the drive and records nothing for the cold tail, so a site that was dropped and a site that abstained produce the same (empty) record"
+gen: conformance   # oracle = the run controller; the same shape holds for an interrupted run's tail
 
 ### REQ-GEN-12h — no pressure to emit   (guard)
 

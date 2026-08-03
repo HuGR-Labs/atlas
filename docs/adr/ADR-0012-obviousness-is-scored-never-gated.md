@@ -184,9 +184,15 @@ has already found five times (task #114). The axis must be re-pointed, not retir
   discipline forbids.
 - **`harmfulToStore`.** Named as the surviving hard door; its predicate is the credential-scrub family
   already shipped. Whether that is the *complete* definition of harm is not settled here.
-- **The wiring.** `makeAdmitGate` has zero production callers and `mine` falls back to a gate that abstains
+- **The wiring.** ~~`makeAdmitGate` has zero production callers and `mine` falls back to a gate that abstains
   at every site, so no admission path — old or new — currently runs in the shipped binary. That is tracked
-  separately and is a precondition for the first genesis run.
+  separately and is a precondition for the first genesis run.~~
+  **CLOSED 2026-08-03** by `REQ-CLI-4d` / `WP-SEEDGATE.COMPOSE`: the composition root now supplies the gate
+  (`compose-mine-admission.ts` → `mine-gate.ts`), `makeAdmitGate` has its first production caller, and the
+  precondition named here is met. Struck rather than deleted — the record of what was open when this ADR was
+  ratified is part of what the ADR is for. What did NOT change: the score is still never a veto, and
+  `nonObvious` still has no mechanical oracle, so the supply pins it and the stored rank carries no
+  information yet. That remainder is below, not here.
 
 ## What the owner still has to ratify
 

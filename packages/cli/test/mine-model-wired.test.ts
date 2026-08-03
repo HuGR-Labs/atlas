@@ -50,8 +50,15 @@ describe('R1 — the CLI reports the model as WIRED when the operator config res
     // teeth (breaks-on "modelWired reads deps again"): no proposer is injected here, so a `deps`-derived
     // flag is false and the render falls into the "no proposer model is wired" branch — on a run whose own
     // cost line says it made two calls to a configured command.
+    //
+    // THE STAND-IN IS `true`, NOT `echo`, and the swap is load-bearing. This case needs a pass that is EMPTY
+    // while a model is genuinely WIRED — that combination is the only state in which the render reaches the
+    // "why is it 0" branch this test exists to police. It used to get that state for free, because `mine`
+    // supplied no admission gate and every site abstained no matter what the model said; REQ-CLI-4d supplies
+    // one, so an `echo`ing command now SEEDS and the branch is never reached. `true` exits 0 with empty
+    // stdout, which `createCommandClient` reads as a GEN-12 abstention (llm.ts:118) — a real call, no claim.
     const repo = makeIndexedRepo();
-    const v = await runMine(repo, { env: withModel(operatorConfig('echo', [CLAIM])) });
+    const v = await runMine(repo, { env: withModel(operatorConfig('true')) });
 
     expect(v.exitCode).toBe(0);
     expect(v.stdout).toContain('cost: llmCalls 2 · budgetSpent 2');

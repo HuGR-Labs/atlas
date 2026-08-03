@@ -7,7 +7,8 @@
 // Nothing here asserts anything about the WIRING: every leg is READ OFF the run's own outcome, which is
 // what keeps the "why is it 0" line from going stale when a seam upstream of it is wired or unwired later.
 
-import type { GenesisReport } from '@atlas/genesis';
+import type { GenesisReport, SiteOutcome } from '@atlas/genesis';
+import { reconcile } from '@atlas/genesis';
 import type { CommitRefusal } from '@atlas/adapter-io';
 import { STAGING_REFUSAL_TEXT as REFUSAL_TEXT } from './mine-staging.js';
 import type { CliVerdict } from './render.js';
@@ -118,6 +119,52 @@ export function promptProvenanceLine(digest: string | undefined): string | null 
   return digest === undefined ? null : `prompt: ${digest} — the artifact every proposal on this run was built from`;
 }
 
+/**
+ * ONE ledger row, as the run prints it — the `site:` prefix plus a single-line JSON object.
+ *
+ * JSON and not prose, deliberately. A `WhyNot.reason` is free text a model wrote: it can carry spaces,
+ * punctuation, a colon, a `·`, or a newline, and every prose format that has to survive that ends up with a
+ * bespoke escaping convention nobody maintains. `JSON.stringify` already has one. The `site: ` prefix keeps
+ * the block greppable and lets a reader split the ledger from the summary without a parser.
+ *
+ * The row names the site by `qualifiedPath` (the site's identity) and `kind`, never by line numbers — the
+ * anchor's `subtreeHash` is the drift oracle and is not this record's business. A `seeded` row lists its
+ * fact ids because ONE SITE MAY YIELD MORE THAN ONE FACT, which is exactly why `sites − facts` is not a
+ * residual and why the row, not the count, is the thing that reconciles.
+ */
+export function siteLine(o: SiteOutcome): string {
+  const row: Record<string, unknown> = { rank: o.rank, outcome: o.outcome, kind: o.site.kind, path: o.site.qualifiedPath };
+  if (o.outcome === 'seeded') row['facts'] = o.facts;
+  if (o.outcome === 'abstained') row['whyNot'] = o.whyNot.reason;
+  if (o.outcome === 'unrecorded') row['note'] = o.note;
+  if (o.outcome === 'unvisited') row['cause'] = o.cause;
+  return `site: ${JSON.stringify(row)}`;
+}
+
+/**
+ * The COVERAGE block: the reconciliation verdict, then one row per planned site.
+ *
+ * This is the run's durable ledger, and until it existed there was none — `GenesisReport` had no abstention
+ * field and the run controller dropped every `WhyNot`, so a site that ABSTAINED (a valid, grounded GEN-12
+ * outcome) and a site that was SILENTLY DROPPED were indistinguishable in everything the product wrote.
+ * "Atlas mined this repository completely" was therefore unfalsifiable, which is the same class of defect as
+ * an unauditable admission filter.
+ *
+ * ABSENT-TOLERANT (the `builtAt` / `sameAs` / `derivedAt` precedent): a report from before the ledger has no
+ * `coverage`, and that reads as UNEVALUABLE — never as a run that covered nothing, and never as one that
+ * covered everything. `reconcile` owns that distinction; this function only prints it.
+ *
+ * The rows are printed IN FULL rather than sampled. A ledger you have to ask for twice is not a ledger, and
+ * a truncated one re-opens the exact hole it closes: the sites elided are indistinguishable from sites
+ * dropped. A 200-site run is the ceiling (GEN-2), so this is bounded by construction.
+ */
+export function coverageLines(r: GenesisReport): readonly string[] {
+  const rec = reconcile(r.coverage);
+  const head = `coverage: ${rec.why}`;
+  if (r.coverage === undefined || r.coverage.sites.length === 0) return [head];
+  return [head, ...r.coverage.sites.map(siteLine)];
+}
+
 /** Fold a finished pass to the CLI's process outcome. `renderVerdict` (render.ts) projects a handler
  *  `Verdict`, not a `GenesisReport`, so the fold is direct: a partial/interrupted run is a non-zero exit.
  *  An empty pass EXPLAINS itself with `mineWhyEmpty` — the cause is computed from the report, so the line
@@ -135,6 +182,10 @@ export function foldVerdict(pass: MinePass, ceiling?: number): CliVerdict {
     ...(pass.refusal !== undefined ? [`staging: REFUSED (${pass.refusal}) — ${REFUSAL_TEXT[pass.refusal]}`] : []),
     ...opt(why),
     ...(r.resumeToken ? [`partial: resume at rank ${r.resumeToken.lastCompletedRank}`] : []),
+    // LAST, and always. The per-site ledger is the only thing that lets a reader establish what the run
+    // covered; it goes below the prose so the three lines `mine.md` pins verbatim keep their position, and
+    // it is unconditional so that "no ledger" can only ever mean "this run has none", never "we skipped it".
+    ...coverageLines(r),
   ];
   const failed = r.resumeToken !== undefined || pass.refusal !== undefined;
   return { exitCode: failed ? 1 : 0, stdout: `${lines.join('\n')}\n` };

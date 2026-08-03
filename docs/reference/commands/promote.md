@@ -29,23 +29,50 @@ atlas promote
 Every block on this page is verbatim stdout from the built binary. Two disclosures about the fixture, both
 load-bearing:
 
-1. **`atlas mine` stages nothing today**, so a run of it does not set this example up. `mine` falls back to
-   an admission gate that abstains at every site, and the gate that would admit (`makeAdmitGate`,
-   `packages/cli/src/mine.ts`) has **no production caller**. Measured on a repository with a real SCIP index
-   and a real ranked frontier:
+1. **`atlas mine` NOW stages candidates** — REQ-CLI-4d wired the admission gate at the composition root, and
+   `makeAdmitGate` has a production caller. This paragraph used to read "`atlas mine` stages nothing today";
+   it was true, and it is the defect that requirement closed. Measured on Atlas itself with a real SCIP
+   index and an operator-configured proposer:
+
+   ```
+   $ atlas mine .
+   genesis: seeded 200 candidate fact(s); ratified 0
+   cost: llmCalls 200 · budgetSpent 200
+   prompt: 1ddad3aff78df671b020867dcebb313a88479ce8d4262904fcce0339f28668a7 — the artifact every proposal on this run was built from
+   # exit 0
+   ```
+
+   TWO THINGS ABOUT THAT BLOCK, because it is the one transcript on this page that could mislead. It is
+   verbatim, from a real 54-minute pass over Atlas's own 200-site frontier with an operator-configured
+   proposer — and it was captured BEFORE the per-site ledger landed in this same merge, which is why it
+   carries no `coverage:` line. It has not been re-run: re-running costs 200 model calls, and editing a
+   `coverage:` row into a transcript nobody produced is exactly the fabrication this page exists to refuse.
+   The second thing: `llmCalls` counts SITES, not model calls (`run-controller.ts` increments it once per
+   visited site whether or not a proposer ran), so read that figure as budget spent, never as spend.
+
+   The ledger's own shape, from the CURRENT build on a one-site fixture — the run that has it:
 
    ```
    $ atlas mine .
    genesis: seeded 0 candidate fact(s); ratified 0
-   cost: llmCalls 2 · budgetSpent 2
-   mine: 0 candidate facts — 2 site(s) visited and every one abstained: no proposer model is wired, so nothing could be proposed (facts are never fabricated)
+   cost: llmCalls 1 · budgetSpent 1
+   mine: 0 candidate facts — 1 site(s) visited and every one abstained: no proposer model is wired, so nothing could be proposed (facts are never fabricated)
+   coverage: coverage CLOSES — all 1 planned site(s) accounted for: 0 seeded, 1 abstained, 0 unrecorded, 0 interrupted, 0 never visited
+   site: {"rank":1,"outcome":"abstained","kind":"file","path":"src/charge.ts","whyNot":"model abstained: no grounded fact at site"}
    # exit 0
    ```
 
-   So the candidate below was staged through the product's own staging door directly
+   `"outcome":"abstained"` carrying a grounded `whyNot` is what the wire bought. Until this merge the row
+   read `"outcome":"unrecorded"`: the `visit` port picked `.facts` off the `ExtractResult`, so each site's
+   `WhyNot` died one layer above the controller and an abstention was indistinguishable from a silent drop —
+   while the prose line above it said "every one abstained" on the strength of `facts === 0` alone, a word
+   the run had no grounds for. The ledger is the row entitled to make that claim; the prose is not.
+
+   The candidate below was nevertheless staged through the product's own staging door directly
    (`packages/e2e-blackbox/test/stage.ts` — the same `commitStaging` + `upsert` + `nodeKey` path `mine`
-   takes, with the same `atlas:mined` scope and `T2` class). Nothing about the promotion is faked; the
-   *proposal* is, because no shipped command can currently produce one.
+   takes, with the same `atlas:mined` scope and `T2` class), because this page's example needs ONE known
+   candidate with known bytes rather than whatever a proposer answered. Nothing about the promotion is
+   faked, and a mined candidate now reaches this door for real.
 2. `.atlas/policy.json` grants `atlas:mined` to `seat:orchestrator`. Without that grant every promotion is
    correctly refused — the last refusal block below is that state.
 
@@ -249,8 +276,10 @@ found, so a partial pass is legible as one instead of rounding to a success.
 
 ## Things worth knowing before you rely on it
 
-- **Nothing shipped produces a candidate yet.** Until the mine admission gate is wired, `atlas promote` on a
-  real repository will report `0 of 0`. That is the honest state, not a defect in this command.
+- **A candidate has to be MINED first.** This line used to read "nothing shipped produces a candidate yet";
+  the mine admission gate is wired now, so `atlas mine` on an indexed repository with a configured proposer
+  stages rows this command can promote. On a repository nobody has mined, `atlas promote` still reports
+  `0 of 0` — that is the honest state, not a defect in this command.
 - **A promoted row stays staged.** There is no delete and no marker; see the idempotence section. The
   projection is the only record of what was promoted.
 - **`ATLAS_RATIFY_TOKEN` is a name, not a credential.** It is compared as a string, with no verification of

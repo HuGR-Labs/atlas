@@ -597,6 +597,22 @@ Then the driver adds 0 admission of its own — the admitted set == the run-cont
 teeth: breaks-on "the `mine` driver adds a local pre-filter that admits/rejects a candidate before the run-controller — the admitted set diverges from the frozen run-controller's (admission invented)"
 gen: conformance
 
+### SCN-CLI-4d-1 — a non-empty frontier reaches the gate's verdict   (happy)
+source: REQ-CLI-4d
+Given a real git repository carrying a real SCIP index, whose structural frontier is NON-EMPTY (asserted before anything is concluded from the run), and a spy proposer that returns a candidate at every site, with NO gate injected
+When `atlas mine` runs over it on production defaults
+Then every visited site reaches the verdict of the gate the composition root supplied — the admitted candidates are staged carrying a re-derived FRESH grounding receipt and a mechanically-computed obviousness score, and no site's outcome is the unwired-default abstention `no admission seam wired (mine default)`
+teeth: breaks-on "the composition root supplies no gate (or supplies one built over a receipt taken verbatim from the seed, whose `subtreeHash` is the dependency-axis node identity the freshness oracle refuses by construction) — the frontier is unchanged, the model is still called at every site, and 0 candidates are staged"
+gen: conformance
+
+### SCN-CLI-4d-2 — with the gate absent the run still abstains, and says so   (guard)
+source: REQ-CLI-4d
+Given the SAME repository, the SAME frontier and the SAME spy proposer as SCN-CLI-4d-1, with the admission supply deliberately REMOVED
+When `atlas mine` runs
+Then the pass visits the same sites, spends the same model calls, stages 0 candidates, and the abstention NAMES THE WIRING (`no admission seam wired (mine default)`) rather than the repository
+teeth: breaks-on "the unwired gate abstains anonymously — an unsupplied gate and a repository that genuinely holds no groundable fact render identically, which is the indistinguishability that let `atlas mine` ship staging nothing while REQ-CLI-4a/4b/4c all held"
+gen: conformance
+
 ---
 
 ## REQ-CLI-7 — promote curates through the existing write door
