@@ -5,30 +5,32 @@
 // requires billy. Binds the FROZEN, PINNED `RatifyApi` (co-located below): `stage(candidate): Staged` and
 // `ratify(staged, token): { committed: boolean }`, over the minimal `Staged`/`RatifyToken` records.
 //
-// ── WHAT KNOW-8 ACTUALLY ENFORCES TODAY (A-D4, MEASURED — read this before the paragraph above) ───────────
-// KNOW-8's measurable is "0 explorer writes reach the store except via a ratifier". IT HOLDS. IT HOLDS
-// VACUOUSLY, and the difference matters because the sentence above describes a propose→ratify FLOW that is
-// NOT WIRED.
+// ── WHAT KNOW-8 ENFORCES TODAY (A-D4 — measured task #83, AMENDED by the promotion door) ─────────────────
+// KNOW-8's measurable is "0 explorer writes reach the store except via a ratifier". IT HOLDS. Until the
+// promotion door landed it held VACUOUSLY, and the whole point of recording that here was that the sentence
+// above described a propose→ratify FLOW that was NOT WIRED.
 //
-// Measured in task #83 by probe (`process.stderr.write` + stack attribution at each function, rebuilt, driven
-// through the whole suite including the real CLI subprocesses):
+// WHAT WAS MEASURED (task #83, by probe — `process.stderr.write` + stack attribution at each function,
+// rebuilt, driven through the whole suite including the real CLI subprocesses):
 //   · the explorer (`atlas mine`) writes candidates DURABLY, to its own sidecar, via `DiskStore.commitStaging`
-//     — 80 hits, all from `cli/src/mine.ts`. That half of KNOW-8 is real and built.
-//   · NOTHING READS STAGING BACK. `loadStaging` had zero production callers (it has since been deleted), and
-//     there is no `promote` command in the CLI's `COMMANDS`. There is no path from staging into the governed
-//     projection, ratified or otherwise.
-//   · `stage()` (below) is not on the explorer's path at all — its only production callers are the two
-//     governed write doors in `adapter-io`.
+//     — 80 hits, all from `cli/src/mine.ts`. That half of KNOW-8 was already real and built.
+//   · NOTHING READ STAGING BACK. `loadStaging` had zero production callers (it has since been deleted) and
+//     there was no `promote` command, so there was no path from staging into the governed projection at all.
+//   · `stage()` (below) is not on the explorer's path — its only production callers are the governed doors.
 //
-// So what stops an explorer write from reaching governed knowledge today is SEVERANCE, NOT RATIFICATION. The
-// ratifier is not the gate on that path; the ABSENCE of a path is. `cli/src/mine.ts` says it in its own
-// words: "mining cannot mutate governed knowledge because it cannot REACH it, not because a check says no."
+// WHAT CHANGED. `atlas promote` (`cli/src/promote.ts` → `adapter-io/src/governed-promote.ts`) is that path,
+// and it is the RATIFIED one: it reads the staging sidecar, rehydrates each candidate's whole fact from CAS,
+// and presents it to the SAME governed emit door (`GOVERNANCE_SURFACE` stays 5 — ADR-0008 pre-decided that a
+// curator door is an ordinary USE of the existing emit door). Crucially the door DERIVES `origin:'promoted'`
+// for that leg, which removes the KNOW-18 fast path: a mined candidate is T2 ∧ advisory ∧ grounded, so
+// without that field it would have AUTO-ACCEPTED and this function would never have been called on the one
+// path built to call it. So the measurable is no longer vacuous — an explorer write can now reach the store,
+// and every route that does passes through `ratify` below with a named ratifier.
 //
-// This is a statement of the CURRENT STATE, not a retirement of the design. Propose→ratify remains the
-// intended shape; the governed PROMOTION door (staging → projection through the ratifier, reusing the
-// existing gate ladder, plus a staging read leg) is simply not built yet and is tracked as its own task.
-// Recorded here rather than left implicit because a reader who takes the paragraph above at face value will
-// build on a review workflow that does not exist.
+// WHAT IS STILL TRUE OF SEVERANCE. `atlas mine` itself still cannot touch the projection — it names no
+// projection door, which is what ADR-0008 made structural — so severance remains the guarantee for the
+// EXPLORER, and ratification is now the guarantee for the CURATOR who promotes what the explorer proposed.
+// Those are two different actors and two different mechanisms, and this file used to be able to name only one.
 //
 // FACET BOUNDARY (BIND — resolved vs the frozen RatifyApi, co-located below):
 //  • [PINNED — oracle-pin-map §8] the gate types (`Staged{node}`, `RatifyToken{by}`) are frozen; this

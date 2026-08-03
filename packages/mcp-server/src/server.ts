@@ -10,8 +10,11 @@
 // PARITY — precisely which one holds. SCHEMA + VERDICT parity HOLDS: `inputSchema`/`description` are read
 // from `handler.schema(tool)` verbatim and every call routes through the ONE wired handler, so identical
 // input yields a byte-identical `Verdict` on CLI and MCP (TOOLS-3). SURFACE parity does NOT hold: the CLI
-// exposes EIGHT commands (`@atlas/cli` `COMMANDS`), and `doctor`, `mine` and `node` are absent from
-// `GOVERNANCE_SURFACE`, so they are CLI-only and unreachable over MCP. Do not read "CLI ≡ MCP" below as a
+// exposes NINE commands (`@atlas/cli` `COMMANDS`), and `doctor`, `mine`, `node` and `promote` are absent from
+// `GOVERNANCE_SURFACE`, so they are CLI-only and unreachable over MCP. `promote` is the newest of them and it
+// is the one worth stating explicitly, because it WRITES: the KNOW-8 curator door publishes through
+// `atlas-emit` (ADR-0008 — an ordinary use of the existing door, not new surface), so no tool token exists
+// for it and an MCP client cannot promote staged candidates. Do not read "CLI ≡ MCP" below as a
 // claim that the two transports reach the same set of operations — it is a claim about the schema bytes.
 // A CallTool routes through
 // `handler.handle(tool, args)` and maps the total `Verdict` → `CallToolResult`: a rejected (fail-closed)

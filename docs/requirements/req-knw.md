@@ -124,7 +124,7 @@ normative-clause: "The explorer MAY write only **candidates** (staging)"
 source: INV-KNOW-8 @ reference/atlas-knowledge.md#know-8
 The knowledge module shall route ratification to the reconcile/lead with reviewer veto.
 normative-clause: "ratification is the reconcile/lead's, with reviewer veto"
-runtime-gap (A-D4, measured task #83): "NOT WIRED for the explorer's candidates. `ratify()` is real and gates both governed write doors, but there is no route that carries a STAGED candidate to it: nothing reads the staging sidecar back and there is no `promote` command. So a mined candidate is never ratified — it is never offered. The sibling clause REQ-KNOW-8a (explorer writes only candidates) IS satisfied, durably, via `commitStaging`. Closing this needs the governed promotion door, tracked as its own task; recorded here so the requirement is not read as delivered."
+runtime-gap (A-D4, measured task #83) — **AMENDED / CLOSED by WP-PROMOTE (2026-08-02)**: "it was NOT WIRED for the explorer's candidates: `ratify()` gated both governed write doors, but no route carried a STAGED candidate to it — nothing read the staging sidecar back and there was no `promote` command, so a mined candidate was never ratified because it was never offered. `atlas promote` is that route (`requirements-adapters.md#REQ-CLI-7a`), and it offers each candidate to the existing `atlas-emit` door under a ratify context in which the KNOW-18 fast path does not apply. The sibling clause REQ-KNOW-8a (explorer writes only candidates) was and remains satisfied, durably, via `commitStaging`."
 
 ### REQ-KNOW-8c — T0 requires billy
 source: INV-KNOW-8 @ reference/atlas-knowledge.md#know-8

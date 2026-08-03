@@ -407,13 +407,14 @@ Then the write lands only in **staging** as a `Candidate` — 0 miner writes rea
 teeth: breaks-on "the miner path writes straight to the committed store (bypasses staging) — a miner self-commits"
 gen: conformance
 
-### SCN-KNOW-8b-1 — ratification requires a ratifier token   (happy)
+### SCN-KNOW-8b-1 — ratification requires a ratifier token   (happy · AMENDED WP-PROMOTE)
 source: REQ-KNOW-8b
 Given a staged candidate
 When it is committed
 Then it is committed only through the reconcile/lead ratifier (a ratifier token present), with reviewer veto honored
 teeth: breaks-on "a staged candidate is committed with no ratifier token — the propose/ratify separation collapses"
 gen: conformance
+runtime-note (A-D4 — AMENDED by WP-PROMOTE, 2026-08-02): the propose→ratify route this golden describes is now WIRED end to end. It used to hold vacuously — nothing read staging back — and the governed promotion door (`atlas promote`) is the missing leg: it presents each staged candidate to the existing `atlas-emit` door under a ratify context the DOOR derived (`origin:'promoted'`), which removes the KNOW-18 fast path so a grounded T2 advisory candidate cannot auto-accept its way past the ratifier. See goldens-adapters.md#SCN-CLI-7b-1 for the black-box witness.
 
 ### SCN-KNOW-8b-2 — a staged `queue/` advisory candidate commits only with the lead ratifier token   (happy · held-out)
 source: REQ-KNOW-8b

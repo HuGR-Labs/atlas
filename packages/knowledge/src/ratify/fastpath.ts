@@ -29,9 +29,41 @@ import { strictestTier } from './tier.js';
  * time; `lowRisk` (KNOW-18a/17b) is the door-2 threshold verdict whose THRESHOLD VALUE stays OPEN-DEFINE in
  * hits.ts (not invented here).
  */
+export type WriteOrigin = 'authored' | 'promoted';
+
 export interface RatifyContext {
   readonly contested: boolean; // KNOW-18b — reviewer veto / conflicting node (store-state verdict)
   readonly lowRisk: boolean; // KNOW-18a/17b — door-2 threshold verdict (threshold value = OPEN-DEFINE, hits.ts)
+
+  /**
+   * [KNOW-8 · the promotion door] WHERE this write came from, as the DOOR knows it — `authored` (a seat
+   * presented this fact at a governed door) or `promoted` (the door lifted it out of the explorer's staging
+   * sidecar). ABSENT ⇒ the door did not speak ⇒ `authored`, so every pre-existing caller is unchanged.
+   *
+   * WHY IT EXISTS, AND WHY IT IS NOT `contested`. The fast path's premise is stated at the top of this file:
+   * human review is spent on RISK, not rubber-stamp. A grounded `T2` advisory that a seat authored IS the
+   * rubber-stamp case. A staged candidate is the opposite case wearing the same shape — it is machine-
+   * proposed, no human has read it, and the whole purpose of promoting it is that a ratifier now takes
+   * responsibility for it. Every mined candidate is `T2`, advisory, and grounded (it cleared the truth door),
+   * so on the intrinsic conjuncts alone a bulk promotion would AUTO-ACCEPT and the KNOW-8 token would never
+   * be consulted: the ratifier would be bypassed on the one path built expressly to run through it.
+   *
+   * The two available shortcuts are both refused as FORGERIES, and the reason is the same one ARCH-9 gives.
+   * `contested:true` means a reviewer vetoed this node or a conflicting node exists; `lowRisk:false` means
+   * the KNOW-17 door-2 threshold judged it risky. Neither is true of an ordinary promotion, and writing
+   * either would put a false value in a record the next reader believes — a store that lies about its own
+   * history is the failure this codebase keeps refusing one direction over. What is TRUE is where the write
+   * came from, so that is the field.
+   *
+   * THE JOIN IS ONE-WAY, exactly like `derivedTier`'s: this conjunct can only ever make the gate HARDER
+   * (`promoted` removes the fast path; it can never grant one), so `FastpathApi`'s contract — auto-accept
+   * ONLY for grounded ∧ lowRisk ∧ T2 ∧ advisory ∧ ¬contested — is narrowed, never widened.
+   *
+   * IT IS DOOR-DERIVED, NEVER REQUEST-CHOSEN (ARCH-9). The promotion door knows it read the row out of
+   * staging; the payload has no way to say so and no way to say otherwise. A fact cannot declare itself
+   * `authored` to buy a softer gate — the field is not on the fact.
+   */
+  readonly origin?: WriteOrigin;
 
   /**
    * [ARCH-9 · ADR-0010] The governance class the DOOR DERIVED for this write's target — the class the author
@@ -64,9 +96,10 @@ export interface RatifyContext {
 
 export interface FastpathApi {
   /** Route a candidate (KNOW-18): auto-accept iff `grounded ∧ lowRisk ∧ T2 ∧ advisory`; predicate / `T0` /
-   *  contested ALL route to `full-ratify` (method-tags-knw:142). `route` computes the candidate-intrinsic
-   *  conjuncts (grounded/T2/advisory) itself; `ctx` supplies the store/threshold-derived `contested` +
-   *  `lowRisk` verdicts. Pure + total over (candidate, ctx). */
+   *  contested — and a write the door derived as `origin:'promoted'` — ALL route to `full-ratify`
+   *  (method-tags-knw:142). `route` computes the candidate-intrinsic conjuncts (grounded/T2/advisory)
+   *  itself; `ctx` supplies the store/threshold-derived `contested` + `lowRisk` verdicts and the two
+   *  door-derived fields (`derivedTier`, `origin`). Pure + total over (candidate, ctx). */
   route(candidate: Candidate, ctx: RatifyContext): 'auto-accept' | 'full-ratify';
 }
 
@@ -87,7 +120,7 @@ export function isAdvisory(candidate: Candidate): boolean {
 
 /**
  * Route a candidate (KNOW-18): auto-accept iff `grounded ∧ lowRisk ∧ T2 ∧ advisory`; predicate / `T0` /
- * contested ALL route to `full-ratify`. Pure + total over (candidate, ctx).
+ * contested / door-derived `promoted` ALL route to `full-ratify`. Pure + total over (candidate, ctx).
  */
 export function route(candidate: Candidate, ctx: RatifyContext): FastpathRoute {
   const grounded = isGrounded(candidate.grounding);
@@ -97,7 +130,11 @@ export function route(candidate: Candidate, ctx: RatifyContext): FastpathRoute {
   const governingTier = ctx.derivedTier === undefined ? candidate.tier : strictestTier(ctx.derivedTier, candidate.tier);
   const t2 = governingTier === 'T2';
   const advisory = isAdvisory(candidate);
-  const fastPath = grounded && ctx.lowRisk && t2 && advisory && !ctx.contested;
+  // KNOW-8 — the PROMOTION conjunct. A write the door lifted out of staging is machine-proposed and unread
+  // by any human, so the rubber-stamp premise the fast path rests on does not hold for it, whatever its
+  // intrinsic conjuncts say. ONE-WAY: this can only remove a fast path, never grant one. Absent ⇒ authored.
+  const promoted = ctx.origin === 'promoted';
+  const fastPath = grounded && ctx.lowRisk && t2 && advisory && !ctx.contested && !promoted;
   return fastPath ? 'auto-accept' : 'full-ratify';
 }
 

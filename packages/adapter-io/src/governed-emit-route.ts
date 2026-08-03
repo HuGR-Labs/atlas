@@ -9,7 +9,9 @@
 // PURE: no store, no policy, no clock. It takes a class the CALLER derived and returns a `RatifyContext`.
 
 import type { Tier } from '@atlas/contracts';
-import type { RatifyContext } from '@atlas/knowledge';
+import type { RatifyContext, WriteOrigin } from '@atlas/knowledge';
+
+export type { WriteOrigin };
 
 /** The KNOW-18 fast-path CONTEXT the door hands to `route`. `lowRisk` (the KNOW-17 door-2 threshold verdict)
  *  and `contested` (the KNOW-18b store-veto) are BOTH store/threshold-derived UPSTREAM and are NOT wired
@@ -50,7 +52,32 @@ const DOOR_RATIFY_CTX: RatifyContext = { contested: false, lowRisk: true };
  * consequences that belongs to the owner, not to this door. It is recorded as OPEN in the architecture
  * decision table and in ADR-0010 §"What the owner still has to ratify" item 2, and it is pinned as an open
  * hole by a test so it cannot later be mistaken for coverage.
+ *
+ * ── THE SECOND DOOR-DERIVED FIELD: `origin` (KNOW-8, the promotion door) ──────────────────────────────
+ *
+ * `DOOR_RATIFY_CTX` above defaults `lowRisk:true` / `contested:false` to preserve the common T2-advisory
+ * auto-accept, and for an AUTHORED write that default is the measured, intended behaviour. It is exactly
+ * wrong for a PROMOTED one, and the arithmetic is not close: a mined candidate is `T2` (`cli/src/mine.ts`
+ * stamps the class from a constant), advisory (the mine gate builds an `AdvisoryProposal`), and grounded
+ * (it cleared the truth door two gates up). With those three plus these two defaults, `route` answers
+ * `auto-accept` — so `governed-emit.ts`'s `ratify()` call, the ONLY one on the emit leg, never runs, and a
+ * bulk promotion would carry every staged row into the durable projection with no ratifier consulted while
+ * every document in the tree says promotion goes THROUGH the ratifier. KNOW-8 would move from holding
+ * VACUOUSLY (severance) to being FALSE, which is strictly worse than the state the promotion door is built
+ * to improve on.
+ *
+ * `origin` is threaded here rather than fixed by forging `contested:true` or `lowRisk:false`. Both of those
+ * would route correctly and both are lies about store state that the next reader has no way to detect —
+ * `RatifyContext.origin`'s own doc block carries the full argument. What is threaded is a fact the DOOR
+ * knows and the request cannot influence, which is the ARCH-9 shape this file already implements once.
+ *
+ * ABSENT ⇒ AUTHORED, so the emit leg `wire.ts` assembles is byte-for-byte unchanged: `assembleHandler`
+ * passes no origin, `deps.origin` is `undefined`, and `route` sees the same context it saw before.
  */
-export function ratifyCtxFor(derivedTier: Tier | undefined): RatifyContext {
-  return derivedTier === undefined ? DOOR_RATIFY_CTX : { ...DOOR_RATIFY_CTX, derivedTier };
+export function ratifyCtxFor(derivedTier: Tier | undefined, origin?: WriteOrigin): RatifyContext {
+  return {
+    ...DOOR_RATIFY_CTX,
+    ...(derivedTier !== undefined ? { derivedTier } : {}),
+    ...(origin !== undefined ? { origin } : {}),
+  };
 }

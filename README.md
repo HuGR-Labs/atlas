@@ -35,7 +35,7 @@ a hashed structural index (BLAKE3-merkle CAS) resolved by scope, dependency blas
 
 The CLI is `atlas` (`packages/cli/package.json` `bin` → `packages/cli/dist/src/bin.js`). The workspace is
 not published, so build it from a checkout — `npm ci && npm run build` — and note that a workspace install
-does **not** put `atlas` on your `PATH`; alias it or invoke the file. **Exactly these eight commands exist**
+does **not** put `atlas` on your `PATH`; alias it or invoke the file. **Exactly these nine commands exist**
 (`COMMANDS` in `packages/cli/src/map.ts`); one reference page each, every example on them executed against
 the real binary.
 
@@ -49,8 +49,9 @@ the real binary.
 | `atlas mine <repo>` | the genesis bootstrap; writes candidates only, and abstains loudly with no model | [reference](./docs/reference/commands/mine.md) |
 | `atlas node <addr>` | read one fact whole, by content address | [reference](./docs/reference/commands/node.md) |
 | `atlas link <a> <b> [--retract]` | governed write door — asserts (or withdraws) `a ≡ b`; never a merge | [reference](./docs/reference/commands/link.md) |
+| `atlas promote` | carries staged candidates into knowledge THROUGH the emit door; needs a ratifier | [reference](./docs/reference/commands/promote.md) |
 
-**Exit codes are a designed surface**, uniform across all eight (`EXIT` / `deriveStatus`,
+**Exit codes are a designed surface**, uniform across all nine (`EXIT` / `deriveStatus`,
 `packages/cli/src/map.ts`): `0` ok · `1` **usage or wiring error — your invocation was wrong** · `2`
 **governed refusal — your invocation was fine and a gate declined it**, so re-running it unchanged will not
 help. A refusal always carries the reason and the invariant it enforced.
@@ -105,10 +106,12 @@ docs/           design-first artifacts (the decomposition, dogfooding the Atlas 
 - **Holds: schema and verdict parity.** The MCP server does not hand-author anything — it reads
   `handler.schema(tool)` verbatim, and both transports route the same call through the one wired handler,
   so an identical input yields a byte-identical `Verdict` on the CLI and over MCP (TOOLS-3).
-- **Does NOT hold: surface parity.** The CLI exposes **eight** commands; MCP advertises
+- **Does NOT hold: surface parity.** The CLI exposes **nine** commands; MCP advertises
   `GOVERNANCE_SURFACE ∪ READ_SURFACE` (ADR-0006), and `READ_SURFACE` is not exported yet — so MCP
-  advertises **five** tools today. `doctor`, `mine` and `node` are **CLI-only and unreachable over MCP**.
-  Closing that gap is campaign 10, which is not built.
+  advertises **five** tools today. `doctor`, `mine`, `node` and `promote` are **CLI-only and unreachable
+  over MCP**. `promote` is the one of those four that WRITES: it publishes through `atlas-emit` (ADR-0008 —
+  an ordinary use of the existing door, not new surface), so no tool token exists for it. Closing that gap
+  is campaign 10, which is not built.
 
 ## Build order
 

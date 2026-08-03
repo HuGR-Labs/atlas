@@ -210,21 +210,28 @@ subprocesses) — the finding is not the one this survey wrote down:**
   doors (`governed-emit.ts`, `governed-link.ts`) — the LEAD's doors. `atlas mine` never calls it.
 - Durable staging **is built and is driven**: `atlas mine` writes candidates to its own sidecar through
   `DiskStore.commitStaging` (80 probe hits, all from `cli/src/mine.ts`). The medium is not missing.
-- What is missing is the **promotion path**. Nothing reads staging back — `loadStaging` had ZERO production
-  callers (deleted in task #83) and there is no `promote` command. A staged candidate has no route into
+- What was missing is the **promotion path**. Nothing read staging back — `loadStaging` had ZERO production
+  callers (deleted in task #83) and there was no `promote` command. A staged candidate had no route into
   governed knowledge, ratified or otherwise.
 
-So KNOW-8's measurable ("0 explorer writes reach the store except via a ratifier") **holds, and holds
-vacuously**: 0 explorer writes reach the store by any route. The separation is enforced by **severance, not
-ratification** — `cli/src/mine.ts` puts it exactly: *"mining cannot mutate governed knowledge because it
-cannot REACH it, not because a check says no."* The prose has been narrowed to say that (A-D4); the governed
-promotion door is tracked as its own task.
+So KNOW-8's measurable ("0 explorer writes reach the store except via a ratifier") **held, and held
+vacuously**: 0 explorer writes reached the store by any route, and the separation was enforced by
+**severance, not ratification** — `cli/src/mine.ts` put it exactly: *"mining cannot mutate governed knowledge
+because it cannot REACH it, not because a check says no."*
+
+**BUILT (WP-PROMOTE).** `atlas promote` is the route: it reads the staging sidecar through the store's own
+read-only decision, rehydrates each candidate's whole fact from CAS, and presents it to the EXISTING
+`atlas-emit` door — no new surface (ADR-0008: a curator door is an ordinary use of that door). The door
+derives `origin:'promoted'`, which removes the KNOW-18 fast path: a mined candidate is T2 ∧ advisory ∧
+grounded, so without it the write would have auto-accepted and the ratifier would have been bypassed on the
+one path built to run through it. The measurable is therefore no longer vacuous. Severance still describes
+what protects the EXPLORER (`atlas mine` names no projection door); ratification describes the CURATOR.
 
 ### Lens 6 — resource / CRUD
 
 | entity | Create | Read | Update | Delete | List |
 |---|---|---|---|---|---|
-| Fact | `emit` ✅ | `node` / `query` ✅ | `emit` @ same nodeKey ✅ | supersede — **no door** ❌ | `query` (bounded: tier≥T1, ≤~2K) ⚠️ |
+| Fact | `emit` ✅ · `promote` (staged candidate → knowledge, WP-PROMOTE) ✅ | `node` / `query` ✅ | `emit` @ same nodeKey ✅ | supersede — **no door** ❌ | `query` (bounded: tier≥T1, ≤~2K) ⚠️ |
 | sameAs edge | `link` ✅ | query envelope ✅ | n/a | `link --retract` ✅ (task #83) | envelope ✅ |
 | Territory / policy | `init` ✅ | **no door** ❌ (G16) | hand-edit `.atlas/policy.*` ⚠️ | n/a | `init` output ⚠️ |
 | Projection | derived | ✅ | — | — | — |
@@ -308,7 +315,7 @@ a seam smell and belongs inside the shared computer, not in each caller.
 |---|---|---|
 | **D1** | **May the MCP server advertise a second, non-governance `READ_SURFACE`** (`atlas-anchors`, `atlas-slots`, `atlas-draft`, `atlas-check`, and — separately — the already-built `doctor`/`node`/`diff`)? | The owner's requirement is "via MCP tool *and* via CLI". `server.ts` advertises exactly `GOVERNANCE_SURFACE`. Publishing more does **not** change `WRITE_PATHS` or the governance count, but it *does* falsify the documented claim "the MCP surface is exactly the five governance tools" ⇒ **spec change + ADR**, in the same class as ADR-0003. |
 | **D2** | **`sameAs` retraction (F2).** | **DECIDED + BUILT (task #83).** None of the three options as framed: retraction is a **MODE of the existing `atlas-link` door**, so there is no third write door and no constitution amendment to trade — `GOVERNANCE_SURFACE` stays 5, `WRITE_PATHS` stays `{emit, link}`, INV-TOOLS-15's store-row medium is untouched. Permanence is **not** accepted for merges; it IS accepted for retraction (the marker latches), because un-retracting means deleting the evidence, and permanence in the *splitting* direction costs one bounded equivalence while permanence in the *merging* direction is the unbounded contagion this finding is about. |
-| **D3** | **Propose-for-review queue (F3).** | **RE-FRAMED by measurement (task #83); PROSE NARROWED, DOOR STILL OPEN.** The dichotomy was false — neither "the code is wrong" nor "the prose is wrong" describes it. Durable staging IS built and driven (`commitStaging`, from `atlas mine`); `stage()` was never the explorer's path; what does not exist is the **promotion** path out of staging. KNOW-8's measurable holds **vacuously** (severance, not ratification). The prose has been narrowed to state exactly that, at the code and in the register/reference. The remaining decision is scoped down to one thing: **build the governed promotion door** (staging → projection through the ratifier, reusing the existing gate ladder, plus a staging read leg) — its own task, owner-gated. |
+| **D3** | **Propose-for-review queue (F3).** | **BUILT (WP-PROMOTE).** The dichotomy was false — neither "the code is wrong" nor "the prose is wrong" described it. Durable staging WAS built and driven (`commitStaging`, from `atlas mine`); `stage()` was never the explorer's path; what did not exist was the **promotion** path out of staging, so KNOW-8's measurable held **vacuously** (severance, not ratification). The governed promotion door now exists: `atlas promote`, a CLI-only curator command that reads staging and runs every candidate through the existing `atlas-emit` gate ladder under a ratify context in which the KNOW-18 fast path does not apply. `GOVERNANCE_SURFACE` stays 5; `WRITE_PATHS` stays `{emit, link}`. What remains OWNER-gated is not the door but the GRANT: `atlas:mined` is unowned until an admin appoints a curator in `.atlas/policy.json`, and until then every promotion refuses `unauthorized` — correctly. |
 | **D4** | **Scope of v1.** D-A + D-C + D-D is the minimum that makes authoring possible. D-B and D-E are cheap. Do the CRUD/List gaps (G15 batch, G16 policy-show) ship now or later? | Scope. |
 
 ---
@@ -342,7 +349,7 @@ extensions for UC-2/3/4; resolve F1) is the remaining work before this feeds S1.
 > (epic × module) slice produced 16.
 >
 > Also resolved since: **D1** (§8) — the owner directed that every door exist on both transports, which
-> ADR-0005 records. **D2** and **D3** remain open and are carried as `A-D3`/`A-D4` in
+> ADR-0005 records. **D2** (task #83) and **D3** (WP-PROMOTE) are now BUILT, and are carried as `A-D3`/`A-D4` in
 > [`reference/atlas-authoring.md`](../reference/atlas-authoring.md) §Decisions.
 
 ### The original estimate (historical)

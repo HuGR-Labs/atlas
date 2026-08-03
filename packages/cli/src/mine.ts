@@ -15,7 +15,12 @@
 //
 // DESTINATION (ADR-0008): every write this driver makes lands in the STAGING sidecar. `mine` is the explorer
 // and KNOW-8 lets the explorer write only CANDIDATES; it holds no truth gate, no authz and no ratifier, so it
-// must not — and now structurally CANNOT — write the knowledge projection. NONE of `loadProjection`,
+// must not — and now structurally CANNOT — write the knowledge projection. WHERE A CANDIDATE GOES NEXT is
+// `atlas promote` (WP-PROMOTE), the governed curator door: it reads this sidecar back and presents each row to
+// the `atlas-emit` door with the KNOW-18 fast path disabled, so the ratifier really runs. That door is the
+// reason the sentence below about severance is now only HALF the story — severance is what protects the
+// explorer, ratification is what protects the curator — and it is why every trap this file records about a
+// mined nodeKey colliding with a governed node is live again at promotion time, against the REAL projection. NONE of `loadProjection`,
 // `persistProjection` or `commitProjection` is CALLED here (they are named only in prose), and that absence
 // IS the guarantee: the fixtures make all THREE throw, so a re-introduced call fails the suite loudly.
 // CONCURRENCY: the write door is `commitStaging`, whose `decide` re-runs the WHOLE pass body on contention.

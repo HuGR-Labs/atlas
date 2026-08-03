@@ -33,9 +33,14 @@ const ARITY: Record<Command, number> = {
   mine: 1, // mine <repo>
   node: 1, // node <addr>
   link: 2, // link <a> <b> — the two nodeKeys to equate (WP-SAMEAS)
+  // `promote` takes NO positional. The repo it promotes in is `process.cwd()` — the same root the entrypoint
+  // composes the runtime over — because the staging sidecar it reads and the projection it writes are both
+  // under that one composed store. A path argument would let the two disagree (read one repo's candidates,
+  // publish into another's knowledge), which is a confusion no gate downstream is positioned to catch.
+  promote: 0,
 };
 
-const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine|node|link';
+const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine|node|link|promote';
 
 function isCommand(s: string): s is Command {
   return Object.prototype.hasOwnProperty.call(COMMAND_LEG, s);

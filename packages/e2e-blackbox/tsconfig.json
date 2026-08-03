@@ -11,6 +11,7 @@
     { "path": "../adapter-io" },
     { "path": "../contracts" },
     { "path": "../index" },
-    { "path": "../knowledge" }
+    { "path": "../knowledge" },
+    { "path": "../kernel" }
   ]
 }

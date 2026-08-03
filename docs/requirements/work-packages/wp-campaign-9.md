@@ -718,6 +718,72 @@ rationale:                                     # ptr
 
 ---
 
+### WP-PROMOTE.CLI — CLI(promote) slice of EPIC-6-b
+epic: EPIC-6-b
+id: WP-PROMOTE.CLI
+content_hash: <filled-at-freeze>
+title: The `atlas promote` curator door — staged candidates into governed knowledge, through the ratifier
+intent: >
+  `atlas mine` stages candidates and nothing reads them back, so KNOW-8's measurable holds VACUOUSLY —
+  severance, not ratification. This WP builds the missing route: a CLI-only `atlas promote` that reads the
+  staging sidecar, rehydrates each candidate's whole fact from CAS, and presents it to the EXISTING
+  `atlas-emit` governed write door (ADR-0008 pre-decided that a curator door is an ordinary use of that door,
+  NOT new surface). The load-bearing detail is the ratification context: a mined candidate is `T2` ∧ advisory
+  ∧ grounded, so under the door's default context it AUTO-ACCEPTS and the ratifier is never consulted — which
+  would make KNOW-8 false rather than vacuous. The door therefore supplies a DERIVED origin that removes the
+  fast path, expressed as a true field rather than as a forged store-state verdict.
+source_reqs:                                  # ptr+digest
+  - source: ../requirements-adapters.md#REQ-CLI-7a  # ptr+digest
+  - source: ../requirements-adapters.md#REQ-CLI-7b  # ptr+digest
+  - source: ../requirements-adapters.md#REQ-CLI-7c  # ptr+digest
+  - source: ../requirements-adapters.md#REQ-CLI-7d  # ptr+digest
+  - source: ../requirements-adapters.md#REQ-CLI-7e  # ptr+digest
+  - source: ../requirements-adapters.md#REQ-CLI-7f  # ptr+digest
+seam-freezes: [ "the governed emit door (createGovernedEmit) + the KNOW-18 route + DiskStore.commitStaging, all consumed as frozen" ]
+anchor: packages/cli/src/promote.ts + packages/adapter-io/src/governed-promote.ts — the CLI leg and the door
+interface_contract:                           # ptr+digest
+  - source: ../../reference/atlas-adapters.md#cli-7    # ptr+digest
+  - source: ../method-tags-adapters.md#INV-CLI-7       # ptr+digest
+exclusions: >
+  No sixth governed tool and no third write door — `GOVERNANCE_SURFACE` stays 5, `WRITE_PATHS` stays
+  `{atlas-emit, atlas-link}`, and INV-TOOLS-1 / ADR-0003 / the spec-conformance CODE-SURFACE pin are
+  untouched. No new `DiskStore` member (staging is read through the store's documented read-only decision).
+  No staging-side "promoted" marker and no second mutable state machine — staging has no delete and the two
+  sidecars have no shared commit. NOT this WP: wiring the mine admission gate (`makeAdmitGate` has no
+  production caller, so `atlas mine` stages nothing today), and wiring `genesis/src/align.ts` (a DECLARED
+  reference model — that is a ledger + gate change).
+inputs:                                        # ptr+digest
+  - source: ../../reference/atlas-adapters.md#cli-7    # ptr+digest
+action: Build the governed promotion door and its CLI leg; verify a staged candidate cannot auto-accept, that the reported count is what settled, that a bytes-missing / degenerate-anchor row is that row's refusal, that a refused staging read is never rendered as an empty staging, and that a mined identity colliding with a governed node (including a LEGACY carrier-less row) fails closed.
+action_surface: [ read-repo, edit(packages/cli/src/promote.ts), edit(packages/adapter-io/src/governed-promote.ts), run(test:cli), run(test:adapter-io), run(test:e2e-blackbox), typecheck ]
+guardrails: >
+  Publish ONLY through `createGovernedEmit` — re-implement no gate. Do not add a `DiskStore` member. Do not
+  express "the fast path does not apply" by forging `contested`/`lowRisk`. Do not edit `.atlas/policy.json`.
+  Report SETTLED counts only. Keep every file at or under the 400-LOC ceiling.
+repair_budget: N=3 · early-stop: { repeated-identical-failure, no-change-diff, semantic-dup-edit }
+acceptance:                                    # ptr+digest = frozen goldens
+  - source: ../goldens-adapters.md#SCN-CLI-7a-1  # ptr+digest
+  - source: ../goldens-adapters.md#SCN-CLI-7b-1  # ptr+digest
+  - source: ../goldens-adapters.md#SCN-CLI-7c-1  # ptr+digest
+  - source: ../goldens-adapters.md#SCN-CLI-7d-1  # ptr+digest
+  - source: ../goldens-adapters.md#SCN-CLI-7e-1  # ptr+digest
+  - source: ../goldens-adapters.md#SCN-CLI-7f-1  # ptr+digest
+deps: [ WP-9.3.6-b.CLI, WP-9.1.1-a.CLI ]
+exit_predicate: all acceptance SCNs green ∧ GOVERNANCE_SURFACE == 5 ∧ WRITE_PATHS == {atlas-emit, atlas-link} ∧ 0 new DiskStore members ∧ promoted count == rows the projection gained ∧ module gates pass ∧ all pointer digests resolve (no STALE)
+context_refs:                                  # closed list
+  - source: ../../reference/atlas-adapters.md
+  - source: ../requirements-adapters.md
+  - source: ../goldens-adapters.md
+  - source: ../method-tags-adapters.md
+owner: charlie · builder_id: <assigned-at-dispatch>
+outputs:                                                    # exec — empty at S4-freeze
+provenance:                                                 # exec — empty at S4-freeze
+trace_ref:                                                  # exec — empty at S4-freeze
+rationale:                                     # ptr
+  - source: ../invariant-register-adapters.md#INV-CLI-7
+
+---
+
 ## CAMPAIGN-9.4 — serve + write-back (Phase 3: MCP + forge)
 
 ### EPIC-7 — the MCP server exposes the five governed tools

@@ -86,6 +86,13 @@ Concretely:
   caller, which is how a human sees what was mined. A curator door that promotes staged candidates in bulk
   is NOT part of this decision and is not needed until a proposer is wired; when it is needed it is an
   ordinary use of the existing emit door, not new surface.
+  *(BUILT since, as WP-PROMOTE, and this clause is exactly what it was built to: `atlas promote` publishes
+  through `createGovernedEmit` — the same leg `atlas-emit` binds — so `GOVERNANCE_SURFACE` stayed 5 and
+  `WRITE_PATHS` stayed `{atlas-emit, atlas-link}`. One thing this decision could not foresee: because a mined
+  candidate is `T2` ∧ advisory ∧ grounded, "an ordinary use of the emit door" would have AUTO-ACCEPTED under
+  the KNOW-18 fast path and never consulted the ratifier. The promotion leg therefore supplies a
+  door-derived `origin:'promoted'` that removes the fast path — the door is ordinary, the ratification
+  context is not.)*
 
 ## Alternatives rejected
 

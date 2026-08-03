@@ -140,6 +140,13 @@ up-property: "mine composes, admits nothing: atlas mine drives the already-froze
 down-model: "the frozen genesis run-controller is the oracle; run mine over a fixture repo with a recorded proposer and assert the produced write-set equals the run-controller's, and every write carries candidate (not ratified) status"
 anti-rot: the frozen run-controller + recorded proposer is the mock; a mine driver that ratifies a fact or diverges from the run-controller's output fails the equality/candidate assertions.
 
+### INV-CLI-7
+method-tag: exhaustive
+fspec: —
+up-property: "promote curates through the existing door: every staged candidate atlas promote makes durable was published through the atlas-emit governed write door and faced FULL ratification (no candidate auto-accepts); GOVERNANCE_SURFACE and WRITE_PATHS are unchanged; the count reported equals the number of rows the projection actually gained; one unpromotable row is refused by name and the pass continues; a refused staging read is never reported as an empty staging"
+down-model: "drive the real promotion door over a seeded staging sidecar and a real governed emit leg: assert the tokenless pass promotes 0 (route == full-ratify) while an authored leg over the SAME candidate auto-accepts; assert promoted == the count of rows the projection gained; assert a bytes-missing row and a degenerate-anchor row are each that row's named refusal with the batch continuing; assert a refused commitStaging yields read:false, never candidates:0; assert the CLI COMMAND_LEG binds promote to a member of the frozen WRITE_PATHS"
+anti-rot: the frozen WRITE_PATHS constant + the real governed emit door are the oracles; a promotion routed by forging contested/lowRisk fails the ratify-context equality, a promotion that fast-paths fails the tokenless-refusal case, and a sixth tool fails the WRITE_PATHS-derived partition.
+
 ### INV-MCP-1
 method-tag: exhaustive
 fspec: —

@@ -252,6 +252,36 @@ source: INV-CLI-4 @ reference/atlas-adapters.md#cli-4
 If admission is required, then the `mine` driver shall rely on the frozen run-controller and add none of its own.
 normative-clause: "the `mine` driver wires the parts and **invents no admission of its own**."
 
+### REQ-CLI-7a — promote publishes only through the existing emit door
+source: INV-CLI-7 @ reference/atlas-adapters.md#cli-7
+`atlas promote` shall carry the explorer's staged candidates into governed knowledge by presenting each one to the existing `atlas-emit` governed write door, minting no new governed tool and opening no second write medium.
+normative-clause: "`atlas promote` MUST carry the explorer's STAGED candidates into governed knowledge by presenting each one to the existing `atlas-emit` governed write door — it MUST NOT mint a new governed tool and MUST NOT open a second write medium, so `GOVERNANCE_SURFACE` and `WRITE_PATHS` are unchanged"
+
+### REQ-CLI-7b — every promoted candidate faces full ratification
+source: INV-CLI-7 @ reference/atlas-adapters.md#cli-7
+If a staged candidate is promoted, then it shall face full ratification under a ratification context the door derived, and shall not be accepted by the confidence fast path.
+normative-clause: "Every staged candidate MUST face FULL ratification: the door MUST supply a ratification context it DERIVED (the write came out of staging), never one the payload chose"
+
+### REQ-CLI-7c — the derivation is stated truthfully
+source: INV-CLI-7 @ reference/atlas-adapters.md#cli-7
+If the door derives that the fast path does not apply, then it shall express that derivation without asserting a store-state verdict that is not true of the candidate.
+normative-clause: "and MUST NOT express that by asserting a store-state verdict that is not true of the candidate"
+
+### REQ-CLI-7d — a refusal is per row
+source: INV-CLI-7 @ reference/atlas-adapters.md#cli-7
+If one staged candidate cannot be promoted, then the pass shall refuse that row by name and continue with the remaining candidates.
+normative-clause: "A refusal MUST be PER-ROW — one unpromotable candidate MUST NOT end the pass"
+
+### REQ-CLI-7e — the reported count is settled
+source: INV-CLI-7 @ reference/atlas-adapters.md#cli-7
+`atlas promote` shall report the number of candidates that were made durable, never the number attempted.
+normative-clause: "the count reported MUST be what SETTLED durably, never what was attempted"
+
+### REQ-CLI-7f — a refused staging read is not an empty staging
+source: INV-CLI-7 @ reference/atlas-adapters.md#cli-7
+If the staging read refuses, then `atlas promote` shall report a refusal and shall not report zero candidates.
+normative-clause: "A staging read that REFUSES MUST be reported as a refusal and MUST NOT degrade to \"0 candidates\""
+
 ### REQ-MCP-1a — the published set is the closed tool union   (amended ADR-0006)
 source: INV-MCP-1 @ reference/atlas-adapters.md#mcp-1
 The MCP stdio server shall publish exactly the members of the closed `Tool` union (`GOVERNANCE_SURFACE ∪ READ_SURFACE`) with their input schemas.

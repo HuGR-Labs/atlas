@@ -125,10 +125,14 @@ repository visits one (see below).
   demo repositories, one of them with real TypeScript `import` edges between three files, both reported
   `0 sites visited`.
 - **Everything `mine` writes is a candidate**, in `.atlas/staging.json`, stamped with the reserved scope
-  `atlas:mined`. No actor is in that scope by default, so nobody can write those rows until an admin
-  appoints a curator in `.atlas/policy.json`.
-- **There is no shipped command that promotes a candidate.** Do not plan a mine-to-query loop around this
-  page.
+  `atlas:mined`. Granting that scope in `.atlas/policy.json` is what APPOINTS a curator; this repository
+  grants it to `seat:orchestrator`, and without the grant every promotion is correctly refused
+  `unauthorized`.
+- **[`promote`](./promote.md) is the command that carries a candidate into knowledge**, through the same
+  governed emit door everything else writes through, and only with a ratifier named. What you still cannot
+  plan around this page is a mine-to-**query** loop, for two separate reasons: `mine` stages nothing until
+  its admission gate is wired, and a mined candidate is `T2`, which `atlas query` bounds OUT of the pack —
+  a promoted mined fact is read back with [`node`](./node.md).
 
 ## Related
 

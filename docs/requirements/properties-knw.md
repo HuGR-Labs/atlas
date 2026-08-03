@@ -100,6 +100,7 @@ arbitrary:   explorer writes + staged candidates over {tier∈(T0,T2,…) × rat
 covers_reqs: [ REQ-KNOW-8a, REQ-KNOW-8b, REQ-KNOW-8c ]      # ptr+digest
 witness:     [ SCN-KNOW-8a-1, SCN-KNOW-8b-1, SCN-KNOW-8c-1 ]
 teeth:       breaks-on "a T0 candidate ratifies with only the lead token (billy not required) for SOME token combination — the full token cross-product exposes the bypass the 3 single-case witnesses cannot enumerate"
+note:        AMENDED by WP-PROMOTE (2026-08-02) — the law is unchanged and now has a SHIPPED witness for its first clause. Until the governed promotion door landed, "0 explorer writes reach the committed store without a ratifier token" was satisfied vacuously (0 reached it by any route). `atlas promote` is the route, and it routes every staged candidate to full ratification via a door-DERIVED `origin:'promoted'`; a promotion is therefore inside this law's quantifier for the first time.
 
 ### PROP-KNOW-9 — both families day-one, advisory-standalone
 inv:         INV-KNOW-9
