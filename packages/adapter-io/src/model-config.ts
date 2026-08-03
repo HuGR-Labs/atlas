@@ -28,10 +28,25 @@ import type { ModelCommand } from './llm.js';
  *  requires to be a SMALL model, i.e. a different binding — is a config entry, never a refactor. */
 export type ModelRole = 'propose' | 'refuter' | 'check-synthesis';
 
-/** The resolved operator configuration. `roles.propose` is the only REQUIRED binding. */
+/** The resolved operator configuration. `roles.propose` is the only REQUIRED binding.
+ *
+ *  EVERY DECLARED KNOB IS AN INTEGER, and the canonicalizer is why (ADR-0011 Decision 2): `canonical.ts:48`
+ *  throws on a non-integer number, so a config carrying `0.05` could not be canonicalized, could not reach
+ *  the sealed `id` seam, and could not be hashed into a run's provenance at all. A ratio is therefore a
+ *  numerator/denominator PAIR — `rank.ts`'s `DAMPING_NUM`/`DAMPING_DEN` idiom, for exactly this reason. */
 export interface ModelConfig {
   readonly roles: Readonly<Partial<Record<ModelRole, ModelCommand>>>;
+  /** Wall clock in whole milliseconds. */
   readonly timeoutMs: number;
+  /** The per-call spend ceiling as an EXACT integer ratio, `costCapNum / costCapDen`. This pair is THE
+   *  declaration — it is what the operator writes and what the preimage carries. */
+  readonly costCapNum: number;
+  readonly costCapDen: number;
+  /** The same ceiling as a decimal, **DERIVED** from the pair and never an independent value. It is a
+   *  NON-ENUMERABLE property on purpose (see `resolvedConfig`): `LlmBudget.costCap` is a frozen signature
+   *  that speaks in decimals, so the number has to be reachable — but it is a function of the pair, and
+   *  putting it in the canonical preimage would contribute nothing except the float that made the resolved
+   *  configuration unhashable in the first place. */
   readonly costCap: number;
 }
 
@@ -57,11 +72,24 @@ export class ModelConfigError extends Error {
  *  spec pins it and no measurement supports it yet, so it is PROVISIONAL and labelled as such here. */
 export const PROVISIONAL_TIMEOUT_MS = 60_000;
 
-/** Per-call spend ceiling default. Also class **C — provisional**. NOTE it is not enforceable by the
- *  subprocess adapter (a child reports no price — llm.ts says so); it is carried for the escalation work,
- *  where a metered adapter can honour it. Carrying an UNENFORCED cap is only acceptable because both this
- *  comment and `createCommandClient`'s say so out loud. */
-export const PROVISIONAL_COST_CAP = 0.05;
+/** Per-call spend ceiling default, as the EXACT integer pair `5/100`. Also class **C — provisional**: the
+ *  pair is a change of EXPRESSION, not of value, and it earns no better label than the decimal it replaces.
+ *
+ *  It used to ship as the literal `0.05`, which violated the integer rule the ADR states three lines after
+ *  declaring it. That was not a style defect: measured against the built module, `id({ roles, timeoutMs:
+ *  60000, costCap: 0.05 })` threw `canonical-form violation: floats forbidden`, so "the resolved
+ *  configuration is hashed into the run's provenance" was UNIMPLEMENTABLE for the value Atlas shipped by
+ *  default. `5/100 === 0.05` exactly in IEEE-754, so nothing an operator observes has changed.
+ *
+ *  NOTE it is still not enforceable by the subprocess adapter (a child reports no price — llm.ts says so);
+ *  it is carried for the escalation work, where a metered adapter can honour it. Carrying an UNENFORCED cap
+ *  is only acceptable because both this comment and `createCommandClient`'s say so out loud. */
+export const PROVISIONAL_COST_CAP_NUM = 5;
+export const PROVISIONAL_COST_CAP_DEN = 100;
+
+/** The provisional ceiling as a decimal, **derived** from the pair above — never an independent literal
+ *  (`rank.ts:76` states the same rule for `DAMPING`). Exported because `LlmBudget.costCap` speaks decimals. */
+export const PROVISIONAL_COST_CAP = PROVISIONAL_COST_CAP_NUM / PROVISIONAL_COST_CAP_DEN;
 
 /** Where the operator config lives, in precedence order: an explicit `$ATLAS_MODEL_CONFIG`, then the XDG
  *  location, then `~/.config/atlas/model.json`. Exported so `atlas config` can SHOW the resolved path —
@@ -147,17 +175,63 @@ function parseModelConfig(raw: unknown, path: string): ModelConfig {
 
   if (roles.propose === undefined) return refuse('`roles.propose` is required — it is the cheap-pass binding');
 
-  const timeoutMs = optionalPositive(raw.timeoutMs, PROVISIONAL_TIMEOUT_MS, () => refuse('`timeoutMs` must be a positive finite number'));
-  const costCap = optionalPositive(raw.costCap, PROVISIONAL_COST_CAP, () => refuse('`costCap` must be a positive finite number'));
+  const timeoutMs = optionalPositiveInteger(raw.timeoutMs, PROVISIONAL_TIMEOUT_MS, () =>
+    refuse('`timeoutMs` must be a positive INTEGER of milliseconds — a fractional millisecond cannot be canonicalized'),
+  );
 
-  return { roles, timeoutMs, costCap };
+  // A decimal `costCap` is REFUSED, not ignored and not rounded. It is the spelling the ADR's own example
+  // JSON showed, so an operator will have written it; accepting the key and silently dropping it would leave
+  // them believing a ceiling is in force, and coercing it would hide the misconfiguration this module exists
+  // to surface. The refusal names the exact replacement, so the fix is mechanical.
+  if (raw.costCap !== undefined) {
+    return refuse(
+      '`costCap` is not a knob: a decimal cannot be canonicalized, so a config carrying one could never be ' +
+        'hashed into the run\'s provenance. Give the EXACT ratio instead — `"costCapNum": 5, "costCapDen": 100` for 0.05',
+    );
+  }
+  if ((raw.costCapNum === undefined) !== (raw.costCapDen === undefined)) {
+    return refuse('`costCapNum` and `costCapDen` must be given together — half a ratio is not a ceiling');
+  }
+  const costCapNum = optionalPositiveInteger(raw.costCapNum, PROVISIONAL_COST_CAP_NUM, () =>
+    refuse('`costCapNum` must be a positive INTEGER — the ceiling is an exact ratio, never a decimal'),
+  );
+  const costCapDen = optionalPositiveInteger(raw.costCapDen, PROVISIONAL_COST_CAP_DEN, () =>
+    refuse('`costCapDen` must be a positive INTEGER — the ceiling is an exact ratio, never a decimal'),
+  );
+
+  return resolvedConfig(roles, timeoutMs, costCapNum, costCapDen);
+}
+
+/**
+ * Assemble the resolved config SO THAT IT CAN REACH THE SEALED `id` SEAM.
+ *
+ * Every own enumerable key here is a string, an array of strings, or an INTEGER, so `id(cfg)` canonicalizes
+ * — which is the entire point of the pair. ADR-0011 promises the resolved configuration is hashed into a
+ * run's provenance; shipping a float default made that promise unkeepable rather than merely unimplemented.
+ *
+ * `costCap` is attached NON-ENUMERABLE, and that is a deliberate, stated exclusion rather than a hidden
+ * field: it is DERIVED from the pair (`num / den`), so the preimage that carries the pair already fixes it,
+ * and admitting it would re-introduce the one value the canonicalizer forbids. The pair is what is HASHED;
+ * the decimal is what is SPENT, by the frozen `LlmBudget` seam.
+ */
+function resolvedConfig(
+  roles: Partial<Record<ModelRole, ModelCommand>>,
+  timeoutMs: number,
+  costCapNum: number,
+  costCapDen: number,
+): ModelConfig {
+  const cfg = { roles, timeoutMs, costCapNum, costCapDen };
+  Object.defineProperty(cfg, 'costCap', { value: costCapNum / costCapDen, enumerable: false });
+  return cfg as ModelConfig;
 }
 
 /** An absent numeric field takes the provisional default; a PRESENT-but-invalid one is refused. Silently
- *  defaulting a typo'd value would hide exactly the misconfiguration this module exists to surface. */
-function optionalPositive(v: unknown, fallback: number, refuse: () => never): number {
+ *  defaulting a typo'd value would hide exactly the misconfiguration this module exists to surface — and
+ *  INTEGER is a hard requirement, not a preference: `canonical.ts` throws on a non-integer, so a coerced or
+ *  admitted float would leave the config unable to be hashed at all. */
+function optionalPositiveInteger(v: unknown, fallback: number, refuse: () => never): number {
   if (v === undefined) return fallback;
-  if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) refuse();
+  if (typeof v !== 'number' || !Number.isInteger(v) || v <= 0) refuse();
   return v as number;
 }
 

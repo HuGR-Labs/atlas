@@ -81,8 +81,16 @@ export interface SourceReader {
 }
 
 /** A prompt builder plus the digest of the template it was built from — the pair is what makes an override
- *  auditable. `digest` is the sealed kernel `id` over the RAW template bytes (comments included), never a
- *  hand-rolled hash (KERNEL-1/2a). */
+ *  auditable. `digest` is the sealed kernel `id` (never a hand-rolled hash — KERNEL-1/2a) over the template
+ *  TEXT AS READ, comments included, **NFC-normalized**.
+ *
+ *  NOT over the raw bytes, and the difference is observable rather than pedantic: `canonical.ts` normalizes
+ *  every string it serializes, so two templates that differ only in Unicode normalization share one digest
+ *  even though the NFD spelling is a byte longer on disk and DIFFERENT BYTES are sent to the model (measured
+ *  against the built modules: 26 bytes vs 27, digests identical). That is the
+ *  deliberate, ratified price of NFC in the canonical preimage (`canonical.ts:12` says the same thing about
+ *  `id` in general), and it is stated here so nobody reads "raw bytes" and concludes the digest witnesses
+ *  the file byte-for-byte. What it witnesses is the artifact up to Unicode normalization. */
 export interface PromptFactory {
   readonly digest: Hash;
   readonly build: (cand: Candidate) => string;
@@ -91,9 +99,10 @@ export interface PromptFactory {
 /**
  * Load a prompt template and return a `buildPrompt` over it.
  *
- * The digest is taken over the file EXACTLY as it ships — including the justification comment — because the
- * question provenance has to answer is "which artifact produced this fact", and an edit to the reasoning is
- * an edit to the artifact even when the sent text is unchanged.
+ * The digest is taken over the file as it ships — including the justification comment, and NFC-normalized by
+ * the canonicalizer (see `PromptFactory.digest`) — because the question provenance has to answer is "which
+ * artifact produced this fact", and an edit to the reasoning is an edit to the artifact even when the sent
+ * text is unchanged.
  */
 export function createPromptFactory(deps: { source: SourceReader; templatePath?: string }): PromptFactory {
   const path = deps.templatePath ?? shippedTemplatePath();
@@ -192,7 +201,10 @@ export function createFileSourceReader(repoPath: string): SourceReader {
 }
 
 /** Remove the template's own justification block. Non-greedy and repeated, so several comments are handled
- *  and a `-->` inside prose cannot swallow the rest of the file. */
+ *  and a `-->` inside prose cannot swallow the rest of the file. Both halves of that sentence now have a
+ *  WITNESS (`prompt.test.ts`, "the strip is NON-GREEDY and REPEATED"): the shipped template carries exactly
+ *  one comment and no stray `-->`, so dropping the `?` survived the entire suite until a fixture with two
+ *  comments and an arrow in the prose between them was added. */
 function stripComments(text: string): string {
   return text.replace(/<!--[\s\S]*?-->\n?/g, '').trimStart();
 }

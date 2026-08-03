@@ -132,6 +132,35 @@ describe('createPromptFactory — a prompt without source is never sent', () => 
   });
 });
 
+describe('createPromptFactory — the strip is NON-GREEDY and REPEATED', () => {
+  // The shipped template has exactly ONE comment and no stray `-->`, so every other case here is blind to
+  // the greediness the source comment claims: mutating `[\s\S]*?` to `[\s\S]*` survived the whole suite.
+  // This fixture is the witness — two comments with a literal `-->` in the prose BETWEEN them.
+  const TWO_COMMENTS = [
+    '<!-- reason A -->',
+    'Ask about {{UNIT}}. The arrow --> appears here in ordinary prose.',
+    '<!-- reason B -->',
+    '{{SOURCE}}',
+    '',
+  ].join('\n');
+
+  it('strips BOTH comments and keeps the prose between them, `-->` and all', () => {
+    // teeth (breaks-on "the strip becomes greedy"): `[\s\S]*` runs from the FIRST `<!--` to the LAST `-->`,
+    // so the whole middle — the prose, the arrow and the `{{UNIT}}` slot — is swallowed and the model is
+    // sent the source with no ask at all. Every assertion below distinguishes the two behaviours.
+    const out = createPromptFactory({ source: reader(CODE), templatePath: templateAt(TWO_COMMENTS) }).build(
+      candidateAt('a/b.ts::b'),
+    );
+
+    expect(out).toContain('The arrow --> appears here in ordinary prose.'); // greedy: swallowed
+    expect(out).toContain('Ask about b.'); // greedy: swallowed with the slot
+    expect(out).not.toContain('reason A'); // non-greedy but UNREPEATED: reason B would survive
+    expect(out).not.toContain('reason B');
+    expect(out).not.toContain('<!--');
+    expect(out).toContain(CODE);
+  });
+});
+
 describe('createPromptFactory — the digest identifies the artifact as shipped', () => {
   const BODY = '<!-- reason A -->\nAsk about {{UNIT}}:\n{{SOURCE}}\n';
 

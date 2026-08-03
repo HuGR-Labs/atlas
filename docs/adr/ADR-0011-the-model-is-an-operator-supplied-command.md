@@ -1,8 +1,9 @@
 # ADR-0011 — the model is an operator-supplied command, and every constant is a governed default
 
 - **Status:** Proposed (2026-08-02). Closes the **D5** impl-DEFINE (`reference/atlas-adapters.md:203`,
-  `invariant-register-adapters.md:176`), which has been `[DEFINE-pending → owner]` since S0. Three findings
-  surfaced by the analysis are named in §"What this ADR does NOT close" and are **not** closed here.
+  `invariant-register-adapters.md:176`), which has been `[DEFINE-pending → owner]` since S0. FOUR findings
+  are named in §"What this ADR does NOT close" and are **not** closed here — three surfaced by the analysis,
+  and one (the fourth) is the gap between what Decision 2 decides and what the delivery ships.
 - **Spec author:** lead, grounded against `87c23cd` (master).
 - **Implements:** `ADAPT-LLM-1` / `INV-ADAPTER-11` (the frozen `SiteProposer` seam), `GEN-2`, `GEN-12`,
   `GEN-13`.
@@ -11,7 +12,7 @@
   **proposed** amendments (the batch seam, and an additive `quote` on a grounding entry) are stated in
   §"What the owner still has to ratify" and are **not** applied by this ADR.
 - **Scope of this seat:** `packages/adapter-io/src/llm.ts` (the model adapter), a new config resolution
-  module, `packages/genesis/prompts/**`, and the docs above. It does **not** touch any governed write door.
+  module, `packages/adapter-io/prompts/**`, and the docs above. It does **not** touch any governed write door.
 
 ## Context — measured, not hypothesised
 
@@ -91,13 +92,25 @@ interpolated, stdout/stderr captured — mirroring the `run-git.ts:25` seam the 
   wrapper against an OpenAI-compatible endpoint satisfies it equally. Substitution is a config edit, not a
   code change.
 
-Two rules make the adapter's verdicts unambiguous:
+Three rules make the adapter's verdicts unambiguous. The first two were in this ADR from the start; the
+third was implemented and argued only in the source, which is how a tradeoff becomes invisible.
 
 - **Empty stdout ⇒ abstention.** No JSON, no parser, no parse-failure mode. This matches GEN-12: abstention
   is a valid, unpressured outcome.
 - **Non-zero exit ⇒ error, never abstention.** A broken configuration MUST NOT be able to present itself as
   "this repo has no facts". That confusion is the fail-silent shape this repo has already been bitten by
   (#118, #123, #130), and it is the one failure that would invalidate a whole genesis run invisibly.
+- **A clean exit that stopped reading the prompt ⇒ the claim is TAKEN, and it may rest on a prompt the model
+  never fully received.** `execFileSync` throws `EPIPE` on the failed *write* when the child exits before
+  Node finishes writing stdin, while carrying the child's real stdout and `status: 0`; that stdout is
+  returned rather than reported as a hard failure (`llm.ts:salvageEarlyExit`). Prompts are whole source
+  subtrees, so the write is long and the window is wide — this surfaced as a load-dependent flake in the
+  suite. **The cost is stated rather than dressed up as correctness:** the child provably did not read the
+  whole prompt (the suite's green case salvages a claim from a command that reads ZERO bytes of an 8 MiB
+  prompt), so a claim may be produced from a partially delivered prompt. That is admissible for one reason
+  and one only — **the admission gate is the backstop.** A proposer returns a PROPOSAL, and GEN-4/12 re-derive
+  it mechanically against the anchored bytes, so a claim built on an unread prefix fails exactly as any other
+  unfounded claim does. Refusing instead would trade a gate-catchable proposal for a hard run failure.
 
 ## Decision 2 — every constant is configurable; invariants are protected by visibility, not prohibition
 
@@ -128,26 +141,56 @@ sweeping exactly these knobs, so a hard prohibition would make Atlas unmeasurabl
 Shape, with `args` as an **array** so nothing is ever shell-split:
 
 ```json
-{ "roles": { "propose": { "cmd": "…", "args": ["…"] } }, "timeoutMs": 60000, "costCap": 0.05 }
+{ "roles": { "propose": { "cmd": "…", "args": ["…"] } }, "timeoutMs": 60000, "costCapNum": 5, "costCapDen": 100 }
 ```
+
+The cost cap is an integer PAIR, not `0.05`, and the integer rule below is why. This example originally read
+`"costCap": 0.05`, and the code shipped that as its default — a rule stated and violated within six lines of
+each other. A decimal `costCap` is now REFUSED (naming the pair that replaces it) rather than ignored, since
+ignoring it would leave an operator believing a ceiling is in force.
 
 `roles` is keyed by the mechanism that issues the call. Only `propose` is populated: `refuter` requires a
 different (small) model per GEN-13f, so the role key exists from the start and adding it later is a config
 entry plus a template file, never a refactor. **No empty role is shipped** — the shape accommodates them, the
 delivery does not fabricate them.
 
-**Absent or malformed config ⇒ today's behaviour**: the fail-closed default proposer, abstaining at every
-site. Zero-config runs, and nobody has to write a file to use Atlas.
+**ABSENT and MALFORMED are different answers, and this deliberately inverts `loadPolicy`.** (This paragraph
+said the opposite — "absent *or* malformed ⇒ the fail-closed default proposer" — through two amendments, and
+it never matched the delivered code.)
+
+- **ABSENT ⇒ `null`, a STATE.** No model is wired; `mine` runs the fail-closed default proposer, abstains at
+  every site and SAYS so. Zero-config runs, and nobody has to write a file to use Atlas.
+- **MALFORMED ⇒ THROW, an ERROR.** Never a silent fall-back.
+
+`loadPolicy` is total and fails CLOSED to a *denying* default because a broken policy that authorizes nothing
+is safe. Here the safety direction is the opposite: a broken model config degrading to "no model" would
+abstain at every site and report a clean, empty run — **indistinguishable from a repository that genuinely
+holds no groundable fact.** That is the same fail-silent shape Decision 1 refuses for a non-zero exit, and
+refusing it at the config layer is the same decision made one layer earlier.
 
 **`atlas config`** prints every knob with its value, its **source** (default / repo / operator), and whether
-it is spec-pinned. Discovering what is tunable must not require reading the source.
+it is spec-pinned. Discovering what is tunable must not require reading the source. *(DECIDED, NOT BUILT —
+finding 4 in §"What this ADR does NOT close".)*
 
-**Every knob is an INTEGER, and the canonicalizer is why.** `kernel/canonical.ts:41` forbids a non-integer
+**Every knob is an INTEGER, and the canonicalizer is why.** `kernel/canonical.ts:48` forbids a non-integer
 number outright — it throws. So a config carrying `0.85` could not be canonicalized, could not reach the
 sealed `id` seam, and could not be hashed into provenance at all. A ratio is therefore expressed as a
 numerator/denominator pair, which is not a workaround: `rank.ts` already computes the damping in exact
 integer fixed-point precisely so a run is byte-identical across machines. The config shape follows the
 implementation instead of fighting it.
+
+> **The first delivery of this ADR broke this rule in its own shipped default, and the fix is recorded here
+> rather than quietly applied.** `model-config.ts` shipped `PROVISIONAL_COST_CAP = 0.05` and a validator that
+> accepted any positive finite number. Measured against the built module: `id({ roles, timeoutMs: 60000,
+> costCap: 0.05 })` threw `canonical-form violation: floats forbidden`, while the same object with an integer
+> cap hashed fine. So "the resolved configuration is hashed into the run's provenance" was not merely
+> unimplemented — it was **unimplementable for the value Atlas shipped by default**. The cap is now the exact
+> pair `costCapNum = 5` / `costCapDen = 100` (`5/100 === 0.05` in IEEE-754, so no behaviour moved), a
+> fractional knob is REFUSED rather than coerced, and the resolved config canonicalizes. It stays class **C —
+> provisional**: changing how a number is written earns no better justification than it had.
+>
+> The decimal remains reachable as a **derived**, non-enumerable property, because the frozen `LlmBudget`
+> speaks decimals. The pair is what is HASHED; the decimal is what is SPENT.
 
 **Consequence for determinism, and it strengthens the claim.** GEN-1 requires S0+S1 to reproduce a
 byte-identical skeleton and ranking at a pinned commit. With the ranking knobs configurable, two operators
@@ -168,12 +211,22 @@ the guarantee is implicit because the numbers are hidden in source.
 > teeth as a side effect, having been vacuous for the same reason.
 
 `nearDup.claimNormThreshold` migrates from `policy.json` to `config.json`: it is tuning, and it should not
-require admin to adjust.
+require admin to adjust. *(DECIDED, NOT BUILT — finding 4 in §"What this ADR does NOT close". It is still
+read from `policy.json` today.)*
 
 ## Decision 3 — the prompt is a versioned artifact with per-clause justification, not a string literal
 
-The prompt lives at `packages/genesis/prompts/propose.md`, versioned, diffable, reviewable, and **hashed into
-the run's provenance**. It is overridable by config, and an override is **recorded, never silent**.
+The prompt lives at `packages/adapter-io/prompts/propose.md` — the adapter's own asset, next to the only
+module that reads it, and pinned there by `adapter-io/test/prompt.test.ts` — versioned, diffable, reviewable,
+and **digested** by the sealed kernel `id`. (This ADR said `packages/genesis/prompts/` in two places; the
+delivered location is the correct one and the ADR was stale.) The digest is over the template text AS READ,
+comment included and **NFC-normalized** by the canonicalizer — not byte-for-byte over the file: two templates
+differing only in Unicode normalization share a digest. That is the ratified price of NFC in the canonical
+preimage, and it is stated so nobody reads more into the digest than it carries.
+
+The prompt is overridable by config, and an override is **recorded, never silent**. *(The digest is computed
+and carried on the `PromptFactory` today; nothing yet WRITES it into a run's provenance record — finding 4 in
+§"What this ADR does NOT close".)*
 
 The prompt carries GEN-12 (abstention is valid), GEN-4d (no self-declaration), GEN-6 (a mined signal is not a
 fact) and door-2 (non-obvious ∧ actionable, not a restated signature). A prompt that is freely editable *and*
@@ -234,8 +287,9 @@ count is either wasteful or insufficient depending on the repository, and neithe
 
 ## What this ADR does NOT close
 
-Three findings surfaced while measuring D5. None is closed here; each is recorded so it is found by
-reading rather than by rediscovery.
+Four findings. Three surfaced while measuring D5; the fourth is the gap between what Decision 2 DECIDES and
+what the delivery actually SHIPS. None is closed here; each is recorded so it is found by reading rather than
+by rediscovery.
 
 1. **The GEN-13 escalation ladder is planned and never executed.** `escalate()` has zero production
    consumers, and `createSiteProposer` structurally cannot run an escalated site (one call, golden-pinned).
@@ -259,6 +313,24 @@ reading rather than by rediscovery.
    *cost* level. They are independent, and conflating them is precisely how a highest-criticality site gets
    read as cheap. Prose in this repo should say **cheap pass / escalated pass** for cost, and reserve "tier"
    for the governance class.
+4. **DECISION 2'S TUNING HALF IS DECIDED AND NOT BUILT.** The decision stands as written; the DELIVERY is
+   partial, and the ADR presented the whole of it as done. What ships is the *second* scope only — the
+   operator-scoped `~/.config/atlas/model.json` (`adapter-io/src/model-config.ts`), whose knobs are now
+   integers and whose resolved value canonicalizes. What does **not** exist, measured on this branch:
+   - **`.atlas/config.json`** — no loader, no schema, no reader. The ~40 tuning constants named in §Context
+     are still hardcoded, so "every constant is configurable" is a decision, not a delivered property.
+   - **`atlas config`** — `grep -n "if (command === " packages/cli/src/cli.ts` returns exactly `mine`,
+     `doctor` and `node`. There is no command that prints a knob, its source, or its spec-pinned status.
+   - **the `nearDup.claimNormThreshold` migration** — it is still read from `.atlas/policy.json` by
+     `adapter-io/src/policy.ts`. Nothing moved.
+   - **the provenance hash of the resolved configuration.** The resolved model config CAN now reach the
+     sealed `id` seam (that is what the integer pair bought, and it is asserted by
+     `adapter-io/test/model-config.test.ts`), and the prompt template's digest is computed on every
+     `PromptFactory` — but **nothing writes either into a run record**. So the strengthened GEN-1 guarantee
+     ("byte-identical for the same rev *and* the same config hash") is not yet observable by anyone.
+   Consequence to keep in view: until `.atlas/config.json` exists, the deviation-recording behaviour in the
+   Decision 2 table — the loud override that makes a spec-pinned change legitimate — has nothing to record,
+   because there is no supported way to override anything.
 
 ## What the owner still has to ratify
 

@@ -61,6 +61,33 @@ function sameDirectory(a: string, b: string): boolean {
   }
 }
 
+/** Ask that oracle, ON THE VOLUME `makeFixtureRepo` ACTUALLY USES (`os.tmpdir()`), whether an uppercased
+ *  name denotes the directory created in lower case. PROBED, never inferred from `process.platform` — a
+ *  case-sensitive volume mounted on macOS folds nothing, and only the filesystem knows its own table. */
+function probeCaseFolding(): boolean {
+  const probe = mkdtempSync(join(tmpdir(), 'atlas-fold-probe-'));
+  try {
+    mkdirSync(join(probe, 'probe'));
+    return sameDirectory(join(probe, 'probe'), join(probe, 'PROBE'));
+  } catch {
+    return false;
+  } finally {
+    rmSync(probe, { recursive: true, force: true });
+  }
+}
+
+const FOLDS_CASE = probeCaseFolding();
+const SKIP_CASE = ' — SKIPPED: this filesystem does not fold case, so the bypass has no second spelling';
+if (!FOLDS_CASE) {
+  console.warn(
+    `[s24] NOT COVERED on this filesystem (${tmpdir()}): it does not fold ASCII case, so the fixture repo ` +
+      'has exactly one spelling and the F1 case-variant bypass of the inside-repo (arbitrary-code-execution) ' +
+      'guard cannot be reproduced through the real `atlas mine` door here. That leg is UNTESTED on this run ' +
+      '— not passing. It is exercised on a folding volume (APFS). CI runs ubuntu-latest/ext4, which folds ' +
+      'nothing: the guard has no black-box witness there.',
+  );
+}
+
 function operatorConfig(body: string): string {
   const d = mkdtempSync(join(tmpdir(), 'atlas-s24-operator-'));
   scratch.push(d);
@@ -102,14 +129,15 @@ describe('S24 — the operator model config, through the real `atlas mine` door'
     rmSync(planted, { force: true });
   });
 
-  it('the SAME planted config is refused when the repo path is spelled in a DIFFERENT CASE', () => {
+  it.skipIf(!FOLDS_CASE)(`the SAME planted config is refused when the repo path is spelled in a DIFFERENT CASE${FOLDS_CASE ? '' : SKIP_CASE}`, () => {
     // teeth (breaks-on "containment is decided by string relative() again"): the refusal vanishes and the
     // planted command is loaded — the F1 arbitrary-code-execution bypass, exactly as measured.
     //
-    // FILESYSTEM-CONDITIONAL, and stated rather than skipped: on a case-SENSITIVE volume (Linux CI) the
-    // variant names a DIFFERENT, non-existent directory — there is no second spelling of this repo, so
-    // there is no bypass to close and the honest outcome is the zero-config run. The expectation is taken
-    // from the kernel, never from a `toLowerCase()` guess about the volume's folding table.
+    // FILESYSTEM-CONDITIONAL, and it SKIPS rather than asserting the other outcome. On a case-SENSITIVE
+    // volume (CI's ubuntu/ext4 runner) the variant names a DIFFERENT, non-existent directory: there is no
+    // second spelling of this repo, so the bypass cannot be reproduced and this case cannot fail. Asserting
+    // the zero-config run there proved only that `atlas mine` ignores a path to nowhere — a green tick
+    // reading as coverage of an RCE guard that was never exercised. The folding is PROBED, never guessed.
     repo ??= makeFixtureRepo({ files: { 'src/charge.ts': 'export function charge(): void {}\n' } });
     mkdirSync(join(repo.repoPath, '.atlas'), { recursive: true });
     const planted = join(repo.repoPath, '.atlas', 'model.json');
@@ -120,13 +148,11 @@ describe('S24 — the operator model config, through the real `atlas mine` door'
 
     const run = runAtlas(repo.repoPath, ['mine', '.'], { ATLAS_MODEL_CONFIG: viaVariant });
 
-    if (sameDirectory(repo.repoPath, variantRepo)) {
-      expect(run.exitCode).toBe(2);
-      expect(run.stdout).toContain('refusing to read the model command from inside the repository');
-    } else {
-      expect(run.exitCode).toBe(0); // a different location, and nothing is there
-      expect(run.stdout).toContain('mine: 0 candidate facts');
-    }
+    // ANTI-VACUITY: the probe said this volume folds; assert it folds for THIS repo, or the case proves
+    // nothing about a second spelling.
+    expect(sameDirectory(repo.repoPath, variantRepo)).toBe(true);
+    expect(run.exitCode).toBe(2);
+    expect(run.stdout).toContain('refusing to read the model command from inside the repository');
     rmSync(planted, { force: true });
   });
 
