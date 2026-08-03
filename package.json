@@ -16,7 +16,8 @@
     "spec-conformance-guard": "node harness/gates/spec-conformance-guard.mjs",
     "layer-guard": "node harness/gates/layer-guard.mjs",
     "reference-model-guard": "node harness/gates/reference-model-guard.mjs",
-    "id-integrity": "node harness/gates/id-integrity.mjs"
+    "id-integrity": "node harness/gates/id-integrity.mjs",
+    "command-doc-guard": "node harness/gates/command-doc-guard.mjs"
   },
   "engines": {
     "node": ">=20"
