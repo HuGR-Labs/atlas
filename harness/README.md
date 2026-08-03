@@ -10,8 +10,13 @@ with a single `git mv`.
 The machinery of governed execution, independent of any one product:
 
 - **Quality gates** — `harness/gates/`. The standing bars enforced on every seat and on the
-  build itself. Today: `godfile-guard.mjs` (the ≤400-LOC ceiling per source file). Same
-  doctrine as the CI: the bar Orchestra enforces on seats is enforced on Orchestra itself.
+  build itself. Six today: `godfile-guard`, `layer-guard`, `reference-model-guard`,
+  `spec-conformance-guard`, `id-integrity`, `command-doc-guard`. Same doctrine as the CI: the
+  bar Orchestra enforces on seats is enforced on Orchestra itself.
+- **Gate libraries** — `harness/lib/`. What the gates *delegate to*: `lexing.mjs` (the ONE
+  TypeScript comment stripper), `reachability.mjs` (the value-vs-type analyser behind
+  reference-model-guard), `drift-patterns.mjs` (the governance-count drift vocabulary). See
+  the rule below — this directory exists so that `harness/gates/` can mean one thing.
 - **Instruments** — `harness/probes/`. Deliberately NOT gates: a probe judges one RUN against a written
   contract and is invoked by hand, so nothing here is wired into `ci.yml` and `package.json` exposes no
   script for it. The distinction is load-bearing — a gate whose input is absent on CI exits 0 having
@@ -29,6 +34,31 @@ The machinery of governed execution, independent of any one product:
 - **Governed CI/CD** — `.github/workflows/*`. `ci.yml` is the product build gate (it *runs*
   the harness gates against Atlas); `release.yml` is the CD skeleton. The workflow files are
   infra that belongs to the harness even while they gate the product.
+
+## The RULE for `harness/gates/` (enforced, not asked for)
+
+> **`harness/gates/` holds files that CAN FAIL and are run BY NAME in CI.
+> Everything a gate imports lives in `harness/lib/`.**
+
+Both halves are mechanically checked by `harness/gates/gate-directory.test.mjs`, and the check is
+empirical rather than syntactic: `harness/` is copied into an otherwise-empty tree and every
+`harness/gates/*.mjs` is run there. A gate, pointed at a tree with no `docs/` and no `packages/`,
+**must** exit non-zero — it has nothing to check and saying OK would be a lie. A pure module exits 0.
+That difference is the whole test, and it is what a syntactic "does the file contain `process.exit(1)`"
+scan cannot give you, because such a scan passes the moment someone writes an unreachable one.
+
+**Why the rule exists.** Three files used to sit in `harness/gates/` that `node <file>` ran to
+completion, exit 0, having asserted nothing: `lexing.mjs`, `drift-patterns.mjs`, `reachability.mjs`.
+Their logic was never dead — each has a vitest twin exercising it, and `reference-model-guard` genuinely
+stands on `reachability.mjs`. What was false was the **location**: a directory whose entire meaning is
+"these fail the build" contained files that could not fail, so the count of gates you got by listing the
+directory (9) and the count you got by reading `ci.yml` (6) disagreed, and the difference looked like
+coverage. They were moved to `harness/lib/` — not deleted and not given teeth, because neither of those
+would have been true.
+
+**`harness/lib/` is admin-owned too** (`CODEOWNERS`), for the reason `harness/gates/` is: rewriting
+`stripComments` to return `''` makes layer-guard observe zero imports and print OK, from a path that was
+inside the lock before the extraction. See `docs/governance/policy-lock.md`.
 
 ## The extraction plan (→ `/HuGR/orchestra`)
 
@@ -58,8 +88,16 @@ internals. This keeps the future `git mv` a clean lift: nothing in `harness/` re
 Verify at any time:
 
 ```sh
-grep -rn "@atlas/" harness/   # must return nothing
+grep -rnE "^\s*(import|export).*from '@atlas/" harness/   # must return nothing
 ```
+
+**This command used to read `grep -rn "@atlas/" harness/`, and that was an overclaim** — it returns 60
+lines today and returned lines for as long as the harness has had comments. `@atlas/` appears all over
+`harness/` in prose (`"@atlas/contracts-owned"`), in layer-guard's import-specifier regex, and in the test
+fixtures that layer-guard's own teeth are written against; none of those is an import. The invariant is
+about what a module RESOLVES, so the check has to look at import positions. The narrowed command returns
+nothing, and the same assertion is mechanized in `harness/gates/gate-directory.test.mjs` so it is checked
+on every `npm test` rather than by whoever remembers to paste a grep.
 
 ## Inventory — harness-owned docs that stay in-place (for now)
 

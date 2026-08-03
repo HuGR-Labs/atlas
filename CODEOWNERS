@@ -36,7 +36,13 @@
 # The ownership map: without this line, the rule above is removable by an ordinary PR.
 /CODEOWNERS @HuGR-Labs/atlas-admins
 
-# The enforcement, both halves: the workflow that SCHEDULES each gate, and the script that IS the gate.
-# Owning either one alone leaves the other as an unowned way to disable the check.
+# The enforcement, all THREE halves: the workflow that SCHEDULES each gate, the script that IS the gate,
+# and the library the gate DELEGATES to. Owning any one alone leaves the others as an unowned way to
+# disable the check. `/harness/lib/` is owned for exactly the reason `/harness/gates/` is: the comment
+# stripper in `harness/lib/lexing.mjs` is what layer-guard's whole import scan stands on — rewrite it to
+# `() => ''` and the gate sees zero edges and prints OK. Before harness/lib/ existed that code sat inside
+# the owned gates directory; the extraction that gave layer-guard its LOC headroom would have moved it OUT
+# of the lock had this line not moved with it.
 /.github/workflows/ @HuGR-Labs/atlas-admins
 /harness/gates/ @HuGR-Labs/atlas-admins
+/harness/lib/ @HuGR-Labs/atlas-admins

@@ -1,4 +1,4 @@
-// harness/gates/lexing.mjs — reading TypeScript correctly, once, for every gate that has to.
+// harness/lib/lexing.mjs — reading TypeScript correctly, once, for every gate that has to.
 //
 // WHY THIS IS ITS OWN MODULE. It was born inside `reachability.mjs` and moved out the moment
 // `layer-guard.mjs` imported it: a helper two gates depend on is INFRASTRUCTURE, not a private part of

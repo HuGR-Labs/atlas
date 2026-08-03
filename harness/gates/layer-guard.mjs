@@ -21,13 +21,21 @@
 //
 // It is NOT dependency-free, and the earlier revision that claimed to be paid for it: reading TypeScript
 // with regexes is what put a private comment stripper in this file, and that stripper deleted real import
-// statements. Lexing is delegated to `lexing.mjs` — the argument, and the measurement, live in its header.
+// statements. Lexing is delegated to `../lib/lexing.mjs` — the argument, and the measurement, live in its
+// header.
+//
+// The SCANNING half (workspace graph, source-import grammar, the canonical layer diagram reader) lives in
+// `../lib/workspace-scan.mjs`. That is a split by ROLE, not by size: this file JUDGES, that one READS. It
+// happened now because this file sat at exactly 400 of the 400-LOC ceiling and could not take another line
+// once `godfile-guard` learned to walk `harness/**` — a file at the cap is a file whose next edit is a
+// refactor whether or not that was the edit you wanted to make.
 
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 // The ONE comment stripper in this repo. Keeping a private copy here is what created the hole it now closes.
-import { stripComments } from './lexing.mjs';
+import { stripComments } from '../lib/lexing.mjs';
+import { canonicalRanks, workspaceGraph } from '../lib/workspace-scan.mjs';
 
 // The repo root, OVERRIDABLE so the gate's own test can point it at a fixture tree. Without this the gate
 // could only ever be mutation-tested by hand against the live repo — which is precisely the 'trust me' the
@@ -35,51 +43,14 @@ import { stripComments } from './lexing.mjs';
 const ROOT = process.env.LAYER_GUARD_ROOT ?? join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const PKGS = join(ROOT, 'packages');
 
-/**
- * The layer ranking is DERIVED, never transcribed.
- *
- * The canonical order is the `L0..L8` diagram in the repo-root `ARCHITECTURE.md`, which every core package
- * barrel independently restates (`// Layer N:`). An earlier version of this gate hard-coded its own array
- * and got it WRONG in three places (persist ranked above knowledge; memory and genesis unranked entirely),
- * which false-PASSed real inversions out of `persist` and false-FAILed the legal `knowledge → persist` edge.
- * A gate that enforces a wrong architecture is worse than no gate — so the order is now read from the one
- * place that already declared it, and drift between that diagram and this gate is impossible by construction.
- *
- * The outer RING (adapter-io + the entrypoints + the e2e suites) sits above the core and is ranked here
- * because ARCHITECTURE.md's diagram predates it. Any workspace package that is neither in the diagram nor
- * in this ring list is a HARD FAILURE — silently-unranked packages are exactly how the previous version let
- * memory and genesis through unchecked.
- */
+/** The canonical layer diagram. It is READ (`../lib/workspace-scan.mjs`), never transcribed — the header of
+ *  `canonicalRanks` records the three ranks an earlier hard-coded array got wrong. */
 const ARCHITECTURE_DOC = join(ROOT, 'ARCHITECTURE.md');
 
-/** The ring, above every `L*` core layer. Index order = increasing depth; `e2e*` import all, are imported by none. */
+/** The ring, above every `L*` core layer. Index order = increasing depth; `e2e*` import all, are imported by
+ *  none. It is declared HERE, with the other architecture constants, because it is an architectural claim —
+ *  the scanner merely applies it. A package in neither the diagram nor this list is a HARD FAILURE below. */
 const RING_ORDER = ['adapter-io', 'cli', 'mcp-server', 'e2e', 'e2e-blackbox'];
-
-/** Parse `<names…> L<n>` rows out of the canonical diagram → Map(pkg → rank). Several packages may share a
- *  rank on one row (`persist   index       L2`), which is a genuine TIER: a peer edge inside a tier is an
- *  inversion just as an upward edge is, so equal ranks are compared with `>=`. */
-function canonicalRanks(known) {
-  if (!existsSync(ARCHITECTURE_DOC)) {
-    note(`ARCH-1 canonical layer diagram missing: ${ARCHITECTURE_DOC} — the layer order MUST be declared, not inferred`);
-    return null;
-  }
-  const ranks = new Map();
-  for (const line of readFileSync(ARCHITECTURE_DOC, 'utf8').split('\n')) {
-    const m = /^(.*?)\bL(\d)\b/.exec(line);
-    if (m === null) continue;
-    for (const word of m[1].match(/[a-z][a-z-]*/g) ?? []) {
-      if (known.has(word)) ranks.set(word, Number(m[2]));
-    }
-  }
-  if (ranks.size === 0) {
-    note(`ARCH-1 no \`L<n>\` layer rows parsed from ${ARCHITECTURE_DOC} — the diagram format changed; this gate is blind until it is fixed`);
-    return null;
-  }
-  // The ring is stacked strictly above the deepest core layer.
-  const base = Math.max(...ranks.values()) + 1;
-  RING_ORDER.forEach((pkg, i) => { if (known.has(pkg)) ranks.set(pkg, base + i); });
-  return ranks;
-}
 
 /** ARCH-2, stated as an explicit denylist so the message can name the invariant rather than a rank. */
 const FORBIDDEN_EDGES = [
@@ -96,93 +67,6 @@ const COMPOSITION_ROOT = join(PKGS, 'adapter-io', 'src', 'wire.ts');
 
 const fail = [];
 const note = (msg) => fail.push(msg);
-
-// ── read the workspace graph ─────────────────────────────────────────────────────────────────────────
-const shortName = (dep) => (dep.startsWith('@atlas/') ? dep.slice('@atlas/'.length) : null);
-
-function workspaceGraph() {
-  const graph = new Map();
-  const undeclared = [];
-  const opaque = [];
-  for (const dir of readdirSync(PKGS)) {
-    const manifest = join(PKGS, dir, 'package.json');
-    if (!existsSync(manifest)) continue;
-    const pkg = JSON.parse(readFileSync(manifest, 'utf8'));
-    const declared = new Set(
-      Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }).map(shortName).filter((d) => d !== null),
-    );
-    const imported = sourceImports(dir);
-    for (const dep of imported.edges) {
-      if (dep !== dir && !declared.has(dep)) undeclared.push(`@atlas/${dir} imports @atlas/${dep} but does not declare it`);
-    }
-    opaque.push(...imported.opaque);
-    graph.set(dir, [...new Set([...declared, ...imported.edges])].filter((d) => d !== dir));
-  }
-  return { graph, undeclared, opaque };
-}
-
-/**
- * The edges that ACTUALLY create coupling are imports, not manifest entries. A manifest-only graph is
- * blind: a source import needs no manifest edit to resolve (npm workspaces symlinks every package into the
- * root `node_modules`), which was demonstrated on this tree — a real `tools → adapter-io` runtime edge
- * passed the entire gate suite green. So the graph is the UNION of declared and imported edges, and the
- * divergence between them is itself reported.
- *
- * Both static (`from '@atlas/x'`) and dynamic (`import('@atlas/x')`) forms are scanned; `wire.ts` uses the
- * dynamic form heavily in type positions, so a `from`-only scan misses real edges. A dynamic specifier that
- * is NOT a literal cannot be resolved statically and is refused outright in an inner layer — that is the
- * exact shape used to smuggle the undetectable edge.
- *
- * ── WHAT THE SPECIFIER GRAMMAR MUST ADMIT, because two shapes it rejected were live blind spots ───────
- * The point of scanning source at all is stated above: a source import needs no manifest edit to resolve.
- * So the source scan MUST see at least everything the manifest scan sees, or the check it exists to
- * perform inverts — an edge becomes easier to hide in code than in a manifest. It did not, twice, and both
- * were reproduced on a fixture where the plain form correctly failed with 4 violations:
- *
- *   DIGITS. The captured name was `[a-z][a-z-]*`, which rejects `0-9`, while `shortName` (which reads the
- *   MANIFEST) accepts any `@atlas/*`. `e2e` and `e2e-blackbox` are real ranked packages in `RING_ORDER`.
- *   `@atlas/e2e` in a manifest was graphed and failed the gate; the SAME edge written as a source import
- *   scored exit 0, 0 violations. That asymmetry is precisely the smuggling shape, running backwards.
- *
- *   SUBPATHS. The specifier was matched WHOLE against the closing quote, so any deep import —
- *   `@atlas/adapter-io/dist/src/index.js` — matched nothing at all and the edge was invisible. The
- *   package identity is everything up to the first `/` after the scope; whatever follows is a file within
- *   the SAME package and cannot change which package is being coupled to.
- */
-function sourceImports(pkgDir) {
-  const out = { edges: new Set(), opaque: [] };
-  const srcRoot = join(PKGS, pkgDir, 'src');
-  if (!existsSync(srcRoot)) return out;
-  const walk = (dir) => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const p = join(dir, entry.name);
-      if (entry.isDirectory()) { walk(p); continue; }
-      if (!/\.(ts|tsx|mts|js|mjs)$/.test(entry.name)) continue;
-      // Strip comments FIRST. This codebase is comment-dense and routinely NAMES other packages in prose
-      // ("`@atlas/contracts`-owned", "would invert the DAG"). Scanning raw text turns every such mention
-      // into a phantom edge — an earlier revision of this scanner reported 68 violations, all false.
-      //
-      // The stripper is the SHARED, parser-backed one. The two-regex form that used to sit on this line
-      // deleted real imports — see `lexing.mjs`; pinned by fixture in layer-guard.test.mjs.
-      const src = stripComments(readFileSync(p, 'utf8'), entry.name);
-      // Only real specifier positions count. `[a-z0-9-]` and the `(?:\/…)?` tail: see DIGITS/SUBPATHS above.
-      const SPECIFIER =
-        /(?:\bfrom\s*|\bimport\s*|\brequire\s*\(\s*|\bimport\s*\(\s*)['"]@atlas\/([a-z][a-z0-9-]*)(?:\/[^'"]*)?['"]/g;
-      for (const m of src.matchAll(SPECIFIER)) out.edges.add(m[1]);
-      // A dynamic import whose specifier is not a string literal is statically unresolvable. HEURISTIC, and
-      // stated as one: a captured `:` means this is a TypeScript signature for a METHOD NAMED `import`
-      // (`import(json: string): Cas`, which both portable.ts files declare), not a dynamic import — a real
-      // specifier expression cannot carry a top-level colon. Without this exclusion the scan reports those
-      // two interface members as unresolvable imports.
-      for (const m of src.matchAll(/\bimport\s*\(\s*(?!['"`])([^)]{0,60})\)/g)) {
-        if (m[1].includes(':')) continue;
-        out.opaque.push(`${pkgDir}/src/${p.slice(srcRoot.length + 1)}: import(${m[1].trim().slice(0, 40)})`);
-      }
-    }
-  };
-  walk(srcRoot);
-  return out;
-}
 
 // ── ARCH-1/2 — direction, forbidden edges, acyclicity ────────────────────────────────────────────────
 function checkLayers(graph, rank) {
@@ -361,8 +245,14 @@ async function checkSurface(legs) {
 }
 
 // ── run ──────────────────────────────────────────────────────────────────────────────────────────────
-const { graph, undeclared, opaque } = workspaceGraph();
-const rank = canonicalRanks(new Set(graph.keys()));
+// ORDER IS THE CONTRACT. The violation list is printed in push order, so the verdict is only comparable
+// across revisions if the notes go in at the same points. `canonicalRanks` used to call `note()` itself;
+// a library cannot reach into its caller's accumulator, so it returns its notes and they are spliced in
+// HERE — the same position, before `checkLayers`. Verified byte-identical on this tree, on a tree carrying
+// a deliberate `tools → adapter-io` inversion (4 violations, same order), and on a missing root.
+const { graph, undeclared, opaque } = workspaceGraph(PKGS);
+const { ranks: rank, notes: rankNotes } = canonicalRanks(ARCHITECTURE_DOC, new Set(graph.keys()), RING_ORDER);
+for (const n of rankNotes) note(n);
 checkLayers(graph, rank);
 
 // A source import that no manifest declares is a real edge the build resolves by workspace hoisting. It is

@@ -1,4 +1,4 @@
-// harness/gates/reachability-lexing.test.mjs — the LEXING regression battery.
+// harness/lib/reachability-lexing.test.mjs — the LEXING regression battery.
 //
 // Split out of reachability.test.mjs, which the semantics of reachability already fill. This file is about
 // one thing: reading TypeScript correctly. Three successive hand-written scanners each shipped a FAIL-OPEN

@@ -9,7 +9,9 @@
 //   ID-1  UNIQUENESS  — every id is DEFINED exactly once, inside its owner file family.
 //   ID-2  RESOLUTION  — every `<relpath>.md#<ID>` citation resolves to a definition IN THE CITED FILE.
 //                       This is the renumbering check: renaming REQ-AUTH-3f breaks every pointer at once.
-//   ID-3  ORPHAN      — every REQ, and every non-`held-out` SCN, is consumed by ≥1 WP card.
+//   ID-3  ORPHAN      — every REQ, and every non-`held-out` SCN, is SCHEDULED by ≥1 WP card, where
+//                       "scheduled" means a structured `source_reqs:` / `acceptance:` pointer. Prose does
+//                       not schedule work.
 //   ID-4  ANCHOR      — every `#author-*` / `#entry-*` citation lands on a real `<a id=…>` in its target.
 //   ID-5  LINK        — every relative `.md` link/citation names a file that exists.
 //
@@ -283,22 +285,49 @@ for (const [rel, src] of text) {
 
 // ── ID-3 — orphans ───────────────────────────────────────────────────────────────────────────────────
 /**
- * DIRECTION: definition → WP. A defined REQ/SCN must be CONSUMED by at least one WP card.
+ * DIRECTION: definition → WP. A defined REQ/SCN must be SCHEDULED by at least one WP card.
  *
  * That is the direction that catches the failure this corpus actually suffers: S1 defines a requirement (or
  * a late ADR adds one) and S4 never carries it into executable work, so it ships as prose nobody builds. The
  * opposite direction — a WP citing an id that does not exist — is ID-2, enforced separately with no ledger.
  *
+ * ── WHAT COUNTS AS SCHEDULING, AND WHY IT IS NARROWER THAN IT WAS ────────────────────────────────────
+ * ONLY a structured pointer inside a `source_reqs:` or `acceptance:` block: `- source: <path>#<ID>`. A bare
+ * prose mention of the id ANYWHERE in the card used to count, and that made the check silenceable by
+ * documentation — write "this does not fix REQ-X" in an intent paragraph and REQ-X stopped being an orphan.
+ * A ratchet a sentence can switch off is the same class of defect as a gate that cannot fail.
+ *
+ * Measured when the narrowing landed: a seat that stripped its structured citations found only 5 of its 10
+ * ids went red; the other 5 were held up by prose naming them. Measured on the corpus at the same moment:
+ * the narrowing orphans **nothing new** — all 4 ID-3 violations are the same 4 before and after, because
+ * every id that any card schedules at all, it schedules structurally. So this is a tightening that costs
+ * nothing today and closes the escape for every card written after it. Both numbers are in
+ * `work-packages/wp-gates-that-cannot-fail.md`.
+ *
+ * The two field names are the schema's own (114 cards, 114 `source_reqs:`, 114 `acceptance:`) — not a
+ * vocabulary invented here. `source_reqs:` schedules REQs, `acceptance:` schedules the SCNs that witness
+ * them; a card whose acceptance is prose (the out-of-band hotfix cards) schedules no SCN, which is true.
+ *
  * SCN carries one derived exemption: a scenario whose heading is marked `held-out` is an independent second
  * fixture, deliberately withheld from every WP's acceptance list (citing it would defeat the hold-out). The
  * exemption is read off the heading, not hardcoded — 342 of the 343 uncited SCNs declare it.
  */
+/** A block opener at column 0. Continuation lines are indented; the next column-0 token closes the block. */
+const SCHEDULING_FIELD = /^(?:source_reqs|acceptance)\s*:/;
+/** A structured pointer row inside such a block. The id is the ANCHOR of the pointer, so a path alone
+ *  schedules nothing and a `# ptr+digest` trailing comment (which sometimes restates a FAMILY id) is cut
+ *  first — the same TRAILING_COMMENT rule ID-2 already applies to every other citation. */
+const SCHEDULED_PTR = new RegExp(String.raw`^\s*-\s*source:\s*\S*?#((?:${KINDS})-[A-Za-z0-9][A-Za-z0-9.-]*)`);
 const wpRefs = new Set();
 for (const [rel, src] of text) {
   if (!OWNER.WP.test(rel)) continue;
-  const body = src.replace(/^###\s+WP-[^\n]*$/gm, ''); // a card's own heading is not a citation
-  for (const m of body.matchAll(new RegExp(`\\b(?:${KINDS})-[A-Za-z0-9][A-Za-z0-9.-]*`, 'g'))) {
-    wpRefs.add(m[0].replace(/[.-]+$/, ''));
+  let inBlock = false;
+  for (const line of src.split('\n')) {
+    if (SCHEDULING_FIELD.test(line)) { inBlock = true; continue; }
+    if (/^\S/.test(line)) { inBlock = false; continue; } // any column-0 token ends the block
+    if (!inBlock) continue;
+    const m = SCHEDULED_PTR.exec(line.replace(TRAILING_COMMENT, ''));
+    if (m !== null) wpRefs.add(m[1].replace(/[.-]+$/, ''));
   }
 }
 const heldOut = new Set();

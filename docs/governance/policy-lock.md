@@ -10,14 +10,19 @@ for a reason that is about identity, not settings. See "What the lock actually b
 ## The lock (two mechanisms, both required — both now BUILT as of 2026-08-02)
 
 1. **Ownership — CODEOWNERS. IN FORCE.** The repo-root `CODEOWNERS` assigns `/.atlas/policy.json`,
-   `/CODEOWNERS` **itself**, `/.github/workflows/` and `/harness/gates/` to `@HuGR-Labs/atlas-admins`
-   (step 3 below, landed 2026-08-02). **The team now exists** — measured 2026-08-02:
+   `/CODEOWNERS` **itself**, `/.github/workflows/`, `/harness/gates/` and `/harness/lib/` to
+   `@HuGR-Labs/atlas-admins`
+   (step 3 below, landed 2026-08-02; the fifth path added 2026-08-03 with the directory it names).
+   **The team now exists** — measured 2026-08-02:
    `gh api orgs/HuGR-Labs/teams` returns one team, `atlas-admins`, `privacy: closed` (visible, which is
    required — GitHub will not resolve a *secret* team in CODEOWNERS), holding `role: write` on the repo,
    with `gmhelmold` as its member. Consequently
-   `gh api repos/HuGR-Labs/atlas/codeowners/errors --jq '.errors'` returns **`[]`** — every one of the four
-   rules resolves. This paragraph previously said the team did not exist and every rule reported
-   `Unknown owner`; that was true when written and is now false.
+   `gh api repos/HuGR-Labs/atlas/codeowners/errors --jq '.errors'` returns **`[]`** — every one of the
+   rules resolving was measured on the four rules that existed then. This paragraph previously said the
+   team did not exist and every rule reported `Unknown owner`; that was true when written and is now
+   false. The fifth rule (`/harness/lib/`) is the same team on the same syntax as the fourth, so it
+   resolves for the same reason — but the endpoint reads the DEFAULT BRANCH, so that is an inference and
+   not a measurement until this lands on `master`, and it is written as one.
 2. **Enforcement — branch protection. PARTIALLY IN FORCE, and the gap is deliberate.** A rule now exists on
    `master`. Measured 2026-08-02:
 
@@ -107,6 +112,7 @@ every PR cannot ratify anything. That is the honest remaining blocker; everythin
    /CODEOWNERS           @HuGR-Labs/atlas-admins
    /.github/workflows/   @HuGR-Labs/atlas-admins
    /harness/gates/       @HuGR-Labs/atlas-admins
+   /harness/lib/         @HuGR-Labs/atlas-admins
    ```
 
    The fourth line was itself missed on the first cut, and found by a cold review — the same shape of gap
@@ -115,6 +121,16 @@ every PR cannot ratify anything. That is the honest remaining blocker; everythin
    path, and CI runs the neutered check and reports green. The workflow and the script it runs are one
    control and are owned together. The lesson generalizes: after adding an owned path, ask what the
    *content* of that path delegates to, and own that too.
+
+   The fifth line is that lesson applied one level further down, and it was added by the change that
+   created the directory it names (`work-packages/wp-gates-that-cannot-fail.md`). `harness/lib/` holds
+   what the gates DELEGATE to: the shared comment stripper, the reachability analyser, the drift
+   vocabulary, and layer-guard's workspace scanner. Every one of them is load-bearing for a gate's
+   verdict — `stripComments` returning `''` makes layer-guard see zero imports and print OK — so the same
+   argument that owns the gate owns its library. Note the direction of the risk: this line was not
+   closing a pre-existing hole but preventing one, because the extraction that moved that code from
+   `harness/gates/` to `harness/lib/` would otherwise have moved it silently OUT of the lock. A
+   refactor that relocates owned content is an ownership change even when it is a behaviour no-op.
 
 4. **Protect `master`** — **DONE 2026-08-02 except the two review fields, and the exception is deliberate.**
    - *Require a pull request before merging* — ✅ **on**, no direct pushes.
@@ -215,7 +231,8 @@ a null `required_status_checks` meant none of them was a merge condition. They w
 was trusted to read. **A gate is only as binding as the thing that requires it.**
 
 Same shape as the CODEOWNERS gap that made this document necessary, one level further out: an enforcement
-body whose *schedule* is owned (`/.github/workflows/`) and whose *content* is owned (`/harness/gates/`), but
+body whose *schedule* is owned (`/.github/workflows/`) and whose *content* is owned (`/harness/gates/` +
+`/harness/lib/`), but
 whose **verdict** was not consulted at the merge point. Owning all three is what closes it.
 
 It was also the one item that needed **no second human** — unlike the two review fields, a required check

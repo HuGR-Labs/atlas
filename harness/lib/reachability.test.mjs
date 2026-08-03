@@ -1,4 +1,4 @@
-// harness/gates/reachability.test.mjs — the reference-model analyser's OWN teeth.
+// harness/lib/reachability.test.mjs — the reference-model analyser's OWN teeth.
 //
 // The SEMANTICS of reachability: what counts as a caller, what a barrel does, and the value-vs-type split
 // the whole gate turns on. The LEXING battery — regex literals, nested interpolations, comments hiding a
