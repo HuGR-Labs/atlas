@@ -15,13 +15,21 @@
 //                          forbidden; it fails the gate so the move to dynamic projection (ARCH-8) is a
 //                          deliberate decision rather than a drift.
 //
-// Grounding: architecture fitness functions (Ford/Parsons/Kua; ArchUnit → ArchUnitTS). Deliberately
-// dependency-free and dist-free where it can be: the LAYER + BINDING checks read source and package
-// manifests, so they work before a build. Only the SURFACE check imports the built constants.
+// Grounding: architecture fitness functions (Ford/Parsons/Kua; ArchUnit → ArchUnitTS). DIST-free where it
+// can be: the LAYER + BINDING checks read source and package manifests, so they work before a build. Only
+// the SURFACE check imports the built constants.
+//
+// It is NOT dependency-free, and the earlier revision that claimed to be paid for it. Reading TypeScript
+// with regexes is what put a two-regex comment stripper in this file, and that stripper deleted real import
+// statements (see `stripComments`). Lexing is now delegated to the same parser-backed helper
+// `reachability.mjs` uses, which costs a `typescript` devDependency and buys back the ability to believe a
+// green run. Nothing here reads `dist`.
 
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+// The ONE comment stripper in this repo. Duplicating it here is what created the hole it now closes.
+import { stripComments } from './reachability.mjs';
 
 // The repo root, OVERRIDABLE so the gate's own test can point it at a fixture tree. Without this the gate
 // could only ever be mutation-tested by hand against the live repo — which is precisely the 'trust me' the
@@ -126,6 +134,22 @@ function workspaceGraph() {
  * dynamic form heavily in type positions, so a `from`-only scan misses real edges. A dynamic specifier that
  * is NOT a literal cannot be resolved statically and is refused outright in an inner layer — that is the
  * exact shape used to smuggle the undetectable edge.
+ *
+ * ── WHAT THE SPECIFIER GRAMMAR MUST ADMIT, because two shapes it rejected were live blind spots ───────
+ * The point of scanning source at all is stated above: a source import needs no manifest edit to resolve.
+ * So the source scan MUST see at least everything the manifest scan sees, or the check it exists to
+ * perform inverts — an edge becomes easier to hide in code than in a manifest. It did not, twice, and both
+ * were reproduced on a fixture where the plain form correctly failed with 4 violations:
+ *
+ *   DIGITS. The captured name was `[a-z][a-z-]*`, which rejects `0-9`, while `shortName` (which reads the
+ *   MANIFEST) accepts any `@atlas/*`. `e2e` and `e2e-blackbox` are real ranked packages in `RING_ORDER`.
+ *   `@atlas/e2e` in a manifest was graphed and failed the gate; the SAME edge written as a source import
+ *   scored exit 0, 0 violations. That asymmetry is precisely the smuggling shape, running backwards.
+ *
+ *   SUBPATHS. The specifier was matched WHOLE against the closing quote, so any deep import —
+ *   `@atlas/adapter-io/dist/src/index.js` — matched nothing at all and the edge was invisible. The
+ *   package identity is everything up to the first `/` after the scope; whatever follows is a file within
+ *   the SAME package and cannot change which package is being coupled to.
  */
 function sourceImports(pkgDir) {
   const out = { edges: new Set(), opaque: [] };
@@ -139,9 +163,16 @@ function sourceImports(pkgDir) {
       // Strip comments FIRST. This codebase is comment-dense and routinely NAMES other packages in prose
       // ("`@atlas/contracts`-owned", "would invert the DAG"). Scanning raw text turns every such mention
       // into a phantom edge — an earlier revision of this scanner reported 68 violations, all false.
-      const src = readFileSync(p, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-      // Only real module-specifier positions count as an edge.
-      const SPECIFIER = /(?:\bfrom\s*|\bimport\s*|\brequire\s*\(\s*|\bimport\s*\(\s*)['"]@atlas\/([a-z][a-z-]*)['"]/g;
+      //
+      // The stripper is the SHARED, parser-backed one. The two-regex form that used to sit on this line ran
+      // its BLOCK pass before its LINE pass, so a comment containing a glob (`packages/<star>/src`) opened a
+      // phantom block comment and deleted every import down to the next real closer — a forbidden edge under
+      // such a line scored exit 0. Reproduced on a fixture, pinned in layer-guard.test.mjs.
+      const src = stripComments(readFileSync(p, 'utf8'), entry.name);
+      // Only real module-specifier positions count as an edge. `[a-z0-9-]` and the optional `(?:\/…)?` tail
+      // are load-bearing, not tidiness — see the DIGITS and SUBPATHS paragraphs above.
+      const SPECIFIER =
+        /(?:\bfrom\s*|\bimport\s*|\brequire\s*\(\s*|\bimport\s*\(\s*)['"]@atlas\/([a-z][a-z0-9-]*)(?:\/[^'"]*)?['"]/g;
       for (const m of src.matchAll(SPECIFIER)) out.edges.add(m[1]);
       // A dynamic import whose specifier is not a string literal is statically unresolvable. HEURISTIC, and
       // stated as one: a captured `:` means this is a TypeScript signature for a METHOD NAMED `import`
@@ -232,13 +263,25 @@ function boundLegs() {
     note('ARCH-3 composition root: unbalanced braces in the legs binding block');
     return null;
   }
-  // Strip comments and template/string bodies BEFORE scanning: `wire.ts` is ~70% comment by volume, and a
-  // lone `}` in a comment truncates the block (false FAIL) while a lone `{` extends it past the literal
-  // (false PASS). Demonstrated on this tree.
-  const block = src
-    .slice(open, end)
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/\/\/[^\n]*/g, '');
+  // Strip comments BEFORE scanning the block: `wire.ts` is ~70% comment by volume, so a `}` or a `...` in
+  // prose is otherwise read as syntax.
+  //
+  // Same shared stripper, and it matters MORE here than in the import scan: the block is walked by INDEX
+  // (the top-level-spread detector counts brackets) and matched with a `^\s*` line anchor, so the stripper
+  // BLANKS comments rather than deleting them and every offset still addresses the same byte. The old
+  // two-regex form both mis-lexed AND shifted every offset after the first comment.
+  //
+  // Stripped from the WHOLE FILE, then sliced at the offsets computed above. Blanking is offset-preserving,
+  // so this is byte-for-byte the previous slice with the lexing corrected. Handing the lexer a mid-file
+  // FRAGMENT instead would start it inside a function body: the parser recovers, but its trivia boundaries
+  // would then be computed for a program that does not exist.
+  //
+  // WHAT THIS DOES NOT COVER, said plainly rather than implied by the strip's presence: `open`/`end` are
+  // still brace-matched over the RAW source a few lines up, so a stray brace inside a COMMENT can still
+  // move the block boundary. That is a separate defect from the one this strip closes, it was never
+  // addressed by the strip that used to live here either (the strip has always run AFTER the match), and
+  // it is left standing deliberately rather than folded into an unrelated fix.
+  const block = stripComments(src, 'wire.ts').slice(open, end);
 
   // A SPREAD or a COMPUTED key AT THE TOP LEVEL of the literal hides a leg from this scan while leaving it
   // fully invocable — the handler dispatches on `legs[tool]` with no membership check, so a spread-in leg is
