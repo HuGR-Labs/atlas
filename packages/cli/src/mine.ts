@@ -43,6 +43,8 @@ import type {
 } from '@atlas/genesis';
 import { createDiskStore, headSha, createSkeletonSource, gitSidecarTrust } from '@atlas/adapter-io';
 import { resolveProposer } from './mine-proposer.js';
+import { createProposerPool, makeVisitAll, proposerPoolAvailable } from './mine-pool.js';
+import type { ProposerPool, SiteVisit } from './mine-pool.js';
 import { composedGate } from './mine-gate.js';
 import type { CommitDecision, CommitRefusal, DiskStore } from '@atlas/adapter-io';
 import { upsert as knowledgeUpsert, normalizeCheck, primaryAnchorId, nodeKey } from '@atlas/knowledge';
@@ -210,7 +212,16 @@ function withDefaults(repoPath: string, deps?: Partial<MineDeps>): ResolvedDeps 
  *   - `changed`   — the INDEX-12 delta seam (unused by a single `genesis()` pass; supplied for the surface).
  *   - `handoffTo` — the S4 terminator (a no-op for a mine pass); `onRefusal` — see `MinePass`.
  */
-export function buildControllerDeps(repoPath: string, d: MineDeps, onRefusal?: (r: CommitRefusal) => void, watch?: PassWatch): ControllerDeps {
+export function buildControllerDeps(
+  repoPath: string,
+  d: MineDeps,
+  onRefusal?: (r: CommitRefusal) => void,
+  watch?: PassWatch,
+  pool?: ProposerPool,
+): ControllerDeps {
+  // THE ONE PER-SITE EXPRESSION — both `visit` and `visitAll` route through it, so neither can produce
+  // different facts for a site: there is exactly one place facts come from (see `SiteVisit`, mine-pool.ts).
+  const visitWith: SiteVisit = (cand, proposer) => runExtract([cand], SINGLE_SITE, { proposer, gate: d.gate });
   const mine = createMine({
     skeleton: d.skeleton,
     history: d.history,
@@ -301,12 +312,15 @@ export function buildControllerDeps(repoPath: string, d: MineDeps, onRefusal?: (
     // change needed for the per-site ledger to carry real abstentions instead of `unrecorded`.
     visit: (cand): ExtractResult => {
       try {
-        return runExtract([cand], SINGLE_SITE, { proposer: d.proposer, gate: d.gate });
+        return visitWith(cand, d.proposer);
       } catch (e) {
         if ((e as { name?: unknown } | null)?.name === 'ModelCommandError') watch?.onFault?.(e as Error);
         throw e;
       }
     },
+    // CONCURRENCY, ONLY WHEN A POOL WAS SUPPLIED (task #158): `visitAll` runs the batch's model calls in
+    // parallel, then admits each site here in rank order through the SAME `visitWith` the arm above uses.
+    ...(pool !== undefined ? { visitAll: makeVisitAll(pool, visitWith, watch?.onFault) } : {}),
     upsert: (incoming): readonly Fact[] => {
       // THE CANDIDATE SIDECAR, NEVER THE KNOWLEDGE PROJECTION. An unconditional persist carries no decision
       // to re-run and so cannot be made concurrency-safe, which is why this door is the only one left.
@@ -345,23 +359,34 @@ export function driveMinePass(repoPath: string, deps?: Partial<MineDeps>): MineP
     onFault: (e) => void (fault ??= e),
     onSeedsDropped: (n) => void (seedsDropped += n),
   };
-  const ports = buildControllerDeps(repoPath, d, (r) => void (refusal = r), watch);
-  const report = makeRunController(ports).genesis(repoPath, d.rev, d.budget, d.scope);
-  if (fault !== undefined) throw fault; // a misconfigured model is not a mining outcome
-  return {
-    report,
-    modelWired: resolved.modelWired,
-    seedsDropped,
-    ...(refusal !== undefined ? { refusal } : {}),
-    ...(resolved.promptDigest !== undefined ? { promptDigest: resolved.promptDigest } : {}),
-  };
+  // POOL ONLY WHEN THE PROPOSER CAME FROM OPERATOR CONFIG (task #158) — a fact about the seam, not a policy:
+  // a worker rebuilds its proposer via `resolveProposer(repoPath, env)`, pure in those two args, whereas an
+  // INJECTED proposer is a closure and cannot cross a thread. Third conjunct: the pool is a COMPILED
+  // artifact (a worker loads a file), so outside `dist/` there is nothing to start.
+  const usePool = resolved.modelWired && deps?.proposer === undefined && proposerPoolAvailable();
+  const pool = usePool ? createProposerPool(repoPath, d.env ?? process.env) : undefined;
+  try {
+    const ports = buildControllerDeps(repoPath, d, (r) => void (refusal = r), watch, pool);
+    const report = makeRunController(ports).genesis(repoPath, d.rev, d.budget, d.scope);
+    if (fault !== undefined) throw fault; // a misconfigured model is not a mining outcome
+    return {
+      report,
+      modelWired: resolved.modelWired,
+      seedsDropped,
+      ...(refusal !== undefined ? { refusal } : {}),
+      ...(resolved.promptDigest !== undefined ? { promptDigest: resolved.promptDigest } : {}),
+    };
+  } finally {
+    // `finally`, not a trailing call: `driveMinePass` THROWS on a captured `ModelCommandError`, and a pool
+    // left running there holds eight live threads and the CLI never exits.
+    pool?.close();
+  }
 }
 
 /** The `GenesisReport` alone (the write-set carrier) — the shape every existing caller and oracle uses. */
 export function driveMine(repoPath: string, deps?: Partial<MineDeps>): GenesisReport {
   return driveMinePass(repoPath, deps).report;
 }
-
 /** Run the one-time genesis bootstrap over a repo, projecting the outcome to a `CliVerdict` (CLI-4). A pass
  *  that seeds nothing renders WHY, read off its own report — `foldVerdict`/`mineWhyEmpty` (mine-render.ts).
  *

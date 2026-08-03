@@ -1550,3 +1550,61 @@ fixture. No new behaviour is asserted; flagged for the coverage ledger.
   byte-identical reproducibility (HARD RULE 5). Held-out coverage: **67/67 conformance-eligible REQ**, 5
   exempt+noted (GEN-16), 3 out-of-scope PBT (GEN-11) ⇒ the held-out GATE leg is AVAILABLE for the whole
   conformance set.
+
+## §GEN-CONC goldens — concurrency is unobservable, and spend is not hidden by it
+
+### SCN-GEN-CONC-1 — a concurrent pass reports byte-identically to a sequential one   (happy)
+source: REQ-GEN-CONC-2
+Given a 37-site frontier and a dispatch port that completes its batches in REVERSE order
+When the pass is run concurrently and again sequentially
+Then the two reports are byte-identical, and model calls issued equals sites used (37)
+teeth: breaks-on "the batch is folded in completion order rather than rank order"
+gen: conformance
+
+### SCN-GEN-CONC-2 — arrival order leaking into the batch result is caught   (guard)
+source: REQ-GEN-CONC-1
+Given a dispatch port that returns its results in COMPLETION order instead of the order it was handed them
+When the pass is run and compared against the sequential report
+Then the reports differ and the seeded facts come back in a different order
+teeth: breaks-on "the port's positional-alignment obligation is dropped and nothing detects it"
+gen: conformance
+
+### SCN-GEN-CONC-3 — a pool spends exactly the sequential budget   (guard)
+source: REQ-GEN-CONC-4
+Given a 30-site frontier under a ceiling of 22, which is not a multiple of the pool width
+When the pass is run concurrently
+Then budget spent, model calls issued and sites used are all 22, the report is byte-identical to sequential, and the 8-site cold tail is recorded with the ceiling named as its cause
+teeth: breaks-on "the batch width ignores the calls remaining, so a full batch is dispatched past the ceiling"
+gen: conformance
+
+### SCN-GEN-CONC-4 — the first fault BY RANK is the interruption   (guard)
+source: REQ-GEN-CONC-3
+Given ranks 3 and 6 both faulting inside ONE batch whose completion order is reversed
+When the pass is run concurrently
+Then the resume cursor is 2, rank 3 is the interruption, every later rank is recorded unvisited, and the report matches sequential apart from spend
+teeth: breaks-on "the fault that finished first by wall-clock is reported, so the cursor steps over a rank that never ran"
+gen: conformance
+
+### SCN-GEN-CONC-5 — resume after a concurrent interruption matches resume after a sequential one   (happy)
+source: REQ-GEN-CONC-3
+Given a 24-site frontier interrupted at rank 9 under both execution modes
+When each interrupted run is resumed from its own token
+Then both resumed reports agree apart from spend, spend accumulates across the two legs, and sites used agree exactly
+teeth: breaks-on "the resumed leg re-derives its cursor from arrival order and skips a site"
+gen: conformance
+
+### SCN-GEN-CONC-6 — the spend counter is present even when it is zero   (guard)
+source: REQ-GEN-CONC-5
+Given a malformed run that never obtained a frontier, and a run over an empty frontier
+When each report is inspected
+Then each carries the model-calls-issued field explicitly, set to zero
+teeth: breaks-on "the counter is spread conditionally, so a zero reads as the field never applying"
+gen: conformance
+
+### SCN-GEN-CONC-7 — the marginal-value halt is not pass-level on the mine path   (guard)
+source: REQ-GEN-CONC-1
+Given the mine driver, which calls the S2 extract with exactly one candidate and a ceiling of one
+When 40 sites are driven
+Then each call produces at most one outcome, so the trailing-20 admit window is never reachable and no scheduling-dependent halt exists
+teeth: breaks-on "the pool is placed inside the multi-candidate extract loop, where the halt becomes arrival-dependent"
+gen: conformance
