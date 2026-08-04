@@ -59,6 +59,40 @@ export interface GroundingEntry {
  *     mint). Bytes, not characters: the digest is over bytes, so a character index would address a
  *     different thing than the hash commits to.
  *
+ * ⚠ THE OFFSET UNIT IS BYTES, AND THE REPO'S OTHER OFFSET SUPPLY IS NOT. MEASURED (task #159, 2026-08-03),
+ * because a producer that gets this wrong cites the wrong bytes silently and the digest cannot catch it:
+ *   · `web-tree-sitter` 0.23.x reports `node.startIndex`/`endIndex` in **UTF-16 code units**, not bytes.
+ *   · `adapter-io/src/ast.ts` `src.slice(node.startIndex, node.endIndex)` is therefore CORRECT as written —
+ *     `String.prototype.slice` counts the same UTF-16 units tree-sitter counts. That line is not a defect.
+ *   · The divergence is between tree-sitter and THIS TYPE. Measured on a fixture whose anchored unit sits
+ *     after a `café ☕`/`🚀` prefix: the unit begins at UTF-16 offset 64 and at BYTE offset 71. Handing
+ *     tree-sitter's 64 straight to `mintSpan` yields a span whose read returns `unch";\nexport function …` —
+ *     off by 7 at both ends, and NOT refused, because `mintSpan`'s `splitsCodePoint` guard only rejects a
+ *     boundary that lands mid-code-point and 64 happens to be a valid one.
+ * SO: any producer supplying INTERIOR offsets (symbol-granular sites, #182) MUST convert UTF-16 → UTF-8
+ * byte offsets before minting. There is no such producer today — the only mint is whole-range (`0..length`),
+ * whose endpoints are unit-agnostic — which is exactly why the hazard is written here and not discovered later.
+ *
+ * WHAT `contentHash` COMMITS TO, also measured: the shipped chain is `readFileSync(fd,'utf8')` → JS string →
+ * `TextEncoder().encode(…)`, so the digest is over the UTF-8 RE-ENCODING of the decoded text, NOT over the
+ * file's bytes as stored. For well-formed UTF-8 (including astral characters and NFD-decomposed text, both
+ * measured) the round-trip is lossless and the two agree byte-for-byte. For MALFORMED UTF-8 they do not — a
+ * lone `0xFF` decodes to U+FFFD and re-encodes 2 bytes longer — so a reader presenting the raw file bytes
+ * gets `undefined`. That is fail-closed and correct in direction, but it means a reader must present the
+ * same decode-then-encode bytes the minter did. `TextEncoder` does NOT Unicode-normalize, so the KERNEL-1
+ * NFC rule (and the #106 non-injectivity it buys) does not reach this digest.
+ *
+ * PER-`StructRef.kind` SEMANTICS — all five, no gaps (task #159):
+ *   · `symbol` — a real sub-range of the file's bytes: the symbol's own extent. REQUIRED once symbol-granular
+ *     sites exist (#182); the byte conversion above is a PRE-REQUISITE for it.
+ *   · `block`  — as `symbol`: the block's extent, a real sub-range.
+ *   · `file`   — **ABSENT.** The unit IS the file, so a `0..len` span carries no information the anchor does
+ *     not already carry, and storing one invites a reader to treat "the whole file" as a located citation.
+ *     Nothing may emit `0..0`, and nothing may emit a sentinel; a producer that cannot locate omits the field.
+ *   · `repo` / `project` — REQUIRED where the anchor is what GROUND-12 says it is: a policy artifact's
+ *     heading/section BLOCK, which is a genuine sub-range of that artifact's bytes. A `repo` anchor that
+ *     resolved to a whole file follows the `file` rule instead — absent.
+ *
  * NOT THE DRIFT ORACLE, on the same terms as `displayLines` (GROUND-1). Nothing in `isGrounded` or
  * `driftDetect` reads this field, and their verdicts are invariant under adding, removing or corrupting
  * it. A span is a POINTER INTO evidence; the oracle stays `anchor.subtreeHash`.

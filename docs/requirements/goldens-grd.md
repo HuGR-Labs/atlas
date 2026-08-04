@@ -641,6 +641,24 @@ teeth: breaks-on "the read verifies only the sliced bytes — an edit elsewhere 
 held_out: true
 gen: conformance   # independent-data leg of SCN-GROUND-1f-1
 
+### REQ-GROUND-1g — the offsets are UTF-8 bytes, and a whole-file anchor carries no span   (guard)   <!-- ADDED 2026-08-03, task #159 -->
+
+### SCN-GROUND-1g-1 — a multi-byte character BEFORE the unit does not move the citation   (guard)
+source: REQ-GROUND-1g
+Given `B_uni` — a source file whose anchored unit `export function validaçãoDePagamento` is preceded by `// café ☕` and `const emoji = "🚀 launch"`, so that the unit's UTF-16 offset (64) and its UTF-8 byte offset (71) differ by 7
+When the unit is addressed by BYTE offset and read back, and separately when the same unit is addressed by the UTF-16 offset `web-tree-sitter` reports for it
+Then the byte-addressed read returns the unit byte-for-byte, and the UTF-16-addressed read returns a DIFFERENT, shifted slice that is NOT refused — the digest cannot detect a wrong-unit offset, so the conversion is the producer's obligation
+teeth: breaks-on "the fixture is ASCII, where all three counting systems agree and the whole hazard is invisible" AND on "`splitsCodePoint` is assumed to catch a mis-unit offset — it only rejects a boundary that lands mid-code-point"
+gen: conformance   # both readings executed against the built `bindSpan`; the shifted slice is asserted, not merely shown unequal
+
+### SCN-GROUND-1g-2 — a `file` anchor carries no span, and the digest survives the UTF-8 round trip   (guard)
+source: REQ-GROUND-1g
+Given the entry a `file`-kind site produces, and byte sequences that are well-formed UTF-8 (ASCII, astral `🚀`, NFD-decomposed `café`) alongside one that is malformed (a lone `0xFF`)
+When the entry's `span` is inspected, and a span minted over the decoded-then-re-encoded bytes is read back against the RAW file bytes
+Then the `file` entry has no `span` key at all — not `0..len`, not `0..0`, not a sentinel — and the read succeeds byte-identically for every well-formed case while REFUSING the malformed one
+teeth: breaks-on "a whole-file span is emitted as a harmless default, asserting a located citation nobody made" AND on "the digest is assumed to be over the file's stored bytes — it is over their UTF-8 re-encoding, which differs for malformed input"
+gen: conformance   # the round-trip legs are measured against the built module, not asserted from the docstring
+
 ### SCN-GROUND-2a-2 — real iff ≥1 entry AND every entry non-empty (held-out)   (happy)
 source: REQ-GROUND-2a
 Given `g_full2 = {E_tax(sh-tax-01), E3(sh-tax-01b)}` (both non-empty) and `g_partial2 = {E_tax(sh-tax-01), E_empty2("")}` (one entry has an empty subtreeHash)
