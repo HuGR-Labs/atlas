@@ -121,14 +121,16 @@ row declaring `T0`.
 - **`atlas:mined` is a namespace, not an owner.** Mining has no actor, so a mined node is owned by *nobody*
   until `.atlas/policy.json` grants that scope — granting it **appoints a curator**. Until then
   `actorInScope` denies, and every promotion is correctly refused `unauthorized`.
-- **`T2` is the candidate class, and it is BOUNDED OUT OF THE READ PACK.** `atlas query` applies
-  `TOOLS-6: bounded read projection (tier>=T1)`. So a promoted mined fact is **addressable and durable, not
-  served**: [`query`](../reference/commands/query.md) will not show it and
-  [`node`](../reference/commands/node.md) will. This is measured, not inferred — it is the state
-  [`promote`](../reference/commands/promote.md) documents with verbatim output, and story S26 pins it in
-  both directions.
-- **Do not plan a mine → promote → query loop.** Getting a mined fact into the served pack means a fact at
-  `T1` or stricter, which no mined candidate is. That is a re-classification, it is an explicit signed act
+- **`T2` is the candidate class, and it is bounded out of the GOVERNING band only.** This bullet used to say
+  `T2` was bounded out of the read pack entirely, citing the CLI's then-current
+  `TOOLS-6: bounded read projection (tier>=T1)`. [ADR-0013](../adr/ADR-0013-the-pack-has-two-bands-governing-and-advisory.md)
+  split the pack into **two separately bounded bands**, and the advisory band is exactly `T2` — so a promoted
+  mined fact IS served by [`query`](../reference/commands/query.md), on an `advisory` row under its own verb
+  and its own cap, and never on an `inv` row. Measured through the real promotion door, not inferred; the
+  verbatim output is on [`promote`](../reference/commands/promote.md).
+- **A mine → promote → query loop reaches the ADVISORY band and stops there.** Getting a mined fact into the
+  **governing** band means a fact at `T1` or stricter, which no mined candidate is. That is a
+  re-classification, it is an explicit signed act
   ([ADR-0009](../adr/ADR-0009-re-classification-is-an-explicit-signed-act.md)), and it has no door yet.
 
 The contract clause is therefore two-part and both parts are checkable: **every row carries a usable

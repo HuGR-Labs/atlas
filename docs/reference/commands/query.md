@@ -1,7 +1,9 @@
 # `atlas query`
 
-Ask what Atlas holds about a scope — a file, folder, module or crate — and get back a bounded pack of
-`tier≥T1` invariants with a `stale` flag. Read-only: it opens no write door.
+Ask what Atlas holds about a scope — a file, folder, module or crate — and get back a bounded pack in **two
+separately bounded bands**: `tier≥T1` **governing** invariants, and a separately capped **advisory** band of
+`T2` machine proposals no ratifier saw. Every row carries its own freshness verdict, and the pack carries a
+`stale` flag of its own. Read-only: it opens no write door.
 
 This page describes the **CLI** command `atlas query`. The MCP tool is `atlas-query`; both route through the
 same handler, so the same input yields the same verdict — but see *Transport differences* below, the two
@@ -25,18 +27,28 @@ After one grounded fact has been emitted against `src/greet.ts`:
 ```
 $ atlas query src
 status: ok
-next: re-ground stale packs before trusting; scope must be a path string
-invariant: TOOLS-6: bounded read projection (tier>=T1)
+next: re-ground stale packs before trusting; an advisory row is a machine proposal no ratifier saw — check its per-row freshness; scope must be a path string
+invariant: TOOLS-6: bounded read projection, two bands (governing tier>=T1 + separately capped advisory T2), every row carrying its own freshness
 data:
-  inv T1 f9517988f330a775ffc767c072fa01e52f38642220442916ca6b9b8c20bef532: greet returns a non-empty string
+  inv T1 f9517988f330a775ffc767c072fa01e52f38642220442916ca6b9b8c20bef532 [FRESH]: greet returns a non-empty string
+  advisoryDropped: 0
   stale: false
   tokenEstimate: 32
 # exit 0
 ```
 
-- `inv <tier> <nodeKey>: <claim>` — one line per invariant. The identifier is the **nodeKey**, which is what
-  [`link`](./link.md), [`doctor why`](./doctor.md) and `doctor reground` take. It is *not* the address
-  [`node`](./node.md) takes — see that page.
+- `inv <tier> <nodeKey> [<freshness>]: <claim>` — one line per **governing** invariant (`tier≥T1`). The
+  identifier is the **nodeKey**, which is what [`link`](./link.md), [`doctor why`](./doctor.md) and
+  `doctor reground` take. It is *not* the address [`node`](./node.md) takes — see that page.
+- `advisory <tier> <nodeKey> [<freshness>]: <claim>` — one line per row of the **advisory** band, which is
+  exactly `T2` and separately capped ([ADR-0013](../../adr/ADR-0013-the-pack-has-two-bands-governing-and-advisory.md)).
+  Its own verb, never interleaved with `inv`: an advisory row is a machine proposal no ratifier saw. This is
+  where a promoted [`mine`](./mine.md) candidate surfaces — see [`promote`](./promote.md).
+- `[<freshness>]` is that **row's own** `FRESH`/`DRIFTED`/`STALE` verdict, re-derived on the read. It is not
+  the pack-level `stale` below and is not computed from it — two questions, two answers (ADR-0002 amended).
+  A row from a door that predates the field renders `[?]`, never `[FRESH]`.
+- `advisoryDropped: <n>` — how many advisory rows the advisory cap cut. Printed unconditionally, so `0` is a
+  measured fact rather than a line you have to notice is missing.
 - `stale: true` means *do not trust this pack until it is re-grounded*. Read the next section for exactly
   what it is computed from — it is a watermark, not a live re-derivation.
 - `tokenEstimate` is an advisory size figure, not a budget the tool enforces.
@@ -63,9 +75,10 @@ A scope with nothing in it is an honest empty pack, not an error:
 ```
 $ atlas query src
 status: ok
-next: re-ground stale packs before trusting; scope must be a path string
-invariant: TOOLS-6: bounded read projection (tier>=T1)
+next: re-ground stale packs before trusting; an advisory row is a machine proposal no ratifier saw — check its per-row freshness; scope must be a path string
+invariant: TOOLS-6: bounded read projection, two bands (governing tier>=T1 + separately capped advisory T2), every row carrying its own freshness
 data:
+  advisoryDropped: 0
   stale: false
   tokenEstimate: 0
 # exit 0
@@ -98,8 +111,8 @@ that would read as "nothing is known here":
 ```
 $ atlas query does/not/exist
 status: error
-next: re-ground stale packs before trusting; scope must be a path string
-invariant: TOOLS-6: bounded read projection (tier>=T1)
+next: re-ground stale packs before trusting; an advisory row is a machine proposal no ratifier saw — check its per-row freshness; scope must be a path string
+invariant: TOOLS-6: bounded read projection, two bands (governing tier>=T1 + separately capped advisory T2), every row carrying its own freshness
 reason: cover: no covering territory for scope does/not/exist
 # exit 1
 ```

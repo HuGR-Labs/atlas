@@ -174,8 +174,12 @@ emit T0 → CREATE ; emit T2 → UPDATE ; node now points at the T2 bytes ; supe
 ```
 
 A `T0` fact admitted only with the billy token **could be displaced by a `T2` advisory carrying no token at
-all**, at the same `(anchor, slot)`. And because `atlas-query` bounds `T2` out of reads, the T0 invariant
-then silently stopped appearing for its scope, with no refusal on any transport.
+all**, at the same `(anchor, slot)`. And because `atlas-query` bounded `T2` out of reads entirely when this
+was written, the T0 invariant then silently stopped appearing for its scope, with no refusal on any
+transport. [ADR-0013](../adr/ADR-0013-the-pack-has-two-bands-governing-and-advisory.md) has since given the
+pack an advisory band that DOES serve `T2` — which does not repair this, it only changes how the damage
+reads: the displaced T0 invariant still leaves the **governing** band, and what remains at its `(anchor,
+slot)` is an unratified proposal wearing the `advisory` verb.
 
 The mechanism has a name: **`tier` is an author-supplied argument that selects which gate runs.** In the
 literature this is the confused deputy, and the current framing of it for agent systems is precise —
