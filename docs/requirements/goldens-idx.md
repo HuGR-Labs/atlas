@@ -1064,19 +1064,35 @@ Then it **FAILs** the build (not merely schedules the `functional` axis)
 teeth: breaks-on "crossing the ceiling in `territory:net` only logs a warning / schedules the `functional` axis and the build stays green — the T0 gate has no teeth"
 gen: conformance   # held-out; independent T0 territory
 
+### REQ-INDEX-17a — dependency axis addresses, does not commit   (guard, #191)
+
+### SCN-INDEX-17a-1 — editing a file's content moves its spatial hash but not its dependency-axis hash   (guard, #191)
+source: REQ-INDEX-17a
+Given a file `cas.ts` present on both the `spatial` and `dependency` axes of a built index
+When `cas.ts`'s content is edited and the index is rebuilt
+Then `cas.ts`'s `spatial`-axis `subtreeHash` CHANGES, but its `dependency`-axis node's `subtreeHash` stays
+  byte-identical — it equals `asSubtreeHash(nodeHashOfPath('cas.ts'))`, a constant of the PATH, both before
+  and after the edit
+teeth: breaks-on "the dependency axis rolls up child CONTENT the way the spatial axis does — the leaf's
+  `subtreeHash` moves on a content edit, so an anchor resolved there could witness drift (the exact
+  defeatability class closed by #98) and #189's 72.3%-fabricated-edge defect would again have had a spec
+  with no stated exception to catch it against"
+gen: conformance
+
 ---
 
 ## Coverage ledger (S3 completeness facet)
 
-- **REQ coverage:** 57/57 REQ have ≥1 SCN.
-- **Guard coverage:** 25/25 unwanted-behaviour / If-then / MUST-NOT REQ have a guard SCN —
-  1b, 2c, 3b, 3c, 3e, 5b, 5c, 6b, 7a, 9b, 10c, 12d, 12f, 12j, 12k, 13b, 13c, 13f, 14d, 14e, 14f, 15b, 15d, 15e, 16c.
-- **Teeth (Gate 3):** 57/57 SCN name the exact mutant of their REQ they flip to BROKEN on; none vacuous. The
+- **REQ coverage:** 58/58 REQ have ≥1 SCN.
+- **Guard coverage:** 26/26 unwanted-behaviour / If-then / MUST-NOT REQ have a guard SCN —
+  1b, 2c, 3b, 3c, 3e, 5b, 5c, 6b, 7a, 9b, 10c, 12d, 12f, 12j, 12k, 13b, 13c, 13f, 14d, 14e, 14f, 15b, 15d, 15e, 16c, 17a.
+- **Teeth (Gate 3):** 58/58 SCN name the exact mutant of their REQ they flip to BROKEN on; none vacuous. The
   PBT law witnesses are interesting (a real 5-node reverse-closure with blast-radius 4 for the INDEX-12
   boundedness/`maxHops=2`/`state-suspect` cluster; a genuine two-overlapping-glob resolution for INDEX-14;
   an order-swapped child list for INDEX-2 determinism — no antecedent-failure passes).
-- **gen histogram:** PBT 21 (2a/2b/2c/8a/12a–12k/14a–14f) · conformance 36 (1a/1b/3a/3b/3c/3d/3e/4a/4b/5a/5b/5c/
-  6a/6b/7a/9a/9b/10a/10b/10c/11a/11b/13a/13b/13c/13d/13e/13f/15a/15b/15c/15d/15e/16a/16b/16c) · residue 0.
+- **gen histogram:** PBT 21 (2a/2b/2c/8a/12a–12k/14a–14f) · conformance 37 (1a/1b/3a/3b/3c/3d/3e/4a/4b/5a/5b/5c/
+  6a/6b/7a/9a/9b/10a/10b/10c/11a/11b/13a/13b/13c/13d/13e/13f/15a/15b/15c/15d/15e/16a/16b/16c/17a) · residue 0.
+  (17a and 13c-3 are out-of-band hotfix goldens — no held-out `-2` fixture, per the `wp-fix-*` convention.)
 - **DEFINE-parametric SCN:** 1 (SCN-INDEX-15a-1 — optional-feature, gated on owner-generation being enabled;
   SHOULD-vs-MUST mandate is a DEFINE-seat dependency).
 - **Held-out fixtures (Wave H · execution-GATE held-out leg):** 35 added — one `held_out: true` second fixture

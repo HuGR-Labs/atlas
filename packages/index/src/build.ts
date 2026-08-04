@@ -203,6 +203,12 @@ function deriveEdges(scip: ScipOutput): DepEdge[] {
  * The freshness oracle therefore MUST NOT resolve an anchor here — grounding/src/drift.ts resolves over
  * the content-committing axes only, and refuses any node whose hash is its own key. If an anchor could be
  * resolved on this axis, an author could pick one and mint a fact that CAN NEVER DRIFT.
+ *
+ * This is not a local implementation quirk that happens to agree with the docs — it is the frozen
+ * declaration in `docs/spec/atlas.md` §3.5 ("The dependency axis ADDRESSES; it does not COMMIT … the
+ * axis is not a freshness oracle, and an anchor on it is not a grounding") and `docs/reference/
+ * atlas-index.md` INDEX-17, both citing this exact function as the built mechanism (#191, closing the
+ * shared root cause of #98/#189 — an unqualified §3.5 rule that had no stated exception).
  */
 function dependencyAxis(edges: readonly DepEdge[]): IndexNode {
   const nodes = new Set<string>();

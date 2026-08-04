@@ -145,7 +145,8 @@ An object is cross-indexed on every applicable axis but stored **once** in the C
 - **Dual rollup (v1 graph-v1 §3).** `rId` captures *shape* (node added / removed / moved); `rState` captures
   *state* (a status flip or drift). A `Delta` says which changed and where — re-checks are **bounded to the
   changed buckets**, never the whole store. A change re-hashes only the affected leaf→root path **on the
-  relevant axis**; unaffected subtrees keep both hashes, so facts anchored there stay FRESH.
+  relevant axis**; unaffected subtrees keep both hashes, so facts anchored there stay FRESH. **The
+  dependency axis is the exception to this paragraph** — see INDEX-17.
 - **Composition.** One object hangs off all three — its file (spatial), owner+tier (territory), deps
   (dependency). A query picks the axis that fits; the object is never duplicated.
 
@@ -155,6 +156,7 @@ An object is cross-indexed on every applicable axis but stored **once** in the C
   and discovery across every axis. There MUST NOT be a separate discovery structure or staleness pass.
 - **INDEX-2 Merkle rollup.** Each node's rollup MUST be the BLAKE3 rollup of its children. An edit MUST
   re-hash only the leaf→root path on the affected axis; every unaffected subtree MUST keep its hash.
+  (This is the content-committing model; the dependency axis does not participate in it — see INDEX-17.)
 - **INDEX-3 Deterministic, mechanical build.** Every axis (structural tree, territory tree, `depends-on`
   graph + blast radius) MUST be mechanically derived from the real file tree / import graph via a
   per-language **SCIP indexer** (SCIP-primary; a separate installed, version-pinned binary per language),
@@ -204,6 +206,12 @@ An object is cross-indexed on every applicable axis but stored **once** in the C
   published health metric** on every rollup, and the T0 ceiling (`unresolved-edges / total-edges > 15%`) MUST
   be enforced as a **standing gate from day one** — crossing it in a T0 territory MUST fail the gate, not
   merely schedule the `functional` axis. (The `coChanged` auto-union backstop is INDEX-13.)
+- **INDEX-17 The dependency axis ADDRESSES; it does not COMMIT (#191, closes #98/#189's shared root cause).**
+  A dependency-axis node's `subtreeHash` MUST be the identity of its path (`id({file: path})`) and MUST
+  carry no content, so INDEX-2's leaf-to-root re-hash model MUST NOT be read as applying to it: the axis
+  MUST NOT be treated as a freshness oracle, and an anchor resolved on it MUST NOT be treated as a
+  grounding. (Built: `packages/index/src/build.ts` `dependencyAxis`/`nodeHashOfPath`; enforced at the
+  freshness door by `packages/grounding/src/drift.ts` `resolveCurrent`, which does not scan this axis.)
 
 ## Surface / API
 
@@ -249,3 +257,6 @@ put(object): Hash                                // content-address ANY object (
     the generated one; `tier` is never generated (stays human-ratified).
 12. **INDEX-16** — A T0 territory whose `unresolved/total` crosses 15% fails the standing coverage gate at
     build time (not deferred to a later axis); the ratio is readable on the territory rollup.
+13. **INDEX-17** — Editing a file's content changes its `spatial`-axis `subtreeHash` but leaves its
+    `dependency`-axis node's `subtreeHash` byte-identical (it is `asSubtreeHash(id({file: path}))`, a
+    constant of the path); an anchor resolved against the dependency axis is never treated as FRESH.

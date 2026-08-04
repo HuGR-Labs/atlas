@@ -10,9 +10,10 @@ import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { canonicalForm, id } from '@atlas/kernel';
+import { canonicalForm, id, asSubtreeHash } from '@atlas/kernel';
+import type { SubtreeHash } from '@atlas/contracts';
 import type { FileTree, ScipOutput, DepEdge, Axes } from '@atlas/index';
-import { build } from '../src/build.js';
+import { build, nodeHashOfPath, escapeKeyComponent } from '../src/build.js';
 
 const decode = (b: Uint8Array): string => new TextDecoder().decode(b);
 const canon = (a: Axes): string => decode(canonicalForm(a));
@@ -153,6 +154,53 @@ describe('INDEX-3 — mechanical SCIP-derived build (visible goldens)', () => {
     // Post-fix: no edge at all, on EITHER side (not even `unresolved` — a local symbol is excluded from
     // both the defs loop and the reference loop, never merely left unresolved).
     expect(edges).toEqual([]);
+  });
+
+  it('SCN-INDEX-17a-1 (#191): dependency axis ADDRESSES, does not COMMIT — content moves the spatial hash, never the dependency hash', () => {
+    // Same tree shape, same SCIP edges — ONLY `file:cas.ts`'s content differs between the two builds.
+    const edited: FileTree = {
+      ...tree,
+      children: tree.children.map((c) => ({
+        ...c,
+        children: c.children.map((m) => ({
+          ...m,
+          children: m.children.map((f) =>
+            f.path === 'file:cas.ts'
+              ? { ...f, children: f.children.map((b) => ({ ...b, content: `${b.content}-EDITED` })) }
+              : f,
+          ),
+        })),
+      })),
+    };
+    const before = build(tree, scip);
+    const after = build(edited, scip);
+
+    // THE CONTRAST — the spatial axis DOES commit to content: cas.ts's file node and every ancestor
+    // re-hash on the edit (the leaf-to-root re-hash spec §3.5 describes).
+    const spatialKey = escapeKeyComponent('file:cas.ts'); // mintKey escapes ':' — see build.ts `mintKey`
+    const spatialFile = (axes: Axes): SubtreeHash | undefined =>
+      axes.spatial.children[0]?.children[0]?.children.find((n) => n.key === spatialKey)?.subtreeHash;
+    expect(spatialFile(before)).not.toBe(spatialFile(after));
+    expect(before.spatial.subtreeHash).not.toBe(after.spatial.subtreeHash); // the root re-hashes too
+
+    // THE DECLARATION — the dependency axis does NOT commit: `file:cas.ts`'s dependency-axis node is keyed
+    // by `nodeHashOfPath('file:cas.ts')`, a constant of the PATH, so its subtreeHash is identical before
+    // and after the content edit, and equals `asSubtreeHash(that same key)` on BOTH sides — never folding
+    // the file's bytes at all (the exact property spec/atlas.md §3.5's new bullet and reference/
+    // atlas-index.md's INDEX-17 declare).
+    const depKey = String(nodeHashOfPath('file:cas.ts'));
+    const depLeaf = (axes: Axes) => axes.dependency.children.find((n) => n.key === depKey);
+    const beforeLeaf = depLeaf(before);
+    const afterLeaf = depLeaf(after);
+    expect(beforeLeaf).toBeDefined();
+    expect(afterLeaf).toBeDefined();
+    expect(afterLeaf?.subtreeHash).toBe(beforeLeaf?.subtreeHash);
+    expect(String(beforeLeaf?.subtreeHash)).toBe(String(asSubtreeHash(depKey)));
+    expect(String(afterLeaf?.subtreeHash)).toBe(String(asSubtreeHash(depKey)));
+    // teeth: a `dependencyAxis` that folded `node.content` into the leaf's subtreeHash the way `hierarchy`'s
+    // `rollupHash` does (the counterfactual the declaration forbids) would move `afterLeaf.subtreeHash` off
+    // `beforeLeaf.subtreeHash` on this same edit — this is the exact regression #98 closed and #189
+    // measured the consequence of; a spec with no stated exception is what let both happen unnoticed.
   });
 
   it('rollup order-independence: reordering children leaves the parent subtreeHash unchanged', () => {
