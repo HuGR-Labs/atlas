@@ -413,6 +413,22 @@ Then the primary-only mechanical drift is `mechanical`, `semantic` is empty, `re
 teeth: breaks-on "the shared classifier answers `semantic` when NO entry drifted, or keys semantic on anything other than a citation that re-derives nowhere — either turns the merge gate into a blanket block on drifted-but-alive facts"
 gen: conformance
 
+### SCN-ADAPTER-9f-1 — a secondary-only drift is surfaced end-to-end, through the real merge gate   (happy, added 2026-08-03)
+source: REQ-ADAPTER-9f
+Given a durable knowledge base holding four facts driven through the real `composeRuntime` handler at `mergeBase = A`: `sec-mech` (primary fresh, secondary renamed with a byte-identical body), `sec-rot` (primary fresh, secondary rewritten away), `lead-mech` (primary renamed, secondary fresh) and `mixed` (primary renamed AND secondary rewritten away)
+When `atlas-reconcile` classifies the run
+Then all FOUR facts are surfaced (not just `lead-mech` and `mixed`): `mechanical == ['sec-mech','lead-mech']`, `semantic == ['sec-rot','mixed']`, `reauthorCount == 2`, `exitCode == 2`
+teeth: breaks-on "`driftAt` reads `f.grounding.entries[0]` alone — `sec-mech` and `sec-rot`'s primaries are intact, so neither ever reaches the classifier: `mechanical == ['lead-mech']`, `semantic == ['mixed']`, `reauthorCount == 1` (MEASURED pre-fix through the shipped path)"
+gen: conformance
+
+### SCN-ADAPTER-9f-2 — single-entry facts and a rot-free base are unaffected   (guard, added 2026-08-03)
+source: REQ-ADAPTER-9f
+Given (a) every pre-existing single-entry `DriftSource`/`atlas-reconcile` fixture, unchanged, and (b) the SAME four-fact repository above with `sec-rot` and `mixed` — the two rotted-secondary facts — absent from the durable projection
+When `DriftSource.driftAt`/`atlas-reconcile` runs
+Then (a) is BYTE-IDENTICAL to its pre-widening result (a single-entry grounding's only entry IS entry 0) and (b) reports `mechanical == ['sec-mech','lead-mech']`, `semantic == []`, `reauthorCount == 0`, `exitCode == 0`
+teeth: breaks-on "the widened loop reports a pair for a fact whose entries never drifted (an over-eager detector that surfaces everything), or a single-entry grounding's result changes shape — either moves a merge gate that was never supposed to move"
+gen: conformance
+
 ---
 
 ## REQ-ADAPTER-10 — forge carries the atlas

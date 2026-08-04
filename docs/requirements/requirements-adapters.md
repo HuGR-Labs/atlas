@@ -210,6 +210,18 @@ implementation, never a second copy of the question — two copies are free to d
 exit code is the one a merge depends on. A drifted citation that re-derives NOWHERE therefore blocks the gate
 (exit 2) whichever entry of the grounding carries it."
 
+### REQ-ADAPTER-9f — detection spans every cited anchor, not the primary alone   (added 2026-08-03, WP-FIX-DRIFTAT-ENTRIES)
+source: INV-ADAPTER-9 @ reference/atlas-adapters.md#adapt-git-2
+When `DriftSource.driftAt` decides which facts have drifted across the merge base, that decision shall be taken
+over every grounding entry — the same set classification ranges over (REQ-ADAPTER-9c) — and not over the primary
+anchor alone. The anchor pair `driftAt` reports for a surfaced fact (the frozen `DriftItem` single pair) shall
+be the FIRST entry, in recorded order, that actually drifted.
+normative-clause: "`DriftSource.driftAt` MUST surface a fact when ANY of its grounding entries has drifted between
+the merge base and the topic tip, not `entries[0]` alone — a fact whose PRIMARY anchor is intact and whose
+NON-PRIMARY citation has rotted MUST still be surfaced. The `anchorWas`/`anchorNow` pair reported for a surfaced
+fact MUST be the FIRST entry (in recorded order) that drifted, so the pair a caller is shown always names an
+anchor that actually moved. `DriftItem` (atlas-tools:24) is NOT widened — it stays one pair."
+
 ### REQ-ADAPTER-10a — forge carries the atlas
 source: INV-ADAPTER-10 @ reference/atlas-adapters.md#adapt-git-3
 The Forge shall write the provenance trailer, a `refs/notes/orchestra` note, and the PR projection onto a real host.

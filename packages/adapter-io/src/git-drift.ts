@@ -106,7 +106,73 @@ function resolveMergeBase(repoPath: string, rev: string): string {
  * the path-keyed diff produced no in-place drift BUT the fact's RECORDED content re-located to a DIFFERENT
  * qualifiedPath at HEAD, emit a drift pair whose `anchorNow` is that new location (mirrors doctor surfacing
  * a moved anchor). Deterministic + TOTAL: no content resolver / content gone / content unmoved ⇒ no pair.
+ *
+ * ── #185: DETECTION NOW SPANS EVERY ENTRY, NOT JUST `entries[0]` ─────────────────────────────────────────
+ * THE THIRD INSTANCE OF THE ENTRY-0 ASYMMETRY, AND THE WORST OF THE THREE. `doctor-source.ts`'s classifier
+ * and the composition root's merge-gate predicate BOTH used to read `entries[0]` alone — those gave a WRONG
+ * ANSWER (a rotted secondary misclassified `mechanical`). This one, here, used to give NO ANSWER: `driftAt`
+ * is what DECIDES which facts reach the classifier at all, so a fact whose PRIMARY anchor was intact and
+ * whose NON-PRIMARY citation had rotted away was never surfaced as a pair — not detected, not classified, not
+ * reported, `exitCode 0`. Total invisibility, one layer above where the classifier fix could reach (measured
+ * in `test/reconcile-entry-symmetry.test.ts`'s `MEASURED GAP` case, closed by `test/git-drift-entries.test.ts`).
+ *
+ * `doctor-source.ts`'s `isMechanicalAt`/`driftedEntries` do NOT fit this call site and are deliberately NOT
+ * reused here: they decide mechanical-vs-semantic by asking, PER ENTRY, whether it re-derives at ONE target
+ * rev (`revIndex.reDerives`, a conjunction over a single `Axes` snapshot) — a CLASSIFICATION question, already
+ * fixed and unchanged by this card (frozen decision #4). `driftAt` asks a structurally different, DETECTION
+ * question — whether an entry's anchor differs between TWO revs (`baseSha` vs `topicSha`), over the injected
+ * `resolveAnchorAt`/`resolveBySubtreeAt` pair rather than a `RevIndex`/`reDerives` seam — and `DriftSource`'s
+ * frozen deps carry no `RevIndex` for it to call through. So this is not a third copy of one predicate to
+ * collapse; it is the SOLE existing per-entry-diff body (previously restricted to entry 0), widened in place
+ * to loop over every entry via `entryDrift` below rather than duplicated.
+ *
+ * `DriftItem` stays FROZEN (atlas-tools:24, one anchor pair) — never widened. The pair reported for a fact is
+ * now the FIRST DRIFTED entry (`entryDrift` in recorded order), not `entries[0]` — so a human is shown an
+ * anchor that actually moved, never a primary that never moved. A single-entry grounding is BYTE-IDENTICAL to
+ * before (the loop's first — and only — entry is entry 0), pinned by every pre-existing test in this suite.
  */
+
+/** One entry's drift verdict between `baseSha` and `topicSha` — the DECOMPOSED per-entry unit `driftAt` loops
+ *  over every grounding entry with, instead of `entries[0]` alone. `undefined` ⇒ nothing to say about THIS
+ *  entry: no baseline anchor at `baseSha` (the honest per-fact skip, {@link UnresolvableMergeBaseError}'s doc),
+ *  or the entry is intact at `topicSha` (same path, unchanged content, or a genuine — not phantom — rename).
+ *  Total: never throws, mirrors the pre-widening inline body exactly for one entry. */
+function entryDrift(
+  deps: {
+    resolveAnchorAt: (rev: string, qualifiedPath: string) => StructRef | undefined;
+    resolveBySubtreeAt?: (rev: string, subtreeHash: string) => StructRef | undefined;
+  },
+  baseSha: string,
+  topicSha: string,
+  entry: GroundedFact['grounding']['entries'][number],
+): { readonly anchorWas: StructRef; readonly anchorNow: StructRef } | undefined {
+  const qp = entry.anchor.qualifiedPath;
+  // THIS `undefined` MEANS ONE THING ONLY (the base is known to exist, validated once by the caller): this
+  // entry's anchor did not exist at that base, there is no baseline to diff — nothing to say about it.
+  const was = deps.resolveAnchorAt(baseSha, qp);
+  if (was === undefined) return undefined;
+  const now = deps.resolveAnchorAt(topicSha, qp);
+  if (now !== undefined && was.subtreeHash !== now.subtreeHash) {
+    // In-place drift: the SAME qualifiedPath now carries different content at HEAD.
+    return { anchorWas: was, anchorNow: now };
+  }
+  // The recorded qualifiedPath STILL resolves at HEAD (and did not drift in place) ⇒ this entry is intact at
+  // its own path ⇒ NEVER a rename. Return BEFORE the content lookup — otherwise a byte-identical DUPLICATE of
+  // the content at some other path would let `resolveBySubtreeAt` (first-preorder / refused-ambiguity) hand
+  // back a different path and fabricate a PHANTOM move, diverging from doctor (whose `reDerives` reads FRESH
+  // here). The pure-rename widening below fires ONLY when the recorded path is truly GONE at HEAD.
+  if (now !== undefined) return undefined;
+  // PURE-RENAME widening (N10): the recorded qualifiedPath is GONE at HEAD. If this entry's RECORDED content
+  // re-located to a DIFFERENT qualifiedPath at HEAD, the citation MOVED but survives ⇒ report it, anchored at
+  // that new location (mirrors doctor surfacing a moved anchor). The `!== qp` guard is a belt-and-braces
+  // totality check (the content cannot resolve at the now-absent qp, but never assume).
+  const relocated = deps.resolveBySubtreeAt?.(topicSha, String(entry.anchor.subtreeHash));
+  if (relocated !== undefined && relocated.qualifiedPath !== qp) {
+    return { anchorWas: was, anchorNow: relocated };
+  }
+  return undefined;
+}
+
 export function createDriftSource(deps: {
   repoPath: string;
   resolveAnchorAt: (rev: string, qualifiedPath: string) => StructRef | undefined;
@@ -125,41 +191,16 @@ export function createDriftSource(deps: {
 
       const pairs: DriftPair[] = [];
       for (const f of deps.facts) {
-        const first = f.grounding.entries[0];
-        if (first === undefined) continue;
-        const qp = first.anchor.qualifiedPath;
-        // THIS `undefined` NOW MEANS ONE THING ONLY. The base is known to exist, so the sole remaining reading
-        // is the honest per-fact one: this fact's anchor did not exist at that base, there is no baseline to
-        // diff, and the gate has nothing to say ABOUT THIS FACT (never a throw, never a whole-run verdict).
-        const was = deps.resolveAnchorAt(baseSha, qp);
-        if (was === undefined) continue; // no baseline anchor to diff — nothing to say (never a throw)
-        const now = deps.resolveAnchorAt(topicSha, qp);
-        if (now !== undefined && was.subtreeHash !== now.subtreeHash) {
-          // In-place drift: the SAME qualifiedPath now carries different content at HEAD.
-          pairs.push({
-            drifted: { fact: f, newSha: topicSha as Hash },
-            anchorWas: was,
-            anchorNow: now,
-          });
-          continue;
-        }
-        // The recorded qualifiedPath STILL resolves at HEAD (and did not drift in place) ⇒ the fact is intact
-        // at its own path ⇒ NEVER a rename. Skip BEFORE the content lookup — otherwise a byte-identical
-        // DUPLICATE of the content at some other path would let `findBySubtree` (first-preorder) hand back the
-        // duplicate and fabricate a PHANTOM move, diverging from doctor (whose `reDerives` reads FRESH here).
-        // The pure-rename widening below fires ONLY when the recorded path is truly GONE at HEAD.
-        if (now !== undefined) continue;
-        // PURE-RENAME widening (N10): the recorded qualifiedPath is GONE at HEAD. If the fact's RECORDED
-        // content re-located to a DIFFERENT qualifiedPath at HEAD, the claim MOVED but survives ⇒ emit a pair
-        // anchored at that new location (mirrors doctor surfacing a moved anchor). The `!== qp` guard is a
-        // belt-and-braces totality check (the content cannot resolve at the now-absent qp, but never assume).
-        const relocated = deps.resolveBySubtreeAt?.(topicSha, String(first.anchor.subtreeHash));
-        if (relocated !== undefined && relocated.qualifiedPath !== qp) {
-          pairs.push({
-            drifted: { fact: f, newSha: topicSha as Hash },
-            anchorWas: was,
-            anchorNow: relocated,
-          });
+        // SPAN EVERY ENTRY (#185): a fact is surfaced when ANY entry has drifted, not just `entries[0]`. The
+        // pair reported is the FIRST drifted entry in recorded order — `DriftItem` stays frozen at one pair —
+        // so the anchor a human is shown actually moved, rather than a primary that never did. `break` after
+        // the first hit: ONE pair per fact, never all-or-nothing across its own citations either.
+        for (const entry of f.grounding.entries) {
+          const d = entryDrift(deps, baseSha, topicSha, entry);
+          if (d !== undefined) {
+            pairs.push({ drifted: { fact: f, newSha: topicSha as Hash }, anchorWas: d.anchorWas, anchorNow: d.anchorNow });
+            break;
+          }
         }
       }
       return pairs;

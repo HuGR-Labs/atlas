@@ -12,14 +12,16 @@
 // where a non-primary citation has rotted will start FAILING `reconcile` where they used to pass. That is the
 // gate doing its job; it is not silent.
 //
-// ── THE THIRD INSTANCE OF THE SAME ASYMMETRY, MEASURED AND NOT FIXED HERE ─────────────────────────────────
-// `git-drift.ts` `driftAt` — the DETECTOR that decides which facts reach the gate at all — reads
-// `f.grounding.entries[0]` and nothing else. So a fact whose PRIMARY is intact is never surfaced as a pair,
-// whatever happened to its other citations: the classifier cannot misclassify a fact it never receives. That
-// narrows the hole (a secondary-ONLY drift is invisible to `reconcile` end to end) and it MOVES it (the fix
-// bites on facts whose primary drifted AND whose secondary rotted — surfaced, and previously waved through).
-// Measured below as `MEASURED GAP`. It is named, not repaired: repairing it is a change to the detector's
-// reach and belongs to whoever sequences it.
+// ── THE THIRD INSTANCE OF THE SAME ASYMMETRY — NAMED HERE, CLOSED IN `git-drift-entries.test.ts` (#185) ────
+// `git-drift.ts` `driftAt` — the DETECTOR that decides which facts reach the gate at all — used to read
+// `f.grounding.entries[0]` and nothing else, so a fact whose PRIMARY was intact was never surfaced as a pair,
+// whatever happened to its other citations: the classifier could not misclassify a fact it never received.
+// That was the WORST of the three instances (total invisibility, one layer above where the classifier fix
+// could reach) and it is now CLOSED: `driftAt` spans every grounding entry, the reported pair is the FIRST
+// entry that actually drifted (never `entries[0]` unconditionally), and `DriftItem` stays frozen at one pair.
+// The `MEASURED GAP` test below is retired in favour of a GREEN assertion — the gap it recorded now closes —
+// and the full four-combination / real-merge-gate proof (REQ-ADAPTER-9f, SCN-ADAPTER-9f-1/9f-2), including the
+// TEETH that reproduce this file's OLD pre-#185 numbers, lives in `git-drift-entries.test.ts`.
 
 import { describe, it, expect, afterAll, beforeAll } from 'vitest';
 import { execFileSync } from 'node:child_process';
@@ -160,48 +162,60 @@ let clean: GateFix;
 
 beforeAll(() => {
   full = makeGateFix(ALL_FOUR);
-  clean = makeGateFix(['sec-mech', 'sec-rot', 'lead-mech']); // the SAME repo, minus the rotted-secondary fact
+  // The two facts with NO rot at all (#185 — see the negative-direction test below for why `sec-rot` was
+  // dropped from this seed, not just `mixed`).
+  clean = makeGateFix(['sec-mech', 'lead-mech']);
 });
 afterAll(() => {
   full?.cleanup();
   clean?.cleanup();
 });
 
-describe('THE MERGE GATE — one classifier, spanning every citation', () => {
+describe('THE MERGE GATE — one classifier, spanning every citation (detection now spans every citation too, #185)', () => {
   it('a fact whose non-primary citation ROTTED blocks the merge: exitCode 2 (the entry-0 copy answered 0)', () => {
     const out = runGate(full);
     // TEETH: the pre-fix composition root asked `resolveBySubtreeAt(entries[0].subtreeHash)`. For `mixed`
     // that is the RENAMED primary, whose content is alive at src/x-mixed-moved.ts ⇒ `mechanical` ⇒ the whole
     // run reported semantic=[] and exitCode 0, over a knowledge base holding a dead citation.
-    expect(out.semantic).toEqual(['mixed']);
+    //
+    // TIGHTENED BY #185: `sec-rot` (primary fresh, secondary rewritten away) now ALSO reaches the gate and
+    // classifies `semantic` — pre-#185 it was invisible to `driftAt` entirely (its primary never drifted), so
+    // this run used to report `semantic: ['mixed']` alone. `sec-mech` (primary fresh, secondary renamed) now
+    // reaches the gate too and classifies `mechanical` (moved-but-alive).
+    expect(out.semantic).toEqual(['sec-rot', 'mixed']);
     expect(out.exitCode).toBe(2);
-    expect(out.reauthorCount).toBe(1); // exactly the fact a human must re-author — never the whole store
-    // The reviewable item for it is classed semantic too (the split and the item never disagree).
+    expect(out.reauthorCount).toBe(2); // exactly the facts a human must re-author — never the whole store
+    // The reviewable items are classed semantic too (the split and the items never disagree).
     expect(out.drift.find((d) => d.fact === 'mixed')!.class).toBe('semantic');
-    // `mixed` LEFT the mechanical set (pre-fix: `['lead-mech','mixed']`), and its neighbour did not follow
-    // it — one rotted fact blocks the merge without condemning every other drifted fact in the run.
-    expect(out.mechanical).toEqual(['lead-mech']);
+    expect(out.drift.find((d) => d.fact === 'sec-rot')!.class).toBe('semantic');
+    // `mixed` LEFT the mechanical set (pre-fix: `['lead-mech','mixed']`); `sec-mech` newly ENTERS it
+    // (pre-fix: invisible, in neither set) — one rotted fact blocks the merge without condemning every other
+    // drifted fact in the run.
+    expect(out.mechanical).toEqual(['sec-mech', 'lead-mech']);
   });
 
-  it('the NEGATIVE direction — no rotted citation ⇒ the gate still passes (GREEN on the pre-fix code too)', () => {
+  it('the NEGATIVE direction — no rotted citation anywhere ⇒ the gate still passes', () => {
+    // RENAMED FROM the pre-#185 `clean` fixture (`['sec-mech','sec-rot','lead-mech']`): that fixture actually
+    // CONTAINED a rotted citation (`sec-rot`'s secondary) — it was named "clean" only because the pre-#185
+    // detector could not see it. `clean` here is `['sec-mech','lead-mech']`, the two facts with NO rot at all,
+    // so this exit-0 claim is honest post-fix. The genuinely rot-free case is TIGHTENED, never relaxed: this
+    // fixture is now smaller, not larger, so the assertion is a stronger claim than the one it replaces.
     const out = runGate(clean);
-    // `lead-mech` is the case that already worked: its primary was renamed, its secondary never moved. This
-    // whole test is green on BOTH sources by construction — it is the behaviour the fix must not move.
-    expect(out.mechanical).toEqual(['lead-mech']);
+    expect(out.mechanical).toEqual(['sec-mech', 'lead-mech']);
     expect(out.semantic).toEqual([]);
     expect(out.exitCode).toBe(0); // a knowledge base with NO rotted citation must still merge
     expect(out.reauthorCount).toBe(0);
     expect(out.regroundedCount).toBe(0);
   });
 
-  it('MEASURED GAP — `driftAt` reads entries[0] only, so a secondary-ONLY drift never reaches the gate', () => {
-    // This records the DETECTOR's reach today; it does not endorse it. `git-drift.ts` `driftAt` keys its
-    // merge-base diff on `f.grounding.entries[0]` alone — the THIRD instance of the entry-0 asymmetry (the
-    // first was doctor's classifier, the second the composition root's copy). Consequence, measured: a fact
-    // whose PRIMARY is intact is never surfaced as a pair, so `sec-mech` and `sec-rot` are invisible to
-    // `reconcile` end to end — the gate hole for a secondary-ONLY drift is in DETECTION, not classification.
-    // IF THIS GOES RED because the pair set GREW, the detector was widened: that is the third instance being
-    // closed, and this expectation should be updated and the gate assertions above TIGHTENED, never relaxed.
+  it('CLOSED (#185) — `driftAt` now spans every entry, so a secondary-ONLY drift reaches the gate', () => {
+    // This test USED TO record the detector's entries[0]-only reach as a deliberately unrepaired gap
+    // (`MEASURED GAP`, git blame this file). #185 closed it: `driftAt` now surfaces a fact when ANY entry
+    // drifted, not just `entries[0]`. `sec-mech` and `sec-rot` — previously invisible because their PRIMARY
+    // never moved — now surface alongside `lead-mech` and `mixed`. Full REQ-ADAPTER-9f / SCN-ADAPTER-9f-1/9f-2
+    // coverage (all four combinations, the real merge gate, the TEETH reproducing these exact OLD numbers, and
+    // the single-entry negative-direction pin) lives in `git-drift-entries.test.ts`; this assertion is kept
+    // here, tightened rather than deleted, so this file's own history stays legible.
     const rev = createRevIndex(full.repoPath);
     const source = createDriftSource({
       repoPath: full.repoPath,
@@ -210,8 +224,6 @@ describe('THE MERGE GATE — one classifier, spanning every citation', () => {
       facts: ALL_FOUR.map((k) => full.facts[k]!),
     });
     const surfaced = source.driftAt(full.A).map((p) => String(p.drifted.fact.id));
-    expect(surfaced).toEqual(['lead-mech', 'mixed']); // both have a drifted PRIMARY
-    expect(surfaced).not.toContain('sec-mech'); // secondary renamed  — primary intact ⇒ never detected
-    expect(surfaced).not.toContain('sec-rot'); // secondary rewritten — primary intact ⇒ never detected
+    expect(surfaced).toEqual(['sec-mech', 'sec-rot', 'lead-mech', 'mixed']); // ALL FOUR, recorded order
   });
 });
