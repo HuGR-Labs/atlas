@@ -71,8 +71,10 @@ DoctorOut    = { archive?, whyBroken?, hotSet?: { size, budget, over: boolean },
        The retired claim ran through FOUR lines of this file — this bullet, the `QueryOut` data-model line,
        the `atlas-query` Surface/API line and acceptance item 5 — and all four are amended together:
        amending one carrier and leaving three is the exact shape that produced this divergence.
-       The link is now MECHANICAL, not editorial — `spec-conformance-guard` check (5) resolves every REQ's
-       `normative-clause` into the invariant it cites, so the next amendment that skips a quote fails CI. -->
+       The link is now MECHANICAL, not editorial — `harness/gates/req-clause-guard.mjs` (npm run
+       req-clause-guard, named in ci.yml) resolves every REQ's `normative-clause` into the invariant it
+       cites, so the next amendment that skips a quote fails CI. Amending THIS bullet is what proved its
+       teeth: REQ-TOOLS-6b went red before its quote was re-lifted. -->
 - **TOOLS-7 `atlas-emit` fails closed.** It MUST re-derive the citation at `source@sha`; a node whose
   grounding does not re-derive MUST be rejected (`emitted:false`, nothing persisted) (A-2). Writes MUST be
   templated (A-13) and upserts, not blind inserts (A-12).

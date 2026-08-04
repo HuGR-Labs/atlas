@@ -83,7 +83,8 @@ normative-clause: "It MUST accept any scope (file/folder/module/crate), resolve 
 
 ### REQ-TOOLS-6b — pack is bounded to tier≥T1
 source: INV-TOOLS-6 @ reference/atlas-tools.md#tools-6
-The `atlas-query` tool shall return a `≤ ~2K` pack of `tier≥T1` invariants.
+The `atlas-query` tool shall return a `≤ ~2K` **governing** pack of `tier≥T1` invariants, beside the
+separately capped ADVISORY band of `T2` rows that REQ-TOOLS-6f governs.
 normative-clause: "return a `≤ ~2K` **governing** pack of `tier≥T1` invariants"
 
 <!-- SCOPE OF THIS CLAUSE AFTER ADR-0013 (owner-ratified 2026-08-03), stated here because the sentence above
@@ -104,13 +105,18 @@ normative-clause: "return a `≤ ~2K` **governing** pack of `tier≥T1` invarian
        · The note previously also said the GUIDANCE STRING still read the single-band form. That sub-claim
          was ALREADY STALE when written and is corrected here: `packages/tools/src/handler.ts:77` reads
          "TOOLS-6: bounded read projection, two bands (governing tier>=T1 + separately capped advisory T2),
-         every row carrying its own freshness" — fixed by #107, verified on this branch. What is STILL
-         single-band is a DIFFERENT string, the MCP tool DESCRIPTION at `handler.ts:143` ("the merged
-         covering pack of tier>=T1 invariants"), plus the doc-comment at `tools/src/types.ts:78`. Both are
-         under `packages/**`, which this WP does not touch — reported, not fixed.
-       · The link is now MECHANICAL: `spec-conformance-guard` check (5) resolves every REQ's
-         `normative-clause` into the invariant it cites. This exact divergence is what proved its teeth —
-         amending the invariant turned this clause RED before the quote was re-lifted. -->
+         every row carrying its own freshness" — fixed by #107, verified on this branch.
+       · The PRODUCT residues this note once listed are CLOSED too, by `ed22ae7` (PR #117, #193) — a
+         sibling wave, not this WP. The MCP tool DESCRIPTION now reads "a covering pack in TWO bands:
+         `invariants` is GOVERNING (tier>=T1, ratified) and `advisory` is ADVISORY (T2 machine proposals NO
+         ratifier saw, separately capped …)", pinned off-the-wire by e2e-blackbox S26.4 asserting the WHOLE
+         string; the retired sentence survives one line above it only as a quoted "it said" record. The
+         `tools/src/types.ts` doc-comment is two-band as well. Nothing under `packages/**` is single-band
+         and nothing here asks for a product change.
+       · The link is now MECHANICAL: `harness/gates/req-clause-guard.mjs` (npm run req-clause-guard, named
+         in ci.yml) resolves every REQ's `normative-clause` into the invariant it cites. This exact
+         divergence is what proved its teeth — amending the invariant turned this clause RED before the
+         quote was re-lifted. -->
 
 ### REQ-TOOLS-6c — stale pack must be re-grounded
 source: INV-TOOLS-6 @ reference/atlas-tools.md#tools-6

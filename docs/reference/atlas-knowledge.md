@@ -89,7 +89,7 @@ CLI + MCP parity, published input schema.
 | Tool | Does | Contract |
 |---|---|---|
 | `atlas-init <tree>` | `$0`-LLM structural move-in | returns the territory skeleton + blast radius + `T0`-candidate flags; auto-promotes nothing (KNOW-6, KNOW-7). |
-| `atlas-query <path>` | a territory's pack | resolves any scope (file/folder/module/crate) to the covering territory/-ies; returns a `≤~2K` pack of `tier≥T1` invariants; `stale:true` ⇒ re-ground before trusting. |
+| `atlas-query <path>` | a territory's pack | resolves any scope (file/folder/module/crate) to the covering territory/-ies; returns a `≤~2K` **governing** pack of `tier≥T1` invariants, beside a separately capped ADVISORY band of `T2` machine proposals no ratifier saw (ADR-0013, owner-ratified 2026-08-03; INV-TOOLS-6 amended 2026-08-04); `stale:true` ⇒ re-ground before trusting. |
 | `atlas-emit <node>` | fail-closed grounded write | re-derives the citation `@sha`; ungrounded ⇒ rejected, not persisted (KNOW-2); a changed fact supersedes (KNOW-4). |
 | `atlas-reconcile` | merge-time drift → BROKEN | flips the `DRIFTED` subset `BROKEN`; exits 2 to block the merge on any flip (KNOW-5). |
 

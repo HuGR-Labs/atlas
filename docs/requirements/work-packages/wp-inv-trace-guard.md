@@ -43,10 +43,28 @@ intent: >
   **The gate is the deliverable; the amendment is its first real case** — and the amendment proved the
   teeth, not a planted mutation: applying it turned `REQ-TOOLS-6b` RED before its quote was re-lifted.
 
+## THE RATIFIED TEXT — OWNER-RATIFIED 2026-08-04, reproduced verbatim
+
+This block is the RATIFICATION ARTIFACT for the `INV-TOOLS-6` amendment. It is here because a cold review
+could not verify the amendment's fidelity at all: the ratified wording reached this seat in a dispatch
+message and existed in no committed file, so the two renderings in the repo could only confirm each other.
+It is reproduced EXACTLY as ratified, so any reviewer can diff `docs/reference/atlas-tools.md:53-56`
+against it. The only permitted deviations are the `> ` quote marker below and the `- `/2-space bullet
+indent the file's own list format requires; every other byte is the owner's.
+
+> **TOOLS-6 `atlas-query` returns a bounded pack.** It MUST accept any scope (file/folder/module/crate),
+> resolve it through the index to the covering territory/-ies, and return a `≤ ~2K` **governing** pack of
+> `tier≥T1` invariants, **beside a separately capped ADVISORY band of `T2` machine proposals no ratifier
+> saw** (ADR-0013, owner-ratified 2026-08-03); `stale:true` MUST mean re-ground before trusting (§6.1).
+
+VERIFIED: `diff` of the shipped bullet against this block, after stripping the `> ` marker and the bullet's
+`- `/2-space indent, is EMPTY: 417 bytes on each side, 0 substitutions, 0 re-wrapping.
+
 ## axioms (inherited premises — given, not re-litigated)
 
-- **A1 — OWNER RATIFICATION, 2026-08-04**, applied byte-exact (see `outputs`); clerical in substance, the
-  behaviour having been ratified by ADR-0013. No behaviour change, no REQ change beyond A2's quote.
+- **A1 — OWNER RATIFICATION, 2026-08-04**, applied byte-exact against the block quoted above; clerical in
+  substance, the behaviour having been ratified by ADR-0013. No behaviour change, no REQ change beyond
+  A2's quote.
 - **A2.** `REQ-TOOLS-6b`'s quote is re-lifted onto the amended sentence. Checked every other
   `REQ-TOOLS-6*`: `6a`/`6c` still hold verbatim and were NOT touched; `6d`/`6e`/`6f` diverged BEFORE this
   amendment and still do — they are ledgered with a reason, not rewritten (see the framing-error section).
@@ -118,8 +136,12 @@ source_reqs:
 
 exclusions:
   - `packages/**` — NO source edits. Live seats own `packages/genesis/src/**`, `packages/adapter-io/src/**`
-    and `packages/tools/src/**`. Read-only; two residual single-band strings found there are REPORTED, not
-    fixed (`tools/src/handler.ts:143`, `tools/src/types.ts:78`).
+    and `packages/tools/src/**`. Read-only, and NOTHING is asked of them: two single-band strings that were
+    live at this branch's fork point `e4882a3` (the MCP tool description in `tools/src/handler.ts` and the
+    `tools/src/types.ts` doc-comment) were both fixed on master by `ed22ae7` (PR #117, #193) while this
+    branch was in flight. Verified against `origin/master`, not assumed: the description is two-band and
+    pinned off-the-wire by e2e-blackbox S26.4, and the retired sentence survives only as a quoted "it said"
+    record in the comment above it.
   - `harness/gates/adr-citation-guard.mjs`, `harness/lib/**` — owned by `fix/surface-truth`. Not edited and
     not depended on: this gate imports nothing from `harness/lib/`.
   - `docs/reference/commands/**`, `docs/how-to/**` — owned by `fix/doc-transcripts`.
@@ -137,6 +159,10 @@ action_surface: `[ read(**), edit(docs/reference/atlas-tools.md), edit(docs/requ
   edit(.github/workflows/ci.yml, one step line),
   edit(docs/requirements/work-packages/wp-inv-trace-guard.md, new file),
   run(tsc -b), run(vitest run), run(node harness/gates/*.mjs) ]`
+  WIDENED by the cold review's fix round (B-F4), to finish a fan-out that had stopped at one file:
+  `[ edit(docs/spec/atlas.md, one table row), edit(docs/reference/atlas-knowledge.md, one table row),
+  edit(docs/requirements/method-tags-tls.md, one sentence of an amendment note),
+  edit(docs/requirements/properties-tls.md, the 19 digest pins + the re-freeze record) ]`
 
 guardrails: writes confined to the paths above; `packages/**` untouched; no `git checkout`/`restore`/
   `stash`/`reset` in the worktree — the two falsification demos used `cp` backup + `cp` restore verified by
@@ -191,8 +217,21 @@ outputs:
   - `docs/reference/atlas-tools.md` — `INV-TOOLS-6` amended byte-exact (A1) + house-form amendment note;
     and the SAME retired claim amended on its three other carriers in that file: the `QueryOut` data-model
     line (21), the `atlas-query` Surface/API line (154) and acceptance item 5 (232)
-  - `docs/requirements/req-tls.md` — `REQ-TOOLS-6b`'s quote re-lifted; the divergence note marked CLOSED,
-    its stale guidance-string sub-claim corrected, and the two REAL residues named
+  - `docs/requirements/req-tls.md` — `REQ-TOOLS-6b`'s quote re-lifted, its EARS sentence amended to match
+    (it said "a `≤ ~2K` pack of `tier≥T1` invariants" one line above the two-band clause — a REQ
+    contradicting itself, and invisible to the gate, which reads `normative-clause:` only); the divergence
+    note marked CLOSED and its stale sub-claims corrected
+  - `docs/spec/atlas.md`, `docs/reference/atlas-knowledge.md` — the SAME retired claim, in the
+    `atlas-query` row of each file's tool table, amended in the same register (cold review B-F4)
+  - `docs/requirements/method-tags-tls.md` — the closing sentence of INV-TOOLS-6's amendment note recorded
+    `reference/atlas-tools.md#tools-6` as an OPEN divergence, which this WP closes; corrected. The
+    `up-property` is deliberately NOT rewritten — the 2026-08-03 amendment scoped it as a statement about
+    the GOVERNING band, that scoping is ratified and true, and re-authoring a ratified law under cover of a
+    clerical fix is not this WP's surface
+  - `docs/requirements/properties-tls.md` — the 19 `@sha256` pins re-frozen `aa329ac9` → `ecf859a9`, with a
+    record of WHY. The digest tripwire (`spec-conformance-guard` check (3)) fired on the method-tags edit
+    exactly as designed; PROP-TOOLS-6's `law`/`arbitrary`/`teeth`/`witness` are reconciled UNCHANGED,
+    because no `up-property`/`down-model`/`anti-rot` text moved
   - `package.json`, `.github/workflows/ci.yml` — one line each, wiring the gate (see A4)
   - `docs/requirements/work-packages/wp-inv-trace-guard.md` — this card
 
@@ -260,7 +299,21 @@ all" (`6b`, `6d`, `6e`, `6f`). The latter would have had this WP silently re-aut
 clauses under cover of a clerical amendment. Only `6b` was touched; `6d`/`6e`/`6f` are ledgered with their
 reasons.
 
-**8. What the lead got right, confirmed by measurement.** The amendment IS clerical — the two-band
+**8. What I got wrong, found by the cold review — and the worst one is this WP's own defect class.** The
+amendment I committed into a ratified invariant file promised enforcement by "`spec-conformance-guard`
+check (5)", a check that does not exist: it is residue from the A4 design I abandoned at 433 LOC, and the
+gate that really does this is `req-clause-guard`, which was named nowhere outside this card. **A false
+"fails CI" promise, written into a ratified tombstone, by the branch whose entire purpose is closing that
+class.** A pointer nobody resolves — for the fourth time this week, this time mine. Both sites now name the
+real gate. Three more, same round: the note asserted two live product residues that master had already
+fixed under me in `ed22ae7` (verified against `origin/master`, not assumed); `REQ-TOOLS-6b`'s EARS sentence
+still said "a `≤ ~2K` pack of `tier≥T1` invariants" one line above its own two-band clause; and the fan-out
+stopped at one file while the same claim stood in `spec/atlas.md`, `reference/atlas-knowledge.md` and — the
+sharpest — this card's own declared `interface_contract`, `method-tags-tls.md#TOOLS-6`, whose note still
+recorded the divergence as OPEN. I had verified the fan-out WITHIN `atlas-tools.md` and never swept the
+tree; the sweep that found the rest took one grep.
+
+**9. What the lead got right, confirmed by measurement.** The amendment IS clerical — the two-band
 behaviour is shipped and ratified, and `git diff --stat` shows zero `packages/**` bytes. A1's block applied
 byte-exact with no re-wrapping. The delta's four carriers are all real (lines 21, 54, 140, 218-219 on
 master; the last three now amended too) — and the delta's own instruction to verify them paid off: line
