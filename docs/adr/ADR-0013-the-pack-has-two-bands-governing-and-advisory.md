@@ -1,6 +1,17 @@
 # ADR-0013 — the pack has two bands: governing and advisory
 
-- **Status:** **Accepted (2026-08-03) — IMPLEMENTED.** The owner ratified the *substance* on 2026-08-03
+- **Status:** **Accepted (2026-08-03) — IMPLEMENTED IN CODE AND IN THE REQUIREMENT LAYER; THE INVARIANT
+  TEXT THIS ADR CLAIMS TO AMEND IS STILL UNAMENDED.** Read the `Amends` bullet below against this, because
+  the loop it describes closes on nothing: `req-tls.md:89-95` defers amending `INV-TOOLS-6` to *"ADR-0013's
+  own declared surface"*, this ADR names `INV-TOOLS-6` as a surface it amends, and
+  `reference/atlas-tools.md:53` still reads *"return a `≤ ~2K` pack of `tier≥T1` invariants"* as a statement
+  about the whole pack. `reference/atlas-retrieval.md:139` is the same for `RETR-12`. Both are recorded as
+  live divergences in the requirement layer, so they are declared rather than hidden — and they are open.
+  **A third one is not merely a document:** `packages/tools/src/handler.ts:143`, the `atlas-query` MCP tool
+  `description` that every client shows a calling agent, still promises *"the merged covering pack of
+  `tier>=T1` invariants"* while the tool returns the advisory band too. The sibling `invariant` string
+  (`:77`) was corrected; this one was not. Tracked separately; it is a product defect, not a doc lag, and it
+  contradicts clause 3 of this ADR at the first place a reader looks. The owner ratified the *substance* on 2026-08-03
   ("advisory facts enter the pack, marked as advisory and kept separate from the governing ones"). This ADR
   was first recorded **BLOCKED — deliberately not implemented**, because measurement showed the amendment
   could not be landed honestly without a **second** amendment to a **separately ratified** decision
