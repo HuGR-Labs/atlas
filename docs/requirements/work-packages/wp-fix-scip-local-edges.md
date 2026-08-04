@@ -40,11 +40,16 @@ intent: >
 
   MEASURED, on this repo's real regenerated index (via the production `composeRuntime` path —
   `walkFileTree` → `foldAstUnits` → `build`, run through the built `dist/`, not reasoned about from
-  source): total edges 6,753 → 2,202 (removes 4,551: 4,525 `resolved` + 26 `unresolved`); the downstream
-  GEN-15c `structuralFrontier` (`packages/genesis/src/seeds.ts`) reports IDENTICAL seed counts before and
-  after — 513 seeds, 0 `droppedNoPath`, both sides — because every real TS file that `scip-typescript`
-  indexes carries at least one non-local reference (an import), so no document's dependency-axis NODE
-  (not edge) is ever local-symbol-only. No frontier site or structural seed is lost.
+  source): total edges 6,753 → 2,202 (removes 4,551: 4,525 `resolved` + 26 `unresolved`) — **4,525 of
+  6,260 pre-fix `resolved` edges were fabricated, i.e. 72.3% of every `resolved` edge in this repository's
+  dependency axis pointed at a document the SCIP data never actually named as a dependency.** An
+  independently-run seat measured ~71% on a separately-generated 489-document index; this WP's own
+  513-document index (regenerated fresh, same repo, later commit) reproduces the same order of magnitude
+  from a second, independent build — two seats, two indexes, the same answer. The downstream GEN-15c
+  `structuralFrontier` (`packages/genesis/src/seeds.ts`) reports IDENTICAL seed counts before and after —
+  513 seeds, 0 `droppedNoPath`, both sides — because every real TS file that `scip-typescript` indexes
+  carries at least one non-local reference (an import), so no document's dependency-axis NODE (not edge)
+  is ever local-symbol-only. No frontier site or structural seed is lost.
 
 source_reqs:                             # ptr+digest — the existing requirement this fix restores compliance with
   - source: ../req-idx.md#REQ-INDEX-13c  # ptr+digest — "never fabricate a resolved target"; the defect fabricated a resolved target for a document-scoped symbol across an unrelated document
@@ -59,38 +64,42 @@ interface_contract:                      # free-form (unchecked, per repo conven
   - source: ../method-tags-idx.md#INDEX-13  (unresolvable/cross-language edges declared, never guessed — the same never-fabricate posture this fix extends to document-scoped symbols)
 
 exclusions:
-  - `packages/e2e-blackbox/test/s9-retrieval-modes.blackbox.test.ts`,
-    `s21-scip-forgery.blackbox.test.ts`, `s28-own-briefing.blackbox.test.ts` — NOT fixed here. All three
-    use `local S` / `local G` as an arbitrary GLOBAL cross-document symbol name in their SCIP fixtures, to
-    demonstrate an ordinary reference→definition edge between two files. That is a SCIP-illegal fixture on
-    its own terms — the grammar reserves the `local ` scheme prefix for document-scoped symbols, so a
-    conformant indexer would never emit a cross-document `local`-prefixed reference/definition pair in the
-    first place — and this fix now (correctly) refuses to turn it into a resolved edge, which is exactly
-    the SCIP-conformant behaviour REQ-INDEX-13c already required. Renaming the fixture symbol (e.g. `local
-    S` → `sym S`) is a one-line, in-package fix that preserves each test's intent exactly, but it touches
-    three files outside `packages/index/**` (a different package's owned fixtures) — out of this WP's
-    declared surface. Flagged for the lead rather than actioned unilaterally; see the framing-error section
-    below and the return card.
-  - `packages/adapter-io/**`, `packages/genesis/**`, `packages/knowledge/**`, `packages/cli/**` — read-only
-    reference only, to MEASURE the downstream site/seed consequence (see `intent` above); no source edit.
+  - `packages/adapter-io/**` — a LIVE seat (#190) owns this package concurrently; not touched, read-only
+    reference only (to MEASURE the downstream site/seed consequence via `composeRuntime`'s composition, see
+    `intent` above — no import from it, no edit).
+  - `packages/genesis/**`, `packages/knowledge/**`, `packages/cli/**` — read-only reference only, same
+    reason as above; no source edit.
   - any other campaign's WP card — this is a deliberately NEW file so as not to collide with concurrent
     edits to `wp-campaign-*.md`.
 
-action: exclude `local `-prefixed SCIP symbols from BOTH loops of `deriveEdges` (the `defs` population loop
-  and the `reference` loop) via a new `isLocalSymbol` predicate, documented against the SCIP grammar; add a
-  regression test (`packages/index/test/build.test.ts`, `SCN-INDEX-13c-3`) proving two documents that each
-  define+reference `local 2` produce ZERO edges post-fix, proven RED against the unfixed source first.
+action: (round 1) exclude `local `-prefixed SCIP symbols from BOTH loops of `deriveEdges` (the `defs`
+  population loop and the `reference` loop) via a new `isLocalSymbol` predicate, documented against the
+  SCIP grammar; add a regression test (`packages/index/test/build.test.ts`, `SCN-INDEX-13c-3`) proving two
+  documents that each define+reference `local 2` produce ZERO edges post-fix, proven RED against the
+  unfixed source first.
+  (round 2, lead-directed) rename the SYMBOL STRING ONLY (`local S`→`sym S`, `local G`→`sym G`) in the
+  three e2e-blackbox fixtures the round-1 fix broke — `s9-retrieval-modes`, `s21-scip-forgery`,
+  `s28-own-briefing.blackbox.test.ts` — no assertion, threshold, or narrative claim touched; add one
+  narrative-header line to `s9`/`s28` (the two stories whose cross-document edge was, until this fix,
+  entirely dependent on the `local`-join defect) recording that fact for the next reader; `s21`'s FORGERY A
+  use of the same symbol is judged UNCHANGED by the rename (see the framing-error section) and renamed for
+  consistency but not because its own story required it.
 
 action_surface: `[ read(packages/**), edit(packages/index/src/build.ts),
   edit(packages/index/test/build.test.ts),
+  edit(packages/e2e-blackbox/test/s9-retrieval-modes.blackbox.test.ts, symbol string + header line only),
+  edit(packages/e2e-blackbox/test/s21-scip-forgery.blackbox.test.ts, symbol string only),
+  edit(packages/e2e-blackbox/test/s28-own-briefing.blackbox.test.ts, symbol string + header line only),
   edit(docs/requirements/goldens-idx.md, new golden only),
   edit(docs/requirements/work-packages/wp-fix-scip-local-edges.md, new file only),
   run(tsc -b), run(vitest run), run(gates) ]`
 
 guardrails: writes confined to `packages/index/src/build.ts` (in-place edit, no signature change to
   `build`/`deriveEdges`/`dependencyAxis`/`Axes`), one test added to the existing
-  `packages/index/test/build.test.ts` (no new test file), one new golden entry, and this card; forbidden
-  zones = every package outside `packages/index/**` (read-only), every other `work-packages/*.md`.
+  `packages/index/test/build.test.ts` (no new test file), the SYMBOL STRING + one narrative-header line in
+  each of the three named `e2e-blackbox` fixtures (no assertion/threshold/narrative-claim edit), one new
+  golden entry, and this card; forbidden zones = `packages/adapter-io/**` (live seat #190), every other
+  package, every other `work-packages/*.md`.
 
 acceptance:
   - source: ../goldens-idx.md#SCN-INDEX-13c-3  # ptr+digest — the new golden this WP adds and satisfies
@@ -116,6 +125,12 @@ outputs:
   - `packages/index/src/build.ts` — `isLocalSymbol` predicate + both `deriveEdges` loops guarded; 237 LOC
     total, well under the 400-LOC cap
   - `packages/index/test/build.test.ts` — `SCN-INDEX-13c-3` regression case added; 235 LOC total
+  - `packages/e2e-blackbox/test/s9-retrieval-modes.blackbox.test.ts` — `local S` → `sym S` (2 sites) +
+    narrative-header line recording the prior silent reliance on the `local`-join defect
+  - `packages/e2e-blackbox/test/s21-scip-forgery.blackbox.test.ts` — `local S` → `sym S` (3 sites), no
+    header line (see framing-error section: this story's own claim is unaffected by the rename)
+  - `packages/e2e-blackbox/test/s28-own-briefing.blackbox.test.ts` — `local G` → `sym G` (2 sites) +
+    narrative-header line, same reason as `s9`
   - `docs/requirements/goldens-idx.md` — `SCN-INDEX-13c-3` golden added under the existing REQ-INDEX-13c
   - `docs/requirements/work-packages/wp-fix-scip-local-edges.md` — this card
 
@@ -144,11 +159,31 @@ regenerated `.atlas/index.scip` matching `/^local/i` renders as exactly `local N
 and SAFE: the downstream `structuralFrontier` seed count is identical (513/513) before and after, run
 through the real production path, not reasoned about.
 
-**Got wrong / unmeasured:** the fix — applied exactly as frozen — breaks 3 pre-existing tests OUTSIDE
-`packages/index/**`: `s9-retrieval-modes`, `s21-scip-forgery`, `s28-own-briefing.blackbox.test.ts` all use
-`symbol: 'local S'` / `'local G'` as an arbitrary two-file cross-document symbol name to demonstrate a
-generic resolved edge. That usage was never legal SCIP to begin with (the grammar reserves the `local `
-scheme prefix for document-local symbols), so the correct fix is renaming those three fixture symbols, not
-adjusting `deriveEdges` — but it is a change to fixtures outside this WP's owned package, so it is reported
-here rather than actioned. Not caught by reasoning about the brief in isolation; caught only by running the
-full suite red before assuming green.
+**Got wrong / unmeasured (round 1), corrected (round 2):** the fix — applied exactly as frozen — broke 3
+pre-existing tests OUTSIDE `packages/index/**`: `s9-retrieval-modes`, `s21-scip-forgery`,
+`s28-own-briefing.blackbox.test.ts` all used `symbol: 'local S'` / `'local G'` as a two-file cross-document
+symbol name. That usage was never legal SCIP (the grammar reserves the `local ` scheme prefix for
+document-local symbols). The lead's sharper framing, confirmed against the two stories' own text: `s9` and
+`s28` each state in their own narrative that they build **"a real SCIP reference→definition edge"** — a
+cross-document edge — using a symbol that, by grammar, cannot cross a document. **Those stories were not
+"using an inconvenient symbol name"; they were PASSING BECAUSE OF THE DEFECT** — the exact `local`-join bug
+this WP fixes was the only reason `src/use.ts`'s reference ever resolved to `src/dep.ts`'s definition (`s9`)
+or `src/caller.ts`'s to `src/greet.ts`'s (`s28`). Fixed by renaming the symbol string ONLY (`local S`→`sym
+S`, `local G`→`sym G`) plus one narrative-header line on each recording the prior silent vacuity — no
+assertion, threshold, or claim touched, and all 4/10/5 tests in the three files pass unchanged after the
+rename (verified in isolation before the full-suite re-run below).
+
+**`s21` verdict, in writing, as requested:** `s21`'s subject is the forgery — "hostile file contents a
+reader believes" — not the symbol scheme. Its FORGERY A (test `(v)`) uses the SAME `local S` string to
+fabricate an "other depends on target" edge, and — unlike `s9`/`s28` — this usage genuinely IS an instance
+of the identical defect (confirmed: `(v)` was one of the 3 tests that failed after round 1, for the same
+reason). But the STORY `(v)` tells is general — "the dependency axis is derived from the dump, so an
+attacker who controls the dump moves the blast radius" — and that claim does not depend on the symbol being
+`local`-scoped; a plain global symbol (`sym S`) fabricates the identical `resolved` edge, legitimately,
+because a real attacker forging a SCIP dump would use an ordinary global scheme (the `local ` prefix is
+merely one MORE way to exploit an unfixed indexer, now closed). **Verdict: the rename leaves what `s21`
+proves UNCHANGED** — verified by running `(v)` after the rename: it passes, `withEdge.stdout` still
+contains `CLAIM_OTHER`, unchanged from before. No narrative-header line added to `s21` (unlike `s9`/`s28`)
+because its story was never silently dependent on document-scoping in the first place — it demonstrates
+attacker-controlled content in general, of which the `local`-join bug was one incidental instance, not the
+substance.

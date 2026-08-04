@@ -198,15 +198,15 @@ describe('S21 — a forged `.atlas/index.scip` cannot launder a stale fact into 
 
     // FORGERY A: "other depends on target" ⇒ the reverse closure of target contains other.
     forgeScipInRepo(repo.repoPath, [
-      { path: TARGET, symbols: [{ name: 'local S', def: true }] },
-      { path: OTHER, symbols: [{ name: 'local S', def: false }] },
+      { path: TARGET, symbols: [{ name: 'sym S', def: true }] },
+      { path: OTHER, symbols: [{ name: 'sym S', def: false }] },
     ]);
     const withEdge = runAtlas(repo.repoPath, ['query', TARGET, '--by', 'dependency']);
     expect(withEdge.exitCode).toBe(0);
     expect(withEdge.stdout).toContain(CLAIM_OTHER);
 
     // FORGERY B: the same repo, the same facts, a dump that declares no edge at all.
-    forgeScipInRepo(repo.repoPath, [{ path: TARGET, symbols: [{ name: 'local S', def: true }] }]);
+    forgeScipInRepo(repo.repoPath, [{ path: TARGET, symbols: [{ name: 'sym S', def: true }] }]);
     const noEdge = runAtlas(repo.repoPath, ['query', TARGET, '--by', 'dependency']);
     expect(noEdge.exitCode).toBe(0);
     expect(invLines(noEdge.stdout)).toStrictEqual([]);

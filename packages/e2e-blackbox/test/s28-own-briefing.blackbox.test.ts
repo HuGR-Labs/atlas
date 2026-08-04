@@ -28,6 +28,12 @@
 //
 // Every EXECUTION + ASSERTION is pure black-box (subprocess). Product libs are touched ONLY to author the
 // grounded input facts + a valid SCIP dump (the crux — same discipline as author.ts / S9).
+//
+// #189: the fixture's edge symbol was `local G` until this line was added — a SCIP `local` symbol is
+// document-scoped BY GRAMMAR and cannot legally cross `src/greet.ts` → `src/caller.ts` at all, so THE
+// BLAST SUMMARY IS REAL claim above was, until the #189 fix, silently riding a `deriveEdges` defect that
+// joined same-named `local` symbols across documents rather than a real cross-document edge. Renamed to
+// the plain, non-reserved `sym G`, which is what a legitimate cross-file SCIP symbol looks like.
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
@@ -86,11 +92,11 @@ function writeScipDepEdge(repoPath: string): void {
     documents: [
       create(DocumentSchema, {
         relativePath: 'src/greet.ts',
-        occurrences: [create(OccurrenceSchema, { symbol: 'local G', symbolRoles: SymbolRole.Definition })],
+        occurrences: [create(OccurrenceSchema, { symbol: 'sym G', symbolRoles: SymbolRole.Definition })],
       }),
       create(DocumentSchema, {
         relativePath: 'src/caller.ts',
-        occurrences: [create(OccurrenceSchema, { symbol: 'local G', symbolRoles: 0 })], // 0 ⇒ reference
+        occurrences: [create(OccurrenceSchema, { symbol: 'sym G', symbolRoles: 0 })], // 0 ⇒ reference
       }),
     ],
   });
