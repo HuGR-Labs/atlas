@@ -108,7 +108,7 @@ for the next step**: the left value is the routing `nodeKey` (what `atlas query`
 and what [`link`](./link.md) takes); the right one is the CAS **content address**, which is what
 [`node`](./node.md) takes.
 
-## Reading a promoted fact back — `node`, not `query`
+## Reading a promoted fact back — `node`, and now `query` too
 
 ```
 $ atlas node 83660b81ecf5f0b371e37448124b1465d1626bc134b7be5ac8adf9c8184645c7
@@ -123,26 +123,39 @@ data:
 # exit 0
 ```
 
-**`atlas query` will not show it, and that is correct, not a failure.** A mined candidate is stamped `T2`
-(`mine` stamps the class from a constant), and the read pack bounds `T2` **out** — `TOOLS-6: bounded read
-projection (tier>=T1)`. Same repository, immediately after the promotion above:
+**`atlas query` now shows it — on an `advisory` row, not an `inv` row.** A mined candidate is stamped `T2`
+(`mine` stamps the class from a constant), and since [ADR-0013](../../adr/ADR-0013-the-pack-has-two-bands-governing-and-advisory.md)
+the pack has **two separately bounded bands**: the governing band (`inv`, `tier≥T1`, unchanged) and a
+separately capped **advisory** band that is exactly `T2`. So the row is served, under its own verb, with its
+own per-row freshness verdict. Same repository, immediately after the promotion above:
 
 ```
 $ atlas query src
 status: ok
-next: re-ground stale packs before trusting; scope must be a path string
-invariant: TOOLS-6: bounded read projection (tier>=T1)
+next: re-ground stale packs before trusting; an advisory row is a machine proposal no ratifier saw — check its per-row freshness; scope must be a path string
+invariant: TOOLS-6: bounded read projection, two bands (governing tier>=T1 + separately capped advisory T2), every row carrying its own freshness
 data:
+  advisory T2 802f2bcde25d0ab2211a10d639bdde37ffbbe2c3b8251c7ea3b85f7fc5522f6a [FRESH]: greet() returns a greeting for the supplied name
+  advisoryDropped: 0
   stale: false
-  tokenEstimate: 0
+  tokenEstimate: 48
 # exit 0
 ```
 
-So promotion makes a mined fact **addressable and durable**, not **served**. The empty pack above and a
-promotion that silently did nothing look identical from `query` alone; the `node` read is what tells them
-apart. Do not plan a mine → promote → **query** loop. Promoting a fact *into* the served pack means a fact
-at `T1` or stricter, which no mined candidate is — that is a re-classification, and it has no door
-(ADR-0009 / task #88).
+So promotion makes a mined fact **addressable, durable and readable** — but readable as a *proposal*, never
+as ratified knowledge. What has **not** changed is the thing the two bands exist to keep apart: no mined
+candidate reaches the **governing** band. Promoting a fact into `inv` still means a fact at `T1` or stricter,
+which no mined candidate is; that is a re-classification, it has no door (ADR-0009 / task #88), and the
+`advisory` verb on the row above is what stops a reader mistaking one for the other.
+
+> **The shipped binary still says otherwise, and it is recorded here rather than papered over.**
+> `atlas promote`'s guidance line — visible in every `promote` transcript on this page — still ends
+> *"(a T2 fact is bounded OUT of the `atlas query` pack, TOOLS-6)"*. That was true before ADR-0013 and is not
+> true now. It is a string in the shipped binary, so it is a code fix and not a documentation one, and it is
+> not made here. Believe the transcript above it, not the sentence.
+>
+> The `node` read at the top of this section is still the right way to read a promoted fact **whole** — it
+> is the door that returns the fact's own identity, tier and claim — which is why the section keeps it.
 
 ## Running it twice — idempotent by UPSERT, not by refusal
 

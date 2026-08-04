@@ -39,8 +39,9 @@ The edge shows up on the next read, as its own line — both facts are still the
 $ atlas query src
 […]
 data:
-  inv T1 bb4094b5aa8ca84d6d5d4e2c118c75980bb8a9aba3e84648993cdcd62a324555: add is total over numbers
-  inv T1 f9517988f330a775ffc767c072fa01e52f38642220442916ca6b9b8c20bef532: greet returns a non-empty string
+  inv T1 bb4094b5aa8ca84d6d5d4e2c118c75980bb8a9aba3e84648993cdcd62a324555 [FRESH]: add is total over numbers
+  inv T1 f9517988f330a775ffc767c072fa01e52f38642220442916ca6b9b8c20bef532 [FRESH]: greet returns a non-empty string
+  advisoryDropped: 0
   stale: false
   tokenEstimate: 57
   sameAs bb4094b5aa8ca84d6d5d4e2c118c75980bb8a9aba3e84648993cdcd62a324555 ≡ f9517988f330a775ffc767c072fa01e52f38642220442916ca6b9b8c20bef532
@@ -60,7 +61,7 @@ data:
 ```
 
 After which the `sameAs` line is gone from the pack (the pack above, re-run, printed the two `inv` lines,
-`stale`, `tokenEstimate` and nothing else).
+`advisoryDropped`, `stale`, `tokenEstimate` and nothing else).
 
 ## Exit codes
 

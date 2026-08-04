@@ -75,10 +75,11 @@ the parts that exist — and says plainly where the gap is.
    ```
    $ atlas query src
    status: ok
-   next: re-ground stale packs before trusting; scope must be a path string
-   invariant: TOOLS-6: bounded read projection (tier>=T1)
+   next: re-ground stale packs before trusting; an advisory row is a machine proposal no ratifier saw — check its per-row freshness; scope must be a path string
+   invariant: TOOLS-6: bounded read projection, two bands (governing tier>=T1 + separately capped advisory T2), every row carrying its own freshness
    data:
-     inv T1 f9517988f330a775ffc767c072fa01e52f38642220442916ca6b9b8c20bef532: greet returns a non-empty string
+     inv T1 f9517988f330a775ffc767c072fa01e52f38642220442916ca6b9b8c20bef532 [FRESH]: greet returns a non-empty string
+     advisoryDropped: 0
      stale: false
      tokenEstimate: 32
    # exit 0
