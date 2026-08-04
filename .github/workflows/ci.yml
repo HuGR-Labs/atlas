@@ -20,4 +20,5 @@ jobs:
       - run: npm run id-integrity    # docs id graph: unique definitions, no dangling citation/anchor, no orphan REQ/SCN, links resolve
       - run: npm run command-doc-guard  # every shipped CLI command has a reference page, and vice versa
       - run: npm run adr-citation-guard  # every ADR-NNNN cited under docs/ resolves to docs/adr/ADR-NNNN-*.md
+      - run: npm run req-clause-guard  # every REQ's normative-clause still occurs in the invariant it cites
       - run: npm test                # vitest run — own-suite + held-out GATE + totality fences
