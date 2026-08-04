@@ -171,6 +171,10 @@ repo → crate/package → module → file → item (fn/type) → block
 - Each level carries the BLAKE3 hash of its subtree (the Merkle property is native to BLAKE3, §3.1). A
   change re-hashes only the affected path from leaf to root; every unaffected subtree keeps its hash, so
   facts anchored there stay `FRESH`.
+- **The dependency axis ADDRESSES; it does not COMMIT.** A dependency-axis node's `subtreeHash` is the
+  identity of its path (`id({file: path})`) and carries no content, so the leaf-to-root re-hashing above
+  does **not** apply to it: the axis is **not** a freshness oracle, and an anchor on it is **not** a
+  grounding.
 - The **same** index resolves a `path` (file / folder / module / crate) to its territory and its facts —
   this is what makes knowledge **discoverable by scope** (§6.1). Drift and discovery are one structure,
   not two.

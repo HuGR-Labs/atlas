@@ -285,5 +285,10 @@ source: INV-INDEX-16 @ reference/atlas-index.md#index-16
 If a T0 territory crosses the unresolved-edge ceiling, then the index shall fail the gate rather than merely schedule the functional axis.
 normative-clause: "crossing it in a T0 territory MUST fail the gate, not merely schedule the `functional` axis"
 
+### REQ-INDEX-17a — dependency axis addresses, does not commit   (#191)
+source: INV-INDEX-17 @ reference/atlas-index.md#index-17
+A dependency-axis node's subtreeHash shall be the identity of its path, carrying no content, so it shall not be treated as a freshness oracle and an anchor resolved on it shall not be treated as a grounding.
+normative-clause: "A dependency-axis node's `subtreeHash` MUST be the identity of its path (`id({file: path})`) and MUST carry no content … the axis MUST NOT be treated as a freshness oracle, and an anchor resolved on it MUST NOT be treated as a grounding"
+
 ## [NEEDS RECONCILIATION]
 - INV-INDEX-15: the ownership-generation clause is normatively `SHOULD` ("owner SHOULD be generated…"), whereas its override-precedence, reconciliation-determinism, tier-human-ratified, and manifest-not-sole clauses are `MUST` — REQ-INDEX-15a projects a recommendation with a `shall`; confirm with DEFINE whether owner-generation is a hard mandate or a recommended default.
