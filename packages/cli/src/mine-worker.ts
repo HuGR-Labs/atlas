@@ -18,6 +18,7 @@
 
 import { parentPort, workerData } from 'node:worker_threads';
 import type { MessagePort } from 'node:worker_threads';
+import { initAst } from '@atlas/adapter-io';
 import type { Candidate, SeedProposal, SiteProposer } from '@atlas/genesis';
 import { resolveProposer } from './mine-proposer.js';
 
@@ -87,4 +88,16 @@ function serve(ctx: WorkerContext): void {
 
 // The module is loaded ONLY as a worker entry; `workerData` is absent if anything else imports it, and in
 // that case it must do nothing rather than throw on a missing port.
-if (parentPort !== null && (workerData as WorkerContext | null)?.port !== undefined) serve(workerData as WorkerContext);
+//
+// THE GRAMMAR IS WARMED HERE, AND WITHOUT THIS LINE #182 WOULD HAVE SHIPPED BROKEN IN THE ONE
+// CONFIGURATION PRODUCTION ACTUALLY USES. `bin.ts` awaits `initAst()` on the MAIN thread, but a worker
+// thread has its own module registry and its own null grammar singletons — and every model call goes
+// through a worker whenever the proposer came from operator config (`usePool`, mine.ts). The S2 reader
+// folds the site's file to slice the unit out; with no grammar the fold is a total no-op, no unit key
+// resolves, and EVERY sub-file site would have taken the `source-unreadable` refusal while the unit suite
+// (main-thread, warmed) stayed green. Awaited BEFORE `serve` attaches the listener: a `MessagePort` queues
+// messages until one is attached, so no job is lost by starting late.
+if (parentPort !== null && (workerData as WorkerContext | null)?.port !== undefined) {
+  await initAst();
+  serve(workerData as WorkerContext);
+}

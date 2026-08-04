@@ -246,7 +246,7 @@ the rest read/derive (ADR-0003):
 | Tool | Does | Contract |
 |---|---|---|
 | `atlas-init` | `$0`-LLM structural move-in | returns the territory skeleton + blast radius + T0-candidate flags; auto-promotes nothing (A-5, A-6). |
-| `atlas-query` | a territory's pack | returns a `≤2K` pack of `tier≥T1` invariants; `stale:true` ⇒ re-ground before trusting (§3.4 pack/stale rule; A-1 truth-gate). |
+| `atlas-query` | a territory's pack | returns a `≤2K` **governing** pack of `tier≥T1` invariants, beside a separately capped ADVISORY band of `T2` machine proposals no ratifier saw (ADR-0013, owner-ratified 2026-08-03; INV-TOOLS-6 amended 2026-08-04); `stale:true` ⇒ re-ground before trusting (§3.4 pack/stale rule; A-1 truth-gate). |
 | `atlas-emit` | fail-closed grounded write | re-derives the citation `@sha`; ungrounded ⇒ rejected, not persisted (A-2). |
 | `atlas-reconcile` | merge-time drift → BROKEN | flips the `DRIFTED` subset `BROKEN`; exits 2 to block the merge on any flip (A-3). |
 | `atlas-link` | governed sameAs assertion **or retraction** | links two existing nodeKeys as the same fact after authz-over-the-merged-class + a ratifier (`billy` when any class member is `T0`); a non-destructive read-side equivalence edge, never a merge. With `--retract` / `retract:true` it WITHDRAWS a previously asserted equivalence through the SAME gates — an APPEND, never a delete, and the class splits on the next read (ADR-0003, incl. §Retraction / A-D3). |

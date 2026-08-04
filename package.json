@@ -19,6 +19,7 @@
     "id-integrity": "node harness/gates/id-integrity.mjs",
     "command-doc-guard": "node harness/gates/command-doc-guard.mjs",
     "adr-citation-guard": "node harness/gates/adr-citation-guard.mjs",
+    "req-clause-guard": "node harness/gates/req-clause-guard.mjs",
     "doc-transcript-guard": "node harness/gates/doc-transcript-guard.mjs"
   },
   "engines": {

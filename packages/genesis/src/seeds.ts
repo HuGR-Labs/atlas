@@ -10,10 +10,15 @@ import type { StructRef } from '@atlas/contracts';
 import { nodeHashOfPath, unescapeKeyComponent } from '@atlas/index';
 import type { IndexNode } from '@atlas/index';
 import type { Skeleton } from './types.js';
+import { cmp, filePartOf, isUnitSite, unitsOfAxis } from './unit-order.js';
+import type { SiteOrderKey, UnitPrior, UnitPriorSource } from './unit-order.js';
 
-/** The one string order used by every sort here — sorted pairs + first-wins makes each map below a
- *  function of the SET of nodes, never of the walk order (GEN-1 byte-identity). */
-export const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+/** The unit vocabulary and the order over it live in `unit-order.ts` (split at the LOC ceiling). They are
+ *  RE-EXPORTED here because `cmp` and the `#182` order are part of this module's published surface and
+ *  `rank.ts` already imports both from it — the split must move code, not the API. */
+export { cmp, filePartOf, isUnitSite, compareSiteOrder } from './unit-order.js';
+export type { SiteOrderKey, UnitPrior, UnitPriorSource } from './unit-order.js';
+
 
 // ── node-identity ↔ subtreeHash correspondence (the F1/F2 bridge) ─────────────────────────────────────
 // The dep-graph keys edge endpoints by NODE IDENTITY (`DepEdge.from/to: Hash` = `IndexNode.key`, the
@@ -45,11 +50,45 @@ export function correspondence(graph: Skeleton): {
   return { keyOfSubtree, subtreeOfKey };
 }
 
-/** Resolve a frontier site's CONTENT subtreeHash to its NODE-IDENTITY key (the edge-endpoint space) via
- *  the index correspondence. A site with NO node in the index stays a disconnected island under its own
- *  synthetic identity — NEVER brand-laundered into the node space by a raw-string coincidence. */
-export const resolveSiteKey = (keyOfSubtree: ReadonlyMap<string, string>, site: StructRef): string =>
-  keyOfSubtree.get(site.subtreeHash) ?? `unresolved:${site.subtreeHash}`;
+
+/**
+ * Resolve a frontier site's CONTENT subtreeHash to its NODE-IDENTITY key (the edge-endpoint space) via
+ * the index correspondence. A site with NO node in the index stays a disconnected island under its own
+ * synthetic identity — NEVER brand-laundered into the node space by a raw-string coincidence.
+ *
+ * A SUB-FILE SITE RESOLVES TO ITS FILE'S IDENTITY (#182), and the reason is structural rather than a
+ * convenience: `deriveEdges` (index/src/build.ts) keys BOTH endpoints of every dependency edge by
+ * `docHash(doc.relativePath)`, so the dependency graph's nodes are DOCUMENTS and a sub-file unit has no
+ * vertex in it — and therefore no PPR of its own, ever, on this axis. Looking a unit up by its own content
+ * subtreeHash returns the SPATIAL key, which is not in the graph, so the unit would score the isolated-node
+ * floor: MEASURED on this repository, the first sub-file site then lands at rank 500 of 5803 and a
+ * budget-200 run visits ZERO of them — the frontier would grow 11× and change nothing at all.
+ *
+ * Taking the FILE's identity is the join the contract already sanctions (struct.ts: "the FILE portion is
+ * the prefix up to the first `::`"), so a unit inherits exactly its file's centrality and nothing else is
+ * invented. It is a PREFIX join on a delimiter the index escapes (`escapeKeyComponent`), NOT a join by
+ * spelling of a symbol NAME — the class #189/#153 punished and which this must not become.
+ *
+ * The consequence is deliberate and load-bearing: every unit of one file TIES with that file and with its
+ * siblings, so the ordering below — never a hash — is what actually decides which units are mined.
+ */
+export const resolveSiteKey = (
+  keyOfSubtree: ReadonlyMap<string, string>,
+  site: StructRef,
+  inGraph?: (key: string) => boolean,
+): string => {
+  const direct = keyOfSubtree.get(site.subtreeHash);
+  // THE SITE'S OWN IDENTITY WINS WHENEVER IT IS REALLY IN THE GRAPH. The file-prefix fallback below is a
+  // LAST resort for a site that has no vertex of its own, never a blanket rule for anything spelled with a
+  // `::` — a caller whose sites carry a `::` address AND resolve into the dependency axis (the transcribed
+  // goldens do exactly that) must keep the score it always had.
+  if (direct !== undefined && (inGraph === undefined || inGraph(direct))) return direct;
+  if (isUnitSite(site.qualifiedPath)) {
+    const file = String(nodeHashOfPath(filePartOf(site.qualifiedPath)));
+    if (inGraph === undefined || inGraph(file)) return file;
+  }
+  return direct ?? `unresolved:${site.subtreeHash}`;
+};
 
 /** The repo-relative PATH a spatial node addresses. `build.ts` mints a spatial key by joining the ESCAPED
  *  `/`-components of `node.path` (`escapeKeyComponent`), so the raw path is recovered by the exact inverse
@@ -106,10 +145,27 @@ export interface StructuralFrontier {
   readonly droppedNoPath: number; // dep-graph nodes with no spatial counterpart ⇒ no path ⇒ not promptable
 }
 
+
+/**
+ * How wide the structural frontier is cut (#182).
+ *
+ * `subFile` DEFAULTS TO FALSE — the shipped, file-only frontier, byte-for-byte — and that default is a
+ * claim about evidence, not timidity. The hypothesis this card exists to test (a symbol-granular frontier
+ * yields more distinct, more narrowly-grounded facts at equal budget) is NOT established; the card's own
+ * falsifiers may sink it, in which case the honest outcome is to revert. A behaviour that may be reverted
+ * must not be the one every existing caller silently gets in the meantime, so the wider frontier is OPT-IN
+ * at every layer: library, mine driver, and CLI (`ATLAS_FRONTIER=symbol`).
+ */
+export interface FrontierOptions {
+  readonly subFile?: boolean; //      default FALSE: file sites only, exactly as master ships
+  readonly prior?: UnitPriorSource; // absent ⇒ the within-file order degrades to `path asc` (honest, stated)
+}
+
+
 /** The STRUCTURAL personalization vector (GEN-15c): the def→ref graph's structurally-central sites (highest
  *  degree = type/API-surface density), ordered deterministically. Used when history is thin OR absent — a
  *  non-uniform, non-random frontier, NEVER rank noise. */
-export function structuralFrontier(graph: Skeleton): StructuralFrontier {
+export function structuralFrontier(graph: Skeleton, opts: FrontierOptions = {}): StructuralFrontier {
   // `h` iterates over dep-graph NODE-IDENTITY keys (edge endpoints), and BOTH legs of the emitted
   // `StructRef` are resolved back out of that space, never re-branded from it (KNOW-15):
   //   • `subtreeHash` — the CONTENT leg (F2): the node's real subtreeHash via the index correspondence,
@@ -133,6 +189,9 @@ export function structuralFrontier(graph: Skeleton): StructuralFrontier {
   const ranked = (ids.length > 0 ? ids : [...degree.keys()]).sort(
     (a, b) => (degree.get(b) ?? 0) - (degree.get(a) ?? 0) || cmp(a, b),
   );
+  // The SUB-FILE seeds are cut from the SPATIAL axis (the only axis that carries `::` nodes), and only for
+  // files that already reach the frontier — a file with dep-degree 0 has nothing to inherit.
+  const units = opts.subFile === true ? unitsOfAxis(graph.axes.spatial, opts.prior).byFile : undefined;
   const seeds: StructRef[] = [];
   let droppedNoPath = 0;
   for (const h of ranked) {
@@ -143,11 +202,56 @@ export function structuralFrontier(graph: Skeleton): StructuralFrontier {
       continue;
     }
     seeds.push({ kind: 'file', qualifiedPath: path, subtreeHash: asSubtreeHash(st) });
+    // …then that file's units, in the PRIOR order (`byUnitPrior`), never a hash. The file seed stays: it
+    // is the coarse anchor, and dropping it would make the two arms differ in more than granularity.
+    for (const u of units?.get(path) ?? [])
+      seeds.push({ kind: u.kind, qualifiedPath: u.qualifiedPath, subtreeHash: asSubtreeHash(u.subtreeHash) });
   }
   return { seeds, droppedNoPath };
 }
 
 /** The seeds alone — the shape every existing caller and oracle uses. */
-export function structuralSeeds(graph: Skeleton): readonly StructRef[] {
-  return structuralFrontier(graph).seeds;
+export function structuralSeeds(graph: Skeleton, opts: FrontierOptions = {}): readonly StructRef[] {
+  return structuralFrontier(graph, opts).seeds;
+}
+
+
+/**
+ * The tie-break key for each site of a personalization vector, computed from the SKELETON — never from the
+ * caller's array order, and never from a side-channel the producer had to remember to fill.
+ *
+ * A unit's `group` is recovered the same way `structuralFrontier` minted it: `nodeHashOfPath(file)` is the
+ * dependency node identity `h`, and `subtreeOfKey.get(h) ?? h` is the `st` the file seed carries. So a
+ * unit sorts into exactly its own file's slot. A site the spatial axis does not know (a mined history site,
+ * a hand-built fixture) falls back to its own `subtreeHash` on both legs — i.e. the shipped behaviour.
+ */
+export function siteOrderKeys(
+  graph: Skeleton,
+  sites: readonly StructRef[],
+  prior?: UnitPriorSource,
+): readonly SiteOrderKey[] {
+  const { subtreeOfKey } = correspondence(graph);
+  const { byPath } = unitsOfAxis(graph.axes.spatial, prior);
+  const groupCache = new Map<string, string>();
+  const groupOf = (file: string): string => {
+    const hit = groupCache.get(file);
+    if (hit !== undefined) return hit;
+    const h = String(nodeHashOfPath(file));
+    const g = subtreeOfKey.get(h) ?? h;
+    groupCache.set(file, g);
+    return g;
+  };
+  return sites.map((s): SiteOrderKey => {
+    const path = s.qualifiedPath;
+    const hash = String(s.subtreeHash);
+    const u = byPath.get(path);
+    // A UNIT IS A SITE THE FOLDED TREE KNOWS ABOUT — not a site whose address happens to contain `::`.
+    // The two are different and the difference is load-bearing: the transcribed goldens address their
+    // sites as `pkg/<id>.ts::<id>` while their skeletons carry no sub-file node at all, so a
+    // string-shaped test would have re-grouped them under a file hash that indexes nothing and silently
+    // reordered a frozen ranking. It also gives I1 for free — a site the reader could not resolve is
+    // never treated as a unit here either.
+    if (u === undefined) return { group: hash, sub: false, exported: false, bytes: 0, path, hash };
+    return { group: groupOf(filePartOf(path)), sub: true, exported: u.exported, bytes: u.bytes, path, hash };
+  });
 }
