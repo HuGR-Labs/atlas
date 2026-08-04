@@ -55,6 +55,11 @@ exclusions: # value
     `@sha256:` pins in `properties-tls.md` (b86f0afa → aa329ac9) is the consequence of that fan-out.
   - `atlas own` is NOT widened. It still bounds `T2` out of the briefing entirely (`own-source.ts` applies
     `atLeastT1` unchanged); only its per-row freshness now comes from the oracle. Verified in s28.
+    **[SUPERSEDED 2026-08-03 by `wp-own-two-bands.md` / `REQ-RETR-12m`.]** This exclusion was the defect. It
+    left the two read doors bounding the same store differently, and on the real 199-fact mined graph — where
+    every fact is `T2` — `atlas own` served 0/199 while `atlas query` served them. The s28 assertion that
+    "verified" it was verifying the exclusion, not a property. The amendment above now reaches `own`: same
+    membership predicates, a sub-cap inside the unchanged `OWN_CAP`, governing band untouched.
   - `packages/retrieval/src/pack.ts` (a LEDGERED reference model whose `fill()` no shipped door reaches) is
     made to COMPILE and no more: it projects its existing per-candidate `stale` boolean into the 3-state
     verdict and reports an empty advisory band with an honest `0` ledger. Amending it would move no shipped

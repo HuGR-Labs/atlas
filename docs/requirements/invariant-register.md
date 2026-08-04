@@ -214,7 +214,7 @@ anchor: `reference/atlas-retrieval.md#retr-N`.
 | RETR-9 empty & total | FR-2 (robustness) | on-diag (decoupled-after KERNEL-7) | PBT | malformed scope ⇒ empty pack/tools/no poke; 0 throws | — | behavioural | — | **RATIFIED** *(FR by analogy)* |
 | RETR-10 deterministic relate, no model-walk | FR-2 | COUPLED (index 3-axis seam) | PBT | relate byte-identical; 0 LLM; coChanged opt-in+labeled | determinism↔recall | behavioural | ADR-R10 index-closure | **RATIFIED** |
 | RETR-11 bounded blast radius | FR-2 (+FR-1) | COUPLED (consumes GEN-11 PPR) | PBT | maxHops=2, K=8, truncated+total meta; hub outranks near leaf | precision↔recall | behavioural | ADR-R11 PPR-bounded | **RATIFIED** |
-| RETR-12 curated own-pack, zero-assembly | FR-2 + FR-3 | COUPLED internal | PBT | own ≤ ~1.5K, index-reads only, 0 LLM; seat never chooses scope | budget↔completeness | behavioural | ADR-R12 mechanical-own | **RATIFIED** |
+| RETR-12 curated own-pack, zero-assembly | FR-2 + FR-3 | COUPLED internal | PBT | governing band tier≥T1 + advisory band T2 under a sub-cap INSIDE the unchanged own ≤ ~1.5K (AMENDED 2026-08-03, REQ-RETR-12m, extending ADR-0013 to this door); index-reads only, 0 LLM; seat never chooses scope; governing band keeps priority; every row carries its own freshness | budget↔completeness | behavioural | ADR-R12 mechanical-own | **RATIFIED** |
 | RETR-13 MISS-oracle off-atlas coverage | FR-2 | COUPLED (ledger sibling) | PBT | off-atlas rate ⇒ calibration prompt; no history ⇒ 0 | precision↔recall | behavioural | ADR-R13 MISS-oracle | **RATIFIED** |
 
 **RET: 13/13 RATIFIED.**

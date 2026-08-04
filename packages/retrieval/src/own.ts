@@ -6,23 +6,50 @@
 // D1: the composer carries an AVAILABILITY-MANIFEST — a bounded, frecency-ranked, CONTENT-FREE map of
 // reachable surfaces (pointers + how-to-pull, never content), under the same `OWN_CAP` budget. The result
 // `OwnPackPlus` extends the frozen `OwnPack` with additive exec-observable receipts (assignable to it).
+//
+// [AMENDED — REQ-RETR-12m, 2026-08-03] The briefing is TWO bands, not one filtered list, exactly as the
+// query pack has been since ADR-0013: the GOVERNING band (`tier≥T1`, ratified — `invariants` + `gotchas`,
+// unchanged in content, order and budget) and the ADVISORY band (`T2`, machine proposals no ratifier saw),
+// filled LAST out of what the governing band left, under its own `OWN_ADVISORY_CAP` sub-cap INSIDE the
+// unchanged `OWN_CAP`. `OWN_CAP` does not grow; what the sub-cap refuses joins the existing `pullReachable`
+// tail and is counted in `advisoryDropped`. The tier PREDICATES are not stated here — this layer cannot
+// import `@atlas/tools` (L5 inner, L7 outer), so the feed hands over a band it has already labelled through
+// the one shared `splitBands`/`isAdvisory` in `@atlas/tools` src/bands.ts, and this composer only budgets.
 
 import { tierRank } from '@atlas/knowledge';
-import type { NodeKey, Pack, PackInvariant, Tier } from '@atlas/contracts';
+import type { NodeKey, Pack, PackInvariant } from '@atlas/contracts';
 import type { GroundedFact } from '@atlas/knowledge';
-import type { OwnLevel, OwnPack, OwnUnit, RelatedFact, RelationSet } from './types.js';
+import type { OwnLevel, OwnUnit, RelatedFact, RelationSet } from './types.js';
+import type {
+  DedupPointer,
+  EpicUnit,
+  GroundingSource,
+  ManifestCandidate,
+  ManifestPointer,
+  OwnFacet,
+  OwnPackPlus,
+  OwnSources,
+  SizedGotcha,
+  SizedInvariant,
+} from './own-model.js';
 
-/**
- * The curated, zero-assembly `own` pack (RETR-12): `own_<unit>` returns a curated `OwnPack` composed by
- * INDEX READS ALONE (0 LLM, 0 free prose), `≤ ~1.5K` under the pinned cap, byte-identical for equal
- * input. Total: a malformed unit yields an empty briefing, never a throw (RETR-9). (atlas-retrieval:168)
- */
-export interface OwnApi {
-  /** Scope-unit → its CURATED, mechanically-composed `OwnPack` (the `own_<id>` tool), `≤ ~1.5K` under
-   *  the pinned cap, deterministic (0 LLM). Pure + total (miss ⇒ empty briefing, no throw — RETR-9).
-   *  (atlas-retrieval:168) */
-  own(unit: OwnUnit): OwnPack;
-}
+// The facet's DATA MODEL lives in `own-model.ts` and is re-exported HERE, unchanged, so every existing
+// importer of `./own.js` (and the package barrel) keeps the exact names it had. The split is by role —
+// declarations vs. the composer — and the public surface is byte-identical; see that file's header.
+export type {
+  AvailabilityManifest,
+  DedupPointer,
+  EpicUnit,
+  GroundingSource,
+  ManifestCandidate,
+  ManifestPointer,
+  OwnApi,
+  OwnFacet,
+  OwnPackPlus,
+  OwnSources,
+  SizedGotcha,
+  SizedInvariant,
+} from './own-model.js';
 
 // ── frozen bounds (RETR-12f/caps.ts: own ~1.5K under the ~5K ceiling; edges/finer/manifest bounded) ──────
 /** The `own` briefing budget in the pinned `cl100k_base` measure — `~1.5K` under the ceiling (RETR-12f). */
@@ -34,96 +61,26 @@ export const FINER_CAP = 16;
 /** Hard cap on the availability-manifest pointer count (D1: a bounded index, not a second swarm). */
 export const MANIFEST_CAP = 12;
 
+/**
+ * The ADVISORY band's sub-cap INSIDE `OWN_CAP` — `750`, and every part of that sentence is load-bearing.
+ *
+ * INSIDE. `OWN_CAP` does not grow. RETR-12f caps the whole briefing at `~1.5K` and this amendment adds a
+ * band, not a budget: an advisory row is only ever paid for out of the 1500 the briefing already had.
+ *
+ * DERIVED, not chosen. `@atlas/tools` src/bands.ts carries the one owner-ratified advisory bound in this
+ * product — `ADVISORY_CAP = 2000` against a governing `PACK_CAP = 2000` (retrieval/src/pack.ts), i.e. the
+ * ratified ratio is 1:1, an advisory band may be as large as the governing band and no larger. That number
+ * cannot be reused here: 2000 exceeds the whole 1500 briefing, so importing it would make the sub-cap
+ * vacuous. The RATIO carries over instead, applied to the budget this door actually has — `OWN_CAP / 2`.
+ * So no new magnitude is invented; what is inherited is the ratified shape ("advisory ≤ governing"), and
+ * the consequence is stated rather than assumed: a briefing can never be more than half machine proposals.
+ */
+export const OWN_ADVISORY_CAP = OWN_CAP / 2;
+
 /** Criticality → ordinal (T0 first). */
 // The lattice is NOT rebuilt here. A private `Record<Tier, number>` yields `undefined` for an off-lattice
 // value, so `tierRank(a) - tierRank(b)` was `NaN` and the sort order became undefined around a
 // poisoned row. `tierRank` (@atlas/knowledge) is total: an unrecognized class ranks LAST, so it sinks.
-
-// ── facet-local input records (the sized index candidates the composer ranks/caps) ──────────────────────
-/** One `tier≥T1` invariant candidate + its ranking keys + its pinned token cost (index-supplied). */
-export interface SizedInvariant {
-  readonly inv: PackInvariant;
-  readonly ppr: number; // stored precomputed importance (GEN-11) — a field, not a call
-  readonly hits: number; // observed hit-count (frecency)
-  readonly cost: number; // tokenEstimate under the pinned cap measure
-}
-
-/** One gotcha/rationale knowledge fact + its pinned token cost. */
-export interface SizedGotcha {
-  readonly fact: GroundedFact;
-  readonly cost: number;
-}
-
-/**
- * A CONTENT-FREE availability pointer (D1). Names a reachable surface — never carries its content.
- * `digest` is the surface's content-identity: index/kernel-SUPPLIED (this facet never hashes — sealed
- * @atlas/kernel seam). Where a digest is synthesized locally it is a FLAGGED `sim:` placeholder.
- */
-export interface ManifestPointer {
-  readonly kind: 'pack' | 'memory' | 'knowledge' | 'drill';
-  readonly name: string; // e.g. `own_payments`, `pr-memory:billing`
-  readonly digest: string; // content-identity (index-supplied; `sim:` prefix = SIMULATED, no raw hashing here)
-  readonly pull: string; // how-to-pull label
-  readonly hits: number; // frecency — ranks + drops the pointer
-}
-
-/** One manifest-pointer candidate + its pinned token cost. */
-export interface ManifestCandidate {
-  readonly pointer: ManifestPointer;
-  readonly cost: number;
-}
-
-/** The bounded, frecency-ranked, content-free reachable map (D1). */
-export interface AvailabilityManifest {
-  readonly pointers: readonly ManifestPointer[];
-  readonly truncated: boolean;
-}
-
-/** Where a unit is grounded from (RETR-12i): the tree (crate/module), a manifest (service/feature), or —
- *  for a NON-grounded epic (RETR-12j) — its project-memory `goal`. */
-export type GroundingSource = 'tree' | 'manifest' | 'goal';
-
-/** The composed OwnPack + the exec-observable receipts the goldens assert on (additive; see SHAPE NOTE). */
-export interface OwnPackPlus extends OwnPack {
-  readonly grounding: { readonly source: GroundingSource };
-  readonly tokenEstimate: number; // pinned `cl100k_base` count — `≤ OWN_CAP` (RETR-12f)
-  readonly manifest: AvailabilityManifest; // D1 content-free reachable map
-  readonly pullReachable: readonly NodeKey[]; // capped-out fact keys (0 silent drops — a pull-reachable tail)
-}
-
-/** The index-read axes the composer consumes (the seam). It owns none of these — it ranks + caps + projects. */
-export interface OwnSources {
-  readonly role: (unit: OwnUnit) => string; // the 1-line role (from a definition fact / terrain)
-  readonly invariants: (unit: OwnUnit) => readonly SizedInvariant[]; // the unit's tier≥T1 invariants
-  readonly terrain: (unit: OwnUnit) => { readonly contents: readonly NodeKey[]; readonly owner: string; readonly tier: Tier };
-  readonly relate: (unit: OwnUnit) => RelationSet; // bounded relate() — the blast summary source
-  readonly gotchas: (unit: OwnUnit) => readonly SizedGotcha[]; // gotcha/rationale knowledge facts
-  readonly memory: (unit: OwnUnit) => unknown; // upward project-memory POINTERS (never a memory type)
-  readonly finer: (unit: OwnUnit) => readonly OwnUnit[]; // finer scope-units (drill.finer)
-  readonly manifest: (unit: OwnUnit) => readonly ManifestCandidate[]; // D1 reachable-surface pointers
-}
-
-/** An epic scope-unit (RETR-12j/12l): NOT a grounded node — a project-memory `goal` spanning `features`. */
-export interface EpicUnit {
-  readonly id: string;
-  readonly goal: string; // the Orientation project-memory goal (the role source)
-  readonly features: readonly OwnUnit[]; // the grounded feature units whose OwnPacks compose the epic
-}
-
-/** A dedup pointer (RETR-12k): a nodeId the co-injected pack cedes to `own`, plus how-to-pull it. */
-export interface DedupPointer {
-  readonly nodeId: NodeKey;
-  readonly pull: string;
-}
-
-/** The facet surface. `own` narrows the frozen `OwnApi.own` (OwnPackPlus is assignable to OwnPack). */
-export interface OwnFacet extends OwnApi {
-  own(unit: OwnUnit): OwnPackPlus;
-  ownEpic(epic: EpicUnit): OwnPackPlus;
-  dispatch(unit: OwnUnit): { readonly tool: string; readonly pack: OwnPackPlus };
-  project(units: readonly OwnUnit[]): readonly { readonly tool: string; readonly pack: OwnPackPlus }[];
-  dedup(own: OwnPackPlus, pack: Pack): { readonly pack: Pack; readonly pointers: readonly DedupPointer[] };
-}
 
 // ── pure helpers ────────────────────────────────────────────────────────────────────────────────────────
 /** Byte-stable code-point key comparator (the final total-order tiebreak, matches relate's `nodeKey-asc`). */
@@ -185,6 +142,8 @@ function emptyOwn(source: GroundingSource): OwnPackPlus {
     tokenEstimate: 0,
     manifest: { pointers: [], truncated: false },
     pullReachable: [],
+    advisory: [],
+    advisoryDropped: 0,
   };
 }
 
@@ -236,6 +195,39 @@ export function createOwn(sources: OwnSources): OwnFacet {
       }
     }
 
+    // ADVISORY band (RETR-12m) — LAST, and the position is the invariant. Every governing row, every
+    // gotcha and every manifest pointer has already been paid for out of `OWN_CAP` by the time this loop
+    // runs, so an advisory row can only ever spend what the ratified content did not want: a briefing whose
+    // governing band fills the budget serves ZERO advisory rows and is byte-identical to what it served
+    // before this amendment. The band is bounded TWICE — by its own `OWN_ADVISORY_CAP` sub-cap and by the
+    // unchanged `OWN_CAP` total — so it can neither displace the governing band nor grow the briefing.
+    //
+    // The fill is CAP-WINS, byte-for-byte the discipline `splitBands` (@atlas/tools src/bands.ts) applies
+    // to the query pack's advisory band: once either cap has bitten, every remaining row is dropped and no
+    // later (smaller) row sneaks in ahead of an earlier one. It differs DELIBERATELY from the greedy best-
+    // fit of the two governing loops above, which is pre-existing and is not this amendment's to change:
+    // the two shipped advisory bands must truncate the same way, or "the advisory band" names two things.
+    const advisory: PackInvariant[] = [];
+    let advisoryUsed = 0;
+    let advisoryDropped = 0;
+    let advisoryCapped = false;
+    for (const cand of [...sources.advisory(unit)].sort(cmpInvariant)) {
+      const fits = advisoryUsed + cand.cost <= OWN_ADVISORY_CAP && used + cand.cost <= OWN_CAP;
+      if (!advisoryCapped && fits) {
+        advisory.push(cand.inv);
+        advisoryUsed += cand.cost;
+        used += cand.cost;
+      } else {
+        advisoryCapped = true;
+        // Both ledgers, deliberately: `advisoryDropped` is the COUNT a reader checks against "did I see the
+        // whole band", `pullReachable` is the existing 0-silent-drops tail that names each row by nodeKey.
+        // `own` already promises the tail ("what did not fit is listed as pull-reachable, never silently
+        // dropped"); honouring that promise beats inventing a second one.
+        advisoryDropped += 1;
+        overflow.push(cand.inv.nodeId);
+      }
+    }
+
     const terrain = sources.terrain(unit);
     return {
       unit: oneLine(sources.role(unit)),
@@ -253,6 +245,8 @@ export function createOwn(sources: OwnSources): OwnFacet {
       tokenEstimate: used,
       manifest: { pointers, truncated },
       pullReachable: overflow,
+      advisory,
+      advisoryDropped,
     };
   }
 
@@ -274,6 +268,8 @@ export function createOwn(sources: OwnSources): OwnFacet {
       let used = 0;
       const seen = new Set<string>();
       const invariants: PackInvariant[] = [];
+      const advisory: PackInvariant[] = [];
+      let advisoryDropped = 0;
       const gotchas: GroundedFact[] = [];
       const finer: OwnUnit[] = [];
       const pointers: ManifestPointer[] = [];
@@ -295,11 +291,24 @@ export function createOwn(sources: OwnSources): OwnFacet {
             invariants.push(iv);
           }
           for (const g of fpack.gotchas) gotchas.push(g);
+          // The feature's own advisory band rides along with the feature, already sub-capped by its own
+          // composition, and its drop ledger ADDS UP rather than being restated: an epic that swallowed a
+          // feature's truncation count would report a complete band the feature knew was cut.
+          for (const av of fpack.advisory) {
+            if (seen.has(av.nodeId)) continue; // same nodeId dedup the governing band applies
+            seen.add(av.nodeId);
+            advisory.push(av);
+          }
+          advisoryDropped += fpack.advisoryDropped;
           for (const d of fpack.edges.dependents) depSet.add(d);
           for (const d of fpack.edges.dependencies) depsSet.add(d);
         } else {
           truncated = true;
           for (const iv of fpack.invariants) overflow.push(iv.nodeId); // pull-reachable, not silently gone
+          // A feature that did not fit takes its advisory band with it — named in the tail and COUNTED,
+          // never quietly absent, and counted here as well as in the feature's own ledger below.
+          for (const av of fpack.advisory) overflow.push(av.nodeId);
+          advisoryDropped += fpack.advisory.length + fpack.advisoryDropped;
         }
       }
 
@@ -315,6 +324,8 @@ export function createOwn(sources: OwnSources): OwnFacet {
         tokenEstimate: used,
         manifest: { pointers, truncated },
         pullReachable: overflow,
+        advisory,
+        advisoryDropped,
       };
     } catch {
       return emptyOwn('goal');

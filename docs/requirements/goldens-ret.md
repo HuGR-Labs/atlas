@@ -610,6 +610,45 @@ Then `n3` appears in `own` only; the co-injected pack shows a `pull-reachable` p
 teeth: breaks-on "the dedup is dropped — `n3` appears in **both** `own` and the co-injected pack (the fact is double-counted, paid for twice against the ceiling)"
 gen: PBT   # witness of the dedup law: `own ∩ pack = ∅` after dedup, own wins
 
+<!-- REQ-RETR-12 family AMENDED 2026-08-03 (REQ-RETR-12m — the two bands on this door). The 12a–12l scenarios
+     above are UNCHANGED and still pass byte-for-byte: they are all stated over `tier≥T1` fixtures, which is
+     exactly the GOVERNING band this amendment does not move. The four scenarios below are ADDED beside them
+     for the ADVISORY band. Fixture: the real disk store + real built `Axes` of
+     `packages/adapter-io/test/own-two-bands.test.ts`, four rows at one anchor — `T0`, `T1`, `T2`, and an
+     off-lattice `T3` a committed `.atlas/` can carry with no write door. -->
+
+### SCN-RETR-12m-1 — a `T2` under the scope is SERVED, on the advisory band, with its own freshness   (happy)   [AMENDED 2026-08-03]
+source: REQ-RETR-12m
+Given a scope carrying `T0`, `T1` and `T2` facts in one durable store
+When `own_<scope>` is composed
+Then the `T2` rows are served in the ADVISORY band, each carrying its own re-derived `Freshness` verdict, and the `T0`/`T1` rows are served in the GOVERNING band exactly as before — the band a row lands in is decided by tier MEMBERSHIP, never by `!atLeastT1`
+teeth: breaks-on "the advisory band is bounded out by `atLeastT1` (the shipped defect: `own` served 0 of the 199 facts in Atlas's own store while `query` served them); or a governing row is duplicated into the advisory band"
+gen: conformance   # differential vs the shipped `createOwnLeg` over a real store
+
+### SCN-RETR-12m-2 — an OFF-LATTICE tier is in NEITHER band, and is not counted as a truncation   (guard)   [AMENDED 2026-08-03]
+source: REQ-RETR-12m
+Given a projection carrying a row whose `tier` is `T3` — off the lattice, minted by no write door
+When `own_<scope>` is composed
+Then that row appears in neither band, and `advisoryDropped` does not count it — a refusal is a governance decision, not a budget event
+teeth: breaks-on "the advisory predicate is written `!atLeastT1` instead of `isTier(t) && t === 'T2'`, so an off-lattice row is served as a proposal; or a refused row is folded into the truncation ledger"
+gen: conformance   # differential vs the shipped `createOwnLeg` over a poisoned store
+
+### SCN-RETR-12m-3 — the advisory sub-cap bites INSIDE `OWN_CAP`, and every refused row is named   (guard)   [AMENDED 2026-08-03]
+source: REQ-RETR-12m
+Given more `T2` rows under the scope than the advisory sub-cap admits
+When `own_<scope>` is composed
+Then the served advisory rows cost `≤ OWN_ADVISORY_CAP`, the whole briefing still costs `≤ OWN_CAP`, `advisoryDropped` reports exactly how many rows the cap cut, and every cut row is named by nodeKey in the pull-reachable tail
+teeth: breaks-on "the advisory band is capped by `OWN_CAP` alone so a briefing becomes mostly unratified; the total budget is raised to fit the band; or a cut row is silently absent instead of pull-reachable"
+gen: conformance   # differential vs the shipped composer under a 12-row advisory fixture
+
+### SCN-RETR-12m-4 — the GOVERNING band keeps priority — ratified content is never displaced   (guard)   [AMENDED 2026-08-03]
+source: REQ-RETR-12m
+Given a scope whose `tier≥T1` facts alone fill the whole `OWN_CAP` budget
+When `own_<scope>` is composed
+Then the governing rows are served in full, zero advisory rows are served, and the advisory rows are reported as dropped and pull-reachable — a briefing never regresses because proposals arrived
+teeth: breaks-on "the advisory band is filled before the governing band, or shares the budget pro-rata, so a ratified row is pushed into the tail by a machine proposal"
+gen: conformance   # differential vs the shipped composer under a budget-filling governing fixture
+
 ---
 
 ## REQ-RETR-13 — MISS-oracle, off-atlas coverage per territory (reference-model; 13b DEFINE-gated)

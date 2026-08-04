@@ -27,9 +27,11 @@ import type { OwnDispatch } from '@atlas/adapter-io';
 import type { GroundedFact } from '@atlas/knowledge';
 import type { CliVerdict } from './render.js';
 
-/** The invariant line every `own` outcome carries — the one property a reader should check the bytes against. */
+/** The invariant line every `own` outcome carries — the one property a reader should check the bytes against.
+ *  It names the TWO BANDS (REQ-RETR-12m) because the difference between a ratified row and a machine
+ *  proposal is the one thing an operator must not have to infer from a tier column. */
 const INVARIANT =
-  'RETR-12: `own_<scope>` is composed by INDEX READS ALONE — 0 LLM, 0 free prose, byte-identical for equal input — and it is bounded: what did not fit is listed as pull-reachable, never silently dropped';
+  'RETR-12: `own_<scope>` is composed by INDEX READS ALONE — 0 LLM, 0 free prose, byte-identical for equal input — two bands (governing tier>=T1 + separately capped advisory T2), and it is bounded: what did not fit is listed as pull-reachable, never silently dropped';
 
 /** The advisory claim body of a fact. An `AdvisoryNode` carries `claimNorm`; a `PredicateNode` carries a
  *  `check` and no claim body, so it renders EMPTY rather than a stringified record. (`GroundedFact.claims`
@@ -55,7 +57,7 @@ export function ownVerdict(out: OwnDispatch): CliVerdict {
     `invariant: ${INVARIANT}`,
     // The header states the BUDGET, not just the content: a briefing is a bounded artifact and its size
     // against its cap is the number that tells a caller whether they are reading all of it.
-    `own: ${tool} — ${pack.invariants.length} invariant(s), ${pack.gotchas.length} gotcha(s); tokenEstimate ${pack.tokenEstimate}`,
+    `own: ${tool} — ${pack.invariants.length} invariant(s), ${pack.gotchas.length} gotcha(s), ${pack.advisory.length} advisory; tokenEstimate ${pack.tokenEstimate}`,
     `  role: ${pack.unit}`,
     `  grounding: ${pack.grounding.source}`,
     `  owner: ${pack.shape.owner}`,
@@ -63,6 +65,12 @@ export function ownVerdict(out: OwnDispatch): CliVerdict {
     ...pack.shape.contents.map((c) => `  contains ${c}`),
     ...pack.invariants.map((i) => `  inv ${i.tier} ${i.nodeId}: ${i.claim}`),
     ...pack.gotchas.map((g) => `  gotcha ${g.tier} ${g.id}: ${claimOf(g)}`),
+    // THE ADVISORY BAND GETS ITS OWN VERB AND IS NEVER INTERLEAVED (REQ-RETR-12m, the same rule ADR-0013
+    // put on the query pack). The row format is byte-for-byte `render.ts`'s advisory line, including the
+    // bracketed per-row freshness verdict, because it IS the same `PackInvariant` — a reader who has seen
+    // one `atlas query` has already read this. An operator who skips these rows loses nothing ratified.
+    ...pack.advisory.map((i) => `  advisory ${i.tier} ${i.nodeId} [${i.freshness}]: ${i.claim}`),
+    `  advisoryDropped: ${pack.advisoryDropped}`,
     ...pack.edges.dependents.map((d) => `  dependent ${d}`),
     ...pack.edges.dependencies.map((d) => `  dependency ${d}`),
     ...pack.drill.finer.map((f) => `  finer ${f.id}`),
@@ -86,10 +94,18 @@ export function ownVerdict(out: OwnDispatch): CliVerdict {
  * unit at all answers with an empty briefing rather than an error, which is right for a briefing and wrong
  * to leave ambiguous. `shape.contents` is the discriminator — it comes from the code index, not from the
  * knowledge store, so it is non-empty exactly when the path IS a real structural unit.
+ *
+ * AN ADVISORY ROW COUNTS AS A FACT HERE, and that is a correctness fix rather than a preference: `facts`
+ * gates the sentence "NO fact is filed under it yet". Counting only the governing band would print that
+ * sentence over a briefing that had just listed `T2` rows from the store — the guidance would contradict
+ * the bytes three lines below it. The row's STATUS is not blurred: the caveat below says what an advisory
+ * row is, and the band is rendered under its own verb.
  */
 function nextLine(out: OwnDispatch): string {
   const { pack } = out;
-  const facts = pack.invariants.length + pack.gotchas.length;
+  const facts = pack.invariants.length + pack.gotchas.length + pack.advisory.length;
+  /** Appended whenever an advisory row is on screen — the same warning `atlas query`'s guidance carries. */
+  const caveat = pack.advisory.length === 0 ? '' : '; an advisory row is a machine proposal no ratifier saw — check its per-row freshness';
   if (facts === 0 && pack.shape.contents.length === 0) {
     return 'this path names no unit in the code index and serves nothing — check the spelling (`own` is TOTAL: an unknown scope answers with an empty briefing, never an error), or point it at a directory/file that exists at HEAD';
   }
@@ -101,9 +117,9 @@ function nextLine(out: OwnDispatch): string {
     // row this command prints — `inv`, `gotcha`, `dependent`, `pull-reachable` — carries a **nodeKey**, the
     // same identifier `atlas query`'s `inv` lines carry. `atlas node` takes a CONTENT ADDRESS and would miss
     // on every one of them, so it is deliberately not the verb suggested here.
-    return `${out.pack.invariants.length} invariant(s) fit the budget; ${out.pack.pullReachable.length} more are pull-reachable, named below by nodeKey — narrow the scope to one of the \`finer\` units to fit them into a briefing, or inspect one with \`atlas doctor why <nodeKey>\``;
+    return `${out.pack.invariants.length} invariant(s) and ${out.pack.advisory.length} advisory row(s) fit the budget; ${out.pack.pullReachable.length} more are pull-reachable, named below by nodeKey — narrow the scope to one of the \`finer\` units to fit them into a briefing, or inspect one with \`atlas doctor why <nodeKey>\`${caveat}`;
   }
-  return `the whole of what is filed under this scope fits the briefing — drill with \`atlas own <finer>\`, widen with \`atlas query ${out.pack.drill.complement.pull.replace(/^relate:/, '')}\``;
+  return `the whole of what is filed under this scope fits the briefing — drill with \`atlas own <finer>\`, widen with \`atlas query ${out.pack.drill.complement.pull.replace(/^relate:/, '')}\`${caveat}`;
 }
 
 /**
