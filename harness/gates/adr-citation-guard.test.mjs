@@ -9,69 +9,55 @@
 // Fixtures are built in a temp tree and the gate is pointed at them with `ADR_CITATION_GUARD_ROOT`. Exit
 // codes come from `execFileSync`'s thrown `status` — never from a shell pipeline, which reports the LAST
 // command's status and has already bought this repo two false greens.
+//
+// SECOND CORPUS (#192). The gate now walks `packages/**/*.ts` beside `docs/**/*.md`, so every docs-focused
+// fixture below also lays down a minimal `packages/` floor (`pkgFloor`) — without it the gate correctly
+// refuses A-4 and the fixture would be testing the wrong branch. The floor cites NOTHING on purpose: a docs
+// fixture's hand-written expected report must not silently gain rows from the scaffolding around it.
+// This file owns the `docs/**` teeth, the exact-report shape and the four ORIGINAL refusals (A-0..A-3).
+// The `packages/**` teeth, the A4 fixture exclusion and A-4/A-5 are the sibling twin
+// `adr-citation-guard.packages.test.mjs`; the scratch-tree plumbing both use is `harness/lib/
+// adr-citation-fixtures.mjs`, so the two twins cannot drift into meaning different things by the same name.
 
 import { describe, it, expect, afterAll } from 'vitest';
-import { execFileSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { cpSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  adr,
+  pkgFloor,
+  refusal,
+  reported,
+  runGate,
+  scratchPool,
+} from '../lib/adr-citation-fixtures.mjs';
 
 const GATES = dirname(fileURLToPath(import.meta.url));
 const REPO = join(GATES, '..', '..');
 const GATE = join(GATES, 'adr-citation-guard.mjs');
 
-const temps = [];
-/** A fresh scratch root. Prefix is this file's own — nothing else in the tree is ever removed. */
-function scratch() {
-  const d = mkdtempSync(join(tmpdir(), 'atlas-adrcite-'));
-  temps.push(d);
-  return d;
-}
-afterAll(() => {
-  for (const d of temps) rmSync(d, { recursive: true, force: true });
-});
-
-/** Run the gate against `root`. Returns `{ code, out }` with the code read directly, never through a pipe. */
-function run(root) {
-  try {
-    const stdout = execFileSync(process.execPath, [GATE], {
-      env: { ...process.env, ADR_CITATION_GUARD_ROOT: root },
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    return { code: 0, out: stdout };
-  } catch (e) {
-    return { code: e.status ?? -1, out: `${e.stdout ?? ''}${e.stderr ?? ''}` };
-  }
-}
-
-/** The `citing file:line → ADR-NNNN` occurrences the gate reported, in order. */
-const reported = (out) =>
-  out
-    .split('\n')
-    .map((l) => /^\s*✗\s+(\S+)\s+→\s+(ADR-\d{4})\b/.exec(l))
-    .filter((m) => m !== null)
-    .map((m) => `${m[1]} → ${m[2]}`);
-
-/** The refusal code (`A-0`…`A-3`) the gate printed, or `null` if it reported dangling citations instead. */
-const refusal = (out) => (/^\s*✗\s+(A-\d)\s/m.exec(out) ?? [null, null])[1];
-
-const adr = (root, n, slug) => {
-  mkdirSync(join(root, 'docs', 'adr'), { recursive: true });
-  writeFileSync(join(root, 'docs', 'adr', `ADR-${n}-${slug}.md`), `# ADR-${n} — ${slug}\n`);
-};
+const pool = scratchPool();
+const scratch = () => pool.scratch();
+const run = (root) => runGate(GATE, root);
+afterAll(() => pool.cleanup());
 
 describe('adr-citation-guard — the real corpus', () => {
   it('passes on the repository as it stands, and says what it checked', () => {
     const { code, out } = run(REPO);
     expect(code, out).toBe(0);
-    expect(out).toMatch(/^adr-citation-guard: OK — \d+ `ADR-<NNNN>` citation\(s\) in \d+ docs/);
+    expect(out).toMatch(
+      /^adr-citation-guard: OK — \d+ `ADR-<NNNN>` citation\(s\) across \d+ file\(s\) \(\d+ docs\/\*\*\/\*\.md \+ \d+ packages\/\*\*\/\*\.ts\)/,
+    );
+    // the widened sweep is NON-VACUOUS on the real tree: both legs must have found files.
+    const [, nDocs, nPkgs] = /\((\d+) docs\/\*\*\/\*\.md \+ (\d+) packages\/\*\*\/\*\.ts\)/.exec(out);
+    expect(Number(nDocs)).toBeGreaterThan(0);
+    expect(Number(nPkgs)).toBeGreaterThan(0);
   });
 
   it('FAILS when a real, heavily-cited ADR is removed — and names EVERY occurrence, not the first', () => {
     const root = scratch();
     cpSync(join(REPO, 'docs'), join(root, 'docs'), { recursive: true });
+    pkgFloor(root);
     unlinkSync(join(root, 'docs', 'adr', 'ADR-0013-the-pack-has-two-bands-governing-and-advisory.md'));
 
     const { code, out } = run(root);
@@ -94,6 +80,7 @@ describe('adr-citation-guard — the report is exact', () => {
   it('reports precisely the hand-written expected set: file:line → id, one line per OCCURRENCE', () => {
     const root = scratch();
     adr(root, '0001', 'the-one-that-exists');
+    pkgFloor(root);
     mkdirSync(join(root, 'docs', 'requirements'), { recursive: true });
     writeFileSync(
       join(root, 'docs', 'requirements', 'req-x.md'),
@@ -121,6 +108,7 @@ describe('adr-citation-guard — the report is exact', () => {
   it('a citation inside a fenced block is still a citation (a fence is not a hiding place)', () => {
     const root = scratch();
     adr(root, '0001', 'exists');
+    pkgFloor(root);
     writeFileSync(join(root, 'docs', 'note.md'), '```\nADR-0099\n```\n');
     const { code, out } = run(root);
     expect(code).toBe(1);
@@ -131,6 +119,7 @@ describe('adr-citation-guard — the report is exact', () => {
     const root = scratch();
     adr(root, '0001', 'alpha');
     adr(root, '0002', 'beta');
+    pkgFloor(root);
     writeFileSync(join(root, 'docs', 'note.md'), 'ADR-0001 amends ADR-0002.\n');
     const { code, out } = run(root);
     expect(code, out).toBe(0);
@@ -140,6 +129,7 @@ describe('adr-citation-guard — the report is exact', () => {
   it('a nested file under docs/adr/ does NOT satisfy a citation (the index is flat by declaration)', () => {
     const root = scratch();
     adr(root, '0001', 'exists');
+    pkgFloor(root);
     mkdirSync(join(root, 'docs', 'adr', 'archive'), { recursive: true });
     writeFileSync(join(root, 'docs', 'adr', 'archive', 'ADR-0077-buried.md'), '# ADR-0077\n');
     writeFileSync(join(root, 'docs', 'note.md'), 'ADR-0077 is cited here.\n');
@@ -203,3 +193,4 @@ describe('adr-citation-guard — anti-vacuity: every way of checking nothing is 
     expect(roots.map((r) => refusal(run(r).out))).toEqual(['A-0', 'A-2', 'A-1', 'A-3']);
   });
 });
+
