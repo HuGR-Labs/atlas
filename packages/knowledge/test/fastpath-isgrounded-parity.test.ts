@@ -75,6 +75,30 @@ const VALID_HASH: SubtreeHash = asSubtreeHash('sh-synthetic-test-hash-0001');
  *  value) — no other row throws (`{}`/`[]`/`0`/`false` all resolve `.length` to `undefined`, no throw). */
 const SEALED_THROWS_ON: ReadonlySet<string> = new Set(['undefined', 'null']);
 
+/**
+ * PINNED FINDING (measured 2026-08-04, #176 re-verification) — THE DIVERGENCE POINTS THE OTHER WAY.
+ *
+ * The sealed body is `e.anchor.subtreeHash.length > 0` with NO `typeof` guard, so it does not ask for a
+ * STRING — it asks for anything wearing a positive `.length`. A non-empty array, a plain object carrying a
+ * `length` property, and a boxed `String` object therefore all read as GROUNDED in `@atlas/grounding`,
+ * while the local (knowledge) copy — which DOES guard `typeof` — refuses all three.
+ *
+ * The direction matters and is the opposite of the one this file was originally written to chase. The local
+ * fast-path copy is now STRICTLY STRICTER than the sealed reference: there is no input the sealed predicate
+ * refuses and the fast path accepts (the fail-OPEN direction, closed by `56f0440`), only inputs the sealed
+ * one accepts and the fast path refuses. So the fast path cannot ratify anything the sealed path would
+ * reject, and the residual looseness lives in the SEALED reference, not in the copy.
+ *
+ * NOT FIXED HERE, DELIBERATELY: `packages/grounding/**` is out of scope for this card and the sealed
+ * predicate is authoritative by axiom — a behavioural change to it is an owner decision, not a test's. This
+ * set pins the OBSERVED behaviour so the gap is visible and cannot regress silently in either direction.
+ */
+const SEALED_ACCEPTS_NONSTRING: ReadonlySet<string> = new Set([
+  "['a','b'] (NON-empty array)",
+  '{length:5} (object wearing a .length)',
+  'new String("abc") (boxed String object)',
+]);
+
 /** The minimum table the brief specifies (undefined/null/''/0/false/{}/[]/valid string), driven through
  *  BOTH implementations below. `expected` is the CORRECT (fail-closed) answer: never auto-accept. */
 const COERCION_TABLE: ReadonlyArray<{ readonly label: string; readonly value: unknown; readonly expected: boolean }> = [
@@ -85,6 +109,9 @@ const COERCION_TABLE: ReadonlyArray<{ readonly label: string; readonly value: un
   { label: 'false', value: false, expected: false },
   { label: '{} (plain object)', value: {}, expected: false },
   { label: '[] (empty array)', value: [], expected: false },
+  { label: "['a','b'] (NON-empty array)", value: ['a', 'b'], expected: false },
+  { label: '{length:5} (object wearing a .length)', value: { length: 5 }, expected: false },
+  { label: 'new String("abc") (boxed String object)', value: new String('abc'), expected: false },
   { label: 'valid non-empty hash string', value: VALID_HASH, expected: true },
 ];
 
@@ -119,6 +146,11 @@ describe('GROUND-2 fitness function — local isGrounded ≡ sealed GroundApi.is
       // be the fail-open bug reappearing in the sealed reference itself.
       if (row.expected) {
         expect(row['sealed @atlas/grounding isGrounded']).toBe(true);
+      } else if (SEALED_ACCEPTS_NONSTRING.has(row.input)) {
+        // The pinned looseness: sealed reads a positive `.length` as grounded whatever the type.
+        expect(row['sealed @atlas/grounding isGrounded']).toBe(true);
+        // What actually guards the write door is the LOCAL copy, and it refuses.
+        expect(row['new typeof-guarded (FIXED, fail-closed)']).toBe(false);
       } else {
         expect(row['sealed @atlas/grounding isGrounded']).not.toBe(true);
       }
@@ -132,7 +164,12 @@ describe('GROUND-2 fitness function — local isGrounded ≡ sealed GroundApi.is
 
   it.each(COERCION_TABLE)('sealed (@atlas/grounding) isGrounded: $label → agrees with FIXED, or documented THROW', ({ label, value, expected }) => {
     const observed = sealedObserved(groundingWith(value));
-    if (SEALED_THROWS_ON.has(label)) {
+    if (SEALED_ACCEPTS_NONSTRING.has(label)) {
+      // PINNED: sealed has no `typeof` guard, so a non-string with a positive `.length` reads as grounded.
+      // The local copy refuses it — asserted in the sibling `local (knowledge)` row — so the fast path is
+      // strictly stricter and nothing reaches a write door on the strength of this.
+      expect(observed).toBe(true);
+    } else if (SEALED_THROWS_ON.has(label)) {
       // PINNED FINDING: the sealed reference is not `total` on this input despite its own docstring
       // ("Pure + total", @atlas/grounding types.ts:79-80) — it throws instead of failing closed to
       // `false`. Out of scope to fix here (packages/grounding/** untouched, per brief); pinned so a
@@ -161,12 +198,36 @@ describe('GROUND-2 fitness function — local isGrounded ≡ sealed GroundApi.is
     expect(sealedObserved(g)).toBe('THROWS');
   });
 
-  it('FULL PARITY — for every row where the sealed impl does not throw, local and sealed agree exactly', () => {
+  it('ONE-WAY CONTAINMENT — there is NO input the sealed impl refuses and the local fast path accepts', () => {
+    // THE SECURITY PROPERTY THIS FILE EXISTS FOR, stated as the implication that actually matters. The
+    // original phrasing here claimed FULL PARITY, which the three `SEALED_ACCEPTS_NONSTRING` rows falsify:
+    // the two predicates are NOT equal. What holds — and what a write door depends on — is the one-way
+    // direction: `sealed refuses ⇒ local refuses`. Its contrapositive is "local accepts ⇒ sealed accepts",
+    // i.e. the fast path can never ratify something the sealed predicate would have rejected.
     for (const row of COERCION_TABLE) {
       const g = groundingWith(row.value);
       const sealed = sealedObserved(g);
-      expect(localIsGrounded(g)).toBe(row.expected); // local: always answers, always correctly
-      if (sealed !== 'THROWS') expect(sealed).toBe(row.expected); // sealed: correct whenever it answers at all
+      const local = localIsGrounded(g);
+      expect(local).toBe(row.expected); // local: always answers, always correctly, never throws
+      if (sealed !== true) {
+        expect(local).toBe(false); // sealed refused (or threw) ⇒ local MUST refuse — the fail-OPEN direction
+      }
     }
+  });
+
+  it('the local fast path is strictly STRICTER than sealed — the divergence set is non-empty and one-way', () => {
+    const localAcceptsSealedRefuses: string[] = [];
+    const sealedAcceptsLocalRefuses: string[] = [];
+    for (const row of COERCION_TABLE) {
+      const g = groundingWith(row.value);
+      const sealed = sealedObserved(g);
+      const local = localIsGrounded(g);
+      if (local === true && sealed !== true) localAcceptsSealedRefuses.push(row.label);
+      if (sealed === true && local !== true) sealedAcceptsLocalRefuses.push(row.label);
+    }
+    // The dangerous direction is EMPTY — nothing the sealed predicate rejects can be fast-path ratified.
+    expect(localAcceptsSealedRefuses).toEqual([]);
+    // The safe direction is exactly the pinned set — sealed's missing `typeof` guard, not the copy's.
+    expect(new Set(sealedAcceptsLocalRefuses)).toEqual(SEALED_ACCEPTS_NONSTRING);
   });
 });
