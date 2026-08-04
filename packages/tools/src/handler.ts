@@ -140,7 +140,17 @@ const SCHEMAS: Record<Tool, ToolSchema> = {
   },
   'atlas-query': {
     name: 'atlas-query',
-    description: 'bounded read projection — resolves a scope to the merged covering pack of tier>=T1 invariants, stale-flagged (TOOLS-6)',
+    // ADR-0013 clause 3: this string is what an MCP client SHOWS a calling agent, so it is the first place
+    // the two-band amendment has to be true. It said "the merged covering pack of tier>=T1 invariants" for
+    // the whole window after the split shipped — an agent was promised ratified rows only and handed
+    // machine proposals beside them, under the same word. The sibling `GUIDANCE['atlas-query'].invariant`
+    // above was corrected and this one was not, which is why the claim is now pinned by an off-the-wire
+    // test (e2e-blackbox S26.4) that asserts the WHOLE string, not a substring of it.
+    description:
+      'bounded read projection — resolves a scope to a covering pack in TWO bands: `invariants` is GOVERNING ' +
+      '(tier>=T1, ratified) and `advisory` is ADVISORY (T2 machine proposals NO ratifier saw, separately ' +
+      'capped, with `advisoryDropped` counting what the cap dropped). Every row carries its own `freshness`; ' +
+      'the pack-level `stale` flag means re-ground before trusting (TOOLS-6, ADR-0013)',
     inputSchema: {
       type: 'object',
       properties: {
