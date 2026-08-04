@@ -1,4 +1,4 @@
-// harness/gates/drift-patterns.mjs — the governance-count DRIFT vocabulary, extracted so it can be TESTED.
+// harness/lib/drift-patterns.mjs — the governance-count DRIFT vocabulary, extracted so it can be TESTED.
 //
 // These patterns are the whole of `spec-conformance-guard`'s check (2). They live in their own module for
 // one reason: a regex nobody can falsify is not a gate. Kept here they are importable by

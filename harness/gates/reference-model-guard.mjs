@@ -38,7 +38,7 @@
 // this repo builds with `verbatimModuleSyntax: true`, under which a type-only import MUST be written
 // `import type` / `import { type X }`, so the syntax and the emit cannot disagree. The analyser was
 // nonetheless cross-checked against the emitted `dist/**/src/**.js` (types already erased by tsc) and the
-// two agreed on all 54 modules. See harness/gates/reachability.mjs.
+// two agreed on all 54 modules. See harness/lib/reachability.mjs.
 //
 // ── LIMITS, STATED ───────────────────────────────────────────────────────────────────────────────────
 // Reachability is DIRECT, not transitive from an entrypoint (reachability.mjs says why). A closed ring of
@@ -53,7 +53,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { referenceModels } from './reachability.mjs';
+import { referenceModels } from '../lib/reachability.mjs';
 
 const ROOT = process.env.REFERENCE_MODEL_GUARD_ROOT ?? join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const PKGS = join(ROOT, 'packages');

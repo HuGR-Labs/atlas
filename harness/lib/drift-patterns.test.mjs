@@ -1,4 +1,4 @@
-// harness/gates/drift-patterns.test.mjs — the anti-drift vocabulary's OWN teeth.
+// harness/lib/drift-patterns.test.mjs — the anti-drift vocabulary's OWN teeth.
 //
 // `spec-conformance-guard`'s check (2) is a list of regexes, and a regex is the easiest kind of gate to get
 // silently wrong in BOTH directions: too loose and it cries wolf until authors write around it, too tight

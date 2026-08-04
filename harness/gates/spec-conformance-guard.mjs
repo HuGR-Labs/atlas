@@ -20,7 +20,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 // The drift vocabulary lives in its own module so it can be exercised by a test (drift-patterns.test.mjs)
 // without importing this file's top-level sweep + process.exit. A regex nobody can falsify is not a gate.
-import { isStaleGovernanceClaim } from './drift-patterns.mjs';
+import { isStaleGovernanceClaim } from '../lib/drift-patterns.mjs';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const problems = [];

@@ -185,6 +185,67 @@ describe('id-integrity — every claimed defect class is falsifiable', () => {
     expect(code).toBe(1);
   });
 
+  // ── ID-3 SCHEDULING: only a structured pointer counts ──────────────────────────────────────────────
+  // The hole these close: `wpRefs` used to collect EVERY id token anywhere in a WP card, so a sentence
+  // naming an id marked it "scheduled". Documenting an orphan silenced the ratchet tracking it. Each case
+  // below FAILS against that implementation — the first three because prose/other fields used to schedule,
+  // the last two because they must keep working after the narrowing (a tightening that also breaks the
+  // legitimate cases is not a fix).
+  it('ID-3 is NOT satisfied by a bare prose mention of the id', () => {
+    append('requirements/req-blk.md', ['', '### REQ-BLK-9z — added by a late ADR']);
+    append('requirements/work-packages/wp-campaign-1.md', [
+      '',
+      'exclusions: >',
+      '  REQ-BLK-9z is deliberately out of scope for this card and is left to a later campaign.',
+    ]);
+    const { code, out } = runGate();
+    expect(out).toMatch(/ID-3 orphan requirement: 'REQ-BLK-9z'/);
+    expect(code).toBe(1);
+  });
+
+  it('ID-3 is NOT satisfied by a markdown LINK to the id outside a scheduling block', () => {
+    append('requirements/req-blk.md', ['', '### REQ-BLK-9z — added by a late ADR']);
+    append('requirements/work-packages/wp-campaign-1.md', [
+      '',
+      'intent: >',
+      '  Restores compliance with [REQ-BLK-9z](../req-blk.md#REQ-BLK-9z) without carrying it.',
+    ]);
+    expect(runGate().out).toMatch(/ID-3 orphan requirement: 'REQ-BLK-9z'/);
+  });
+
+  it('ID-3 is NOT satisfied by a structured pointer in a NON-scheduling field', () => {
+    append('requirements/req-blk.md', ['', '### REQ-BLK-9z — added by a late ADR']);
+    append('requirements/work-packages/wp-campaign-1.md', [
+      '',
+      'context_refs:',
+      '  - source: ../req-blk.md#REQ-BLK-9z',
+    ]);
+    expect(runGate().out).toMatch(/ID-3 orphan requirement: 'REQ-BLK-9z'/);
+  });
+
+  it('ID-3 IS satisfied by a structured source_reqs: pointer — and the block survives a blank line', () => {
+    append('requirements/req-blk.md', ['', '### REQ-BLK-9z — added by a late ADR']);
+    append('requirements/work-packages/wp-campaign-1.md', [
+      '',
+      'source_reqs:',
+      '',
+      '  - source: ../req-blk.md#REQ-BLK-9z   # ptr+digest',
+    ]);
+    const { code, out } = runGate();
+    expect(out).not.toMatch(/ID-3/);
+    expect(code).toBe(0);
+  });
+
+  it('ID-3 IS satisfied for an SCN by a structured acceptance: pointer', () => {
+    append('requirements/goldens-blk.md', ['', '### SCN-BLK-9z-1 — a golden   (guard)']);
+    append('requirements/work-packages/wp-campaign-1.md', [
+      '',
+      'acceptance:',
+      '  - source: ../goldens-blk.md#SCN-BLK-9z-1',
+    ]);
+    expect(runGate().code).toBe(0);
+  });
+
   it('ID-4 catches a dangling <a id> anchor', () => {
     const p = join(root, 'docs', 'reference', 'atlas-blk.md');
     writeFileSync(p, readFileSync(p, 'utf8').replace('<a id="author-1"></a>', ''));

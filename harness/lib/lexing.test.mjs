@@ -1,4 +1,4 @@
-// harness/gates/lexing.test.mjs — the teeth for the ONE comment stripper.
+// harness/lib/lexing.test.mjs — the teeth for the ONE comment stripper.
 //
 // `stripComments` moved out of `reachability.mjs` when `layer-guard.mjs` became its second consumer, and
 // its fixtures moved with it. They were previously in `reachability-lexing.test.mjs`, which stays exactly

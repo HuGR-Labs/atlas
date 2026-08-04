@@ -1,4 +1,4 @@
-// harness/gates/reachability.mjs — the VALUE-vs-TYPE reachability analyser behind reference-model-guard.
+// harness/lib/reachability.mjs — the VALUE-vs-TYPE reachability analyser behind reference-model-guard.
 //
 // It lives in its own module, like drift-patterns.mjs, so a test can falsify it without importing a
 // top-level sweep and a `process.exit`. An analyser nobody can falsify is not evidence.
