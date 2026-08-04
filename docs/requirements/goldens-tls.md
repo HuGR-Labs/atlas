@@ -453,6 +453,14 @@ Then the governing band is served whole and the advisory band is bounded exactly
 teeth: breaks-on "one shared budget lets an advisory proposal displace a ratified invariant"
 gen: conformance
 
+### SCN-TOOLS-6f-4 — the PUBLISHED description declares both bands, off the wire   (guard)
+source: REQ-TOOLS-6f
+Given the BUILT `atlas-mcp` server driven over real MCP stdio in a subprocess
+When a client calls `ListTools` and reads the `atlas-query` tool `description`
+Then it names both returned bands (`invariants` governing `tier>=T1` ratified, `advisory` `T2` that NO ratifier saw, plus `advisoryDropped`) and no longer promises "the merged covering pack of tier>=T1 invariants"
+teeth: breaks-on "the two-band amendment lands in the behaviour and the guidance string while the published tool description keeps promising one ratified band — the state shipped between #107 and #193, in which a calling agent is handed unratified rows under a word that says they are ratified (ADR-0013 clause 3)"
+gen: conformance
+
 ---
 
 ## REQ-TOOLS-7 — fail-closed grounded write

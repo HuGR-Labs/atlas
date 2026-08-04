@@ -74,9 +74,22 @@ export interface InitOut {
 }
 
 /**
- * `atlas-query` result (TOOLS-6). Transcribed EXACTLY from atlas-tools:20 — `QueryOut = Pack`: the merged
- * covering bounded pack (`≤ ~2K`, `tier≥T1`, stale-flagged). `Pack` is the contracts-owned injection
- * type — imported, NEVER redefined; a `stale:true` pack means re-ground before trusting (§6.1).
+ * `atlas-query` result (TOOLS-6, as amended by ADR-0013) — `QueryOut = Pack`: the covering bounded pack in
+ * TWO bands. `invariants` is the GOVERNING band (`tier≥T1`, ratified, under the `≤ ~2K` bound); `advisory`
+ * is the ADVISORY band (`T2` — machine proposals NO ratifier saw) under its own separate `ADVISORY_CAP`,
+ * with `advisoryDropped` counting what that cap dropped. They are separate FIELDS, never one filtered list,
+ * so a `T2` proposal can never arrive on the line form a ratified invariant arrives on. Every row carries
+ * its own `freshness`; a `stale:true` pack means re-ground before trusting (§6.1).
+ *
+ * `Pack` is the contracts-owned injection type — imported, NEVER redefined.
+ *
+ * THIS COMMENT NO LONGER TRANSCRIBES `atlas-tools:20`, and that is deliberate. It used to read "the merged
+ * covering bounded pack (`≤ ~2K`, `tier≥T1`, stale-flagged)" — the same single-band promise that #193 fixed
+ * on the published MCP `description`, surviving here on the very type this door returns and hover-rendered
+ * for every consumer of `@atlas/tools`. `INV-TOOLS-6` in `docs/reference/atlas-tools.md` still states the
+ * pre-amendment form; amending a ratified INVARIANT is its own owner-ratified change and is tracked
+ * separately, so this comment describes the SHIPPED type and names the divergence rather than transcribing
+ * a line that the code has outgrown.
  */
 export type QueryOut = Pack;
 
