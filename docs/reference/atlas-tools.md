@@ -18,7 +18,7 @@ Guidance    = { next: string, invariant: string }     // shipped with every resu
 Verdict     = { ok: boolean, data?, rejected?: string, guidance: Guidance }
 
 InitOut      = { territories: Territory[], blastRadius, t0Candidates: string[] }
-QueryOut     = Pack                                    // ≤2K, tier≥T1, stale-flagged (§6.1 watermark)
+QueryOut     = Pack   // TWO BANDS (ADR-0013): governing ≤2K tier≥T1 + separately capped T2 advisory, stale-flagged (§6.1)
 QueryEnvelope= { pack: Pack, subsumes: Subsumes[], sameAs: SameAs[] }  // Verdict.data for atlas-query (derived, read-only)
 EmitOut      = { emitted: boolean, id?, rejected?: string }
 LinkOut      = { linked: boolean, a?, b?, rejected?: string }  // atlas-link (WP-SAMEAS); linked:false = fail-closed refusal
@@ -51,14 +51,28 @@ DoctorOut    = { archive?, whyBroken?, hotSet?: { size, budget, over: boolean },
   the territory skeleton + blast radius + T0-candidate flags and MUST NOT set any tier above `T2` or promote
   a `T0` automatically (A-5, A-6). Heuristics MAY only *flag* a T0 candidate.
 - **TOOLS-6 `atlas-query` returns a bounded pack.** It MUST accept any scope (file/folder/module/crate),
-  resolve it through the index to the covering territory/-ies, and return a `≤ ~2K` pack of `tier≥T1`
-  invariants; `stale:true` MUST mean re-ground before trusting (§6.1). **Freshness is a read-model WATERMARK
+  resolve it through the index to the covering territory/-ies, and return a `≤ ~2K` **governing** pack of
+  `tier≥T1` invariants, **beside a separately capped ADVISORY band of `T2` machine proposals no ratifier
+  saw** (ADR-0013, owner-ratified 2026-08-03); `stale:true` MUST mean re-ground before trusting (§6.1).
+  **Freshness is a read-model WATERMARK
   (N11, ADR-0002):** `stale` is `true` when ANY under-scope fact's stored `freshness` is `DRIFTED` OR the
   projection's persist-time `builtAt` HEAD differs from live HEAD (the view is behind HEAD ⇒ unverified). The
   behind-HEAD check is a cheap `git rev-parse HEAD` (NO worktree); `atlas-query` is NOT a live drift oracle —
   the authoritative per-fact re-derivation stays `atlas reconcile` / `atlas doctor`. The query envelope
   (`Verdict.data`) additionally carries the derived, read-only `subsumes` (DP-2) and `sameAs` (WP-SAMEAS)
   relations, scoped to the pack — never a stored merge.
+  <!-- AMENDED 2026-08-04 — OWNER RATIFIED, and CLERICAL. Was: "and return a `≤ ~2K` pack of `tier≥T1`
+       invariants", a statement about the WHOLE pack. ADR-0013 (owner-ratified 2026-08-03) had already
+       ratified the two-band behaviour and it is SHIPPED — `splitBands` / `ADVISORY_CAP`
+       (`packages/tools/src/bands.ts`), `Pack.advisory` + `Pack.advisoryDropped`
+       (`packages/contracts/src/pack.ts`). Only this text lagged, which left six requirements
+       (REQ-TOOLS-6a…6f) citing a ratified invariant that contradicted them. NO behaviour change and no REQ
+       change: REQ-TOOLS-6b's quote is re-lifted onto the amended sentence and nothing else moves.
+       The retired claim ran through FOUR lines of this file — this bullet, the `QueryOut` data-model line,
+       the `atlas-query` Surface/API line and acceptance item 5 — and all four are amended together:
+       amending one carrier and leaving three is the exact shape that produced this divergence.
+       The link is now MECHANICAL, not editorial — `spec-conformance-guard` check (5) resolves every REQ's
+       `normative-clause` into the invariant it cites, so the next amendment that skips a quote fails CI. -->
 - **TOOLS-7 `atlas-emit` fails closed.** It MUST re-derive the citation at `source@sha`; a node whose
   grounding does not re-derive MUST be rejected (`emitted:false`, nothing persisted) (A-2). Writes MUST be
   templated (A-13) and upserts, not blind inserts (A-12).
@@ -137,7 +151,7 @@ DoctorOut    = { archive?, whyBroken?, hotSet?: { size, budget, over: boolean },
 
 ```
 atlas-init      <path>                 → InitOut       // $0-LLM structural move-in (A-5, A-6)
-atlas-query     <scope>                → QueryOut      // scope → covering pack + related band, ≤2K, stale-flagged (§6.1)
+atlas-query     <scope>                → QueryOut      // scope → covering pack (governing ≤2K + separately capped T2 advisory band, ADR-0013) + related band, stale-flagged (§6.1)
 atlas-emit      <node> --at <sha>      → EmitOut       // fail-closed grounded write (A-2, A-12, A-13)
 atlas-reconcile <mergeBase>            → ReconcileOut  // classify drift; exit 2 ONLY on semantic (A-3, A-4, TOOLS-8)
 atlas-reconcile <mergeBase> --accept-reground → ReconcileOut  // auto-re-ground mechanical in one pass, no block (TOOLS-13)
@@ -215,8 +229,9 @@ reach the store, down a native-first ladder where the **CLI is the floor, not th
 3. **TOOLS-4** — Every result carries non-empty `next + invariant` guidance.
 4. **TOOLS-5** — `atlas-init` on any tree ⇒ zero invariants, all territories `T2/advisory`; a T0-keyword
    territory yields `t0Candidate:true` **and** `tier=='T2'` (§8.5, §8.6).
-5. **TOOLS-6** — `atlas-query` on a file, folder, module, and crate each returns the merged covering pack,
-   `≤ ~2K` tokens (§8.9, §8.15).
+5. **TOOLS-6** — `atlas-query` on a file, folder, module, and crate each returns the merged covering pack:
+   its **governing** band `≤ ~2K` tokens, with the `T2` **advisory** band separately capped beside it
+   (ADR-0013, owner-ratified 2026-08-03) (§8.9, §8.15).
 6. **TOOLS-7** — `atlas-emit` of a node with no resolvable citation ⇒ `emitted:false`, nothing persisted
    (§8.2); a changed fact supersedes rather than duplicates (§8.13).
 7. **TOOLS-8 / TOOLS-13** — A merge that drifts a fact **semantically** ⇒ `semantic` non-empty,
