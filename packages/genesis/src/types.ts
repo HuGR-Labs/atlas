@@ -220,6 +220,24 @@ export interface GenesisReport {
   readonly open: readonly OpenQ[];
   readonly llmCalls: number;
   readonly budgetSpent: number;
+  /** MODEL CALLS ACTUALLY MADE — including the ones whose results were DISCARDED (task #158).
+   *
+   *  It is a SECOND counter rather than a correction to `llmCalls`, because the two answer different
+   *  questions and only one of them is about money. `llmCalls` counts sites whose result was USED — it is
+   *  incremented per folded site, so a site that faulted, or one whose batch-mate faulted first, does not
+   *  appear in it. That is right for a coverage claim and WRONG for a cost claim: those calls were issued
+   *  and, against a real provider, billed. Under a bounded pool up to `POOL_WIDTH - 1` calls can be issued
+   *  and discarded when a lower-ranked batch-mate faults, and a sequential run already discarded the
+   *  faulting call itself.
+   *
+   *  `modelCalls - llmCalls` is therefore the DISCARDED count, and it is the number an operator is owed:
+   *  cost is the axis this product is measured on, so a spend figure that quietly excluded calls we paid
+   *  for would make the one number we are trying to win a false claim.
+   *
+   *  OPTIONAL in the TYPE only because `GenesisReport` literals are constructed in frozen test fixtures
+   *  this change may not edit. Every path in the run controller SETS IT, ALWAYS, INCLUDING ZERO — a field
+   *  that appeared only when non-zero would read as "this never happens". */
+  readonly modelCalls?: number;
   readonly cost?: CostReport; // [FLAG] GEN-13/A-13 require per-stage cost; §Surface literal omits it
   readonly resumeToken?: ResumeToken; // present only on a partial/interrupted run (GEN-8)
   /** The per-site run ledger (GEN-8/12g). OPTIONAL for the same reason `cost` is: the §Surface literal

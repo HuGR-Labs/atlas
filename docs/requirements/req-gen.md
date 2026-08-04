@@ -376,3 +376,35 @@ normative-clause: "a fact **no wave ever consults decays out** of the served set
 source: INV-GEN-16 @ reference/atlas-genesis.md#gen-16
 Genesis shall calibrate the admission threshold against observed hits.
 normative-clause: "the admission threshold calibrates against observed hits"
+
+## §GEN-CONC — the S2 pass spends concurrently and reports as though it had not (task #158)
+
+### REQ-GEN-CONC-1 — one seam for concurrency
+source: INV-GEN-2 @ reference/atlas-genesis.md#gen-2
+Genesis shall admit concurrency only through a batched S2 dispatch port that receives candidates in ascending rank order and returns one positionally-aligned result per candidate.
+normative-clause: "concurrency enters through the batched S2 dispatch port and nowhere else"
+
+### REQ-GEN-CONC-2 — the report is invariant under scheduling
+source: INV-GEN-8 @ reference/atlas-genesis.md#gen-8
+The report of a concurrently-executed pass shall be byte-identical to the report of the same pass executed sequentially, excepting only the count of model calls actually issued.
+normative-clause: "a concurrent pass reports byte-identically to a sequential one"
+
+### REQ-GEN-CONC-3 — the resume cursor is a contiguous prefix
+source: INV-GEN-8 @ reference/atlas-genesis.md#gen-8
+Genesis shall set the resume cursor to the highest rank R such that every rank less than or equal to R has completed, never to the highest rank that merely finished first.
+normative-clause: "the resume cursor is the highest rank whose every predecessor completed"
+
+### REQ-GEN-CONC-4 — the ceiling is never overshot
+source: INV-GEN-2 @ reference/atlas-genesis.md#gen-2
+Genesis shall not dispatch a site once the budget ceiling is reached, bounding each batch by the calls remaining.
+normative-clause: "no site is dispatched once the ceiling is reached"
+
+### REQ-GEN-CONC-5 — spend is reported apart from coverage
+source: INV-GEN-2 @ reference/atlas-genesis.md#gen-2
+Genesis shall report the model calls actually issued separately from the sites whose results were used, and shall report it always, including when the two are equal.
+normative-clause: "model calls issued are reported separately from sites used, always"
+
+### REQ-GEN-CONC-6 — durable writes remain serialized
+source: INV-GEN-7 @ reference/atlas-genesis.md#gen-7
+Genesis shall route every durable write through the pass loop, one site at a time in rank order, regardless of how the model calls were dispatched.
+normative-clause: "durable writes remain serialized in rank order under concurrency"
