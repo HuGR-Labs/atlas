@@ -20,6 +20,7 @@ import { createRequire } from 'node:module';
 import Parser from 'web-tree-sitter';
 import { escapeKeyComponent } from '@atlas/index';
 import type { FileTree } from '@atlas/index';
+import type { UnitPrior } from '@atlas/genesis';
 import { isSymlinkLeaf } from './fs.js';
 
 const require = createRequire(import.meta.url);
@@ -92,13 +93,29 @@ function grammarFor(path: string): TsLanguage | undefined {
   return undefined;
 }
 
-/** Unwrap an `export` / `export default` wrapper to the declaration it carries (else the node itself). */
-function unwrapExport(node: SyntaxNode): SyntaxNode {
-  if (node.type !== 'export_statement') return node;
+/**
+ * A top-level declaration PLUS the one fact about its wrapper (#182).
+ *
+ * `unwrapExport` used to return the bare inner node, so `export function f` and a private `function f`
+ * were indistinguishable from the moment it returned — the package's SURFACE erased at the first type
+ * boundary it crossed. The wrapper is the only place that fact exists in the tree, and it costs one
+ * boolean to keep, so it is kept: it is the strongest available PRIOR for which unit inside a file is
+ * worth a model call (`genesis/src/seeds.ts` `unitPrior`). It is a prior and nothing more — it is not
+ * grounding, it is not a measured importance, and it never enters a subtreeHash.
+ */
+interface Declaration {
+  readonly node: SyntaxNode;
+  readonly exported: boolean;
+}
+
+/** Unwrap an `export` / `export default` wrapper to the declaration it carries (else the node itself),
+ *  KEEPING whether there was a wrapper. */
+function unwrapExport(node: SyntaxNode): Declaration {
+  if (node.type !== 'export_statement') return { node, exported: false };
   const decl = node.childForFieldName('declaration');
-  if (decl !== null) return decl;
-  for (const c of node.namedChildren) if (ITEM_KINDS.has(c.type)) return c;
-  return node;
+  if (decl !== null) return { node: decl, exported: true };
+  for (const c of node.namedChildren) if (ITEM_KINDS.has(c.type)) return { node: c, exported: true };
+  return { node, exported: true }; // `export { a }` / `export * from` — filtered out by ITEM_KINDS below
 }
 
 /** The declared name of a unit (empty for an anonymous closure). A `lexical`/`var` declaration joins its
@@ -176,42 +193,61 @@ function blockNode(parentPath: string, src: string, node: SyntaxNode, name: stri
 
 /** Build the FileTree node for one `item` unit — its source slice as `content`, its blocks as children
  *  (canonical source order), each block nested under THIS item's path (`file::item::block`). */
-function itemNode(filePath: string, src: string, decl: SyntaxNode, ordinal: number): FileTree {
+function itemNode(filePath: string, src: string, decl: Declaration, ordinal: number): FileTree {
   const blocks: SyntaxNode[] = [];
-  collectBlocks(decl, blocks);
+  collectBlocks(decl.node, blocks);
   blocks.sort((a, b) => a.startIndex - b.startIndex);
   const names = blocks.map(nameOf);
   const ordinals = ordinalsOf(blocks, names);
-  const itemPath = unitPath(filePath, decl, nameOf(decl), ordinal);
+  const itemPath = unitPath(filePath, decl.node, nameOf(decl.node), ordinal);
   return {
     path: itemPath,
     children: blocks.map((b, i) => blockNode(itemPath, src, b, names[i] ?? '', ordinals[i] ?? 0)),
-    content: src.slice(decl.startIndex, decl.endIndex),
+    content: src.slice(decl.node.startIndex, decl.node.endIndex),
   };
 }
 
 /** Parse one TS/TSX file `content` into its ordered item child nodes. A parse that yields an error tree
  *  (or throws) returns `[]` — an honest EMPTY refinement, never a fabricated unit. */
-function itemsOf(filePath: string, src: string, grammar: TsLanguage): FileTree[] {
+function itemsOf(filePath: string, src: string, grammar: TsLanguage, priors: Map<string, UnitPrior>): FileTree[] {
   try {
     const parser = new Parser();
     parser.setLanguage(grammar);
     const tree = parser.parse(src);
     const root = tree.rootNode;
     if (root.hasError) return [];
-    const items = root.namedChildren.map(unwrapExport).filter((n) => ITEM_KINDS.has(n.type));
-    items.sort((a, b) => a.startIndex - b.startIndex);
-    const ordinals = ordinalsOf(items, items.map(nameOf));
-    return items.map((decl, i) => itemNode(filePath, src, decl, ordinals[i] ?? 0));
+    const items = root.namedChildren.map(unwrapExport).filter((d) => ITEM_KINDS.has(d.node.type));
+    items.sort((a, b) => a.node.startIndex - b.node.startIndex);
+    const nodes = items.map((d) => d.node);
+    const ordinals = ordinalsOf(nodes, nodes.map(nameOf));
+    return items.map((decl, i) => {
+      const built = itemNode(filePath, src, decl, ordinals[i] ?? 0);
+      recordPriors(priors, built, decl.exported);
+      return built;
+    });
   } catch {
     return [];
   }
 }
 
+/** Record the ORDERING PRIOR of one item and of every block under it (#182). Walked from the BUILT nodes
+ *  rather than from the syntax nodes so the key is exactly the unit `path` the fold published — the same
+ *  string `structuralFrontier` reconstructs from the index key and the same one the unit reader looks up.
+ *  A block is never itself an `export` statement, so only the item carries `exported`. */
+function recordPriors(priors: Map<string, UnitPrior>, item: FileTree, exported: boolean): void {
+  priors.set(item.path, { exported, bytes: byteLengthOf(item.content) });
+  for (const b of item.children) priors.set(b.path, { exported: false, bytes: byteLengthOf(b.content) });
+}
+
+/** The ONE size measure — UTF-8 bytes, the unit the evidence span is also measured in. */
+const SIZER = new TextEncoder();
+const byteLengthOf = (content: string | undefined): number =>
+  content === undefined ? 0 : SIZER.encode(content).length;
+
 /** Refine one FileTree node (recursively). Directory nodes recurse into children; a TS/TSX file leaf gains
  *  its parsed item children. Every existing node is preserved (path + content untouched); only children
  *  are additively refined. */
-function refine(node: FileTree): FileTree {
+function refine(node: FileTree, priors: Map<string, UnitPrior>): FileTree {
   // A mode-120000 leaf is NOT source and is never parsed. Its `content` is a link target path — text the
   // author of the link chose freely — so parsing it would mint sub-file unit keys out of something that is
   // not a program: `ln -s 'const x = 1' src/leak.ts` yields `src/leak.ts::lexical_declaration:0:x`, and a
@@ -222,11 +258,11 @@ function refine(node: FileTree): FileTree {
   if (node.content !== undefined && node.children.length === 0) {
     const grammar = grammarFor(node.path);
     if (grammar === undefined) return node;
-    const items = itemsOf(node.path, node.content, grammar);
+    const items = itemsOf(node.path, node.content, grammar, priors);
     if (items.length === 0) return node;
     return { path: node.path, children: items, content: node.content };
   }
-  const children = node.children.map(refine);
+  const children = node.children.map((c) => refine(c, priors));
   return node.content === undefined
     ? { path: node.path, children }
     : { path: node.path, children, content: node.content };
@@ -234,5 +270,27 @@ function refine(node: FileTree): FileTree {
 
 /** Fold sub-file item/block AST units into the spatial `FileTree` (additive refinement, ADAPT-AST-1). */
 export function foldAstUnits(tree: FileTree): FileTree {
-  return refine(tree);
+  return refine(tree, new Map());
+}
+
+/**
+ * The fold PLUS the per-unit ORDERING PRIORS the sub-file frontier ranks by (#182) — from ONE parse.
+ *
+ * WHY THIS EXISTS AS A SECOND RETURN RATHER THAN AS FIELDS ON `FileTree`. `FileTree`/`IndexNode` are the
+ * frozen index data model and `packages/index/src/**` is out of scope for this card, so `exported` and the
+ * unit's byte size cannot ride on the tree. They also cannot be RECOVERED downstream: `IndexNode` carries
+ * no `content`, so by the time `genesis`'s `structuralFrontier` sees the spatial axis both signals are
+ * gone — `unwrapExport` had already discarded export-ness, and only a hash of the bytes survives. Handing
+ * them back beside the tree is the one carrier that costs no second parse.
+ *
+ * The map is keyed by the unit's fold PATH (`file::item[::block]`) — the same string the frontier
+ * reconstructs from the index key and the same one the unit-granular reader looks up, so the three cannot
+ * drift apart. A key the map does not hold means "prior unknown", never "prior zero as a fact".
+ */
+export function foldAstUnitsWithPriors(tree: FileTree): {
+  readonly tree: FileTree;
+  readonly priors: ReadonlyMap<string, UnitPrior>;
+} {
+  const priors = new Map<string, UnitPrior>();
+  return { tree: refine(tree, priors), priors };
 }

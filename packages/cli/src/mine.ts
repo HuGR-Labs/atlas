@@ -31,6 +31,7 @@ import { makeRunController, createScan, createMine, runExtract } from '@atlas/ge
 import type {
   ControllerDeps,
   Plan,
+  FrontierOptions,
   GenesisBudget,
   GenesisReport,
   Candidate,
@@ -43,6 +44,7 @@ import type {
 } from '@atlas/genesis';
 import { createDiskStore, headSha, createSkeletonSource, gitSidecarTrust } from '@atlas/adapter-io';
 import { resolveProposer } from './mine-proposer.js';
+import { resolveFrontier } from './mine-frontier.js';
 import { createProposerPool, makeVisitAll, proposerPoolAvailable } from './mine-pool.js';
 import type { ProposerPool, SiteVisit } from './mine-pool.js';
 import { composedGate } from './mine-gate.js';
@@ -51,7 +53,7 @@ import { upsert as knowledgeUpsert, normalizeCheck, primaryAnchorId, nodeKey } f
 import type { WriteRequest, StoreProjection, Candidate as KnowledgeCandidate } from '@atlas/knowledge';
 import { id } from '@atlas/kernel';
 import { join } from 'node:path';
-import { StagingCommitError as StagingRefusalError } from './mine-staging.js';
+import { MINED_SCOPE, MINED_TIER, StagingCommitError as StagingRefusalError } from './mine-staging.js';
 import { foldVerdict } from './mine-render.js';
 import type { MinePass } from './mine-render.js';
 import type { CliVerdict } from './render.js';
@@ -82,6 +84,10 @@ export interface MineDeps {
   readonly handoffTo: () => void; //      S4 — the born-from-work terminator (a no-op for a mine pass)
   readonly budget?: GenesisBudget; //     the hard site ceiling; omitted ⇒ the controller's defaultBudget
   readonly scope?: string; //             a subtree to seed instead of the whole repo (GEN-13)
+  /** #182 — how wide the structural frontier is cut, and where its ordering priors come from. Omitted ⇒
+   *  resolved from `ATLAS_FRONTIER` + this pass's own skeleton source (see `withDefaults`). Injectable so
+   *  a test can pin either arm without touching the environment. */
+  readonly frontier?: FrontierOptions;
   /** The environment the OPERATOR config is located in (`$ATLAS_MODEL_CONFIG` / `$XDG_CONFIG_HOME`),
    *  defaulted to `process.env`. Threaded so a test is HERMETIC: without it `runMine(repo)` reads the
    *  developer's own `~/.config/atlas/model.json` and would execute their model binary in a unit test. */
@@ -126,23 +132,11 @@ const claimNormOf = (f: Fact): string => (f.kind === 'advisory' ? f.claimNorm : 
  *  driver falls back to below. */
 export { makeAdmitGate, unwiredGate, UNWIRED_GATE_REASON } from './mine-gate.js';
 
-/**
- * The reserved scope every MINED node carries — PROVENANCE plus a fail-closed default, not the boundary itself
- * (ADR-0008 moved these rows out of the governed projection entirely). Mining has no actor, so a mined node has no
- * owner, and an unowned node is writable not by "anyone" but by NOBODY: no actor belongs to this scope unless
- * `.atlas/policy.json` declares it, so `actorInScope` denies by default (KNOW-11a) and, should a candidate ever be
- * promoted, the emit door refuses any fact declaring a different scope onto a mined row. Granting it appoints a
- * curator — deliberate, NOT protected: the grant lives in `.atlas/policy.json`, which no live mechanism gates.
- */
-export const MINED_SCOPE = 'atlas:mined';
-
-/** The governance CLASS a mined row lives under: `T2`, the candidate class, always — stamped from this constant,
- *  never forwarded from `f.tier`, so an injected gate cannot mint a staged row DECLARING `T0`. */
-const MINED_TIER = 'T2' as const;
-
-/** The staging refusal vocabulary + its thrown discriminant, extracted at the LOC ceiling (see that file's
- *  header). RE-EXPORTED here because `StagingCommitError` is part of this module's published surface. */
-export { StagingCommitError, STAGING_REFUSAL_TEXT } from './mine-staging.js';
+/** The staging refusal vocabulary, its thrown discriminant, and what a staged ROW DECLARES about itself
+ *  (`MINED_SCOPE`/`MINED_TIER`) — all extracted to `mine-staging.ts` at the LOC ceiling, along the same
+ *  seam. RE-EXPORTED here because `StagingCommitError` and `MINED_SCOPE` are part of this module's
+ *  published surface. */
+export { StagingCommitError, STAGING_REFUSAL_TEXT, MINED_SCOPE, MINED_TIER } from './mine-staging.js';
 
 /** The honest fail-closed default history: no signals, empty frontier ⇒ the structural fallback ranks 0
  *  sites (GEN-15b). A real pass INJECTS `createHistorySource(repo, rev)`; the default never shells git.
@@ -174,7 +168,11 @@ function withDefaults(repoPath: string, deps?: Partial<MineDeps>): ResolvedDeps 
   // HOISTED out of the literal below: the REQ-CLI-4d gate is built over THE SAME `SkeletonSource` this pass
   // ranks its sites from, so the gate and the frontier can never resolve two different indexes.
   const skeleton = deps?.skeleton ?? defaultSkeleton(repoPath);
+  // #182 — the frontier arm, resolved ONCE from the threaded env and this pass's own skeleton source, so
+  // the seam that enumerates units and the seam that orders them are the same object (one fold, one truth).
+  const frontier: FrontierOptions = deps?.frontier ?? resolveFrontier(deps?.env ?? process.env, skeleton);
   const d: MineDeps = {
+    frontier,
     rev,
     proposer: deps?.proposer ?? resolved!.proposer,
     history: deps?.history ?? defaultHistory(),
@@ -226,6 +224,7 @@ export function buildControllerDeps(
     skeleton: d.skeleton,
     history: d.history,
     ...(watch?.onSeedsDropped !== undefined ? { onSeedsDropped: watch.onSeedsDropped } : {}),
+    ...(d.frontier !== undefined ? { frontier: d.frontier } : {}), // #182 — the A/B arm + its priors
   });
   const scan = createScan(d.skeleton);
   // STAGING, NOT KNOWLEDGE (ADR-0008 / KNOW-8). `mine` is the explorer — no truth gate, no KNOW-11 authz, no
