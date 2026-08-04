@@ -37,6 +37,12 @@ const GREET = `${U}::function_declaration:0:greet`;
 const HELPER = `${U}::function_declaration:1:helper`;
 const ZETA = `${U}::function_declaration:2:zeta`;
 const CLOSURE = `${GREET}::arrow_function:0`;
+// ALPHA and OMEGA are the `path asc` PAIR: identical `exported` AND identical `bytes`, so the third leg
+// of the comparator is the only thing that can separate them. Without such a pair the leg is unreachable
+// in this fixture and a mutant reversing it survives the entire suite while reordering 488 of the real
+// repository's 5816 emitted records — measured, and the reason this pair exists.
+const ALPHA = `${U}::function_declaration:0:alpha`;
+const OMEGA = `${U}::function_declaration:0:omega`;
 
 const leaf = (path: string, content: string): FileTree => ({ path, children: [], content });
 
@@ -54,6 +60,8 @@ const TREE: FileTree = {
             { path: GREET, content: 'export function greet(){}', children: [leaf(CLOSURE, '() => 1')] },
             leaf(HELPER, 'function helper(){}'),
             leaf(ZETA, 'export function zeta(){}'),
+            leaf(ALPHA, 'export function alpha(){}'),
+            leaf(OMEGA, 'export function omega(){}'),
           ],
         },
       ],
@@ -76,12 +84,16 @@ const SK: Skeleton = canonicalizeSkeleton({ axes: build(TREE, SCIP), manifest: {
  * cannot tell which one is doing the work:
  *   exported-only ⇒ {greet, zeta} before helper       size-only ⇒ helper, greet, zeta
  *   path-only     ⇒ greet, helper, zeta               the real order ⇒ greet, zeta, helper
+ * ALPHA/OMEGA additionally tie on BOTH of the first two legs, so `path asc` is the only leg that can
+ * order them and a mutation of that leg alone has somewhere to show.
  */
 const PRIORS: Readonly<Record<string, UnitPrior>> = {
   [GREET]: { exported: true, bytes: 60 },
   [HELPER]: { exported: false, bytes: 200 },
   [ZETA]: { exported: true, bytes: 20 },
   [CLOSURE]: { exported: false, bytes: 7 },
+  [ALPHA]: { exported: true, bytes: 40 }, // ties with OMEGA on (exported, bytes) …
+  [OMEGA]: { exported: true, bytes: 40 }, // … so only `path asc` separates them
 };
 const prior = (p: string): UnitPrior | undefined => PRIORS[p];
 
@@ -135,7 +147,7 @@ describe('#182 S1 — `subFile: true` seeds the symbol and block units inside ea
     walk(TREE);
 
     const subFileSeeds = structuralSeeds(SK, { subFile: true, prior }).filter((s) => s.kind !== 'file');
-    expect(subFileSeeds.length).toBe(4); // 3 items + 1 block — the whole of what the tree holds
+    expect(subFileSeeds.length).toBe(6); // 5 items + 1 block — the whole of what the tree holds
     for (const s of subFileSeeds) expect(inTree.has(s.qualifiedPath)).toBe(true);
   });
 
@@ -160,7 +172,7 @@ describe('#182 I4 — the within-file order is `(exported desc, size desc, path 
     const ranked = rank(SK, structuralSeeds(SK, { subFile: true, prior }), { prior });
     const util = pathsOf(ranked.map((c) => c.site)).filter((p) => p.startsWith(U));
 
-    expect(util).toEqual([U, GREET, ZETA, HELPER, CLOSURE]);
+    expect(util).toEqual([U, GREET, ALPHA, OMEGA, ZETA, HELPER, CLOSURE]);
   });
 
   it('every unit of a file really does tie with it — the score is not doing the ordering', () => {
@@ -170,6 +182,21 @@ describe('#182 I4 — the within-file order is `(exported desc, size desc, path 
     const scores = new Set(ranked.filter((c) => c.site.qualifiedPath.startsWith(U)).map((c) => c.ppr));
 
     expect(scores.size).toBe(1);
+  });
+
+  it('`path asc` is the DECIDING leg for two units that tie on `(exported, bytes)`', () => {
+    // teeth (breaks-on "the third leg is reversed"): ALPHA and OMEGA are indistinguishable to legs 1 and 2,
+    // so this pair is the ONLY place in the suite where the direction of leg 3 is observable. Asserted on
+    // BOTH order-producing paths, because the emission comparator (`byUnitPrior`, which orders
+    // `structuralSeeds`) and the rank comparator (`compareSiteOrder`) are two different functions carrying
+    // the same three legs, and a mutant of either alone must have somewhere to fail.
+    const emitted = structuralSeeds(SK, { subFile: true, prior }).map((x) => x.qualifiedPath);
+    const ranked = rank(SK, structuralSeeds(SK, { subFile: true, prior }), { prior }).map((c) => c.site.qualifiedPath);
+
+    expect(PRIORS[ALPHA]).toEqual(PRIORS[OMEGA]); // NOT VACUOUS: the pair really does tie on legs 1 and 2
+    expect(ALPHA < OMEGA).toBe(true); //             …and `path asc` puts ALPHA first
+    expect(emitted.indexOf(ALPHA)).toBeLessThan(emitted.indexOf(OMEGA));
+    expect(ranked.indexOf(ALPHA)).toBeLessThan(ranked.indexOf(OMEGA));
   });
 
   it('is a STRICT TOTAL ORDER: antisymmetric, irreflexive off the diagonal, and transitive', () => {
@@ -210,7 +237,7 @@ describe('#182 I4 — the within-file order is `(exported desc, size desc, path 
       .map((s) => s.qualifiedPath)
       .filter((p) => p.startsWith(U));
 
-    expect(emitted).toEqual([U, GREET, ZETA, HELPER, CLOSURE]);
+    expect(emitted).toEqual([U, GREET, ALPHA, OMEGA, ZETA, HELPER, CLOSURE]);
   });
 
   it('a `::` address the TREE DOES NOT KNOW is ordered as an opaque site, not as a unit', () => {
@@ -233,7 +260,7 @@ describe('#182 I4 — the within-file order is `(exported desc, size desc, path 
     const ranked = rank(SK, structuralSeeds(SK, { subFile: true }), {});
     const util = pathsOf(ranked.map((c) => c.site)).filter((p) => p.startsWith(U));
 
-    expect(util).toEqual([U, GREET, CLOSURE, HELPER, ZETA]); // address order, not (exported, size)
+    expect(util).toEqual([U, ALPHA, GREET, CLOSURE, OMEGA, HELPER, ZETA]); // address order, not (exported, size)
   });
 });
 

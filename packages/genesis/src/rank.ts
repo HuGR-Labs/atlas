@@ -128,9 +128,13 @@ export interface MineDeps {
    *  value back from it; it exists because a bounded set that is silently truncated reads as "we covered
    *  everything" (#130), and `MineApi.mine` is frozen at `readonly Candidate[]` with nowhere to carry it. */
   readonly onSeedsDropped?: (dropped: number) => void;
-  /** How wide the STRUCTURAL fallback frontier is cut (#182). Omitted ⇒ the shipped default (sub-file
-   *  seeds ON). `{ subFile: false }` reproduces the file-only frontier byte-identically — the A/B's arm
-   *  FILE, selectable at run time so both arms run from ONE binary rather than two builds. */
+  /** How wide the STRUCTURAL fallback frontier is cut (#182). **Omitted ⇒ FILE SITES ONLY** — the frontier
+   *  master ships, byte for byte. Sub-file seeding is OPT-IN at every layer (`{ subFile: true }` here,
+   *  `ATLAS_FRONTIER=symbol` at the CLI), because the hypothesis it tests is not established and a
+   *  behaviour that may be reverted must not be what every unrelated caller silently gets meanwhile.
+   *  THE DEFAULT IS DECLARED IN EXACTLY ONE PLACE — `FrontierOptions` in `seeds.ts` — and this sentence is
+   *  a pointer to it, not a second copy of it: the previous wording here said the opposite of the code it
+   *  documents, which is the failure class this whole wave exists to close. */
   readonly frontier?: FrontierOptions;
 }
 

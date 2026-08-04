@@ -67,8 +67,23 @@ const candAt = (qualifiedPath: string, kind: StructRef['kind'] = 'symbol'): Cand
   rank: 1,
 });
 
-/** The digest of exactly these bytes, through the SAME seam `evidenceSpan` mints through (GROUND-10). */
-const digestOf = (text: string): string => String(bindSpan(defaultEncoder).mintSpan(new TextEncoder().encode(text), 0, 1)?.contentHash);
+/**
+ * The digest of exactly these bytes, through the SAME seam `evidenceSpan` mints through (GROUND-10).
+ *
+ * `0, bytes.length` — NOT `0, 1`, which is what this was and which is a vacuity trap rather than a style
+ * point: `mintSpan` REFUSES a boundary that splits a code point, so with `end = 1` any text whose first
+ * character is multi-byte mints `undefined`, `String(undefined?.contentHash)` is the literal `'undefined'`,
+ * and `expect(String(span?.contentHash)).toBe(digestOf(x))` then passes by comparing `'undefined'` to
+ * `'undefined'` — i.e. an assertion that a span was NOT minted, wearing the shape of one that it was. Every
+ * fixture here happens to lead with ASCII, so the trap is not live today; the multi-byte case below is one
+ * fixture edit away from making it live, and that case is the one whose entire purpose is the hazard.
+ */
+const digestOf = (text: string): string => {
+  const bytes = new TextEncoder().encode(text);
+  const span = bindSpan(defaultEncoder).mintSpan(bytes, 0, bytes.length);
+  if (span === undefined) throw new Error(`the fixture bytes could not be spanned: ${JSON.stringify(text)}`);
+  return String(span.contentHash);
+};
 
 // ── the corpus ────────────────────────────────────────────────────────────────────────────────────────
 // One exported function holding one closure, plus a second declaration, so a UNIT is a strict subset of

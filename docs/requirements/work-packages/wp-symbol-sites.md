@@ -145,20 +145,38 @@ outputs:
   - `packages/genesis/src/unit-order.ts` (new) · `packages/genesis/src/seeds.ts` · `packages/genesis/src/rank.ts`
   - `packages/adapter-io/src/unit-source.ts` (new) · `packages/adapter-io/src/ast.ts` · `packages/adapter-io/src/skeleton-source.ts` · `packages/adapter-io/src/index.ts`
   - `packages/cli/src/mine-frontier.ts` (new) · `packages/cli/src/mine.ts` · `packages/cli/src/mine-staging.ts` · `packages/cli/src/mine-proposer.ts` · `packages/cli/src/mine-worker.ts`
-  - `packages/genesis/test/unit-frontier.test.ts` (new, 14 cases) · `packages/adapter-io/test/unit-source.test.ts` (new, 11 cases) · `packages/adapter-io/test/symbol-frontier.test.ts` (new, 5 cases)
+  - `packages/genesis/test/unit-frontier.test.ts` (new, 15 cases) · `packages/adapter-io/test/unit-source.test.ts` (new, 12 cases) · `packages/adapter-io/test/symbol-frontier.test.ts` (new, 5 cases)
+  - `packages/e2e-blackbox/test/s26-symbol-arm.blackbox.test.ts` (new, 3 cases) — the BUILT-BINARY guard on
+    the proposer pool; see the cold-review section below for why a unit test could not carry it
 
 provenance:
-  - MEASURED on this repository through the built `dist` (both arms, one binary): arm FILE **520** sites,
-    all `kind:'file'` — byte-identical to the no-options default and to the lead's master baseline. Arm
-    SYMBOL **5830** sites = 520 `file` + 3815 `symbol` + 1495 `block`. Unit bytes over 5310 units:
-    min 7 · median 114 · max 17435. Exported units 1329, private 3981.
+  - **HOW TO READ EVERY ABSOLUTE NUMBER BELOW — the provenance, because without it they do not reproduce.**
+    Atlas here measures ITSELF, so the magnitudes are a function of the working tree at the moment of
+    measurement, and of the SCIP dump the dependency axis is derived from. That dump is
+    `.atlas/index.scip`: **it is NOT committed** — `.gitignore:20` ignores `.atlas/*` except `policy.json`
+    — it is a LOCAL artifact generated at master `e4882a3` and copied into the worktree, and it names
+    exactly **520 documents**, which is why arm FILE is exactly 520 sites. Any file created after
+    `e4882a3` is therefore absent from the dump, has no dependency edge, reaches no frontier slot, and
+    contributes no seed — while its units DO exist in the walked tree. Re-running against a REGENERATED
+    dump would raise the seed counts; `scip-typescript` is not installed here, so it was not regenerated.
+  - MEASURED through the built `dist` at the tree of THIS COMMIT (both arms, one binary): arm FILE **520**
+    sites, all `kind:'file'` — byte-identical to the no-options default and to the master baseline. Arm
+    SYMBOL **5816** sites = 520 `file` + 3805 `symbol` + 1491 `block`. Units in the walked tree **5376**;
+    unit bytes min 7 · median 114 · max 17435; exported 1336, private 4040.
+  - THE CHECKABLE INVARIANT, which is what a reader should verify rather than the constants: every unit in
+    the tree that the frontier does NOT emit belongs to a file the dump does not name. MEASURED —
+    `unitsInTree 5376 − unitsEmitted 5296 = 80`, and the units under files absent from the frontier total
+    **exactly 80**, across 7 files, every one of them created by this task and every one reporting
+    `inScipDump: false, existsInWalkedTree: true`. The identity holds by matched item, not by arithmetic
+    coincidence. (An earlier revision of this card recorded 5830/5310/1329/3981 measured on a mid-task
+    snapshot; those figures did not reproduce at the shipped commit and are superseded here.)
   - THE HEADLINE FOR S4, and it is a CONFOUND, not a result: at budget 200 arm SYMBOL touches **16**
     distinct files (16 `file` + 174 `symbol` + 10 `block` sites) against arm FILE's **200**. A unit
     inherits its file's PPR and therefore sorts adjacent to it, so the budget is spent depth-first. Any
     deficit arm SYMBOL shows in "distinct facts" is attributable to a 12.5× coverage collapse before it is
     attributable to granularity. Named here rather than discovered after 200 model calls.
-  - 9 targeted mutants, every pattern proved MATCHED (occurrences = 1) and every file proved changed
-    before the run: **9/9 KILLED**, every restore byte-identical, unmutated control 30/30 green.
+  - 11 targeted mutants, every pattern proved MATCHED (occurrences = 1) and every file proved changed
+    before the run: **11/11 KILLED**, every restore byte-identical, unmutated control 32/32 green.
   - BUILT-BINARY probe (subprocess, real worker pool, `echo` stand-in model — no live model): arm FILE
     exit 0 / 2 sites, all `kind:'file'`; arm SYMBOL exit 0 / 6 sites, all `seeded`; `ATLAS_FRONTIER=symbols`
     (a typo) reads as arm FILE rather than as a third behaviour.
@@ -202,6 +220,47 @@ measured working, and then REVERTED to honour the exclusion. If the owner ever l
 change that deletes this seam — **and `rank.ts` `canonNode` must be updated in the same commit**, because
 it rebuilds `IndexNode` field by field and would silently erase both fields between the producer and the
 only consumer that reads them. That erasure is a sixth instance of the class this card is about.
+
+## `ATLAS_FRONTIER` is deliberately absent from the reference docs (cold review F7)
+
+`ATLAS_ACTOR` appears in 10+ places under `docs/reference/`; `ATLAS_FRONTIER` appears in none, and that is
+a decision rather than an omission. `ATLAS_ACTOR` is a SUPPORTED operator input with governance meaning —
+it selects the identity a write is judged as, and an operator must be able to look it up. `ATLAS_FRONTIER`
+selects a CANDIDATE POOL for one experiment whose stated outcome may be "revert the frontier"; it feeds no
+gate, changes no authority, and is read in exactly one file. Documenting it beside `ATLAS_ACTOR` would
+publish it as a supported surface and make removing it a breaking change to a documented contract — the
+opposite of what an opt-in experiment should cost to withdraw. It is therefore documented HERE, on the card
+that owns its lifetime, and in the header of `packages/cli/src/mine-frontier.ts` where it is read. **If S4
+keeps the symbol arm, promoting it to the reference docs is part of keeping it; if S4 sinks it, the seam
+and this card go together.**
+
+## What the cold review found, and what it changed (one fix round)
+
+- **F1 — a genuine surviving mutant.** Reversing the `path asc` leg of `byUnitPrior` applied cleanly and
+  the full suite still passed, while the real repository's emitted order moved on 488 of 5816 records. The
+  leg was unreachable in the fixture because every unit there had a distinct `bytes`. Closed by adding a
+  PAIR (`ALPHA`/`OMEGA`) that ties on both `exported` and `bytes`, so `path` is the only leg that can
+  separate them, plus a case asserting it on BOTH order-producing paths. The mutant, and the matching one
+  on `compareSiteOrder`, are now KILLED.
+- **F2 — a docstring stating the opposite of its code.** `rank.ts` `MineDeps.frontier` said sub-file seeds
+  were ON by default; they are OFF. Fixed, and the wording now POINTS at the single declaration in
+  `FrontierOptions` rather than restating it — a second copy of a default is how the first one drifts. The
+  other five places a default is claimed were audited and are correct.
+- **F3 — the `initAst()` worker fix was load-bearing and unguarded.** Deleting it leaves `tsc -b` at 0 and
+  all 32 unit goldens green while arm SYMBOL exits 1 with its first symbol site INTERRUPTED. A unit test
+  cannot reach the worker pool, so the guard is a built-binary subprocess story (`s26`). Re-verified in
+  both directions after it was written: with the line deleted `s26` exits **1** and the 32 unit goldens
+  still exit **0**; restored, `s26` exits 0.
+- **F4 — absolute magnitudes that did not reproduce.** Settled above by MEASUREMENT rather than
+  reconstruction: the reconciliation identity is checked by matched item, and the dump's provenance (local,
+  gitignored, generated at `e4882a3`, 520 documents) is now stated.
+- **F6 — a vacuity trap.** `digestOf` minted `mintSpan(bytes, 0, 1)`, which returns `undefined` whenever
+  offset 1 splits a code point, making `String(undefined?.contentHash)` the literal `'undefined'` on BOTH
+  sides of the assertion. Confirmed live-capable (`mintSpan(encode('☕x'), 0, 1) === undefined`) and fixed
+  to `0, bytes.length`, which now THROWS on an unspannable fixture rather than silently asserting nothing.
+- **F5 is NOT fixed here** and is carded separately by the lead: `UnitPriorSource`'s memo is instance-scoped
+  and keyed by path, never refreshed per rev, so it would answer for any rev's units after one HEAD call.
+  Proved unreachable on the shipped path; keying by `subtreeHash` is a design change, not a fix round.
 
 ## The fifth instance of one class
 
