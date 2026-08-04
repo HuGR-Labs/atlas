@@ -348,8 +348,16 @@ describe('WP-8.28-b.GEN — mechanical admission with teeth (visible goldens)', 
     // the sound compiler"): the synthesized-query seam is NEVER consulted; the sound type oracle decides.
     expect(calls.synthesize).toBe(0);
     expect(diagnosed).toBe(1);
-    // the admitted check is the SOUND declarative assertion, not an index-query.
-    if (a.fact.kind !== 'predicate') throw new Error('expected a predicate node');
-    expect(a.fact.check.kind).toBe('assertion');
+    // WP-FIX-6.KNOW (#200). The two lines that stood here asserted the admitted node was a `predicate`
+    // carrying `check.kind === 'assertion'`. Neither is in the golden — the golden says only that the
+    // TYPE-CHECKER decides rather than a synthesized query, which the two assertions above are exactly
+    // what pins. What those two extra lines actually witnessed was the FABRICATION: the `assertion` they
+    // approved of was `{expr: 'type-checker/LSP diagnostics: contract'}`, never passed to `verify`, never
+    // subjected to `teeth`, unreadable by the evaluator that later re-runs it — and it rode a node stamped
+    // `status: 'HOLDS'`. The sound arm now emits an ADVISORY: no check, and no `status` field to lie in.
+    expect(a.fact.kind).toBe('advisory');
+    expect('check' in a.fact).toBe(false);
+    expect('status' in a.fact).toBe(false);
+    expect(a.fact.predicateSlot).toBe('contract'); // the slot survives — read-side grouping unchanged
   });
 });

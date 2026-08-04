@@ -877,6 +877,14 @@ Then it yields `BROKEN` — exactly one of `HOLDS / BROKEN / NA`, from that inde
 teeth: breaks-on "the evaluator reads external/runtime state to decide the dependency-axis verdict — the verdict is no longer a function of the Atlas index"
 gen: conformance
 
+### SCN-KNOW-16a-3 — a check whose TEXT is not a query of the shipped grammar is refused at admission   (guard)
+source: REQ-KNOW-16a
+Given a proposed check of an evaluable KIND (`index-query` / `assertion`) whose body names none of the five shipped operators (`exists|<key>` · `absent|<key>` · `has-object|<hash>` · `child-count|<key>|<non-negative integer>` · `subtree-hash|<key>|<hash>`), or names one with a body it cannot take — including `child-count|<key>|` (`Number('')` is `0`) and `child-count|<key>|three` (`NaN`)
+When it is put to the admission gate
+Then it is REFUSED with a reason naming the expected form and quoting the body that was read — never admitted, so it can never reach `evaluate` and be answered with a verdict nobody computed; and all five shipped operators are still admitted and still evaluate to the identical verdict
+teeth: breaks-on "the gate admits on `kind` alone without reading the body — an unparseable expression is admitted, and the interpreter's fallbacks turn it into `NA` forever, a `HOLDS` on an empty count, or a `BROKEN` on a non-numeric one, any of which reaches `atlas-reconcile` as though a predicate had really been evaluated"
+gen: conformance   # the refusal is exercised in both directions: the twelve shipped operator/verdict pairs are pinned admitted BEFORE the door is narrowed
+
 ### SCN-KNOW-16b-1 — a check requiring code execution is not evaluated   (guard)
 source: REQ-KNOW-16b
 Given a check that would require arbitrary code execution / a sandbox
