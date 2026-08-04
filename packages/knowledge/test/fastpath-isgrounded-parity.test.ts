@@ -15,23 +15,33 @@
 // > 0` — the coercion is gone, only an actual non-empty string clears the gate.
 //
 // THE STRUCTURAL RISK THIS FILE EXISTS TO CLOSE. `packages/knowledge` type-imports `Grounding` from
-// `@atlas/grounding` but may not value-import `isGrounded` from it (the package imports only TYPES from
-// `@atlas/grounding` — a uniform, deliberate five-type-import/zero-value-import pattern; `route`'s frozen
-// signature also has no room for an injected dep). So `knowledge`'s local `isGrounded` and the SEALED
+// `@atlas/grounding` and does NOT value-import `isGrounded` from it. Be precise about why, because the
+// obvious reading is wrong: this is a PATTERN, not a rule. `@atlas/grounding` is a declared dependency in
+// `packages/knowledge/package.json`, no gate in `harness/gates/` forbids a value import (checked
+// 2026-08-04, `layer-guard.mjs` has no type-only rule), and this very test file value-imports the sealed
+// predicate two lines below — proving it resolves and links. The five type-only imports across
+// `knowledge/src` are a BUILD-AHEAD residue: `lifecycle/freshness.ts:14` records the original reason as
+// "`@atlas/grounding` ships zero runtime yet (its barrel is `export type *`)", and that reason is now
+// FALSE — only `types.js` is type-exported; `drift.js` (which exports `isGrounded`) is value-exported at
+// `grounding/src/index.ts:17`. So the duplicate is not structurally forced; it is unremoved.
+// It is NOT removed here, and the reason is the finding below, not the pattern: importing the sealed
+// predicate today would ADOPT its missing `typeof` guard and WIDEN this door. Collapsing the two requires
+// tightening the sealed predicate first — a `packages/grounding/**` change, out of scope for this WP and
+// an owner decision. Until then, `knowledge`'s local `isGrounded` and the SEALED
 // `GroundApi['isGrounded']` (`@atlas/grounding` `src/drift.ts:73-74`) are now two implementations of ONE
 // predicate — which is exactly the shape that let this bug exist unnoticed. This is the fitness function:
 // it drives BOTH implementations over the same input table and asserts they agree on every row. If they
 // ever diverge again — coercion creeping back into either one, a boundary case handled differently — this
-// test goes red. Test files may value-import freely; the type-only rule constrains `src`, not `test`.
+// test goes red.
 //
 // A FINDING THIS FILE ALSO PINS RATHER THAN HIDES. The sealed body is `e.anchor.subtreeHash.length > 0`
 // with NO `typeof`/coercion guard at all — safe against the fail-open bug (it never treats a non-string as
 // grounded) but NOT safe against `undefined`/`null`: `(undefined).length` / `(null).length` THROW a
 // `TypeError`, even though `GroundApi.isGrounded`'s own docstring (`@atlas/grounding` `types.ts:79-80`)
-// says "Pure + total". This file cannot fix that — `packages/grounding/**` is out of scope for this WP
-// (another seat is live in `freshness.ts`) — so it is pinned as observed fact: the local FIXED `isGrounded`
-// (`typeof` guard) is strictly safer than its own sealed reference, because it never throws on any input
-// while the sealed one does on two of the eight table rows. See `SEALED_THROWS_ON` below.
+// says "Pure + total". This file cannot fix that — `packages/grounding/**` is out of scope for this WP and
+// a behavioural change to a SEALED predicate is an owner decision — so it is pinned as observed fact: the
+// local FIXED `isGrounded` (`typeof` guard) is strictly safer than its own sealed reference, because it
+// never throws on any input while the sealed one throws on the two rows in `SEALED_THROWS_ON` below.
 
 import { describe, it, expect } from 'vitest';
 import { asSubtreeHash } from '@atlas/kernel';
