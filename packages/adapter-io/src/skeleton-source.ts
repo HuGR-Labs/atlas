@@ -33,9 +33,9 @@ import { id } from '@atlas/kernel';
 import { build, createResolve, createDepgraph } from '@atlas/index';
 import type { Axes, FileTree, ScipOutput } from '@atlas/index';
 import { createInit } from '@atlas/tools';
-import type { Skeleton, SkeletonSource } from '@atlas/genesis';
+import type { Skeleton, SkeletonSource, UnitPrior, UnitPriorSource } from '@atlas/genesis';
 import { walkFileTree } from './fs.js';
-import { foldAstUnits } from './ast.js';
+import { foldAstUnitsWithPriors } from './ast.js';
 import { readScipOrEmpty } from './scip.js';
 import { createIndexAdapter } from './index-adapter.js';
 import { createRevIndex } from './rev-index.js';
@@ -55,6 +55,18 @@ const NO_SCIP: ScipOutput = { documents: [] };
  * The injectable seams (testability only — every one defaults to the real frozen adapter). A test can drive
  * a deterministic skeleton without a git repo or a `.scip` on disk; production passes nothing.
  */
+/**
+ * The production S0 source: the frozen genesis `SkeletonSource` port PLUS the #182 unit-prior lookup.
+ *
+ * A SUPERSET, never a replacement — it still IS a `SkeletonSource`, so every existing consumer and every
+ * injected test double is unaffected. The extra member rides here rather than on `Skeleton` because
+ * `Skeleton`/`IndexNode` are the frozen index data model and carry no `content`: the priors would have had
+ * to be recovered by a SECOND whole-repo parse. They ride on the object that already did the first one.
+ */
+export interface ProductionSkeletonSource extends SkeletonSource {
+  readonly unitPrior: UnitPriorSource;
+}
+
 export interface SkeletonSourceDeps {
   readonly walkFileTree?: (repoPath: string) => FileTree;
   readonly readScip?: (scipPath: string) => ScipOutput;
@@ -97,10 +109,19 @@ function manifestOf(axes: Axes): Skeleton['manifest'] {
  *  them (`foldAstUnits` before `build`, so the skeleton carries the same `::` sub-file nodes the truth-gate
  *  re-derives freshness against once `initAst()` has been awaited; a no-op warm-up-free). Total by
  *  inheritance: an unwalkable tree ⇒ empty tracked set, an absent/corrupt dump ⇒ `{documents: []}`. */
-function workingTreeAxes(repoPath: string, deps: SkeletonSourceDeps): Axes {
+function workingTreeAxes(
+  repoPath: string,
+  deps: SkeletonSourceDeps,
+  priors: Map<string, UnitPrior>,
+): Axes {
   const walk = deps.walkFileTree ?? walkFileTree;
   const scip = deps.readScip ?? readScipOrEmpty;
-  return build(foldAstUnits(walk(repoPath)), scip(join(repoPath, SCIP_REL)));
+  // ONE fold, TWO outputs (#182). The `::` units and their ordering priors come from the same parse, so a
+  // unit the frontier can seed and a unit the frontier can rank are the same set by construction — there
+  // is no second walk to fall out of step with this one, and no re-parse to pay for.
+  const folded = foldAstUnitsWithPriors(walk(repoPath));
+  for (const [path, p] of folded.priors) priors.set(path, p);
+  return build(folded.tree, scip(join(repoPath, SCIP_REL)));
 }
 
 /**
@@ -123,24 +144,31 @@ function workingTreeAxes(repoPath: string, deps: SkeletonSourceDeps): Axes {
  * expensive part of an S0 pass. The build is deterministic, so the memo is behaviour-preserving; the cache
  * lives on the source instance (one mine pass), never module-global.
  */
-export function createSkeletonSource(repoPath: string, deps: SkeletonSourceDeps = {}): SkeletonSource {
+export function createSkeletonSource(repoPath: string, deps: SkeletonSourceDeps = {}): ProductionSkeletonSource {
   const head = deps.headSha ?? headSha;
   const memo = new Map<string, Skeleton>();
+  // The #182 ordering priors, accumulated by the SAME fold that produces the working-tree axes above. It
+  // is a cache, never an oracle: a path it does not hold reads `undefined` = UNKNOWN, and the frontier
+  // comparator degrades to address order rather than asserting a prior it does not have. The non-HEAD rev
+  // leg genuinely has none (`axesAt` builds from a throwaway worktree, not through this fold) and that is
+  // the honest answer for it.
+  const priors = new Map<string, UnitPrior>();
   // The arbitrary-rev index is built LAZILY: constructing it is cheap, but the HEAD leg must never pay for
   // a capability it does not use, and a caller that only ever mines HEAD must never touch `git worktree`.
   let rev0: RevIndex | undefined = deps.revIndex;
   const revIndex = (): RevIndex => (rev0 ??= createRevIndex(repoPath));
 
   const axesFor = (repo: string, rev: string): Axes => {
-    if (rev === '' || rev === 'HEAD') return workingTreeAxes(repo, deps);
+    if (rev === '' || rev === 'HEAD') return workingTreeAxes(repo, deps, priors);
     const at = head(repo);
     // `rev` is compared against the resolved HEAD sha, so `atlas mine --rev <headSha>` takes the same
     // (SCIP-bearing) leg as `HEAD` instead of paying for a redundant worktree checkout of HEAD itself.
-    if (at !== undefined && rev === at) return workingTreeAxes(repo, deps);
+    if (at !== undefined && rev === at) return workingTreeAxes(repo, deps, priors);
     return revIndex().axesAt(rev);
   };
 
   return {
+    unitPrior: (qualifiedPath: string): UnitPrior | undefined => priors.get(qualifiedPath),
     skeleton(repo: string, rev: string): Skeleton {
       // The memo key joins `repo` and `rev` on NUL — the one byte that can appear in NEITHER a POSIX path
       // NOR a git rev, so the join is injective and no two distinct (repo, rev) pairs can share a cache

@@ -12,7 +12,7 @@ export type { LangId, IndexerPlan } from './scip.js';
 // the per-language SCIP index and prints the command; the OPERATOR runs it. Nothing here spawns a process.
 export { reportIndexPlan } from './indexer-report.js';
 export type { IndexPlanReport, PlannedLang, ScipState } from './indexer-report.js';
-export { foldAstUnits, initAst } from './ast.js';
+export { foldAstUnits, foldAstUnitsWithPriors, initAst } from './ast.js';
 export { createDiskStore, rehydrateProjection } from './store.js';
 export type { CasPath, DiskStore } from './store.js';
 // The durable-sidecar seam the two governed doors commit through. Exported because `DiskStore.commitProjection`
@@ -40,6 +40,7 @@ export { loadModelConfig, modelConfigPath, ModelConfigError } from './model-conf
 export type { ModelConfig, ModelRole } from './model-config.js';
 export { createPromptFactory, createFileSourceReader, PromptError } from './prompt.js'; // ADR-0011 D3
 export type { PromptFactory, SourceReader } from './prompt.js';
+export { createUnitSourceReader } from './unit-source.js'; // #182 S2 — the UNIT's bytes, not the file's
 export { createIndexAdapter } from './index-adapter.js';
 export type { IndexAdapterDeps } from './index-adapter.js';
 export { materializePoke, pokeFilePath, POKE_FILE_EXT } from './poke-file.js';
@@ -52,7 +53,7 @@ export { createRevIndex, type RevIndex } from './rev-index.js';
 // readScipOrEmpty + @atlas/index `build` + the index-adapter/`atlas-init` territory move-in. Consumed by the
 // `atlas mine` driver, which previously injected a hand-built empty skeleton (⇒ 0 seeds, 0 sites, 0 calls).
 export { createSkeletonSource } from './skeleton-source.js';
-export type { SkeletonSourceDeps } from './skeleton-source.js';
+export type { SkeletonSourceDeps, ProductionSkeletonSource } from './skeleton-source.js';
 
 // The ONE shared handler assembly (constitution WIRE-1) — consumed by every entrypoint (CLI, MCP).
 export { assembleHandler } from './wire.js';

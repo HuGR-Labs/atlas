@@ -4,7 +4,7 @@
 // question — where does the model come from, and what happens when it does not. `mine.ts` keeps the run
 // composition; this file keeps the proposer resolution.
 
-import { createCommandClient, createFileSourceReader, createPromptFactory, createSiteProposer, loadModelConfig } from '@atlas/adapter-io';
+import { createCommandClient, createPromptFactory, createSiteProposer, createUnitSourceReader, loadModelConfig } from '@atlas/adapter-io';
 import type { SiteProposer } from '@atlas/genesis';
 
 /** The honest fail-closed default proposer: no model is wired, so the model abstains at every site
@@ -54,7 +54,10 @@ export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = proce
   const cfg = loadModelConfig(repoPath, env); // throws on malformed — never silently "no model"
   const propose = cfg?.roles.propose;
   if (cfg === null || propose === undefined) return { proposer: defaultProposer(), wired: false };
-  const prompts = createPromptFactory({ source: createFileSourceReader(repoPath) });
+  // #182 S2 — the UNIT-granular reader. It WRAPS `createFileSourceReader(repoPath)` (all three of its
+  // containment/symlink/fd checks intact) and narrows a `::` site to the unit's own bytes; a bare-path
+  // site reads exactly as before, which is what lets one binary serve both A/B arms.
+  const prompts = createPromptFactory({ source: createUnitSourceReader(repoPath) });
   const proposer = createSiteProposer({
     client: createCommandClient(propose),
     budget: { costCap: cfg.costCap, timeoutMs: cfg.timeoutMs },

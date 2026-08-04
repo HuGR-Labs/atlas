@@ -7,7 +7,8 @@
 
 import type { StructRef } from '@atlas/contracts';
 import type { Axes, IndexNode, Manifest } from '@atlas/index';
-import { cmp, correspondence, resolveSiteKey, structuralFrontier } from './seeds.js';
+import { cmp, compareSiteOrder, correspondence, resolveSiteKey, siteOrderKeys, structuralFrontier } from './seeds.js';
+import type { FrontierOptions, SiteOrderKey } from './seeds.js';
 import type { Candidate, CostReport, MinedSignals, ScanApi, Skeleton } from './types.js';
 
 /**
@@ -127,13 +128,22 @@ export interface MineDeps {
    *  value back from it; it exists because a bounded set that is silently truncated reads as "we covered
    *  everything" (#130), and `MineApi.mine` is frozen at `readonly Candidate[]` with nowhere to carry it. */
   readonly onSeedsDropped?: (dropped: number) => void;
+  /** How wide the STRUCTURAL fallback frontier is cut (#182). Omitted ⇒ the shipped default (sub-file
+   *  seeds ON). `{ subFile: false }` reproduces the file-only frontier byte-identically — the A/B's arm
+   *  FILE, selectable at run time so both arms run from ONE binary rather than two builds. */
+  readonly frontier?: FrontierOptions;
 }
 
 // ── S0 — the structural skeleton (GEN-1) ─────────────────────────────────────────────────────────────
 
 /** Canonicalise an axis node: children sorted by key, objects sorted — recursively. This is where the
  *  GEN-1 byte-identity is EARNED: the walk's order (mtime, hash-map iteration) is discarded for a stable
- *  structural order, so a re-run reproduces a byte-identical skeleton (SCN-GEN-1b-1). */
+ *  structural order, so a re-run reproduces a byte-identical skeleton (SCN-GEN-1b-1).
+ *
+ *  IT REBUILDS THE RECORD FIELD BY FIELD, which is why the #182 ordering priors are NOT carried on the
+ *  node: a field added upstream and forgotten here is silently erased between the producer and the
+ *  frontier, and `structuralFrontier` runs on exactly this canonicalised skeleton. The priors ride an
+ *  explicit injected seam instead (`MineDeps.frontier.prior`), where an absent supplier is VISIBLE. */
 function canonNode(n: IndexNode): IndexNode {
   return {
     axis: n.axis,
@@ -236,11 +246,24 @@ function pprScores(
   return score;
 }
 
-/** Order personalization sites by fixed-point PPR score DESCENDING, breaking numeric ties by the site's
- *  `subtreeHash` ascending — a stable total order (GEN-11). */
-function orderByPpr(a: readonly [StructRef, bigint], b: readonly [StructRef, bigint]): number {
+/**
+ * Order personalization sites by fixed-point PPR score DESCENDING, breaking numeric ties by
+ * `compareSiteOrder` (seeds.ts) — a stable total order (GEN-11).
+ *
+ * THE TIE-BREAK IS NO LONGER "the site's subtreeHash ascending", AND THAT SENTENCE IS NOT A DOWNGRADE.
+ * For two FILE sites `compareSiteOrder` REDUCES to exactly `cmp(subtreeHash)`, so a file-only frontier
+ * ranks byte-identically to master — pinned by `unit-frontier.test.ts` and measured in a subprocess against
+ * the built binary. What changed is that sub-file sites (#182) have no PPR of their own and therefore ALL
+ * tie with their parent file: a hash would then be deciding which 200 of 5803 candidates get a model call.
+ * MEASURED on this repository BEFORE the refinement: 40 of the 200 sites inside the shipped budget window
+ * were already being ordered by that hash, so this is not a hypothetical branch.
+ */
+function orderByPpr(
+  a: readonly [StructRef, bigint, SiteOrderKey],
+  b: readonly [StructRef, bigint, SiteOrderKey],
+): number {
   if (a[1] !== b[1]) return a[1] > b[1] ? -1 : 1;
-  return cmp(a[0].subtreeHash, b[0].subtreeHash);
+  return compareSiteOrder(a[2], b[2]);
 }
 
 /**
@@ -250,18 +273,33 @@ function orderByPpr(a: readonly [StructRef, bigint], b: readonly [StructRef, big
  * `ppr` is the fixed-point score divided by the scale (a deterministic float); `signals` is the zero record
  * here — the S1 `mine` driver attaches the mined heuristics (GEN-6). NEVER a fact.
  */
-export function rank(graph: Skeleton, personalization: readonly StructRef[]): readonly Candidate[] {
+export function rank(
+  graph: Skeleton,
+  personalization: readonly StructRef[],
+  opts: FrontierOptions = {},
+): readonly Candidate[] {
   // BIND: resolve each frontier site's CONTENT subtreeHash to its NODE-IDENTITY key BEFORE the PPR join,
   // so a mined site connects to the dep-graph on the real index (not a disconnected island — F1). The two
   // legs are bridged through the index correspondence, never compared as raw brand-mismatched strings.
   const { keyOfSubtree } = correspondence(graph);
-  const siteKey = (s: StructRef): string => resolveSiteKey(keyOfSubtree, s);
+  // The dependency-axis endpoint set — the ONLY keys that can carry a PPR score. It is what tells
+  // `resolveSiteKey` whether a site has a vertex of its own or must inherit its file's (#182): a sub-file
+  // unit never does, because `deriveEdges` keys both endpoints by document.
+  const depNodes = new Set<string>();
+  for (const e of graph.axes.edges) {
+    depNodes.add(e.from);
+    if (e.to !== null) depNodes.add(e.to);
+  }
+  const inGraph = (k: string): boolean => depNodes.has(k);
+  const siteKey = (s: StructRef): string => resolveSiteKey(keyOfSubtree, s, inGraph);
   const { nodes, out } = adjacency(graph, personalization.map(siteKey));
   const pers = new Set<string>(personalization.map(siteKey));
   const scores = pprScores(nodes, out, pers);
-  const scored = personalization.map((site): readonly [StructRef, bigint] => [
+  const orderKeys = siteOrderKeys(graph, personalization, opts.prior);
+  const scored = personalization.map((site, i): readonly [StructRef, bigint, SiteOrderKey] => [
     site,
     scores.get(siteKey(site)) ?? 0n,
+    orderKeys[i]!,
   ]);
   const ordered = [...scored].sort(orderByPpr);
   return ordered.map(([site, s], i) => ({
@@ -291,8 +329,8 @@ export function probeHistory(history: HistorySource, repo: string, rev: string):
 
 /** The GEN-15c structural frontier + its drop count (src/seeds.ts) — RE-EXPORTED so the package surface is
  *  unchanged by the file split: `structuralSeeds` is imported from here by tests and by adapter-io. */
-export { structuralSeeds, structuralFrontier } from './seeds.js';
-export type { StructuralFrontier } from './seeds.js';
+export { structuralSeeds, structuralFrontier, filePartOf, isUnitSite, compareSiteOrder, siteOrderKeys } from './seeds.js';
+export type { StructuralFrontier, FrontierOptions, SiteOrderKey, UnitPrior, UnitPriorSource } from './seeds.js';
 
 // ── S1 — the `mine` driver: rank the frontier, attach signals, degrade thin history (GEN-6 / GEN-15) ──
 
@@ -310,10 +348,12 @@ export function createMine(deps: MineDeps): MineApi {
     // GEN-15b booster-not-dependency: thin history OR an empty mined frontier ⇒ the structural fallback.
     // Computed ONCE (it used to be built twice, and the second build would re-fire the drop observer).
     const structural = mined.length === 0;
-    const fallback = structural ? structuralFrontier(sk) : undefined;
+    const fallback = structural ? structuralFrontier(sk, deps.frontier ?? {}) : undefined;
     if (fallback !== undefined && fallback.droppedNoPath > 0) deps.onSeedsDropped?.(fallback.droppedNoPath);
     const personalization = fallback?.seeds ?? mined;
-    const ranked = rank(sk, personalization);
+    // The SAME `frontier` options the fallback was cut with are handed to `rank`: the seam that decides
+    // which units exist and the seam that orders them must never be two different suppliers.
+    const ranked = rank(sk, personalization, deps.frontier ?? {});
     return ranked.map((c) => ({
       ...c,
       signals: structural ? ZERO_SIGNALS : deps.history.signals(c.site),

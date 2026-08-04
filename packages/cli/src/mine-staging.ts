@@ -27,3 +27,17 @@ export class StagingCommitError extends Error {
     this.name = 'StagingCommitError';
   }
 }
+
+/**
+ * The reserved scope every MINED node carries — PROVENANCE plus a fail-closed default, not the boundary itself
+ * (ADR-0008 moved these rows out of the governed projection entirely). Mining has no actor, so a mined node has no
+ * owner, and an unowned node is writable not by "anyone" but by NOBODY: no actor belongs to this scope unless
+ * `.atlas/policy.json` declares it, so `actorInScope` denies by default (KNOW-11a) and, should a candidate ever be
+ * promoted, the emit door refuses any fact declaring a different scope onto a mined row. Granting it appoints a
+ * curator — deliberate, NOT protected: the grant lives in `.atlas/policy.json`, which no live mechanism gates.
+ */
+export const MINED_SCOPE = 'atlas:mined';
+
+/** The governance CLASS a mined row lives under: `T2`, the candidate class, always — stamped from this constant,
+ *  never forwarded from `f.tier`, so an injected gate cannot mint a staged row DECLARING `T0`. */
+export const MINED_TIER = 'T2' as const;
