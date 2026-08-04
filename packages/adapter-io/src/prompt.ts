@@ -14,7 +14,9 @@ import { closeSync, constants as fsConstants, existsSync, fstatSync, openSync, r
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { id } from '@atlas/kernel';
+import { id, defaultEncoder } from '@atlas/kernel';
+import { bindSpan } from '@atlas/grounding';
+import type { GroundingSpan } from '@atlas/grounding';
 import type { Hash, StructRef } from '@atlas/contracts';
 import type { Candidate } from '@atlas/genesis';
 
@@ -95,6 +97,27 @@ export interface SourceReader {
 export interface PromptFactory {
   readonly digest: Hash;
   readonly build: (cand: Candidate) => string;
+
+  /**
+   * THE EVIDENCE SPAN (owner-approved SPAN amendment, 2026-08-02): a `GroundingSpan` addressing the exact
+   * bytes `build` would interpolate for `cand` — the evidence the claim must re-derive from — or `null`
+   * when the source cannot be read.
+   *
+   * IT IS MINTED FROM BYTES ATLAS READ, NEVER FROM WHAT THE MODEL SAYS IT READ, and that is the point of
+   * putting it here rather than in the output contract. The proposer's entire channel is
+   * `CompletionResult.claim: string | null` (llm.ts) — one line of prose or an abstention — so there is no
+   * wire on which a model could hand back a span, and `prompts/propose.md` is NOT amended to ask for one.
+   * ADR-0011 already withholds `Candidate.signals` from the prompt so a proposer cannot self-certify; a
+   * span taken from the model's own report would reinstate exactly that hazard. This one is computed from
+   * the file's bytes before the model is called and is unchanged by whatever comes back.
+   *
+   * GRANULARITY, STATED RATHER THAN IMPLIED — the span is only ever as narrow as the reader is, and the
+   * shipped reader is FILE-granular even for a `symbol` anchor (see `createFileSourceReader`). So today
+   * this addresses the whole file that was shown. That is the honest current state, not a claim of
+   * symbol-precision: what lands now is the CARRIER — content-addressed, re-derivable, no stored text —
+   * and when symbol slicing arrives the range narrows with no change to the shape or to its readers.
+   */
+  readonly evidenceSpan: (cand: Candidate) => GroundingSpan | null;
 }
 
 /**
@@ -115,9 +138,18 @@ export function createPromptFactory(deps: { source: SourceReader; templatePath?:
   }
   const template = assertUsable(stripComments(raw), path);
   const digest = id({ promptTemplate: raw } as never);
+  // The GROUND-10 seam, not a local digest: a blake3↔stub encoder swap flows through spans exactly as it
+  // flows through every anchor. `bindSpan` refuses anything that is not a real in-bounds byte range.
+  const { mintSpan } = bindSpan(defaultEncoder);
 
   return {
     digest,
+    evidenceSpan(cand: Candidate): GroundingSpan | null {
+      const source = deps.source.read(cand.site);
+      if (source === null) return null; // no bytes ⇒ no span. Absent means UNKNOWN, never "the whole unit".
+      const bytes = new TextEncoder().encode(source);
+      return mintSpan(bytes, 0, bytes.length) ?? null;
+    },
     build(cand: Candidate): string {
       const site = cand.site;
       const source = deps.source.read(site);

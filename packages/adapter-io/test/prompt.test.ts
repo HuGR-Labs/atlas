@@ -11,12 +11,13 @@
 //   • THE DIGEST COVERS THE ARTIFACT AS SHIPPED, comment included — provenance answers "which artifact
 //     produced this fact", and editing the reasoning edits the artifact.
 
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { asSubtreeHash } from '@atlas/kernel';
+import { asSubtreeHash, defaultEncoder } from '@atlas/kernel';
+import { bindSpan } from '@atlas/grounding';
 import type { StructRef } from '@atlas/contracts';
 import type { Candidate, MinedSignals } from '@atlas/genesis';
 
@@ -308,5 +309,48 @@ describe('createFileSourceReader — only bytes that really live in the reposito
     mkdirSync(join(repo, 'src'), { recursive: true });
     expect(createFileSourceReader(repo).read(siteAt('src'))).toBeNull();
     expect(createFileSourceReader(repo).read(siteAt('src/gone.ts'))).toBeNull();
+  });
+});
+
+// ── evidenceSpan (the 2026-08-02 SPAN amendment) ────────────────────────────────────────────────────────
+// The span is minted from the bytes ATLAS read, before any model is called. The hazard it must not
+// reintroduce is the one ADR-0011 removed by withholding `Candidate.signals`: a proposer certifying its own
+// grounding. So the assertions below are as much about what the prompt does NOT contain as about the span.
+
+describe('createPromptFactory — evidenceSpan addresses the bytes, and never a self-report', () => {
+  it('the span re-derives EXACTLY the source that was interpolated', () => {
+    const factory = createPromptFactory({ source: reader(CODE) });
+    const cand = candidateAt('src/a.ts::charge');
+    const span = factory.evidenceSpan(cand);
+    expect(span).not.toBeNull();
+    const bytes = new TextEncoder().encode(CODE);
+    const slice = bindSpan(defaultEncoder).readSpan(span!, bytes);
+    expect(new TextDecoder().decode(slice)).toBe(CODE);
+    // and those bytes really are what went to the model.
+    expect(factory.build(cand)).toContain(CODE);
+  });
+
+  it('no bytes ⇒ NO span — absent is unknown, never a fabricated whole-unit citation', () => {
+    // teeth (breaks-on "an unreadable source mints a zero-length or whole-repo span"): the reader refuses,
+    // so there is nothing to address, and the entry must simply carry no span.
+    expect(createPromptFactory({ source: reader(null) }).evidenceSpan(candidateAt('src/a.ts::charge'))).toBeNull();
+  });
+
+  it('the span moves with the BYTES, not with the site name', () => {
+    const a = createPromptFactory({ source: reader(CODE) }).evidenceSpan(candidateAt('src/a.ts::charge'));
+    const b = createPromptFactory({ source: reader(CODE) }).evidenceSpan(candidateAt('src/z.ts::other'));
+    const c = createPromptFactory({ source: reader(`${CODE} // edited`) }).evidenceSpan(candidateAt('src/a.ts::charge'));
+    expect(a).toEqual(b); //         same bytes ⇒ same address
+    expect(a).not.toEqual(c); //     different bytes ⇒ different address
+  });
+
+  it('THE SHIPPED PROMPT NEVER ASKS FOR ONE — the span cannot be a proposer self-report', () => {
+    // teeth (breaks-on "a {{SPAN}} slot / an 'output the lines you used' clause is added to propose.md"):
+    // the model's whole channel is `CompletionResult.claim: string | null`, and the artifact must not grow a
+    // second one. This also pins that the amendment left the prompt digest untouched.
+    const shipped = readFileSync(shippedTemplatePath(), 'utf8');
+    for (const ask of ['{{SPAN}}', 'span', 'offset', 'byte range', 'quote']) {
+      expect(shipped.toLowerCase()).not.toContain(ask);
+    }
   });
 });

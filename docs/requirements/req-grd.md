@@ -16,6 +16,36 @@ source: INV-GROUND-1 @ reference/atlas-grounding.md#ground-1
 If a grounding entry is anchored by line-ranges alone, then the grounding gate shall reject it as an invalid anchor.
 normative-clause: "Line-ranges alone are NEVER a valid anchor."
 
+### REQ-GROUND-1d — a grounding entry MAY carry a span, addressed into content-addressed bytes
+source: INV-GROUND-1 @ reference/atlas-grounding.md#ground-1
+If a grounding entry records where inside the cited unit a claim was derived from, then the grounding gate shall record it as a `span` — the digest of the byte sequence plus a byte range into it — and shall never record a copy of the cited text.
+normative-clause: "A grounding entry's `span` MUST address content-addressed bytes (`contentHash` + `[start, end)`); it MUST NOT store the cited text."
+> **ADDED by the owner-approved SPAN amendment (2026-08-02)**, on the ADR-precedent that a ratified decision may add a REQ under an existing invariant (cf. REQ-MCP-1d/1e under ADR-0006). Rationale, because the distinction is the whole point: a stored quote is a second, unversioned copy of the source — it drifts silently the moment the file changes and nothing can ever check that those characters were really there. A span addressed into content-addressed bytes RE-DERIVES: re-read the cited bytes, verify they hash to `contentHash`, slice the range. If the content moved, the hash no longer matches and the read refuses, while the fact's freshness verdict is still decided by the existing drift machinery over `anchor.subtreeHash`.
+
+### REQ-GROUND-1e — the span is additive and absent-tolerant
+source: INV-GROUND-1 @ reference/atlas-grounding.md#ground-1
+If a grounding entry carries no `span`, then the grounding gate shall read it exactly as before and shall treat the location inside the unit as unknown.
+normative-clause: "`span` is OPTIONAL. Absent MUST mean UNKNOWN — never a defaulted whole-unit citation — and an entry without one MUST still satisfy GROUND-2 on its `anchor.subtreeHash` alone."
+> **ADDED 2026-08-02 with REQ-GROUND-1d.** The same additive/absent-tolerant discipline as `builtAt`/`sameAs` (task #75) and the per-row `derivedAt` watermark: old data still reads, and an absent field is a stated unknown rather than a fabricated default. A `span` is ADDITIVE to an entry's anchor, never a replacement for it — an entry carrying a valid span and an empty `subtreeHash` is still not real grounding (REQ-GROUND-2a).
+
+### REQ-GROUND-1f — the span never participates in drift, and its stored form is not integrity-protected
+source: INV-GROUND-1 @ reference/atlas-grounding.md#ground-1
+If drift is being detected for a grounding entry, then the grounding gate shall not let `span` participate.
+normative-clause: "`span` MUST NOT participate in drift detection — the oracle stays `anchor.subtreeHash`, exactly as for `displayLines` (REQ-GROUND-1b)."
+> **ADDED 2026-08-02 with REQ-GROUND-1d — and the LIMIT is recorded here rather than implied away.** A `span` lives inside `grounding`, which KERNEL-8 EXCLUDES from the canonical preimage at every level (`packages/kernel/src/canonical.ts` `SIDE_INDEX`). MEASURED end-to-end on the built binary (2026-08-03, `atlas emit` → `atlas node <addr>` on a real fixture repo): a fact emitted with a span persisted to `.atlas/cas/19/1994bea4…`; rewriting that span in place — offsets `7,12` → `0,3` and `contentHash` `aaa…` → `bbb…` — left `atlas node <addr>` answering `status: ok`, exit 0, byte-identical output, while the control tamper of `claimNorm` (inside the preimage) answered `no-such-node`, exit 1. So: **a stored span can be tampered without any shipped surface noticing.** What `readSpan` witnesses is the CONTENT — bytes that are not the addressed bytes yield no citation — not the integrity of the offsets as stored. Anything stronger requires folding `span` into the addressed preimage, which is a KERNEL-8 amendment and is NOT claimed here.
+
+### REQ-GROUND-1g — the span's offsets are UTF-8 bytes, and it is absent for a whole-file anchor
+source: INV-GROUND-1 @ reference/atlas-grounding.md#ground-1
+If a producer mints a span, then the grounding gate shall require its offsets to index UTF-8 bytes of the sequence `contentHash` commits to, and shall require the span to be absent when the cited unit is the whole file.
+normative-clause: "`span.start`/`span.end` MUST be UTF-8 BYTE offsets into the sequence `contentHash` digests. A producer holding offsets in any other unit MUST convert before minting. A `file`-kind anchor MUST NOT carry a span — never `0..len`, never `0..0`, never a sentinel; absence is the stated unknown (REQ-GROUND-1e)."
+> **ADDED 2026-08-03 (task #159).** Two obligations that were implied by the type and by nothing else, both MEASURED against the built modules rather than reasoned about.
+>
+> **The unit.** `web-tree-sitter` 0.23.x reports `node.startIndex`/`endIndex` in **UTF-16 code units**. `packages/adapter-io/src/ast.ts` `src.slice(node.startIndex, node.endIndex)` is therefore correct — `String.prototype.slice` counts the same units — and is NOT the defect. The divergence is between tree-sitter and this REQ. On a fixture whose anchored unit follows a `café ☕`/`🚀` prefix the unit begins at UTF-16 offset **64** and byte offset **71**; minting from the UTF-16 value returns `unch";\nexport function …`, off by 7 at both ends, and is NOT refused — `mintSpan`'s `splitsCodePoint` guard rejects only a boundary landing mid-code-point, and 64 is a valid boundary. No production producer supplies interior offsets today (the sole mint is `0..length`, whose endpoints are unit-agnostic), so this REQ is a **standing obligation on the symbol-granular producer #182 will add**, written before the first interior offset is minted rather than after.
+>
+> **What the digest commits to.** The shipped chain is `readFileSync(fd,'utf8')` → JS string → `TextEncoder().encode(…)`: the digest is over the UTF-8 re-encoding of the decoded text, not over the file's stored bytes. Measured: for well-formed UTF-8 — including astral characters and NFD-decomposed text — the round-trip is lossless and the two agree byte-for-byte; for malformed UTF-8 (a lone `0xFF` → U+FFFD, 2 bytes longer) they do not, and `readSpan` against the raw file bytes returns `undefined`. Fail-closed and correct in direction; recorded so a reader knows it must present the same decode-then-encode bytes. `TextEncoder` does not Unicode-normalize, so the KERNEL-1 NFC rule does not reach this digest.
+>
+> **The `file` case.** The unit IS the file, so a `0..len` span adds nothing the anchor does not carry and invites a reader to treat "the whole file" as a located citation. Absence is not a gap here — it is the correct answer, on the REQ-GROUND-1e discipline.
+
 ### REQ-GROUND-2a — definition of a real grounding
 source: INV-GROUND-2 @ reference/atlas-grounding.md#ground-2
 The grounding gate shall treat a `Grounding` as real if and only if it has at least one entry and every entry carries a non-empty `subtreeHash`.

@@ -190,7 +190,76 @@ provenance:                                          # exec — empty at S4-free
 trace_ref:                                           # exec — empty at S4-freeze
 rationale:                               # ptr
   - source: ../invariant-register.md#INV-GROUND-11
+
+### WP-4.10-d.GROUND — the SPAN amendment (owner-approved 2026-08-02)
+epic: EPIC-10-a
+id: WP-4.10-d.GROUND
+content_hash: <filled-at-freeze>
+title: a grounding entry carries a SPAN into content-addressed bytes — explicitly not a copied quote
+intent: >
+  Give the "where inside the cited unit" leg a carrier. A grounding entry gains an OPTIONAL `span` = `{contentHash, start, end}`: the digest of the byte sequence plus a byte range into it, and NO copy of the text. A quote is a second, unversioned copy of the source — it drifts silently and nothing can check it was ever there; a span RE-DERIVES (re-read the bytes, verify the digest, slice). Additive and absent-tolerant on the `builtAt`/`sameAs`/`derivedAt` precedent; inert on the drift rail, so GROUND-1/GROUND-2 are untouched. (non-authoritative handle)
+source_reqs:                             # ptr+digest
+  - source: ../req-grd.md#REQ-GROUND-1d  # ptr+digest
+  - source: ../req-grd.md#REQ-GROUND-1e  # ptr+digest
+  - source: ../req-grd.md#REQ-GROUND-1f  # ptr+digest
+  - source: ../req-grd.md#REQ-GROUND-1g  # ptr+digest
+seam-freezes: [ "the grounding receipt shape owned-by GROUND, consumed-by KNOW (additive optional field — no consumer edit required)", "the `Encoder` digest seam consumed-from KERNEL (GROUND-10 / KERNEL-2a)" ]
+anchor: packages/grounding/src/span.ts (`bindSpan` — `mintSpan`/`readSpan`) + `src/types.ts` (`GroundingSpan`, `GroundingEntry.span?`); `packages/adapter-io/src/prompt.ts` (`PromptFactory.evidenceSpan`) is the MINTER — and it is NOT REACHED: it has zero production callers (task #159, measured below), so this card lands the carrier and NOT the carriage.
+interface_contract:                      # ptr+digest
+  - source: ../../reference/atlas-grounding.md#ground-1  # ptr+digest
+  - source: ../../reference/atlas-grounding.md#ground-2  # ptr+digest
+  - source: ../../reference/atlas-grounding.md#ground-10  # ptr+digest
+exclusions: the drift oracle itself (unchanged — WP-4.10-a.GROUND); narrowing the span below FILE granularity (needs the AST slicing seam, not this card); attaching the span to the mined receipt in `cli/src/mine.ts` (a different seat owns that file — reported, not done); folding `span` into the canonical preimage (a KERNEL-8 amendment, explicitly NOT claimed).
+inputs:                                  # ptr+digest
+  - source: ../req-krn.md#REQ-KERNEL-8a  # ptr+digest
+action: add the `span` carrier to the frozen receipt as an OPTIONAL field; implement mint/read over the INJECTED `Encoder` seam, total and fail-closed; keep drift/grounding verdicts invariant under every span edit; mint the production span from bytes ATLAS read, never from the model's answer.
+action_surface: [ edit packages/grounding/**, edit packages/adapter-io/src/prompt.ts, run grounding + adapter-io suites, run the gate set ]
+guardrails: no new type parallel to `Grounding`/`GroundingEntry`/`StructRef`/`Hash`/`SubtreeHash`; no stored text anywhere in the receipt; no `{{SPAN}}` slot and no "state which lines you used" clause in `prompts/propose.md` (the prompt digest MUST NOT change — a proposer-supplied span reinstates the exact self-certification ADR-0011 removed); GROUND-2 keeps holding.
+repair_budget: N=3; early-stop on repeated-identical failure, no-change loop, or semantic-dup patch.
+acceptance:                              # ptr+digest = frozen goldens
+  - source: ../goldens-grd.md#SCN-GROUND-1d-1  # ptr+digest
+  - source: ../goldens-grd.md#SCN-GROUND-1e-1  # ptr+digest
+  - source: ../goldens-grd.md#SCN-GROUND-1f-1  # ptr+digest
+  - source: ../goldens-grd.md#SCN-GROUND-1g-1  # ptr+digest
+  - source: ../goldens-grd.md#SCN-GROUND-1g-2  # ptr+digest
+deps: [ WP-4.10-a.GROUND ]   parallel_group: [S] — serial after the drift oracle it must stay inert on
+exit_predicate: all listed acceptance goldens green ∧ `isGrounded`/`driftDetect` verdicts provably invariant under add/remove/corrupt of a span ∧ the shipped prompt artifact's digest unchanged ∧ the KERNEL-8 tamper limit MEASURED and recorded on REQ-GROUND-1f rather than implied away.
+context_refs:                            # closed list
+  - source: ../../reference/atlas-grounding.md#ground-1
+  - source: ../../reference/atlas-grounding.md#ground-2
+  - source: ../../reference/atlas-grounding.md#ground-10
+  - source: ../../reference/atlas-kernel.md#kernel-8
+owner: seat-grounding
+outputs:                                             # exec — empty at S4-freeze
+provenance:                                          # exec — empty at S4-freeze
+trace_ref:                                           # exec — empty at S4-freeze
+rationale:                               # ptr
+  - source: ../invariant-register.md#INV-GROUND-1
 ---
+
+> **REACH, MEASURED THROUGH THE BUILT BINARY — the span does NOT arrive in a durable fact (task #159, 2026-08-03).**
+> `atlas mine` was run from `packages/cli/dist/src/bin.js` on a real git repository with a real
+> `.atlas/index.scip` and a real operator-configured `roles.propose` command: exit 0, `llmCalls 2`,
+> `seeded 2`, two facts persisted to `.atlas/cas/`. Every stored grounding entry is `{anchor, path}`; the
+> string `span` occurs **0 times** anywhere under `.atlas/`. Three independent reasons, all structural — this
+> is not a missing one-liner:
+> 1. `PromptFactory.evidenceSpan` has ZERO production callers. `cli/src/mine-proposer.ts:57-63` builds the
+>    factory and consumes `.build` and `.digest` only; `ResolvedProposer` has no field to carry a span, so
+>    the minted span is discarded at the point of creation.
+> 2. The receipt is not built there at all. `cli/src/mine-gate.ts` `makeAdmitGate` takes its grounding from
+>    `reground` → `adapter-io/src/compose-mine-admission.ts` → `grounding/src/ground.ts` `ground(node, axes)`,
+>    which resolves anchors against the INDEX AXES and never reads a byte of source. `GroundableUnit.citations`
+>    has no `span` field, so there is no seam through which a span could enter a receipt.
+> 3. Even wired, it would store nothing today: every site the shipped frontier emits is `kind: 'file'`
+>    (`genesis/src/seeds.ts:145` hard-codes it; the probe run's two sites both reported `"kind":"file"`), and
+>    the per-`kind` rule this card states requires the span to be ABSENT for `file`.
+>
+> **CONSEQUENCE FOR SEQUENCING, reported not acted on:** (3) means #159 cannot be *proven reached* before
+> #182 lands symbol-granular sites, because the only anchor kind that exists today is the one kind for which
+> the contract forbids a span. The carrier is nonetheless the right thing to land first — #182 needs the
+> shape and needs the UTF-16→byte conversion obligation (`GroundingSpan` docstring) written down before it
+> mints its first interior offset. Wiring the carriage is a change to what a mined fact STORES and is left
+> to the owner of that path.
 
 ## EPIC-11 — truth-gate (11-a) · admission, obviousness scored (11-b)
 

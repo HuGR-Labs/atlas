@@ -12,6 +12,32 @@ import type { SubtreeHash } from './hash.js';
  *  subtreeHash, never anchorless (GROUND-12). (atlas-grounding line 44; atlas-index line 56) */
 export interface StructRef {
   readonly kind: 'symbol' | 'block' | 'file' | 'repo' | 'project';
+
+  /**
+   * A REPO-RELATIVE PATH, and — since #155 — only ever that. **ONE FORM. There is no union.**
+   *
+   * Written down because the failure was SILENCE, not complexity (task #159). This field was an UNSTATED
+   * union: `adapter-io/src/git-history.ts` `fileRef` put a repo-relative path here, while
+   * `genesis/src/seeds.ts` `structuralFrontier` put a DEPENDENCY-GRAPH NODE-IDENTITY HASH here. Every
+   * reader — `createFileSourceReader`, `filePathOf`, `bucketOf` — assumed a path, so on a thin-history
+   * repository every site threw `source-unreadable`. The type said `string` and both producers were
+   * type-correct; nothing could have caught it.
+   *
+   * #155 (D5 REJECT) fixed it AT THE PRODUCER: `structuralFrontier` now resolves the node-identity key
+   * back to a path through the index correspondence and DROPS any dep-graph node with no spatial
+   * counterpart (counted out as `StructuralFrontier.droppedNoPath`, never silently). So the second form
+   * was ELIMINATED rather than taught to consumers.
+   *
+   * WHAT A READER MAY ASSUME, therefore: a repo-relative path, usable as a filesystem path after the
+   * containment checks, and as a resolution key into the spatial/territory axes. For `symbol`/`block` the
+   * path is extended by the `::`-separated unit chain (`file::item::block`, `adapter-io/src/ast.ts`) — the
+   * FILE portion is the prefix up to the first `::`. A reader that needs the file must take that prefix
+   * (`filePathOf`), never the whole string.
+   *
+   * WHAT A PRODUCER OWES: a path that exists in the repository, or nothing at all. A producer that holds
+   * only a node identity MUST resolve it or drop the site — it may NOT widen this field back into a union.
+   */
   readonly qualifiedPath: string;
+
   readonly subtreeHash: SubtreeHash;
 }
