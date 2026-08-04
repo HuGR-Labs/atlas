@@ -20,9 +20,29 @@ The machinery of governed execution, independent of any one product:
 - **Instruments** — `harness/probes/`. Deliberately NOT gates: a probe judges one RUN against a written
   contract and is invoked by hand, so nothing here is wired into `ci.yml` and `package.json` exposes no
   script for it. The distinction is load-bearing — a gate whose input is absent on CI exits 0 having
-  checked nothing, which reads exactly like coverage. Today: `genesis-output-probe.mjs` (with
-  `atlas-store-read.mjs`, `mine-report.mjs`) — the instrument for
-  `docs/design/genesis-output-contract.md`.
+  checked nothing, which reads exactly like coverage. Today:
+
+  - `genesis-output-probe.mjs` (with `atlas-store-read.mjs`, `mine-report.mjs`) — the instrument for
+    `docs/design/genesis-output-contract.md`.
+  - **the concurrency kit** — `model-call-shim.mjs` (a recording passthrough that stands where
+    `roles.propose.cmd` stands), `fake-model.mjs` (a zero-cost stand-in model), and
+    `concurrency-report.mjs` (reconstructs peak concurrency by sweeping the recorded intervals). It
+    answers one question about a `mine` run — how many model calls were really in flight — and it exists
+    because the hand-rolled shim it replaces answered that question wrongly. That shim named its per-call
+    files `call-$(date +%s%N)`; BSD `date` does not implement `%N` and emits a literal `N`, so eight
+    concurrent calls shared one set of filenames. Two things followed: peak concurrency read as 1 on a run
+    that was demonstrably 8-wide (and a healthy pool was opened as a defect), and — worse — eight
+    concurrent `O_TRUNC` writers overlaid one another's bytes, so the "answer" handed back to Atlas was a
+    splice of up to eight different model replies. Uniqueness here is enforced by `O_CREAT|O_EXCL`, not by
+    a clock; the analyser refuses a log it cannot draw a conclusion from rather than reporting a plausible
+    number from unusable input.
+
+  **`concurrency-report.test.mjs` is the one probe file `npm test` runs, and that is deliberate.** It is
+  not a gate over the product — it is the CALIBRATION of a harness module, the same posture as
+  `harness/lib/lexing.test.mjs`, and it takes no external input: it spawns the shim over the fake model
+  eight-wide and asserts the report says exactly 8, then serially and asserts exactly 1. It therefore
+  cannot be vacuous on CI, which is the property the rule below is actually protecting. An instrument
+  nobody has watched succeed at the thing it measures is worth exactly what the last one was worth.
 - **The execution method** — the governed pipeline `S0 → S1 → S2 → S3 → C → S4` plus the
   per-work-package execution loop `BIND → RED → GREEN → REFACTOR → GATE → SEAL`. These live
   as prompt + protocol docs under `docs/` (see the inventory below); they are harness-owned
