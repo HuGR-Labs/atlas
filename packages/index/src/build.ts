@@ -138,24 +138,48 @@ const docHash = nodeHashOfPath;
 const edgeKey = (e: DepEdge): string => `${String(e.from)}\0${e.to === null ? '' : String(e.to)}\0${e.kind}`;
 
 /**
+ * A SCIP symbol is DOCUMENT-SCOPED (unrelated to any same-named symbol in another document) iff it is a
+ * `local` symbol per the SCIP grammar itself (`@c4312/scip` `scip_pb.d.ts`, mirroring the upstream
+ * `scip.proto` doc-comment verbatim):
+ *
+ *   <symbol> ::= <scheme> ' ' <package> ' ' (<descriptor>)+ | 'local ' <local-id>
+ *   "Local symbols MUST only be used for entities which are local to a Document."
+ *
+ * i.e. the ENTIRE symbol string for a local is the literal `'local '` (with the trailing space — part of
+ * the grammar, not a separator we chose) followed by an arbitrary `<local-id>`; there is no scheme/package
+ * prefix to disambiguate one document's `local 2` from another's. Confirmed against this repo's own
+ * `.atlas/index.scip`: every occurrence matching `/^local/i` renders as exactly `local N` (never `Local N`,
+ * `local:N`, or any other spelling) — so `startsWith('local ')` is the exact, spec-anchored predicate.
+ */
+const isLocalSymbol = (symbol: string): boolean => symbol.startsWith('local ');
+
+/**
  * Derive the depends-on edge ledger from the SCIP occurrences alone. A `reference` whose symbol has an
  * in-index `definition` ⇒ a `resolved` edge to the defining document; a `reference` with NO in-index
  * definition (every cross-language / FFI target — unseeable by a single-language indexer) ⇒ an `unresolved`
  * edge with `to: null`. Edges are deduped + sorted so a rebuild is byte-identical. (SCN-INDEX-3e-1)
+ *
+ * A `local` symbol (`isLocalSymbol`) contributes NO edge, on either side (defs loop AND reference loop).
+ * The dependency axis's endpoints are `docHash(doc.relativePath)` — its edges are BETWEEN DOCUMENTS. A
+ * document-scoped symbol carries zero information about an inter-document dependency by construction: the
+ * only edge it could faithfully produce is a self-edge `from === to`, which adds nothing to a dependency
+ * graph. Left unexcluded, a GLOBAL `Map<symbol, Hash>` keyed on the raw SCIP symbol string joins unrelated
+ * `local N` symbols across every document that happens to reuse the same small integer id, first-definition
+ * -wins — fabricating a cross-document edge the SCIP data never asserted.
  */
 function deriveEdges(scip: ScipOutput): DepEdge[] {
   const defs = new Map<string, Hash>();
   for (const doc of scip.documents) {
     const h = docHash(doc.relativePath);
     for (const occ of doc.occurrences) {
-      if (occ.role === 'definition' && !defs.has(occ.symbol)) defs.set(occ.symbol, h);
+      if (occ.role === 'definition' && !isLocalSymbol(occ.symbol) && !defs.has(occ.symbol)) defs.set(occ.symbol, h);
     }
   }
   const seen = new Map<string, DepEdge>();
   for (const doc of scip.documents) {
     const from = docHash(doc.relativePath);
     for (const occ of doc.occurrences) {
-      if (occ.role !== 'reference') continue;
+      if (occ.role !== 'reference' || isLocalSymbol(occ.symbol)) continue;
       const target = defs.get(occ.symbol);
       const edge: DepEdge =
         target !== undefined ? { from, to: target, kind: 'resolved' } : { from, to: null, kind: 'unresolved' };

@@ -765,6 +765,21 @@ Then the edge's target is `unresolved`, never a guessed concrete node
 teeth: breaks-on "the builder fabricates a resolved target for the `TS→Go` edge — a phantom `resolved` edge to an invented node"
 gen: conformance   # held-out; independent TS→Go edge
 
+### SCN-INDEX-13c-3 — a SCIP `local` symbol never gets a fabricated CROSS-DOCUMENT resolved target   (guard, #189)
+source: REQ-INDEX-13c
+Given two documents that each define the SCIP-spec `local 2` symbol (document-scoped per the SCIP symbol
+  grammar, `<symbol> ::= … | 'local ' <local-id>` — unrelated to any other document's `local 2`) and each
+  reference it
+When the dependency edge ledger is built
+Then neither document's `local 2` reference produces ANY edge — no `resolved` edge joins the two documents,
+  and no `unresolved` edge is fabricated in its place either
+teeth: breaks-on "`deriveEdges` keys its definition map on the RAW SCIP symbol string in a single GLOBAL
+  `Map`, so two documents' unrelated `local 2` symbols collide and the second document's reference resolves
+  to the first document's definition — a fabricated cross-document `resolved` edge the SCIP data never
+  asserted (measured on this repo's real `.atlas/index.scip`: 277 symbols defined in >1 document pre-fix,
+  6,753 total edges collapsing to 2,202 post-fix)"
+gen: conformance
+
 ### REQ-INDEX-13d — closure reported under-approximate   (happy)
 
 ### SCN-INDEX-13d-1 — a reverse closure over a node with unresolved edges in scope reports under-approximate   (happy)

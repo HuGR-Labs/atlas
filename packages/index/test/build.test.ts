@@ -115,6 +115,46 @@ describe('INDEX-3 — mechanical SCIP-derived build (visible goldens)', () => {
     expect(edges.some((e) => e.kind === 'resolved' && e.to === null)).toBe(false);
   });
 
+  it('SCN-INDEX-13c-3 (#189): a `local` symbol never fabricates a cross-document edge', () => {
+    // Two UNRELATED files, each defining AND referencing the SCIP `local 2` symbol. `local N` is
+    // document-scoped by the SCIP symbol grammar (`<symbol> ::= … | 'local ' <local-id>` —
+    // `@c4312/scip` scip_pb.d.ts, mirroring scip.proto verbatim): fileA's `local 2` and fileB's
+    // `local 2` share nothing but a coincidental spelling.
+    const localTree: FileTree = {
+      path: 'repo:local',
+      children: [
+        { path: 'file:a.ts', children: [], content: 'a' },
+        { path: 'file:b.ts', children: [], content: 'b' },
+      ],
+    };
+    const localScip: ScipOutput = {
+      documents: [
+        {
+          relativePath: 'file:a.ts',
+          occurrences: [
+            { symbol: 'local 2', role: 'definition' },
+            { symbol: 'local 2', role: 'reference' },
+          ],
+        },
+        {
+          relativePath: 'file:b.ts',
+          occurrences: [
+            { symbol: 'local 2', role: 'definition' },
+            { symbol: 'local 2', role: 'reference' },
+          ],
+        },
+      ],
+    };
+    const edges = build(localTree, localScip).edges;
+    // THE TEETH: pre-fix, a GLOBAL `Map<symbol, Hash>` keyed on the raw symbol string, first-definition
+    // -wins, makes file b.ts's `local 2` reference resolve to file a.ts's `local 2` definition — a
+    // fabricated `resolved` edge b.ts→a.ts (and a self-edge a.ts→a.ts from a.ts's own reference). Neither
+    // is a real inter-document dependency: `local` symbols carry ZERO cross-document information.
+    // Post-fix: no edge at all, on EITHER side (not even `unresolved` — a local symbol is excluded from
+    // both the defs loop and the reference loop, never merely left unresolved).
+    expect(edges).toEqual([]);
+  });
+
   it('rollup order-independence: reordering children leaves the parent subtreeHash unchanged', () => {
     const reord: FileTree = {
       ...tree,
