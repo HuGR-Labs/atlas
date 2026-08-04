@@ -27,12 +27,22 @@
 //
 // ── WHY `packages/**` WAS ADDED (#192) ───────────────────────────────────────────────────────────────
 // This gate shipped walking `docs/` alone, and its own header declared the code carriers out of scope "by
-// construction". That declaration was the blind spot, not a boundary: RE-DERIVED on master `e4882a3`, 124
-// `.ts` files under `packages/**` cite an ADR by name and 26 of them cite `ADR-0013` specifically — a larger
-// citing population than the `docs/` tree that motivated the gate. Atlas's modules explain themselves in
-// prose comments that reference decisions by id, so a deleted-or-renamed ADR strands more pointers in the
-// code than in the documentation. Nothing about "the repo cites an ADR it does not contain" is less true one
-// directory over, and the previous scope meant the gate could report OK over the majority of the citations.
+// construction". That declaration was the blind spot, not a boundary. RE-DERIVED with this gate's own regex
+// over the tree at master `e4882a3` (the commit this extension was written against): of 520 `.ts` files
+// under `packages/**`, **123 cite an ADR by name and 26 of those cite `ADR-0013`**, naming 12 distinct ADR
+// ids — a larger citing population than the `docs/` tree that motivated the gate. Atlas's modules explain
+// themselves in prose comments that reference decisions by id, so a deleted-or-renamed ADR strands more
+// pointers in the code than in the documentation. Nothing about "the repo cites an ADR it does not contain"
+// is less true one directory over, and the previous scope meant the gate could report OK over the majority
+// of the citations.
+//
+// THOSE FIGURES ARE A DATED SNAPSHOT OF ONE NAMED TREE, not a live invariant — every commit can move them,
+// and the gate asserts nothing about them. They are pinned to `e4882a3` for exactly the reason the previous
+// header is quoted above: it carried "25 files" as a bare present-tense number, which was wrong by one and
+// had no tree attached, so nobody could tell whether it was stale or simply mistaken. A count in a comment
+// must name the tree it was measured on or it decays into a claim no reader can check. (The branch that
+// introduced this extension adds one more citer of each — its own new blackbox story — which is precisely
+// how easy it is to make the pair disagree if the two halves are read off different trees.)
 //
 // ── THE FIXTURE EXCLUSION, STATED EXACTLY (A4 — lead-ratified) ───────────────────────────────────────
 // A test fixture may legitimately name an ADR that does not exist, in order to exercise this gate's own

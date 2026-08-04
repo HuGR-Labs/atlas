@@ -37,12 +37,16 @@ intent: >
 
   **#192 — the gate blind spot.** `harness/gates/adr-citation-guard.mjs` (PR #115) requires every
   `ADR-<NNNN>` citation under `docs/` to resolve to a real `docs/adr/ADR-<NNNN>-*.md`. Its own header
-  declared code carriers out of scope "by construction". That declaration WAS the blind spot: re-derived on
-  master `e4882a3` with the gate's own regex, **124 `.ts` files under `packages/**` cite an ADR by name, 26
-  of them cite `ADR-0013` specifically, and 12 distinct ADR ids are cited from code** — a larger citing
-  population than the `docs/` tree that motivated the gate. Atlas modules explain themselves in prose
-  comments that reference decisions by id, so a deleted or renamed ADR strands more pointers in the code
-  than in the documentation. This is the same hole that let the public repo cite an ADR it did not contain.
+  declared code carriers out of scope "by construction". That declaration WAS the blind spot: re-derived
+  with the gate's own regex over the tree at master `e4882a3`, of 520 `.ts` files under `packages/**`,
+  **123 cite an ADR by name, 26 of those cite `ADR-0013`, and 12 distinct ADR ids are cited from code** — a
+  larger citing population than the `docs/` tree that motivated the gate. Atlas modules explain themselves
+  in prose comments that reference decisions by id, so a deleted or renamed ADR strands more pointers in the
+  code than in the documentation. This is the same hole that let the public repo cite an ADR it did not
+  contain. (On THIS branch both figures are one higher — 124 / 27 — because the #193 story added a citer;
+  the numbers above are pinned to `e4882a3` and are a dated snapshot of one named tree, never a live
+  invariant. See the framing-error section: the first version of this card stated the pair `124 / 26`,
+  which describes neither tree.)
 
 source_reqs:                             # ptr+digest — the ratified requirements this fix restores compliance with
   - source: ../req-tls.md#REQ-TOOLS-6f   # ptr+digest — "the pack is two separately bounded bands"; the description contradicted it
@@ -202,3 +206,42 @@ originally printed only on the gate's SUCCESS path while the header promised "pa
 code-corpus twin caught it (`excludedCount` read `NaN` off a failing run), and the CODE was fixed to match
 the documented claim rather than the claim softened — a reader staring at a dangling-citation report is
 exactly the reader who needs to know which files were not read.
+
+---
+
+## What COLD REVIEW caught that I had not (APPROVE, two doc-only findings — one fix round, both closed)
+
+**F1 — I shipped a mismatched pair of counts, which is the exact defect class this card is about.** The
+first version of this card and of the gate header both read *"124 `.ts` files … 26 of them cite ADR-0013"*.
+Re-derived independently with the gate's own regex, reading blobs from the object store at each named rev:
+master `e4882a3` is **123 / 26** over 520 scanned files, and this branch's HEAD is **124 / 27** over 521 —
+the set difference being exactly one file, `packages/e2e-blackbox/test/s26-query-description.blackbox.test.ts`,
+the story #193 added. `124 / 26` describes NEITHER tree: I read the "any ADR" half off my working copy and
+the "ADR-0013" half off master. `12 distinct ids` was correct on both. Both sites now state the master
+figures, labelled with the tree, and say plainly that a count in a comment is a dated snapshot — which is
+the durable form of the same lesson the header already teaches about the previous "25".
+
+**F2 — a second `packages/**` carrier of the retired single-band promise, in my own territory.** The C2
+sweep was scoped to `docs/` by assumption after the `packages/**` grep for the description string came back
+clean; the promise also existed in a different spelling. `packages/tools/src/types.ts:78`, the JSDoc on the
+exported `QueryOut` type, read *"the merged covering bounded pack (`≤ ~2K`, `tier≥T1`, stale-flagged)"* —
+hover-rendered for every consumer of `@atlas/tools`, on the very type the fixed door returns. Rewritten to
+the two-band reality in the same register as the description.
+
+The widened sweep over `packages/**` was then run and enumerated. Only that one file was a carrier.
+`packages/tools/src/query.ts:13-20` and `packages/tools/src/bands.ts:29` already say "governing band"
+explicitly; `packages/tools/src/handler.ts:144` and the #193 story quote the retired sentence deliberately,
+as the thing being refused; `packages/retrieval/src/pack.ts` is a DIFFERENT consumer (`PACK_CAP`, which
+`atlas query` never reaches) and carries two explicit `[ADR-0013 — REFERENCE MODEL, NOT AMENDED]` markers,
+so its `tier≥T1` language is accurate for it. `packages/tools/test/wp-6.19-tools.test.ts:9,65` names "the
+pack" where it means the governing band, but every assertion in it is on `pack.invariants` and its subject
+is `REQ-TOOLS-6b`, which after the amendment IS the governing band — a loose test title, not a false
+surface, and left alone rather than reached for in a one-round fix.
+
+**The 400-LOC figure, measured rather than reconstructed.** The pre-split combined twin was preserved
+byte-exact (19,366 bytes) and re-measured with the repo's own metric (`split('\n').length`,
+`godfile-guard.mjs:74`): **414**, not a reconstruction. Confirmed empirically by running `godfile-guard`
+against a throwaway fixture repo containing exactly that file — `EXIT=1`, `414  harness/gates/
+adr-citation-guard.test.mjs`, over the 400 ceiling by 14. A reconstruction from the two FINAL files lands
+lower because neither final header existed pre-split: the packages twin gained a ~20-line header explaining
+the split, and the docs twin's local helper block was replaced by a 16-line import block.
