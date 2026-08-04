@@ -38,6 +38,8 @@ const DISPATCH = (over: Partial<OwnDispatch['pack']> = {}, tool = 'own_src'): Ow
     tokenEstimate: 0,
     manifest: { pointers: [], truncated: false },
     pullReachable: [],
+    advisory: [],
+    advisoryDropped: 0,
     ...over,
   },
 });

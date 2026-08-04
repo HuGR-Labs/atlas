@@ -94,6 +94,7 @@ function mp(name: string, o: { kind?: 'pack' | 'memory' | 'knowledge' | 'drill';
 interface UnitData {
   role?: string;
   invariants?: readonly SizedInvariant[];
+  advisory?: readonly SizedInvariant[];
   terrain?: { contents: readonly NodeKey[]; owner: string; tier: Tier };
   relate?: RelationSet;
   gotchas?: readonly SizedGotcha[];
@@ -107,6 +108,7 @@ function sourcesOf(db: Record<string, UnitData>): OwnSources {
   return {
     role: (u) => d(u).role ?? `role:${u.id}`,
     invariants: (u) => d(u).invariants ?? [],
+    advisory: (u) => d(u).advisory ?? [],
     terrain: (u) => d(u).terrain ?? { contents: [], owner: 'owner', tier: 'T1' },
     relate: (u) => d(u).relate ?? relSet(u.id, []),
     gotchas: (u) => d(u).gotchas ?? [],

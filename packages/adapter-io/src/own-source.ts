@@ -56,10 +56,13 @@ import { createResolve } from '@atlas/index';
 import { driftDetect } from '@atlas/grounding';
 import type { Axes, AxisForest, IndexNode } from '@atlas/index';
 import { currentNodes, tierRank } from '@atlas/knowledge';
-import type { CurrentNode, GroundedFact, PredicateSlot } from '@atlas/knowledge';
+import type { GroundedFact } from '@atlas/knowledge';
 import type { Freshness, Hash, NodeKey, Tier } from '@atlas/contracts';
 import { underScope } from './anchor-scope.js';
-import { atLeastT1, factToInvariant, resolveFreshness } from './pack-shape.js';
+// The two bands + their row shaping — `own-bands.ts`, which owns WHICH stored facts a briefing may show.
+import { advisoryBand, governingGotchas, governingInvariants } from './own-bands.js';
+import type { Row } from './own-bands.js';
+import { resolveFreshness } from './pack-shape.js';
 import type { AtlasPolicy } from './policy.js';
 import { buildRetrievalModel } from './retrieval-model.js';
 import { rehydrateProjection } from './store.js';
@@ -75,16 +78,6 @@ export interface OwnDispatch {
 /** The composition-root leg: a scope path → its `own_<leaf>` briefing. TOTAL (RETR-9 — a scope that names
  *  no index unit yields an empty briefing, never a throw). */
 export type OwnLeg = (scope: string) => OwnDispatch;
-
-/** The two slots the reference calls "the non-obvious ones" (atlas-retrieval:28) — routed to `gotchas`
- *  rather than `invariants` so the briefing's two sections mean different things. */
-const GOTCHA_SLOTS = new Set<PredicateSlot>(['gotcha', 'rationale']);
-
-/** One fact as the projection + CAS see it: the trusted `CurrentNode` and the whole fact behind it. */
-interface Row {
-  readonly node: CurrentNode;
-  readonly fact: GroundedFact;
-}
 
 /** `Hash` and `NodeKey` are same-string DISTINCT brands (contracts/hash.ts). One cast helper, as
  *  index-adapter.ts does at the same kind of seam — a structural key crossing into the fact vocabulary. */
@@ -112,12 +105,6 @@ function allRows(store: DiskStore): readonly Row[] {
  */
 function underScopeRows(rows: readonly Row[], scope: string): readonly Row[] {
   return rows.filter((r) => r.node.primaryAnchor !== undefined && underScope(r.node.primaryAnchor, scope));
-}
-
-/** The slot a row lives at — the projection's carrier first (it is the trusted, recomputed copy), the fact's
- *  own optional field as the fallback for a row minted before the carrier existed. */
-function slotOf(row: Row): PredicateSlot | undefined {
-  return row.node.slot ?? row.fact.predicateSlot;
 }
 
 /**
@@ -238,11 +225,19 @@ export interface OwnSourceDeps {
  * on a long-lived MCP session an in-session `atlas emit` must be visible to the very next `own`, never a
  * frozen startup snapshot.
  *
- * THE TOOLS-6 BOUND IS APPLIED TO BOTH FACT SECTIONS. `invariants` is bounded by `atLeastT1` because a pack
- * is; `gotchas` is bounded by it too, which the composer does not require — a `GroundedFact` is not a
- * `PackInvariant` and no bound follows it there. It is applied anyway because the alternative is a read door
- * that serves a `T2` (or an off-lattice `T3` out of a committed projection) that `atlas query` is correctly
- * declining to show. A second read door with a laxer bound is a route around the first one.
+ * [AMENDED — REQ-RETR-12m, 2026-08-03] THE FACT SECTIONS ARE TWO BANDS, and the predicates that decide them
+ * live in `own-bands.ts` beside the measurement that moved them. What this docstring said before was:
+ *
+ *   "THE TOOLS-6 BOUND IS APPLIED TO BOTH FACT SECTIONS … the alternative is a read door that serves a `T2`
+ *    … that `atlas query` is correctly declining to show. A second read door with a laxer bound is a route
+ *    around the first one."
+ *
+ * The justification had expired. ADR-0013 (owner-ratified 2026-08-03) made `atlas query` serve `T2` in a
+ * separately capped ADVISORY band, so it declines nothing of the sort; the sentence defended a behaviour
+ * that had been deleted, and the live consequence was that `own` served 0 of this repository's 199 mined
+ * facts while `query` served them. The GOVERNING band (`invariants` + `gotchas`, `tier≥T1`) is unchanged;
+ * the ADVISORY band is added beside it. A laxer bound would still be a route around the first door — this
+ * is the SAME bound as the first door, reached through the same `@atlas/tools` predicates.
  */
 export function buildOwnSources(deps: OwnSourceDeps): OwnSources {
   const { axes, store, policy } = deps;
@@ -266,23 +261,19 @@ export function buildOwnSources(deps: OwnSourceDeps): OwnSources {
       // caller's own input. None is a sentence this module composed, and the last one exists because a
       // scope outside every territory resolves to nothing and an empty role line names nothing at all.
       const defs = scopeRows(unit)
-        .filter((r) => slotOf(r) === 'definition')
+        .filter((r) => (r.node.slot ?? r.fact.predicateSlot) === 'definition')
         .sort((a, b) => (a.node.nodeKey < b.node.nodeKey ? -1 : 1));
       const def = defs[0];
       if (def !== undefined) return def.node.claims.join('; ');
       return createResolve(forest).resolve('territory', unit.id)?.key ?? unit.id;
     },
 
-    invariants: (unit): readonly SizedInvariant[] => {
-      const out: SizedInvariant[] = [];
-      for (const row of scopeRows(unit)) {
-        if (GOTCHA_SLOTS.has(slotOf(row) as PredicateSlot)) continue; // routed to `gotchas` instead
-        const inv = factToInvariant(row.node, row.fact, freshnessOf(row.fact));
-        if (!atLeastT1(inv)) continue; // TOOLS-6, applied at this feed exactly as `mintPack` applies it
-        out.push({ inv, ppr: 0, hits: 0, cost: inv.claim.length });
-      }
-      return out;
-    },
+    invariants: (unit): readonly SizedInvariant[] => governingInvariants(scopeRows(unit), freshnessOf),
+
+    // The ADVISORY band (REQ-RETR-12m) — every `T2` row under the scope, uncapped HERE and bounded by the
+    // composer's `OWN_ADVISORY_CAP` inside the unchanged `OWN_CAP`. Same live read, same oracle, same
+    // shaping as the governing band; the only difference is which membership predicate admits the row.
+    advisory: (unit): readonly SizedInvariant[] => advisoryBand(scopeRows(unit), freshnessOf),
 
     terrain: (unit) => {
       const rows = scopeRows(unit);
@@ -292,10 +283,13 @@ export function buildOwnSources(deps: OwnSourceDeps): OwnSources {
         // for byte-stability. A scope that is not an index unit contributes none.
         contents: (node?.children ?? []).map((c) => asNodeKey(c.key)).sort(),
         owner: terrainOwner(policy, unit.id),
-        // The verdict is irrelevant to a TIER test, so the oracle is not run here: this line asks which
-        // governance classes are present, and paying a drift re-derivation per row to answer it would be
-        // cost with no reader. `'FRESH'` is a placeholder for a field this predicate never reads.
-        tier: terrainTier(rows.filter((r) => atLeastT1(factToInvariant(r.node, r.fact, 'FRESH')))),
+        // The `atLeastT1` pre-filter that used to sit here is GONE, and its removal moves no output byte.
+        // Measured rather than assumed: `terrainTier` starts at `'T2'` and only ever LOWERS, and `tierRank`
+        // (@atlas/knowledge) is total with an unrecognized class ranking LAST — so a `T2` row leaves the
+        // answer at `T2`, an off-lattice row can never beat it, and an empty scope answers `T2` either way.
+        // The filter was a third statement of a bound that has now moved; a no-op restatement of a governing
+        // predicate is exactly what a reader mistakes for the predicate itself.
+        tier: terrainTier(rows),
       };
     },
 
@@ -306,13 +300,7 @@ export function buildOwnSources(deps: OwnSourceDeps): OwnSources {
       return relationSetFor(unit.id, underScopeRows(rows, unit.id), model.blastRadius, byContentHash);
     },
 
-    gotchas: (unit): readonly SizedGotcha[] =>
-      scopeRows(unit)
-        .filter((r) => GOTCHA_SLOTS.has(slotOf(r) as PredicateSlot))
-        // Tier test only — same non-reading placeholder as `terrain` above (`gotchas` carries whole facts,
-        // not `PackInvariant`s, so no freshness field of this row is ever served).
-        .filter((r) => atLeastT1(factToInvariant(r.node, r.fact, 'FRESH'))) // same bound the pack carries
-        .map((r) => ({ fact: r.fact, cost: r.node.claims.join('; ').length })),
+    gotchas: (unit): readonly SizedGotcha[] => governingGotchas(scopeRows(unit)),
 
     // L6 memory has no production instance; `OwnPack.memory` is `unknown` so retrieval never names a memory
     // type. `null` is the honest pointer bag, not a placeholder for one that exists elsewhere.

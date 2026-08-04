@@ -111,3 +111,55 @@ A verdict this reader cannot derive (no oracle wired, or a fact whose CAS bytes 
 reachable, because `.atlas/` is a committed artifact) reads `DRIFTED`, never the stored `FRESH`. That is
 over-reporting in the conservative direction, the same direction `freshness-watermark.ts` already documents
 for a deduped re-verified row.
+
+## AMENDMENT — 2026-08-03: the advisory band reaches the SECOND read door (`REQ-RETR-12m`)
+
+**Status of everything above: unchanged and IN FORCE.** No clause is reversed and no number moves. This
+records that the amendment one section up shipped to ONE read door and had to be carried to the other.
+
+### The gap, measured
+
+`atlas query` and `atlas own` read the same durable store. The amendment above changed `query`; `own`'s feed
+(`packages/adapter-io/src/own-source.ts`) kept applying `atLeastT1` to both of its fact sections, on this
+stated rationale: *"the alternative is a read door that serves a `T2` … that `atlas query` is correctly
+declining to show. A second read door with a laxer bound is a route around the first one."* After this ADR,
+`query` declines nothing of the sort — the rationale described a behaviour that had just been deleted, and
+`REQ-TOOLS-6f` as landed says "The `atlas-query` pack shall…", so the amendment never reached the other door.
+`wp-per-fact-freshness.md` recorded that as a deliberate exclusion ("`atlas own` is NOT widened").
+
+Through the built binary against Atlas's own 199-fact mined store, where **every fact is `T2`**:
+
+```
+atlas own   packages/adapter-io/src/policy.ts  ->  0 invariant(s), 0 gotcha(s)
+atlas query packages/adapter-io/src/policy.ts  ->  advisory T2 b977326… [FRESH]: "`scopeOwnsAnchor` returns …"
+```
+
+Same store, same binary, two read doors disagreeing about what the store contains. `own` served **0 of 199**
+— by specification, not by bug.
+
+### What changed, precisely
+
+1. `OwnPackPlus` gains `advisory` + `advisoryDropped`, the same field names `Pack` carries, so there is one
+   advisory vocabulary across both doors rather than two.
+2. `OwnSources` gains a REQUIRED `advisory` axis. The tier predicates are NOT restated: the feed labels the
+   band through the same `@atlas/tools` src/bands.ts pair (`atLeastT1` / `isAdvisory`, both MEMBERSHIP), and
+   `packages/retrieval/src/own.ts` — which may not import `tools` (L5 inner, L7 outer) — only budgets it.
+3. `OWN_ADVISORY_CAP = OWN_CAP / 2 = 750` — a SUB-cap INSIDE the unchanged `OWN_CAP`, NOT a second `2000`.
+   The `2000` ratified here cannot be reused: it exceeds the whole 1500-char briefing budget and would make
+   the sub-cap vacuous. What carries over is the RATIO this ADR's sibling ratified (`ADVISORY_CAP` 2000 vs
+   `PACK_CAP` 2000 — advisory ≤ governing, 1:1), applied to the budget this door has. So the briefing's
+   total does not grow, and no briefing is ever more than half machine proposals.
+4. The advisory band is filled LAST, after every governing row, gotcha and manifest pointer. The governing
+   band therefore keeps PRIORITY: a briefing whose ratified content fills the budget serves zero advisory
+   rows and is byte-identical to what it served before. Measured on a `T1`-only store, the only diff is the
+   three new band-declaring lines; `tokenEstimate` is unchanged at 118.
+5. What the sub-cap refuses is counted in `advisoryDropped` and named by nodeKey in the `pullReachable` tail
+   `own` already promised ("what did not fit is listed as pull-reachable, never silently dropped") — the
+   existing promise is honoured rather than a new one added.
+
+### The residual, stated
+
+`reference/atlas-retrieval.md#retr-12` still states the briefing as `tier≥T1` alone. Amending a ratified
+INVARIANT is this decision's own declared surface, exactly as `reference/atlas-tools.md#tools-6` was left
+above; the divergence is registered beside `REQ-RETR-12f`/`REQ-RETR-12m` in `req-ret.md` rather than
+straddled silently.

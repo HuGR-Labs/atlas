@@ -21,7 +21,8 @@
 //   - THE SLOT PARTITION IS REAL: a `gotcha`-slot fact renders as a `gotcha` row, not an `inv` row, while
 //     `query` (which does not partition) shows both as `inv`.
 //   - THE BLAST SUMMARY IS REAL: it rides the SAME reverse closure `query --by dependency` serves from.
-//   - TOOLS-6 HOLDS ON THIS DOOR TOO: a `T2` fact is bounded OUT of the briefing exactly as out of the pack.
+//   - TOOLS-6 HOLDS ON THIS DOOR TOO: a `T2` fact is off the GOVERNING verbs of the briefing exactly as it
+//     is off the pack's — and, since REQ-RETR-12m, it is on the ADVISORY verb of both, never on neither.
 //   - TOTAL (RETR-9): a scope that names no index unit is an empty briefing + exit 0, never a throw.
 //   - READ-ONLY: driving the door leaves the durable store byte-identical.
 //   - DETERMINISTIC (RETR-12): equal input ⇒ byte-identical output.
@@ -202,8 +203,15 @@ describe('S28 — atlas own <scope>: the RETR-12 briefing composed over the gove
     const packed = keysOf(invLines(query.stdout));
     expect(briefed).toEqual(packed);
     // invariant + gotcha + definition on `src/greet.ts`, plus the caller's invariant — every T1 fact whose
-    // anchor is under `src`. The T2 is in neither (next test); both doors scope on the SAME `underScope`.
+    // anchor is under `src`. Both doors scope on the SAME `underScope`.
     expect(briefed.length).toBe(4);
+    // [AMENDED — REQ-RETR-12m] The equality holds BAND BY BAND, which is the sharper form of the same
+    // property and the one this WP restored: the advisory bands of the two doors name the same fact too.
+    // Before it, `own`'s advisory band did not exist and the doors agreed only about the ratified half —
+    // which is precisely how they came to disagree about a store where every fact is `T2`.
+    const advKeys = (out: string): string[] => keysOf(out.split('\n').filter((l) => l.startsWith('  advisory ')));
+    expect(advKeys(own.stdout)).toEqual(advKeys(query.stdout));
+    expect(advKeys(own.stdout)).toEqual([String(factT2.id)]);
   });
 
   it('the slot partition is REAL — the gotcha-slot fact is a `gotcha` row here and an `inv` row in `query`', () => {
@@ -232,16 +240,25 @@ describe('S28 — atlas own <scope>: the RETR-12 briefing composed over the gove
     expect(byDep.stdout).toContain(String(factDep.id)); // the same identity, out of the same closure
   });
 
-  it('TOOLS-6 on this door: the T2 fact is OUT of the briefing, and in `query` only on the ADVISORY verb', () => {
+  it('TOOLS-6 on this door: the T2 fact is off BOTH governing verbs, and on the ADVISORY verb of BOTH doors', () => {
     // A read door with a laxer bound than the one beside it is a route around it. The T2 fact was ACCEPTED by
     // the write door (it is in the store, addressable) and must never reach a GOVERNING surface.
-    const own = runAtlas(repo.repoPath, ['own', 'src']);
-    expect(own.stdout).not.toContain(CLAIM_T2);
-    expect(own.stdout).not.toContain(String(factT2.id));
-    // [AMENDED — ADR-0013] `atlas query` now SERVES a T2 row, in the separately capped ADVISORY band. This
-    // assertion used to read `not.toContain(CLAIM_T2)` and is re-pointed at the property that actually
-    // matters: it must not arrive on the governing `inv` verb. `atlas own` is UNCHANGED and still bounds T2
-    // out entirely — the briefing composer applies `atLeastT1` and this WP did not touch that.
+    //
+    // [AMENDED — REQ-RETR-12m, 2026-08-03] This assertion has now been re-pointed TWICE, and the history is
+    // the finding. ADR-0013 made `atlas query` serve a `T2` in a separately capped ADVISORY band, and this
+    // test was amended to say `own` was "UNCHANGED and still bounds T2 out entirely". That left the two read
+    // doors disagreeing about the same store: on the real 199-fact mined graph — every row `T2` — `own`
+    // served 0 of 199 while `query` served them. The amendment was scoped to `query` and never reached here.
+    // What was actually being defended is BAND SEPARATION, not silence: a `T2` must not arrive on a
+    // GOVERNING verb (`inv` / `gotcha`), and it must arrive labelled as a proposal on BOTH doors.
+    const own = runAtlas(repo.repoPath, ['own', 'src']).stdout.split('\n');
+    expect(own.filter((l) => l.startsWith('  inv ') && l.includes(CLAIM_T2))).toEqual([]);
+    expect(own.filter((l) => l.startsWith('  gotcha ') && l.includes(CLAIM_T2))).toEqual([]);
+    expect(own.filter((l) => l.startsWith('  advisory ') && l.includes(CLAIM_T2))).toHaveLength(1);
+    // The advisory row carries the fact's own identity and its own freshness verdict, like every pack row.
+    expect(own.filter((l) => l.startsWith('  advisory ') && l.includes(String(factT2.id)))).toHaveLength(1);
+    expect(own.filter((l) => l.startsWith('  advisoryDropped: 0'))).toHaveLength(1);
+
     const q = runAtlas(repo.repoPath, ['query', 'src']).stdout.split('\n');
     expect(q.filter((l) => l.startsWith('  inv ') && l.includes(CLAIM_T2))).toEqual([]);
     expect(q.filter((l) => l.startsWith('  advisory ') && l.includes(CLAIM_T2))).toHaveLength(1);

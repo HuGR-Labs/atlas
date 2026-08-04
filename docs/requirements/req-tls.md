@@ -131,6 +131,20 @@ source: INV-TOOLS-6 @ reference/atlas-tools.md#tools-6 (ADR-0013 clauses 1-4, ow
 The `atlas-query` pack shall carry a GOVERNING band of `tier≥T1` invariants and a separate ADVISORY band of `T2` rows under its own `2000`-token cap; both bands shall be stated as tier MEMBERSHIP, so a row whose tier is off the lattice lands in NEITHER; the advisory band shall be rendered under its own line verb, never interleaved with the governing band; and where the advisory cap truncates, the pack shall report the dropped count.
 normative-clause: "two separately bounded, separately rendered bands; an unrecognized tier is in neither; 0 silent drops — a truncated advisory band reports what it dropped"
 
+<!-- THE SCOPE OF THIS CLAUSE, AMENDED 2026-08-03 (the amendment is `REQ-RETR-12m` in `req-ret.md`; this
+     note is the fan-out of it into the door this clause names). The sentence above says "The `atlas-query`
+     pack shall…" and it still does — this clause is about ONE read door and is unchanged. What was WRONG
+     was reading that scoping as a decision that the OTHER read door keeps the single-band rule.
+     `packages/adapter-io/src/own-source.ts` applied `atLeastT1` to both fact sections of `atlas own`, citing
+     "a `T2` … that `atlas query` is correctly declining to show" — a justification this very requirement had
+     just deleted. MEASURED on the real 199-fact mined store, where every fact is `T2`: `atlas own` served
+     0/199 while `atlas query` served them, from the same store through the same binary.
+     `REQ-RETR-12m` extends the two-band model to `atlas own`, with the SAME membership predicates (the one
+     `@atlas/tools` src/bands.ts pair) and a SUB-cap inside `OWN_CAP` rather than a second `2000` — the own
+     briefing's total budget does not grow. The `2000` above is the query pack's advisory cap and is
+     unchanged. `wp-per-fact-freshness.md`'s exclusion "`atlas own` is NOT widened" is superseded there. -->
+
+
 ### REQ-TOOLS-7a — re-derive citation at source@sha
 source: INV-TOOLS-7 @ reference/atlas-tools.md#tools-7
 The `atlas-emit` tool shall re-derive the citation at `source@sha`.

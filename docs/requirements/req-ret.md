@@ -265,6 +265,12 @@ source: INV-RETR-12 @ reference/atlas-retrieval.md#retr-12
 The retrieval layer shall cap the `OwnPack` at a bounded briefing budget under the ceiling.
 normative-clause: "It MUST be **capped** (a briefing budget, larger than a poke's `~150` but bounded, e.g. `~1–1.5K`, under the ceiling)"
 
+<!-- SCOPE OF THIS CLAUSE AFTER REQ-RETR-12m (2026-08-03), stated here because the budget is now shared by
+     two bands rather than filled by one. The `OWN_CAP` total does NOT change and this clause is unamended:
+     `OWN_ADVISORY_CAP` is a SUB-cap inside the same 1500, filled LAST, so `tokenEstimate ≤ OWN_CAP` holds
+     exactly as before and a briefing whose governing band fills the budget serves zero advisory rows. -->
+
+
 ### REQ-RETR-12g — OwnPack drill-down affordances
 source: INV-RETR-12 @ reference/atlas-retrieval.md#retr-12
 The retrieval layer shall equip the `OwnPack` with drill-down affordances so more detail is pull-reachable, never inlined.
@@ -294,6 +300,29 @@ normative-clause: "`own_<epic>` composes from that goal + the features' `OwnPack
 source: INV-RETR-12 @ reference/atlas-retrieval.md#retr-12
 If a seat's `own` and a co-injected pack cover the same or an enclosing territory in one turn, then the retrieval layer shall not repeat an `own` fact in the pack, deduping by `nodeId` with `own` winning and the pack showing a `pull-reachable` pointer.
 normative-clause: "a fact carried in `own` MUST NOT be repeated in the co-injected pack (dedup by `nodeId`): `own` wins and the pack shows a `pull-reachable` pointer in its place"
+
+### REQ-RETR-12m — the own briefing is two separately bounded bands   [AMENDED 2026-08-03]
+source: INV-RETR-12 @ reference/atlas-retrieval.md#retr-12 (extends ADR-0013 / REQ-TOOLS-6f from `atlas-query` to `atlas-own`)
+The `own_<scope>` briefing shall carry a GOVERNING band of `tier≥T1` facts and a separate ADVISORY band of `T2` rows under its own sub-cap INSIDE the unchanged `OWN_CAP` total; both bands shall be stated as tier MEMBERSHIP, so a row whose tier is off the lattice lands in NEITHER; the governing band shall keep priority, so no advisory row may displace a ratified one; every advisory row shall carry its own `Freshness` verdict and be rendered under its own line verb, never interleaved with the governing bands; and where the advisory sub-cap truncates, the briefing shall report the dropped count and name every refused row in its existing pull-reachable tail.
+normative-clause: "two separately bounded, separately rendered bands on this door as on the pack; an unrecognized tier is in neither; the governing band is served first and the total budget does not grow; 0 silent drops"
+
+<!-- AMENDMENT, 2026-08-03. WHAT THIS REVERSES, and the measurement that forced it. `own-source.ts` applied
+     `atLeastT1` (TOOLS-6) to BOTH fact sections, on a stated rationale that had expired: "the alternative is
+     a read door that serves a `T2` … that `atlas query` is correctly declining to show. A second read door
+     with a laxer bound is a route around the first one." ADR-0013 (owner-ratified 2026-08-03) made `query`
+     serve `T2` in a separately capped ADVISORY band, so `query` declines nothing of the sort. `REQ-TOOLS-6f`
+     as landed reads "The `atlas-query` pack shall…" — the amendment was scoped to one door and never
+     reached this one, and `wp-per-fact-freshness.md` recorded that as a deliberate exclusion.
+     MEASURED through the built binary against this repository's own 199-fact mined store, where every fact
+     is `T2`: `atlas own packages/adapter-io/src/policy.ts` answered `0 invariant(s), 0 gotcha(s)` while
+     `atlas query` on the same path from the same store served the row. Two read doors over one store
+     disagreeing about what the store contains.
+     WHAT IS NOT AMENDED: REQ-RETR-12c/-12f (the composition and the cap) — the total budget is unchanged and
+     the advisory band is a sub-cap inside it. `INV-RETR-12` (`reference/atlas-retrieval.md#retr-12`) still
+     states "the unit's `tier≥T1` invariants" as a statement about the WHOLE briefing; amending a ratified
+     INVARIANT is ADR-0013's own declared surface, exactly as `wp-per-fact-freshness.md` recorded for
+     `atlas-tools.md#tools-6`, so it is registered here as a live REQ-vs-INV divergence rather than
+     straddled silently. -->
 
 ### REQ-RETR-13a — log off-atlas rate per territory
 source: INV-RETR-13 @ reference/atlas-retrieval.md#retr-13
