@@ -76,11 +76,12 @@
 // NO COUNT IS TRANSCRIBED HERE. The unprotected set, the near-misses and their members are DERIVED and
 // PRINTED on every run, pass or fail, under `WAIVER COVERAGE` — a number in a comment rots away from the
 // tree it described, and this repo has been bitten by exactly that.
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { classifyCoverage, pinProblems } from '../lib/inv-text-pin.mjs';
+import { holds as containsQuote } from '../lib/quote-coverage.mjs';
 
 // Repo root, OVERRIDABLE so the gate's own test can point it at a fixture tree — the same seam
 // `id-integrity.mjs` and `godfile-guard.mjs` use. Without it the ratchet below is a branch no test can
@@ -144,17 +145,10 @@ function fieldValue(body, name) {
   return acc.join('\n');
 }
 
-/** Does the quote still hold in this invariant text? Rules 1 + 3 of the header. */
-function holds(quote, invText) {
-  const t = norm(invText);
-  let at = 0;
-  for (const frag of quote.split('…').map((f) => f.trim()).filter((f) => f !== '')) {
-    const i = t.indexOf(frag, at);
-    if (i < 0) return false;
-    at = i + frag.length;
-  }
-  return true;
-}
+/** Does the quote still hold in this invariant text? Rules 1 + 3 of the header. The body lives in
+ *  `harness/lib/quote-coverage.mjs` so the coverage measurement (issue #208) reuses the EXACT test this
+ *  gate publishes its verdicts with; two implementations could disagree and only one of them gates. */
+const holds = (quote, invText) => containsQuote(quote, invText, norm);
 
 /**
  * EVERY carrier of an anchor, in document order. Three carrier shapes exist in `docs/reference/**` and all
@@ -236,14 +230,16 @@ for (const name of reqFiles) {
     const q = norm(quote);
     const primary = inv.carriers[0];
     const anchorKey = `docs/${ptr[2]}#${ptr[3]}`;
-    if (!coverage.has(anchorKey)) coverage.set(anchorKey, { live: [], waived: [], carriers: inv.carriers });
+    if (!coverage.has(anchorKey)) coverage.set(anchorKey, { live: [], waived: [], carriers: inv.carriers, quotes: [] });
     if (holds(q, primary.text)) {
       ok++;
       coverage.get(anchorKey).live.push(b.id);
+      coverage.get(anchorKey).quotes.push({ req: b.id, q, live: true });
       verdicts.push(`OK        ${at} → ${anchorKey}:${primary.line}`);
       continue;
     }
     coverage.get(anchorKey).waived.push(b.id);
+    coverage.get(anchorKey).quotes.push({ req: b.id, q, live: false });
     verdicts.push(`DIVERGED  ${at} → ${anchorKey}:${primary.line}`);
     // The first point of difference, so the refusal is actionable without opening a debugger.
     const t = norm(primary.text);
@@ -318,6 +314,18 @@ for (const [a, ls] of [...multiAnchors].sort()) console.log(`    · ${a} → car
 // The 586 clean matches are summarised per file above; `REQ_CLAUSE_LIST=1` prints the per-REQ verdict for
 // every evaluated row, so the pass set is inspectable and not merely counted.
 if (process.env.REQ_CLAUSE_LIST !== undefined) for (const v of verdicts) console.log(`    ${v}`);
+// MACHINE-READABLE DUMP of exactly what this run judged: every cited anchor, its carriers and every citing
+// REQ's quote with the gate's OWN live/waived verdict. Off by default and it changes no verdict; it exists so
+// the coverage measurement of issue #208 enumerates from THIS run rather than from a second parser that
+// could disagree with it. The 12 `ARCH-*` invariants are the standing proof that a second enumerator
+// silently misses whole families.
+if (process.env.REQ_CLAUSE_DUMP !== undefined) {
+  writeFileSync(
+    process.env.REQ_CLAUSE_DUMP,
+    JSON.stringify([...coverage].map(([anchor, v]) => ({ anchor, carriers: v.carriers, quotes: v.quotes }))),
+  );
+  console.log(`  DUMP — ${coverage.size} cited anchor(s) written to ${process.env.REQ_CLAUSE_DUMP}`);
+}
 
 if (problems.length > 0) {
   console.error(`\nreq-clause-guard: FAIL — ${problems.length} problem(s):`);
