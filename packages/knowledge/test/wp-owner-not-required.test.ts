@@ -1,48 +1,39 @@
-// @atlas/knowledge — test/wp-owner-not-required.test.ts  (#187 · WP-SEC-3.KNOW)
+// @atlas/knowledge — test/wp-owner-not-required.test.ts  (#187 · WP-SEC-3.KNOW, AMENDED by #186)
 //
 // #178/PR#105 folded an `isOwner` guard into `authz()`'s write branch and pinned it in
-// `wp-fix-enforce-owner.test.ts`. #187 (owner-ratified 2026-08-03) reverses that fold-in — `owner` is
-// removed from KNOW-11a's MUST; `scope` is the SOLE ownership anchor — and the pinning test file is
-// deleted along with the code it pinned. This is a NEW file, not an edit of `wp-fix-enforce-owner.test.ts`
-// (deleted) or `wp-5.14-know.lifecycle.test.ts` (another seat's frozen-golden suite, edited only to drop
-// the now-nonexistent `owner` field from its fixtures/assertions — see that file's own diff).
+// `wp-fix-enforce-owner.test.ts`. #187 (owner-ratified 2026-08-03) reversed that fold-in — `owner` is
+// removed from KNOW-11a's MUST; `scope` is the SOLE ownership anchor.
 //
-// What is pinned here, so the scope half of the fence does not lose coverage because the owner half left:
-//   1. The coercion table for `isScope` — re-run and printed, exactly as tight as `isOwner`'s was.
-//   2. THE FENCE, both directions: a well-formed scope + in-scope actor ⇒ write SUCCEEDS; an absent OR
-//      malformed scope ⇒ write REFUSED (fail-closed, unconditionally — `isScope`'s path is untouched by
-//      #187); an out-of-scope actor ⇒ write REFUSED.
-//   3. READ IS UNIVERSAL: a read of a scope-less fact succeeds for ANY actor, including `''`.
+// ── WHAT #186 CHANGED IN THIS FILE, AND WHY THE DELETION IS THE POINT ────────────────────────────────────
+// Five cases below used to assert the KNOW-11 fence through `authz('write', actor, fact)` / `inScope(actor,
+// scope)`. Those two functions had ZERO production callers. Measured on the BUILT `dist` in a subprocess: a
+// successful `atlas emit` reaches `actorInScope` (adapter-io/src/policy.ts) and `isScope` (this package) and
+// reaches `authz`/`inScope` NEVER. So those five assertions were GREEN ABOUT A GATE THAT DID NOT RUN — and
+// worse, they were green about a DIFFERENT gate: `inScope` decided `actor === scope` (nominal equality)
+// while the shipped door decides admin-declared membership out of `.atlas/policy.json`. A suite passing on
+// the nominal model would have kept passing had the real one been deleted.
+//
+// They are removed, not relocated, and NO real coverage is lost — the live fence is proven twice already,
+// at both levels, and neither was touched:
+//   · `packages/adapter-io/test/policy.test.ts` — `describe('actorInScope — fail-closed authz, mirrors
+//     KNOW-11a inScope')`, six cases including the absent-scope and prototype-name TEETH.
+//   · `packages/e2e-blackbox/test/s7-governance.blackbox.test.ts` — the same fence through the REAL `atlas`
+//     binary: in-scope ALLOW (exit 0), out-of-scope / empty-actor DENY (exit 2, `reason: unauthorized`,
+//     nothing persisted), absent-scope refused at gate 0 (`reason: malformed scope`).
+//
+// What is pinned HERE is what this package actually owns:
+//   1. The coercion table for `isScope` — the surviving runtime SHAPE guard, re-run and printed.
+//   2. A REGRESSION FENCE against #186 coming back: the package must NOT re-export a second authz decision.
 
 import { describe, it, expect } from 'vitest';
-import { asNodeKey, asSubtreeHash } from '@atlas/kernel';
-import type { AdvisoryNode } from '@atlas/knowledge';
-import type { Grounding } from '@atlas/grounding';
-import { authz, inScope, isScope } from '../src/write/authz.js';
-
-const grounding = (n: string): Grounding => ({
-  entries: [{ anchor: { kind: 'symbol', qualifiedPath: `fn ${n}`, subtreeHash: asSubtreeHash(`st-${n}`) }, path: 'src/x.ts' }],
-});
-
-/** An `AdvisoryNode` fixture with an explicit (possibly absent) `scope`. No `owner` leg — the field no
- *  longer exists on the frozen `GroundedFact` (#187). */
-const advisoryNode = (nk: string, opts: { scope?: string } = {}): AdvisoryNode => ({
-  kind: 'advisory',
-  id: asNodeKey(nk),
-  tier: 'T2',
-  claimNorm: `cn-${nk}`,
-  grounding: grounding(nk),
-  freshness: 'FRESH',
-  claims: [],
-  authoring: 'ADVISORY',
-  ...(opts.scope !== undefined ? { scope: opts.scope } : {}),
-});
+import * as knowledge from '@atlas/knowledge';
+import { isScope } from '../src/write/authz.js';
 
 describe('#187 — KNOW-11a scope fence: isScope coercion surface (re-pinned, unchanged by the amendment)', () => {
   // The coercion table — printed so a reviewer can read the whole validity product at a glance. Only a
   // non-empty string may pass; every coercion-hazard shape (property-key coercion, `toString`/`valueOf`
-  // objects, falsy-but-typed values) must fail CLOSED. `isScope` itself is untouched by #187 — this table
-  // is a RE-RUN, not a new claim, so the surviving guard is pinned as tightly as the removed `isOwner` was.
+  // objects, falsy-but-typed values) must fail CLOSED. `isScope` itself is untouched by #187 and by #186 —
+  // this table is a RE-RUN, not a new claim, so the surviving guard is pinned as tightly as `isOwner` was.
   const cases: ReadonlyArray<readonly [string, unknown, boolean]> = [
     ['undefined', undefined, false],
     ['null', null, false],
@@ -68,38 +59,35 @@ describe('#187 — KNOW-11a scope fence: isScope coercion surface (re-pinned, un
   });
 });
 
-describe('#187 — the scope fence, standing alone (owner is not a gate input)', () => {
-  it('a write with a well-formed scope by an in-scope actor SUCCEEDS', () => {
-    const fact = advisoryNode('nk-scoped', { scope: 'A' });
-    expect(authz('write', 'A', fact)).toBe(true);
-    expect(inScope('A', 'A')).toBe(true);
+describe('#186 — ONE authz implementation: the knowledge package publishes the SHAPE, never the DECISION', () => {
+  // The regression this pins is not hypothetical — it is the state the tree was in until #186. A second,
+  // nominal `authz()` sat in the barrel, fully tested, called by nothing, describing a fence the product did
+  // not have. Re-adding any of these names to `@atlas/knowledge` re-creates two answers to one question, and
+  // the reference-model-guard CANNOT catch it: that gate measures whole MODULES, and `write/authz.ts` is
+  // live (three production call sites for `isScope`), so a dead export added beside a live one is invisible
+  // to it. Its header states that limit in as many words. This test is the cover for it.
+  //
+  // NOTE ON WHAT THIS READS. `import * as knowledge from '@atlas/knowledge'` resolves through the workspace
+  // package `exports` to the BUILT `dist/src/index.js`, not to `src/` — `vitest.config.ts` declares no alias.
+  // That is deliberate here and it is the SHIPPED barrel, the same surface `atlas emit` loads. The practical
+  // consequence, recorded because it bit the mutation run: a mutant re-adding `inScope` to `src/write/authz.ts`
+  // SURVIVES until `tsc -b` runs. It was re-run with the rebuild and KILLED (suite exit 1). A mutant that
+  // never reached the code under test is not a survivor, it is a mutant that did not apply.
+  const FORBIDDEN = ['authz', 'authzApi', 'inScope'] as const;
+
+  it('the barrel exports isScope and NONE of the deleted decision surface', () => {
+    const surface = Object.keys(knowledge as Record<string, unknown>).sort();
+    const present = FORBIDDEN.filter((n) => n in (knowledge as Record<string, unknown>));
+    // eslint-disable-next-line no-console
+    console.log({ forbiddenNamesFound: present, isScopeExported: 'isScope' in (knowledge as Record<string, unknown>), surfaceSize: surface.length });
+    expect(present).toStrictEqual([]); // NAMES printed, never a bare count
+    expect('isScope' in (knowledge as Record<string, unknown>)).toBe(true);
   });
 
-  it('a write with an ABSENT scope is REFUSED — fail-closed, no ownership anchor', () => {
-    const scopeless = advisoryNode('nk-scopeless'); // no scope at all
-    expect(authz('write', 'A', scopeless)).toBe(false);
-    expect(inScope('A', undefined)).toBe(false);
-  });
-
-  it('a write with a MALFORMED scope (empty string) is REFUSED — fail-closed', () => {
-    const emptyScope = advisoryNode('nk-empty-scope', { scope: '' });
-    expect(authz('write', 'A', emptyScope)).toBe(false);
-    expect(inScope('A', '')).toBe(false);
-  });
-
-  it('a write by an OUT-OF-SCOPE actor is REFUSED, even though the fact IS well-formed', () => {
-    const fact = advisoryNode('nk-scoped-b', { scope: 'A' });
-    expect(authz('write', 'B', fact)).toBe(false); // B is not in scope A
-    expect(inScope('B', 'A')).toBe(false);
-  });
-
-  it('READ IS UNIVERSAL — a read of a scope-less fact succeeds for ANY actor, including the empty string', () => {
-    const bare = advisoryNode('nk-bare'); // no scope at all
-    expect(authz('read', 'anyone', bare)).toBe(true);
-    expect(authz('read', '', bare)).toBe(true); // even an empty actor string reads fine — read is universal
-    // a scoped fact reads the same way for a caller OUTSIDE its scope — the read leg never inspects scope.
-    const scoped = advisoryNode('nk-scoped-c', { scope: 'A' });
-    expect(authz('read', 'B', scoped)).toBe(true);
-    expect(authz('read', '', scoped)).toBe(true);
+  it('isScope answers a SHAPE question only — it says nothing about who may write', () => {
+    // The whole reason `isScope` is not an authz decision: it passes any non-empty string, including a scope
+    // no policy has ever declared. Authorization is `actorInScope(policy, actor, scope)` in adapter-io.
+    expect(isScope('a-scope-no-policy-declares')).toBe(true);
+    expect(isScope('core')).toBe(true);
   });
 });

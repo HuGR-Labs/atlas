@@ -31,7 +31,7 @@
 import { describe, it, expect } from 'vitest';
 import * as knowledge from '@atlas/knowledge';
 import {
-  authz, inScope,
+  isScope,
   classify, isT0Candidate,
   stage, ratify,
   route, isGrounded, isAdvisory,
@@ -95,23 +95,30 @@ const predicateNode = (nk: string, q: string): PredicateNode => ({
 });
 
 describe('S5 · write governance — authorization + the human-in-the-loop T0 bar (fail-closed)', () => {
-  // ── 1. AUTHZ FAIL-CLOSED — scope-owned write, universal read ────────────────────────────────────────
-  it('refuses an out-of-scope OR scope-less write, admits the in-scope actor, and reads are universal', () => {
+  // ── 1. THE OWNERSHIP ANCHOR — the half of KNOW-11 this package owns (#186) ──────────────────────────
+  //
+  // This case used to assert the fence through `authz('write', actor, fact)` / `inScope(actor, scope)`.
+  // Those had ZERO production callers — measured on the BUILT `dist` in a subprocess, where a successful
+  // `atlas emit` reaches `actorInScope` (adapter-io/src/policy.ts) and `isScope` and reaches them never —
+  // and they encoded a DIFFERENT rule (`actor === scope`) than the shipped door, which decides admin-declared
+  // membership from `.atlas/policy.json`. #186 deleted them. The DECISION half of this story is asserted
+  // where it runs, and neither place was touched: `packages/adapter-io/test/policy.test.ts`
+  // (`describe('actorInScope — fail-closed authz…')`, six cases incl. absent-scope + prototype-name teeth)
+  // and `packages/e2e-blackbox/test/s7-governance.blackbox.test.ts` (the same fence at the real binary:
+  // ALLOW exit 0 / DENY exit 2 `reason: unauthorized` / absent-scope `reason: malformed scope`).
+  it('refuses a scope-less or malformed ownership anchor, and does not pretend to answer authorization', () => {
     const factInScope = advisoryFact({ scope: 'payments' });
-    const factOutOfScope = advisoryFact({ scope: 'payments' });
     const scopeless = advisoryFact(); // no scope ⇒ no ownership anchor
 
-    expect(authz('write', 'payments', factInScope)).toBe(true); // the in-scope actor writes
-    // teeth (breaks-on "an out-of-scope or scope-less write is authorized"):
-    expect(authz('write', 'ui', factOutOfScope)).toBe(false); // a foreign scope cannot mutate
-    expect(authz('write', 'payments', scopeless)).toBe(false); // fail-closed: absent scope ⇒ refuse
-    expect(inScope('ui', 'payments')).toBe(false);
-    expect(inScope('payments', undefined)).toBe(false); // scope-less has no anchor
-    expect(inScope('payments', '')).toBe(false); // empty scope has no anchor
+    expect(isScope(factInScope.scope)).toBe(true); // a real anchor the door can compare and look up
+    // teeth (breaks-on "a scope-less or malformed anchor is treated as an anchor"):
+    expect(isScope(scopeless.scope)).toBe(false); // absent ⇒ the door fails closed at gate 0
+    expect(isScope('')).toBe(false); // empty ⇒ no anchor
+    expect(isScope(['payments'])).toBe(false); // the property-key coercion hazard never passes the shape guard
 
-    // reads are universal — any caller, any (even absent) scope — and authz never throws.
-    expect(authz('read', 'ui', factInScope)).toBe(true);
-    expect(authz('read', 'anyone', scopeless)).toBe(true);
+    // and it is a SHAPE test only: it passes a scope no policy declares, because authorization is not its
+    // question. That separation IS the #186 fix — one decision, in the door, over admin-declared policy.
+    expect(isScope('a-scope-no-policy-has-ever-declared')).toBe(true);
   });
 
   // ── 2. NO AUTO-PROMOTE TIER — classify only FLAGS, never assigns ───────────────────────────────────

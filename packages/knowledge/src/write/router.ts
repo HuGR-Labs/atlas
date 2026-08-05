@@ -155,7 +155,14 @@ export * from './upsert.js';
 
 /** The closed `predicateSlot` vocabulary (NORMATIVE — all 12 members, `PredicateSlot` in types.ts). CLOSED:
  *  adding a slot is a `cv` bump. Finiteness is what lets a `nodeKey` collide + force UPDATE/union
- *  instead of proliferating parallel nodes (atlas-knowledge:150 / SCN-KNOW-15i-1). */
+ *  instead of proliferating parallel nodes (atlas-knowledge:150 / SCN-KNOW-15i-1).
+ *
+ *  THE ONE RUNTIME COPY (#152). The 12 members were transcribed in THREE places and enforced in none:
+ *  the `PredicateSlot` union (types.ts — a TYPE, erased at runtime, so it enforces nothing at a value
+ *  boundary), a second `CLOSED_SLOTS` literal in `template.ts` (KNOW-10), and this list. `template.ts`'s
+ *  `isClosedSlot` now DELEGATES to {@link isKnownSlot} rather than restating the members, so a `cv` bump
+ *  edits exactly one runtime list. This one is where it belongs: `nodeKey` — the identity the closedness
+ *  exists to protect — is computed in THIS file. */
 export const PREDICATE_SLOTS: readonly PredicateSlot[] = [
   'invariant',
   'contract',
@@ -172,10 +179,14 @@ export const PREDICATE_SLOTS: readonly PredicateSlot[] = [
 ];
 const SLOT_SET: ReadonlySet<string> = new Set(PREDICATE_SLOTS);
 
-/** Closed-vocabulary membership guard (KNOW-15i). A slot outside the 12 enumerated members is rejected —
- *  a free-text slot never collides, so `nodeKey` never forces UPDATE and the store would proliferate. */
-export function isKnownSlot(slot: string): boolean {
-  return SLOT_SET.has(slot);
+/** Closed-vocabulary membership guard (KNOW-15i / KNOW-10). A slot outside the 12 enumerated members is
+ *  rejected — a free-text slot never collides, so `nodeKey` never forces UPDATE and the store would
+ *  proliferate. TOTAL over `unknown`: `Set.has` never throws and never coerces, so an array, an object with
+ *  a `toString`, a `Symbol` or an absent value all answer `false` at the value boundary where the erased
+ *  `PredicateSlot` type stops helping. ENFORCED at `upsert` (upsert.ts) — until #152 this guard had zero
+ *  production callers and an out-of-vocabulary slot was ACCEPTED by the shipped `atlas emit`. */
+export function isKnownSlot(slot: unknown): boolean {
+  return typeof slot === 'string' && SLOT_SET.has(slot);
 }
 
 /** Canonical `normalize(check)` — the predicate identity ingredient (KNOW-15c). Deterministic + total:

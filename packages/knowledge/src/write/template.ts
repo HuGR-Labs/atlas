@@ -10,16 +10,28 @@
 // BIND note (template.ts FLAG resolved): the frozen signature gates the staging `Candidate` (it carries the
 // proposed `slot` + claim body), so the required-field check runs over the Candidate-carried template fields
 // {claimText, claimNorm, provenance, grounding, slot}. `scope` (also in `RequiredAdvisoryField`) is the
-// KNOW-11 ownership fence — `scope` alone, enforced fail-closed by the sibling `inScope` predicate
-// (authz.ts), NOT re-checked here — and it fires only on a WRITE (`authz('write', …)`), never against a
-// `Candidate` in staging, which is what this validator gates. Producer identity is a SEPARATE concern,
-// carried by `provenance.source` (KNOW-14, required on every claim), not by this fence. (#187,
-// owner-ratified 2026-08-03: an `owner` leg was folded into `authz()`'s write branch at #178/PR#105 and
-// this comment was rewritten to describe it; #187 reverses that fold — `owner` was never a gate input, and
-// this comment is rewritten again to say so.) A staged candidate carries no `scope` at all (see `Candidate`
-// in types.ts) until it is promoted through the governed write door. No field invented.
+// KNOW-11 ownership fence — `scope` alone, enforced fail-closed at the governed write door by
+// `actorInScope` (adapter-io/src/policy.ts, gate "2. AUTHZ") over an `isScope`-validated value (authz.ts),
+// NOT re-checked here — and it fires only on a WRITE, never against a `Candidate` in staging, which is what
+// this validator gates. Producer identity is a SEPARATE concern, carried by `provenance.source` (KNOW-14,
+// required on every claim), not by this fence. (#187, owner-ratified 2026-08-03: an `owner` leg was folded
+// into the knowledge-side `authz()` write branch at #178/PR#105 and this comment was rewritten to describe
+// it; #187 reversed that fold, and #186 deleted `authz()`/`inScope` outright — they had zero production
+// callers and were a SECOND, nominal implementation of a gate the door decides from admin-declared policy.)
+// A staged candidate carries no `scope` at all (see `Candidate` in types.ts) until it is promoted through
+// the governed write door. No field invented.
+//
+// WHAT THIS MODULE IS, STATED SO IT IS NOT MISTAKEN FOR THE GATE (#152). `validateTemplate` is a DECLARED
+// REFERENCE MODEL — it has zero production callers and is registered as such in
+// `harness/gates/reference-model-guard.mjs`. The governed door validates its OWN required fields at gate 0
+// and never stages a `Candidate`, so the required-field and 512-byte legs here run for nobody. Only ONE of
+// its three legs is a shipped control: the closed-slot membership question, which now lives in exactly one
+// runtime list (`isKnownSlot`, router.ts) and is ENFORCED at `upsert` (upsert.ts) on every durable write.
+// `isClosedSlot` below delegates there; it does not restate the vocabulary and it is not the enforcement point.
 
 import type { Candidate, PredicateSlot } from '../types.js';
+// THE one runtime copy of the closed 12 (#152). See `isClosedSlot` below.
+import { isKnownSlot } from './router.js';
 
 // ── frozen TemplateApi surface, co-located here (was ref/template.ts) ─────────────────────────────────
 
@@ -57,25 +69,6 @@ export interface TemplateApi {
   isClosedSlot(slot: PredicateSlot): boolean;
 }
 
-/** The closed `predicateSlot` vocabulary as a runtime CLOSED set (KNOW-10) — the 12 members transcribed
- *  from the `PredicateSlot` union (types.ts). A `slot` outside this set is REJECTED; adding a
- *  member is a `cv` bump, not a code change. Single source of truth is the union — mirrored here for the
- *  value boundary (a runtime tag whose type is erased). */
-const CLOSED_SLOTS: ReadonlySet<PredicateSlot> = new Set<PredicateSlot>([
-  'invariant',
-  'contract',
-  'precondition',
-  'postcondition',
-  'sideeffect',
-  'ownership',
-  'perf-bound',
-  'security-property',
-  'gotcha',
-  'rationale',
-  'dependency',
-  'definition',
-]);
-
 /** The `claimText` size cap in bytes (KNOW-10, goldens-knw:61). Tied to the frozen type-level bound
  *  `ClaimTextCapBytes = 512` — a drift between this const and the frozen literal is a compile error. */
 const CLAIM_TEXT_CAP_BYTES: ClaimTextCapBytes = 512;
@@ -89,9 +82,15 @@ function isNonEmptyString(v: unknown): v is string {
 }
 
 /** Closed-vocabulary membership (KNOW-10): `true` iff `slot` is one of the 12. A free-prose blob with no
- *  slot binding (`slot` absent / out-of-vocab) yields `false` — the totality guard at the value boundary. */
+ *  slot binding (`slot` absent / out-of-vocab) yields `false` — the totality guard at the value boundary.
+ *
+ *  DELEGATES to `isKnownSlot` (router.ts) rather than restating the 12 (#152). This function used to own a
+ *  SECOND `CLOSED_SLOTS` literal, so the vocabulary was written out three times — here, in `router.ts`, and
+ *  as the `PredicateSlot` union — and enforced in none of them. One runtime list now, in the file that
+ *  computes the `nodeKey` the closedness protects; a `cv` bump edits one place. The KNOW-10 name is kept
+ *  because KNOW-10 is what the goldens cite, and both invariants are the same membership question. */
 export function isClosedSlot(slot: PredicateSlot): boolean {
-  return CLOSED_SLOTS.has(slot);
+  return isKnownSlot(slot);
 }
 
 /** Every Candidate-carried required template field is present (KNOW-10). The `missing` cell of the

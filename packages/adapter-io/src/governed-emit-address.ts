@@ -41,6 +41,8 @@ import { id } from '@atlas/kernel';
 import type { CasObject } from '@atlas/kernel';
 import type { Hash } from '@atlas/contracts';
 import type { GroundedFact } from '@atlas/knowledge';
+// The KNOW-10/KNOW-15i closed-slot refusal `upsert` raises (#152) — recognised STRUCTURALLY; see below.
+import { isClosedSlotError } from '@atlas/knowledge';
 import { UnaddressableCasObjectError } from './sidecar-commit.js';
 
 /** The canonicalizer's own name for every one of its refusals (`kernel/canonical.ts` — floats, unsupported
@@ -90,8 +92,31 @@ export function addressOf(node: GroundedFact): Addressed {
  * cas-object` discriminant that `archive.ts` / `attach.ts` / `sidecar-commit.ts` all share reaches the user.
  * Every other throw — `IdentitySchemaError`, an ENOSPC from `publish` — propagates UNCHANGED: those are not
  * decisions about the caller's bytes.
+ *
+ * ── THE SECOND RE-FILE: THE CLOSED-SLOT REFUSAL (#152) — THE SAME DEFECT, ONE GATE OVER ───────────────────
+ * `upsert` (@atlas/knowledge) now refuses a write whose `predicateSlot` is outside the closed 12, and it
+ * refuses by THROWING a named class — for the reasons its own ARCH-10 block gives, and because the door
+ * discards `UpsertResult.decision`, so a returned refusal would have persisted nothing while the door
+ * reported `emitted: true`. That throw arrived here having made a decision and, like the canonical-form
+ * violation above, failed to RECORD it. MEASURED through the real binary before this line existed:
+ *
+ *   atlas emit <fact with predicateSlot 'free-text-whatever'>  → exit 1 · status: error
+ *     reason: closed-slot-violation: this write declares predicateSlot 'free-text-whatever' …
+ *   atlas emit <ungrounded fact>                               → exit 2 · status: rejected
+ *
+ * Byte-for-byte the header's own defect, so it takes the header's own decision: the exit code follows the
+ * door's record. Nothing about the refusal's TEXT is restated here — `e.message` travels verbatim, so the
+ * `closed-slot-violation` discriminant is minted in exactly one place (`knowledge/src/write/closed-slot.ts`).
+ *
+ * STRUCTURAL, never `instanceof`. `UnaddressableCasObjectError` above can use `instanceof` because it is
+ * raised and caught inside `@atlas/adapter-io`'s own dependency of `@atlas/kernel`; this one crosses a
+ * package boundary, and two `dist` copies of `@atlas/knowledge` in one process (a hoist that did not
+ * dedupe, an embedder pinning its own) give two distinct class objects — under which `instanceof` answers
+ * `false` and silently converts a governance decline back into an unhandled throw at the user's door.
+ * `tools/src/fault.ts` records the identical hazard for its own tag and resolves it the identical way.
  */
 export function commitRefusalOf(e: unknown): string {
   if (e instanceof UnaddressableCasObjectError) return e.message;
+  if (isClosedSlotError(e)) return e.message;
   throw e;
 }

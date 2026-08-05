@@ -18,13 +18,14 @@ export * from './lifecycle/reconcile.js';   // WP-4.12-a.KNOW — drift split: m
 // Campaign-5 (knowledge lifecycle) runtime surface:
 export * from './write/router.js';      // WP-5.13-a.KNOW — write-routing: every write an upsert (exhaustive over the KNOW-4 cells)
 export * from './write/link.js';        // WP-SAMEAS — the pure symmetric `sameAs` write/RETRACT reducers (total, no-op on self/absent)
+export * from './write/closed-slot.js'; // KNOW-10/15i — the closed-12-slot write REFUSAL (#152), enforced at `upsert`; ABSENT stands aside (a stated NARROWING — read that file)
 export * from './read/subsumes.js';     // WP-DEDUP-2 · DP-2 — derive the `subsumes` coverage relation on read (never stored)
 export * from './read/sameas.js';       // WP-SAMEAS — derive the transitive `sameAs` equivalence on read (union-find, never a merge); A-D3 — retraction-aware, + `sameAsEdgeState`
 export * from './lifecycle/evaluator.js';   // WP-5.16.KNOW  — predicate check-engine: deterministic index-query, no code execution
 export * from './lifecycle/produce.js';     // WP-5.17.KNOW  — production-moments: writes fire only at the 3 moments; sealing fed-or-why-not
 // WP-5.14.KNOW (fact lifecycle) — unblocked by the R3 data-model reconciliation (ADR-0001):
 export * from './write/template.js';    // KNOW-10 — required-field ∧ ≤512B cap ∧ closed-12-slot template validate
-export * from './write/authz.js';       // KNOW-11 — inScope(actor, fact.scope) write-gate, fail-closed (reads the R3 scope field)
+export * from './write/authz.js';       // KNOW-11 — isScope: the runtime SHAPE half of the write gate. The DECISION (`actorInScope`) lives in adapter-io/src/policy.ts; the second, nominal implementation that used to live here had zero production callers and was deleted (#186 — see the file header)
 export * from './write/archive.js';     // KNOW-12 — supersede via CAS dedup, supersededBy as a Hash return-leg
 // WP-5.15.KNOW (tier-routed ratification + confidence fast-path) — unblocked by R3 RatifyContext:
 export * from './ratify/init.js';        // KNOW-6  — $0-LLM territory classify (tier=T2, T0-candidate flag)

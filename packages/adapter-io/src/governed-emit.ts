@@ -1,13 +1,13 @@
 // @atlas/adapter-io — src/governed-emit.ts  (COMPOSE-A: the governed durable emit leg)
 //
 // The runtime composition-root's governed write door. `atlas-emit` persists DURABLY only THROUGH the
-// governed path — FIFTEEN fail-closed refusals, in the order below, before a single byte is DURABLE.
-// The count is stated because it drifted: this header said "three" and listed four items while the body had
-// seven refusal points, and a header that under-counts the gates is how a gate gets deleted unnoticed.
+// governed path — SIXTEEN fail-closed refusals, in the order below, before a single byte is DURABLE.
+// The count is stated because it drifted: this header said "three" and listed four while the body had seven
+// refusal points, and a header that under-counts the gates is how a gate gets deleted unnoticed.
 // (Ten became twelve when the durable write became an atomic COMMIT: stage 5 can refuse a write that has
-// cleared every governance gate, and a refusal is counted like any other refusal. Twelve became THIRTEEN
-// with the 2.1 anchor binding — ARCH-9. Thirteen became FIFTEEN with the 0.5 gate: two refusals that already
-// EXISTED as escaping throws, so no record ever reached the renderer — task #136.)
+// cleared every governance gate, and a refusal is counted like any other. Twelve became THIRTEEN with the 2.1
+// anchor binding (ARCH-9); FIFTEEN with the 0.5 gate — two refusals that already EXISTED as escaping throws so
+// no record reached the renderer (#136); SIXTEEN with 3.5, the same shape one gate over (#152).)
 //   0. WELL-FORMED  — the three payload fields the LATER gates route on are type-only and reach this door
 //                     unvalidated (`JSON.parse` + a cast on the CLI wire; a bare `object` schema on MCP),
 //                     so each is refused HERE or nowhere: `tier` must be one of the three real governance
@@ -52,7 +52,9 @@
 //   3. UPSERT+PUT   — route the write through the proven KNOW-15 `upsert(WriteRequest)` decision (mirrors
 //                     the CLI `mine.ts` durable-write path), persist the projection sidecar durably, AND
 //                     `store.put(node)` the WHOLE GroundedFact into CAS so the content-addressed bytes ARE
-//                     the fact (driftFacts / doctor read them back — the INVARIANT).
+//                     the fact (driftFacts/doctor read them back — the INVARIANT).
+//   3.5 CLOSED SLOT — inside that same `upsert`: a `predicateSlot` outside the NORMATIVE 12 is refused
+//                     (`closed-slot-violation`, #152). ABSENT is not one — a NARROWING; see closed-slot.ts.
 //
 // GATE PRECEDENCE IS AN INVARIANT, NOT AN ACCIDENT OF LAYOUT. No pair of these gates changes `emitted`
 // when swapped — every one of them refuses — so the whole suite stays green under a reordering. What the
@@ -369,8 +371,7 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
           return { out: { emitted: true, id: contentHash }, next, put: [node as CasObject] };
       });
     } catch (e) {
-      // ONLY the unaddressable-CAS-object refusal is re-filed; every other throw (identity-schema, an ENOSPC
-      // from `publish`) propagates UNCHANGED — laundering one would hide a broken disk behind a verdict.
+      // ONLY a REFUSAL is re-filed (unaddressable-CAS-object; closed-slot, gate 3.5); every other throw propagates UNCHANGED — laundering one hides a broken disk behind a verdict. `commitRefusalOf` says why.
       return { emitted: false, rejected: commitRefusalOf(e) };
     }
     // 5. THE COMMIT'S OWN REFUSALS — visible, never silent, and door-wide rather than incumbent-derived

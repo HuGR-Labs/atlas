@@ -14,7 +14,10 @@
 import type { Tier } from '@atlas/contracts';
 import type { PredicateSlot } from '../types.js';
 import type { NearDupConfig, NodeFamily, RouteInputs, WriteDecision } from './router.js';
-import { routeWrite } from './router.js';
+import { isKnownSlot, routeWrite } from './router.js';
+// The KNOW-10/KNOW-15i closed-slot REFUSAL (#152) — extracted at the LOC ceiling. Read that file's header
+// before changing the gate below: it carries the measurement, the harm, and the ABSENT-slot decision.
+import { ClosedSlotError } from './closed-slot.js';
 import { isWeakerTier } from '../ratify/tier.js';
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -266,6 +269,14 @@ export function upsert(
   req: WriteRequest,
   cfg: NearDupConfig = { claimNormThreshold: 1 },
 ): UpsertResult {
+  // KNOW-10 / KNOW-15i — THE CLOSED-SLOT GATE (#152). FIRST, before the route is even computed: the slot is
+  // an ingredient of the identity this reducer routes on, so a value outside the closed 12 has already
+  // corrupted the question by the time `routeWrite` answers it. ABSENT stands aside — a deliberate
+  // NARROWING, measured and argued in `./closed-slot.ts`; PRESENT-and-unrecognised fails closed. Until this
+  // line existed, the shipped `atlas emit` ACCEPTED an out-of-vocabulary slot and minted a new address for
+  // it, and BOTH membership guards in this package (`isKnownSlot`, `isClosedSlot`) had zero callers.
+  if (req.slot !== undefined && !isKnownSlot(req.slot)) throw new ClosedSlotError(req.slot);
+
   const nodeKeyHit = store.current.has(req.nodeKey);
   const inputs: RouteInputs = {
     contentHashHit: store.cas.has(req.contentHash),

@@ -18,8 +18,9 @@
 // CONSERVATIVE default: exact-match-only near-dup (`claimNormThreshold: 1`), an EMPTY T0 keyword set, and
 // EMPTY authz scopes. Empty scopes ⇒ no actor is in ANY scope ⇒ NO write is authorized until an admin
 // declares scopes (reads stay universal per KNOW-11b). An absent/broken policy can therefore never open a
-// write path — the default denies. `actorInScope` mirrors @atlas/knowledge authz `inScope` (KNOW-11a):
-// fail-closed on an absent/empty scope or an unlisted actor.
+// write path — the default denies. `actorInScope` IS the KNOW-11a gate (#186 deleted the second, NOMINAL
+// implementation that used to live in @atlas/knowledge `authz.ts` and that nothing called — this comment
+// said `actorInScope` "mirrors" it): fail-closed on an absent/empty scope or an unlisted actor.
 //
 // AND THE POLICY IS NOT AN AUTHENTICATED INPUT EITHER. `authz.scopes` names WHO may write WHAT, but the
 // "who" is a self-asserted string (`actorInScope` below says why), and this file is world-readable and
@@ -51,8 +52,8 @@ export interface T0HeuristicPolicy {
 }
 
 /** The authorization config — the actor↔scope membership map ("who may write to which scope"), feeding the
- *  KNOW-11 `inScope(actor, fact.scope)` gate. `scopes[scope]` is the list of actor ids authorized to write
- *  that scope. An UNLISTED scope (or an absent actor) is fail-closed: no write. */
+ *  KNOW-11 gate {@link actorInScope}. `scopes[scope]` is the list of actor ids authorized to write that
+ *  scope. An UNLISTED scope (or an absent actor) is fail-closed: no write. */
 export interface AuthzPolicy {
   readonly scopes: Record<string, readonly string[]>;
   /**
@@ -222,7 +223,9 @@ export function nearDupConfig(policy: AtlasPolicy): NearDupConfig {
  * writing the wrong scope by mistake — and it is not an adversarial control (ARCH-12). Every caller of this
  * function inherits that ceiling, however carefully the gate around it is built.
  *
- * Mirrors @atlas/knowledge authz `inScope` (KNOW-11a) — FAIL-CLOSED:
+ * THE KNOW-11a gate (#186) — FAIL-CLOSED. It used to be described as MIRRORING a knowledge-side
+ * `inScope(actor, scope)`; that function decided `actor === scope`, had zero production callers, and is
+ * deleted. The shape half of the pair still lives there and still runs on every write (`isScope`):
  * `false` when `scope` is absent/empty, when the scope is not declared in the policy, or when `actor` is not
  * a listed member. `true` only when the policy declares the scope AND lists the actor. Pure + total, no IO —
  * an absent/broken policy (⇒ empty scopes via {@link defaultPolicy}) therefore authorizes NO write.
