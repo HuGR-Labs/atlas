@@ -104,7 +104,13 @@ describe('GEN-12 held-out (-2 beacon)', () => {
     if (a.outcome !== 'admitted') throw new Error('unreachable');
     expect(calls.synthesize).toBe(0);
     expect(diagnosed).toBe(1);
-    if (a.fact.kind !== 'predicate') throw new Error('expected predicate');
-    expect(a.fact.check.kind).toBe('assertion');
+    // WP-FIX-6.KNOW (#200) — same edit as the visible twin: the sound arm emits an ADVISORY, because the
+    // `assertion` these two lines used to approve was the fabricated `type-checker/LSP diagnostics: <slot>`
+    // string. The held-out golden's own claim (the type-checker decides, not a synthesized query) is pinned
+    // by the two assertions above and is untouched.
+    expect(a.fact.kind).toBe('advisory');
+    expect('check' in a.fact).toBe(false);
+    expect('status' in a.fact).toBe(false);
+    expect(a.fact.predicateSlot).toBe('contract');
   });
 });

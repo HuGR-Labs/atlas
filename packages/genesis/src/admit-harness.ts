@@ -1,13 +1,17 @@
 // @atlas/genesis — src/admit-harness.ts   (WP-8.28-b.GEN — EPIC-28-b, GEN-12)
 //
 // The S2 MECHANICAL ADMISSION engine (mechanical admit + synthesized-check TEETH / mutant gate). In S2 the
-// LLM ONLY proposes typed candidates; admission is mechanical. A PREDICATE candidate is admitted only if its
-// synthesized `check` (a) compiles + returns `HOLDS` on current code AND (b) flips to `BROKEN` on ≥1
-// mechanically-mutated counterfactual (the TEETH / anti-vacuity — a check no mutant can break → DROP). An
-// ADVISORY candidate passes the TRUTH door (grounding) alone and is SCORED for obviousness — never rejected
-// for it (ADR-0012, owner-ratified 2026-08-02); abstention is a valid grounded why-not. SOUND ORACLE FIRST
-// for type-expressible slots. Co-locates the frozen `PredicateApi` + `Check` re-export; the check-engine /
-// admission semantics are consumed as injected ports, never defined here.
+// LLM ONLY proposes typed candidates; admission is mechanical. A predicate candidate becomes a PREDICATE
+// NODE only if its synthesized `check` (a) compiles + returns `HOLDS` on current code AND (b) flips to
+// `BROKEN` on ≥1 mechanically-mutated counterfactual (the TEETH / anti-vacuity — a check no mutant can break
+// → DROP), and the two conjuncts are the only constructor of the `VerifiedCheck` the node's `check` field
+// accepts. An ADVISORY candidate passes the TRUTH door (grounding) alone and is SCORED for obviousness —
+// never rejected for it (ADR-0012, owner-ratified 2026-08-02); abstention is a valid grounded why-not.
+// SOUND ORACLE FIRST for type-expressible slots — and that branch emits an ADVISORY, because the sound
+// verdict comes from the type checker while a KNOW-16 `Check` can express nothing but index state, so there
+// is no truthful check to carry (WP-FIX-6.KNOW / #200; see `buildSound` for the whole argument).
+// Co-locates the frozen `PredicateApi` + `Check` re-export; the check-engine / admission semantics are
+// consumed as injected ports, never defined here.
 
 import type { NodeKey, Status, StructRef, Tier } from '@atlas/contracts';
 import type { AdvisoryNode, Check, GroundedFact, ObviousnessScore, PredicateNode, PredicateSlot } from '@atlas/knowledge';
@@ -203,7 +207,8 @@ function admitPredicate(p: PredicateProposal, deps: AdmitDeps): Admission {
   // GEN-12k — a type-expressible slot uses the SOUND `$0` type-checker / LSP, not a synthesized query.
   if (deps.typeOracle.expressible(p.slot)) {
     if (deps.typeOracle.diagnose(p.site, p.slot) !== 'HOLDS') return { outcome: 'dropped', reason: DROP_TYPE_BROKEN };
-    return { outcome: 'admitted', fact: buildPredicate(p, soundCheck(p.slot), scoreObviousness(deps.doors, p.claimNorm)), label: LIKELY_INVARIANT };
+    // ...and it emits an ADVISORY, because there is no truthful `Check` to carry here. See `buildSound`.
+    return { outcome: 'admitted', fact: buildSound(p, scoreObviousness(deps.doors, p.claimNorm)), label: LIKELY_INVARIANT };
   }
 
   // synthesized-check path (CodeQL/Semgrep, KNOW-16).
@@ -218,17 +223,87 @@ function admitPredicate(p: PredicateProposal, deps: AdmitDeps): Admission {
     check = refined;
     verdict = deps.predicate.verify(check, deps.indexState);
   }
-  if (verdict !== 'HOLDS') return { outcome: 'dropped', reason: DROP_NOT_HOLDS }; // never forced
 
-  // GEN-12j TEETH — admit ONLY if the check flips to BROKEN on ≥1 mutant; a survivor is vacuous → drop.
-  if (!deps.predicate.teeth(check, p.site.site)) return { outcome: 'dropped', reason: DROP_VACUOUS };
+  // GEN-12c ∧ GEN-12j, funnelled through the ONE constructor of a `VerifiedCheck`.
+  const final = check;
+  const attested = attest(final, verdict, () => deps.predicate.teeth(final, p.site.site));
+  if (!attested.ok) return { outcome: 'dropped', reason: attested.reason }; // never forced
 
-  return { outcome: 'admitted', fact: buildPredicate(p, check, scoreObviousness(deps.doors, p.claimNorm)), label: LIKELY_INVARIANT };
+  return { outcome: 'admitted', fact: buildPredicate(p, attested.check, scoreObviousness(deps.doors, p.claimNorm)), label: LIKELY_INVARIANT };
 }
 
-/** The SOUND declarative check for a type-expressible slot (GEN-12k) — the `assertion` leg, not a query. */
-function soundCheck(slot: PredicateSlot): Check {
-  return { kind: 'assertion', expr: `type-checker/LSP diagnostics: ${slot}` };
+// ---- I2: a `HOLDS` predicate cannot be BUILT out of a check nobody evaluated ---------------------------
+
+/**
+ * A check that EARNED its verdict: `verify` said `HOLDS` on current code AND `teeth` flipped it to `BROKEN`
+ * on ≥1 mechanically-mutated counterfactual. `attest` is its only constructor and `buildPredicate` accepts
+ * nothing else, so the node that carries `status: 'HOLDS'` cannot be assembled from an unevaluated check:
+ * `buildPredicate` has exactly ONE call site, and at it the compiler will accept nothing `attest` did not
+ * hand back. The brand is `declare`d, so it costs a type error and not a runtime byte.
+ *
+ * This is the enforcement, stated as I2 asks. It is deliberately a TYPE and not a test: the defect it
+ * replaces was a second `return` inside this same function that quietly skipped both mechanisms, and a test
+ * can only catch the shapes of that mistake someone thought to write down.
+ */
+declare const ATTESTED: unique symbol;
+export type VerifiedCheck = Check & { readonly [ATTESTED]: true };
+
+type Attested =
+  | { readonly ok: true; readonly check: VerifiedCheck }
+  | { readonly ok: false; readonly reason: string };
+
+/**
+ * The single gate (GEN-12c + GEN-12j). `teeth` arrives as a THUNK because the ORDER is normative and
+ * observable: a check that is not `HOLDS` on current code must never reach the mutation gate at all
+ * (SCN-GEN-12d-1 pins `teeth` at ZERO calls on a persistently-BROKEN check). Both refusals keep their own
+ * distinct reason — a caller that cannot tell "did not hold" from "held but proved nothing" is being told
+ * less than the harness knows.
+ */
+function attest(check: Check, verdict: Status, teeth: () => boolean): Attested {
+  if (verdict !== 'HOLDS') return { ok: false, reason: DROP_NOT_HOLDS };
+  if (!teeth()) return { ok: false, reason: DROP_VACUOUS };
+  return { ok: true, check: check as VerifiedCheck };
+}
+
+/**
+ * The node the SOUND-ORACLE arm emits (GEN-12k) — an ADVISORY, carrying its slot and NO check.
+ *
+ * WHAT WAS HERE BEFORE, and why a better string was not the fix. This branch used to build a
+ * `PredicateNode` around `soundCheck(slot) = {kind:'assertion', expr:`type-checker/LSP diagnostics:
+ * ${slot}`}` — an expression that was never passed to `verify`, never subjected to `teeth`, and that the
+ * steady-state evaluator cannot read at all: its assertion grammar is `child-count|<key>|<n>` /
+ * `subtree-hash|<key>|<hash>` over one `IndexNode`, so that string names no operator and evaluates to `NA`
+ * on every index state, forever. The node nonetheless shipped `status: 'HOLDS'`.
+ *
+ * The tension is real and is NOT resolved by writing a parseable expression. REQ-GEN-12k wants the SOUND
+ * compiler oracle; KNOW-16's `Check` can express nothing but INDEX STATE, and a type-checker diagnostic is
+ * not index state. `PredicateNode.check` is required, not optional. So the predicate family cannot honestly
+ * hold this fact, and substituting some index query that happens to parse (`exists|<the site>`) would be the
+ * same fabrication in a costume that also gets past the door — a check the mechanisms never ran, asserting
+ * something the oracle never said.
+ *
+ * The advisory family is exactly the shape of what is known: a grounded claim with no mechanical verdict.
+ * It has no `status` field, so `HOLDS` is not merely unset here — it is UNREPRESENTABLE. `predicateSlot`
+ * (R3) keeps the slot, so the KNOW-15b identity leg and KNOW-4g read-side grouping are unchanged.
+ * "ABSENT means UNKNOWN, never a fabricated placeholder" is the repo's own rule for grounding spans; the
+ * verification field earns it more than a span does.
+ *
+ * The `LIKELY_INVARIANT` label is KEPT and it is not an overclaim: it names the ORACLE, and the compiler
+ * really is a machine that really did check. What it never claimed, and still does not, is a proof.
+ */
+function buildSound(p: PredicateProposal, obviousness: ObviousnessScore): AdvisoryNode {
+  return {
+    kind: 'advisory',
+    obviousness,
+    id: p.nodeKey,
+    tier: p.tier,
+    claimNorm: p.claimNorm,
+    grounding: p.grounding,
+    freshness: 'FRESH',
+    claims: [],
+    authoring: 'ADVISORY',
+    predicateSlot: p.slot,
+  };
 }
 
 /**
@@ -237,7 +312,7 @@ function soundCheck(slot: PredicateSlot): Check {
  * score is a defect, not a default — the field is optional on the stored shape only so that pre-ADR data
  * stays readable, exactly as with `builtAt`/`sameAs`).
  */
-function buildPredicate(p: PredicateProposal, check: Check, obviousness: ObviousnessScore): PredicateNode {
+function buildPredicate(p: PredicateProposal, check: VerifiedCheck, obviousness: ObviousnessScore): PredicateNode {
   return {
     kind: 'predicate',
     obviousness,
