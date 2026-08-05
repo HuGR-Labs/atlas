@@ -4,7 +4,8 @@
 //   1. FAIL-CLOSED LOAD — a missing OR malformed policy resolves to `defaultPolicy()` WITHOUT throwing,
 //      and the default DENIES writes (empty scopes). A mutant that throws on malformed, or that returns a
 //      permissive default (non-empty scopes), flips a golden RED.
-//   2. FAIL-CLOSED AUTHZ — `actorInScope` mirrors @atlas/knowledge `inScope` (KNOW-11a): true only for a
+//   2. FAIL-CLOSED AUTHZ — `actorInScope` IS the KNOW-11a gate (#186 deleted the second, NOMINAL
+//      `inScope` in @atlas/knowledge, which nothing called; this line said it MIRRORED it): true only for a
 //      listed actor in a declared scope; false for unlisted / absent / empty / undeclared scope. A mutant
 //      that allows an absent scope flips RED.
 
@@ -81,7 +82,7 @@ describe('loadPolicy — fail-closed load of .atlas/policy.json', () => {
   });
 });
 
-describe('actorInScope — fail-closed authz, mirrors KNOW-11a inScope', () => {
+describe('actorInScope — fail-closed authz, THE KNOW-11a gate (#186: no longer a mirror of a dead one)', () => {
   const policy: AtlasPolicy = {
     nearDup: { claimNormThreshold: 1 },
     t0Heuristic: { keywords: [] },

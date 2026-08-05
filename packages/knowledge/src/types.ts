@@ -113,11 +113,13 @@ export interface ObviousnessScore {
  * string` field (KNOW-11a read "every fact MUST carry an `owner` + `scope`"). That MUST is AMENDED (see
  * `req-knw.md#REQ-KNOW-11a`): measured on the built binary, nothing supplies `owner` on any shipped write
  * path (`atlas emit`, `atlas mine` both stamp `scope`, never `owner`), and it is not a gate input — the
- * write door keys on `scope` alone via `inScope(actor, fact.scope)`. Producer identity is already carried
- * on every claim by `provenance.source` (`ClaimProvenance`, KNOW-14, MUST-required). Grepped repo-wide
- * (source, tests, `dist/`) before removal: the only reads of `fact.owner` were the now-reverted `authz()`
- * write-branch leg (#178/PR#105) and its pinning test, both removed by this same amendment — so nothing
- * reads `owner` after this change, and the field is deleted rather than kept-but-unused.
+ * write door keys on `scope` alone, via `actorInScope(policy, actor, node.scope)` in
+ * `adapter-io/src/policy.ts` (the LIVE gate — this sentence used to name `inScope(actor, fact.scope)`, a
+ * function in `write/authz.ts` that no production path ever called and that #186 deleted). Producer identity
+ * is already carried on every claim by `provenance.source` (`ClaimProvenance`, KNOW-14, MUST-required).
+ * Grepped repo-wide (source, tests, `dist/`) before removal: the only reads of `fact.owner` were the
+ * now-reverted `authz()` write-branch leg (#178/PR#105) and its pinning test, both removed by that
+ * amendment — so nothing reads `owner` after this change, and the field is deleted rather than kept-but-unused.
  */
 export interface AdvisoryNode {
   readonly kind: 'advisory';

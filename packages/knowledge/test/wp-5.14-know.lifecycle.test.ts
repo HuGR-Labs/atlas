@@ -12,9 +12,10 @@
 // NOT referenced here.
 //
 // SEAM (sealed @atlas/kernel CAS; no raw hashing): the archive's dedup/re-spawn uses `createStore()` — the
-// single content-addressed store — exactly as the card pins. `authz`'s `scope` reads the R3-surfaced
-// optional field on the frozen `GroundedFact` (#187, owner-ratified 2026-08-03: `owner` was removed from
-// this fence — see `req-knw.md#REQ-KNOW-11a` — so this suite no longer constructs one). The
+// single content-addressed store — exactly as the card pins. The ownership anchor is the R3-surfaced
+// optional `scope` field on the frozen `GroundedFact` (#187, owner-ratified 2026-08-03: `owner` was removed
+// from this fence — see `req-knw.md#REQ-KNOW-11a` — so this suite no longer constructs one; #186 then
+// removed the knowledge-side `authz()`/`inScope` decision entirely — see the KNOW-11 block below). The
 // `slot`/`predicateSlot` divergence, the missing-field cells (a Candidate typed-required field omitted at
 // runtime), and the off-vocab slot are expressed by casts — the only way to reach the `missing`/`out` cells
 // of the enumerated validity product past the frozen type.
@@ -30,7 +31,7 @@ import type { NodeKey } from '@atlas/contracts';
 import type { Candidate, GroundedFact, AdvisoryNode, PredicateNode } from '@atlas/knowledge';
 import type { Grounding } from '@atlas/grounding';
 import { validateTemplate, isClosedSlot } from '../src/write/template.js';
-import { authz, inScope } from '../src/write/authz.js';
+import { isScope } from '../src/write/authz.js';
 import { bindArchive } from '../src/write/archive.js';
 
 // ── fixtures ────────────────────────────────────────────────────────────────
@@ -117,30 +118,36 @@ describe('WP-5.14.KNOW — templated write, 0 free prose (KNOW-10 visible golden
 
 // ── KNOW-11: scope-owned write, universal read ──────────────────────────────
 
-describe('WP-5.14.KNOW — scope-owned write, universal read (KNOW-11 visible goldens)', () => {
-  it('SCN-KNOW-11a-1 — a write-authorized fact carries a scope; a scope-less fact fails closed', () => {
+// ── #186 — WHERE THE KNOW-11 GOLDENS ARE REALIZED, AND WHY NOT HERE ─────────────────────────────────────
+// SCN-KNOW-11a-1 / 11b-1 / 11c-1 used to be transcribed in this file against `authz(op, actor, fact)` and
+// `inScope(actor, scope)`. Those functions had ZERO production callers — proven on the BUILT `dist` in a
+// subprocess, where a successful `atlas emit` reaches `actorInScope` (adapter-io/src/policy.ts) and
+// `isScope` (this package) and reaches `authz`/`inScope` never — and they encoded a DIFFERENT rule
+// (`actor === scope`, nominal equality) than the shipped door (admin-declared membership from
+// `.atlas/policy.json`). A golden transcribed against the wrong function is not coverage; it is a green
+// light pointing at nothing. #186 deleted the functions, so the transcription moves rather than dying:
+//   · SCN-KNOW-11a-1 (a write carries a scope; scope-less fails closed)
+//       → `packages/e2e-blackbox/test/s7-governance.blackbox.test.ts` — "DENY (absent scope)": exit 2,
+//         `reason: malformed scope`, nothing persisted, through the REAL binary.
+//   · SCN-KNOW-11b-1 (read is universal)
+//       → `packages/adapter-io/src/governed-link.ts` header + S7: no read door is authz-gated at all.
+//   · SCN-KNOW-11c-1 (an out-of-scope write is rejected)
+//       → `packages/adapter-io/test/policy.test.ts` — `describe('actorInScope — fail-closed authz…')`,
+//         six cases incl. absent-scope and prototype-name TEETH; and S7 "DENY (not in scope)" at the binary.
+// What remains HERE is the half this package still owns: the runtime SHAPE of the ownership anchor.
+
+describe('WP-5.14.KNOW — the KNOW-11 ownership ANCHOR, the half this package owns (#186)', () => {
+  it('the ownership anchor is a non-empty string, checked at runtime — the type is erased', () => {
     const fact = advisoryNode('nk-a', { scope: 'A' });
-    expect(authz('write', 'A', fact)).toBe(true); // in-scope write admitted
-    expect(fact.scope).toBeDefined(); // every persisted fact carries a scope
-    // teeth: a fact persists with `scope` unset — the ownership fence has no anchor
-    const anchorless = advisoryNode('nk-a'); // no scope
-    expect(authz('write', 'A', anchorless)).toBe(false); // fail closed — never persists
+    expect(isScope(fact.scope)).toBe(true); // a real anchor
+    expect(isScope(advisoryNode('nk-a').scope)).toBe(false); // absent ⇒ no anchor ⇒ the door fails closed
+    expect(isScope('')).toBe(false); // empty ⇒ no anchor
   });
 
-  it('SCN-KNOW-11b-1 — any caller may read any fact (read is universal)', () => {
-    const factA = advisoryNode('nk-a', { scope: 'A' });
-    expect(authz('read', 'B', factA)).toBe(true); // caller in unrelated scope B reads an A-scoped fact
-    // teeth: the read path must NOT apply the scope check — even a scope-less fact reads
-    expect(authz('read', 'Z', advisoryNode('nk-a'))).toBe(true);
-  });
-
-  it('SCN-KNOW-11c-1 — an out-of-scope write is rejected (inScope(B, A.scope) is false)', () => {
-    const factA = advisoryNode('nk-a', { scope: 'A' });
-    expect(authz('write', 'B', factA)).toBe(false); // scope-B writer cannot mutate an A-scoped fact
-    expect(inScope('B', 'A')).toBe(false);
-    // teeth: the in-scope writer IS admitted (kills the always-reject mutant)
-    expect(authz('write', 'A', factA)).toBe(true);
-    expect(inScope('A', 'A')).toBe(true);
+  it('the anchor guard is NOT an authorization decision — it passes a scope no policy declares', () => {
+    // The exact confusion #186 removed: `isScope` says the value is comparable and usable as a lookup key,
+    // never that anyone may write it. `actorInScope(policy, actor, scope)` decides that, in adapter-io.
+    expect(isScope('a-scope-no-policy-has-ever-declared')).toBe(true);
   });
 });
 

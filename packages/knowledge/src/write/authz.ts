@@ -1,40 +1,40 @@
-// @atlas/knowledge — src/authz.ts  (WP-5.14.KNOW · KNOW-11: owner-scoped write, universal read)
+// @atlas/knowledge — src/write/authz.ts  (WP-5.14.KNOW · KNOW-11: the SHAPE half of the write gate)
 //
-// Implements the FROZEN `AuthzApi` (co-located below): `authz(op,actor,fact) = op==read ? allow :
-// inScope(actor, fact.scope)` (atlas-knowledge:61, 204-205; method-tags-knw:88-93). A read of ANY scope
-// succeeds for ANY caller (universal read, KNOW-11b); a write is authorized only when the actor is in the
-// fact's owning scope (owner-scoped write, KNOW-11c). Pure + total — no clock, no IO.
+// THIS FILE USED TO CARRY A SECOND, DEAD AUTHZ IMPLEMENTATION, AND THAT IS THE DEFECT #186 CLOSED.
+// It exported `authz(op, actor, fact)` / `inScope(actor, scope)` / `authzApi` — the KNOW-11 reference model,
+// rigorously tested, exported from the barrel, named by every document, and called by NOTHING. Measured on
+// the BUILT `dist` in a subprocess (`atlas emit` over a real repo, markers written to stderr from inside the
+// shipped functions): a successful governed write reaches `ADAPTERIO.actorInScope` and `KNOWLEDGE.isScope`,
+// and reaches `KNOWLEDGE.authz` / `KNOWLEDGE.inScope` ZERO times. `authzApi` / `AuthzApi` / `AuthzOp` had no
+// reference anywhere in the tree, tests included.
 //
-// BIND note (authz.ts FLAG resolved by R3): `fact.scope` is now SURFACED on the frozen `GroundedFact`
-// (types.ts, OPTIONAL). The gate keys on `fact.scope` per the frozen reference and FAILS CLOSED when
-// scope is absent — a fact with no scope has no ownership anchor, so no write is ever authorized
-// (KNOW-11a behavioral MUST: no scope-less fact persists).
+// THE TWO WERE NOT THE SAME PREDICATE, WHICH IS WHY THIS WAS NOT A TIDY-UP. The dead one was NOMINAL:
+// `inScope(actor, scope) = actor === scope` — the actor id must literally EQUAL the scope name. The live one
+// (`actorInScope` in `adapter-io/src/policy.ts`) is ADMIN-DECLARED membership: `policy.authz.scopes[scope]`
+// is the list of actor ids authorized to write that scope, loaded fail-closed from `.atlas/policy.json`
+// (empty scopes ⇒ no actor is in any scope ⇒ no write authorized). So "the live path adopts the specified
+// one" was never an option here: adopting it would have DELETED admin-declared membership and replaced
+// KNOW-11 with string equality — a governance downgrade dressed as a conformance fix. The specified module
+// was deleted and its specification moved to the live gate instead (rule 2 of the card, the delete branch).
 //
-// #187 (owner-ratified 2026-08-03, reverses #178/PR#105): `owner` is REMOVED from KNOW-11a's MUST and is
-// NOT a gate input, and was never load-bearing here in the first place — measured on the built binary,
-// nothing supplies `owner` on any shipped write path (`atlas emit`, `atlas mine`), and `authz()`/`inScope`
-// (this file) have ZERO production callers of their own: the live write door
-// (`adapter-io/src/governed-emit.ts`, gate "2. AUTHZ") gates through a separate `actorInScope`
-// reimplementation in `adapter-io/src/policy.ts`, which was never touched by #178 and never read `owner`
-// either. Producer identity is carried by `provenance.source` (KNOW-14, required on every claim) — `owner`
-// was a second, optional, unpopulated answer to a question the contract already answers. #178 folded
-// `isOwner(fact.owner)` into the `authz()` write branch as a second leg; that leg is removed here, along
-// with `isOwner`. `inScope(actor, fact.scope)` is FROZEN and was never touched by #178 — untouched again
-// here.
-
-import type { GroundedFact } from '../types.js';
-
-// ── frozen AuthzApi surface, co-located here (was ref/authz.ts) ───────────────────────────────────────
-
-/** The authorized operation. Read is universal; write is owner-scoped (atlas-knowledge:61). */
-export type AuthzOp = 'read' | 'write';
-
-export interface AuthzApi {
-  /** Authorize `op` by `actor` on `fact` (KNOW-11). `read` ⇒ always allow (universal read); `write` ⇒
-   *  allow iff `actor` is in `fact.scope` (owner-scoped write). Pure + total. `actor` is a nominal seat id
-   *  (`string`); the gate keys on `fact.scope` (R3-surfaced on `GroundedFact`). */
-  authz(op: AuthzOp, actor: string, fact: GroundedFact): boolean;
-}
+// WHAT SURVIVES, AND WHY. `isScope` is NOT part of the deleted decision — it is the runtime SHAPE guard for
+// the other half of the `(scope, tier)` pair, the exact counterpart of `isTier` (ratify/tier.ts), and it is
+// reached on EVERY governed write from three production call sites:
+//   · `adapter-io/src/governed-emit.ts:216`            — gate 0, WELL-FORMED payload (`malformed scope`)
+//   · `adapter-io/src/governed-emit-incumbent.ts:152`  — the incumbent row's stored authority scope
+//   · `adapter-io/src/governed-link.ts:201`            — the second governed write door
+//
+// WHERE KNOW-11 IS NOW STATED IN FULL (the specification moved WHOLE — no orphan sentence left here):
+//   · the DECISION — `actorInScope(policy, actor, scope)`, `adapter-io/src/policy.ts`; universal read
+//     (KNOW-11b: no read path is authz-gated at all), owner-scoped write (KNOW-11c), fail-closed on an
+//     absent/empty scope and on an actor in no scope (KNOW-11a).
+//   · the DOOR    — `adapter-io/src/governed-emit.ts` gate "2. AUTHZ" and `governed-link.ts`'s endpoint gate.
+//   · the SHAPE   — here.
+//
+// #187 (owner-ratified 2026-08-03, reverses #178/PR#105) removed `owner` from KNOW-11a's MUST: nothing on
+// any shipped write path supplies it, and producer identity is carried by `provenance.source` (KNOW-14,
+// required on every claim). That decision is unchanged by this file's contraction — `owner` was not a gate
+// input before and there is no gate here now.
 
 /**
  * Is `v` a WELL-FORMED ownership anchor — a non-empty string? THE runtime guard for the other half of the
@@ -50,28 +50,11 @@ export interface AuthzApi {
  * `{toString:() => 'core'}` both READ as the scope `core` in an authorization lookup while remaining
  * `!==`-unequal to the string `'core'` — and to every other copy of themselves — at every later comparison.
  * No case-folding, no trimming, no Unicode normalization: the value that is checked is the value stored.
+ *
+ * It is a SHAPE test and NOT an authorization decision: a `true` here says only that the value can be
+ * safely compared and used as a lookup key, never that any actor may write it. The decision is
+ * `actorInScope` (adapter-io/src/policy.ts) — see the file header.
  */
 export function isScope(v: unknown): v is string {
   return typeof v === 'string' && v.length > 0;
 }
-
-/** In-scope predicate (KNOW-11): `true` iff `actor` is in `scope`. Nominal territory-scope match — the
- *  honest reference model (method-tags-knw INV-KNOW-11 down-model). FAIL-CLOSED: an absent/empty (or
- *  otherwise malformed) scope has no anchor ⇒ `false` (no write authorized) — the emptiness test IS
- *  {@link isScope}, read from the one guard rather than re-encoded here. FROZEN — scope-only signature,
- *  unchanged by #178 or by its #187 reversal. */
-export function inScope(actor: string, scope: string | undefined): boolean {
-  if (!isScope(scope)) return false; // no ownership anchor ⇒ fail closed
-  return actor === scope;
-}
-
-/** Authorize `op` by `actor` on `fact` (KNOW-11). `read` ⇒ always allow (universal read, KNOW-11b). `write`
- *  ⇒ allow iff `inScope(actor, fact.scope)` (owner-scoped write, fail-closed on absent scope, KNOW-11c).
- *  Pure + total. `owner` is not a gate input (#187) — see the file header. */
-export function authz(op: AuthzOp, actor: string, fact: GroundedFact): boolean {
-  if (op === 'read') return true; // universal read — any caller, any scope (KNOW-11b)
-  return inScope(actor, fact.scope); // owner-scoped write (KNOW-11c)
-}
-
-/** The FROZEN `AuthzApi` binding (RED→GREEN oracle conformance). */
-export const authzApi: AuthzApi = { authz };
