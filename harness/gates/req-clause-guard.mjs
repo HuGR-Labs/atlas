@@ -76,11 +76,12 @@
 // NO COUNT IS TRANSCRIBED HERE. The unprotected set, the near-misses and their members are DERIVED and
 // PRINTED on every run, pass or fail, under `WAIVER COVERAGE` — a number in a comment rots away from the
 // tree it described, and this repo has been bitten by exactly that.
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { classifyCoverage, pinProblems } from '../lib/inv-text-pin.mjs';
+import { classifyCoverage, pinProblems, uncoveredCarriers } from '../lib/inv-text-pin.mjs';
+import { holds as containsQuote } from '../lib/quote-coverage.mjs';
 
 // Repo root, OVERRIDABLE so the gate's own test can point it at a fixture tree — the same seam
 // `id-integrity.mjs` and `godfile-guard.mjs` use. Without it the ratchet below is a branch no test can
@@ -144,17 +145,10 @@ function fieldValue(body, name) {
   return acc.join('\n');
 }
 
-/** Does the quote still hold in this invariant text? Rules 1 + 3 of the header. */
-function holds(quote, invText) {
-  const t = norm(invText);
-  let at = 0;
-  for (const frag of quote.split('…').map((f) => f.trim()).filter((f) => f !== '')) {
-    const i = t.indexOf(frag, at);
-    if (i < 0) return false;
-    at = i + frag.length;
-  }
-  return true;
-}
+/** Does the quote still hold in this invariant text? Rules 1 + 3 of the header. The body lives in
+ *  `harness/lib/quote-coverage.mjs` so the coverage measurement (issue #208) reuses the EXACT test this
+ *  gate publishes its verdicts with; two implementations could disagree and only one of them gates. */
+const holds = (quote, invText) => containsQuote(quote, invText, norm);
 
 /**
  * EVERY carrier of an anchor, in document order. Three carrier shapes exist in `docs/reference/**` and all
@@ -236,14 +230,16 @@ for (const name of reqFiles) {
     const q = norm(quote);
     const primary = inv.carriers[0];
     const anchorKey = `docs/${ptr[2]}#${ptr[3]}`;
-    if (!coverage.has(anchorKey)) coverage.set(anchorKey, { live: [], waived: [], carriers: inv.carriers });
+    if (!coverage.has(anchorKey)) coverage.set(anchorKey, { live: [], waived: [], carriers: inv.carriers, quotes: [] });
     if (holds(q, primary.text)) {
       ok++;
       coverage.get(anchorKey).live.push(b.id);
+      coverage.get(anchorKey).quotes.push({ req: b.id, q, live: true });
       verdicts.push(`OK        ${at} → ${anchorKey}:${primary.line}`);
       continue;
     }
     coverage.get(anchorKey).waived.push(b.id);
+    coverage.get(anchorKey).quotes.push({ req: b.id, q, live: false });
     verdicts.push(`DIVERGED  ${at} → ${anchorKey}:${primary.line}`);
     // The first point of difference, so the refusal is actionable without opening a debugger.
     const t = norm(primary.text);
@@ -273,7 +269,14 @@ for (const [k, d] of diverged) {
 // Every check above is per-REQ, and that is exactly how the hole opened: waive the last citing REQ and the
 // invariant itself has no live quote left to break. This leg is per-INVARIANT.
 const { unprotected, nearMiss } = classifyCoverage(coverage);
-for (const p of pinProblems(unprotected, PINS, PIN_FILE)) problems.push(p);
+// Which live quotes reach WHICH carrier. `holds` is the same test the verdicts above were taken with, so
+// the pinned set cannot disagree with the pass set. A quote is LIVE iff it holds at carrier 1, which is why
+// carrier 1's entry here is empty exactly when the invariant is 100% waived — #124's rule, at ordinal 1.
+for (const v of coverage.values()) {
+  v.carrierLive = v.carriers.map((c) => v.quotes.filter((q) => q.live && holds(q.q, c.text)).map((q) => q.req));
+}
+const uncovered = uncoveredCarriers(coverage);
+for (const p of pinProblems(uncovered, PINS, PIN_FILE)) problems.push(p);
 
 for (const k of LEDGER.keys()) {
   if (!fired.has(k)) {
@@ -297,15 +300,19 @@ console.log(`  UNEVALUABLE (${unevaluable.length}) — carries no resolvable REQ
 for (const u of unevaluable) console.log(`    · ${u}`);
 console.log(`  LEDGERED (${LEDGER.size}, shrink-only — a stale entry FAILS this gate):`);
 for (const [k, why] of LEDGER) console.log(`    · ${k} — ${why}`);
+const carrierTotal = [...coverage.values()].reduce((n, v) => n + v.carriers.length, 0);
 console.log(
-  `  WAIVER COVERAGE — ${coverage.size} invariant(s) cited by at least one evaluable REQ; ` +
-    `${unprotected.length} have ZERO live quote (every citing REQ diverges) and so are held ONLY by a text ` +
-    `pin in ${PIN_FILE}; ${nearMiss.length} are one waiver away.`,
+  `  WAIVER COVERAGE — ${coverage.size} invariant(s) cited by at least one evaluable REQ, carried at ` +
+    `${carrierTotal} site(s); ${carrierTotal - uncovered.length} carrier(s) are reached by a live quote and ` +
+    `${uncovered.length} are reached by NONE, so those are held ONLY by a text pin in ${PIN_FILE}. Of the ` +
+    `uncovered, ${uncovered.filter((c) => c.first).length} are the invariant statement itself and ` +
+    `${uncovered.filter((c) => !c.first).length} are ## Acceptance restatements. ${unprotected.length} ` +
+    `invariant(s) have ZERO live quote anywhere; ${nearMiss.length} are one waiver away.`,
 );
-for (const i of unprotected) {
-  const pinned = PINS[i.anchor] !== undefined ? `PINNED` : `NOT PINNED`;
-  console.log(`    · UNPROTECTED BY QUOTE  ${i.anchor} (carriers ${i.carriers.map((c) => c.line).join(', ')}) — ` +
-    `0 live, ${i.waived.length} waived [${i.waived.join(', ')}] — ${pinned}`);
+// I4/C1 — the pinned set is a LIST, never a number: a declaration whose members are a count cannot be audited.
+for (const c of uncovered) {
+  console.log(`    · HELD ONLY BY A PIN  ${c.key} (line ${c.line}, carrier ${c.ordinal}/${c.of}) — ` +
+    `${PINS[c.key] !== undefined ? 'PINNED' : 'NOT PINNED'}`);
 }
 for (const i of nearMiss) {
   console.log(`    · ONE QUOTE FROM IT     ${i.anchor} — live [${i.live.join(', ')}], waived ${i.waived.length} ` +
@@ -318,6 +325,18 @@ for (const [a, ls] of [...multiAnchors].sort()) console.log(`    · ${a} → car
 // The 586 clean matches are summarised per file above; `REQ_CLAUSE_LIST=1` prints the per-REQ verdict for
 // every evaluated row, so the pass set is inspectable and not merely counted.
 if (process.env.REQ_CLAUSE_LIST !== undefined) for (const v of verdicts) console.log(`    ${v}`);
+// MACHINE-READABLE DUMP of exactly what this run judged: every cited anchor, its carriers and every citing
+// REQ's quote with the gate's OWN live/waived verdict. Off by default and it changes no verdict; it exists so
+// the coverage measurement of issue #208 enumerates from THIS run rather than from a second parser that
+// could disagree with it. The 12 `ARCH-*` invariants are the standing proof that a second enumerator
+// silently misses whole families.
+if (process.env.REQ_CLAUSE_DUMP !== undefined) {
+  writeFileSync(
+    process.env.REQ_CLAUSE_DUMP,
+    JSON.stringify([...coverage].map(([anchor, v]) => ({ anchor, carriers: v.carriers, quotes: v.quotes }))),
+  );
+  console.log(`  DUMP — ${coverage.size} cited anchor(s) written to ${process.env.REQ_CLAUSE_DUMP}`);
+}
 
 if (problems.length > 0) {
   console.error(`\nreq-clause-guard: FAIL — ${problems.length} problem(s):`);
