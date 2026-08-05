@@ -24,6 +24,14 @@
 //
 // NOTHING here is a threshold. `detected/total` is reported per invariant and the distribution is printed
 // with its members, because a bare median has rotted in this repo before.
+//
+// ── WHY THE NUMBERS ABOVE ARE ALLOWED TO SIT IN A COMMENT ────────────────────────────────────────────
+// The house rule is that no committed comment states a bare count. RULED (WP-GOV-3, issue #208): a figure
+// bound to a NAMED COMMIT is a dated observation and is re-derivable from it, so it is not what that rule
+// targets — the rule targets values presented as CURRENT, which silently rot away from the tree they once
+// described. Every number in this header is anchored to `ce91a08` and is a reproduction record. Every
+// number that describes THIS tree — the distribution, the medians, the uncaught flips, the unheld
+// restatements — is derived and printed by `report` at run time, and none of it appears here.
 
 import { fileURLToPath } from 'node:url';
 
