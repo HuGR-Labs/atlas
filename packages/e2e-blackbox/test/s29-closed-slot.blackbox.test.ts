@@ -7,9 +7,18 @@
 // durable node. And the acceptance was not benign — `nodeKey = hash(primaryAnchorId ‖ predicateSlot)`, so the
 // same claim at the same anchor minted DIFFERENT addresses per slot spelling:
 //
-//   slot 'invariant'           → id 9f563fef…   (accepted, exit 0)
-//   slot 'free-text-whatever'  → id 46d8e1b8…   (accepted, exit 0)   ← the defect
-//   slot absent                → id 9af8c5e0…   (accepted, exit 0)
+//   slot 'invariant'           → some id A   (accepted, exit 0)
+//   slot 'free-text-whatever'  → some id B   (accepted, exit 0)   ← the defect
+//   slot absent                → some id C   (accepted, exit 0)
+//   with A, B and C all DISTINCT — which is the whole harm.
+//
+// The three ids are deliberately NOT quoted here. An earlier revision named specific digests and claimed
+// they were "MEASURED ON THIS TREE"; cold review rebuilt master from scratch, drove the real binary over
+// THIS story's own fixture, and got different ones — the quoted values came from a fixture nothing in the
+// repo records, and no reader could re-derive them. The DISTINCTNESS reproduces exactly and is the claim
+// that matters; the digests are a pure function of (path, bytes, claim, scope, tier) and belong to whatever
+// fixture produced them. Re-derive by checking out any commit before this one, building, and running the
+// three cases below.
 //
 // That is what closedness exists to prevent: "same topic" is decidable only because the vocabulary is FINITE
 // (atlas-knowledge:150), so a free-text slot never collides, `nodeKey` never forces UPDATE/union, and the

@@ -8,10 +8,17 @@
 //
 // ── WHY THIS GATE EXISTS (#152) ──────────────────────────────────────────────────────────────────────────
 // The 12-member `predicateSlot` vocabulary was stated in THREE places and enforced in NONE. Measured on the
-// BUILT `dist` through the shipped `atlas emit` binary in a subprocess, over a real repo: a grounded,
-// authorized, ratified fact declaring `predicateSlot: 'free-text-whatever'` was ACCEPTED — exit 0, `status:
-// ok`, and a node minted at content id `46d8e1b8…`, where the SAME fact at slot `invariant` mints
-// `9f563fef…`. That difference IS the harm: `nodeKey = hash(primaryAnchorId ‖ predicateSlot)`, so an
+// BUILT `dist` through the shipped `atlas emit` binary in a subprocess: a grounded, authorized, ratified
+// fact declaring `predicateSlot: 'free-text-whatever'` was ACCEPTED — exit 0, `status: ok`, durable — and
+// the SAME fact at slot `invariant`, and again with the slot ABSENT, each minted a DIFFERENT content id.
+//
+// THE DERIVATION, NOT THE DIGESTS. An earlier revision of this comment quoted three specific ids. Cold
+// review rebuilt `origin/master` from scratch and drove the real binary over `s29`'s own fixture: the
+// three-distinct-addresses result reproduces exactly, but the quoted digests do NOT — they came from a
+// fixture nothing in the repo records, so no reader could ever re-derive them. A digest that cannot be
+// re-derived is a claim, not evidence. To reproduce: check out any commit before this one, build, and run
+// the `s29` fixture's three cases; the ids are a pure function of (file path, file bytes, claim, scope,
+// tier) and all three differ. That difference IS the harm: `nodeKey = hash(primaryAnchorId ‖ predicateSlot)`, so an
 // unrecognised slot does not fail — it silently mints a NEW ADDRESS. "Same topic" is decidable only because
 // the vocabulary is finite (atlas-knowledge:150); a free-text slot never collides, so the store proliferates
 // parallel nodes at one anchor and UPDATE/union never fires. Both membership guards that existed
@@ -29,9 +36,23 @@
 //
 // ── ABSENT IS NOT A VIOLATION, AND THAT IS A DECISION, NOT AN OVERSIGHT ───────────────────────────────────
 // MEASURED 2026-08-04 across 300 model calls in two runs: ZERO stored facts carry a `predicateSlot` at all.
-// The cause is upstream and mechanical — `buildAdvisory` / `buildPredicate` (genesis/src/admit-harness.ts),
-// the ONLY fact constructors the product's own producer has, never set the field. So the question "what does
-// this gate do when the field is ABSENT?" is not a corner case; today it is EVERY mined fact.
+// The cause is upstream and mechanical, but NOT the one an earlier revision of this comment gave. There are
+// THREE fact constructors in `genesis/src/admit-harness.ts`, not two: `buildSound` (:294) — which DOES set
+// `predicateSlot`, at :305 — plus `buildPredicate` (:315) and `buildAdvisory` (:334), which do not. So the
+// field is not unpopulated for want of a constructor.
+//
+// The real reason is one layer up: **no production path constructs a `PredicateProposal`.** The only
+// production caller of the genesis admission gate is `makeAdmitGate` (`packages/cli/src/mine-gate.ts:72`),
+// which builds an `AdvisoryProposal` exclusively — so `buildSound` and `buildPredicate` are unreachable
+// from the CLI and `buildAdvisory`, which sets no slot, is the only constructor that runs. That is why the
+// question "what does this gate do when the field is ABSENT?" is not a corner case; today it is EVERY
+// mined fact.
+//
+// UNMEASURED, and recorded rather than glossed: this refusal's rendering on the MINE leg. `upsert` is
+// reached there at `packages/cli/src/mine.ts:290`, inside `decide` under `store.commitStaging`, where there
+// is NO `commitRefusalOf` re-file. `tools/src/fault.ts` `classifyThrown` should file it as `refused`, but
+// nobody has driven it — and nobody can, until a producer emits a slot. The emit door's exit-2 contract IS
+// proven (see D5); the mine door's is not.
 //
 // The decision: `slot` is OPTIONAL and an ABSENT slot STANDS ASIDE. Three reasons, in order of weight:
 //   1. Fail-closed-on-absent is not a gate, it is an outage. It would refuse 100% of `atlas mine` writes and

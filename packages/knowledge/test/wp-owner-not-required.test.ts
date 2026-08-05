@@ -15,8 +15,10 @@
 //
 // They are removed, not relocated, and NO real coverage is lost — the live fence is proven twice already,
 // at both levels, and neither was touched:
-//   · `packages/adapter-io/test/policy.test.ts` — `describe('actorInScope — fail-closed authz, mirrors
-//     KNOW-11a inScope')`, six cases including the absent-scope and prototype-name TEETH.
+//   · `packages/adapter-io/test/policy.test.ts` — `describe('actorInScope — fail-closed authz, THE
+//     KNOW-11a gate (#186: no longer a mirror of a dead one)')`, six cases including the absent-scope and
+//     prototype-name TEETH. (This same commit renamed that title; the old wording called it a "mirror" of
+//     the `inScope` it deleted.)
 //   · `packages/e2e-blackbox/test/s7-governance.blackbox.test.ts` — the same fence through the REAL `atlas`
 //     binary: in-scope ALLOW (exit 0), out-of-scope / empty-actor DENY (exit 2, `reason: unauthorized`,
 //     nothing persisted), absent-scope refused at gate 0 (`reason: malformed scope`).
