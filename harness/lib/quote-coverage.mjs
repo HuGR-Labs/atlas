@@ -33,7 +33,6 @@
 // number that describes THIS tree — the distribution, the medians, the uncaught flips, the unheld
 // restatements — is derived and printed by `report` at run time, and none of it appears here.
 
-import { fileURLToPath } from 'node:url';
 
 /** The gate's own containment test, moved here so ONE implementation serves both and no second parser can
  *  disagree with the verdict `req-clause-guard` publishes. Rules 1 + 3 of that gate's header:
@@ -284,34 +283,4 @@ export function report(dump, norm, log = console.log) {
   for (const r of contained) log(`    · VOCABULARY-CONTAINED  ${r.key} (line ${r.line})`);
   log(`    ${nov.length - addsContent.length - contained.length} add prose words but no identifier, number or modal: CANDIDATE-equivalent, needs a human read.`);
   return rows;
-}
-
-// ── RUN IT: `node harness/lib/quote-coverage.mjs` ────────────────────────────────────────────────────
-// A REPORT, not a gate: it always exits 0 and lives in `lib/` deliberately, because `harness/gates/` means
-// "files that CAN FAIL, run by name in CI" and nothing here has an agreed bar to fail against yet — issue
-// #208 measures first and lets the owner pick the bar. It re-runs `req-clause-guard` to build its input so
-// the enumeration is always the GATE's, never a second parser's.
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { execFileSync } = await import('node:child_process');
-  const { mkdtempSync, readFileSync, rmSync } = await import('node:fs');
-  const { tmpdir } = await import('node:os');
-  const { join, dirname } = await import('node:path');
-  const { norm } = await import('./inv-text-pin.mjs');
-  const here = dirname(fileURLToPath(import.meta.url));
-  const tmp = mkdtempSync(join(tmpdir(), 'quote-coverage-'));
-  const dumpPath = join(tmp, 'dump.json');
-  try {
-    // The gate may exit non-zero on an unrelated failure; the dump is still written, so read it either way
-    // and say so rather than silently reporting on a stale or absent file.
-    try {
-      execFileSync(process.execPath, [join(here, '..', 'gates', 'req-clause-guard.mjs')], {
-        env: { ...process.env, REQ_CLAUSE_DUMP: dumpPath }, stdio: 'ignore',
-      });
-    } catch {
-      console.log('  NOTE: req-clause-guard exited non-zero on this tree; scoring the dump it still produced.');
-    }
-    report(JSON.parse(readFileSync(dumpPath, 'utf8')), norm);
-  } finally {
-    rmSync(tmp, { recursive: true, force: true });
-  }
 }
