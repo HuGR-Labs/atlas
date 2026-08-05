@@ -59,10 +59,28 @@
 //     acceptance list in every reference doc here — and when that misses, a later hit is REPORTED, never
 //     silently accepted. On this corpus it decides exactly one row (`REQ-TOOLS-9b`).
 
+//
+// ── THE SECOND LEG: WAIVER COVERAGE (issue #199) ─────────────────────────────────────────────────────
+// Everything above is PER-REQ, and that is precisely how the hole opened. A ledgered row is a WAIVED
+// quote. Waive the LAST REQ citing an invariant and there is no live quote left to break, so the check
+// above has nothing to say about that invariant — its whole normative text can be replaced by its own
+// negation with every gate still green. It was reproduced on `INV-TOOLS-1`, the constitutional write-door
+// invariant. So this gate also asks a PER-INVARIANT question: is anything still holding this text?
+//
+// An invariant whose every citing REQ diverges must carry a TEXT PIN in `harness/inv-text-pins.json`, and
+// that pin must still match the tree. The pinned set is DERIVED from this run, never authored: a pin for
+// an invariant that has a live quote again is STALE and fails, exactly as a stale ledger row does. The
+// design, the reproduction, and why "require one live quote" was tested and REJECTED as the fix are in
+// `harness/lib/inv-text-pin.mjs`.
+//
+// NO COUNT IS TRANSCRIBED HERE. The unprotected set, the near-misses and their members are DERIVED and
+// PRINTED on every run, pass or fail, under `WAIVER COVERAGE` — a number in a comment rots away from the
+// tree it described, and this repo has been bitten by exactly that.
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { classifyCoverage, pinProblems } from '../lib/inv-text-pin.mjs';
 
 // Repo root, OVERRIDABLE so the gate's own test can point it at a fixture tree — the same seam
 // `id-integrity.mjs` and `godfile-guard.mjs` use. Without it the ratchet below is a branch no test can
@@ -91,6 +109,18 @@ const LEDGER = new Map(
       : JSON.parse(readFileSync(join(ROOT, 'harness/req-clause-ledger.json'), 'utf8')),
   ),
 );
+
+/**
+ * Text pins for the invariants NOTHING else holds. Same seam and same shrink-only discipline as the
+ * ledger above; see `harness/lib/inv-text-pin.mjs` for the reproduction that made this necessary and for
+ * why "at least one live quote" was tested and rejected as the fix. The pinned SET is derived from this
+ * run, never authored: an entry for an invariant that has a live quote again FAILS as stale.
+ */
+const PIN_FILE = 'harness/inv-text-pins.json';
+const PINS =
+  process.env.REQ_CLAUSE_ROOT !== undefined
+    ? JSON.parse(process.env.REQ_CLAUSE_PINS ?? '{}')
+    : JSON.parse(readFileSync(join(ROOT, PIN_FILE), 'utf8'));
 
 if (!existsSync(REQ_DIR)) {
   // A gate that cannot build its corpus has checked NOTHING and must say so rather than exit 0.
@@ -175,6 +205,7 @@ const diverged = new Map();
 const perFile = [];
 const fired = new Set();
 const multiAnchors = new Map();
+const coverage = new Map();
 const verdicts = [];
 let total = 0;
 let checked = 0;
@@ -204,8 +235,16 @@ for (const name of reqFiles) {
     }
     const q = norm(quote);
     const primary = inv.carriers[0];
-    if (holds(q, primary.text)) { ok++; verdicts.push(`OK        ${at} → docs/${ptr[2]}#${ptr[3]}:${primary.line}`); continue; }
-    verdicts.push(`DIVERGED  ${at} → docs/${ptr[2]}#${ptr[3]}:${primary.line}`);
+    const anchorKey = `docs/${ptr[2]}#${ptr[3]}`;
+    if (!coverage.has(anchorKey)) coverage.set(anchorKey, { live: [], waived: [], carriers: inv.carriers });
+    if (holds(q, primary.text)) {
+      ok++;
+      coverage.get(anchorKey).live.push(b.id);
+      verdicts.push(`OK        ${at} → ${anchorKey}:${primary.line}`);
+      continue;
+    }
+    coverage.get(anchorKey).waived.push(b.id);
+    verdicts.push(`DIVERGED  ${at} → ${anchorKey}:${primary.line}`);
     // The first point of difference, so the refusal is actionable without opening a debugger.
     const t = norm(primary.text);
     let pre = 0;
@@ -230,6 +269,12 @@ for (const [k, d] of diverged) {
         : ''),
   );
 }
+// ── WAIVER COVERAGE ──────────────────────────────────────────────────────────────────────────────────
+// Every check above is per-REQ, and that is exactly how the hole opened: waive the last citing REQ and the
+// invariant itself has no live quote left to break. This leg is per-INVARIANT.
+const { unprotected, nearMiss } = classifyCoverage(coverage);
+for (const p of pinProblems(unprotected, PINS, PIN_FILE)) problems.push(p);
+
 for (const k of LEDGER.keys()) {
   if (!fired.has(k)) {
     problems.push(
@@ -252,6 +297,20 @@ console.log(`  UNEVALUABLE (${unevaluable.length}) — carries no resolvable REQ
 for (const u of unevaluable) console.log(`    · ${u}`);
 console.log(`  LEDGERED (${LEDGER.size}, shrink-only — a stale entry FAILS this gate):`);
 for (const [k, why] of LEDGER) console.log(`    · ${k} — ${why}`);
+console.log(
+  `  WAIVER COVERAGE — ${coverage.size} invariant(s) cited by at least one evaluable REQ; ` +
+    `${unprotected.length} have ZERO live quote (every citing REQ diverges) and so are held ONLY by a text ` +
+    `pin in ${PIN_FILE}; ${nearMiss.length} are one waiver away.`,
+);
+for (const i of unprotected) {
+  const pinned = PINS[i.anchor] !== undefined ? `PINNED` : `NOT PINNED`;
+  console.log(`    · UNPROTECTED BY QUOTE  ${i.anchor} (carriers ${i.carriers.map((c) => c.line).join(', ')}) — ` +
+    `0 live, ${i.waived.length} waived [${i.waived.join(', ')}] — ${pinned}`);
+}
+for (const i of nearMiss) {
+  console.log(`    · ONE QUOTE FROM IT     ${i.anchor} — live [${i.live.join(', ')}], waived ${i.waived.length} ` +
+    `[${i.waived.join(', ')}]. NOTE: a quote is a FRAGMENT; see harness/lib/inv-text-pin.mjs.`);
+}
 // The multi-carrier count is a DECLARED limit, so it names its members: a declaration whose members are a
 // number and not a list cannot be audited.
 console.log(`  MULTI-CARRIER ANCHORS (${multiAnchors.size} distinct) — judged at the FIRST carrier, later ones reported on a miss:`);

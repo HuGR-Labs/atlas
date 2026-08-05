@@ -1,0 +1,10 @@
+{
+  "docs/reference/atlas-grounding.md#ground-7": {
+    "digest": "cc35a9853b47a9c3381bd25e8320dff7",
+    "why": "INV-GROUND-7 is cited by 3 REQ(s) and every one of them is a ledgered waiver, so no live normative-clause holds its text (WP-GOV-1, issue #199). This digest pins the text as it stands at master ac130e9 — it records what is IN THE TREE, not an owner ratification, which only the owner can give. Re-pin only together with a ratified amendment, and name the ratifier here when you do."
+  },
+  "docs/reference/atlas-tools.md#tools-1": {
+    "digest": "eaeae83588458dd6bf8dc7a470e92aa2",
+    "why": "INV-TOOLS-1 is cited by 5 REQ(s) and every one of them is a ledgered waiver, so no live normative-clause holds its text (WP-GOV-1, issue #199). This digest pins the text as it stands at master ac130e9 — it records what is IN THE TREE, not an owner ratification, which only the owner can give. Re-pin only together with a ratified amendment, and name the ratifier here when you do."
+  }
+}

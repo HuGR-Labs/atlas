@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 const GATE = join(dirname(fileURLToPath(import.meta.url)), 'req-clause-guard.mjs');
 
 /** A fixture repo: `docs/requirements/req-fix.md` + `docs/reference/atlas-fix.md`. */
-function run(reqBody, refBody, ledger = {}) {
+function run(reqBody, refBody, ledger = {}, pins = {}) {
   const root = mkdtempSync(join(tmpdir(), 'atlas-reqclause-'));
   try {
     mkdirSync(join(root, 'docs', 'requirements'), { recursive: true });
@@ -29,7 +29,12 @@ function run(reqBody, refBody, ledger = {}) {
       const stdout = execFileSync(process.execPath, [GATE], {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, REQ_CLAUSE_ROOT: root, REQ_CLAUSE_LEDGER: JSON.stringify(ledger) },
+        env: {
+          ...process.env,
+          REQ_CLAUSE_ROOT: root,
+          REQ_CLAUSE_LEDGER: JSON.stringify(ledger),
+          REQ_CLAUSE_PINS: JSON.stringify(pins),
+        },
       });
       return { code: 0, out: stdout };
     } catch (e) {
@@ -58,6 +63,15 @@ const REF = [
 const req = (id, source, clause) =>
   ['# Requirements — fixture', '', `### ${id} — a requirement`, `source: ${source}`, 'The thing shall do the thing.', `normative-clause: ${clause}`, ''].join('\n');
 
+
+/** The digest the gate PRINTS in its own "PIN the ratified text" instruction. It is never recomputed
+ *  here, so these tests cannot agree with a broken implementation by reimplementing it. */
+function pinFor(reqBody, refBody, ledgerKey) {
+  const out = run(reqBody, refBody, { [ledgerKey]: 'known' }).out;
+  const m = /"digest": "([0-9a-f]{32})"/.exec(out);
+  expect(m, 'the UNPROTECTED refusal must print the digest to pin').not.toBeNull();
+  return m[1];
+}
 describe('req-clause-guard — a quote that left its invariant fails the build', () => {
   it('PASSES when the quote is still in the cited invariant (the control — without it every red below is vacuous)', () => {
     const r = run(req('REQ-FIX-1a', 'INV-FIX-1 @ reference/atlas-fix.md#fix-1', '"return a `≤ ~2K` **governing** pack of `tier≥T1` invariants"'), REF);
@@ -121,11 +135,86 @@ describe('req-clause-guard — a quote that left its invariant fails the build',
     const stale = req('REQ-FIX-1a', 'INV-FIX-1 @ reference/atlas-fix.md#fix-1', '"return a `≤ ~2K` pack of `tier≥T1` invariants"');
     const key = /REQ-FIX-1a @ ([0-9a-f]{8})/.exec(run(stale, REF, {}).out);
     expect(key, 'the failure must print the ledger key so the entry can be written').not.toBeNull();
-    expect(run(stale, REF, { [key[0]]: 'known' }).code).toBe(0);
+    // INV-FIX-1 has exactly one citing REQ here, so ledgering it makes the invariant 100% waived and the
+    // WAIVER COVERAGE leg takes over. Pin it, so THIS case still isolates the ledger's own behaviour.
+    const pin = { 'docs/reference/atlas-fix.md#fix-1': { digest: pinFor(stale, REF, key[0]), why: 'fixture' } };
+    expect(run(stale, REF, { [key[0]]: 'known' }, pin).code).toBe(0);
     // The SAME ledger against a corpus where the row no longer diverges ⇒ RATCHET failure.
     const fixed = req('REQ-FIX-1a', 'INV-FIX-1 @ reference/atlas-fix.md#fix-1', '"return a `≤ ~2K` **governing** pack of `tier≥T1` invariants"');
     const r = run(fixed, REF, { [key[0]]: 'known' });
     expect(r.code).toBe(1);
     expect(r.out).toContain('RATCHET');
+  });
+});
+
+describe('req-clause-guard — WAIVER COVERAGE: an invariant every citing REQ has waived', () => {
+  // Reproduced on the real tree before this leg existed (issue #199): INV-TOOLS-1, the constitutional
+  // write-door invariant, is cited by five REQs and all five are ledgered. Its entire normative text was
+  // replaced with its own negation and all nine gates exited 0. These cases are that hole, in a fixture.
+
+  const stale = req('REQ-FIX-1a', 'INV-FIX-1 @ reference/atlas-fix.md#fix-1', '"a quote that is not in FIX-1"');
+  const ledgerKey = () => /REQ-FIX-1a @ ([0-9a-f]{8})/.exec(run(stale, REF, {}).out)[0];
+  const pinned = (k) => ({ 'docs/reference/atlas-fix.md#fix-1': { digest: pinFor(stale, REF, k), why: 'fixture' } });
+
+  it('a 100%-waived invariant with NO pin FAILS, and the refusal says what would restore protection', () => {
+    const r = run(stale, REF, { [ledgerKey()]: 'known' });
+    expect(r.code).toBe(1);
+    expect(r.out).toContain('UNPROTECTED INVARIANT');
+    expect(r.out).toContain('docs/reference/atlas-fix.md#fix-1');
+    expect(r.out).toContain('REQ-FIX-1a');
+    expect(r.out).toContain('un-waiving');                 // route 1 back to protection
+    expect(r.out).toContain('harness/inv-text-pins.json'); // route 2, with the digest to use
+  });
+
+  it('the pin has TEETH: with the invariant pinned, editing its text FAILS (the #199 splice, in miniature)', () => {
+    const k = ledgerKey();
+    const pin = pinned(k);
+    expect(run(stale, REF, { [k]: 'known' }, pin).code, 'pinned + unedited must PASS').toBe(0);
+    // Invert the pinned invariant the way #199 inverted INV-TOOLS-1. Nothing quotes it any more, so the
+    // pin is the only thing left holding it.
+    const inverted = REF.replace('It MUST return a', 'It MUST NOT return a');
+    expect(inverted, 'the mutation must actually change the fixture').not.toBe(REF);
+    const r = run(stale, inverted, { [k]: 'known' }, pin);
+    expect(r.code).toBe(1);
+    expect(r.out).toContain('HAS CHANGED');
+    expect(r.out).toContain('docs/reference/atlas-fix.md#fix-1');
+  });
+
+  it('a re-wrap of the pinned text is NOT a change — the pin holds words, not line breaks', () => {
+    const k = ledgerKey();
+    const rewrapped = REF.replace(
+      '- **FIX-1 The bounded thing.** It MUST return a `≤ ~2K` **governing** pack of `tier≥T1`\n  invariants, beside',
+      '- **FIX-1 The bounded thing.** It MUST return a `≤ ~2K` **governing**\n  pack of `tier≥T1` invariants, beside',
+    );
+    expect(rewrapped, 'the re-wrap must actually change the bytes').not.toBe(REF);
+    expect(run(stale, rewrapped, { [k]: 'known' }, pinned(k)).code).toBe(0);
+  });
+
+  it('a pin for an invariant that REGAINED a live quote is STALE and fails — the set shrinks, never grows', () => {
+    const k = ledgerKey();
+    const pin = pinned(k);
+    // Same pin, but now a live REQ quotes FIX-1 again, so nothing about FIX-1 is 100% waived.
+    const live = req('REQ-FIX-1z', 'INV-FIX-1 @ reference/atlas-fix.md#fix-1', '"`stale:true` MUST mean re-ground"');
+    const r = run(live, REF, {}, pin);
+    expect(r.code).toBe(1);
+    expect(r.out).toContain('STALE PIN');
+  });
+
+  it('a pin cannot be moved between invariants by copy-paste — the anchor is hashed with the text', () => {
+    const k = ledgerKey();
+    const moved = { 'docs/reference/atlas-fix.md#fix-2': pinned(k)['docs/reference/atlas-fix.md#fix-1'] };
+    const r = run(stale, REF, { [k]: 'known' }, moved);
+    expect(r.code).toBe(1);
+    expect(r.out).toContain('STALE PIN');            // fix-2 is not 100% waived...
+    expect(r.out).toContain('UNPROTECTED INVARIANT'); // ...and fix-1 is still unpinned
+  });
+
+  it('the coverage table is PRINTED on a passing run, so the class is auditable without a failure', () => {
+    const k = ledgerKey();
+    const r = run(stale, REF, { [k]: 'known' }, pinned(k));
+    expect(r.code).toBe(0);
+    expect(r.out).toContain('WAIVER COVERAGE');
+    expect(r.out).toContain('UNPROTECTED BY QUOTE  docs/reference/atlas-fix.md#fix-1');
+    expect(r.out).toContain('PINNED');
   });
 });
