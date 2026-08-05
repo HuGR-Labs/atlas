@@ -196,6 +196,45 @@ export function score(anchor, norm) {
   };
 }
 
+/**
+ * IS THE `## Acceptance` RESTATEMENT ACTUALLY A DUPLICATE? (issue #208, WP-GOV-4 second deliverable)
+ *
+ * If these were merely the same rule stated twice, the honest fix would be to delete a copy rather than pin it —
+ * this repo has spent a week finding that two statements of one rule is the defect. So this asks, per
+ * restatement, what it says that its primary carrier does NOT: identifiers, numeric thresholds and normative
+ * modals that appear in the restatement and nowhere in the invariant statement.
+ *
+ * IT IS A LEXICAL TEST AND THAT IS ITS LIMIT, stated rather than implied. Introducing a token the primary
+ * lacks PROVES the restatement carries content the primary does not. The converse does NOT hold: a
+ * restatement built entirely from the primary's vocabulary can still negate or re-scope it, so "no new
+ * token" means CANDIDATE-equivalent and needs a human read. Semantic equivalence is not decidable here and
+ * no model is consulted (A3), so the classes below are evidence for a reviewer, never a verdict.
+ */
+const STOP = new Set('a an the is are be by of to in on for and or not it its this that as at from with each every any all must shall may only never always no'.split(' '));
+const bare = (t) => t.replace(/\*\*|[*_]/g, '');
+const words = (t, norm) => new Set([...bare(norm(t)).toLowerCase().matchAll(/[a-z0-9][a-z0-9._/≥≤+-]*/g)].map((m) => m[0]).filter((w) => w.length > 1 && !STOP.has(w)));
+const idents = (t) => new Set([...t.matchAll(/`([^`]+)`/g)].map((m) => m[1]));
+const numerals = (t) => new Set([...bare(t).matchAll(/\d+(?:\.\d+)?%?/g)].map((m) => m[0]));
+
+export function restatementNovelty(anchor, norm) {
+  const out = [];
+  const prim = anchor.carriers[0];
+  const pw = words(prim.text, norm), pi = idents(prim.text), pn = numerals(prim.text);
+  const pm = new Set(modalSites(prim.text).map((x) => x.word));
+  for (let i = 1; i < anchor.carriers.length; i++) {
+    const c = anchor.carriers[i];
+    // Drop the "N. **ID** —" label: scaffolding, not content.
+    const body = c.text.replace(/^\s*\d+\.\s*\*\*[^*]+\*\*\s*(—|-)?\s*/, '');
+    const newIdents = [...idents(body)].filter((x) => !pi.has(x));
+    const newNums = [...numerals(body)].filter((x) => !pn.has(x));
+    const newModals = [...new Set(modalSites(body).map((x) => x.word))].filter((x) => !pm.has(x));
+    const newWords = [...words(body, norm)].filter((x) => !pw.has(x));
+    out.push({ key: `${anchor.anchor}@carrier${i + 1}`, line: c.line, newIdents, newNums, newModals, newWords,
+      adds: newIdents.length > 0 || newNums.length > 0 || newModals.length > 0 });
+  }
+  return out;
+}
+
 const pct = (x) => (x === null ? '  n/a' : `${(100 * x).toFixed(1)}%`);
 const median = (xs) => {
   const s = [...xs].filter((x) => x !== null).sort((a, b) => a - b);
@@ -231,6 +270,19 @@ export function report(dump, norm, log = console.log) {
   const secZero = multi.filter((r) => r.secCh === 0);
   log(`  SECOND CARRIER — ${multi.length} of ${rows.length} invariant(s) are restated at a later carrier that req-clause-guard never judges; ${secZero.length} of those restatements have ZERO character coverage:`);
   for (const r of secZero) log(`    · ${r.anchor} — primary char ${pct(r.ch)}, restatement char ${pct(r.secCh)}`);
+  // ── IS THE RESTATEMENT A DUPLICATE WORTH DELETING, OR CONTENT THAT EXISTS ONLY THERE? ──────────────
+  const nov = dump.flatMap((a) => restatementNovelty(a, norm));
+  const addsContent = nov.filter((r) => r.adds);
+  const contained = nov.filter((r) => !r.adds && r.newWords.length === 0);
+  log(`  RESTATEMENT NOVELTY — ${nov.length} restatement carrier(s) examined against their own invariant statement.`);
+  log(`    ${addsContent.length} introduce an identifier, number or modal the statement NEVER contains, so they are not restatements at all — that normative text exists in exactly ONE place and deleting it would delete ratified content:`);
+  for (const r of addsContent) log(`    · ADDS CONTENT  ${r.key} (line ${r.line})` +
+    `${r.newIdents.length ? ` identifiers [${r.newIdents.map((x) => '`' + x + '`').join(', ')}]` : ''}` +
+    `${r.newNums.length ? ` numbers [${r.newNums.join(', ')}]` : ''}` +
+    `${r.newModals.length ? ` modals [${r.newModals.join(', ')}]` : ''}`);
+  log(`    ${contained.length} are built entirely from the statement's own vocabulary (the only class a de-duplication could safely touch, and LEXICAL evidence only — a human must still read them).`);
+  for (const r of contained) log(`    · VOCABULARY-CONTAINED  ${r.key} (line ${r.line})`);
+  log(`    ${nov.length - addsContent.length - contained.length} add prose words but no identifier, number or modal: CANDIDATE-equivalent, needs a human read.`);
   return rows;
 }
 

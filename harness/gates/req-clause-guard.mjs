@@ -80,7 +80,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { classifyCoverage, pinProblems } from '../lib/inv-text-pin.mjs';
+import { classifyCoverage, pinProblems, uncoveredCarriers } from '../lib/inv-text-pin.mjs';
 import { holds as containsQuote } from '../lib/quote-coverage.mjs';
 
 // Repo root, OVERRIDABLE so the gate's own test can point it at a fixture tree — the same seam
@@ -269,7 +269,14 @@ for (const [k, d] of diverged) {
 // Every check above is per-REQ, and that is exactly how the hole opened: waive the last citing REQ and the
 // invariant itself has no live quote left to break. This leg is per-INVARIANT.
 const { unprotected, nearMiss } = classifyCoverage(coverage);
-for (const p of pinProblems(unprotected, PINS, PIN_FILE)) problems.push(p);
+// Which live quotes reach WHICH carrier. `holds` is the same test the verdicts above were taken with, so
+// the pinned set cannot disagree with the pass set. A quote is LIVE iff it holds at carrier 1, which is why
+// carrier 1's entry here is empty exactly when the invariant is 100% waived — #124's rule, at ordinal 1.
+for (const v of coverage.values()) {
+  v.carrierLive = v.carriers.map((c) => v.quotes.filter((q) => q.live && holds(q.q, c.text)).map((q) => q.req));
+}
+const uncovered = uncoveredCarriers(coverage);
+for (const p of pinProblems(uncovered, PINS, PIN_FILE)) problems.push(p);
 
 for (const k of LEDGER.keys()) {
   if (!fired.has(k)) {
@@ -293,15 +300,19 @@ console.log(`  UNEVALUABLE (${unevaluable.length}) — carries no resolvable REQ
 for (const u of unevaluable) console.log(`    · ${u}`);
 console.log(`  LEDGERED (${LEDGER.size}, shrink-only — a stale entry FAILS this gate):`);
 for (const [k, why] of LEDGER) console.log(`    · ${k} — ${why}`);
+const carrierTotal = [...coverage.values()].reduce((n, v) => n + v.carriers.length, 0);
 console.log(
-  `  WAIVER COVERAGE — ${coverage.size} invariant(s) cited by at least one evaluable REQ; ` +
-    `${unprotected.length} have ZERO live quote (every citing REQ diverges) and so are held ONLY by a text ` +
-    `pin in ${PIN_FILE}; ${nearMiss.length} are one waiver away.`,
+  `  WAIVER COVERAGE — ${coverage.size} invariant(s) cited by at least one evaluable REQ, carried at ` +
+    `${carrierTotal} site(s); ${carrierTotal - uncovered.length} carrier(s) are reached by a live quote and ` +
+    `${uncovered.length} are reached by NONE, so those are held ONLY by a text pin in ${PIN_FILE}. Of the ` +
+    `uncovered, ${uncovered.filter((c) => c.first).length} are the invariant statement itself and ` +
+    `${uncovered.filter((c) => !c.first).length} are ## Acceptance restatements. ${unprotected.length} ` +
+    `invariant(s) have ZERO live quote anywhere; ${nearMiss.length} are one waiver away.`,
 );
-for (const i of unprotected) {
-  const pinned = PINS[i.anchor] !== undefined ? `PINNED` : `NOT PINNED`;
-  console.log(`    · UNPROTECTED BY QUOTE  ${i.anchor} (carriers ${i.carriers.map((c) => c.line).join(', ')}) — ` +
-    `0 live, ${i.waived.length} waived [${i.waived.join(', ')}] — ${pinned}`);
+// I4/C1 — the pinned set is a LIST, never a number: a declaration whose members are a count cannot be audited.
+for (const c of uncovered) {
+  console.log(`    · HELD ONLY BY A PIN  ${c.key} (line ${c.line}, carrier ${c.ordinal}/${c.of}) — ` +
+    `${PINS[c.key] !== undefined ? 'PINNED' : 'NOT PINNED'}`);
 }
 for (const i of nearMiss) {
   console.log(`    · ONE QUOTE FROM IT     ${i.anchor} — live [${i.live.join(', ')}], waived ${i.waived.length} ` +
