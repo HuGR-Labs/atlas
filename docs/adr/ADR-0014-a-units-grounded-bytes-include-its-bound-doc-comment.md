@@ -12,10 +12,17 @@
   OFF by default). The default file frontier is NOT affected — a file node's `subtreeHash` commits to the whole
   file's bytes, comments included. This ADR is a **precondition for turning on symbol-granular recall**, not a
   fix to a default-path defect.
-- **Amends (ratified surfaces):** (1) the unit-boundary definition feeding `INV-GROUND-1`/`INV-GROUND-5` (what
-  "the cited unit's OWN bytes" spans); (2) the GROUND-5 golden's *header* clause, made precise (§ below) —
-  because the old wording ("a license header added above stays FRESH") is ambiguous exactly where a header is
-  contiguous with a declaration.
+- **Amends (ratified surfaces) — all four that encode "header above ⇒ FRESH", named after cold review:**
+  (1) the unit-boundary definition feeding `INV-GROUND-1`/`INV-GROUND-5` (what "the cited unit's OWN bytes"
+  spans); (2) the GROUND-5 GOLDEN header clause (`docs/design/functional-surface.md:93`, `product-framing.md:
+  115`, `docs/reference/atlas-grounding.md:164`); (3) the NORMATIVE clause `REQ-GROUND-5b`
+  (`docs/requirements/req-grd.md:92-93`), whose parenthetical "import/**license header added above it** … MUST
+  NOT drift" must gain the contiguity qualification; (4) the PROP-GROUND-5 ARBITRARY
+  (`docs/requirements/properties-grd.md:75`), which lists "license header added above" in the NON-TOUCHING ⇒
+  FRESH class — that instance moves to the TOUCHING class. **The PROP-GROUND-5 LAW is unchanged** (`FRESH ⟺
+  subtree(U) byte-identical`): this ADR changes what `subtree(U)` spans, so the law holds verbatim and only the
+  arbitrary's *classification* of a contiguous header is re-partitioned. Per the co-amendment rule (#198), all
+  four move in the same commit as the code.
 - **Does NOT force a `FOLD_DOMAIN` re-key** (corrected — see §Migration and §Cold-review corrections #2).
 - **Does NOT touch:** the span carrier (`grounding/src/span.ts`, additive, drift-invariant), or GROUND-2
   (every entry still carries `anchor.subtreeHash`).
@@ -91,17 +98,23 @@ export function foo() {}
 The `@license` run is contiguous with `foo` and preceded by an import, so it IS `foo`'s bound doc-comment and
 editing it drifts `foo` — contradicting "license header above stays FRESH." There is **no positional rule that
 both attaches a real doc-comment and refuses a contiguous header**: contiguity is exactly what doc tools use to
-associate documentation. So the honest resolution is to AMEND the golden, not to claim survival:
+associate documentation. A first draft tried to carve out "the file's leading comment stays FRESH", but the
+cold review's round 2 showed that carve-out is self-contradictory (the mechanical rule has no file-position
+leg) AND that it would re-open GAP-2 for a genuine first-in-file doc-comment. So the resolution is a SINGLE,
+position-free rule and an honest AMEND of the golden:
 
-> **GROUND-5 (amended header clause):** a header/comment that is the FILE'S leading comment, OR is separated
-> from the declaration by ≥1 blank line, stays FRESH when added or edited. A comment **contiguous** with a
-> declaration (no blank line) is that declaration's documentation and a change to it **DRIFTS** the unit. The
-> conventional license header (file-top, or blank-line-separated) is unaffected; a header glued directly onto a
-> declaration is treated as documentation.
+> **GROUND-5 (amended header clause):** the FRESH-on-add classification is decided by **contiguity, not file
+> position**. A comment separated from the declaration by ≥1 blank line (the conventional file-top or
+> above-the-decl header), or an import/rename that is not a comment, stays **FRESH**. A comment **contiguous**
+> with a declaration (no blank line), *including a comment at the very start of a file directly above the first
+> declaration*, is that declaration's documentation and a change to it **DRIFTS** the unit. There is no
+> file-leading exception — a header meant to stay FRESH is, by universal convention, blank-line-separated from
+> the first declaration, and that is exactly the case that stays FRESH.
 
 The import-above and unrelated-rename-elsewhere legs of GROUND-5 are UNCHANGED and still FRESH (an import is
-not a comment; a blank line or an import breaks contiguity). Only the contiguous-header sub-case flips, and it
-flips because it is genuinely indistinguishable from documentation.
+not a `comment` node, so no run binds and the slice is unchanged; a blank line breaks contiguity). Only the
+**contiguous**-header sub-case flips — including a contiguous file-top header on the first declaration — because
+it is genuinely indistinguishable from documentation, and a single uniform rule is the only consistent one.
 
 ## Migration — slice-only, NOT a domain re-key (corrected)
 
@@ -125,7 +138,12 @@ FRESH" — and buys nothing, because version detection is **absent** (grep: only
 - **G-GAP2-1 (the fix, item):** fact on an item; edit ONLY its bound leading doc-comment to make it false ⇒
   **DRIFTED** (today FRESH).
 - **G-GAP2-1b (the fix, block):** same for a method/arrow block's own leading JSDoc ⇒ **DRIFTED**.
-- **G-GAP2-2 (header, file-leading):** add/edit a file-top license/module header ⇒ first unit stays **FRESH**.
+- **G-GAP2-2 (header, blank-line-separated):** a file-top or above-the-decl header **separated by a blank
+  line** ⇒ the unit stays **FRESH** on a header edit. (There is no file-position carve-out; the FRESH-ness
+  comes from the blank line breaking contiguity, not from being at file top.)
+- **G-GAP2-2b (header, contiguous at file top):** a comment at the very start of a file, contiguous (no blank
+  line) with the first declaration, IS bound and a change to it ⇒ **DRIFTED** — the consistency witness that
+  there is no file-leading exception (guards the round-2 contradiction).
 - **G-GAP2-3 (import above):** add an import above a unit (blank-line-separated) ⇒ **FRESH** (SCN-GROUND-5b,
   must not regress).
 - **G-GAP2-4 (blank-line boundary):** a comment separated from the unit by a blank line ⇒ not bound; edit ⇒
@@ -152,8 +170,10 @@ FRESH" — and buys nothing, because version detection is **absent** (grep: only
 
 1. **The unit-boundary redefinition** — "a unit's grounded bytes include its bound leading doc-comment (item
    and block)." Changes the ratified preimage of `subtreeHash`.
-2. **The GROUND-5 header-clause amendment** — a contiguous header is documentation and drifts the unit; the
-   file-leading / blank-line-separated header stays FRESH.
+2. **The GROUND-5 header-clause amendment, across all four surfaces** (golden + `REQ-GROUND-5b` normative
+   clause + `PROP-GROUND-5` arbitrary partition; the PROP law is unchanged) — the classification is by
+   **contiguity, not file position**: a contiguous comment (including at file top) is documentation and drifts
+   its unit; a blank-line-separated or import-separated header stays FRESH.
 
 The scary third item from the first draft — a repo-wide `FOLD_DOMAIN` re-key — is **withdrawn**; it was not
 forced (§Migration). **Lead recommendation: ratify 1 + 2.** They are the true, minimal ratified surfaces this
@@ -177,3 +197,17 @@ precedent (correct in the open, do not quietly overwrite):
 5. **Miscitation.** The first draft cited `compose.ts:70` (wrong package); the real comparison is
    `drift.ts:100-102`. Version detection is confirmed ABSENT, which is why slice-only (no bump) is the correct
    migration, not merely the cheaper one.
+
+**Round 2 (2026-08-09) — two residual holes in the round-1 header amendment, both now closed:**
+
+6. **The "file-leading comment stays FRESH" carve-out was self-contradictory** and re-opened GAP-2 for a
+   genuine first-in-file doc-comment (the mechanical rule has no file-position leg). Fixed by DELETING the
+   carve-out: the rule is now purely contiguity-based, with no file-leading exception (G-GAP2-2b is the
+   consistency witness). A real header stays FRESH because it is blank-line-separated, not because it is at
+   file top. Fixes 2-5 and the block-tiling/double-commit non-issue were confirmed correct by the round-2
+   review.
+7. **The amend list was incomplete.** Only the golden was named; the normative `REQ-GROUND-5b`
+   (`req-grd.md:92-93`) and the `PROP-GROUND-5` arbitrary (`properties-grd.md:75`) also encode "header above ⇒
+   FRESH" and are now in the Amends list, with the note that the PROP LAW is unchanged and only the arbitrary's
+   partition of a *contiguous* header moves. The import-above witness `SCN-GROUND-5b` does NOT regress (an
+   import is not a `comment` node, so no run binds — confirmed).
