@@ -106,16 +106,47 @@ function grammarFor(path: string): TsLanguage | undefined {
 interface Declaration {
   readonly node: SyntaxNode;
   readonly exported: boolean;
+  // The ORIGINAL top-level node (the `export`/`export default` wrapper if any, else the decl itself). The
+  // bound leading doc-comment (ADR-0014) is a sibling of THIS node, not of the unwrapped `node`, so the
+  // comment scan must start here — a comment above `export function f` is a sibling of the export_statement.
+  readonly outer: SyntaxNode;
 }
 
 /** Unwrap an `export` / `export default` wrapper to the declaration it carries (else the node itself),
- *  KEEPING whether there was a wrapper. */
+ *  KEEPING whether there was a wrapper AND the outer node (for the ADR-0014 leading-comment scan). */
 function unwrapExport(node: SyntaxNode): Declaration {
-  if (node.type !== 'export_statement') return { node, exported: false };
+  if (node.type !== 'export_statement') return { node, exported: false, outer: node };
   const decl = node.childForFieldName('declaration');
-  if (decl !== null) return { node: decl, exported: true };
-  for (const c of node.namedChildren) if (ITEM_KINDS.has(c.type)) return { node: c, exported: true };
-  return { node, exported: true }; // `export { a }` / `export * from` — filtered out by ITEM_KINDS below
+  if (decl !== null) return { node: decl, exported: true, outer: node };
+  for (const c of node.namedChildren) if (ITEM_KINDS.has(c.type)) return { node: c, exported: true, outer: node };
+  return { node, exported: true, outer: node }; // `export { a }` / `export * from` — filtered by ITEM_KINDS below
+}
+
+/**
+ * ADR-0014 — the byte start of a unit's BOUND leading doc-comment, or `undefined` when there is none.
+ *
+ * The bound run is the maximal set of `comment` nodes immediately preceding `outer`, each on the line
+ * DIRECTLY above the next bound token (no blank line between a comment and what follows it). A blank line,
+ * or any non-comment sibling, breaks the run. Consequences, all deliberate (ADR-0014, ratified 2026-08-09):
+ *   - a header/comment separated from the declaration by ≥1 blank line is NOT bound → editing it stays FRESH;
+ *   - a comment CONTIGUOUS with the declaration (incl. a file-top comment directly above the first decl) IS
+ *     bound → editing it DRIFTS the unit (it is the declaration's documentation). There is no file-position
+ *     exception: FRESH-ness is decided by contiguity, not by being at file top.
+ * The scan starts from `outer`, so a comment above `export`/`export default` is found; when a comment IS
+ * bound the slice necessarily includes the `export` keyword that sits between it and the inner decl — an
+ * incidental consequence, not a goal, and it never affects the export PRIOR (computed separately from
+ * `decl.exported`, seeds.ts) nor the `::` subsumes key (positional). A unit with no bound comment is sliced
+ * exactly as before — byte-identical, so it does not drift.
+ */
+function boundCommentStart(outer: SyntaxNode): number | undefined {
+  let start: number | undefined;
+  let nextRow = outer.startPosition.row;
+  for (let s = outer.previousNamedSibling; s !== null && s.type === 'comment'; s = s.previousNamedSibling) {
+    if (nextRow - s.endPosition.row > 1) break; // a blank line separates this comment from the bound token
+    start = s.startIndex;
+    nextRow = s.startPosition.row;
+  }
+  return start;
 }
 
 /** The declared name of a unit (empty for an anonymous closure). A `lexical`/`var` declaration joins its
@@ -187,7 +218,9 @@ function blockNode(parentPath: string, src: string, node: SyntaxNode, name: stri
   return {
     path: unitPath(parentPath, node, name, ordinal),
     children: [],
-    content: src.slice(node.startIndex, node.endIndex),
+    // ADR-0014: extend upward over the block's bound leading doc-comment (a method/arrow's own JSDoc), so a
+    // comment-only edit that invalidates a block-anchored fact drifts. No bound comment ⇒ unchanged slice.
+    content: src.slice(boundCommentStart(node) ?? node.startIndex, node.endIndex),
   };
 }
 
@@ -203,7 +236,9 @@ function itemNode(filePath: string, src: string, decl: Declaration, ordinal: num
   return {
     path: itemPath,
     children: blocks.map((b, i) => blockNode(itemPath, src, b, names[i] ?? '', ordinals[i] ?? 0)),
-    content: src.slice(decl.node.startIndex, decl.node.endIndex),
+    // ADR-0014: extend upward over the item's bound leading doc-comment (scanned from `decl.outer`, so a
+    // comment above `export`/`export default` is found). No bound comment ⇒ byte-identical to before.
+    content: src.slice(boundCommentStart(decl.outer) ?? decl.node.startIndex, decl.node.endIndex),
   };
 }
 
