@@ -44,8 +44,8 @@ teeth:       breaks-on "the admitter treats a partially-grounded node (some entr
 ### PROP-KNOW-3 — structural drift oracle is the subtreeHash
 inv:         INV-KNOW-3
 source:      method-tags-knw.md#INV-KNOW-3                   # ptr+digest
-law:         ∀ fact f, tree t. freshness(f,t) = (subtreeHash(anchoredUnit(f,t)) == f.grounding.subtreeHash) ? FRESH : DRIFTED, with an unresolvable anchor key ⇒ DRIFTED (fail-closed) — line numbers never enter identity or freshness; an edit that does not touch the cited unit (import/license-header above it, unrelated rename elsewhere) stays FRESH; a body change, a reformat OF the unit, and a rename OF the cited symbol all DRIFT
-arbitrary:   a NON-TOUCHING-edit generator (import/license header added above, unrelated rename elsewhere ⇒ the unit's own bytes and key invariant) AND a TOUCHING-edit generator (body change, in-unit whitespace/reindent ⇒ subtreeHash moves; rename of the cited symbol ⇒ anchor key retired); assert the FRESH/DRIFTED split over the paired corpus
+law:         ∀ fact f, tree t. freshness(f,t) = (subtreeHash(anchoredUnit(f,t)) == f.grounding.subtreeHash) ? FRESH : DRIFTED, with an unresolvable anchor key ⇒ DRIFTED (fail-closed) — line numbers never enter identity or freshness; the cited unit's slice INCLUDES its bound leading doc-comment (the contiguous `comment` run, ADR-0014); an edit that does not touch the cited unit (import / blank-line-separated license-header above it, unrelated rename elsewhere) stays FRESH; a body change, a reformat OF the unit, a rename OF the cited symbol, and an edit to the unit's bound doc-comment all DRIFT
+arbitrary:   a NON-TOUCHING-edit generator (import / blank-line-separated license header added above, unrelated rename elsewhere ⇒ the unit's own bytes and key invariant) AND a TOUCHING-edit generator (body change, in-unit whitespace/reindent ⇒ subtreeHash moves; edit to a CONTIGUOUS leading comment (the bound doc-comment) ⇒ subtreeHash moves; rename of the cited symbol ⇒ anchor key retired); assert the FRESH/DRIFTED split over the paired corpus
 covers_reqs: [ REQ-KNOW-3a, REQ-KNOW-3b, REQ-KNOW-3c ]      # ptr+digest
 witness:     [ SCN-KNOW-3a-1, SCN-KNOW-3b-1, SCN-KNOW-3c-1 ]
 teeth:       breaks-on "freshness is computed from the cited unit's line-range — across the generated corpus every downward shift spuriously DRIFTs" · breaks-on "a whitespace normalizer lands — the TOUCHING corpus reads FRESH on an in-unit reformat, and with it on a one-space change inside a template literal" · breaks-on "a rename of the cited symbol re-binds the fact to the renamed unit instead of failing closed"
@@ -55,6 +55,12 @@ teeth:       breaks-on "freshness is computed from the cited unit's line-range �
 > class. **No normalizer exists**, and only import-above is invariant; a reformat moves the hash and a rename
 > of the cited symbol retires the anchor key outright. See the KNOW-3 amendment in `invariant-register.md`
 > (pending owner ratification) and `method-tags-knw.md#INV-KNOW-3`.
+>
+> **AMENDED 2026-08-09 (ADR-0014, owner-ratified same-landing as GROUND-5).** The `subtreeHash` preimage now
+> includes a declaration's bound leading doc-comment, so the law's slice and both generators are
+> contiguity-qualified: a blank-line-separated header stays in the NON-TOUCHING generator; a CONTIGUOUS
+> leading comment (the bound doc-comment) moves into the TOUCHING generator. The law's FRESH ⟺ byte-identical
+> shape is unchanged — only what "the unit's slice" spans grew. Witnessed by `adapter-io` goldens G-GAP2-1..8.
 
 ### PROP-KNOW-4 — every write is an upsert (enumerated universe A)
 inv:         INV-KNOW-4

@@ -377,11 +377,16 @@ claim fools us:
 
 Each maps to an invariant; each is a test that MUST fail if the invariant is violated.
 
-1. **Structural drift, not line drift.** A real change to the cited structural unit ⇒ `DRIFTED`; an import
-   or license header added *above* it, or an unrelated rename *elsewhere*, ⇒ still `FRESH`. A reformat OF
-   the cited unit ⇒ `DRIFTED` (the oracle hashes raw bytes — an accepted false alarm, §3.1). *(A-1, §3.1)*
+1. **Structural drift, not line drift.** A real change to the cited structural unit ⇒ `DRIFTED`; an import,
+   or a *blank-line-separated* license/file header added *above* it, or an unrelated rename *elsewhere*, ⇒
+   still `FRESH`. A reformat OF the cited unit ⇒ `DRIFTED` (the oracle hashes raw bytes — an accepted false
+   alarm, §3.1). An edit to a comment *contiguous* (no blank line) with the cited declaration ⇒ `DRIFTED` —
+   it is the declaration's bound leading doc-comment, so classification is by contiguity, not file position
+   (ADR-0014). *(A-1, §3.1)*
    <!-- AMENDED 2026-08-02 (HONESTY-TAPROOT): "a reformat … ⇒ still FRESH" was never delivered; the
-        acceptance test as written could only pass on a fixture that held the hash constant by hand. -->
+        acceptance test as written could only pass on a fixture that held the hash constant by hand.
+        AMENDED 2026-08-09 (ADR-0014, owner-ratified): the header-above leg is FRESH only when
+        blank-line-separated; a contiguous leading comment is a bound doc-comment and DRIFTS the unit. -->
 2. **Ungrounded reject.** `atlas-emit` of a node with no resolvable citation ⇒ `emitted:false`, nothing
    persisted. *(A-2)*
 3. **Drift blocks the merge.** A merge that drifts a fact ⇒ `atlas-reconcile` reports `BROKEN` non-empty ⇒

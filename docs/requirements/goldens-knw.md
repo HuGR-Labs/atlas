@@ -153,6 +153,15 @@ gen: conformance
 >
 > The scenarios below now pin all three legs — the delivered one FRESH, the two undelivered ones DRIFTED —
 > so the limit is a tooth rather than a silence.
+>
+> **AMENDED 2026-08-09 (ADR-0014, owner-ratified same-landing as GROUND-5).** A fourth leg is added: the
+> `subtreeHash` preimage now includes a declaration's bound leading doc-comment (the contiguous `comment`
+> run), so an edit to a comment CONTIGUOUS with the cited declaration DRIFTS the fact, and the "header above
+> ⇒ FRESH" leg holds only for a BLANK-LINE-SEPARATED (or import-separated) header. The mechanical witness is
+> `adapter-io` goldens **G-GAP2-1..8** over the REAL `foldAstUnits → build → driftDetect` chain. It is NOT
+> witnessed in `freshness.know3.realmint.test.ts`: that harness writes the unit's slice BY HAND (to avoid a
+> knowledge→adapter-io layer inversion), so it cannot see the `foldAstUnits` slice-extension — pinning the new
+> slice by hand there would re-commit the vacuous-fixture sin the file exists to fix.
 
 ### SCN-KNOW-3b-1 — import-above stays FRESH; an in-unit reformat and a rename OF the cited symbol DRIFT   (guard)
 source: REQ-KNOW-3b

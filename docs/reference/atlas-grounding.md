@@ -93,9 +93,11 @@ Status         = 'HOLDS' | 'BROKEN' | 'NA' | 'advisory'
        losing one re-grounded to a one-entry receipt that isGrounded and read FRESH. -->
 - **GROUND-4 Truth-gate.** → see spec **A-1**; enforced in atlas-grounding by `gateHolds` (GROUND-2/3/5
   supply the grounded ∧ FRESH inputs it gates on).
-- **GROUND-5 Non-touching edits only.** An edit that does not TOUCH the cited unit (an import or license
-  header added above it, an unrelated rename elsewhere) MUST NOT drift a fact; a real change to the cited
-  unit MUST drift it. **A reformat OF the cited unit DOES drift it** — the oracle hashes raw bytes, so any
+- **GROUND-5 Non-touching edits only.** An edit that does not TOUCH the cited unit (an import, or a
+  **blank-line-separated** license/file header added above it, an unrelated rename elsewhere) MUST NOT drift a
+  fact; a real change to the cited unit MUST drift it. A comment **contiguous** (no blank line) with the cited
+  declaration IS that declaration's bound doc-comment — editing it MUST drift the unit; classification is by
+  contiguity, not file position (ADR-0014). **A reformat OF the cited unit DOES drift it** — the oracle hashes raw bytes, so any
   byte inside the unit moves the hash. That false alarm is ACCEPTED, not a defect and not a TODO: any
   cheap normalization over raw text also erases whitespace that is SEMANTIC in TS/TSX (string, template
   and regex literals, JSX text, ASI), and the trade is asymmetric — a false alarm costs one re-ground, a
@@ -103,7 +105,9 @@ Status         = 'HOLDS' | 'BROKEN' | 'NA' | 'advisory'
   <!-- AMENDED 2026-08-02 (HONESTY-TAPROOT): was "A semantically-irrelevant edit (reformat, import added
        above, unrelated rename) MUST NOT drift a fact". The reformat leg was never delivered. The
        import-above leg became true only at f2a8659. INV GROUND-5 is RATIFIED — the register amendment is
-       pending owner ratification. -->
+       pending owner ratification. AMENDED 2026-08-09 (ADR-0014, owner-ratified): the header-above leg is
+       FRESH only when blank-line-separated; a contiguous leading comment is a bound doc-comment and drifts
+       its unit — the classification is by contiguity, not file position. -->
 - **GROUND-6 Fail-closed write.** → see spec **A-2**; enforced at `emit` (atlas-tools TOOLS-7) — ungrounded
   facts do not enter.
 - **GROUND-7 Admission, and the score.** A fact is admitted iff it passes **both**: (1) **truth** — its

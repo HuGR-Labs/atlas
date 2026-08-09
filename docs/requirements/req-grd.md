@@ -89,8 +89,8 @@ normative-clause: "a real change to the cited unit MUST drift it."
 
 ### REQ-GROUND-5b — an edit that does not touch the cited unit never drifts
 source: INV-GROUND-5 @ reference/atlas-grounding.md#ground-5
-If an edit that does not touch the cited unit (an import or license header added above it, an unrelated rename elsewhere) is made, then the grounding gate shall not drift the fact. A reformat OF the cited unit DOES drift it.
-normative-clause: "An edit that does not touch the cited unit (import/license header added above it, unrelated rename elsewhere) MUST NOT drift a fact; a reformat OF the cited unit DOES drift it, and MUST"
+If an edit that does not touch the cited unit (an import, or a blank-line-separated license/file header added above it, an unrelated rename elsewhere) is made, then the grounding gate shall not drift the fact. A reformat OF the cited unit, or an edit to a comment CONTIGUOUS (no blank line) with the cited declaration, DOES drift it — a contiguous leading comment is the declaration's bound doc-comment (ADR-0014).
+normative-clause: "An edit that does not touch the cited unit (import, or a blank-line-separated license/file header added above it, unrelated rename elsewhere) MUST NOT drift a fact; a reformat OF the cited unit, or an edit to a comment CONTIGUOUS with the cited declaration (its bound doc-comment), DOES drift it, and MUST — classification is by contiguity, not file position (ADR-0014)"
 > **AMENDED 2026-08-02 (HONESTY-TAPROOT), fanning out the amendment already made in `goldens-grd.md`.**
 > Previously: "a semantically-irrelevant edit (reformat, import added above, unrelated rename) MUST NOT
 > drift a fact". Two of those three legs are delivered — MEASURED through the real
@@ -103,6 +103,13 @@ normative-clause: "An edit that does not touch the cited unit (import/license he
 > JSX text, ASI. The trade is asymmetric: a false alarm costs one re-ground, a false negative lets the truth
 > gate serve HOLDS on a stale fact. `goldens-grd.md` REQ-GROUND-5b was amended at `f2a8659`; THIS document
 > was not, so the two contradicted each other while every gate exited 0.
+>
+> **AMENDED 2026-08-09 (ADR-0014, owner-ratified).** The "license header added above ⇒ FRESH" leg is now
+> qualified by CONTIGUITY, co-amended in the same landing as the code (rule #198): a header **separated by ≥1
+> blank line** from the first declaration stays FRESH (the conventional case, unchanged); a comment
+> **contiguous** with a declaration IS its bound doc-comment and a change to it DRIFTS the unit. The EARS
+> sentence and the normative-clause above moved together with the `adapter-io` slice change. The import-above
+> leg does NOT regress (an import is not a `comment` node, so no doc-comment run binds).
 
 ### REQ-GROUND-6 — fail-closed write at emit
 source: INV-GROUND-6 @ reference/atlas-grounding.md#ground-6

@@ -55,8 +55,8 @@ anti-rot: `grounding/ref/gate.ts` (the reference gate automaton) is the mock reu
 ### INV-GROUND-5
 method-tag: reference-model
 fspec: —
-up-property: "non-touching-edit classification: an edit that does not TOUCH the cited unit (import or license header added above it, unrelated rename elsewhere) ⇒ still `FRESH`; a real change to the cited unit ⇒ `DRIFTED`; a reformat OF the cited unit ⇒ `DRIFTED` — an accepted false alarm, not 0 false drift"
-down-model: "the oracle is `subtreeHash(unit) = Encoder.hash(canonicalForm(unit))` over the unit's RAW SOURCE SLICE (`src.slice(startIndex, endIndex)`, NFC-normalized only by `canonicalForm`); `driftDetect` is FRESH iff that hash is byte-invariant across the edit AND the anchor key still resolves; the golden generator is PBT-fuzz over a non-touching-edit class (asserts FRESH) vs an in-unit/real-change class (asserts DRIFTED) against the reference oracle"
+up-property: "non-touching-edit classification: an edit that does not TOUCH the cited unit (import, or a blank-line-separated license header added above it, unrelated rename elsewhere) ⇒ still `FRESH`; a real change to the cited unit ⇒ `DRIFTED`; a reformat OF the cited unit ⇒ `DRIFTED` — an accepted false alarm, not 0 false drift; an edit to a comment CONTIGUOUS with the cited declaration (its bound doc-comment, ADR-0014) ⇒ `DRIFTED`"
+down-model: "the oracle is `subtreeHash(unit) = Encoder.hash(canonicalForm(unit))` over the unit's RAW SOURCE SLICE — extended upward over the declaration's bound leading doc-comment, the maximal contiguous `comment` run (ADR-0014): `src.slice(boundCommentStart(outer) ?? startIndex, endIndex)`, NFC-normalized only by `canonicalForm`; `driftDetect` is FRESH iff that hash is byte-invariant across the edit AND the anchor key still resolves; the golden generator is PBT-fuzz over a non-touching-edit class (asserts FRESH) vs an in-unit/bound-doc-comment/real-change class (asserts DRIFTED) against the reference oracle"
 anti-rot: `grounding/ref/anchor.ts` (shares the K1 oracle) is the mock; an oracle that folds the unit's line-range drifts a still-true fact on an edit above it and fails the invariance test, and an oracle that erases in-unit bytes goes blind to a one-space change inside a template literal and fails the DRIFTED leg. *(Tag stays `reference-model`: PBT-fuzz generator, but the shape is conformance-to-the-reference-drift-oracle (robustness of classification), not a standalone ordering law; KERNEL-7 pattern.)*
 
 > **AMENDED 2026-08-02 (HONESTY-TAPROOT) — this down-model described a component that was never built.**
@@ -78,6 +78,13 @@ anti-rot: `grounding/ref/anchor.ts` (shares the K1 oracle) is the mock; an oracl
 > cheap normalization over raw text also erases whitespace that is SEMANTIC in TS/TSX (string, template and
 > regex literals, JSX text, ASI), and a false negative — serving `HOLDS` on a stale fact — costs far more
 > than the re-ground a false alarm costs. See REQ-GROUND-5b in `goldens-grd.md`.
+>
+> **AMENDED 2026-08-09 (ADR-0014, owner-ratified).** The RAW SOURCE SLICE is extended upward over the
+> declaration's bound leading doc-comment (the maximal contiguous `comment` run), so the up-property/down-model
+> above are contiguity-qualified: the `license-header-above FRESH` measurement in the block above holds only
+> for a BLANK-LINE-SEPARATED header; a CONTIGUOUS leading comment is the decl's doc-comment and reads
+> `DRIFTED`. The reference oracle (`grounding/ref/`) and shipped `foldAstUnits` move together; the acceptance
+> goldens are `adapter-io` G-GAP2-1..8.
 
 ### INV-GROUND-6
 method-tag: reference-model

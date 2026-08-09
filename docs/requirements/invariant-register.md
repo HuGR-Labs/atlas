@@ -82,7 +82,7 @@ anchor: `reference/atlas-grounding.md#ground-N`.
 | GROUND-2 real grounding | FR-5 | COUPLED | PBT | empty grounding ⇒ not-grounded ∧ DRIFTED; ungrounded never FRESH (0) | — | behavioural | — | **RATIFIED** |
 | GROUND-3 fail-closed resolution | FR-4 | COUPLED | PBT | gone citation ⇒ the WHOLE fact grounds to nothing + DRIFTED, 0 throws | recall↔safety | behavioural | — | **RATIFIED** · **AMENDED + RE-RATIFIED 2026-08-02** (owner-delegated) |
 | GROUND-4 truth-gate | FR-4 | COUPLED | PBT | HOLDS only if grounded∧FRESH else NA (spec A-1) | — | behavioural | — | **RATIFIED** |
-| GROUND-5 non-touching edits only | FR-5 | COUPLED | PBT (P=edit class) | edit that does not TOUCH the cited unit (import/header above, unrelated rename elsewhere) ⇒ FRESH; real change ⇒ DRIFTED; **reformat OF the cited unit ⇒ DRIFTED (a false alarm, accepted)** | false alarms on in-unit reformat ACCEPTED, not eliminated | behavioural | — | **RATIFIED** · **AMENDED + RE-RATIFIED 2026-08-02** (owner-delegated) |
+| GROUND-5 non-touching edits only | FR-5 | COUPLED | PBT (P=edit class) | edit that does not TOUCH the cited unit (import / **blank-line-separated** header above, unrelated rename elsewhere) ⇒ FRESH; real change ⇒ DRIFTED; **reformat OF the cited unit ⇒ DRIFTED (a false alarm, accepted)**; **a CONTIGUOUS leading comment is the decl's bound doc-comment ⇒ editing it DRIFTED (ADR-0014)** | false alarms on in-unit reformat ACCEPTED, not eliminated | behavioural | **ADR-0014** unit incl. bound doc-comment | **RATIFIED** · **AMENDED + RE-RATIFIED 2026-08-02** (owner-delegated) · **unit-boundary AMENDED + RATIFIED 2026-08-09** (ADR-0014, owner) |
 | GROUND-6 fail-closed write | FR-5 | COUPLED | PBT | ungrounded emit ⇒ nothing persisted (spec A-2) | — | behavioural | — | **RATIFIED** |
 | GROUND-7 admission (truth ∧ ¬harmful); obviousness scored | FR-5 | COUPLED | PBT | ungrounded ⇒ rejected; harmful-to-store (secret/PII) ⇒ rejected; **obvious ⇒ ADMITTED with a low score, never rejected** | recall (nothing is lost to an obviousness veto; the score is auditable and re-thresholdable) | behavioural | ADR-G7 two-door · **ADR-0012** | **RATIFIED** · **AMENDED + RE-RATIFIED 2026-08-02** (owner) |
 | GROUND-8 provenance | FR-5 | COUPLED | PBT (P=untrusted) | untrusted source ⇒ advisory, absent from gate (spec A-9) | — | behavioural | — | **RATIFIED** |
@@ -121,10 +121,11 @@ anchor: `reference/atlas-grounding.md#ground-N`.
 > | edit | verdict |
 > |---|---|
 > | import added ABOVE the cited unit | `FRESH` ✅ |
-> | license header added ABOVE the cited unit | `FRESH` ✅ |
+> | **blank-line-separated** license/file header added ABOVE the cited unit | `FRESH` ✅ |
 > | unrelated rename ELSEWHERE | `FRESH` ✅ |
 > | **whitespace reformat OF the cited unit** | **`DRIFTED`** ❌ claimed FRESH |
 > | **comment reindent INSIDE the cited unit** | **`DRIFTED`** ❌ claimed FRESH |
+> | **a CONTIGUOUS leading comment above the decl (its bound doc-comment, ADR-0014)** | **`DRIFTED`** (2026-08-09) |
 > | real change `42`→`43` | `DRIFTED` ✅ |
 >
 > The drift oracle hashes the cited unit's **raw source slice**, NFC-normalized only, so any byte inside the
@@ -143,7 +144,7 @@ anchor: `reference/atlas-knowledge.md#know-N`.
 |---|---|---|---|---|---|---|---|---|
 | KNOW-1 truth-gate | FR-10 | on-diag (DP-10; consumes GRD) | ref-model | self-asserted HOLDS ⇒ rejected; status side-index only | self-verify↔purity | behavioural | — | **RATIFIED** |
 | KNOW-2 fail-closed write | FR-5 | decoupled-after GRD | ref-model | no-citation emit ⇒ emitted:false, 0 persisted | — | behavioural | — | **RATIFIED** |
-| KNOW-3 structural anchor | FR-4 | decoupled-after GRD+IDX | ref-model | import/header-above ⇒ FRESH; real change ⇒ DRIFTED (100%); **reformat OF the unit ⇒ DRIFTED; rename OF the cited symbol ⇒ DRIFTED (anchor unresolvable)** | no rename-tracking; re-ground after a rename is an author action | behavioural | ADR-KN3 | **RATIFIED** · **AMENDED + RE-RATIFIED 2026-08-02** (owner-delegated) |
+| KNOW-3 structural anchor | FR-4 | decoupled-after GRD+IDX | ref-model | import / **blank-line-separated** header-above ⇒ FRESH; real change ⇒ DRIFTED (100%); **reformat OF the unit ⇒ DRIFTED; rename OF the cited symbol ⇒ DRIFTED (anchor unresolvable); edit to a CONTIGUOUS leading comment (bound doc-comment) ⇒ DRIFTED (ADR-0014)** | no rename-tracking; re-ground after a rename is an author action | behavioural | ADR-KN3 · **ADR-0014** unit incl. bound doc-comment | **RATIFIED** · **AMENDED + RE-RATIFIED 2026-08-02** (owner-delegated) · **unit-boundary AMENDED + RATIFIED 2026-08-09** (ADR-0014, owner same-landing) |
 | KNOW-4 upsert; git is history | FR-7 | COUPLED-with FR-9 (DP-6) | **PBT-exhaustive** | changed advisory ⇒ edit-in-place; 1 current node/(anchor,slot), 0 dup | in-store lineage↔lean store | behavioural | ADR-KN4 edit-over-append | **RATIFIED** |
 | KNOW-5 drift split mech/sem | FR-6 | decoupled-after GRD | ref-model | k drift, s no re-derive ⇒ k−s auto-reground exit0; s semantic exit2; reauthor==s | — | behavioural | ADR-KN5 | **RATIFIED** |
 | KNOW-6 empty & honest | FR-9 | COUPLED-with FR-7 (DP-8) | ref-model | init ⇒ 0 invariants; 100% T2/advisory | — | behavioural | — | **RATIFIED** |
@@ -196,6 +197,19 @@ anchor: `reference/atlas-knowledge.md#know-N`.
 > rename of the cited unit itself — and that has never been true in any revision of this product. It is the
 > only leg in this taproot where the corpus claimed a capability (rename-tracking) that was never designed,
 > rather than a normalization that was designed and then deliberately dropped.
+>
+> ### AMENDMENT RATIFIED — KNOW-3 unit-boundary (2026-08-09, ADR-0014, owner same-landing)
+>
+> The owner ratified ADR-0014, which redefines the `subtreeHash` preimage to include a declaration's bound
+> leading doc-comment (the maximal run of `comment` nodes CONTIGUOUS with the decl, no blank line). KNOW-3
+> and GROUND-5 are both consumers of that one oracle, so both moved in the same landing. **When shown that
+> ADR-0014's own amend-list had named only GROUND-5 surfaces and that KNOW-3 (a ratified sibling on the same
+> oracle) was mechanically affected too, the owner ratified carrying KNOW-3 in the same landing** rather than
+> as a separate proposal — recorded here because the ADR text undercounted the blast radius (a lead error,
+> logged in the open). Consequence: the "license-header-above ⇒ FRESH" leg is FRESH only when
+> blank-line-separated; a contiguous leading comment is the decl's bound doc-comment and DRIFTS the fact.
+> Import-above does NOT regress (an import is not a `comment` node). Witnessed by the `adapter-io` acceptance
+> goldens G-GAP2-1..8, which fold the real `foldAstUnits → build → driftDetect` chain.
 
 ## Block RET — retrieval (13) · M-Retrieval (DP-2+DP-3) · **FR-2⇄FR-3 COUPLED** (consumes IDX relate + MEM packs) · elevated / PBT
 

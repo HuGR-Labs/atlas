@@ -113,10 +113,21 @@ describe('SCN-KNOW-3b-1 [WIDENED] — KNOW-3 through the real key+hash mint, not
     expect(freshness(fact, after)).toBe('FRESH');
   });
 
-  it('DELIVERED: a license header added ABOVE the unit stays FRESH', () => {
+  it('DELIVERED: a license header SEPARATED from the unit (by the import) stays FRESH', () => {
+    // The header sits above the import, which sits above the unit — so NO comment run is contiguous with
+    // the declaration and the unit's slice is unchanged. ADR-0014 qualifies "header above ⇒ FRESH" by
+    // CONTIGUITY; a header separated from the decl by an import (or a blank line) is not bound. Stays FRESH.
     const after = axesFor(`// Copyright 2026\n// SPDX-License-Identifier: Apache-2.0\n` + IMPORTS, UNIT);
     expect(freshness(fact, after)).toBe('FRESH');
   });
+
+  // ADR-0014 (bound leading doc-comment ⇒ DRIFTS) is NOT witnessed here on purpose: `axesFor` writes the
+  // unit node's `content` BY HAND (= `unitSrc`), deliberately bypassing `foldAstUnits` to avoid a knowledge→
+  // adapter-io layer inversion (see this file's header). The slice-extension that binds a contiguous leading
+  // doc-comment lives in `foldAstUnits`, so a comment-only edit never reaches this hand-written content and
+  // would read FRESH here — modelling the new slice by hand would re-commit the vacuous-fixture sin this file
+  // exists to fix. The mechanical witness of the ADR-0014 leg is `adapter-io/test/ast-gap2-doc-comment.test.ts`
+  // (goldens G-GAP2-1..8), over the REAL parser + `build` + `driftDetect`.
 
   it('NOT DELIVERED: a whitespace reformat OF the cited unit DRIFTS (the oracle hashes raw bytes)', () => {
     const after = axesFor(IMPORTS, UNIT.replace('decode(buf, 42)', 'decode(buf,  42)'));

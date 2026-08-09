@@ -17,8 +17,8 @@ normative-clause: "The drift oracle MUST be the BLAKE3 `subtreeHash`"
 
 ### REQ-KNOW-3b — an edit that does not touch the cited unit stays FRESH
 source: INV-KNOW-3 @ reference/atlas-knowledge.md#know-3
-When an import or license header is added above the cited unit, or an unrelated symbol elsewhere is renamed, the knowledge module shall keep the fact FRESH. A reformat OF the cited unit, and a rename OF the cited symbol, DRIFT it.
-normative-clause: "an import/license-header added above the cited unit, or an unrelated rename elsewhere, MUST stay `FRESH`; a reformat OF the cited unit and a rename OF the cited symbol DRIFT it, and MUST"
+When an import, or a blank-line-separated license/file header, is added above the cited unit, or an unrelated symbol elsewhere is renamed, the knowledge module shall keep the fact FRESH. A reformat OF the cited unit, a rename OF the cited symbol, and an edit to a comment CONTIGUOUS (no blank line) with the cited declaration — its bound doc-comment — DRIFT it (ADR-0014).
+normative-clause: "an import, or a blank-line-separated license/file header, added above the cited unit, or an unrelated rename elsewhere, MUST stay `FRESH`; a reformat OF the cited unit, a rename OF the cited symbol, and an edit to a comment CONTIGUOUS with the cited declaration (its bound doc-comment) DRIFT it, and MUST — classification is by contiguity, not file position (ADR-0014)"
 > **AMENDED 2026-08-02 (HONESTY-TAPROOT), narrowing to what is actually delivered.**
 > Previously: "a reformat/rename/import-above MUST stay `FRESH`". Of those three legs only **import-above**
 > is delivered (and only since `f2a8659`, when the symbol's byte start index left the anchor key). The other
@@ -34,6 +34,14 @@ normative-clause: "an import/license-header added above the cited unit, or an un
 >   REQ-GROUND-5b amendment, because GROUND-5b only ever claimed an *unrelated* rename ELSEWHERE — which is
 >   delivered. KNOW-3 claimed the strictly stronger "the symbol renamed", and that claim was never true.
 >   Atlas has no rename-tracking; re-grounding after a rename is an author action, not an automatic one.
+>
+> **AMENDED 2026-08-09 (ADR-0014, owner-ratified same-landing).** The "license-header added above ⇒ FRESH"
+> leg is now qualified by CONTIGUITY, co-amended with the `adapter-io` slice change (rule #198). KNOW-3 and
+> GROUND-5 are both consumers of the SAME `subtreeHash` oracle; ADR-0014 redefined that oracle's preimage to
+> include a declaration's bound leading doc-comment, so the header-above leg is FRESH only when
+> blank-line-separated, and a CONTIGUOUS leading comment (the decl's bound doc-comment) DRIFTS the fact. The
+> import-above leg does NOT regress (an import is not a `comment` node). The owner ratified this KNOW-3 leg
+> together with GROUND-5 on 2026-08-09 as one landing.
 
 ### REQ-KNOW-3c — real change drifts
 source: INV-KNOW-3 @ reference/atlas-knowledge.md#know-3

@@ -29,7 +29,7 @@ Concrete fixture universe reused across the block (structural nodes hashed via t
 
 | fixture | subtreeHash / rState | on edit | notes |
 |---|---|---|---|
-| `U_arr` = `billing.ts › computeArr()` | `sh-arr-01` | import-above / license-header-above / unrelated-rename-elsewhere ⇒ **still `sh-arr-01`** (the unit's own bytes are untouched); real change `42→43` ⇒ `sh-arr-02`; **whitespace reformat OF the unit ⇒ `sh-arr-0R` — it MOVES** <!-- AMENDED 2026-08-02 with REQ-GROUND-5b: the oracle hashes the raw source slice, NFC only; there is no normalize step --> | cited unit of `F_arr` |
+| `U_arr` = `billing.ts › computeArr()` | `sh-arr-01` | import-above / **blank-line-separated** license-header-above / unrelated-rename-elsewhere ⇒ **still `sh-arr-01`** (the unit's own bytes are untouched); real change `42→43` ⇒ `sh-arr-02`; **whitespace reformat OF the unit ⇒ `sh-arr-0R` — it MOVES**; **a CONTIGUOUS leading comment above the decl is its bound doc-comment ⇒ editing it MOVES** <!-- AMENDED 2026-08-02 with REQ-GROUND-5b: the oracle hashes the raw source slice, NFC only; there is no normalize step. AMENDED 2026-08-09 (ADR-0014): the header-above leg is FRESH only when blank-line-separated; a contiguous leading comment drifts the unit (contiguity, not file position) --> | cited unit of `F_arr` |
 | `E_arr` (grounding entry on `U_arr`) | anchor.subtreeHash `sh-arr-01`, displayLines `[40-52]`, source `trusted` | import-above shifts displayLines `[40-52]→[44-56]`, subtreeHash **unchanged** | — |
 | `E_lronly` | anchor: line-range `[40-52]` only, **no** subtreeHash | — | invalid anchor |
 | `E_empty` | anchor.subtreeHash `""` (empty), displayLines `[40-52]` | — | ungrounded entry |
@@ -572,8 +572,8 @@ Independent held-out fixture universe (a parallel data family — different anch
 
 | fixture | subtreeHash / rState | on edit | notes |
 |---|---|---|---|
-| `U_tax` = `pricing.ts › computeVat()` | `sh-tax-01` | license-header-above / unrelated-rename-elsewhere ⇒ **still `sh-tax-01`** (the unit's own bytes are untouched); real change `20→21` ⇒ `sh-tax-02`; **comment-reindent INSIDE the unit ⇒ `sh-tax-0R` — it MOVES** <!-- AMENDED 2026-08-02 with REQ-GROUND-5b --> | cited unit of `F_tax` |
-| `E_tax` (grounding entry on `U_tax`) | anchor.subtreeHash `sh-tax-01`, displayLines `[88-96]`, source `trusted` | license-header-above shifts displayLines `[88-96]→[95-103]`, subtreeHash **unchanged** | — |
+| `U_tax` = `pricing.ts › computeVat()` | `sh-tax-01` | **blank-line-separated** license-header-above / unrelated-rename-elsewhere ⇒ **still `sh-tax-01`** (the unit's own bytes are untouched); real change `20→21` ⇒ `sh-tax-02`; **comment-reindent INSIDE the unit ⇒ `sh-tax-0R` — it MOVES**; **a CONTIGUOUS leading comment above the decl is its bound doc-comment ⇒ editing it MOVES** <!-- AMENDED 2026-08-02 with REQ-GROUND-5b. AMENDED 2026-08-09 (ADR-0014): header-above is FRESH only when blank-line-separated; a contiguous leading comment drifts the unit --> | cited unit of `F_tax` |
+| `E_tax` (grounding entry on `U_tax`) | anchor.subtreeHash `sh-tax-01`, displayLines `[88-96]`, source `trusted` | a **blank-line-separated** license-header-above shifts displayLines `[88-96]→[95-103]`, subtreeHash **unchanged** (a contiguous one would move the hash — ADR-0014) | — |
 | `E_lronly2` | anchor: line-range `[88-96]` only, **no** subtreeHash | — | invalid anchor |
 | `E_empty2` | anchor.subtreeHash `""` (empty), displayLines `[88-96]` | — | ungrounded entry |
 | `E_gone2` | cites a unit/path that was **deleted** | — | unresolvable citation |
@@ -598,7 +598,7 @@ Held-out gate candidates (`Status × grounded × Freshness`) for GROUND-4/7/8 le
 
 ### SCN-GROUND-1a-2 — drift keys off subtreeHash alone (held-out)   (happy)
 source: REQ-GROUND-1a
-Given `E_tax` (anchor.subtreeHash `sh-tax-01`); run A recomputes the cited unit after a **license header added above it** (the unit's own bytes and minted key untouched, its line-range shifted), run B recomputes it after a real VAT edit `20→21` (`sh-tax-02`)   <!-- AMENDED 2026-08-02 with SCN-GROUND-1a-1: run A was a comment-reindent, which MOVES the raw-source-slice hash; the old tooth named the shipped oracle as its failure mode -->
+Given `E_tax` (anchor.subtreeHash `sh-tax-01`); run A recomputes the cited unit after a **blank-line-separated license header added above it** (the unit's own bytes and minted key untouched, its line-range shifted; a contiguous header would be the unit's bound doc-comment and move the hash — ADR-0014), run B recomputes it after a real VAT edit `20→21` (`sh-tax-02`)   <!-- AMENDED 2026-08-02 with SCN-GROUND-1a-1: run A was a comment-reindent, which MOVES the raw-source-slice hash; the old tooth named the shipped oracle as its failure mode -->
 When `driftDetect(E_tax)` reads its oracle in each run
 Then run A is `FRESH` and run B is `DRIFTED` — the verdict tracks **`subtreeHash`** and nothing else
 teeth: breaks-on "the oracle folds the unit's line-range — run A (bytes-equal but shifted down the file) flips to `DRIFTED`, the false alarm the subtreeHash oracle exists to suppress"
@@ -607,7 +607,7 @@ gen: conformance   # independent-data leg of SCN-GROUND-1a-1 (differential vs `g
 
 ### SCN-GROUND-1b-2 — a pure line-shift does not drift (held-out)   (guard)
 source: REQ-GROUND-1b
-Given `E_tax` whose subtreeHash stays `sh-tax-01` while a license header added above shifts its displayLines `[88-96]→[95-103]`
+Given `E_tax` whose subtreeHash stays `sh-tax-01` while a **blank-line-separated** license header added above shifts its displayLines `[88-96]→[95-103]` (a contiguous header would be the unit's bound doc-comment and move the hash — ADR-0014)
 When `driftDetect(E_tax)` runs
 Then the verdict is `FRESH` — the displayLines change did **not** participate in drift
 teeth: breaks-on "`displayLines` is folded into the oracle — the license-header line-shift flips the still-anchored `E_tax` to `DRIFTED`"
@@ -715,7 +715,7 @@ gen: conformance   # independent-data leg of SCN-GROUND-5a-1 (differential vs th
 
 ### SCN-GROUND-5b-2 — comment-reindent + license-above + unrelated-rename stay FRESH (held-out)   (guard)
 source: REQ-GROUND-5b
-Given `F_tax` on `U_tax`, then two edits that do not touch the cited unit — a license header added above, and an unrelated helper renamed elsewhere — leaving the unit's own bytes and its minted key invariant; and separately a comment-reindent INSIDE the cited unit
+Given `F_tax` on `U_tax`, then two edits that do not touch the cited unit — a blank-line-separated license header added above (a contiguous one would be the unit's bound doc-comment and DRIFT it — ADR-0014), and an unrelated helper renamed elsewhere — leaving the unit's own bytes and its minted key invariant; and separately a comment-reindent INSIDE the cited unit
 When `driftDetect(F_tax)` runs after each edit
 Then the two non-touching edits verdict `FRESH` — 0 false drift — and the in-unit reindent verdicts `DRIFTED`, which is the oracle's stated limit, not a defect   <!-- AMENDED 2026-08-02 with REQ-GROUND-5b -->
 teeth: breaks-on "the license-header add drifts a still-true fact — the anchor key carries a byte offset and any line inserted above re-keys it" · breaks-on "an in-unit comment reindent reads FRESH — a normalizer landed and the oracle can no longer see a change inside a template literal"
