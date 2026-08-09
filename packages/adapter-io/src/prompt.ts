@@ -32,8 +32,9 @@ const O_READ_NO_SYMLINK =
 /** Why a prompt could not be built. Thrown, never papered over — see `NO_SOURCE` in particular. */
 export type PromptRefusal =
   | 'template-unreadable'
-  | 'template-has-no-source-slot' // a template that never interpolates the code would send an empty ask
-  | 'source-unreadable'; //          sending a source-less prompt is what invites a fabricated fact
+  | 'template-has-no-source-slot' //  a template that never interpolates the code would send an empty ask
+  | 'template-has-no-related-slot' // a `related` reader was injected but the template omits {{RELATED}}
+  | 'source-unreadable'; //           sending a source-less prompt is what invites a fabricated fact
 
 export class PromptError extends Error {
   constructor(
@@ -296,7 +297,7 @@ function assertUsable(template: string, path: string, requireRelated: boolean): 
   }
   if (requireRelated && !template.includes(SLOT_RELATED)) {
     throw new PromptError(
-      'template-has-no-source-slot',
+      'template-has-no-related-slot',
       `the prompt template at ${path} never interpolates ${SLOT_RELATED}, but a sibling reader was injected ` +
         `— the enriched context would be silently dropped. Use the enriched template, or drop the reader`,
     );

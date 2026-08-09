@@ -21,6 +21,16 @@ import type { SiteProposer } from '@atlas/genesis';
  *  decision, not a silent behaviour change. */
 export const ENRICH_ENV = 'ATLAS_ENRICH';
 
+/** `true` iff the ENRICH arm is enabled by `env`. OFF for unset and for every explicit falsey spelling
+ *  (`''`, `'0'`, `'false'`, `'off'`, `'no'`, case-insensitive) — so `ATLAS_ENRICH=false` does NOT silently
+ *  turn it on. Any other value is ON. Pure + total, exported so the gating decision is tested, not merely
+ *  inspected. */
+export function enrichEnabled(env: NodeJS.ProcessEnv): boolean {
+  const v = env[ENRICH_ENV];
+  if (v === undefined) return false;
+  return !['', '0', 'false', 'off', 'no'].includes(v.trim().toLowerCase());
+}
+
 /** The honest fail-closed default proposer: no model is wired, so the model abstains at every site
  *  (GEN-12). Reached when the operator has configured no model — which is the zero-config state, and `mine`
  *  reports it rather than implying the repo held nothing (WP-F6). */
@@ -74,8 +84,7 @@ export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = proce
   // Default: the anchored-unit-only prompt. Opt-in ENRICH (ATLAS_ENRICH): also show the target's same-file
   // context siblings via the enriched template — the fact stays anchored to the target (KNOW-15g), only what
   // the model SEES widens.
-  const enrich = env[ENRICH_ENV] !== undefined && env[ENRICH_ENV] !== '' && env[ENRICH_ENV] !== '0';
-  const prompts = enrich
+  const prompts = enrichEnabled(env)
     ? createPromptFactory({
         source: createUnitSourceReader(repoPath),
         related: createUnitSiblingReader(repoPath),
