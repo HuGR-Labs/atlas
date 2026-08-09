@@ -4,8 +4,22 @@
 // question — where does the model come from, and what happens when it does not. `mine.ts` keeps the run
 // composition; this file keeps the proposer resolution.
 
-import { createCommandClient, createPromptFactory, createSiteProposer, createUnitSourceReader, loadModelConfig } from '@atlas/adapter-io';
+import {
+  createCommandClient,
+  createPromptFactory,
+  createSiteProposer,
+  createUnitSiblingReader,
+  createUnitSourceReader,
+  loadModelConfig,
+  shippedEnrichedTemplatePath,
+} from '@atlas/adapter-io';
 import type { SiteProposer } from '@atlas/genesis';
+
+/** The opt-in ENRICH arm (A4-LEVER.md): when set truthy, the proposer shows the model each target unit's
+ *  same-file CONTEXT siblings, fixing the cross-unit precision trap (#201). Default OFF ⇒ the shipped
+ *  anchored-unit-only prompt, byte-identical. Gated here rather than defaulted so the flip stays a measured
+ *  decision, not a silent behaviour change. */
+export const ENRICH_ENV = 'ATLAS_ENRICH';
 
 /** The honest fail-closed default proposer: no model is wired, so the model abstains at every site
  *  (GEN-12). Reached when the operator has configured no model — which is the zero-config state, and `mine`
@@ -57,7 +71,17 @@ export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = proce
   // #182 S2 — the UNIT-granular reader. It WRAPS `createFileSourceReader(repoPath)` (all three of its
   // containment/symlink/fd checks intact) and narrows a `::` site to the unit's own bytes; a bare-path
   // site reads exactly as before, which is what lets one binary serve both A/B arms.
-  const prompts = createPromptFactory({ source: createUnitSourceReader(repoPath) });
+  // Default: the anchored-unit-only prompt. Opt-in ENRICH (ATLAS_ENRICH): also show the target's same-file
+  // context siblings via the enriched template — the fact stays anchored to the target (KNOW-15g), only what
+  // the model SEES widens.
+  const enrich = env[ENRICH_ENV] !== undefined && env[ENRICH_ENV] !== '' && env[ENRICH_ENV] !== '0';
+  const prompts = enrich
+    ? createPromptFactory({
+        source: createUnitSourceReader(repoPath),
+        related: createUnitSiblingReader(repoPath),
+        templatePath: shippedEnrichedTemplatePath(),
+      })
+    : createPromptFactory({ source: createUnitSourceReader(repoPath) });
   const proposer = createSiteProposer({
     client: createCommandClient(propose),
     budget: { costCap: cfg.costCap, timeoutMs: cfg.timeoutMs },

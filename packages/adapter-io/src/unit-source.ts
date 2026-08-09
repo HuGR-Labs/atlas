@@ -34,7 +34,7 @@ import type { StructRef } from '@atlas/contracts';
 import type { FileTree } from '@atlas/index';
 import { foldAstUnits } from './ast.js';
 import { createFileSourceReader } from './prompt.js';
-import type { SourceReader } from './prompt.js';
+import type { RelatedUnit, SiblingReader, SourceReader } from './prompt.js';
 
 /** The FILE portion of a `qualifiedPath` — the prefix up to the FIRST `::` (contracts/struct.ts). Split on
  *  the first separator only: the `::` chain continues into item/block locals. */
@@ -69,21 +69,7 @@ export function createUnitSourceReader(
   deps: { readonly file?: SourceReader } = {},
 ): SourceReader {
   const file = deps.file ?? createFileSourceReader(repoPath);
-  // path → the folded node index of THAT file, or `null` when the file itself could not be read. Memoized
-  // per reader instance (one mine pass / one pool worker), never module-global.
-  const folded = new Map<string, ReadonlyMap<string, FileTree> | null>();
-
-  // The FILE request derived from a unit site: the same `subtreeHash` CARRIED THROUGH (never a fabricated
-  // one — the injected reader consults `qualifiedPath` alone, so inventing a hash here would put a false
-  // value on the wire for no reason) with the path narrowed to the file and the kind stated honestly.
-  const unitsOf = (site: StructRef, path: string): ReadonlyMap<string, FileTree> | null => {
-    const hit = folded.get(path);
-    if (hit !== undefined) return hit;
-    const src = file.read({ kind: 'file', qualifiedPath: path, subtreeHash: site.subtreeHash });
-    const built = src === null ? null : nodesByPath(foldAstUnits({ path, children: [], content: src }));
-    folded.set(path, built);
-    return built;
-  };
+  const unitsOf = makeUnitsOf(file);
 
   return {
     read(site: StructRef): string | null {
@@ -92,6 +78,111 @@ export function createUnitSourceReader(
       const units = unitsOf(site, path);
       if (units === null) return null; //                        the file itself was refused
       return units.get(site.qualifiedPath)?.content ?? null; //  NO fallback to the file — that is the point
+    },
+  };
+}
+
+/** The memoized per-file fold both readers share (never a duplicated primitive). `path → the folded node
+ *  index of THAT file, or `null` when the file itself could not be read`; memoized per reader instance (one
+ *  mine pass / one pool worker), never module-global. The FILE request narrows the site to its file and
+ *  CARRIES THROUGH the same `subtreeHash` — never a fabricated one, since the injected reader consults
+ *  `qualifiedPath` alone (inventing a hash here would put a false value on the wire for no reason). */
+function makeUnitsOf(
+  file: SourceReader,
+): (site: StructRef, path: string) => ReadonlyMap<string, FileTree> | null {
+  const folded = new Map<string, ReadonlyMap<string, FileTree> | null>();
+  return (site, path) => {
+    const hit = folded.get(path);
+    if (hit !== undefined) return hit;
+    const src = file.read({ kind: 'file', qualifiedPath: path, subtreeHash: site.subtreeHash });
+    const built = src === null ? null : nodesByPath(foldAstUnits({ path, children: [], content: src }));
+    folded.set(path, built);
+    return built;
+  };
+}
+
+/** The identifier grammar for the same-file sibling BFS — a JS/TS identifier token. Used to decide which
+ *  OTHER same-file units a unit's bytes reference by name. Deliberately over-inclusive (it will match a
+ *  method name that merely coincides with a sibling's leaf); over-inclusion widens CONTEXT the model reads
+ *  and never touches the grounding anchor, so the failure direction is "shows one context unit too many",
+ *  not "grounds against the wrong bytes". */
+const IDENT_RE = /[A-Za-z_$][A-Za-z0-9_$]*/g;
+
+/** The symbol chain of a unit path — everything after the FIRST `::` (the `<file>::` prefix removed). The
+ *  human name shown to the model as a `<related-unit name>`. */
+function unitChainOf(qualifiedPath: string): string {
+  const at = qualifiedPath.indexOf('::');
+  return at === -1 ? qualifiedPath : qualifiedPath.slice(at + 2);
+}
+
+/** The leaf IDENTIFIER of a unit chain — the trailing `:`-segment (`function_declaration:0:createInit` ⇒
+ *  `createInit`). This is the token another unit would mention to reference it. */
+function leafIdentOf(chain: string): string {
+  const segs = chain.split(':');
+  return segs[segs.length - 1] ?? chain;
+}
+
+/**
+ * A `SiblingReader` that resolves the minimal same-file CONTEXT set a target unit references (the ENRICH
+ * fix, A4-LEVER.md `a4-enrich-fix.json`): an identifier BFS over the SAME file's folded units, seeded by the
+ * target and its parent chain, expanding to any sibling whose leaf identifier appears in an included unit's
+ * bytes, transitively, capped at `cap` (default 8). Same file only — no cross-file IO, no retrieval
+ * dependency; it reuses the exact memoized fold `createUnitSourceReader` uses, so the whole-tree parse is
+ * never re-run and the bytes come through the same secured `createFileSourceReader`.
+ *
+ * WHY THIS IS SOUND FOR GROUNDING: the returned units are CONTEXT for the proposer only. The caller
+ * (`createPromptFactory`) shows them to the model but grounds the fact — and mints its evidence span —
+ * against the TARGET unit alone. So enrichment lifts PRECISION (a fact whose truth needs a sibling's
+ * bytes/type is derivable instead of guessed, #201) without moving the anchor (KNOW-15g: secondary context
+ * feeds the proposer, never identity).
+ *
+ * TOTAL: a whole-file site, an unresolvable file, or a target the fold does not contain all yield `[]` — the
+ * caller then renders no related context and the enriched prompt degrades to the bare anchored-unit prompt.
+ */
+export function createUnitSiblingReader(
+  repoPath: string,
+  deps: { readonly file?: SourceReader } = {},
+  cap = 8,
+): SiblingReader {
+  const file = deps.file ?? createFileSourceReader(repoPath);
+  const unitsOf = makeUnitsOf(file);
+
+  return {
+    readSiblings(site: StructRef): readonly RelatedUnit[] {
+      const path = filePathOf(site.qualifiedPath);
+      if (path === site.qualifiedPath) return []; // a whole-file anchor has no sub-file siblings
+      const units = unitsOf(site, path);
+      if (units === null || !units.has(site.qualifiedPath)) return []; // file refused / target not folded
+
+      // Index the file's sub-file units by their symbol chain → bytes. The file root is excluded (it is the
+      // container, not a sibling); a unit with no content is skipped (nothing to show, nothing to scan).
+      const byChain = new Map<string, string>();
+      for (const [qp, node] of units) {
+        if (qp !== path && node.content !== undefined) byChain.set(unitChainOf(qp), node.content);
+      }
+
+      const targetChain = unitChainOf(site.qualifiedPath);
+      // Seeds: the target plus every ancestor prefix of its `::` chain (a nested unit's context includes its
+      // enclosing declaration). Mirrors `bin/enrich-anchor.mjs`.
+      const seeds: string[] = [targetChain];
+      const parts = targetChain.split('::');
+      for (let i = 1; i < parts.length; i++) seeds.push(parts.slice(0, i).join('::'));
+
+      const included = new Map<string, string>();
+      const queue = [...seeds];
+      while (queue.length > 0 && included.size < cap) {
+        const name = queue.shift()!;
+        const content = byChain.get(name);
+        if (content === undefined || included.has(name)) continue;
+        included.set(name, content);
+        const idents = new Set(content.match(IDENT_RE) ?? []);
+        for (const [chain] of byChain) {
+          if (!included.has(chain) && idents.has(leafIdentOf(chain))) queue.push(chain);
+        }
+      }
+      included.delete(targetChain); // the target is the anchored unit, shown separately — never its own context
+
+      return [...included].map(([chain, content]) => ({ name: chain, content }));
     },
   };
 }
