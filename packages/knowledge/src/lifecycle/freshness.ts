@@ -5,7 +5,11 @@
 // cited unit DRIFTs. KNOW-3 was AMENDED 2026-08-02: a REFORMAT of the cited unit also drifts (no
 // normalizer exists), and a rename OF the cited symbol drifts by a stronger mechanism — the name is in
 // the anchor key, so the anchor stops resolving and fails closed. That leg was never delivered in any
-// revision. See `@atlas/grounding` `src/subtree.ts` for why the byte-exact oracle is deliberate. This module is the
+// revision. KNOW-3 was AMENDED 2026-08-09 (ADR-0014): GROUND's subtreeHash preimage now includes a
+// declaration's bound leading doc-comment (the contiguous `comment` run), so a contiguous leading comment
+// DRIFTs the unit and the "header above stays FRESH" leg holds only for a blank-line-separated header; an
+// import still stays FRESH (not a `comment` node). This module CONSUMES that oracle unchanged.
+// See `@atlas/grounding` `src/subtree.ts` for why the byte-exact oracle is deliberate. This module is the
 // KNOWLEDGE-LAYER BINDING that wires a Knowledge fact's freshness verdict to GROUND's frozen
 // drift-oracle (`@atlas/grounding` `DriftApi.driftDetect`, WP-4.10-a.GROUND). It CONSUMES the oracle;
 // it does NOT redefine it, and it computes NO hash itself (the subtreeHash compute lives in GROUND /

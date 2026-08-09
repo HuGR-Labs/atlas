@@ -32,8 +32,8 @@ anti-rot: `knowledge/ref/emit.ts` (the fail-closed admitter) is the mock in atla
 ### INV-KNOW-3
 method-tag: reference-model
 fspec: —
-up-property: "structural drift oracle: freshness is a function of the BLAKE3 `subtreeHash` of the cited unit alone — an import or license header added ABOVE the unit, and an unrelated rename elsewhere, stay `FRESH`; a real change `DRIFT`s, and so do a reformat OF the cited unit and a rename OF the cited symbol; line numbers never enter identity or freshness"
-down-model: "reference `freshness(fact,tree) = subtreeHash(anchoredUnit) == fact.grounding.subtreeHash ? FRESH : DRIFTED`, where `subtreeHash` is taken over the unit's RAW SOURCE SLICE (NFC-normalized only) and an unresolvable anchor key is `DRIFTED` (fail-closed); the oracle is a differential corpus {non-touching-edit ⇒ FRESH, in-unit-edit ∪ cited-symbol-rename ⇒ DRIFTED}. Not exhaustive — the edit space is open, so a corpus/reference-model, not a finite enumeration."
+up-property: "structural drift oracle: freshness is a function of the BLAKE3 `subtreeHash` of the cited unit alone — an import, or a BLANK-LINE-SEPARATED license/file header, added ABOVE the unit, and an unrelated rename elsewhere, stay `FRESH`; a real change `DRIFT`s, and so do a reformat OF the cited unit, a rename OF the cited symbol, and an edit to a comment CONTIGUOUS with the cited declaration (its bound doc-comment, ADR-0014); line numbers never enter identity or freshness"
+down-model: "reference `freshness(fact,tree) = subtreeHash(anchoredUnit) == fact.grounding.subtreeHash ? FRESH : DRIFTED`, where `subtreeHash` is taken over the unit's RAW SOURCE SLICE — which INCLUDES the declaration's bound leading doc-comment, the maximal run of `comment` nodes contiguous with the decl (ADR-0014) — NFC-normalized only, and an unresolvable anchor key is `DRIFTED` (fail-closed); the oracle is a differential corpus {non-touching-edit ⇒ FRESH, in-unit-edit ∪ bound-doc-comment-edit ∪ cited-symbol-rename ⇒ DRIFTED}. Not exhaustive — the edit space is open, so a corpus/reference-model, not a finite enumeration."
 anti-rot: shares the grounding subtreeHash oracle (`grounding/ref/subtree.ts`) as the mock; a line-range anchor drifts on an edit ABOVE the unit and fails the FRESH leg, and an oracle that erases in-unit bytes goes blind to a one-space change inside a template literal and fails the DRIFTED leg.
 
 > **AMENDED 2026-08-02 (HONESTY-TAPROOT).** The up-property claimed "a reformat / **rename** / import-above
@@ -45,6 +45,13 @@ anti-rot: shares the grounding subtreeHash oracle (`grounding/ref/subtree.ts`) a
 > (`<parent>::<kind>:<ordinal>[:<name>]`), so a rename retires the anchor and the fact fails closed rather
 > than re-binding. KNOW-3's rename leg is a strictly stronger claim than GROUND-5b's "unrelated rename
 > elsewhere" and was never true; it is corrected here for the first time.
+>
+> **AMENDED 2026-08-09 (ADR-0014, owner-ratified same-landing as GROUND-5).** The `subtreeHash` preimage now
+> includes a declaration's bound leading doc-comment (the contiguous `comment` run), so the "license header
+> above ⇒ FRESH" leg is qualified by CONTIGUITY: a blank-line-separated header stays FRESH; a contiguous
+> leading comment IS the decl's doc-comment and DRIFTS the unit. The reference oracle (`grounding/ref/`) and
+> the shipped `foldAstUnits` slice move together — this up-property/down-model pair is the reference model the
+> `adapter-io` goldens G-GAP2-1..8 verify.
 
 ### INV-KNOW-4
 method-tag: exhaustive

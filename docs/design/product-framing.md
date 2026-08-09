@@ -112,11 +112,14 @@ and **FR-2** (retrieved context is task-relevant) with **zero vector/ANN**, for 
   band *below* that floor. (Binary-search-to-budget is the *genesis* site-budget mechanism, not retrieval — a
   distinction D2 must keep.)
 - **Ground:** each served fact carries a StructRef anchored to a BLAKE3 **subtree** hash; an edit that changes
-  the cited unit's own bytes flips it stale → withheld/flagged (an added import or license header ABOVE the
-  unit, or an unrelated rename ELSEWHERE, stays FRESH — drift keys on the unit's subtree, not "any edit in
-  range"; spec §3.1, acceptance #1). A reformat INSIDE the cited unit does flip it — the hash is over raw
-  bytes, an accepted false alarm.   <!-- AMENDED 2026-08-02 (HONESTY-TAPROOT): was "a reformat / added-import
-  / unrelated rename inside the unit stays FRESH", which was never delivered. -->
+  the cited unit's own bytes flips it stale → withheld/flagged (an added import, a **blank-line-separated**
+  license/file header ABOVE the unit, or an unrelated rename ELSEWHERE, stays FRESH — drift keys on the unit's
+  subtree, not "any edit in range"; spec §3.1, acceptance #1). A reformat INSIDE the cited unit does flip it —
+  the hash is over raw bytes, an accepted false alarm. A comment **contiguous** (no blank line) with the cited
+  declaration is its bound doc-comment and editing it flips the unit too — classification is by contiguity, not
+  file position (ADR-0014).   <!-- AMENDED 2026-08-02 (HONESTY-TAPROOT): was "a reformat / added-import
+  / unrelated rename inside the unit stays FRESH", which was never delivered. AMENDED 2026-08-09 (ADR-0014):
+  the header-above leg is FRESH only when blank-line-separated; a contiguous header is a bound doc-comment and drifts. -->
   This is why the retrieval is **auditable** where an embedding is not.
 
 **Why the relevance claim (FR-2) is *stronger*, not just cheaper:** the relevant set for "edit function F" is
