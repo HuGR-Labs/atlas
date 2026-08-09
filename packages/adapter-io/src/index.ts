@@ -38,9 +38,15 @@ export { createCommandClient, ModelCommandError } from './llm.js';
 export type { ModelCommand, ModelFailure } from './llm.js';
 export { loadModelConfig, modelConfigPath, ModelConfigError } from './model-config.js'; // ADR-0011 D2
 export type { ModelConfig, ModelRole } from './model-config.js';
-export { createPromptFactory, createFileSourceReader, PromptError } from './prompt.js'; // ADR-0011 D3
-export type { PromptFactory, SourceReader } from './prompt.js';
-export { createUnitSourceReader } from './unit-source.js'; // #182 S2 — the UNIT's bytes, not the file's
+export {
+  createPromptFactory,
+  createFileSourceReader,
+  shippedTemplatePath,
+  shippedEnrichedTemplatePath, // ENRICH arm (A4-LEVER) — the {{RELATED}}-bearing template
+  PromptError,
+} from './prompt.js'; // ADR-0011 D3
+export type { PromptFactory, SourceReader, SiblingReader, RelatedUnit } from './prompt.js';
+export { createUnitSourceReader, createUnitSiblingReader } from './unit-source.js'; // #182 S2 — unit bytes + ENRICH siblings
 export { createIndexAdapter } from './index-adapter.js';
 export type { IndexAdapterDeps } from './index-adapter.js';
 export { materializePoke, pokeFilePath, POKE_FILE_EXT } from './poke-file.js';

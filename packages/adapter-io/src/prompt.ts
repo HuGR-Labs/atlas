@@ -32,8 +32,9 @@ const O_READ_NO_SYMLINK =
 /** Why a prompt could not be built. Thrown, never papered over — see `NO_SOURCE` in particular. */
 export type PromptRefusal =
   | 'template-unreadable'
-  | 'template-has-no-source-slot' // a template that never interpolates the code would send an empty ask
-  | 'source-unreadable'; //          sending a source-less prompt is what invites a fabricated fact
+  | 'template-has-no-source-slot' //  a template that never interpolates the code would send an empty ask
+  | 'template-has-no-related-slot' // a `related` reader was injected but the template omits {{RELATED}}
+  | 'source-unreadable'; //           sending a source-less prompt is what invites a fabricated fact
 
 export class PromptError extends Error {
   constructor(
@@ -45,10 +46,12 @@ export class PromptError extends Error {
   }
 }
 
-/** The three slots the template may interpolate. `{{SOURCE}}` is MANDATORY (see `assertUsable`). */
+/** The four slots the template may interpolate. `{{SOURCE}}` is MANDATORY (see `assertUsable`). `{{RELATED}}`
+ *  is MANDATORY ONLY when an enriched template is used (a `related` reader is injected). */
 const SLOT_SOURCE = '{{SOURCE}}';
 const SLOT_PATH = '{{PATH}}';
 const SLOT_UNIT = '{{UNIT}}';
+const SLOT_RELATED = '{{RELATED}}';
 
 /**
  * The shipped template, resolved from the PACKAGE ROOT — the nearest ancestor holding a `package.json`.
@@ -63,6 +66,13 @@ const SLOT_UNIT = '{{UNIT}}';
  */
 export function shippedTemplatePath(): string {
   return join(packageRoot(dirname(fileURLToPath(import.meta.url))), 'prompts', 'propose.md');
+}
+
+/** The ENRICHED proposal template (opt-in ENRICH arm) — resolved the same package-root way as
+ *  `shippedTemplatePath` (see its note on why not module-relative). Carries the `{{RELATED}}` slot the
+ *  bare template omits; used only when a `SiblingReader` is injected into `createPromptFactory`. */
+export function shippedEnrichedTemplatePath(): string {
+  return join(packageRoot(dirname(fileURLToPath(import.meta.url))), 'prompts', 'propose-enriched.md');
 }
 
 /** Walk up to the nearest directory containing `package.json`. Bounded by the filesystem root, so a module
@@ -81,6 +91,22 @@ function packageRoot(from: string): string {
  *  not this module's; `null` means the bytes could not be produced (deleted file, unresolvable anchor). */
 export interface SourceReader {
   read(site: StructRef): string | null;
+}
+
+/** One RELATED unit shown to the model as CONTEXT alongside the anchored target — its name and its bytes.
+ *  Never a citation and never grounded: it exists only to widen what the proposer can SEE, so a fact whose
+ *  truth depends on a sibling unit's bytes/type is derivable instead of guessed (#201, the cross-unit trap
+ *  measured in A4-LEVER.md). The grounding anchor and the evidence span stay on the TARGET (see below). */
+export interface RelatedUnit {
+  readonly name: string;
+  readonly content: string;
+}
+
+/** Resolve the CONTEXT units a target site references — the minimal same-file sibling set (identifier BFS,
+ *  capped) that the anchored-unit-only view hides. Injected for the same reason as `SourceReader`: which
+ *  siblings a symbol references is the AST's business. Total: an unresolvable/whole-file site yields `[]`. */
+export interface SiblingReader {
+  readSiblings(site: StructRef): readonly RelatedUnit[];
 }
 
 /** A prompt builder plus the digest of the template it was built from — the pair is what makes an override
@@ -128,7 +154,15 @@ export interface PromptFactory {
  * artifact produced this fact", and an edit to the reasoning is an edit to the artifact even when the sent
  * text is unchanged.
  */
-export function createPromptFactory(deps: { source: SourceReader; templatePath?: string }): PromptFactory {
+export function createPromptFactory(deps: {
+  source: SourceReader;
+  templatePath?: string;
+  /** OPT-IN cross-unit context (the ENRICH fix, A4-LEVER.md). ABSENT ⇒ byte-identical to the shipped
+   *  anchored-unit-only prompt — the default arm is unchanged. PRESENT ⇒ the template MUST carry `{{RELATED}}`
+   *  and `build` interpolates the sibling context; the grounding anchor and `evidenceSpan` are UNTOUCHED — a
+   *  related unit is what the model SEES, never what the fact is anchored to (KNOW-15g). */
+  related?: SiblingReader;
+}): PromptFactory {
   const path = deps.templatePath ?? shippedTemplatePath();
   let raw: string;
   try {
@@ -136,7 +170,7 @@ export function createPromptFactory(deps: { source: SourceReader; templatePath?:
   } catch (e) {
     throw new PromptError('template-unreadable', `the prompt template at ${path} could not be read: ${String(e)}`);
   }
-  const template = assertUsable(stripComments(raw), path);
+  const template = assertUsable(stripComments(raw), path, deps.related !== undefined);
   const digest = id({ promptTemplate: raw } as never);
   // The GROUND-10 seam, not a local digest: a blake3↔stub encoder swap flows through spans exactly as it
   // flows through every anchor. `bindSpan` refuses anything that is not a real in-bounds byte range.
@@ -162,11 +196,17 @@ export function createPromptFactory(deps: { source: SourceReader; templatePath?:
             `claim must re-derive from`,
         );
       }
+      // The RELATED context (opt-in). Interpolated BEFORE the target source so the target bytes — injected
+      // LAST — are never re-scanned for a slot token. A related unit is CONTEXT the model sees; it is not
+      // grounded and does not touch `evidenceSpan`/the anchor above.
+      const related = deps.related === undefined ? '' : renderRelated(deps.related.readSiblings(site));
       return template
         .split(SLOT_PATH)
         .join(filePathOf(site))
         .split(SLOT_UNIT)
         .join(unitNameOf(site))
+        .split(SLOT_RELATED)
+        .join(related)
         .split(SLOT_SOURCE)
         .join(source);
     },
@@ -244,8 +284,10 @@ function stripComments(text: string): string {
 
 /** A template that never interpolates the code would send a well-formed ask with nothing to ground against,
  *  and the model would answer it from memory. Refusing at LOAD time makes that unshippable rather than a
- *  quiet degradation on every site. */
-function assertUsable(template: string, path: string): string {
+ *  quiet degradation on every site. When a `related` reader is injected, the template MUST carry `{{RELATED}}`
+ *  too — otherwise the enriched context is silently dropped and the ENRICH arm would run as the bare arm
+ *  while claiming otherwise, the exact "wired but not functional" trap. */
+function assertUsable(template: string, path: string, requireRelated: boolean): string {
   if (!template.includes(SLOT_SOURCE)) {
     throw new PromptError(
       'template-has-no-source-slot',
@@ -253,7 +295,22 @@ function assertUsable(template: string, path: string): string {
         `cannot be grounded, and the model would answer it from parametric memory`,
     );
   }
+  if (requireRelated && !template.includes(SLOT_RELATED)) {
+    throw new PromptError(
+      'template-has-no-related-slot',
+      `the prompt template at ${path} never interpolates ${SLOT_RELATED}, but a sibling reader was injected ` +
+        `— the enriched context would be silently dropped. Use the enriched template, or drop the reader`,
+    );
+  }
   return template;
+}
+
+/** Render the RELATED units as CONTEXT blocks — the same shape the target unit is shown in, tagged as
+ *  related so the template can frame them as context-only. Empty set ⇒ empty string (the enriched template's
+ *  surrounding prose states that no related units means none were found). Order is the reader's — the caller
+ *  (`createUnitSiblingReader`) returns them in a deterministic BFS order. */
+function renderRelated(units: readonly RelatedUnit[]): string {
+  return units.map((u) => `<related-unit name="${u.name}">\n${u.content}\n</related-unit>`).join('\n');
 }
 
 /** `qualifiedPath` is `<file>::<symbol>` for a symbol anchor and a bare path otherwise (struct.ts). Split on
