@@ -34,8 +34,13 @@ export interface RelationsData {
 }
 
 /** Build the composition-root read leg over the durable `store` — the SAME store the handler's query leg and
- *  `atlas doctor` read. No provenance guard here: a COMMITTED store is refused at the entrypoint (the CLI's
- *  `readRefusal`, before dispatch), exactly as it is for `node`/`own`/`doctor`. */
+ *  `atlas doctor` read. No provenance guard here, and where that guard IS applied differs by transport (stated
+ *  honestly, not credited to a refusal this leg does not run): on the CLI a COMMITTED / provenance-refused
+ *  store is refused at the entrypoint (`cli.ts` `readRefusal`, before dispatch), exactly as for
+ *  `node`/`own`/`doctor`. Over MCP that refusal is NOT threaded — `mcp-server/src/bin.ts` applies `readRefusal`
+ *  to NO read, so `atlas-relations` (like `atlas query`/`node` over MCP) will serve a committed store. That is
+ *  a PRE-EXISTING MCP-wide gap this leg inherits, not one #99a introduces, and it is strictly read-only (the
+ *  leg opens no write path). Closing it means threading `readRefusal` into `createMcpServer`. */
 export function createRelationLeg(store: DiskStore): RelationLeg {
   return (unit, direction) => relationsOf(rehydrateProjection(store), unit, direction);
 }
