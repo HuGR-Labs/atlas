@@ -14,6 +14,10 @@ import type { FixtureRepo } from '../src/harness.js';
 /** The CLOSED governance surface — these tools, in this order (mirrors GOVERNANCE_SURFACE; WP-SAMEAS added
  *  the governed `atlas-link` write door as the fifth). */
 const GOVERNANCE_TOOLS = ['atlas-init', 'atlas-query', 'atlas-emit', 'atlas-reconcile', 'atlas-link'];
+/** The full surface the SHIPPED server advertises: the governance five PLUS the `atlas-relations` READ tool
+ *  (#99a / ADR-0015 D2), served from the injected relation leg — no governed token, GOVERNANCE_SURFACE still
+ *  closed at five (see mcp-server/src/server.ts). Production advertises SIX. */
+const ADVERTISED_TOOLS = [...GOVERNANCE_TOOLS, 'atlas-relations'];
 
 let repo: FixtureRepo;
 
@@ -62,11 +66,11 @@ describe('runAtlas — drives the REAL atlas CLI as a subprocess', () => {
 });
 
 describe('mcpSession — drives the REAL atlas-mcp server over stdio', () => {
-  it('listTools() returns EXACTLY the 5 governance tools with input schemas; then close()', async () => {
+  it('listTools() returns the 5 governance tools PLUS the atlas-relations read tool, with input schemas; then close()', async () => {
     const session = await mcpSession(repo.repoPath);
     try {
       const { tools } = await session.client.listTools();
-      expect(tools.map((t) => t.name)).toEqual(GOVERNANCE_TOOLS);
+      expect(tools.map((t) => t.name)).toEqual(ADVERTISED_TOOLS);
       for (const t of tools) expect(t.inputSchema).toMatchObject({ type: 'object' });
     } finally {
       await session.close();
