@@ -197,12 +197,10 @@ const LEDGER = {
   // with a zero-length pointer. Named refusal added; module still has ZERO production callers.
   'packages/knowledge/src/write/archive.ts': { values: 2, shipped: null, banner: false },
   'packages/knowledge/src/write/template.ts': { values: 3, shipped: null, banner: false },
-  // #99b N1 STAGED identity leg: negationKey mints a NegationNode's id, but its sole consumer is the N2
-  // governed-emit door (the abstention gate), which lands THIS SAME WAVE. Tracked here rather than falsely
-  // branded a reference model in its header (it is production code, not a spec witness). When N2 value-imports
-  // negationKey this row goes dead→live and this gate FAILS with STALE LEDGER ENTRY (as it did for own.ts) —
-  // forcing its removal. That is the ledger keeping the transition on the record.
-  'packages/knowledge/src/write/negation-key.ts': { values: 3, shipped: null, banner: false },
+  // #99b N2 landed: the N2 governed-emit door (`adapter-io/src/governed-emit-negation.ts`) now VALUE-IMPORTS
+  // `negationKey` (mints an admitted negation's id AND an AbstainedRecord's address), so the row that tracked
+  // it dead-until-wired went dead→live and was REMOVED here — the ledger keeping the N1→N2 transition on the
+  // record, exactly as it forced `own.ts`'s removal one wave over.
 };
 
 const fail = [];

@@ -95,7 +95,8 @@
 import type { CasObject } from '@atlas/kernel';
 import type { Hash, Tier } from '@atlas/contracts';
 import { upsert, route, stage, ratify, isTier, isScope } from '@atlas/knowledge';
-import type { Candidate, CurrentNode, GroundedFact, NodeFamily, WriteRequest, RatifyToken, WriteOrigin } from '@atlas/knowledge';
+import type { Candidate, CurrentNode, GroundedFact, NegationNode, NodeFamily, WriteRequest, RatifyToken, WriteOrigin } from '@atlas/knowledge';
+import { emitNegation, type NegationEmitDeps } from './governed-emit-negation.js'; // #99b N2 — THE ABSTENTION DOOR
 // FAMILY + IDENTITY resolution (all three fact shapes) — extracted at the LOC ceiling; a relation (ADR-0015
 // D2) is addressed by `relationKey`, never the intrinsic `nodeKey`. See that file's header.
 import { familyOf, claimNormOf, relationWellFormed, relationCarriers, resolveWriteIdentity } from './governed-emit-identity.js';
@@ -124,7 +125,7 @@ import { REJECTED_UNTRUSTED_STORE } from './read-provenance.js';
 
 /** What the governed emit leg is composed over: the durable CAS store, the truth-gate seam, the admin
  *  policy (authz scopes), and the actor identity resolved from the environment. */
-export interface GovernedEmitDeps {
+export interface GovernedEmitDeps extends NegationEmitDeps {
   readonly store: DiskStore;
   readonly gate: TruthGate;
   readonly policy: AtlasPolicy;
@@ -135,7 +136,7 @@ export interface GovernedEmitDeps {
    *  the `billy` token. A fast-pathed (auto-accept) fact ignores it entirely. */
   readonly ratifyToken?: string;
   /** ARCH-9 — where this write came from, DERIVED by the door that built this leg, never by the payload. ABSENT ⇒ `authored` ⇒ behaviour unchanged (`wire.ts` sets none); `promoted` removes the KNOW-18 fast path so every staged row faces the ratifier. Why a new field and not a forged `contested`/`lowRisk`: `governed-emit-route.ts` + `RatifyContext.origin`. */
-  readonly origin?: WriteOrigin;
+  readonly origin?: WriteOrigin; // #99b N2 — the NEGATION leg's channels are inherited from `NegationEmitDeps`.
 }
 
 // `isCheck` / `familyOf` / `claimNormOf` now live in `./governed-emit-identity.js` (extracted at the LOC
@@ -149,6 +150,9 @@ export interface GovernedEmitDeps {
  */
 export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (node: GroundedFact, at: Hash) => EmitOut } {
   const emit = (raw: GroundedFact, at: Hash): EmitOut => {
+    // #99b N2 — a negation re-routes to `emitNegation` (its own gate ladder, §4), branched before gate 0; `at` unused.
+    if (raw.kind === 'negation') return emitNegation(deps, raw as NegationNode);
+
     // 0. WELL-FORMED PAYLOAD — `tier`, `scope` and the `kind`/`check` pair: the three fields every LATER
     //    gate routes on, and the three the author supplies.
     //
@@ -234,12 +238,13 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
     // onto a candidate VIEW ONCE — else a later `nodeKey` cast is LOSSY (`.slot` undefined) and the nodeKey is
     // computed slot-free, diverging from the true `hash(primaryAnchorId ‖ predicateSlot)` identity (the E2E
     // emit→query readback exposed this). The route reads the fact's REAL `tier`/`check`/`grounding` — no guess.
-    // A RelationNode (ADR-0015 D2) and a NegationNode (ADR-0015 D3) carry no `predicateSlot`; narrow it away.
-    // The view is still built for either because `route` (the ratify gate below) reads its `tier`/`grounding` —
-    // both ratify on the advisory path (no `check`). Their IDENTITY, however, is NOT nodeKey-of-this-view.
+    // A RelationNode (ADR-0015 D2) carries no `predicateSlot`; narrow it away. (A NEGATION — ADR-0015 D3 —
+    // branched to `governed-emit-negation.ts` before gate 0, so it never reaches here; `node` is already
+    // narrowed to exclude it.) The relation view is still built because `route` (the ratify gate below) reads
+    // its `tier`/`grounding` — it ratifies on the advisory path (no `check`); its IDENTITY is not this nodeKey.
     const candidateView = {
       ...node,
-      slot: node.kind === 'relation' || node.kind === 'negation' ? undefined : node.predicateSlot,
+      slot: node.kind === 'relation' ? undefined : node.predicateSlot,
     } as unknown as Candidate;
 
     // 2.1 ANCHOR BINDING (ARCH-9 for `scope` — ADR-0010 open item 3). Gate 2 asked whether the actor is in
@@ -342,7 +347,7 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
           //    the node so a later sibling-adjacency scan reads them off the projection (WP-B); NOT read here.
           //    `predicateSlot` is R3-optional; conditional spread keeps `slot` ABSENT (exactOptionalPropertyTypes).
           primaryAnchor, // the SAME value gate 2.1 bound the declared scope against — computed once
-          ...(node.kind !== 'relation' && node.kind !== 'negation' && node.predicateSlot !== undefined ? { slot: node.predicateSlot } : {}),
+          ...(node.kind !== 'relation' && node.predicateSlot !== undefined ? { slot: node.predicateSlot } : {}),
           // ── RELATION carrier (ADDITIVE — ADR-0015 D2) — a `family:'relation'` write stamps its endpoint pair
           //    + kind on the ROW so the read-side `relationsOf` fold indexes it by both endpoints. Empty for a
           //    non-relation. `primaryAnchor` above is `endpointA` for a relation (the subject), by construction.

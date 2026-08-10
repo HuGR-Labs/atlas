@@ -59,6 +59,8 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { CurrentNode, StoreProjection } from '@atlas/knowledge';
+import { abstainedFromWire } from './sidecar-abstained.js';
+import type { AbstainedWire } from './sidecar-abstained.js';
 import type { SidecarTrust } from './store-provenance.js';
 import { classifyIdentity } from './identity-schema.js';
 import type { IdentityVerdict } from './identity-schema.js';
@@ -81,6 +83,12 @@ export type SidecarBase = 'projection' | 'staging';
 export interface WireProjection {
   readonly current: ReadonlyArray<readonly [string, CurrentNode]>;
   readonly cas: readonly string[];
+  /** ADR-0015 D3 / #99b — the durable honest-ABSTENTION ledger (`StoreProjection.abstained`), Map as an
+   *  entry-array exactly like `current`, keyed by `negationKey`. The N2 door's round-trip obligation (the
+   *  frozen seam header names it): without it an abstention does not survive restart and #202 stays open.
+   *  ADDITIVE — absent ⇒ no abstentions, a pre-#99b sidecar round-trips unrewritten; never a fact, never CAS.
+   *  The (de)serialization lives in `sidecar-abstained.ts` so the read + write halves cannot drift. */
+  readonly abstained?: AbstainedWire;
   /** N11 PROJECTION-level freshness watermark (HEAD sha at persist); absent ⇒ unknown (old sidecars).
    *  NO LONGER THE LOAD-BEARING SIGNAL — the watermark is per ROW (`CurrentNode.derivedAt`, which rides
    *  inside `current` and needs no line here). This field survives as the reader's back-compat FALLBACK for a
@@ -292,10 +300,12 @@ function readOne(path: string): { projection: StoreProjection; gen: number; iden
     // is untrusted input from a file anyone with write access can forge, so it reads as 0.
     const builtAt = typeof wire.builtAt === 'string' ? { builtAt: wire.builtAt } : {};
     const gen = typeof wire.gen === 'number' && Number.isSafeInteger(wire.gen) && wire.gen >= 0 ? wire.gen : 0;
+    // #99b — the ABSTENTION ledger, rehydrated only from a well-shaped entry-array (sidecar-abstained.ts).
+    const abstained = abstainedFromWire(wire.abstained);
     // #112: the raw stamp is carried out UNJUDGED and UNCOERCED. Classification is `classifyIdentity`'s job
     // (it is total over `unknown`), and keeping the raw value means a `foreign` refusal can quote the tag it
     // actually found rather than "something else" — the one concrete thing such a store can say about itself.
-    return { projection: { current: new Map(wire.current), cas: new Set(wire.cas), ...builtAt }, gen, identity: wire.identity };
+    return { projection: { current: new Map(wire.current), cas: new Set(wire.cas), ...builtAt, ...abstained }, gen, identity: wire.identity };
   } catch {
     return undefined; // malformed entries (e.g. a non-[k,v] element)
   }

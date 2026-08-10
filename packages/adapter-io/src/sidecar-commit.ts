@@ -30,6 +30,7 @@ import { join } from 'node:path';
 import { emptyStore } from '@atlas/knowledge';
 import type { StoreProjection } from '@atlas/knowledge';
 import { generations, genPath, mirrorPath, readSidecarSet } from './sidecar.js';
+import { abstainedToWire } from './sidecar-abstained.js';
 import type { CommitDecision, CommitResult, SidecarBase, SidecarCtx, WireProjection } from './sidecar.js';
 import { IDENTITY_SCHEMA, refuseForeignIdentityWrite } from './identity-schema.js';
 import { stampGeneration } from './freshness-watermark.js';
@@ -105,6 +106,9 @@ function publish(
     // row keeps its own, older stamp. `builtAt` below stays for back-compat and is no longer load-bearing.
     current: stampGeneration(projection.current, prev?.current, builtAt),
     cas: [...projection.cas],
+    // #99b — the ABSTENTION ledger (sidecar-abstained.ts), an entry-array like `current`, present ONLY when
+    // non-empty so a store with none round-trips byte-identically. Not a fact: no freshness stamp, never CAS.
+    ...abstainedToWire(projection.abstained),
     gen,
     // #112 — THE IDENTITY STAMP, written UNCONDITIONALLY and from the constant, never from what was read
     // back. Copying the incoming store's stamp forward would make the field self-perpetuating: a store would

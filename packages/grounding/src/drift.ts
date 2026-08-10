@@ -57,7 +57,7 @@ function findByKey(node: IndexNode, key: string): SubtreeHash | undefined {
  * that wants a freshness-bearing anchor names the unit on the spatial/territory rail (the file path, or a
  * `file::item::block` refinement key), where the hash actually folds the bytes.
  */
-function resolveCurrent(src: Axes, qualifiedPath: string): SubtreeHash | undefined {
+export function resolveCurrent(src: Axes, qualifiedPath: string): SubtreeHash | undefined {
   for (const root of [src.spatial, src.territory]) {
     const hit = findByKey(root, qualifiedPath);
     if (hit !== undefined) return hit;

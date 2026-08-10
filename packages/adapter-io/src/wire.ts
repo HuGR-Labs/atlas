@@ -21,7 +21,8 @@ import type { Hash } from '@atlas/contracts';
 import { retrievalPack } from './retrieval-model.js';
 import type { CasPath } from './store.js';
 import { walkFileTree } from './fs.js';
-import { readScipOrEmpty } from './scip.js';
+import { readScipOrEmpty, planIndexers } from './scip.js';
+import type { LangId } from './scip.js';
 import { createIndexAdapter } from './index-adapter.js';
 import { createProjectionQueryIndex, underScope } from './projection-query-index.js';
 import { createDriftSource } from './git-drift.js';
@@ -40,6 +41,25 @@ import { createSiteProposer } from './llm.js';
 
 /** The one wired handler — the exact return of the frozen `createHandler` (@atlas/tools). */
 export type WiredHandler = ReturnType<typeof createHandler>;
+
+/** The every-language set the extractor plan spans (ring shape — scip.ts `LangId`). */
+const ALL_LANGS: readonly LangId[] = ['ts', 'py', 'go', 'java', 'rust', 'rb'];
+
+/**
+ * The EDGE-MODEL version string a #99b negation stamps onto `NegationNode.edgeModel` (§3 clause 4 — the ONE
+ * completeness clause `driftDetect` cannot see, since an extractor upgrade changes no file bytes). It is the
+ * DETERMINISTIC join of the PINNED per-language extractor releases (`IndexerPlan.version`) — the "edge model"
+ * that decided what edges (and thus what CALLERS) the completeness feed could see. Repo-independent (it is the
+ * set of pinned tools, not which files exist) and stable (sorted), so equal builds stamp byte-identical
+ * versions and a later re-check can compare them. An un-indexed language (`honest-hole`, no `version`) pins
+ * nothing and contributes nothing here.
+ */
+function edgeModelVersion(): string {
+  return planIndexers([...ALL_LANGS])
+    .flatMap((p) => (p.version !== undefined ? [`${p.lang}@${p.version}`] : []))
+    .sort()
+    .join(',');
+}
 
 /** The legs the assembler composes (frozen, referenced to pin the edge). */
 type _Legs = ToolLegs;
@@ -165,6 +185,15 @@ export function assembleHandler(config: WireConfig): WiredHandler {
     // The ratify token rides the SAME env-sourced, payload-free channel as the actor. Conditional spread
     // keeps it ABSENT (not `undefined`) when unset — `exactOptionalPropertyTypes`, so the door defaults to ''.
     ...(config.ratifyToken !== undefined ? { ratifyToken: config.ratifyToken } : {}),
+    // #99b N2 — THE NEGATION LEG's channels. `symbolReverse` is the N0 completeness feed off the SAME
+    // assembled index surface `blastRadius` rides; `axes`/`nodeHashOfPath` are the live structural rail the
+    // abstention gate resolves the scope-Merkle and the `∩ S` containment against; `edgeModel` is the pinned
+    // extractor release stamped onto an admitted negation (§3 clause 4). ABSENT `config.axes` (bare-WIRE fake)
+    // ⇒ a negation abstains fail-closed, exactly as `--by dependency` fails closed there.
+    symbolReverse: () => index.symbolReverse(),
+    ...(config.axes !== undefined ? { axes: config.axes } : {}),
+    nodeHashOfPath,
+    edgeModel: edgeModelVersion(),
   });
 
   // GOVERNED sameAs LINK (WP-SAMEAS): the second governed write door — asserts a human `a ≡ b` equivalence
