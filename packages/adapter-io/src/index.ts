@@ -104,6 +104,10 @@ export { createDoctorSource, regroundTemplate, retireTemplate } from './doctor-s
 // builder both transports drive for byte-identical SCHEMA + VERDICT parity. It opens no governed surface: a read.
 export { createRelationLeg, relationsVerdict } from './relation-source.js';
 export type { RelationLeg, RelationsData } from './relation-source.js';
+// The grounded-negation + abstention READ leg (#99b) — the production edge for `negationsOf`/`abstentionsOf`,
+// plus the SHARED verdict builder both transports drive. Read-only, opens no governed surface; the #202 close.
+export { createNegationLeg, negationsVerdict } from './negation-source.js';
+export type { NegationLeg, NegationsData, NegationsRead } from './negation-source.js';
 
 // The PROVENANCE tripwire's READ-side refusal (`read-provenance.ts`) — the half the write doors already had.
 // Exported because the CLI entrypoint renders it (`cli/src/cli.ts`) and because a test must be able to

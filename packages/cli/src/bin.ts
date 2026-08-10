@@ -14,7 +14,7 @@ import { main } from './cli.js';
 // yet still index `::` sub-file symbol nodes, so a symbol grounding is groundable and `subsumes` fires.
 void (async () => {
   await initAst();
-  const { handler, doctorSource, promote, own, relations, readRefusal } = composeRuntime(process.cwd());
+  const { handler, doctorSource, promote, own, relations, negations, readRefusal } = composeRuntime(process.cwd());
   // The provenance refusal rides the same injected-deps seam as the handler (conditional spread keeps it
   // ABSENT on a healthy repo — exactOptionalPropertyTypes), so prod and tests share ONE surface. `promote`
   // (the KNOW-8 governed promotion leg) rides that same seam: it is not a `Tool`, so it cannot arrive through
@@ -31,6 +31,11 @@ void (async () => {
     // the same reason: the CLI must not stand up a second runtime, or the relations it reads stop being the
     // ones off the store `atlas query` reads back. This line is what makes `relationsOf` running code.
     relations,
+    // `negations` (the #99b grounded-negation + abstention read leg) rides the same injected-deps seam as
+    // `relations`, and for the same reason: the CLI must not stand up a second runtime, or the negatives +
+    // abstentions it reads stop being the ones off the store `atlas query` reads back. This line is what makes
+    // `negationsOf`/`abstentionsOf` running code and a fired abstention observable at the CLI (#202).
+    negations,
     ...(readRefusal !== undefined ? { readRefusal } : {}),
   });
 })();

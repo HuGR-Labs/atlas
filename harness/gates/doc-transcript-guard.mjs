@@ -143,6 +143,10 @@ const UNVERIFIABLE = {
   ...each('an illustrative worked example over fabricated units + abbreviated relation nodeKeys; the behaviour is pinned by relations-cli.test.ts over a real composed store, not reproducible from a clean checkout',
     'reference/commands/relations.md#1', 'reference/commands/relations.md#2'
   ),
+  // #99b — POPULATED `atlas negations` examples show a SEEDED negation + fired abstention a clean checkout lacks (it reproduces to the empty negations.md#3, which IS diffed).
+  ...each('an illustrative worked example over a SEEDED negation + fired abstention (a clean checkout stores neither, so it reproduces to the empty form of negations.md#3); the behaviour is pinned by negations-cli.test.ts + negations-mcp.test.ts, not reproducible from a clean checkout',
+    'reference/commands/negations.md#1', 'reference/commands/negations.md#2'
+  ),
 };
 
 // ── enumeration ─────────────────────────────────────────────────────────────────────────────────────────

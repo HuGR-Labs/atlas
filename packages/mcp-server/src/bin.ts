@@ -15,8 +15,10 @@ import { createMcpServer } from './server.js';
 // nodes after `initAst()` resolves, so a symbol grounding is groundable and `subsumes` fires over MCP too.
 void (async () => {
   await initAst();
-  const { handler, relations } = composeRuntime(process.cwd());
+  const { handler, relations, negations } = composeRuntime(process.cwd());
   // `relations` (#99a) is the grounded-relation read leg — exposed over MCP as `atlas-relations`, served
   // directly from this leg (it is not a governed `Tool`), so an MCP client reaches the same fold the CLI does.
-  await createMcpServer(handler, relations).start();
+  // `negations` (#99b) is the grounded-negation + abstention read leg — exposed over MCP as `atlas-negations`
+  // the same way, so an MCP client can SEE a fired abstention (the #202 close), never through a governed token.
+  await createMcpServer(handler, relations, negations).start();
 })();
