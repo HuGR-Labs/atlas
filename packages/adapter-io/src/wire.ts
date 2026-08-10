@@ -11,7 +11,7 @@
 
 import { createHandler, createInit, createQuery, createReconcile } from '@atlas/tools';
 import type { ToolLegs, ToolLeg, NodeSource } from '@atlas/tools';
-import { build, createResolve, createDepgraph, nodeHashOfPath } from '@atlas/index';
+import { build, createResolve, createDepgraph, createSymbolReverse, nodeHashOfPath } from '@atlas/index';
 import type { Axes } from '@atlas/index';
 // The GROUND-1 per-fact drift oracle — the SAME import the composition root's truth-gate uses (compose.ts).
 import { driftDetect } from '@atlas/grounding';
@@ -137,6 +137,7 @@ export function assembleHandler(config: WireConfig): WiredHandler {
     build,
     createResolve,
     createDepgraph,
+    createSymbolReverse, // #99b N0 — the symbol-reverse view for the negation door (N2), off the same surface
     nodeHashOfPath, // THE index's own minting, imported — never a local copy of `id({file:p})` (KERNEL-1)
   });
 

@@ -151,7 +151,7 @@ const edgeKey = (e: DepEdge): string => `${String(e.from)}\0${e.to === null ? ''
  * `.atlas/index.scip`: every occurrence matching `/^local/i` renders as exactly `local N` (never `Local N`,
  * `local:N`, or any other spelling) — so `startsWith('local ')` is the exact, spec-anchored predicate.
  */
-const isLocalSymbol = (symbol: string): boolean => symbol.startsWith('local ');
+export const isLocalSymbol = (symbol: string): boolean => symbol.startsWith('local ');
 
 /**
  * Derive the depends-on edge ledger from the SCIP occurrences alone. A `reference` whose symbol has an

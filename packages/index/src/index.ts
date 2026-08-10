@@ -12,6 +12,7 @@ export type * from './types.js';
 // ── Runtime surface + co-located frozen facet interfaces ───────────────────────────────────────────
 export * from './build.js';        // WP-2.6.INDEX   — mechanical $0-LLM axis build (BuildApi)
 export * from './depgraph.js';     // WP-2.6/2.8-b   — dependency axis + honest reverse closure (DepgraphApi/ReverseClosure/EdgeKind)
+export * from './symbol-reverse.js'; // #99b N0       — symbol-level reverse callers, the negation completeness feed (SymbolReverseApi)
 export * from './rollup.js';       // WP-2.7-a.INDEX — structural rollup, leaf→root re-hash (RollupApi)
 export * from './fold.js';         // WP-2.7-a/2.7-b — delta + drift, dirty-bit/lazy rState/MaxHops (FoldApi)
 export * from './resolve.js';      // WP-2.8-a.INDEX — three-mode resolve (ResolveApi)
