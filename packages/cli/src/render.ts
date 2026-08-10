@@ -88,6 +88,27 @@ function renderData(data: unknown): string {
     return `data:\n${lines.join('\n')}\n`;
   }
 
+  // relations { relations, unit, direction } — the grounded relation edges touching a unit (`atlas relations`,
+  // #99a). Recognised by a `relations` array (no other data shape carries that key), guarded BEFORE the shapes
+  // below (none of which has a `relations` field, so no cross-shadowing). A header line states the unit,
+  // direction and COUNT, so an EMPTY result is a measured fact ("0 edge(s)") and never an absent line; each
+  // edge renders `  relation <kind> <A> -> <B> (<nodeKey>)` in the fold's own deterministic order.
+  if (Array.isArray(d.relations)) {
+    const edges = d.relations as readonly {
+      nodeKey: string;
+      relationKind: string;
+      endpointA: string;
+      endpointB: string;
+    }[];
+    const unit = typeof d.unit === 'string' ? d.unit : '';
+    const direction = typeof d.direction === 'string' ? d.direction : 'both';
+    const lines = [
+      `  relations: ${unit} ${direction} — ${edges.length} edge(s)`,
+      ...edges.map((e) => `  relation ${e.relationKind} ${e.endpointA} -> ${e.endpointB} (${e.nodeKey})`),
+    ];
+    return `data:\n${lines.join('\n')}\n`;
+  }
+
   // link { linked, a, b, retracted? } — the governed sameAs write door result (WP-SAMEAS). A SUCCESSFUL link
   // renders a single `  linked: <a> ≡ <b>` line; a REJECTED link (linked:false) carries its `rejected` string
   // through the handler's ok:false path → the `reason:` block (mirrors emit), so it is never shadowed here.

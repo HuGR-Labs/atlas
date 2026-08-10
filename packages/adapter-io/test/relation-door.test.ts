@@ -11,7 +11,8 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { asNodeKey, asSubtreeHash } from '@atlas/kernel';
 import { DegenerateAnchorError } from '@atlas/knowledge';
-import type { GroundedFact, RelationKind, Tier } from '@atlas/knowledge';
+import type { GroundedFact, RelationKind } from '@atlas/knowledge';
+import type { Tier } from '@atlas/contracts';
 import { createGovernedEmit } from '../src/governed-emit.js';
 import { REJECTED_MALFORMED_RELATION } from '../src/governed-emit-reasons.js';
 import { AT, HOLDS, advisoryFact, freshWorkspace, policyOf, reasonOf } from './door-regression-support.js';

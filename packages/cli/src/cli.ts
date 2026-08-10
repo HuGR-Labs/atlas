@@ -8,8 +8,8 @@
 import type { Hash } from '@atlas/contracts';
 import { asHash } from '@atlas/kernel';
 import { headSha } from '@atlas/adapter-io';
-import { reportIndexPlan } from '@atlas/adapter-io';
-import type { IndexPlanReport, OwnLeg, PromoteOut, WiredHandler } from '@atlas/adapter-io';
+import { reportIndexPlan, relationsVerdict } from '@atlas/adapter-io';
+import type { IndexPlanReport, OwnLeg, PromoteOut, RelationLeg, WiredHandler } from '@atlas/adapter-io';
 import type { DoctorSource, Guidance, Tool, Verdict } from '@atlas/tools';
 import { runDoctor } from './doctor.js';
 import { ensureAtlasIgnored } from './gitignore.js';
@@ -78,6 +78,17 @@ export interface CliDeps {
    * matters most for THIS door, since an empty briefing is also a legitimate answer.
    */
   readonly own?: OwnLeg;
+  /**
+   * The composition root's grounded-relation READ leg (`ComposedRuntime.relations`, #99a) — the `relationsOf`
+   * fold over the durable projection. Injected on the SAME seam as `handler`/`promote`/`own`, and for the
+   * same reason: the CLI must never stand up a second runtime, or the relations it reads stop being the ones
+   * off the store `atlas query` reads back.
+   *
+   * It is NOT reached through `handler.handle`, because it is not a `Tool`: `GOVERNANCE_SURFACE` stays 5, and
+   * this door writes nothing at all — it is a read. ABSENT ⇒ `atlas relations` fails closed with the same
+   * "runtime is not composed yet" guidance every other routed command gives, never a silent empty result.
+   */
+  readonly relations?: RelationLeg;
 }
 
 /** A structured error verdict for a CLI-layer failure (parse / unwired command) — guidance always present. */
@@ -225,6 +236,22 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
     }
     const addr = positionals[0] as Parameters<WiredHandler['resolveNode']>[0];
     return emit(deps.handler.resolveNode(addr, 'cli'));
+  }
+
+  if (command === 'relations') {
+    // CLI-9/#99a: `atlas relations <unit> [out|in|both]` — the READ-ONLY grounded-relation door. It reads the
+    // bidirectional fold (`relationsOf`, @atlas/knowledge / ADR-0015 D2) over the composition root's
+    // `relations` leg — the SAME durable projection `atlas query` reads back, never a second runtime. Like
+    // `node`/`own` it is intercepted before the handler (it is not a `Tool`: it opens no governed surface,
+    // GOVERNANCE_SURFACE stays 5, WRITE_PATHS untouched). Rendered through the SHARED `renderVerdict`/`emit`
+    // path (exit 0 with the edges on `data`; a structured error + exit 1 on an uncomposed runtime OR an
+    // out-of-vocabulary direction). Never a throw — `relationsVerdict` + `relationsOf` are both total.
+    if (!deps.relations) {
+      return emit(
+        errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'),
+      );
+    }
+    return emit(relationsVerdict(deps.relations, positionals[0] ?? '', positionals[1]));
   }
 
   // The remaining five governance commands each route to a `Tool` through the one wired handler.

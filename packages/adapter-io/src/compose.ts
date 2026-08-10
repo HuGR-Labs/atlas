@@ -38,6 +38,8 @@ import { createGovernedPromote } from './governed-promote.js';
 import type { PromoteOut } from './governed-promote.js';
 import { createOwnLeg } from './own-source.js';
 import type { OwnLeg } from './own-source.js';
+import { createRelationLeg } from './relation-source.js';
+import type { RelationLeg } from './relation-source.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
 import { gitSidecarTrust } from './store-provenance.js';
 import { readProvenanceRefusal } from './read-provenance.js';
@@ -86,6 +88,21 @@ export interface ComposedRuntime {
    * caller and stop a dishonest one for exactly as long as it takes to set one environment variable.
    */
   readonly own: OwnLeg;
+  /**
+   * The grounded-relation READ leg (#99a / ADR-0015 D2) — `relations(unit, direction)` returns the
+   * `family:'relation'` facts touching a unit, both directions, via the `relationsOf` fold.
+   *
+   * IT IS BUILT FROM `store`, THE SAME OBJECT THE HANDLER'S QUERY LEG READS, and that is the whole reason it
+   * is composed here rather than in a transport: the relations touching a unit are read off the very
+   * projection `atlas query` reads back, so the two can never diverge. `DiskStore` holds no state of its own
+   * (all of it is the sidecar + CAS files it names), so a relation emitted through the handler in the same
+   * process is visible to the very next `atlas relations` — the leg re-reads the live projection per call.
+   *
+   * It rides BESIDE the handler for the same reason `doctorSource`/`promote`/`own` do: it is not a `Tool`.
+   * `GOVERNANCE_SURFACE` stays 5 and `WRITE_PATHS` is untouched — this is a READ door, it opens no write
+   * path, and there is nothing for `WiredHandler.handle` to route.
+   */
+  readonly relations: RelationLeg;
   /**
    * The PROVENANCE refusal for this repo's durable store, or `undefined` when it is trustworthy
    * (`read-provenance.ts`). PRESENT means `.atlas/` arrived by COMMIT rather than through a door, so every
@@ -323,6 +340,10 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     // store, and `policy` is the same loaded `.atlas/policy.json` the write door gates on (it supplies the
     // terrain OWNER, which is the declared scope membership, not a second notion of ownership).
     own: createOwnLeg({ axes, store, policy }),
+    // THE GROUNDED-RELATION READ LEG (#99a). `store` is the very object the handler's query leg reads —
+    // passed, not rebuilt — so `atlas relations <unit>` and `atlas query <unit>` are two projections of ONE
+    // store, and a relation emitted through the emit door is visible to the very next `relations` call.
+    relations: createRelationLeg(store),
     ...(readRefusal !== undefined ? { readRefusal } : {}),
   };
 }
