@@ -100,6 +100,10 @@ export type { ComposedRuntime, MineAdmission, Reground } from './compose.js';
 export { buildOwnSources, createOwnLeg } from './own-source.js';
 export type { OwnDispatch, OwnLeg, OwnSourceDeps } from './own-source.js';
 export { createDoctorSource, regroundTemplate, retireTemplate } from './doctor-source.js';
+// The grounded-relation READ leg (#99a) — the production edge for `relationsOf`, plus the SHARED verdict
+// builder both transports drive for byte-identical SCHEMA + VERDICT parity. It opens no governed surface: a read.
+export { createRelationLeg, relationsVerdict } from './relation-source.js';
+export type { RelationLeg, RelationsData } from './relation-source.js';
 
 // The PROVENANCE tripwire's READ-side refusal (`read-provenance.ts`) — the half the write doors already had.
 // Exported because the CLI entrypoint renders it (`cli/src/cli.ts`) and because a test must be able to

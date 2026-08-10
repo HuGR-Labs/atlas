@@ -58,7 +58,9 @@ export function stageCandidate(repoPath: string, fact: GroundedFact): StagedRow 
   const f = { ...fact, scope: MINED_SCOPE, tier: MINED_TIER } as GroundedFact;
   // `predicateSlot → .slot` FIRST: the identity functions read `.slot`, so a view without the map computes a
   // slot-free key that diverges from stored identity (found by E2E, missed by four isolated reviews).
-  const view = { ...f, slot: f.predicateSlot } as unknown as Candidate;
+  // A RelationNode (ADR-0015 D2) carries no `predicateSlot`; narrow it away (this staging path emits intrinsic facts).
+  const fSlot = f.kind === 'relation' ? undefined : f.predicateSlot;
+  const view = { ...f, slot: fSlot } as unknown as Candidate;
   const key = nodeKey(view) as unknown as string;
   const contentHash = id(f as unknown as CasObject) as unknown as string;
   const req: WriteRequest = {
@@ -67,7 +69,7 @@ export function stageCandidate(repoPath: string, fact: GroundedFact): StagedRow 
     family: 'advisory',
     claimNorm: (f as { claimNorm: string }).claimNorm,
     primaryAnchor: primaryAnchorId(view) as unknown as string,
-    ...(f.predicateSlot !== undefined ? { slot: f.predicateSlot } : {}),
+    ...(fSlot !== undefined ? { slot: fSlot } : {}),
     scope: MINED_SCOPE,
     tier: MINED_TIER,
   };

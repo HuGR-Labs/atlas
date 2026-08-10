@@ -135,6 +135,14 @@ const UNVERIFIABLE = {
     'reference/commands/promote.md#6', 'reference/commands/promote.md#7', 'reference/commands/promote.md#8',
     'reference/commands/promote.md#9', 'reference/commands/promote.md#11'
   ),
+  // #99a — `atlas relations` worked examples are ILLUSTRATIVE: they show fabricated unit keys
+  // (`pkg/order.ts::placeOrder`) and abbreviated relation nodeKeys (`rel:abc…`), so no clean checkout
+  // reproduces them byte-exactly — a store first has to be seeded with those exact grounded relations
+  // (`atlas emit` a `family:relation` fact per edge). The BEHAVIOUR they illustrate is mechanically pinned
+  // by `packages/cli/test/relations-cli.test.ts` (real composed store) — this page is the human narration of it.
+  ...each('an illustrative worked example over fabricated units + abbreviated relation nodeKeys; the behaviour is pinned by relations-cli.test.ts over a real composed store, not reproducible from a clean checkout',
+    'reference/commands/relations.md#1', 'reference/commands/relations.md#2'
+  ),
 };
 
 // ── enumeration ─────────────────────────────────────────────────────────────────────────────────────────

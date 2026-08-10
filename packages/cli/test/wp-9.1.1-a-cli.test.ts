@@ -50,9 +50,9 @@ afterEach(() => vi.restoreAllMocks());
 // ── REQ-CLI-1 — total command surface ─────────────────────────────────────────────────────────────
 
 describe('SCN-CLI-1a — every command maps to exactly one leg', () => {
-  it('is total (10 keys) and mutually-exclusive over the ratified table', () => {
+  it('is total (11 keys) and mutually-exclusive over the ratified table', () => {
     // totality: every command in the finite surface has exactly one leg.
-    expect(COMMANDS).toEqual(['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own']);
+    expect(COMMANDS).toEqual(['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations']);
     expect(Object.keys(COMMAND_LEG).sort()).toEqual([...COMMANDS].sort());
     expect(COMMAND_LEG).toEqual({
       init: 'atlas-init',
@@ -66,6 +66,8 @@ describe('SCN-CLI-1a — every command maps to exactly one leg', () => {
       promote: 'atlas-emit', // WRITE authority oracle (KNOW-8 governed promotion) — publishes THROUGH atlas-emit
       own: 'atlas-query', // READ authority oracle (RETR-12 `own_<scope>` briefing) — a second projection of the
       //                     query readback over the SAME durable store; carries no write authority
+      relations: 'atlas-query', // READ authority oracle (#99a grounded-relation fold) — intercepted before the
+      //                           handler, a projection of the same durable store; carries no write authority
     });
     // teeth: a command bound to zero legs (totality) or two legs (uniqueness) — each key resolves to one string.
     for (const c of COMMANDS) {

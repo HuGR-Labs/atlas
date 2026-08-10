@@ -13,8 +13,11 @@ import type { Tool, Verdict } from '@atlas/tools';
  *  the existing emit door), so it is not a sixth tool and `WRITE_PATHS` does not move.
  *  [EXTENDED — WP-OWN] `own` joins as the CLI door of the `own_<scope>` curated briefing (RETR-12). It binds
  *  `atlas-query` — a READ authority oracle, like `node` and `doctor` — so `GOVERNANCE_SURFACE` stays 5 and
- *  `WRITE_PATHS` is untouched. `authorityOf` DERIVES that from `WRITE_PATHS`; it is not asserted here. */
-export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own'] as const;
+ *  `WRITE_PATHS` is untouched. `authorityOf` DERIVES that from `WRITE_PATHS`; it is not asserted here.
+ *  [EXTENDED — #99a] `relations` joins as the CLI door of the grounded-relation read fold (`relationsOf`,
+ *  ADR-0015 D2). Like `own` it binds `atlas-query` — a READ authority oracle — so `GOVERNANCE_SURFACE` stays 5
+ *  and `WRITE_PATHS` is untouched; `authorityOf` DERIVES that from `WRITE_PATHS`, it is not asserted here. */
+export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations'] as const;
 export type Command = (typeof COMMANDS)[number];
 
 /** The leg a command routes to — a governance `Tool`, or the genesis entry (data-only; NOT executed here —
@@ -52,6 +55,9 @@ export const COMMAND_LEG: Record<Command, Leg> = {
   promote: 'atlas-emit', // WRITE authority oracle (KNOW-8 governed promotion); intercepted before the handler
   //                        (cli.ts) and driven over the composition root's promotion leg, which publishes
   //                        through THIS leg's own door — the same `createGovernedEmit` `wire.ts` binds
+  relations: 'atlas-query', // READ authority oracle (#99a grounded-relation fold); intercepted before the handler
+  //                           (cli.ts) and driven over the composition root's `relations` leg, which reads the
+  //                           SAME durable projection this leg's query readback rides. Carries NO write authority.
   own: 'atlas-query', // READ authority oracle (RETR-12 `own_<scope>` briefing); intercepted before the handler
   //                     (cli.ts) and driven over the composition root's `own` leg, which reads the SAME
   //                     durable store this leg's query readback rides. Carries NO write authority — the

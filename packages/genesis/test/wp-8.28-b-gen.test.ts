@@ -358,6 +358,6 @@ describe('WP-8.28-b.GEN — mechanical admission with teeth (visible goldens)', 
     expect(a.fact.kind).toBe('advisory');
     expect('check' in a.fact).toBe(false);
     expect('status' in a.fact).toBe(false);
-    expect(a.fact.predicateSlot).toBe('contract'); // the slot survives — read-side grouping unchanged
+    expect((a.fact as { predicateSlot?: string }).predicateSlot).toBe('contract'); // the slot survives — read-side grouping unchanged
   });
 });

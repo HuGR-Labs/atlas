@@ -69,6 +69,13 @@ export const REJECTED_MALFORMED_FAMILY =
   '`advisory` MUST carry none: keeping the check while declaring `kind:"advisory"` routed an UPDATE onto a ' +
   'predicate node (free text on a checked fact, one generation of supersede lineage dropped), and declaring ' +
   '`kind:"predicate"` with no check threw a raw TypeError out of the door instead of refusing';
+export const REJECTED_MALFORMED_RELATION =
+  'malformed relation: a relation fact (ADR-0015 D2) is identified by the ordered triple (endpointA, ' +
+  'relationKind, endpointB), and one of the three is not well-formed. endpointA and endpointB must each be a ' +
+  'non-empty unit key and must be DISTINCT (a self-relation is an intrinsic predicate about one unit, not a ' +
+  'two-ended fact), and relationKind must be a closed-vocabulary member (depends-on | calls). This is the ' +
+  "2-ended analogue of `malformed family`: the payload's OWN shape is refused before any incumbent is read, " +
+  'so it discloses nothing. Re-state the relation naming both units it connects with a supported kind';
 /** The COMMIT refusals (door stage 5 — `store.commitProjection`). Neither is error handling dressed as a
  *  gate: each names a state in which the door REFUSES to make a write durable, and each REPLACES a silent
  *  loss that used to be reported as `status: ok` — a contended writer's node vanishing under a concurrent

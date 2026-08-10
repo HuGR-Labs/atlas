@@ -125,7 +125,7 @@ function defaultSkeleton(repoPath: string): SkeletonSource {
 }
 
 /** The advisory claim body a write carries (the KNOW-4c set-union element); a predicate carries its check. */
-const claimNormOf = (f: Fact): string => (f.kind === 'advisory' ? f.claimNorm : normalizeCheck(f.check));
+const claimNormOf = (f: Fact): string => (f.kind === 'advisory' ? f.claimNorm : f.kind === 'predicate' ? normalizeCheck(f.check) : '');
 
 /** The admission seam resolution (mine-gate.ts) — RE-EXPORTED so the module surface is unchanged by the
  *  file split. `makeAdmitGate` now HAS a production caller: `composedGate`, the REQ-CLI-4d supply this
@@ -260,7 +260,8 @@ export function buildControllerDeps(
       // (KNOW-15b), the SAME seam that mints contentHash/primaryAnchor; the payload's own `f.id` never routes, or
       // an author could spoof another node's identity (governed-emit.ts parity, WP-F3). Map `predicateSlot` →
       // `.slot` first: the cast is otherwise LOSSY (identity fns read `.slot`) and yields a slot-free key.
-      const view = { ...f, slot: f.predicateSlot } as unknown as KnowledgeCandidate;
+      const fSlot = f.kind === 'relation' ? undefined : f.predicateSlot; // relation (ADR-0015 D2) has no slot
+      const view = { ...f, slot: fSlot } as unknown as KnowledgeCandidate;
       const key = nodeKey(view) as unknown as string;
       // A MINED CANDIDATE NEVER RE-AUTHORS AN ESTABLISHED ONE — belt-and-braces since ADR-0008, load-bearing before
       // it: a mined key colliding with a governed node routed UPDATE and set-unioned into it, mutating a ratified
@@ -275,7 +276,7 @@ export function buildControllerDeps(
         // ── ADJACENCY carrier (ADDITIVE) — primary anchor + R3-optional slot for a later sibling-adjacency
         //    scan (WP-B). NOT routed; `slot` stays ABSENT when omitted (exactOptionalPropertyTypes).
         primaryAnchor: primaryAnchorId(view) as unknown as string,
-        ...(f.predicateSlot !== undefined ? { slot: f.predicateSlot } : {}),
+        ...(fSlot !== undefined ? { slot: fSlot } : {}),
         // ── GOVERNANCE carrier (ADR-0007) — from the MINED constants, never forwarded from the fact. Neither
         //    half is routed (`RouteInputs` reads neither), so no hash and no route moves; what changes is that
         //    the row now DECLARES what it is — what the ARCH-10 guard derives authority from.

@@ -1,0 +1,164 @@
+# ADR-0015 — A grounding token is typed by the fact's SHAPE, not one hash for all
+
+**Status:** PROPOSED — owner ratification required (amends the GROUND-1 oracle model).
+**Closes:** the product limit in #99 (Atlas cannot ground a negative, a relation, or a transition — 5 seats
+hit the same wall). Reconnects the deferred GAP-1 (multi-unit anchor, ADR-0014 §"does NOT close") and #189
+(the dependency graph is an under-approximation) to a real consumer, and names `hugit-diff` (structural diff
+with moves) as the rename-reconciliation seam.
+
+> This ADR decides the SHAPE only. No code lands on this ADR. It is grounded in a prior-art sweep of the
+> state of the art (sources inline); the honest hard problems are named, not hidden.
+
+## Context — what the wall actually is
+
+Atlas grounds every fact the same way: a fact anchors to a structural unit's `subtreeHash` (BLAKE3 of the
+unit's normalized bytes, GROUND-1), and it is FRESH iff that hash still matches at HEAD. Five mining seats hit
+a wall trying to state facts that this single oracle cannot express:
+
+- **a relation** — "X depends on Z", "A calls B" (spans TWO units);
+- **a negation** — "X is never called", "f has no side effects" (a `¬∃` over a WHOLE relation);
+- **a transition** — "returned A, now returns B", "T2→T0" (spans TWO revisions).
+
+The root cause is one design decision that the SOTA sweep makes unarguable: **Atlas uses ONE grounding token
+(`subtreeHash`) for every fact shape, and that token conflates two roles — IDENTITY and FRESHNESS — that every
+mature code-fact system keeps separate.** A content hash is a perfect drift detector and a hopeless identity.
+
+## Prior art (the load-bearing mechanism of each, with sources)
+
+**Relations — a relation is a typed tuple `(endpointA, kind, endpointB)`, and identity is decoupled from content.**
+- **Kythe**: an edge is `(sourceVName, kind, targetVName)`; a VName is a *location-free* semantic id
+  (`corpus,root,path,language,signature`) generated without source locations, so a move does not perturb node
+  identity ([storage](https://kythe.io/docs/kythe-storage.html), [indexer](https://kythe.io/docs/schema/writing-an-indexer.html)).
+- **Meta Glean**: a relation is a typed predicate (a table); a fact's KEY gives identity and dedups; derived
+  predicates compute relations by query ([derived](https://glean.software/docs/derived/)).
+- **CodeQL**: relations are first-class DB tables, queried by joins, never pointer-walked
+  ([about](https://codeql.github.com/docs/codeql-overview/about-codeql/)).
+- **SCIP** (Atlas already consumes it): a global symbol is a location-free descriptor string; `relationships`
+  are genuine symbol→symbol facts — but a **local symbol is `local <id>`, document-scoped, with no cross-file
+  identity** ([scip.proto](https://github.com/sourcegraph/scip/blob/main/scip.proto)). This is exactly #189.
+- **Datalog (Soufflé/Doop)**: a relation-instance's identity IS the tuple of endpoint ids
+  ([relations](https://souffle-lang.github.io/relations)).
+
+**Negation — a negative is only true relative to a relation computed COMPLETELY; the freshness trigger is an
+insertion, not an edit.**
+- **Closed-world assumption + stratified negation** (Soufflé/Doop/DDlog): `!calls(X,Y)` means "absent from the
+  materialized `calls` relation" — sound only if `calls` was computed over the whole program; negation is a
+  property of the RELATION, never a tuple ([Alice ch.15](http://webdam.inria.fr/Alice/pdfs/Chapter-15.pdf)).
+- **Soundiness manifesto** (Livshits, Sridharan, Smaragdakis et al.): real call graphs are "soundy" — sound
+  core, deliberately UNDER-approximated on reflection/dynamic-dispatch/`eval`/FFI, which *"render much of the
+  codebase invisible."* A negative over those edges is a lie; a **SCIP local-symbol graph is an
+  under-approximation, so its complement is unsound by construction** ([manifesto](https://yanniss.github.io/Soundiness-CACM.pdf), [soundiness.org](http://soundiness.org/)).
+- **Semiring / why-not provenance** (Green et al.; Bourgaux et al.): a positive points at one derivation; a
+  negative points at the whole frontier of FAILED derivations — its invalidation trigger is an **INSERTION
+  anywhere in the negated relation**, which a per-unit hash is monotone-blind to
+  ([provenance semirings](https://web.cs.ucdavis.edu/~green/papers/pods07.pdf), [datalog provenance](https://arxiv.org/pdf/2202.10766)).
+
+**Transition — a two-rev, HISTORICAL claim; freshness does not apply; node-correspondence under move+edit is
+outside content-hash equality.**
+- **GumTree**: node correspondence `A@r1 ≡ B@r2` needs a similarity match (type + Jaccard/dice over
+  descendants) to recover a moved+edited node — content-hash isomorphism only carries the UNCHANGED subtrees
+  ([ASE'14](https://www.labri.fr/perso/xblanc/data/papers/ASE14.pdf)).
+- **RefactoringMiner**: two snapshots → one TYPED transition fact (~60 refactoring + ~40 API-change types)
+  ([TSE'20](https://users.encs.concordia.ca/~nikolaos/publications/TSE_2020.pdf)).
+- **Datomic / bitemporal**: a transition is a valid-time interval `[X,Y)` — a closed, fixed fact; only its
+  supersession changes, never its truth ([bitemporal](https://blog.podsnap.com/bitemp.html)).
+- **Glean stacked incremental**: immutable DB layers non-destructively add/hide facts — supersession, not
+  mutation ([incrementality](https://glean.software/docs/implementation/incrementality/)).
+
+## Decision
+
+**A grounding token is typed by the fact's shape. There are FOUR shapes; the current `subtreeHash` oracle is
+the correct token for exactly ONE of them.** Identity (`unitKey`, a location-free qualified-symbol key — the
+Kythe/SCIP lesson) is separated from freshness (`subtreeHash`, the drift oracle) everywhere.
+
+| shape | example | grounding token | FRESH means | drift trigger |
+|---|---|---|---|---|
+| **positive-intrinsic** (today) | "this body calls Y" | `subtreeHash(unit)` | hash matches HEAD | edit to the unit |
+| **relation** (2-ended) | "X depends on Z" | the PAIR `{unitKeyA·hashA, unitKeyB·hashB}` | BOTH hashes match | edit to EITHER end |
+| **negation** (`¬∃` over a relation) | "X is never called" | a COMPLETENESS WITNESS | witness holds | insertion into the scope |
+| **transition** (2-rev, historical) | "returned A, now B" | the rev-PAIR `{unit@sha_before, unit@sha_after}` | — (permanently true) | never — superseded, not falsified |
+
+The four sub-decisions:
+
+**D1 — Positive-intrinsic is unchanged.** `subtreeHash` is a *sound* oracle for a property that is a pure
+function of the hashed unit's bytes. Everything shipped today is this shape and stays exactly as is.
+
+**D2 — A relation is a 2-ended grounded fact; freshness is the existing oracle lifted from a singleton to a
+2-set.** The grounding data model ALREADY supports this: `Grounding.entries[]` is multi-entry and `driftDetect`
+is FRESH iff EVERY entry's `subtreeHash` matches (an AND-fold), and `ground()` is fail-closed at the fact
+(grounding/src/ground.ts). So a relation = a fact with TWO grounding entries (both endpoints); drift-if-either
+is already the oracle's behaviour. **This is GAP-1's multi-unit anchor — and its consumer now exists.** The
+NEW work is: a `RelationKind` fact type (reuse the index `EdgeKind`), a producer that emits the pair, and a
+bidirectional read index (the dependency axis already has reverse-closure; promote reverse-indexing to *any*
+relation kind). Identity of a relation = `(unitKeyA, kind, unitKeyB)`.
+
+**D3 — A negation is groundable ONLY where completeness is decidable; otherwise it ABSTAINS.** Its token is a
+**completeness witness** = (scope-closure predicate) ∧ (a Merkle root over EVERY in-scope unit that could emit
+a `→X` edge) ∧ (the edge-model/extractor version). It drifts on: any in-scope unit's hash change, a unit
+*entering* the scope (insertion-sensitivity a per-unit hash lacks), or an edge-model change. Because the
+shipped dependency graph is an under-approximation (#189), an **unscoped** negative ("X is never called") has
+no witness and is a LIE — the door MUST refuse it. The honest, groundable form is the **scoped positive**:
+"within closed scope S under edge-model E, no caller of X was found" — falsifiable, carrying its own
+completeness proof. Negations at open-world boundaries (exported symbols, any reachable
+reflective/dynamic/FFI edge) abstain. *This is the axis where "honestidade inegociável" is load-bearing: the
+easy version ships a lie.*
+
+**D4 — A transition is an IMMUTABLE ADVISORY historical record, not a live predicate.** It anchors to the
+rev-pair `(unit@sha_before → unit@sha_after)`, both content-addressed. It is never re-checked for truth at
+HEAD (it was true and stays true — a closed valid-time interval); it is retained, indexed by unit lineage, and
+**superseded** by a later transition on the same lineage. The freshness oracle does not apply to it.
+
+## The one hard problem, named honestly (spans D2 + D4)
+
+**Endpoint identity across a move+rename is provably outside content-hash equality.** A `subtreeHash` MUST
+change on every edit (that's freshness); if it is also identity, any edit orphans the relation → a false-drift
+storm. The fix is D2's split: `unitKey` (location-free, identity) + `subtreeHash` (freshness). A pure edit then
+drifts the relation *without orphaning it* — the win content-hash-alone cannot buy. But a genuine move+rename
+changes `unitKey` itself, and **no content scheme can survive that** (Kythe minimizes it with location-free
+VNames but a rename still re-derives a signature). The residual reduces to **rename reconciliation**, whose
+natural home is a structural-diff / rename-detection pass — Atlas's own `hugit-diff` (TED-with-moves): diff
+HEAD⁻¹→HEAD, detect the moved+renamed subtree, rewrite `unitKey` on both single- and 2-ended facts before the
+oracle runs. #99 is therefore also the first real consumer of `hugit-diff`.
+
+## What this reconnects (three deferred/parallel threads get a consumer)
+
+- **GAP-1** (multi-unit anchor, deferred in ADR-0014 for "no consumer"): D2's relation IS the consumer.
+- **#189** (dep graph is an under-approximation): D3's abstention discipline is the honest response to it.
+- **hugit-diff** (structural diff with moves): the rename-reconciliation seam for D2+D4.
+
+## What the owner must ratify
+
+1. **The typed-token model (D1–D4)** — that a grounding token is chosen by fact shape, amending the GROUND-1
+   "the oracle is `subtreeHash`" invariant to "the oracle for a *positive-intrinsic* fact is `subtreeHash`;
+   other shapes carry their own token." (Ratified-invariant amendment — the GAP-2 rite.)
+2. **The negation abstention law (D3)** — that Atlas MUST refuse an unscoped negative and may only state a
+   scoped-positive with a completeness witness. This is a product-honesty commitment, not just a mechanism.
+3. **Transition as advisory-historical (D4)** — that a transition is never a live predicate and is superseded,
+   not falsified.
+4. **The decomposition + sequencing** below.
+
+## Recommended decomposition (each its own landing, GAP-2 rite)
+
+- **#99a — RELATION (build first).** Highest value/effort ratio: the grounding model already AND-folds a
+  2-entry receipt, and the reverse-closure index exists. Work = `RelationKind` fact + 2-ended producer +
+  bidirectional index + the `unitKey`/`subtreeHash` identity/freshness split. Consumes GAP-1. No new
+  soundness theory. *Feeds #196 (typed genesis output) directly — a relation IS a typed fact.*
+- **#99b — NEGATION (build second, most rigorous).** Work = scope-closure decision procedure + completeness
+  witness (scope Merkle root + edge-model version) + the abstention gate. Design-heavy; the honesty core.
+  Blocked-in-spirit until the dep graph's completeness boundary is stated (#189 follow-through).
+- **#99c — TRANSITION (build third).** Work = advisory rev-pair record + supersession lineage + rename
+  reconciliation via `hugit-diff`. Depends on the structural-diff work maturing.
+
+**Lead recommendation: ratify D1–D4 + the sequencing, then build #99a (RELATION) as the first landing.** It is
+the buildable core, it discharges the deferred GAP-1, and it is the one that most moves the north (relations
+are the high-value facts the frontier's comment-rich units already gesture at but cannot ground).
+
+## Honesty / scope
+
+- This ADR is a design, prior-art-anchored, not code. The prior-art sweep was three controlled web-research
+  passes (owner-authorized); sources are inline and primary where load-bearing.
+- The population measurement earlier this session showed genesis facts skew toward comment-restatements
+  (obvious, low-value). Relations (D2) are the concrete answer to that: a grounded `(A, depends-on, B)` is a
+  fact the comment gestures at but never grounds — non-obvious by construction.
+- The negation axis is the one where the SOTA and the owner's honesty law agree exactly: the cheap version is
+  a lie, and abstention is the only honest floor.

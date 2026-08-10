@@ -20,13 +20,23 @@ import { groundedAdvisoryFact, ungroundedFact } from './author.js';
 import type { GroundedFact } from '@atlas/knowledge';
 import { ACTOR, RATIFIER, emitFact, invLines, scopedPolicy } from './support.js';
 
+// The CLOSED governance surface (TOOLS-1) — the five GOVERNED write/read doors, each routed through the one
+// wired handler. This stays exactly five; a new governed door is a constitution change.
 const GOVERNANCE_TOOLS = ['atlas-init', 'atlas-query', 'atlas-emit', 'atlas-reconcile', 'atlas-link'];
+// The FULL advertised surface the SHIPPED composition root exposes over MCP: the governance surface PLUS the
+// `atlas-relations` READ tool (#99a / ADR-0015 D2). The read tool is NOT a governed `Tool` — it is served
+// directly from the injected relation leg through the same shared verdict builder the CLI drives, so it opens
+// no governed token and leaves `GOVERNANCE_SURFACE` byte-for-byte closed at five (the honest divergence stated
+// in mcp-server/src/server.ts). Production therefore advertises SIX; a build with no relation leg advertises
+// exactly the five (asserted by the mcp-server unit test).
+const ADVERTISED_TOOLS = [...GOVERNANCE_TOOLS, 'atlas-relations'];
 const REQUIRED: Record<string, string[]> = {
   'atlas-init': ['path'],
   'atlas-query': ['scope'],
   'atlas-emit': ['node', 'at'],
   'atlas-reconcile': ['mergeBase'],
   'atlas-link': ['a', 'b'], // WP-SAMEAS — the governed sameAs door's two nodeKeys
+  'atlas-relations': ['unit'], // #99a — the grounded-relation read tool; unit is the required nodeKey
 };
 
 interface McpText { data?: unknown; rejected?: unknown; guidance?: { next?: string; invariant?: string } }
@@ -57,11 +67,13 @@ afterAll(() => {
 });
 
 describe('S5 — MCP stdio parity with the CLI over the one governed core', () => {
-  it('listTools() advertises EXACTLY the 5 governance tools, each with an object input schema + required args', { timeout: 20000 }, async () => {
+  it('listTools() advertises the 5 governance tools PLUS the atlas-relations read tool, each with an object input schema + required args', { timeout: 20000 }, async () => {
     const session = await mcpSession(repo.repoPath);
     try {
       const { tools } = await session.client.listTools();
-      expect(tools.map((t) => t.name)).toEqual(GOVERNANCE_TOOLS);
+      // The shipped composition root injects the relation read leg (#99a), so production advertises SIX: the
+      // closed governance surface + `atlas-relations`. The governance five are still all present and unchanged.
+      expect(tools.map((t) => t.name)).toEqual(ADVERTISED_TOOLS);
       for (const t of tools) {
         expect(t.inputSchema).toMatchObject({ type: 'object' });
         expect(t.inputSchema.required).toEqual(REQUIRED[t.name]);

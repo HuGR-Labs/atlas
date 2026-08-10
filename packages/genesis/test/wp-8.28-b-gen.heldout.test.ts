@@ -111,6 +111,6 @@ describe('GEN-12 held-out (-2 beacon)', () => {
     expect(a.fact.kind).toBe('advisory');
     expect('check' in a.fact).toBe(false);
     expect('status' in a.fact).toBe(false);
-    expect(a.fact.predicateSlot).toBe('contract');
+    expect((a.fact as { predicateSlot?: string }).predicateSlot).toBe('contract');
   });
 });

@@ -18,8 +18,8 @@
 import { build } from '@atlas/index';
 import type { Axes, IndexNode } from '@atlas/index';
 import { foldAstUnits, initAst, walkFileTree } from '@atlas/adapter-io';
-import { nodeKey } from '@atlas/knowledge';
-import type { Candidate, GroundedFact, PredicateSlot } from '@atlas/knowledge';
+import { nodeKey, relationKey } from '@atlas/knowledge';
+import type { Candidate, GroundedFact, PredicateSlot, RelationKind, RelationNode } from '@atlas/knowledge';
 import type { SubtreeHash, Tier } from '@atlas/contracts';
 
 // WARM UP the opt-in AST grammar at MODULE LOAD (top-level await) so this in-process authoring helper folds
@@ -258,4 +258,50 @@ export function groundedMultiSymbolFact(spec: MultiSymbolFactSpec): GroundedFact
     kind: 'advisory', id: authoredId, tier, claimNorm: spec.claim, grounding, freshness: 'FRESH',
     claims: [], authoring: 'ADVISORY', scope: spec.scope ?? 'src', predicateSlot: spec.slot,
   };
+}
+
+/** The recipe for one grounded RELATION fact (ADR-0015 D2 / #99a). `fileA`/`fileB` are REAL fixture files —
+ *  the two ENDPOINTS of the directed relation. They normally live in DIFFERENT directories (a relation is
+ *  inherently cross-file); when they share no `::` ancestor the intrinsic `nodeKey`/`primaryAnchorId` path
+ *  THROWS `DegenerateAnchorError` (the #103 wildcard fix) — which is exactly why a relation cannot reuse it
+ *  and mints its own `relationKey` instead. */
+export interface RelationFactSpec {
+  readonly repoPath: string;
+  readonly fileA: string; // endpointA — the directed SUBJECT (the scope-owned side, ADR-0015 §4a)
+  readonly fileB: string; // endpointB — the directed OBJECT
+  readonly relationKind: RelationKind;
+  readonly tier?: Tier; // default 'T1' — visible in the bounded read pack (tier≥T1)
+  readonly scope?: string; // default 'src' — the KNOW-11 authz scope (bound on endpointA)
+}
+
+/**
+ * A serializable RELATION `GroundedFact` whose TWO grounding entries BOTH re-derive FRESH (each cites the
+ * real folded-index `subtreeHash` of its endpoint file) and whose identity is the REAL
+ * `relationKey(fileA, kind, fileB)` — collision-free over the ORDERED pair, minted WITHOUT
+ * `deepestCommonUnit`. `endpointA`/`endpointB` are the location-free identity legs (survive a pure edit); the
+ * grounding entries are the freshness legs (`driftDetect` AND-folds both, so the relation DRIFTS if EITHER
+ * endpoint's bytes move). Directed: `(A, kind, B) ≠ (B, kind, A)`.
+ */
+export function groundedRelationFact(spec: RelationFactSpec): GroundedFact {
+  const tier: Tier = spec.tier ?? 'T1';
+  const grounding: GroundedFact['grounding'] = {
+    entries: [
+      { anchor: { kind: 'file', qualifiedPath: spec.fileA, subtreeHash: asSubtree(subtreeHashOf(spec.repoPath, spec.fileA)) }, path: spec.fileA },
+      { anchor: { kind: 'file', qualifiedPath: spec.fileB, subtreeHash: asSubtree(subtreeHashOf(spec.repoPath, spec.fileB)) }, path: spec.fileB },
+    ],
+  };
+  const node: RelationNode = {
+    kind: 'relation',
+    id: relationKey(spec.fileA, spec.relationKind, spec.fileB),
+    tier,
+    relationKind: spec.relationKind,
+    endpointA: spec.fileA,
+    endpointB: spec.fileB,
+    grounding,
+    freshness: 'FRESH',
+    claims: [],
+    authoring: 'RELATED',
+    scope: spec.scope ?? 'src',
+  };
+  return node;
 }

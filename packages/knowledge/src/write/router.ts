@@ -100,8 +100,10 @@ export interface RouterApi {
   primaryAnchorId(node: Candidate): NodeKey;
 }
 
-/** The two content kinds of the Atlas (atlas-knowledge:19): advisory ⇒ UPDATE/union · predicate ⇒ SUPERSEDE. */
-export type NodeFamily = 'advisory' | 'predicate';
+/** The content kinds of the Atlas (atlas-knowledge:19): advisory ⇒ UPDATE/union · predicate ⇒ SUPERSEDE.
+ *  WIDENED by ADR-0015 D2 (#99a) with `relation` — a 2-ended fact that, having NO `check`, routes like an
+ *  advisory (UPDATE/union on a nodeKey hit), never SUPERSEDE. */
+export type NodeFamily = 'advisory' | 'predicate' | 'relation';
 
 /**
  * The enumerated routing product — the four orthogonal, already-RESOLVED oracle inputs the
@@ -126,7 +128,9 @@ export interface RouteInputs {
 export function routeWrite(inputs: RouteInputs): WriteDecision {
   if (inputs.contentHashHit) return 'DEDUP'; // 4b — byte-identical fact, idempotent no-op
   if (!inputs.nodeKeyHit) return 'CREATE'; // 4f — new (anchor, slot[, check]) OR a different check
-  if (inputs.family === 'advisory') return 'UPDATE'; // 4c/4d — claim set-union, edited in place
+  // 4c/4d — claim set-union, edited in place. A `relation` (ADR-0015 D2) has NO `check`, so re-evidencing an
+  // existing relationKey is an UPDATE (append the claim/provenance), never a SUPERSEDE — it joins advisory here.
+  if (inputs.family !== 'predicate') return 'UPDATE';
   return inputs.checkSame ? 'SUPERSEDE' : 'CREATE'; // 4e — same-check re-evidence supersedes
 }
 
@@ -342,6 +346,11 @@ export function nodeKey(node: Candidate): NodeKey {
     : { a: anchor, s: node.slot }; // advisory: anchor ‖ slot only
   return asNodeKey(defaultEncoder.hash(canonicalForm(preimage)));
 }
+
+
+// RELATION IDENTITY (ADR-0015 D2 · #99a) — the 2-ended fact's identity leg lives in its own module at the
+// 400-LOC ceiling, cohesively (mirrors `closed-slot.ts`). Re-exported below so the package surface is unchanged.
+export * from './relation-key.js';
 
 
 /**

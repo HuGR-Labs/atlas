@@ -39,9 +39,12 @@ const ARITY: Record<Command, number> = {
   // publish into another's knowledge), which is a confusion no gate downstream is positioned to catch.
   promote: 0,
   own: 1, // own <scope> — the scope-unit path the briefing is composed for (RETR-12)
+  // `relations <unit> [out|in|both]` — the unit is the only REQUIRED positional; the direction is an OPTIONAL
+  // second positional (defaults to `both`, validated by the shared verdict builder), so arity is 1.
+  relations: 1,
 };
 
-const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine|node|link|promote|own';
+const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine|node|link|promote|own|relations';
 
 function isCommand(s: string): s is Command {
   return Object.prototype.hasOwnProperty.call(COMMAND_LEG, s);

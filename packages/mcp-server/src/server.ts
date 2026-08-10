@@ -1,11 +1,17 @@
 // @atlas/mcp-server — src/server.ts  (MCP-1/2: the stdio MCP server over the one wired handler)
 //
-// Stand up a stdio MCP server whose every tool call routes through the one wired handler (@atlas/adapter-io),
-// returning the frozen `Verdict` (@atlas/tools) shape. The advertised surface is `GOVERNANCE_SURFACE ∪
-// READ_SURFACE` (ADR-0006 superseded the older "publishes exactly five" rule); it enumerates to the five
-// governance tools TODAY only because `READ_SURFACE` is still empty — the constant has NO export site
-// anywhere in `packages/**` (CAMPAIGN-10.3 / WP-10.A5.TOOLS is not built), which `npm run layer-guard`
-// reports as DECLARED UNCOVERED on every run.
+// Stand up a stdio MCP server whose every GOVERNED tool call routes through the one wired handler
+// (@atlas/adapter-io), returning the frozen `Verdict` (@atlas/tools) shape. The advertised surface is
+// `GOVERNANCE_SURFACE` (exactly five, TOOLS-1, pinned) PLUS any injected READ leg — today the one read tool
+// `atlas-relations` (#99a / ADR-0015 D2), advertised via `advertisedReadTools(relations)` when a relation
+// leg is composed, so production advertises SIX tools. HONEST DIVERGENCE, stated so it is not mistaken for the
+// designed seam: the constitution's extension point is `GOVERNANCE_SURFACE ∪ READ_SURFACE` (ADR-0006), but
+// `READ_SURFACE` has NO export site anywhere in `packages/**` (CAMPAIGN-10.3 / WP-10.A5.TOOLS is not built —
+// `npm run layer-guard` reports it DECLARED UNCOVERED). Rather than block a read tool on that unbuilt seam,
+// `atlas-relations` is advertised through a NARROW parallel path that leaves `GOVERNANCE_SURFACE` byte-for-byte
+// closed at five (SCN-MCP-1 holds) and is served DIRECTLY from the injected leg, never through `handler.handle`
+// — it opens no governed token and no write path. Folding this into the formal `READ_SURFACE` seam remains
+// owed to CAMPAIGN-10.3.
 //
 // PARITY — precisely which one holds. SCHEMA + VERDICT parity HOLDS: `inputSchema`/`description` are read
 // from `handler.schema(tool)` verbatim and every call routes through the ONE wired handler, so identical
@@ -35,7 +41,8 @@ import type {
   ListToolsResult,
   Tool as SdkTool,
 } from '@modelcontextprotocol/sdk/types.js';
-import type { WiredHandler } from '@atlas/adapter-io';
+import type { RelationLeg, WiredHandler } from '@atlas/adapter-io';
+import { relationsVerdict } from '@atlas/adapter-io';
 import { faultOf, GOVERNANCE_SURFACE } from '@atlas/tools';
 import type { Tool, Verdict } from '@atlas/tools';
 
@@ -70,9 +77,60 @@ export function advertisedTools(handler: WiredHandler): SdkTool[] {
   });
 }
 
-/** The ListTools response — the closed governance surface (TOOLS-1). */
-export function listTools(handler: WiredHandler): ListToolsResult {
-  return { tools: advertisedTools(handler) };
+/**
+ * The `atlas relations` MCP tool (#99a). It is a READ tool served DIRECTLY from an injected `RelationLeg`,
+ * NOT through `GOVERNANCE_SURFACE` — so `GOVERNANCE_SURFACE` stays 5 and the closed-surface pin is untouched.
+ * This is the honest mirror of the CLI, where `relations` (like `node`/`own`) is intercepted BEFORE the
+ * handler: it opens no governed surface and has no `Tool` token, so `handler.schema` cannot own its schema.
+ * The schema is therefore DOCUMENTED here and advertised verbatim — the one place it lives.
+ */
+export const RELATIONS_TOOL = 'atlas-relations';
+
+/**
+ * The DOCUMENTED input schema for `atlas-relations` (JSON-Schema). `unit` is the required nodeKey the
+ * relations touch; `direction` is optional (`out` = the unit is the SUBJECT, `in` = the OBJECT, `both` = the
+ * union; default `both`).
+ *
+ * WHAT IS ENFORCED, stated honestly (the schema is advertised to clients, but the transport does not run a
+ * JSON-Schema validator): `required:['unit']` IS enforced — a missing/non-string `unit` fails CLOSED at the
+ * shared `relationsVerdict` body (isError), so the required-unit contract holds identically on CLI and MCP.
+ * `additionalProperties:false` is ADVERTISED but not machine-enforced here — an extra key is ignored, not
+ * rejected. That matches the wider MCP schema-enforcement limitation this repo already tracks (task #166);
+ * it is a documentation-honesty note, not a hole (the tool is strictly read-only and every arg is coerced
+ * totally). Do not read the advertised schema as a validator this server runs.
+ */
+export const RELATIONS_INPUT_SCHEMA = {
+  type: 'object',
+  properties: {
+    unit: { type: 'string', description: 'the nodeKey the grounded relations touch' },
+    direction: {
+      type: 'string',
+      enum: ['out', 'in', 'both'],
+      description: 'out = unit is the subject, in = the object, both = the union (default both)',
+    },
+  },
+  required: ['unit'],
+  additionalProperties: false,
+} as const;
+
+/** The read tools advertised beside the governance surface — the `relations` tool when a leg is injected,
+ *  else none (so the closed-governance pin holds byte-for-byte when no read leg is composed). */
+export function advertisedReadTools(relations?: RelationLeg): SdkTool[] {
+  if (relations === undefined) return [];
+  return [
+    {
+      name: RELATIONS_TOOL,
+      description:
+        'Read the GROUNDED relation facts (family:relation) touching a unit, both directions (#99a / ADR-0015 D2). Read-only; opens no governed surface.',
+      inputSchema: RELATIONS_INPUT_SCHEMA as unknown as SdkTool['inputSchema'],
+    },
+  ];
+}
+
+/** The ListTools response — the closed governance surface (TOOLS-1), PLUS the `relations` read tool when a
+ *  read leg is injected. With no leg the response is byte-for-byte the closed governance surface. */
+export function listTools(handler: WiredHandler, relations?: RelationLeg): ListToolsResult {
+  return { tools: [...advertisedTools(handler), ...advertisedReadTools(relations)] };
 }
 
 /**
@@ -103,26 +161,40 @@ export function verdictToResult(verdict: Verdict): CallToolResult {
  * request maps to a well-formed `isError` result — the transport never throws to the SDK. The `name` is
  * passed as the `Tool` token; an off-surface token routes to the handler's fail-closed path.
  */
-export function callTool(handler: WiredHandler, name: string, args: unknown): CallToolResult {
+export function callTool(handler: WiredHandler, name: string, args: unknown, relations?: RelationLeg): CallToolResult {
+  // `atlas-relations` (#99a) is served DIRECTLY from the injected read leg through the SHARED verdict builder
+  // (`relationsVerdict`, @atlas/adapter-io) — the SAME body the CLI drives, so identical input yields a
+  // byte-identical `Verdict` on both transports (the SCHEMA + VERDICT parity invariant). It never reaches
+  // `handler.handle`: it is not a `Tool` and has no governed token. TOTAL — a non-string `unit` coerces to
+  // `''` and a non-string `direction` to `undefined`, then `relationsVerdict` ENFORCES `required:['unit']`
+  // (a missing/empty unit fails CLOSED to `isError`, matching the CLI) and rejects a bad `direction` — never a throw.
+  if (relations !== undefined && name === RELATIONS_TOOL) {
+    const a = (typeof args === 'object' && args !== null ? args : {}) as { unit?: unknown; direction?: unknown };
+    const unit = typeof a.unit === 'string' ? a.unit : '';
+    const direction = typeof a.direction === 'string' ? a.direction : undefined;
+    return verdictToResult(relationsVerdict(relations, unit, direction));
+  }
   const verdict = handler.handle(name as Tool, args);
   return verdictToResult(verdict);
 }
 
-/** Wire the SDK `Server` over the one handler: advertise the closed surface + route every CallTool. */
-function configureServer(handler: WiredHandler): Server {
+/** Wire the SDK `Server` over the one handler: advertise the closed surface (+ the `relations` read tool when
+ *  a read leg is injected) and route every CallTool. */
+function configureServer(handler: WiredHandler, relations?: RelationLeg): Server {
   const server = new Server(SERVER_INFO, { capabilities: { tools: {} } });
-  server.setRequestHandler(ListToolsRequestSchema, () => listTools(handler));
+  server.setRequestHandler(ListToolsRequestSchema, () => listTools(handler, relations));
   server.setRequestHandler(CallToolRequestSchema, (request) =>
-    callTool(handler, request.params.name, request.params.arguments),
+    callTool(handler, request.params.name, request.params.arguments, relations),
   );
   return server;
 }
 
-/** Construct the stdio MCP server over the one wired handler (MCP-1). */
-export function createMcpServer(handler: WiredHandler): McpServer {
+/** Construct the stdio MCP server over the one wired handler (MCP-1), optionally exposing the `relations`
+ *  read tool when the composition root injects its leg. */
+export function createMcpServer(handler: WiredHandler, relations?: RelationLeg): McpServer {
   return {
     async start(): Promise<void> {
-      const server = configureServer(handler);
+      const server = configureServer(handler, relations);
       const transport = new StdioServerTransport();
       await server.connect(transport);
     },
