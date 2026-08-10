@@ -151,20 +151,12 @@ export interface CurrentNode {
 export interface StoreProjection {
   readonly current: ReadonlyMap<string, CurrentNode>; // nodeKey → the ONE current node
   readonly cas: ReadonlySet<string>; // retained contentHashes — prior versions stay addressable
-  // ── ABSTENTION ledger (ADDITIVE, OPTIONAL — ADR-0015 D3 / #99b) — the durable honest-abstention records,
-  //    keyed by `negationKey` (the SAME address the negation WOULD take, §2). This is the N2↔N3 SEAM, frozen
-  //    here (lead, 2026-08-10) so the door (N2, writer) and the read fold (N3, reader) build against ONE shape:
-  //    · A grounded NEGATION is a GroundedFact ⇒ it lands in `current` via `upsert` like any fact (family
-  //      'negation'), read back by `negationsOf` folding `current.values()`. NOTHING new is needed for it.
-  //    · An ABSTENTION is NOT a fact (it asserts nothing about the world) ⇒ it MUST NOT enter `current`.
-  //      It lives HERE. The N2 door writes an `AbstainedRecord` into this map through `commitProjection`
-  //      (NOT through `upsert` — the reducer is for facts); when a later negation at the same `negationKey`
-  //      is admitted, the door DELETES that key here as it puts the fact into `current` (the §2 supersede:
-  //      "couldn't decide" → "decided false"). N3's `abstentionsOf` folds `abstained.values()`.
-  //    WIRE ROUND-TRIP is the writer's obligation (adapter-io store.ts must serialize/rehydrate this map, the
-  //    same additive way it round-trips `current`/`builtAt`) — else abstentions do not survive restart and
-  //    #202's "abstention is observable" fails. ADDITIVE/OPTIONAL, back-compat: absent ⇒ no abstentions; a
-  //    projection minted before this field round-trips unchanged. NEVER enters any nodeKey (it is not a fact).
+  // ── ABSTENTION ledger (ADDITIVE, OPTIONAL — ADR-0015 D3 / #99b) — the N2↔N3 SEAM (frozen commit 1be6ea6).
+  //    An `AbstainedRecord` is NOT a fact (asserts nothing) so it must NOT enter `current`; it lives here,
+  //    keyed by `negationKey` (the address the negation would take, §2). Writer (N2 door) writes via
+  //    `commitProjection` NOT `upsert`, deletes the key on a later admitted negation (§2 supersede), and
+  //    round-trips it in adapter-io store.ts (else #202's observability fails). Reader (N3) folds
+  //    `abstained.values()`. Additive/optional (the `builtAt` discipline); absent ⇒ none; never a nodeKey.
   readonly abstained?: ReadonlyMap<string, AbstainedRecord>;
   // ── freshness watermark (ADDITIVE, OPTIONAL — N11) — the git HEAD sha this projection's stored per-fact
   //    freshness was last computed against (stamped at persist). A query cheaply compares it to current HEAD:
