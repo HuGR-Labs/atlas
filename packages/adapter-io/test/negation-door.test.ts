@@ -15,7 +15,7 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { asSubtreeHash } from '@atlas/kernel';
-import { negationKey } from '@atlas/knowledge';
+import { negationKey, negationsOf } from '@atlas/knowledge';
 import type { GroundedFact, NegationNode, RelationKind } from '@atlas/knowledge';
 import type { Axes, Axis, IndexNode, SymbolReverseApi } from '@atlas/index';
 import type { Hash, Tier } from '@atlas/contracts';
@@ -157,6 +157,25 @@ describe('#99b N2 — the abstention door (the honesty core)', () => {
     expect(fact.grounding.entries[0]!.path).toBe(S);
     expect(fact.edgeModel).toBe(EDGE_MODEL); // stamped from the extractor release
     expect(fact.id).toBe(KEY); // MINTED = negationKey, never trusted from the payload
+  });
+
+  it('INTEGRATION (lucy P0): a door-admitted negation SURFACES through `negationsOf` — the read fold sees the row', () => {
+    // The seam this asserts: the door must stamp the `endpointB`/`relationKind` identity CARRIERS onto the
+    // projection row, because `negationsOf` reads target off `endpointB` and kind off `relationKind` and SKIPS a
+    // row missing either. Before the fix the door left them absent, so every door-emitted negation was dropped by
+    // the read and `atlas negations` showed 0 — green in isolation (fold tests hand-stamped the carriers), dead
+    // end-to-end. This test emits through the REAL door then reads the REAL rehydrated projection.
+    const admitted = negDoor([], []).emit(negation(), NaN as unknown as Hash);
+    expect(admitted.emitted).toBe(true);
+    const found = negationsOf(rehydrateProjection(ws!.store), 'src');
+    expect(found).toHaveLength(1); // the admitted negation is VISIBLE (0 before the endpointB/relationKind fix)
+    expect(found[0]).toMatchObject({ target: TARGET, relationKind: KIND, scope: S });
+  });
+
+  it('an EMPTY-STRING target is REFUSED malformed (nit N1 — the target.length guard has teeth)', () => {
+    const out = negDoor([], []).emit(negation({ target: '' }), NaN as unknown as Hash);
+    expect(out.emitted).toBe(false);
+    expect(reasonOf(out.rejected)).toBe(reasonOf(REJECTED_MALFORMED_NEGATION));
   });
 
   it('a `local ` (document-scoped) target ABSTAINS target-not-global — its callers are intra-doc, out of v1', () => {

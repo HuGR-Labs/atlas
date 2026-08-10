@@ -250,6 +250,12 @@ export function emitNegation(deps: GovernedEmitDeps, raw: NegationNode): EmitOut
         family: 'negation',
         claimNorm: `NOT(${target} ${relationKind})@${scope}`,
         primaryAnchor: scope, // the scope directory the negation is anchored at (bound at gate 2.1)
+        // IDENTITY CARRIERS onto the row — `negationsOf` (knowledge/read/negations.ts) reads the target off
+        // `endpointB` and the kind off `relationKind` and SKIPS a row missing either, so a door-emitted negation
+        // is invisible to `atlas negations` without these (lucy P0). `endpointA` (the subject) stays ABSENT: a
+        // negation quantifies the subject away — it is ¬∃·→X, about the OBJECT X only.
+        endpointB: target,
+        relationKind,
         scope,
         tier,
       };

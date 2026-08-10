@@ -33,8 +33,10 @@ import type { KnowledgeFreshness, RelationKind, ObviousnessScore } from './types
  *     ⇒ the dir hash moves ⇒ DRIFTED. Identity (target+scope) is SPLIT from freshness (the directory
  *     subtreeHash), the whole point of D3's "insertion-sensitivity a per-unit hash lacks".
  *   - `edgeModel` is the `IndexerPlan.version` at emit — the ONE completeness clause `driftDetect`
- *     CANNOT see (an extractor upgrade changes no file bytes). It rides as this explicit field and is
- *     compared by the door's re-check (N2); freshness never re-runs `reverseCallers` (§3 clause 2/4).
+ *     CANNOT see (an extractor upgrade changes no file bytes). It rides as this explicit field. HONEST STATUS
+ *     (billy F1, 2026-08-10): the conjunct `edgeModel === currentEdgeModel` is STAMPED at emit but NOT YET
+ *     ENFORCED — no freshness path reads it; enforcement is a named N4 DoD (reconcile/doctor, §6). Until
+ *     wired, a negation is sound only under a FIXED edge model. (freshness never re-runs `reverseCallers`.)
  */
 export interface NegationNode {
   readonly kind: 'negation';

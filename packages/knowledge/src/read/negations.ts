@@ -34,7 +34,12 @@ import { isPrefix } from './anchor-match.js';
  *  row's key); `relationKind`/`target`/`scope` are the identity legs stamped on the row's frozen carriers.
  *  There is deliberately no `freshness` here, exactly as the sibling `RelationEdge` carries none: FRESH/DRIFTED
  *  is a property of the grounding against the built `Axes` (`driftDetect`), which a pure fold over the
- *  projection ROWS does not hold — it is decided by the door's re-check (N2), not read off a stored field. */
+ *  projection ROWS does not hold. The recompute belongs to the reconcile/doctor freshness path, NOT this fold.
+ *  HONEST STATUS (billy F1/F3, 2026-08-10): that per-negation freshness recompute — driftDetect AND the
+ *  `edgeModel` completeness-version conjunct (§3 clause 4) — is NOT YET WIRED for negations; it is a NAMED N4
+ *  DoD item. So `atlas negations` today lists an admitted negative WITHOUT a freshness signal: a consumer must
+ *  run `atlas doctor` to learn whether a listed negative still holds (a re-opened scope drifts the dir hash, so
+ *  doctor marks it DRIFTED). Do not read the absence of `freshness` as "always fresh". */
 export interface GroundedNegation {
   readonly nodeKey: string;
   readonly relationKind: string;
