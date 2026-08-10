@@ -20,6 +20,7 @@ export * from './write/router.js';      // WP-5.13-a.KNOW — write-routing: eve
 export * from './write/link.js';        // WP-SAMEAS — the pure symmetric `sameAs` write/RETRACT reducers (total, no-op on self/absent)
 export * from './write/closed-slot.js'; // KNOW-10/15i — the closed-12-slot write REFUSAL (#152), enforced at `upsert`; ABSENT stands aside (a stated NARROWING — read that file)
 export * from './read/subsumes.js';     // WP-DEDUP-2 · DP-2 — derive the `subsumes` coverage relation on read (never stored)
+export * from './read/relations.js';    // ADR-0015 D2 / #99a — derive the bidirectional grounded-relation set on read (never stored)
 export * from './read/sameas.js';       // WP-SAMEAS — derive the transitive `sameAs` equivalence on read (union-find, never a merge); A-D3 — retraction-aware, + `sameAsEdgeState`
 export * from './lifecycle/evaluator.js';   // WP-5.16.KNOW  — predicate check-engine: deterministic index-query, no code execution
 export * from './lifecycle/produce.js';     // WP-5.17.KNOW  — production-moments: writes fire only at the 3 moments; sealing fed-or-why-not
