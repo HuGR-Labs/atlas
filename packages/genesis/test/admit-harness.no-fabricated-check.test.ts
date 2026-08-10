@@ -124,7 +124,7 @@ describe('WP-FIX-6.KNOW — no node ships HOLDS on a check that was never evalua
     expect(saw.verified).toEqual([]);
     expect(saw.teethed).toEqual([]);
     // ...and the slot survives, so read-side grouping (KNOW-4g) is unchanged.
-    expect(a.fact.predicateSlot).toBe('contract');
+    expect((a.fact as { predicateSlot?: string }).predicateSlot).toBe('contract');
     // the label describes the ORACLE, which really was a machine, and still never claims a proof.
     expect(a.label).toBe(LIKELY_INVARIANT);
     expect(a.label).not.toBe('proof');

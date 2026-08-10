@@ -43,6 +43,14 @@ export interface WriteRequest {
   //    refused any relocation or downgrade — so what is stamped here is already monotone.
   readonly scope?: string;
   readonly tier?: Tier;
+  // ── RELATION carrier (ADDITIVE, OPTIONAL — ADR-0015 D2 / #99a) — the two endpoint unitKeys + the kind of a
+  //    2-ended fact, forwarded so `upsert` stamps them on the ROW and the read-side `relationsOf` fold can
+  //    index a relation by BOTH endpoints without an O(repo) scan. NOT ROUTED: none enters `RouteInputs`; a
+  //    relation's identity is `relationKey` (router.ts), computed upstream into `nodeKey` here. Present only on
+  //    a `family:'relation'` write; absent for advisory/predicate. Direction is preserved (A=subject, B=object).
+  readonly endpointA?: string;
+  readonly endpointB?: string;
+  readonly relationKind?: string; // the closed-vocabulary RelationKind VALUE (string form at this seam)
 }
 
 /** A current node in the territory projection. Exactly one lives per `nodeKey` (KNOW-4g). */
@@ -124,6 +132,16 @@ export interface CurrentNode {
   //    IT DOES NOT ENTER `nodeKey`, for the same reason `scope`/`tier` do not: a date is not an identity, and
   //    folding one in would re-address a fact every time it was re-verified.
   readonly derivedAt?: string;
+  // ── RELATION carrier (ADDITIVE, OPTIONAL — ADR-0015 D2 / #99a) — the two endpoint unitKeys + kind of a
+  //    2-ended fact, stamped on the row so the read-side `relationsOf` fold indexes a relation by BOTH
+  //    endpoints (direction preserved: A=subject, B=object) without an O(repo) scan. Present only on a
+  //    `family:'relation'` row; absent for advisory/predicate. NONE enters `nodeKey` (identity is `relationKey`,
+  //    already the row's `nodeKey`). ADDITIVE/OPTIONAL, back-compat, the `sameAs`/`scope` discipline: a row
+  //    minted before this WP simply has none, old sidecars round-trip unrewritten (the wire serializes the
+  //    whole CurrentNode). Carried forward by `upsert` with the rest of the row.
+  readonly endpointA?: string;
+  readonly endpointB?: string;
+  readonly relationKind?: string;
 }
 
 /** The territory store projection: the one-current-node map + the append-only CAS retention set. */
@@ -240,6 +258,17 @@ function governanceOf(req: WriteRequest): { scope?: string; tier?: Tier } {
   return { ...(req.scope !== undefined ? { scope: req.scope } : {}), ...(req.tier !== undefined ? { tier: req.tier } : {}) };
 }
 
+/** The ADDITIVE relation carrier a write contributes to the row (ADR-0015 D2). Conditional spread, same
+ *  discipline as {@link governanceOf}: an omitted leg stays ABSENT, never an explicit `undefined`, keeping
+ *  `exactOptionalPropertyTypes` and the JSON round-trip honest. Present only on a `family:'relation'` write. */
+function relationOf(req: WriteRequest): { endpointA?: string; endpointB?: string; relationKind?: string } {
+  return {
+    ...(req.endpointA !== undefined ? { endpointA: req.endpointA } : {}),
+    ...(req.endpointB !== undefined ? { endpointB: req.endpointB } : {}),
+    ...(req.relationKind !== undefined ? { relationKind: req.relationKind } : {}),
+  };
+}
+
 /**
  * Apply one write as an upsert: resolve the routing inputs against the current projection, route
  * with {@link routeWrite}, then reduce the projection per the route. DEDUP is a no-op; CREATE mints
@@ -311,6 +340,7 @@ export function upsert(
         ...(req.primaryAnchor !== undefined ? { primaryAnchor: req.primaryAnchor } : {}),
         ...(req.slot !== undefined ? { slot: req.slot } : {}),
         ...governanceOf(req), // GOVERNANCE carrier (ADR-0007) — absent when the caller declares neither half
+        ...relationOf(req), // RELATION carrier (ADR-0015 D2) — the endpoint pair + kind on a family:'relation' write
       });
       break;
     case 'UPDATE': {
@@ -326,6 +356,7 @@ export function upsert(
         ...(req.primaryAnchor !== undefined ? { primaryAnchor: req.primaryAnchor } : {}),
         ...(req.slot !== undefined ? { slot: req.slot } : {}),
         ...governanceOf(req), // re-states scope / re-states-or-RAISES tier; omitted ⇒ `...prior` stands
+        ...relationOf(req), // RELATION carrier (ADR-0015 D2) — re-evidencing a relation re-states its endpoints
       });
       break;
     }

@@ -126,13 +126,13 @@ describe('§2 ARCH-9 for `tier` — the door supplies the class it DERIVED, not 
     // The seam ADR-0010 opened, exercised at the exact point the door calls it. Without `derivedTier` this
     // candidate auto-accepts and the KNOW-8 token is never consulted.
     const declaredT2 = advisoryFact({ anchor: 'src/a.ts::a', scope: 'core', tier: 'T2', claimNorm: 'x' });
-    const view = { ...declaredT2, slot: declaredT2.predicateSlot } as unknown as Candidate;
+    const view = { ...declaredT2, slot: declaredT2.kind === 'relation' ? undefined : declaredT2.predicateSlot } as unknown as Candidate;
     expect(route(view, ratifyCtxFor(undefined))).toBe('auto-accept');
     expect(route(view, ratifyCtxFor('T0'))).toBe('full-ratify');
     expect(route(view, ratifyCtxFor('T1'))).toBe('full-ratify');
     // The join is ONE-WAY: a derived T2 can never make a declared T0's gate easier.
     const declaredT0 = advisoryFact({ anchor: 'src/a.ts::a', scope: 'core', tier: 'T0', claimNorm: 'x' });
-    const t0View = { ...declaredT0, slot: declaredT0.predicateSlot } as unknown as Candidate;
+    const t0View = { ...declaredT0, slot: declaredT0.kind === 'relation' ? undefined : declaredT0.predicateSlot } as unknown as Candidate;
     expect(route(t0View, ratifyCtxFor('T2'))).toBe('full-ratify');
     // ARCH-D3b: absent means the door DID NOT SPEAK, and it must stay absent rather than defaulting.
     expect(ratifyCtxFor(undefined)).not.toHaveProperty('derivedTier');

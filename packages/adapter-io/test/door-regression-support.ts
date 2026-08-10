@@ -76,7 +76,10 @@ export function reasonOf(rejected: string | undefined): string {
 /** The REAL product identity of a fact — the same `nodeKey(candidateView)` the emit door mints. Never
  *  hand-forged, so no assertion here can pin an identity the product does not actually compute. */
 export function keyOf(fact: GroundedFact): string {
-  const view = { ...fact, slot: fact.predicateSlot } as unknown as Candidate;
+  // A RelationNode (ADR-0015 D2) carries no `predicateSlot`; narrow it away. (This helper builds an intrinsic
+  // Candidate view — a relation's identity is `relationKey`, not `nodeKey`, so relation facts don't reach here.)
+  const slot = fact.kind === 'relation' ? undefined : fact.predicateSlot;
+  const view = { ...fact, slot } as unknown as Candidate;
   return nodeKey(view) as unknown as string;
 }
 

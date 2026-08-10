@@ -94,8 +94,11 @@
 
 import type { CasObject } from '@atlas/kernel';
 import type { Hash, Tier } from '@atlas/contracts';
-import { upsert, normalizeCheck, primaryAnchorId, nodeKey, route, stage, ratify, isTier, isScope } from '@atlas/knowledge';
-import type { Candidate, Check, CurrentNode, GroundedFact, NodeFamily, WriteRequest, RatifyToken, WriteOrigin } from '@atlas/knowledge';
+import { upsert, route, stage, ratify, isTier, isScope } from '@atlas/knowledge';
+import type { Candidate, CurrentNode, GroundedFact, NodeFamily, WriteRequest, RatifyToken, WriteOrigin } from '@atlas/knowledge';
+// FAMILY + IDENTITY resolution (all three fact shapes) — extracted at the LOC ceiling; a relation (ADR-0015
+// D2) is addressed by `relationKey`, never the intrinsic `nodeKey`. See that file's header.
+import { familyOf, claimNormOf, relationWellFormed, relationCarriers, resolveWriteIdentity } from './governed-emit-identity.js';
 import type { EmitOut, TruthGate } from '@atlas/tools';
 import { ratifyCtxFor } from './governed-emit-route.js';
 // The ADDRESSABILITY gate + the commit-leg re-file (#136) — that file carries the measurement + the decision.
@@ -107,7 +110,7 @@ import type { CommitResult } from './sidecar.js';
 // The structured fail-closed reasons (TOOLS-7b / KNOW-11 / KNOW-8) — the door's user-visible contract AND
 // its disclosure surface, extracted to their own module at the LOC ceiling. See that file's header.
 import {
-  REJECTED_CONTENDED, REJECTED_UNREADABLE_STORE, REJECTED_MALFORMED_FAMILY, REJECTED_MALFORMED_SCOPE, REJECTED_MALFORMED_TIER,
+  REJECTED_CONTENDED, REJECTED_UNREADABLE_STORE, REJECTED_MALFORMED_FAMILY, REJECTED_MALFORMED_RELATION, REJECTED_MALFORMED_SCOPE, REJECTED_MALFORMED_TIER,
   REJECTED_UNAUTHORIZED, REJECTED_UNAUTHORIZED_ANCHOR, REJECTED_UNGROUNDED, REJECTED_UNRATIFIED,
 } from './governed-emit-reasons.js';
 import { incumbentDecision } from './governed-emit-incumbent.js';
@@ -135,40 +138,8 @@ export interface GovernedEmitDeps {
   readonly origin?: WriteOrigin;
 }
 
-/** Is `v` a well-formed `Check` (KNOW-16)? The tagged union with a STRING body — total over `unknown`, so
- *  `normalizeCheck` (which reads `.kind` then `.query`/`.expr` and calls `.normalize()` on the body) is
- *  never handed something that makes it throw. A door cannot be fail-closed and partial at once. */
-function isCheck(v: unknown): v is Check {
-  if (typeof v !== 'object' || v === null) return false;
-  const c = v as { kind?: unknown; query?: unknown; expr?: unknown };
-  if (c.kind === 'index-query') return typeof c.query === 'string';
-  if (c.kind === 'assertion') return typeof c.expr === 'string';
-  return false;
-}
-
-/**
- * THE family of a fact — derived from ONE source of truth, `check` PRESENCE, and cross-checked against the
- * declared `kind`. `undefined` ⇒ the two contradict and the write is refused (`malformed family`).
- *
- * Presence is the source of truth because it is what the IDENTITY already uses: `nodeKey` folds
- * `normalize(check)` into a predicate's key and omits it for an advisory (KNOW-15b/15c), and `route`
- * (KNOW-18) sends any check-bearing candidate to full ratification. `kind` is a THIRD reading of the same
- * question — it decided only `upsert`'s `family`, i.e. UPDATE-in-place vs SUPERSEDE-with-lineage — and it
- * was never checked against the other two. One question, one answer, computed once and used everywhere.
- */
-function familyOf(node: GroundedFact): NodeFamily | undefined {
-  const check = (node as { check?: unknown }).check;
-  if (check === undefined) return node.kind === 'advisory' ? 'advisory' : undefined;
-  return node.kind === 'predicate' && isCheck(check) ? 'predicate' : undefined;
-}
-
-/** The advisory claim body a write carries (the KNOW-4c set-union element); a predicate carries its
- *  normalized check. Mirrors the CLI `mine.ts` `claimNormOf` durable-write parity. TOTAL because `family`
- *  is the CHECKED discriminant from {@link familyOf}: on the predicate leg the `check` is a well-formed
- *  `Check`, so `normalizeCheck` cannot be handed `undefined` (it was, and threw a TypeError at the door). */
-function claimNormOf(node: GroundedFact, family: NodeFamily): string {
-  return family === 'advisory' ? (node as { claimNorm: string }).claimNorm : normalizeCheck((node as { check: Check }).check);
-}
+// `isCheck` / `familyOf` / `claimNormOf` now live in `./governed-emit-identity.js` (extracted at the LOC
+// ceiling, alongside the relation identity resolution ADR-0015 D2 added). Imported above.
 
 /**
  * Build the GOVERNED durable emit leg. The returned `emit(node, at)` conforms EXACTLY to the frozen
@@ -230,6 +201,15 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
       return { emitted: false, rejected: REJECTED_MALFORMED_FAMILY };
     }
 
+    // 0.1 WELL-FORMED RELATION (ADR-0015 D2) — a `family:'relation'` fact is identified by the ordered triple
+    //     (endpointA, relationKind, endpointB); refuse it here if any leg is malformed. Like `malformed
+    //     family`, it reads the caller's OWN payload and discloses nothing about an incumbent, so it belongs at
+    //     gate 0 before the truth door. A non-relation passes unconditionally. This makes `relationKey`
+    //     (called in `resolveWriteIdentity` below) unable to throw on a shape that reached this point.
+    if (!relationWellFormed(node)) {
+      return { emitted: false, rejected: REJECTED_MALFORMED_RELATION };
+    }
+
     // 0.5 ADDRESSABLE — minted HERE, once, and REFUSED here rather than thrown from inside the commit. Safe
     //     at this position: answered from the caller's OWN payload, so it discloses less than every gate below.
     const addressed = addressOf(node);
@@ -254,7 +234,10 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
     // onto a candidate VIEW ONCE — else a later `nodeKey` cast is LOSSY (`.slot` undefined) and the nodeKey is
     // computed slot-free, diverging from the true `hash(primaryAnchorId ‖ predicateSlot)` identity (the E2E
     // emit→query readback exposed this). The route reads the fact's REAL `tier`/`check`/`grounding` — no guess.
-    const candidateView = { ...node, slot: node.predicateSlot } as unknown as Candidate;
+    // A RelationNode (ADR-0015 D2) carries no `predicateSlot`; narrow it away. The view is still built for a
+    // relation because `route` (the ratify gate below) reads its `tier`/`grounding` — a relation ratifies on
+    // the advisory path (no `check`). Its IDENTITY, however, is NOT nodeKey-of-this-view (see below).
+    const candidateView = { ...node, slot: node.kind === 'relation' ? undefined : node.predicateSlot } as unknown as Candidate;
 
     // 2.1 ANCHOR BINDING (ARCH-9 for `scope` — ADR-0010 open item 3). Gate 2 asked whether the actor is in
     //    the scope this write DECLARES; the author picks that string. Meanwhile the READ projection scopes
@@ -275,7 +258,12 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
     //    nothing, and putting it later would let a caller with no authority over the target learn about the
     //    target first. `primaryAnchorId` THROWS on a degenerate anchor (`DegenerateAnchorError`), which is
     //    the door's existing behaviour for that shape and is left exactly as it was.
-    const primaryAnchor = primaryAnchorId(candidateView) as unknown as string;
+    //
+    //    ADR-0015 D2: a RELATION resolves its identity + binding anchor differently — `targetKey` is
+    //    `relationKey(endpointA, kind, endpointB)` (the intrinsic `nodeKey→primaryAnchorId` throws on the
+    //    cross-file pair), and the scope gate binds on `endpointA` (the directed fact's SUBJECT — contract
+    //    §4a). `resolveWriteIdentity` branches on kind; for a relation `primaryAnchorId` is NEVER called.
+    const { primaryAnchor, targetKey } = resolveWriteIdentity(node, candidateView);
     if (!scopeOwnsAnchor(deps.policy, scope, primaryAnchor)) {
       return { emitted: false, rejected: REJECTED_UNAUTHORIZED_ANCHOR };
     }
@@ -290,7 +278,7 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
     //    these gates and to the upsert, so what the gates were priced against is exactly what the upsert
     //    lands on. (An earlier version of this comment claimed the projection had been read TWICE before —
     //    it had not. Parity presented as an improvement; corrected rather than deleted.)
-    const targetKey = nodeKey(candidateView) as unknown as string;
+    //    (`targetKey` was resolved above by `resolveWriteIdentity` — one identity, kind-aware, one read.)
 
     // ── THE ATOMIC COMMIT (stages 2.25 → 4) ─────────────────────────────────────────────────────────────
     // Everything from here down is ONE decision, taken against ONE snapshot of the projection and published
@@ -351,7 +339,11 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
           //    the node so a later sibling-adjacency scan reads them off the projection (WP-B); NOT read here.
           //    `predicateSlot` is R3-optional; conditional spread keeps `slot` ABSENT (exactOptionalPropertyTypes).
           primaryAnchor, // the SAME value gate 2.1 bound the declared scope against — computed once
-          ...(node.predicateSlot !== undefined ? { slot: node.predicateSlot } : {}),
+          ...(node.kind !== 'relation' && node.predicateSlot !== undefined ? { slot: node.predicateSlot } : {}),
+          // ── RELATION carrier (ADDITIVE — ADR-0015 D2) — a `family:'relation'` write stamps its endpoint pair
+          //    + kind on the ROW so the read-side `relationsOf` fold indexes it by both endpoints. Empty for a
+          //    non-relation. `primaryAnchor` above is `endpointA` for a relation (the subject), by construction.
+          ...relationCarriers(node),
           // ── GOVERNANCE carrier (ADDITIVE — ADR-0007) — stamp the `(scope, tier)` pair onto the ROW so the
           //    incumbent guard above can resolve target authority off the projection instead of off the CAS
           //    bytes. These are the GATE-0 SNAPSHOT values, not `raw.*`: what was validated is what is stored,

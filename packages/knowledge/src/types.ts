@@ -54,10 +54,64 @@ export type Check =
   | { readonly kind: 'assertion'; readonly expr: string };
 
 /**
- * The Knowledge node — one of the two content kinds of the Atlas. Transcribed EXACTLY from
- * atlas-knowledge:19 — `GroundedFact = AdvisoryNode | PredicateNode`. A discriminated union on `kind`.
+ * The Knowledge node — the content kinds of the Atlas. Transcribed from atlas-knowledge:19
+ * (`GroundedFact = AdvisoryNode | PredicateNode`) and WIDENED by ADR-0015 D2 (#99a) with the THIRD shape,
+ * `RelationNode` — a 2-ended grounded fact. A discriminated union on `kind`.
+ *
+ * [ADR-0015 D2 — #99a] A relation ("X depends-on Z") spans TWO structural units, generally in different
+ * files. It gets its OWN identity (`relationKey`, the ordered endpoint pair — router.ts) because the
+ * intrinsic identity (`nodeKey → deepestCommonUnit`) refuses a cross-file grounding by design (#103's
+ * wildcard fix). Its FRESHNESS is the UNCHANGED oracle: a relation grounds TWO entries (both endpoints) and
+ * `driftDetect` already AND-folds every entry (drift-if-either) — GROUND-1/5 verbatim. Identity (the
+ * location-free `endpointA`/`endpointB` unitKeys) is SPLIT from freshness (the entries' `subtreeHash`), so a
+ * pure edit drifts the relation WITHOUT orphaning it. See docs/design/99a-relation-fact-contract.md.
  */
-export type GroundedFact = AdvisoryNode | PredicateNode;
+export type GroundedFact = AdvisoryNode | PredicateNode | RelationNode;
+
+/**
+ * The closed relation vocabulary (NORMATIVE, additive-only — a new kind is a `cv` bump, exactly like the
+ * `PredicateSlot` vocabulary). DIRECTED: `endpointA <relationKind> endpointB` reads left-to-right, so
+ * `(A, depends-on, B) ≠ (B, depends-on, A)`. Seeded minimal + honest — only the kinds Atlas can GROUND from
+ * index state today (the dependency axis). These are the frontier's high-value facts a comment gestures at
+ * but never grounds (ADR-0015 §Honesty).
+ *
+ * [ADR-0015 letter-correction] ADR-0015 D2 said "reuse the index `EdgeKind`". Read against the code,
+ * `@atlas/index`'s `EdgeKind = 'resolved' | 'unresolved' | 'dynamic'` is edge-RESOLUTION status, not relation
+ * SEMANTICS — reusing it would type a relation by how confidently the extractor resolved it, not by what the
+ * relation IS. The ADR is right in spirit (a relation is a typed tuple) and wrong in the letter of which enum;
+ * corrected here to a semantic vocabulary. The dependency axis remains the drift/witness SOURCE.
+ */
+export type RelationKind =
+  | 'depends-on' // A's unit references/imports B's unit (a grounded dependency-axis edge)
+  | 'calls'; // A's body calls B (a resolved call edge)
+
+/**
+ * A 2-ended grounded fact (ADR-0015 D2, #99a). Structurally a sibling of `AdvisoryNode` — no `check`, so no
+ * predicate lifecycle — but carrying TWO endpoints and a `relationKind` instead of a single anchor + claim.
+ *
+ * IDENTITY vs FRESHNESS, made concrete (the Kythe/SCIP lesson):
+ *   - `endpointA` / `endpointB` are the LOCATION-FREE identity legs (the units' `qualifiedPath`s). They feed
+ *     `relationKey = hash(endpointA ‖ relationKind ‖ endpointB)` (router.ts) — NOT `deepestCommonUnit`, which
+ *     would collapse a cross-file pair to the empty wildcard anchor (#103). A pure edit does not change them.
+ *   - `grounding.entries` carries EXACTLY TWO entries — entry[0] anchors A, entry[1] anchors B — each with its
+ *     unit's `subtreeHash`. These are the FRESHNESS legs: `driftDetect` (drift.ts) AND-folds both, so the
+ *     relation reads DRIFTED iff EITHER endpoint's bytes changed, and FRESH iff both still match. Reused
+ *     verbatim — the whole point of D2 is that the multi-entry AND-fold already existed (the deferred GAP-1).
+ */
+export interface RelationNode {
+  readonly kind: 'relation';
+  readonly id: NodeKey; // = relationKey (router.ts); MINTED, never trusted from the payload
+  readonly tier: Tier;
+  readonly relationKind: RelationKind;
+  readonly endpointA: string; // location-free unitKey (qualifiedPath of A's anchor) — identity leg, subject
+  readonly endpointB: string; // location-free unitKey (qualifiedPath of B's anchor) — identity leg, object
+  readonly grounding: Grounding; // EXACTLY two entries: [0] anchors A, [1] anchors B (freshness, AND-folded)
+  readonly freshness: KnowledgeFreshness;
+  readonly claims: readonly ClaimEntry[];
+  readonly authoring: 'RELATED' | 'SUPERSEDED';
+  readonly scope?: string; // KNOW-11a — the write scope (authz); the 2.1 anchor gate binds on `endpointA`
+  readonly obviousness?: ObviousnessScore; // ADR-0012 — additive, absent-tolerant (see AdvisoryNode)
+}
 
 /**
  * The ORDINAL leg of the obviousness score (ADR-0012). Two-point on purpose, and the honesty matters:
