@@ -145,19 +145,38 @@ root D3 wanted. This was only visible by reading the rollup preimage law, which 
 - clause **2** (`underApprox`) is decided ONCE at EMIT (the abstention gate, §4). Freshness never re-runs
   `reverseCallers` — anything that could introduce a caller or open S already drifts the scope hash.
 
-**THE ENCODING (decided — neither of the two candidate (a)/(b) new mechanisms is needed):**
+**THE ENCODING (decided; the two verification facts below are now MEASURED, one CORRECTING this section's earlier premise, 2026-08-10):**
+
+The two mechanical facts §3 said N1 must confirm were measured by the lead before dispatch — one HELD, one was FALSE and is corrected here:
+
+- **(i) HELD — a directory resolves through `resolveCurrent`.** `hierarchy` (index/src/build.ts:110-122) folds
+  EVERY FileTree node — directories included — into an `IndexNode` with `key = mintKey(node,parent)` (for a `::`-free
+  dir, exactly its repo-relative path) and `subtreeHash = foldNodeHash({key, content: undefined, children})` — the
+  git-tree Merkle over its NAMED children. `resolveCurrent(src, <dirPath>)` (grounding/src/drift.ts:60) walks
+  `spatial`+`territory` by `node.key === qualifiedPath` and returns that folded hash. A directory's fold is a real
+  hash, NOT the `subtreeHash===key` sentinel `findByKey` rejects (drift.ts:33), so it is NOT read as absent. Insertion
+  of a new file into the dir changes the named-child set → dir hash → DRIFT. Confirmed, not assumed.
+- **(ii) FALSE PREMISE, CORRECTED — a directory carries NO reusable `StructRef.kind`.** `StructRef.kind` (the SACRED
+  `packages/contracts/src/struct.ts:14`) is `'symbol' | 'block' | 'file' | 'repo' | 'project'` — there is **no
+  `directory` member**, and a spatial `IndexNode` carries a `level` string (SPATIAL_LEVELS), not a `StructRef.kind`.
+  So "reuse the directory node's existing kind" was **not groundable** — the freeze wrote it optimistically. Since
+  `honestidade-inegociável` forbids stamping a directory anchor `kind: 'file'` (a lie in a committed type) and the
+  oracle never reads `.kind` (driftDetect/isGrounded ignore it — measured), the honest fix is **DECIDED: WIDEN the
+  enum with `'directory'`.** This is a SACRED @atlas/contracts change (a `cv`-class vocabulary addition, exactly like
+  a new `RelationKind`/`PredicateSlot`), owner-ratify + **bobby** owed before the #99b PR merges (§7 already schedules
+  the sacred review) — NOT slipped in silently. Blast radius MEASURED bounded (3 touches; nothing else): the enum
+  itself; `harness/probes/genesis-output-probe.mjs:44` `ANCHOR_KINDS` Set (add `'directory'` or it rejects the anchor);
+  and the honest struct.ts comment. `grounding/src/ground.ts:35` `Citation.kind: StructRef['kind']` auto-follows. The
+  sole production reader of an anchor `.kind` is `router.ts:300` `=== 'symbol'` for intrinsic identity — a negation
+  routes by `negationKey`, never `primaryAnchorId`, so it is unaffected.
+
+**The encoding, therefore:**
 - The negation's `grounding` = **ONE ordinary `GroundingEntry`** anchored at the scope directory: `anchor =
-  { kind: <the directory node's existing StructRef kind — REUSE, do not widen the sacred contracts enum>,
-  qualifiedPath: S, subtreeHash: <S's folded hash at emit> }`. `isGrounded` passes (non-empty subtreeHash);
-  `driftDetect(grounding, axes)` rides **verbatim** — NO change to the sealed `grounding/src/{ground,drift}.ts`,
-  NO new anchor-kind, NO `StructRef.kind` enum widening.
+  { kind: 'directory', qualifiedPath: S, subtreeHash: <S's folded hash at emit> }`. `isGrounded` passes (non-empty
+  subtreeHash); `driftDetect(grounding, axes)` rides **verbatim** — NO change to the sealed
+  `grounding/src/{ground,drift}.ts`, NO new oracle logic. The only sacred touch is the one honest enum member above.
 - The door's negation freshness (N2) = `driftDetect(node.grounding, axes) === FRESH && node.edgeModel ===
   currentEdgeModel`. A tiny door-side conjunct, not an oracle rewrite.
-
-**N1 must VERIFY two transcription facts before relying on this (cheap, mechanical):** (i) a directory node
-resolves through `resolveCurrent` (spatial/territory rails) — it should, dir nodes are spatial; (ii) the exact
-`StructRef.kind` a directory node carries, to reuse it. If a directory does NOT resolve, fall back to candidate
-(b) with a `witness` anchor-kind and FLAG it to the lead — but the measurement above says it will.
 
 ## 4. Family, routing, door traversal (knowledge/write + adapter-io/governed-emit)
 
@@ -196,7 +215,7 @@ grounds without the symbol-reverse graph); N1 freezes the shape+witness encoding
 | WP | owner-files (disjoint) | dep | DoD |
 |---|---|---|---|
 | **N0** | index/src (new `symbol-reverse.ts` + `index.ts`), adapter-io wiring (`wire.ts`/`index-adapter.ts`), tests | — | `reverseCallers(globalSymbol): {callers, underApprox}` over the SAME occurrences `deriveEdges` reads; doc-level `dependencyAxis` UNCHANGED; WIRED (production caller in adapter-io, not a reference model); unit tests incl. an inserted-caller and an `underApprox` (unresolved/dynamic) case |
-| **N1** | knowledge/src/types.ts, negation-key.ts, router.ts, upsert.ts; the §3 witness-encoding decision | N0 | `NegationNode`+`AbstainedRecord` in the model; `negationKey`+`MalformedNegationError`; `NodeFamily` widened; witness grounding encoding CHOSEN with the oracle code open (§3); every exhaustive `.kind`/family switch handles 'negation'+'abstained'; `driftDetect` 4-clause freshness; unit tests incl. insertion-drift + scope-open-abstain |
+| **N1** | contracts/src/struct.ts (SACRED — the `'directory'` enum member, §3(ii)) + genesis-output-probe.mjs ANCHOR_KINDS; knowledge/src/types.ts, negation-key.ts, router.ts, upsert.ts | N0 | `StructRef.kind` widened with `'directory'` (§3(ii) DECIDED) + probe Set + honest comment; `NegationNode`+`AbstainedRecord` in the model; `negationKey`+`MalformedNegationError`; `NodeFamily` widened; witness grounding = one `kind:'directory'` entry (§3); every exhaustive `.kind`/family switch handles 'negation'+'abstained'; the two `fact.kind === 'relation' ? undefined : predicateSlot` sites (governed-emit.ts:240, own-bands.ts:52, own-source.ts:264, cli/mine.ts:263) also treat 'negation' as slotless; `driftDetect` 4-clause freshness; unit tests incl. insertion-drift + scope-open-abstain |
 | **N2** | adapter-io/src/governed-emit*.ts (+reasons), the abstention gate | N1 | the door computes `reverseCallers`, ABSTAINS (emits `AbstainedRecord`) on `underApprox`, REJECTS on a real caller, ADMITS only the closed-empty case; scope authz on `scope`; the crux tested (a scope-open question ABSTAINS, not silently drops); mutation-scoped per re-routed gate |
 | **N3** | index/knowledge read folds, cli/src, mcp-server/src | N1 | `negationsOf`/`abstentionsOf`; `atlas negations` CLI + `atlas-negations` MCP; abstention VISIBLE on both; total (miss⇒empty); CLI≡MCP parity |
 | **N4** | e2e-blackbox (new sNN) | N0-N3 | subprocess story: emit `(f, ¬calls, S)` grounded (f global, S closed) → `atlas negations S` finds it → INSERT a caller of f → the negation reads DRIFTED → a `¬calls` over an OPEN scope (unresolved/dynamic in S) EMITS AN ABSTAINED record, readable (proves abstention FIRES — closes #202) |
@@ -205,6 +224,12 @@ grounds without the symbol-reverse graph); N1 freezes the shape+witness encoding
 
 - **ADR-0015 D3 is owner-ratified (2026-08-09);** the two mechanization commitments (symbol-level, explicit
   ABSTAINED) are owner-ratified (2026-08-10, this document's header). No NEW invariant amendment beyond the ADR.
+- **ONE sacred-vocabulary addition owed to the owner before merge (§3(ii)):** `StructRef.kind += 'directory'`. The
+  freeze's "no enum widening" premise was measured FALSE (a directory carries no reusable kind); the honest carrier
+  for a scope-directory anchor is an explicit `'directory'` member. It is a mechanical consequence of the ratified
+  directory-scoped negation, not a new product decision, but it touches the most sacred layer — so it rides the
+  **bobby** sacred review (below) and is flagged for owner ratification, never shipped silently. This is the
+  contract's own framing-error correction, recorded per the discipline that every freeze owes.
 - The `GroundedFact` union widening to a FOURTH variant ripples to every exhaustive `.kind` switch repo-wide — an
   R1-style audit (`grep '.kind ==='`, `case '…'`, `never` checks) is a NAMED N1 deliverable, exactly as #99a's
   blast-radius sweep found the render/doctor/genesis sites (all handled or Proposal-typed there; re-audit for the
