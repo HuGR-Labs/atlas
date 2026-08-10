@@ -79,8 +79,9 @@ export interface NegationNode {
   readonly tier: Tier;
   readonly relationKind: RelationKind;  // the NEGATED relation (reuse #99a's closed 'depends-on'|'calls')
   readonly target: string;             // the location-free GLOBAL symbol key X the negative is ABOUT (¬∃ · →X)
-  readonly scope: string;              // the CLOSED scope S the completeness witness ranges over (identity leg)
-  readonly grounding: Grounding;        // the COMPLETENESS WITNESS (see §3) — NOT a per-unit subtreeHash
+  readonly scope: string;              // the CLOSED scope S (a DIRECTORY key) the witness ranges over (identity leg)
+  readonly grounding: Grounding;        // ONE entry anchored at S; its subtreeHash IS the scope Merkle (see §3 — DECIDED)
+  readonly edgeModel: string;          // the IndexerPlan.version at emit — the ONE witness clause the oracle can't see (§3)
   readonly freshness: KnowledgeFreshness;
   readonly claims: readonly ClaimEntry[];
   readonly authoring: 'NEGATED' | 'SUPERSEDED';
@@ -123,36 +124,40 @@ non-empty string, or `kind ∉ RELATION_KINDS`. An `AbstainedRecord` reuses the 
 later successful negation at the same question SUPERSEDES the abstention (the honest lifecycle: "couldn't decide"
 → later "decided false").
 
-## 3. The completeness witness — the grounding (the one hard, genuinely-new sub-decision)
+## 3. The completeness witness — the grounding (DECIDED with the oracle code open, 2026-08-10)
 
-A negation's grounding is NOT a per-unit `subtreeHash`. It is the **completeness witness**:
+**THE KEY MEASUREMENT (grounded, not assumed): a DIRECTORY's `subtreeHash` IS already the insertion-sensitive
+scope Merkle root.** `foldNodeHash`/`rollupHash` (index/src/rollup.ts:21-31) folds a node's own content PLUS its
+**sorted, NAMED child hashes** (the git-tree model, `childName` binds the relative basename). So a directory node
+re-hashes when: an in-scope file's bytes change (a child hash moves) OR a file ENTERS/LEAVES the directory (the
+named-child set changes). ADR-0015's "a per-unit `subtreeHash` is monotone-blind to INSERTION" is true for a
+per-FILE hash — but a per-DIRECTORY hash is a BRANCH over named children, so it is exactly the insertion-sensitive
+root D3 wanted. This was only visible by reading the rollup preimage law, which is why the freeze deferred it.
 
-- **`scopeRoot`** — a Merkle root over `{ unitKey · subtreeHash }` for EVERY in-scope unit that could emit a `→X`
-  edge, sorted by unitKey. Drifts on: any in-scope unit's bytes changing (a hash moves) OR a unit ENTERING/LEAVING
-  the scope (the set membership changes → the root changes). This is the insertion-sensitivity §0 names.
-- **`edgeModel`** — the `IndexerPlan.version` string. An extractor upgrade can surface a previously-invisible edge,
-  so it MUST invalidate the witness.
-- (The assertion "no →X caller in S" is NOT stored — it is re-derived at HEAD by `reverseCallers(X)`.)
+**Consequence — the "genuinely new mechanism" collapses to near-free reuse.** Scope `S` is a DIRECTORY key.
+- clause **3** (scope Merkle) `==` `resolveCurrent(S)` — the directory's own folded `subtreeHash`. `driftDetect`
+  already computes this. It **SUBSUMES clause 1** (a NEW caller of X is a new `reference` occurrence, which requires
+  either a new file in S → dir hash changes, or an edit to an in-S file → its hash changes → dir hash changes — so
+  any new caller drifts the scope hash) **and clause-2-persistence** (a scope cannot OPEN post-emit without a byte
+  change in S). So a stale scope hash means "re-verify the negative", the honest conservative trigger the ADR names.
+- clause **4** (`edgeModel`) is the ONE thing `driftDetect(grounding, Axes)` cannot see — an extractor upgrade
+  changes no file bytes. It rides as an explicit `NegationNode.edgeModel` field, compared by the door's re-check.
+- clause **2** (`underApprox`) is decided ONCE at EMIT (the abstention gate, §4). Freshness never re-runs
+  `reverseCallers` — anything that could introduce a caller or open S already drifts the scope hash.
 
-**`driftDetect` for a negation (the freshness oracle).** FRESH iff ALL hold at HEAD:
-1. `reverseCallers(X).callers ∩ S == ∅` — still no caller (a caller inserted ⇒ DRIFTED);
-2. `!reverseCallers(X).underApprox` — scope still CLOSED (a new unresolved/dynamic edge opened S ⇒ DRIFTED, and on
-   a *fresh emit attempt* would ABSTAIN);
-3. `scopeRoot` recomputed == stored — no in-scope unit changed AND none entered/left;
-4. `edgeModel` == stored.
+**THE ENCODING (decided — neither of the two candidate (a)/(b) new mechanisms is needed):**
+- The negation's `grounding` = **ONE ordinary `GroundingEntry`** anchored at the scope directory: `anchor =
+  { kind: <the directory node's existing StructRef kind — REUSE, do not widen the sacred contracts enum>,
+  qualifiedPath: S, subtreeHash: <S's folded hash at emit> }`. `isGrounded` passes (non-empty subtreeHash);
+  `driftDetect(grounding, axes)` rides **verbatim** — NO change to the sealed `grounding/src/{ground,drift}.ts`,
+  NO new anchor-kind, NO `StructRef.kind` enum widening.
+- The door's negation freshness (N2) = `driftDetect(node.grounding, axes) === FRESH && node.edgeModel ===
+  currentEdgeModel`. A tiny door-side conjunct, not an oracle rewrite.
 
-**HOW the witness rides the frozen `Grounding` model — N1 DESIGN RESIDUE, resolve with evidence, do not fabricate.**
-ADR-0015's whole thesis is that the `subtreeHash` oracle is correct for exactly ONE shape; a negation needs a
-DIFFERENT token. Two candidate encodings, to be decided in N1 against the frozen `Grounding`/`driftDetect` code
-(grounding/src/{ground,drift}.ts) — the lead picks ONE with the code open, this contract does not guess:
-  - **(a) a typed grounding token**: widen the grounding entry with a `witness` shape (`scopeRoot`+`edgeModel`) and
-    branch `driftDetect` on the token type. Truest to the ADR; touches the sealed oracle.
-  - **(b) a witness-anchor kind**: express the witness as one grounding entry whose `anchor.kind: 'witness'` and
-    whose "subtreeHash" IS the `scopeRoot`, re-derived by recomputing the scope Merkle. Rides the existing
-    entries[]/AND-fold with a new anchor-kind resolver; smaller blast radius on the oracle.
-Whichever is chosen, the freshness must be the 4-clause conjunction above — the encoding is the residue, not the
-semantics. This is the ONE place the contract defers a decision, and it defers it to *code-grounded* judgment, not
-to a builder (AP-3).
+**N1 must VERIFY two transcription facts before relying on this (cheap, mechanical):** (i) a directory node
+resolves through `resolveCurrent` (spatial/territory rails) — it should, dir nodes are spatial; (ii) the exact
+`StructRef.kind` a directory node carries, to reuse it. If a directory does NOT resolve, fall back to candidate
+(b) with a `witness` anchor-kind and FLAG it to the lead — but the measurement above says it will.
 
 ## 4. Family, routing, door traversal (knowledge/write + adapter-io/governed-emit)
 
