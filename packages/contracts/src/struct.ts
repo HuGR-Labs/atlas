@@ -9,9 +9,16 @@ import type { SubtreeHash } from './hash.js';
 
 /** A grounding anchor into the structural tree. `subtreeHash` is the drift oracle (never line
  *  numbers). 'repo'/'project' anchors a global rule to a policy artifact's heading/section BLOCK
- *  subtreeHash, never anchorless (GROUND-12). (atlas-grounding line 44; atlas-index line 56) */
+ *  subtreeHash, never anchorless (GROUND-12). (atlas-grounding line 44; atlas-index line 56)
+ *
+ *  'directory' is a SPATIAL CONTAINER node whose `subtreeHash` folds its sorted, NAMED children
+ *  (the git-tree Merkle, `foldNodeHash`/`rollupHash`, @atlas/index src/rollup.ts) — so it re-hashes
+ *  when an in-scope file's bytes change OR when a file ENTERS/LEAVES it (the named-child set moves).
+ *  That INSERTION-sensitivity is exactly what a per-unit `subtreeHash` lacks, which is why it is the
+ *  carrier for a directory-scoped negation's completeness witness (#99b / ADR-0015 D3, §3(ii)): the
+ *  scope Merkle root a `(¬calls, X, S)` fact grounds against so a NEW caller entering S drifts it. */
 export interface StructRef {
-  readonly kind: 'symbol' | 'block' | 'file' | 'repo' | 'project';
+  readonly kind: 'symbol' | 'block' | 'file' | 'repo' | 'project' | 'directory';
 
   /**
    * A REPO-RELATIVE PATH, and — since #155 — only ever that. **ONE FORM. There is no union.**

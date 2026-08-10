@@ -11,6 +11,9 @@ import type { Tier, Status, StructRef, Hash, NodeKey } from '@atlas/contracts';
 import type { ClaimEntry } from '@atlas/kernel';
 import type { Grounding } from '@atlas/grounding';
 import type { IndexNode } from '@atlas/index';
+// The #99b scoped-negative shapes are declared in a cohesive sibling (extracted at the godfile ceiling) and
+// IMPORTED here so `GroundedFact` can reference `NegationNode`, then RE-EXPORTED below for a byte-identical surface.
+import type { NegationNode, AbstainedRecord } from './negation-types.js';
 
 /**
  * The Knowledge freshness vocabulary. Transcribed from atlas-knowledge:29 — `Freshness = 'FRESH' |
@@ -65,8 +68,13 @@ export type Check =
  * `driftDetect` already AND-folds every entry (drift-if-either) — GROUND-1/5 verbatim. Identity (the
  * location-free `endpointA`/`endpointB` unitKeys) is SPLIT from freshness (the entries' `subtreeHash`), so a
  * pure edit drifts the relation WITHOUT orphaning it. See docs/design/99a-relation-fact-contract.md.
+ *
+ * [ADR-0015 D3 — #99b] WIDENED to a FOURTH variant, `NegationNode` — a scoped grounded NEGATIVE, sibling
+ * of `RelationNode` (advisory-CLASS, no `check`). `AbstainedRecord` (below) is its honest-abstention
+ * sibling and is deliberately NOT in this union — it asserts nothing about the world. See
+ * docs/design/99b-negation-fact-contract.md.
  */
-export type GroundedFact = AdvisoryNode | PredicateNode | RelationNode;
+export type GroundedFact = AdvisoryNode | PredicateNode | RelationNode | NegationNode;
 
 /**
  * The closed relation vocabulary (NORMATIVE, additive-only — a new kind is a `cv` bump, exactly like the
@@ -112,6 +120,13 @@ export interface RelationNode {
   readonly scope?: string; // KNOW-11a — the write scope (authz); the 2.1 anchor gate binds on `endpointA`
   readonly obviousness?: ObviousnessScore; // ADR-0012 — additive, absent-tolerant (see AdvisoryNode)
 }
+
+// The #99b scoped-negative shapes (ADR-0015 D3) — `NegationNode` (the FOURTH `GroundedFact` variant) and its
+// honest-abstention sibling `AbstainedRecord` (NOT in the union) — are DECLARED in `negation-types.ts`
+// (imported above) and RE-EXPORTED here so the package surface is byte-identical to an inline declaration.
+// They were extracted at the 400-LOC godfile ceiling along a cohesive boundary, exactly as `relation-key.ts`
+// split from `router.ts` on the sibling #99a leg. `RelationKind`/`ObviousnessScore` stay owned HERE.
+export type { NegationNode, AbstainedRecord };
 
 /**
  * The ORDINAL leg of the obviousness score (ADR-0012). Two-point on purpose, and the honesty matters:

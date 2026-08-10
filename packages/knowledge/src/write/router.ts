@@ -102,8 +102,10 @@ export interface RouterApi {
 
 /** The content kinds of the Atlas (atlas-knowledge:19): advisory ⇒ UPDATE/union · predicate ⇒ SUPERSEDE.
  *  WIDENED by ADR-0015 D2 (#99a) with `relation` — a 2-ended fact that, having NO `check`, routes like an
- *  advisory (UPDATE/union on a nodeKey hit), never SUPERSEDE. */
-export type NodeFamily = 'advisory' | 'predicate' | 'relation';
+ *  advisory (UPDATE/union on a nodeKey hit), never SUPERSEDE. WIDENED again by ADR-0015 D3 (#99b) with
+ *  `negation` — a scoped negative that likewise carries NO `check`, so it joins advisory/relation on the
+ *  UPDATE branch below (never SUPERSEDE by routing). */
+export type NodeFamily = 'advisory' | 'predicate' | 'relation' | 'negation';
 
 /**
  * The enumerated routing product — the four orthogonal, already-RESOLVED oracle inputs the
@@ -128,8 +130,11 @@ export interface RouteInputs {
 export function routeWrite(inputs: RouteInputs): WriteDecision {
   if (inputs.contentHashHit) return 'DEDUP'; // 4b — byte-identical fact, idempotent no-op
   if (!inputs.nodeKeyHit) return 'CREATE'; // 4f — new (anchor, slot[, check]) OR a different check
-  // 4c/4d — claim set-union, edited in place. A `relation` (ADR-0015 D2) has NO `check`, so re-evidencing an
-  // existing relationKey is an UPDATE (append the claim/provenance), never a SUPERSEDE — it joins advisory here.
+  // 4c/4d — claim set-union, edited in place. A `relation` (ADR-0015 D2) AND a `negation` (ADR-0015 D3) each
+  // have NO `check`, so re-evidencing an existing relationKey/negationKey is an UPDATE (append the
+  // claim/provenance), never a SUPERSEDE — both join advisory on this `family !== 'predicate'` branch. An
+  // `AbstainedRecord`→negation transition is an EXPLICIT supersede on the shared negationKey address, handled
+  // at the door (N2), NOT by this routing function.
   if (inputs.family !== 'predicate') return 'UPDATE';
   return inputs.checkSame ? 'SUPERSEDE' : 'CREATE'; // 4e — same-check re-evidence supersedes
 }
@@ -351,6 +356,10 @@ export function nodeKey(node: Candidate): NodeKey {
 // RELATION IDENTITY (ADR-0015 D2 · #99a) — the 2-ended fact's identity leg lives in its own module at the
 // 400-LOC ceiling, cohesively (mirrors `closed-slot.ts`). Re-exported below so the package surface is unchanged.
 export * from './relation-key.js';
+
+// NEGATION IDENTITY (ADR-0015 D3 · #99b) — the scoped-negative's identity leg, the 3-legged sibling of
+// `relation-key.js` (reuses its closed `RelationKind` vocabulary). Re-exported here beside it, same pattern.
+export * from './negation-key.js';
 
 
 /**

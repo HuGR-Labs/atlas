@@ -234,10 +234,13 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
     // onto a candidate VIEW ONCE — else a later `nodeKey` cast is LOSSY (`.slot` undefined) and the nodeKey is
     // computed slot-free, diverging from the true `hash(primaryAnchorId ‖ predicateSlot)` identity (the E2E
     // emit→query readback exposed this). The route reads the fact's REAL `tier`/`check`/`grounding` — no guess.
-    // A RelationNode (ADR-0015 D2) carries no `predicateSlot`; narrow it away. The view is still built for a
-    // relation because `route` (the ratify gate below) reads its `tier`/`grounding` — a relation ratifies on
-    // the advisory path (no `check`). Its IDENTITY, however, is NOT nodeKey-of-this-view (see below).
-    const candidateView = { ...node, slot: node.kind === 'relation' ? undefined : node.predicateSlot } as unknown as Candidate;
+    // A RelationNode (ADR-0015 D2) and a NegationNode (ADR-0015 D3) carry no `predicateSlot`; narrow it away.
+    // The view is still built for either because `route` (the ratify gate below) reads its `tier`/`grounding` —
+    // both ratify on the advisory path (no `check`). Their IDENTITY, however, is NOT nodeKey-of-this-view.
+    const candidateView = {
+      ...node,
+      slot: node.kind === 'relation' || node.kind === 'negation' ? undefined : node.predicateSlot,
+    } as unknown as Candidate;
 
     // 2.1 ANCHOR BINDING (ARCH-9 for `scope` — ADR-0010 open item 3). Gate 2 asked whether the actor is in
     //    the scope this write DECLARES; the author picks that string. Meanwhile the READ projection scopes
@@ -339,7 +342,7 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
           //    the node so a later sibling-adjacency scan reads them off the projection (WP-B); NOT read here.
           //    `predicateSlot` is R3-optional; conditional spread keeps `slot` ABSENT (exactOptionalPropertyTypes).
           primaryAnchor, // the SAME value gate 2.1 bound the declared scope against — computed once
-          ...(node.kind !== 'relation' && node.predicateSlot !== undefined ? { slot: node.predicateSlot } : {}),
+          ...(node.kind !== 'relation' && node.kind !== 'negation' && node.predicateSlot !== undefined ? { slot: node.predicateSlot } : {}),
           // ── RELATION carrier (ADDITIVE — ADR-0015 D2) — a `family:'relation'` write stamps its endpoint pair
           //    + kind on the ROW so the read-side `relationsOf` fold indexes it by both endpoints. Empty for a
           //    non-relation. `primaryAnchor` above is `endpointA` for a relation (the subject), by construction.
