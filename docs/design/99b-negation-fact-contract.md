@@ -224,12 +224,17 @@ grounds without the symbol-reverse graph); N1 freezes the shape+witness encoding
 
 - **ADR-0015 D3 is owner-ratified (2026-08-09);** the two mechanization commitments (symbol-level, explicit
   ABSTAINED) are owner-ratified (2026-08-10, this document's header). No NEW invariant amendment beyond the ADR.
-- **ONE sacred-vocabulary addition owed to the owner before merge (§3(ii)):** `StructRef.kind += 'directory'`. The
+- **ONE sacred-vocabulary addition — OWNER-RATIFIED 2026-08-10:** `StructRef.kind += 'directory'`. The
   freeze's "no enum widening" premise was measured FALSE (a directory carries no reusable kind); the honest carrier
   for a scope-directory anchor is an explicit `'directory'` member. It is a mechanical consequence of the ratified
-  directory-scoped negation, not a new product decision, but it touches the most sacred layer — so it rides the
-  **bobby** sacred review (below) and is flagged for owner ratification, never shipped silently. This is the
-  contract's own framing-error correction, recorded per the discipline that every freeze owes.
+  directory-scoped negation, not a new product decision, but it touches the most sacred layer — so it rode the
+  **bobby** sacred review and was flagged for owner ratification, never shipped silently. Blast radius re-measured
+  at ratification: the SOLE production reader of an anchor's `StructRef.kind` is `router.ts:305`
+  (`anchorOf(e)?.kind === 'symbol'`), where a `'directory'` anchor is correctly excluded from `symbolAnchors`; no
+  exhaustive `never`-switch ranges over `StructRef.kind` (the one in `evaluator.ts:99` ranges over the fact-family
+  union); `tsc -b` EXIT 0 confirms no exhaustiveness broke. The owner ratified the vocabulary addition on this
+  measured basis (PR #129). This is the contract's own framing-error correction, recorded per the discipline that
+  every freeze owes.
 - The `GroundedFact` union widening to a FOURTH variant ripples to every exhaustive `.kind` switch repo-wide — an
   R1-style audit (`grep '.kind ==='`, `case '…'`, `never` checks) is a NAMED N1 deliverable, exactly as #99a's
   blast-radius sweep found the render/doctor/genesis sites (all handled or Proposal-typed there; re-audit for the
