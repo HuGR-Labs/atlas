@@ -39,13 +39,19 @@ const claimNormOf = (f: Fact): string =>
  * `grounded` is passed in (the caller keeps it across settled commits) rather than closed over, which is the only change the
  * mine.ts→mine-decide.ts split imposed on the body — the decision stays a pure function of `(staged, incoming, grounded)`.
  */
+/** A grounded row, WIDENED to optionally carry its own `answerRef` alongside it — additive, and read by
+ *  exactly one caller: `mine.ts`'s `upsert` fold, which is also `ControllerDeps.answerReceipts`'s (#209) sole
+ *  source (see the header there). `Fact` itself (genesis, frozen) is NOT touched; this is a CLI-local
+ *  transport shape for the one hop between "this row minted with a receipt" and "the report counts it". */
+export type MintedFact = Fact & { readonly answerRef?: string };
+
 export function decideStaging(
   staged: StoreProjection,
   incoming: readonly Fact[],
   grounded: ReadonlyMap<string, Fact>,
-): CommitDecision<Map<string, Fact>> {
+): CommitDecision<Map<string, MintedFact>> {
   let projection = staged;
-  const minted = new Map<string, Fact>(); // what THIS attempt would write; folded into `grounded` only on settle
+  const minted = new Map<string, MintedFact>(); // what THIS attempt would write; folded into `grounded` only on settle
   const puts: unknown[] = []; // the CAS bytes the protocol makes durable BEFORE publishing the rows naming them
   for (const raw of incoming) {
     // [#195 b] SEPARATE the answer-provenance transport field from the fact BEFORE anything hashes the fact:
@@ -100,7 +106,10 @@ export function decideStaging(
     if (receipt !== undefined) puts.push(receipt.obj);
     puts.push(f);
     projection = knowledgeUpsert(projection, req).store; // route the write-decision
-    minted.set(key, f);
+    // [#209] the minted row carries its OWN answerRef alongside it (MintedFact) — the one additive field
+    // `mine.ts`'s fold reads to build `ControllerDeps.answerReceipts()`. Absent when this row minted with no
+    // receipt (a non-mine/human write, or #195 leg (b) not applicable) — fail-closed, never fabricated.
+    minted.set(key, receipt !== undefined ? { ...f, answerRef: receipt.answerRef } : f);
   }
   // `next` is published even when nothing was minted, keeping the write cadence identical to the
   // `persistStaging`-per-site one it replaces — so a mutant seeding from `emptyStore()` still publishes that
