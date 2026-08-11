@@ -1,8 +1,15 @@
 # ADR-0016 — the proposer emits a typed candidate carrying a machine-checkable predicate
 
-- **Status:** Proposed (2026-08-11). The *principle* is the already-ratified `INV-GEN-12`; what is **new and
-  requires owner ratification** is (a) widening the shipped output contract that `ADR-0011` froze, and (b) the
-  measured blast radius below. This ADR is written so the owner ratifies a **measured scope**, not a summary.
+- **Status: WITHDRAWN — FAILED COLD REVIEW (2026-08-11). NOT for ratification.** Three cold seats
+  (spec-conformance, architecture, security) found a T0 self-certification hole and that the headline scope
+  ("amends ONLY ADR-0011 Decision 1") is false — the draft silently amends/violates ~5 ratified surfaces. The
+  CORE reframe survives (`INV-GEN-12` genuinely does mandate the typed-candidate *deterministic* core — two
+  seats confirmed the quote), but the design below is wrong in the ways enumerated in **§Review findings**.
+  This file is retained as the anchor for a corrected v2, not as a ratifiable proposal. Do not present it to
+  the owner as-is. Superseded-by: a future ADR that (a) keeps the check HARNESS-synthesized, (b) decides the
+  LLM-fallback question against INV-ADAPTER-11/GEN-13 explicitly, (c) scopes the real predicate-engine build.
+- **Status (original draft):** Proposed (2026-08-11). The *principle* is the already-ratified `INV-GEN-12`;
+  what is **new** is (a) widening the shipped output contract that `ADR-0011` froze, and (b) the blast radius.
 - **Spec author:** lead, grounded against master `4bb54a5`.
 - **Resolves:** the standing gap where the SHIPPED proposer path (`{ claim: string | null }`, "no reasoning,
   one line") is **strictly narrower than its own ratified invariant** `INV-GEN-12`, which mandates *typed
@@ -132,3 +139,66 @@ adversarial set; the gate must show `mine` now drops them.
 
 Nothing merges until (1)–(3) are ratified by the owner (admin), and the `gate` CI check is green. The lead
 does not self-ratify a ratified surface.
+
+## §Review findings (cold review 2026-08-11 — three seats, verbatim scope)
+
+The draft above is kept for the record; these are the reasons it was withdrawn. Each is grounded to code/spec.
+
+### T0 (billy F1) — self-certification via a non-encoding predicate
+The teeth gate proves a check is *sensitive to the anchored bytes* (`admit-harness.ts:60-63`), NOT that the
+check's truth-condition equals the claim's. `claimNorm` is never passed to `attest` (`admit-harness.ts:299-303`).
+Today this is inert because the check is **harness-synthesized, never trusted from the model**
+(`admit-proposals.ts:23-27`; `PredicateProposal` has no check field; a dedicated RED test
+`admit-harness.no-fabricated-check.test.ts` forbids it). Decision 1's `predicate?: MachineCheck` FROM THE MODEL
+arms it: the model supplies both the claim and the check that admits it, and a truthful-but-unrelated predicate
+(HOLDS + flips) seeds a FALSE claim into CAS. This is exactly the measured E&V "predicate-does-not-encode-the-
+claim" class. **Fix: the check stays `PredicateApi.synthesize` (zero-model); a model predicate may be a hint
+synthesize MAY ignore, never the teeth-tested object** — which is what INV-GEN-12's "its *synthesized* check"
+already says.
+
+### BLOCKER (bobby) — "engine wired into the shipped path" is false
+`compose-mine-admission.ts:71` wires the predicate legs as fail-closed NO-OPS (`synthesize:()=>null,
+verify:()=>'NA', teeth:()=>false, K:0`); its header says the predicate legs are "STRUCTURALLY UNREACHABLE" and
+the shipped `mine` admits ADVISORIES on the grounding/about-ness door alone (the bench-#95 failure). Building
+real `PredicateApi.synthesize/verify/teeth` + a non-zero `K` is the BULK of the work and is entirely absent
+from the draft's scope. This is the D5/#155 reference-model-vs-shipped-path trap — reproduced.
+
+### BLOCKER (lucy) — Decision 2's context-isolated agent is a SECOND model call → amends INV-ADAPTER-11
+`method-tags-adapters.md:97`: "a model is invoked **only** via SiteProposer.propose, exactly once per site …
+**0 out-of-band model calls**." ADR-0011 itself (finding 1, lines 299-303) says this invariant "must be
+amended … before escalation can land." The draft's LLM fallback on ~77% of sites is that second call, unlisted.
+It also contradicts GEN-12's "admission is **mechanical**, never an oracle" for that layer, and violates
+PROP-GEN-13's escalation predicate `(highValue ∧ uncertain)` by firing default-on (gated on predicate-NA).
+**Decision: either DROP the LLM fallback (accept the deterministic engine's lower coverage) OR make amending
+INV-ADAPTER-11 + PROP-GEN-13 an explicit, owner-ratified part of the scope.**
+
+### MAJOR (lucy) — factClass ≠ ADR-0015
+ADR-0015 has **FOUR** shapes (`ADR-0015:71`); the draft emits FIVE (adds RATIONALE) and drops the shape-specific
+grounding-token carriers (relation=pair, negation=completeness-witness, transition=rev-pair). Emitting ABSENCE
+with no completeness witness would violate ADR-0015 D3's abstention law. **Fix: reconcile `factClass` against
+both ADR-0015's four shapes AND the existing `kind` discriminant (`extract.ts:57`) — they are two axes.**
+
+### MAJOR (bobby+lucy) — transport parser / #195 provenance NOT untouched
+Widening `{claim:string|null}` to a JSON candidate reintroduces a parser + parse-failure mode `ADR-0011:98`
+("No JSON, no parser, no parse-failure mode") deliberately removed, breaks the truncated-output salvage
+(`ADR-0011:104-113`), and touches the #195 `rawAnswer`/answer-provenance gate (`llm.ts:58-73`). **Fix: specify
+the wire format + schema + size guard + parse-failure→grounded-abstention, as an explicit ADR-0011 D1 amendment.**
+
+### MAJOR (billy F2/F3 + bobby) — model-supplied `anchors`/`evidence` are new untrusted legs
+`anchors`: the draft never says grounding is minted from `cand.site` (bytes Atlas read) vs the model's anchors
+— if the latter, a false claim pins to any fresh symbol (grounding forgery, T0). **Fix: anchors are advisory
+metadata; grounding stays `reground(cand.site)`.** `evidence`: a new model free-text leg to CAS with no
+`scrubEvidence` (KNOW-11 scrub-before-CAS covers only claimNorm/check/unit/grounding — `mine-decide.ts:138-147`).
+**Fix: `evidence` is admission-only (dropped before `id(f)`) OR add `scrubEvidence`.** Also pin
+`MachineCheck === Check` (pure interpreter, no code-exec) or the ADR silently authorizes a compile/exec path.
+
+### MAJOR (lucy+billy F4) — reachability gate passes vacuously, two holes
+(a) The LLM fallback could reject the 9 planted falses while the deterministic engine never fires — proving the
+wrong subsystem. (b) No retention leg: a reject-EVERYTHING engine passes "rejects the 9 falses". **Fix: the gate
+must prove (i) the DETERMINISTIC engine (not the fallback) drops the falses, (ii) a known-TRUE set still ADMITS,
+and (iii) the fallback DROPS on unwired/error (fail-closed).**
+
+### MINOR (bobby) — the 100% number is attributed to an unbuilt path
+88/88 precision is a real measurement of the PROPOSE-REDESIGN (adjudicated by panels). The deterministic-engine-
+in-production numbers are PROJECTED (the engine is no-ops today). **Fix: label which is measured vs projected —
+`premissa-sem-evidencia-e-teoria`.**
