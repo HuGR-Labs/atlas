@@ -39,10 +39,15 @@ scoped knowledge produces a single untyped-beyond-advisory, T2-only stream. #96 
   - `NegationNode` (`negation-types.ts:41`) — `{kind:'negation', id, tier, relationKind, target, scope,
     grounding, edgeModel, freshness, claims, authoring}`; its honest-abstention sibling is
     `AbstainedRecord` (`reason: 'scope-open'|'target-not-global'|'scope-empty'`).
-- **Shared prerequisite (UNVERIFIED, [A] — WP-0 must confirm):** a mined fact is scoped `atlas:mined`
-  (`mine-staging.ts:39`). Governed gate 2 (`actorInScope`) refuses any actor not granted that scope, and
-  compose resolves `actor = ATLAS_ACTOR ?? gitUserEmail ?? ''`. bobby found **no default policy grant** for
-  `atlas:mined` in a shipped `policy.json`. Without it, `atlas promote` refuses **every** row at gate 2.
+- **Shared prerequisite — VERIFIED PRESENT [M] (bobby's [A] resolved 2026-08-10):** a mined fact is scoped
+  `atlas:mined` (`mine-staging.ts:39`), and `.atlas/policy.json:15` **already grants** it:
+  `"atlas:mined": ["seat:orchestrator"]` (with a long `$comment` recording that this appoints the
+  orchestrator as curator so the promotion door may write). The repo's own `.atlas/cas/*` already holds
+  mined advisory facts scoped `atlas:mined`, `authoring:ADVISORY` — so the advisory **mine→promote→governed**
+  path is demonstrably live today. `WP-96-0` therefore collapses from a build to a **confirmation** (an E2E
+  that the promote path — not `atlas emit` — lands a mined row). Honest caveat (`mine-staging.ts:37`, #187):
+  the grant lives in `policy.json` which **no live mechanism gates** — a known governance-honesty limit, out
+  of #96 scope.
 
 ## 2. The decided design
 
@@ -93,7 +98,7 @@ N then fill **disjoint functions** and never collide on the switch.
 
 | WP | scope (disjoint after SEAM) | dep-on | gate |
 |---|---|---|---|
-| **WP-96-0** POLICY | verify/add the `atlas:mined` actor grant so `atlas promote` accepts a mined row; a black-box test that a promoted advisory row lands in the projection | — | reachability proof (a mined row actually promotes) |
+| **WP-96-0** POLICY | ~~verify/add grant~~ **grant confirmed present** (`.atlas/policy.json:15`); reduced to a black-box test that a mined advisory row lands in the projection **via `atlas promote`** (not `atlas emit`) | — | reachability proof (a mined row actually promotes) |
 | **WP-219** SCRUB | scrub predicate `check`/`claimNorm` before `id(f)`/nodeKey (the existing #219 card; consistent scrub of the nodeKey preimage too) | — | **blocks WP-96-P** |
 | **WP-96-SEAM** | widen `Proposal` union (+`RelationProposal`,`NegationProposal`) + `admit()` switch cases as typed stubs; freeze the two new proposal types | — | tsc + the union is exhaustive again |
 | **WP-96-P** PREDICATE | `mine-gate` builds `PredicateProposal` (not hardcoded advisory) + proposer predicate lens produces predicate candidates | WP-219, WP-96-SEAM | a mine pass emits an admitted predicate that promotes + is queryable |
