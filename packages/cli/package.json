@@ -20,6 +20,7 @@
     "@atlas/genesis": "*",
     "@atlas/kernel": "*",
     "@atlas/knowledge": "*",
+    "@atlas/persist": "*",
     "@atlas/tools": "*"
   },
   "scripts": {

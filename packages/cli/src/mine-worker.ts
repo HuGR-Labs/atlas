@@ -33,7 +33,10 @@ interface PoolJob {
  *  because it is load-bearing downstream (`mine.ts` reports only `ModelCommandError` as a wiring fault) and
  *  a structured clone of a custom Error subclass is not guaranteed to preserve the subclass. */
 export type PoolAnswer =
-  | { readonly ok: true; readonly seed: SeedProposal | null }
+  // [#195c] `{ abstain }` rides alongside `SeedProposal | null` so a MALFORMED-answer abstention survives the
+  // worker boundary too — the concurrent path is the production path the 2026-08-04 splice went invisible on,
+  // so dropping the tag here would re-open exactly the hole #195 closes. A plain string structured-clones fine.
+  | { readonly ok: true; readonly seed: SeedProposal | { readonly abstain: string } | null }
   | { readonly ok: false; readonly name: string; readonly message: string };
 
 /** The immutable context a worker rebuilds its proposer from. `resolveProposer(repoPath, env)` is a pure

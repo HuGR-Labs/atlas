@@ -33,18 +33,27 @@ What is genuinely absent, and is the whole of #195:
    `claimNorm` (`llm.ts:116-117`, `:122-138` even salvages a claim from a *partially delivered* prompt).
 3. **No content-addressed link** from the fact to the answer bytes.
 
-## 2. The decided design — three legs (owner-ratified a+b+c, 2026-08-10)
+## 2. The decided design — two legs (owner-ratified b+c, 2026-08-10; leg (a) STRUCK 2026-08-10 on review)
+
+> **AMENDMENT (2026-08-10, post-ratification contract review):** leg **(a) `answerDigest` is STRUCK** as
+> redundant and, as originally specified, false-by-construction. In a content-addressed store the `answerRef`
+> (the CAS id) IS the digest of the stored content, so a separate digest field adds nothing. Worse, the
+> invariant this contract stated — `answerDigest == hash(answerRef's content)` — cannot hold if `answerDigest`
+> is `blake3(rawStoredBytes)`: the CAS id is `id(obj) = blake3(canonicalForm(obj))`, and `canonicalForm` of a
+> string is `JSON.stringify(NFC(s))` (`packages/kernel/src/canonical.ts:52-54,104-115`), never the raw bytes.
+> **Tamper-evidence at rest is provided by the CAS pattern itself:** a reader re-runs `id(fetchedBytes)` and
+> compares to `answerRef` — `store.ts get()` already does exactly this on every read (a mutated stored answer
+> re-hashes to a different id and is read as absent). Precedent: `promptDigest` (mine-proposer.ts) is a single
+> digest field with no companion ref, for the same reason. The WP therefore ships **(c) + (b)** only.
 
 The legs compose as a **pipeline at the answer boundary**, ordered so each later leg trusts the earlier:
 
 ```
-raw stdout bytes  ──(c) SANITY GATE──►  scrub (KNOW-11)  ──(b) put→CAS──►  answerRef
-                         │ fail                                │
-                         ▼                                     ▼
-                  grounded abstention                  (a) answerDigest = hash(stored bytes)
-                  WhyNot('answer-malformed')                   │
-                                                               ▼
-                                                    fact carries {answerRef, answerDigest}
+raw stdout bytes  ──(c) SANITY GATE──►  scrub (KNOW-11)  ──(b) put→CAS──►  answerRef = id(scrubbed bytes)
+                         │ fail                                                    │  (the CAS id IS the digest —
+                         ▼                                                         ▼   its own tamper-evidence)
+                  grounded abstention                                    fact carries { answerRef }
+                  WhyNot('answer-malformed')
 ```
 
 ### (c) Admission sanity gate — `llm.ts`, at the answer boundary, BEFORE the answer becomes a claim
@@ -60,53 +69,60 @@ a fabricated fact:
 
 This closes the **coarse class** (empty, corrupt, spliced, truncated-to-empty) at the door.
 
-### (a) Answer digest on the fact — tamper-evidence at rest
-The fact carries `answerDigest = blake3(<the bytes actually stored in (b)>)`. It is **independent of
-`claimNorm`** (which is trimmed/normalised) and makes the stored answer self-verifying: any later
-mutation of the stored answer is detectable. Always-on, cheap.
+### (a) Answer digest on the fact — **STRUCK (see amendment above)**
+~~The fact carries `answerDigest = blake3(...)`.~~ Removed. The CAS id `answerRef` is already the digest of
+the stored content, so it is its own tamper-evidence: **re-hash the fetched bytes and compare to `answerRef`**
+— no separate digest field. `store.ts get()` performs this re-hash on every read.
 
 ### (b) Answer → CAS — real traceability (THE RATIFIED LEG)
-The answer bytes go to CAS via the store's `put()` and the fact carries `answerRef = <cas id>`. This is
-the leg that makes a fact auditable back to what produced it.
+The answer bytes go to CAS via the store's `put()` and the fact carries `answerRef = <cas id> = id(scrubbed
+bytes)`. This is the leg that makes a fact auditable back to what produced it, and `answerRef` doubles as the
+tamper-evidence at rest (re-hash-on-read).
 - **Privacy / KNOW-11 (why this needed ratification):** the answer may contain a secret. It is scrubbed
-  **before** `put()`, exactly as every other write into the objects map must be (fitness function #121).
-  This adds a **new call site** to the scrubber's surface; the scrubber-coverage fitness function must be
-  extended to cover it (a DoD item, not an assumption).
+  **before** `put()`, using the **same `@atlas/persist` `scrub`** the content-addressed transcript boundary
+  already uses (`persist/src/transcript-store.ts` `put()` scrubs by construction; fitness function #121).
+  This adds a **new call site** to the scrubber's surface; the scrubber-coverage fitness function is
+  extended to cover it (`packages/cli/test/mine-answer-scrub-fitness.test.ts` — a DoD item, not an assumption).
+- **Why the generic `store.ts put()` and not `@atlas/persist`'s scrub-enforced `TranscriptStore`:** that
+  store enforces scrub-at-the-door *structurally* (stronger), but it is **in-memory-only with zero production
+  callers today** — it has no disk-persistence wiring. Routing the mine path through it is therefore
+  **DEFERRED, not silently bypassed**: until that wiring exists, the answer goes through the mine driver's
+  ordinary CAS `store.put()`, with scrub-before-put enforced at the call site (`mine-answer.ts`) **and** by
+  the #121-style fitness function over that module. Flagged here so the shortcut is a recorded decision.
 - **Storage cost:** accepted by the owner as the price of real provenance.
 
-### The one design tension, resolved
-Legs (a) and (b) could disagree: a digest over *raw* bytes will not match a *scrubbed* stored copy.
-**Resolution:** `answerDigest` is taken over the **exact bytes stored by (b)** (post-scrub), so
-`answerDigest == hash(answerRef's content)` is an invariant a gate can check. The **raw pre-scrub bytes
-are not retained** — the sanity gate (c) is what inspects the raw answer at the boundary, before scrub,
-so corruption is caught in transit; (a)+(b) then guarantee integrity of what is kept. This keeps the
-scrubber the sole authority over what persists, with no un-scrubbed raw copy anywhere.
-
 ## 3. Interaction with #209 (the ledger must witness the transcript)
-Once answers are stored and digested, the run report can carry a **count / digest over the stored
-`answerRef`s of admitted facts** — so *issued* (`modelCalls`) vs *stored* becomes verifiable in the
-artifact, not only in a probe. This is exactly the witness #209 asks for; **#209 consumes #195(b)**.
-Sequencing: #195(b) lands the stored answers, then #209 makes the report digest them.
+Once answers are stored, the run report can carry a **count over the stored `answerRef`s of admitted facts**
+— so #209 **makes the issued-vs-stored CARDINALITY visible** (`modelCalls` issued vs `answerRef`s stored)
+in the artifact, not only in a probe, and gives **per-answer traceability** (each admitted fact points at the
+exact stored bytes). This is *not* a claim that "issued ≠ stored is fully verifiable": a stale-but-valid ref
+substitution (a real `answerRef` for a *different* real stored answer) is not caught by the stored side
+alone — that would need the report to bind `answerRef` to the site/rank it was issued for. **#209 consumes
+#195(b).** Sequencing: #195(b) lands the stored answers, then #209 makes the report count/trace them.
 
-## 4. Shapes (frozen)
-- `WhyNot` reason gains `'answer-malformed'` with a sub-reason `'empty' | 'not-utf8' | 'multi-response'`.
-- The fact / `CurrentNode` shape gains `readonly answerRef?: string` (CAS id) and
-  `readonly answerDigest?: string` (blake3 over the stored answer). **Optional** for additive tolerance
-  (facts authored by non-mine paths, e.g. human `atlas emit`, carry neither).
+## 4. Shapes (frozen; leg (a) struck)
+- `WhyNot` reason gains `'answer-malformed'` with a sub-reason `'not-utf8' | 'multi-response'` (an empty /
+  whitespace-only answer stays the **untagged** plain GEN-12 model-abstain — it is a decline, not a corruption).
+- The fact / `CurrentNode` shape gains **`readonly answerRef?: string` (CAS id) only** — no `answerDigest`.
+  **Optional** for additive tolerance (facts authored by non-mine paths, e.g. human `atlas emit`, carry none).
 - The single-response predicate: **specified at build time from the incident fixture**, not guessed here;
   its only frozen requirement is that it REJECTS the 2026-08-04 splice fixture and ADMITS a normal single
   answer (both are DoD tests).
 
 ## 5. Godfile / blast radius
-- `upsert.ts` is at **397/400**; adding `answerRef`/`answerDigest` to the row shape forces a split (mirror
-  the prior `router.ts`→`upsert.ts` and `mine-proposer`/`mine-gate`/`mine-render` extractions).
+- `upsert.ts` carries the `answerRef` row field (the split that made room for it was `router.ts`→`upsert.ts`
+  / `projection-types.ts`, already landed). **Correction found in build:** the row *type* had the field but
+  the CREATE branch never *carried* it — a freshly mined node dropped `answerRef` (mirror of the "reference
+  model vs shipped path" trap). `answerProvenanceOf(req)` now stamps it in CREATE/UPDATE, exactly as
+  `governanceOf`/`relationOf` do.
 - `llm.ts` is at **165/400** — the sanity gate + capture + scrub-and-put land here with room.
 - `mine.ts` is at **399/400** — any new wiring forces a split.
 - The sole production reader of a fact's provenance is the read/pack surface; new optional fields are
   additive (no exhaustive switch ranges over them). tsc + full suite + gates are the reachability proof.
 
 ## 6. Ratification (GAP-2 rite)
-- **(a)+(b)+(c) owner-ratified 2026-08-10** (this is the record).
+- **(a)+(b)+(c) owner-ratified 2026-08-10**; **leg (a) STRUCK 2026-08-10 on contract review** (see §2
+  amendment) — the WP ships **(b)+(c)** only.
 - Leg **(b)** touches **KNOW-11 / the scrubber surface** — the scrubber-coverage fitness function (#121)
   must be extended to the new `put()` call site as a **mandatory DoD item**, and **billy** cold-reviews the
   door (a secret reaching CAS unscrubbed is the exact failure this leg must not introduce).

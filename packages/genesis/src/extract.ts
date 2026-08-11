@@ -34,17 +34,30 @@ export function defaultCeiling(frontierSize: number): number {
 export interface SeedProposal {
   readonly cand: Candidate;
   readonly claim: string;
+  /**
+   * [#195c] The VALIDATED answer bytes as a string — the untrimmed answer envelope the model returned, of
+   * which `claim` is the trimmed projection. Present ONLY on a model-produced seed that passed the adapter's
+   * admission sanity gate (`llm.ts admitModelAnswer`). W-MINE scrubs this and puts it to CAS as the fact's
+   * `answerRef` receipt (KNOW-11); the DRIVER here NEVER reads it (it is opaque provenance,
+   * routed straight to the gate). Absent on a hand-built / human seed. Typed here rather than ridden as an
+   * untyped widened field, so the emit path can thread it without a cast.
+   */
+  readonly rawAnswer?: string;
   readonly selfAsserted?: boolean; // IGNORED by the driver (GEN-4d) — never promotes a seed
   readonly confidence?: number; //    IGNORED by the driver (GEN-4d) — never promotes a seed
 }
 
 /**
  * The single bounded LLM call per site (GEN-2). CALLED, never defined here (the proposer/admission engine
- * is EPIC-28-b). Returns the proposed seed, or `null` when the model abstains at the site (abstention is a
- * valid, unpressured outcome — GEN-12). The driver invokes this EXACTLY ONCE per visited site.
+ * is EPIC-28-b). The driver invokes this EXACTLY ONCE per visited site. Three distinct outcomes:
+ *   - a `SeedProposal` — a grounded proposal the driver routes to the gate;
+ *   - `null` — a PLAIN GEN-12 model-abstention (the model declined; an empty answer is not a corruption);
+ *   - `{ abstain }` — [#195c] a MALFORMED-ANSWER abstention, carrying the sanity gate's already-tagged
+ *     `answer-malformed:*` sub-reason so a spliced/corrupt answer drives a DISTINCT, greppable grounded
+ *     `WhyNot` instead of vanishing into the silent `null` case (the 2026-08-04 splice was invisible).
  */
 export interface SiteProposer {
-  propose(cand: Candidate): SeedProposal | null;
+  propose(cand: Candidate): SeedProposal | { readonly abstain: string } | null;
 }
 
 /** The gate's mechanical verdict: an admitted grounded `Fact`, or a grounded `WhyNot` abstention. */
@@ -116,6 +129,11 @@ export function runExtract(
     if (seed === null) {
       // GEN-12: abstention is first-class — a site that yields no proposal yields a grounded WhyNot.
       abstained.push({ site: cand.site, reason: 'model abstained: no grounded fact at site' });
+    } else if ('abstain' in seed) {
+      // [#195c] A MALFORMED-answer abstention is DISTINCT from a plain model-abstain: it produces a grounded
+      // WhyNot whose reason is the sanity gate's `answer-malformed:*` sub-reason (carried VERBATIM, never
+      // re-derived), so the spliced/corrupt-answer class is GREPPABLE in the run ledger rather than silent.
+      abstained.push({ site: cand.site, reason: seed.abstain });
     } else {
       // GEN-4: admission is the mechanical 2-door verdict alone (self-declaration on `seed` is NOT read).
       const verdict = deps.gate.emit(seed, cand);

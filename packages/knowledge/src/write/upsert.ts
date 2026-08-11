@@ -31,7 +31,7 @@ import { isWeakerTier } from '../ratify/tier.js';
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 
 // The projection ROW shapes — `WriteRequest` and `CurrentNode` — were EXTRACTED to `projection-types.ts` at
-// the 400-LOC godfile ceiling (this WP, #195, added the two `answerRef`/`answerDigest` carriers to both).
+// the 400-LOC godfile ceiling (#195 b added the `answerRef` carrier to both).
 // Re-exported here so the package surface and every existing `../write/upsert.js` / `router.js` import is
 // byte-identical. `StoreProjection`/`UpsertResult` and the reducer itself stay in this file. Imported (not
 // just re-exported) so the reducer body below can still name them.
@@ -170,6 +170,19 @@ function relationOf(req: WriteRequest): { endpointA?: string; endpointB?: string
   };
 }
 
+/** The ADDITIVE answer-provenance carrier a MINED write contributes to the row (#195 b). Conditional spread,
+ *  same discipline as {@link governanceOf}/{@link relationOf}: an omitted `answerRef` stays ABSENT (never an
+ *  explicit `undefined`), keeping `exactOptionalPropertyTypes` and the JSON round-trip honest. Present ONLY on
+ *  the mine emit path — a human `atlas emit`/`atlas link` supplies none.
+ *
+ *  WITHOUT THIS the field lived on the row TYPE (projection-types.ts) but a freshly CREATEd mined node never
+ *  carried it: the CREATE/UPDATE branches re-mint only the fields named INLINE (ADR-0009 carry-forward spreads
+ *  `...prior`, but a first mine has NO prior), so `answerRef` was dropped and the shape claimed a receipt the
+ *  reducer discarded. Named here, it is carried exactly as governance/relation are. */
+function answerProvenanceOf(req: WriteRequest): { answerRef?: string } {
+  return { ...(req.answerRef !== undefined ? { answerRef: req.answerRef } : {}) };
+}
+
 /**
  * Apply one write as an upsert: resolve the routing inputs against the current projection, route
  * with {@link routeWrite}, then reduce the projection per the route. DEDUP is a no-op; CREATE mints
@@ -242,6 +255,7 @@ export function upsert(
         ...(req.slot !== undefined ? { slot: req.slot } : {}),
         ...governanceOf(req), // GOVERNANCE carrier (ADR-0007) — absent when the caller declares neither half
         ...relationOf(req), // RELATION carrier (ADR-0015 D2) — the endpoint pair + kind on a family:'relation' write
+        ...answerProvenanceOf(req), // ANSWER-PROVENANCE carrier (#195 b) — the mined answer receipt, mine path only
       });
       break;
     case 'UPDATE': {
@@ -258,6 +272,7 @@ export function upsert(
         ...(req.slot !== undefined ? { slot: req.slot } : {}),
         ...governanceOf(req), // re-states scope / re-states-or-RAISES tier; omitted ⇒ `...prior` stands
         ...relationOf(req), // RELATION carrier (ADR-0015 D2) — re-evidencing a relation re-states its endpoints
+        ...answerProvenanceOf(req), // ANSWER-PROVENANCE carrier (#195 b) — re-mining re-states the receipt; else `...prior`
       });
       break;
     }

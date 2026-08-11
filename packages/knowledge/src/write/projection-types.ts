@@ -7,7 +7,7 @@
 // `../src/write/router.js` / `upsert.js` import — is byte-identical. `NodeFamily` stays owned by
 // `router.ts` and is imported here (a type-only cycle, erased at runtime, exactly as negation-types'
 // import of `RelationKind` is). Nothing here changed in the move EXCEPT the two ADDITIVE/OPTIONAL
-// answer-provenance carriers (`answerRef`/`answerDigest`, #195) added to both shapes below.
+// answer-provenance carrier (`answerRef`, #195 b) added to both shapes below.
 
 import type { Tier } from '@atlas/contracts';
 import type { PredicateSlot } from '../types.js';
@@ -37,14 +37,15 @@ export interface WriteRequest {
   readonly endpointA?: string;
   readonly endpointB?: string;
   readonly relationKind?: string; // the closed-vocabulary RelationKind VALUE (string form at this seam)
-  // ── ANSWER-PROVENANCE carrier (ADDITIVE, OPTIONAL — #195) — binds a MINED fact to the exact bytes the model
-  //    returned. `answerRef` is the CAS id of the answer bytes actually stored (scrubbed before `put`, KNOW-11);
-  //    `answerDigest` is the blake3 over THOSE stored bytes (tamper-evidence at rest; invariant
-  //    `answerDigest === hash(answerRef's content)`). Supplied ONLY by the mine door (a model produced the
-  //    claim); absent for human `atlas emit`/`atlas link`. NEITHER enters `nodeKey` (a provenance receipt is
-  //    not an identity). NOT ROUTED. See docs/design/195-answer-provenance-contract.md.
+  // ── ANSWER-PROVENANCE carrier (ADDITIVE, OPTIONAL — #195 b) — binds a MINED fact to the exact bytes the model
+  //    returned. `answerRef` is the CAS id of the answer bytes actually stored (scrubbed before `put`, KNOW-11).
+  //    In a content-addressed store the CAS id IS the digest of the stored content, so `answerRef` is its OWN
+  //    tamper-evidence at rest — a reader re-runs `id(fetchedBytes)` and compares (store.ts `get()` does exactly
+  //    this on read), so NO separate `answerDigest` field is kept (precedent: `promptDigest` — one digest, no
+  //    companion ref). Supplied ONLY by the mine door (a model produced the claim); absent for human
+  //    `atlas emit`/`atlas link`. Does NOT enter `nodeKey` (a provenance receipt is not an identity). NOT
+  //    ROUTED. See docs/design/195-answer-provenance-contract.md.
   readonly answerRef?: string;
-  readonly answerDigest?: string;
 }
 
 /** A current node in the territory projection. Exactly one lives per `nodeKey` (KNOW-4g). */
@@ -136,14 +137,14 @@ export interface CurrentNode {
   readonly endpointA?: string;
   readonly endpointB?: string;
   readonly relationKind?: string;
-  // ── ANSWER-PROVENANCE carrier (ADDITIVE, OPTIONAL — #195) — the mined fact's receipt for the exact bytes the
-  //    model returned: `answerRef` = CAS id of the stored (scrubbed) answer, `answerDigest` = blake3 over those
-  //    stored bytes. Present only on a MINED row (a model produced the claim); absent for human writes. NEITHER
-  //    enters `nodeKey` (a provenance receipt is not an identity). Round-trips inside the CurrentNode entry
-  //    (store.ts WireProjection serializes the whole node — no format edit). ADDITIVE/OPTIONAL, back-compat: a
-  //    row minted before this WP simply has neither, reading as "answer provenance UNKNOWN" (never "verified").
-  //    #209 consumes these: the run report digests the admitted rows' `answerRef`s so issued != stored is
-  //    visible in the artifact. See docs/design/195-answer-provenance-contract.md.
+  // ── ANSWER-PROVENANCE carrier (ADDITIVE, OPTIONAL — #195 b) — the mined fact's receipt for the exact bytes the
+  //    model returned: `answerRef` = CAS id of the stored (scrubbed) answer. The CAS id is its own tamper-evidence
+  //    (store.ts `get()` re-hashes on read), so no separate digest is kept. Present only on a MINED row (a model
+  //    produced the claim); absent for human writes. Does NOT enter `nodeKey` (a provenance receipt is not an
+  //    identity). Round-trips inside the CurrentNode entry (store.ts WireProjection serializes the whole node — no
+  //    format edit). ADDITIVE/OPTIONAL, back-compat: a row minted before this WP simply has none, reading as
+  //    "answer provenance UNKNOWN" (never "verified"). #209 consumes it: the run report digests the admitted rows'
+  //    `answerRef`s so the issued-vs-stored CARDINALITY is visible in the artifact, plus per-answer traceability.
+  //    See docs/design/195-answer-provenance-contract.md.
   readonly answerRef?: string;
-  readonly answerDigest?: string;
 }

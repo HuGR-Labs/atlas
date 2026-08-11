@@ -63,11 +63,15 @@ export function createSiteProposer(deps: {
     propose(cand: Candidate) {
       const prompt = deps.buildPrompt(cand);
       const r = deps.client.complete(prompt, deps.budget); // EXACTLY ONE bounded call — no retry/loop
-      if (r.claim === null) return null;
-      // [#195c] Forward the VALIDATED answer bytes through the proposal so W-MINE can scrub-and-put them to
-      // CAS. Built as a variable (not a return-position literal) so the extra field rides a `SeedProposal`
-      // without a genesis-owned type change — the SiteProposer contract stays `SeedProposal | null`.
-      const seed: SeedProposal & { rawAnswer?: string } = {
+      if (r.claim === null) {
+        // [#195c] Split the abstention so the MALFORMED case is OBSERVABLE. A tagged `abstainReason` (the
+        // sanity gate's `answer-malformed:*`) returns a DISTINCT `{ abstain }` the driver builds a greppable
+        // grounded WhyNot from; an UNTAGGED null (empty / model-declined) stays the plain GEN-12 abstention.
+        return r.abstainReason !== undefined ? { abstain: r.abstainReason } : null;
+      }
+      // [#195c] Forward the VALIDATED answer bytes on the now-TYPED `SeedProposal.rawAnswer` field so W-MINE
+      // scrubs-and-puts them to CAS as the fact's `answerRef`; this seam does not scrub and never touches CAS.
+      const seed: SeedProposal = {
         cand,
         claim: r.claim,
         ...(r.rawAnswer !== undefined ? { rawAnswer: r.rawAnswer } : {}),
