@@ -7,8 +7,9 @@ oracle is reused verbatim.
 
 > Search-before-freeze done (2026-08-10, branch `feat/relation-fact-99a` off `28af788`). The surfaces below
 > were read, not assumed; each cited at `file:line`. The one hard problem (endpoint identity under move+rename)
-> is D2+D4's shared residue and is **explicitly deferred to #99c/hugit-diff** — a pure edit is handled here, a
-> move+rename is out of #99a scope and named as such.
+> is D2+D4's shared residue and is **explicitly deferred to #99c** (its rename engine was scoped to `hugit-diff`,
+> discontinued/on hold 2026-08-10 — now TBD) — a pure edit is handled here, a move+rename is out of #99a scope and
+> named as such.
 
 ## 0. The crux this contract exists to resolve
 
