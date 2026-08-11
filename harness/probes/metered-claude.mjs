@@ -60,6 +60,19 @@ function recordSidecar(fields) {
   appendFileSync(SIDECAR, JSON.stringify({ ts: new Date().toISOString(), model: MODEL, ...fields }) + '\n');
 }
 
+/**
+ * True iff the model's answer IS the abstain sentinel — the same predicate as `isAbstainToken` in
+ * packages/adapter-io/src/llm.ts (`ABSTAIN_SENTINEL = 'NO-FACT'`): case-insensitive, surrounding
+ * formatting/punctuation stripped from the ends, whole-answer match. The token string is DUPLICATED here on
+ * purpose — the harness invariant forbids importing `@atlas/*`. This is used ONLY to label the sidecar; the
+ * bytes still flow to Atlas unchanged, and Atlas's own gate remains the authority (kept in sync by intent —
+ * if ABSTAIN_SENTINEL ever changes, this string must follow).
+ */
+function isAbstainSentinel(answer) {
+  const stripped = answer.trim().replace(/^[\s`'"*.[\](){}]+|[\s`'"*.[\](){}]+$/g, '');
+  return stripped.toUpperCase() === 'NO-FACT';
+}
+
 let stdoutBuf;
 try {
   stdoutBuf = execFileSync(CLAUDE_BIN, ['-p', '--model', MODEL, '--output-format', 'json'], {
@@ -105,13 +118,22 @@ try {
 const isError = env.is_error === true;
 const result = typeof env.result === 'string' ? env.result : '';
 const usage = env.usage && typeof env.usage === 'object' ? env.usage : {};
+const emptyResult = result.trim() === '';
 
-// STDOUT contract: abstain (write nothing) on error or empty/whitespace result; else pass `result` VERBATIM.
-const abstained = isError || result.trim() === '';
-if (!abstained) {
+// STDOUT contract: write nothing on error or empty/whitespace result; else pass `result` VERBATIM. The
+// abstain SENTINEL is passed THROUGH like any other bytes — Atlas's own gate (isAbstainToken, llm.ts) is the
+// authority that turns it into an abstention, so a metered run exercises the real production path, not a
+// wrapper shortcut.
+if (!isError && !emptyResult) {
   // write the exact bytes of `result` — no re-encode of newlines, Atlas's gate judges the shape.
   writeSync(1, Buffer.from(result, 'utf8'));
 }
+
+// abstained = the outcome Atlas WILL record, so the sidecar's abstention-rate reading is truthful: an error,
+// empty stdout, OR the abstain sentinel (#201) all become an abstention at the seam. Empty-stdout alone was
+// wrong here — after the #201 fix the model abstains by emitting the NON-empty token NO-FACT, which this
+// wrapper otherwise booked as abstained=false (measured 2026-08-11 integ-smoke). See isAbstainSentinel.
+const abstained = isError || emptyResult || isAbstainSentinel(result);
 
 recordSidecar({
   input_tokens: usage.input_tokens ?? null,

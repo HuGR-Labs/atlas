@@ -7,6 +7,7 @@
 //   (a) on a normal envelope, stdout === the canned `result` VERBATIM (the `--output-format text` contract);
 //   (b) the sidecar gains one line with the exact token numbers and cost;
 //   (c) an is_error envelope ⇒ EMPTY stdout (abstention) + a sidecar line with abstained:true;
+//   (c3) the abstain sentinel NO-FACT ⇒ sidecar abstained:true while the token still flows to stdout (#201);
 //   (d) a missing ATLAS_COST_SIDECAR exits 3 (fail-loud: nowhere to record = silent-loss bug).
 //
 // Harness invariant (harness/README.md): no `@atlas/*` import.
@@ -155,6 +156,34 @@ describe('metered-claude wrapper (A3 cost metering)', () => {
       expect(readSidecar(sidecar)[0].abstained).toBe(true);
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('(c3) the abstain SENTINEL ⇒ sidecar abstained:true, yet the token still flows to stdout (#201)', () => {
+    // After the #201 fix the model abstains by emitting the NON-empty token NO-FACT. The wrapper must (1)
+    // book it as an abstention in the sidecar (else the abstention-rate reading lies), AND (2) still pass the
+    // bytes THROUGH — Atlas's own isAbstainToken gate is the authority that maps it, so a metered run
+    // exercises the real path. Both a bare token and a markdown-backtick-wrapped one (the measured Sonnet 4.6
+    // case) must be recognised.
+    for (const result of ['NO-FACT', '`NO-FACT`', '  no-fact \n']) {
+      const dir = mkdtempSync(join(tmpdir(), 'metered-sentinel-'));
+      try {
+        const sidecar = join(dir, 'cost.jsonl');
+        const canned = JSON.stringify({
+          is_error: false,
+          result,
+          total_cost_usd: 0.004,
+          usage: { input_tokens: 800, output_tokens: 7, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+        });
+        const r = runWrapper({ dir, sidecar, cannedJson: canned });
+        expect(r.status).toBe(0);
+        expect(r.stdout).toBe(result); //            (2) token passed through VERBATIM, Atlas's gate maps it
+        const rec = readSidecar(sidecar)[0];
+        expect(rec.abstained).toBe(true); //         (1) sidecar tells the truth about the outcome
+        expect(rec.total_cost_usd).toBe(0.004); //   cost is still recorded — an abstention is not free
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
     }
   });
 
