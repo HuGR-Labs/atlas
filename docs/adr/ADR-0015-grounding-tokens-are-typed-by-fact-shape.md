@@ -3,8 +3,9 @@
 **Status:** PROPOSED — owner ratification required (amends the GROUND-1 oracle model).
 **Closes:** the product limit in #99 (Atlas cannot ground a negative, a relation, or a transition — 5 seats
 hit the same wall). Reconnects the deferred GAP-1 (multi-unit anchor, ADR-0014 §"does NOT close") and #189
-(the dependency graph is an under-approximation) to a real consumer, and names `hugit-diff` (structural diff
-with moves) as the rename-reconciliation seam.
+(the dependency graph is an under-approximation) to a real consumer. It originally named `hugit-diff` (structural
+diff with moves) as the rename-reconciliation seam; **that project is discontinued/on hold as of 2026-08-10, so the
+seam is reopened — TBD** (see the 2026-08-10 amendment note at the end of "What this reconnects").
 
 > This ADR decides the SHAPE only. No code lands on this ADR. It is grounded in a prior-art sweep of the
 > state of the art (sources inline); the honest hard problems are named, not hidden.
@@ -116,15 +117,25 @@ storm. The fix is D2's split: `unitKey` (location-free, identity) + `subtreeHash
 drifts the relation *without orphaning it* — the win content-hash-alone cannot buy. But a genuine move+rename
 changes `unitKey` itself, and **no content scheme can survive that** (Kythe minimizes it with location-free
 VNames but a rename still re-derives a signature). The residual reduces to **rename reconciliation**, whose
-natural home is a structural-diff / rename-detection pass — Atlas's own `hugit-diff` (TED-with-moves): diff
-HEAD⁻¹→HEAD, detect the moved+renamed subtree, rewrite `unitKey` on both single- and 2-ended facts before the
-oracle runs. #99 is therefore also the first real consumer of `hugit-diff`.
+natural home is a structural-diff / rename-detection pass: diff HEAD⁻¹→HEAD, detect the moved+renamed subtree,
+rewrite `unitKey` on both single- and 2-ended facts before the oracle runs. This was originally scoped to Atlas's
+own `hugit-diff` (TED-with-moves); **that project is discontinued/on hold as of 2026-08-10, so the engine is TBD**
+(the algorithm survives as a reference, not a shipped dependency). The move+rename residue is not yet built — a
+pure edit is already handled by the split; the residue is re-scoped at #99c.
 
 ## What this reconnects (three deferred/parallel threads get a consumer)
 
 - **GAP-1** (multi-unit anchor, deferred in ADR-0014 for "no consumer"): D2's relation IS the consumer.
 - **#189** (dep graph is an under-approximation): D3's abstention discipline is the honest response to it.
-- **hugit-diff** (structural diff with moves): the rename-reconciliation seam for D2+D4.
+- **rename-reconciliation seam** for D2+D4 (a structural diff with moves): originally scoped to `hugit-diff`,
+  **now TBD** — see the amendment note below.
+
+> **Amendment 2026-08-10 (honesty maintenance, non-normative):** `hugit-diff` — the project originally named
+> throughout this ADR as the rename-reconciliation seam — has been discontinued / put on hold by the owner. No
+> shipped Atlas code ever depended on it (grep of `packages/**` + `harness/**` for `hugit` = 0; #99a and #99b
+> shipped with their own machinery). The move+rename residue for #99c remains explicitly deferred, and its engine
+> is now an open design question rather than a named home. This amendment corrects the forward references above; it
+> does not change any ratified decision of ADR-0015 (the typed-token model, the D2/D3/D4 split, the sequencing).
 
 ## What the owner must ratify
 
@@ -147,7 +158,8 @@ oracle runs. #99 is therefore also the first real consumer of `hugit-diff`.
   witness (scope Merkle root + edge-model version) + the abstention gate. Design-heavy; the honesty core.
   Blocked-in-spirit until the dep graph's completeness boundary is stated (#189 follow-through).
 - **#99c — TRANSITION (build third).** Work = advisory rev-pair record + supersession lineage + rename
-  reconciliation via `hugit-diff`. Depends on the structural-diff work maturing.
+  reconciliation. The rename engine was scoped to `hugit-diff` (discontinued/on hold 2026-08-10) — now **TBD**; the
+  move+rename residue is re-scoped at #99c freeze.
 
 **Lead recommendation: ratify D1–D4 + the sequencing, then build #99a (RELATION) as the first landing.** It is
 the buildable core, it discharges the deferred GAP-1, and it is the one that most moves the north (relations
