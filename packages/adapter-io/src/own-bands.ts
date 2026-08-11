@@ -48,8 +48,9 @@ const GOTCHA_SLOTS = new Set<PredicateSlot>(['gotcha', 'rationale']);
 /** The slot a row lives at — the projection's carrier first (it is the trusted, recomputed copy), the fact's
  *  own optional field as the fallback for a row minted before the carrier existed. */
 function slotOf(row: Row): PredicateSlot | undefined {
-  // A RelationNode (ADR-0015 D2) carries no `predicateSlot`; narrow it away (relations aren't slotted facts).
-  const factSlot = row.fact.kind === 'relation' ? undefined : row.fact.predicateSlot;
+  // A RelationNode (ADR-0015 D2) and a NegationNode (ADR-0015 D3) carry no `predicateSlot`; narrow it away
+  // (neither is a slotted fact).
+  const factSlot = row.fact.kind === 'relation' || row.fact.kind === 'negation' ? undefined : row.fact.predicateSlot;
   return row.node.slot ?? factSlot;
 }
 

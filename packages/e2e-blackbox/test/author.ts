@@ -19,7 +19,7 @@ import { build } from '@atlas/index';
 import type { Axes, IndexNode } from '@atlas/index';
 import { foldAstUnits, initAst, walkFileTree } from '@atlas/adapter-io';
 import { nodeKey, relationKey } from '@atlas/knowledge';
-import type { Candidate, GroundedFact, PredicateSlot, RelationKind, RelationNode } from '@atlas/knowledge';
+import type { Candidate, GroundedFact, NegationNode, PredicateSlot, RelationKind, RelationNode } from '@atlas/knowledge';
 import type { SubtreeHash, Tier } from '@atlas/contracts';
 
 // WARM UP the opt-in AST grammar at MODULE LOAD (top-level await) so this in-process authoring helper folds
@@ -302,6 +302,43 @@ export function groundedRelationFact(spec: RelationFactSpec): GroundedFact {
     claims: [],
     authoring: 'RELATED',
     scope: spec.scope ?? 'src',
+  };
+  return node;
+}
+
+/** The recipe for one SCOPED NEGATION payload (ADR-0015 D3 / #99b — "the honesty core"): the assertion
+ *  `(¬relationKind, target, scope)` — "no `relationKind`-edge to the GLOBAL symbol `target` was found within
+ *  the CLOSED directory `scope`". */
+export interface NegationFactSpec {
+  readonly target: string; // the location-free GLOBAL SCIP symbol X the negative is ABOUT (¬∃·→X)
+  readonly scope: string; //  the CLOSED directory scope S the witness ranges over (its own authz scope)
+  readonly relationKind?: RelationKind; // default 'calls'
+  readonly tier?: Tier; // default 'T2' — advisory-class, grounded ⇒ auto-accepts (no ratifier consulted)
+}
+
+/**
+ * A serializable raw `NegationNode` as it ARRIVES at the door. Unlike the advisory/relation authors above,
+ * this one computes NOTHING from the index: the abstention DOOR (governed-emit-negation.ts) is the sole
+ * authority that decides closure and CONSTRUCTS the §3 grounding, mints the `negationKey` id, and stamps the
+ * `edgeModel` at admit — so `grounding`/`id`/`edgeModel` here are placeholders the door re-derives (exactly as
+ * the door's own unit tests hand it an empty grounding). What the payload carries that MATTERS is the identity
+ * triple `(relationKind, target, scope)` and the tier; the door proves or refuses the rest against the REAL
+ * completeness feed it builds from the fixture's SCIP. This is the honest shape a user would write by hand.
+ */
+export function negationPayload(spec: NegationFactSpec): GroundedFact {
+  const tier: Tier = spec.tier ?? 'T2';
+  const node: NegationNode = {
+    kind: 'negation',
+    id: 'author-placeholder-remint' as unknown as NegationNode['id'], // the door MINTS negationKey; never trusted
+    tier,
+    relationKind: spec.relationKind ?? 'calls',
+    target: spec.target,
+    scope: spec.scope,
+    grounding: { entries: [] }, // the door CONSTRUCTS the §3 directory grounding at admit
+    edgeModel: '', // the door STAMPS edgeModelVersion() at admit
+    freshness: 'FRESH',
+    claims: [],
+    authoring: 'NEGATED',
   };
   return node;
 }

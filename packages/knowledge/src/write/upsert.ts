@@ -13,6 +13,9 @@
 
 import type { Tier } from '@atlas/contracts';
 import type { PredicateSlot } from '../types.js';
+// ADR-0015 D3 / #99b — the honest-abstention record (NOT a GroundedFact; it asserts nothing). Type-only,
+// same package. Carried on the projection as a sibling to `current` (see StoreProjection.abstained below).
+import type { AbstainedRecord } from '../negation-types.js';
 import type { NearDupConfig, NodeFamily, RouteInputs, WriteDecision } from './router.js';
 import { isKnownSlot, routeWrite } from './router.js';
 // The KNOW-10/KNOW-15i closed-slot REFUSAL (#152) — extracted at the LOC ceiling. Read that file's header
@@ -148,6 +151,13 @@ export interface CurrentNode {
 export interface StoreProjection {
   readonly current: ReadonlyMap<string, CurrentNode>; // nodeKey → the ONE current node
   readonly cas: ReadonlySet<string>; // retained contentHashes — prior versions stay addressable
+  // ── ABSTENTION ledger (ADDITIVE, OPTIONAL — ADR-0015 D3 / #99b) — the N2↔N3 SEAM (frozen commit 1be6ea6).
+  //    An `AbstainedRecord` is NOT a fact (asserts nothing) so it must NOT enter `current`; it lives here,
+  //    keyed by `negationKey` (the address the negation would take, §2). Writer (N2 door) writes via
+  //    `commitProjection` NOT `upsert`, deletes the key on a later admitted negation (§2 supersede), and
+  //    round-trips it in adapter-io store.ts (else #202's observability fails). Reader (N3) folds
+  //    `abstained.values()`. Additive/optional (the `builtAt` discipline); absent ⇒ none; never a nodeKey.
+  readonly abstained?: ReadonlyMap<string, AbstainedRecord>;
   // ── freshness watermark (ADDITIVE, OPTIONAL — N11) — the git HEAD sha this projection's stored per-fact
   //    freshness was last computed against (stamped at persist). A query cheaply compares it to current HEAD:
   //    if they differ, the read is BEHIND HEAD ⇒ its freshness is unverified ⇒ honestly `stale` (never a

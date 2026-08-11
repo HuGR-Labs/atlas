@@ -260,7 +260,7 @@ export function buildControllerDeps(
       // (KNOW-15b), the SAME seam that mints contentHash/primaryAnchor; the payload's own `f.id` never routes, or
       // an author could spoof another node's identity (governed-emit.ts parity, WP-F3). Map `predicateSlot` →
       // `.slot` first: the cast is otherwise LOSSY (identity fns read `.slot`) and yields a slot-free key.
-      const fSlot = f.kind === 'relation' ? undefined : f.predicateSlot; // relation (ADR-0015 D2) has no slot
+      const fSlot = f.kind === 'relation' || f.kind === 'negation' ? undefined : f.predicateSlot; // relation (D2)/negation (D3) have no slot
       const view = { ...f, slot: fSlot } as unknown as KnowledgeCandidate;
       const key = nodeKey(view) as unknown as string;
       // A MINED CANDIDATE NEVER RE-AUTHORS AN ESTABLISHED ONE — belt-and-braces since ADR-0008, load-bearing before

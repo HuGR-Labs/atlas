@@ -82,13 +82,16 @@ export interface GroundingEntry {
  * same decode-then-encode bytes the minter did. `TextEncoder` does NOT Unicode-normalize, so the KERNEL-1
  * NFC rule (and the #106 non-injectivity it buys) does not reach this digest.
  *
- * PER-`StructRef.kind` SEMANTICS — all five, no gaps (task #159):
+ * PER-`StructRef.kind` SEMANTICS — all six, no gaps (task #159; `directory` added by #99b / ADR-0015 D3):
  *   · `symbol` — a real sub-range of the file's bytes: the symbol's own extent. REQUIRED once symbol-granular
  *     sites exist (#182); the byte conversion above is a PRE-REQUISITE for it.
  *   · `block`  — as `symbol`: the block's extent, a real sub-range.
  *   · `file`   — **ABSENT.** The unit IS the file, so a `0..len` span carries no information the anchor does
  *     not already carry, and storing one invites a reader to treat "the whole file" as a located citation.
  *     Nothing may emit `0..0`, and nothing may emit a sentinel; a producer that cannot locate omits the field.
+ *   · `directory` — **ABSENT**, on the `file` rule: the unit IS the directory (a spatial container node), and
+ *     it has no byte-range of its own — its `subtreeHash` folds its NAMED children, not a contiguous slice. A
+ *     directory-scoped negation grounds against that folded hash (#99b), never a span.
  *   · `repo` / `project` — REQUIRED where the anchor is what GROUND-12 says it is: a policy artifact's
  *     heading/section BLOCK, which is a genuine sub-range of that artifact's bytes. A `repo` anchor that
  *     resolved to a whole file follows the `file` rule instead — absent.

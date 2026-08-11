@@ -109,6 +109,36 @@ function renderData(data: unknown): string {
     return `data:\n${lines.join('\n')}\n`;
   }
 
+  // negations { negations, abstentions, scope, abstained } — the grounded negatives + honest abstentions under
+  // a scope (`atlas negations`, #99b). Recognised by a `negations` array (no other data shape carries that
+  // key; the relations shape carries `relations`, not `negations`, so no cross-shadowing), guarded BEFORE the
+  // shapes below. A header line states the scope and BOTH counts, so an EMPTY result is a measured fact and an
+  // abstention that fired is never an absent line. Each negative renders `  negation <kind> <target> in
+  // <scope> (<nodeKey>)`; each abstention renders `  abstained <kind> <target> in <scope> — <reason>` — the
+  // ABSTAINED section is the #202 observability. `--abstained` FOCUSES the render on the abstentions ONLY (the
+  // data still carries both arrays, so parity + observability hold); the default shows negatives AND
+  // abstentions, so a fired abstention is visible without any flag.
+  if (Array.isArray(d.negations)) {
+    const negs = d.negations as readonly { nodeKey: string; relationKind: string; target: string; scope: string; freshness?: string }[];
+    const absts = d.abstentions as readonly { relationKind: string; target: string; scope: string; reason: string }[] | undefined;
+    const abstentions = Array.isArray(absts) ? absts : [];
+    const scope = typeof d.scope === 'string' ? d.scope : '';
+    const focus = d.abstained === true;
+    const abstainedLines = abstentions.map(
+      (a) => `  abstained ${a.relationKind} ${a.target} in ${a.scope} — ${a.reason}`,
+    );
+    // N4: each grounded negative renders its per-row §3 freshness verdict (FRESH/DRIFTED) — a re-opened scope
+    // or an extractor-model bump reads DRIFTED, so "does this negative still hold" is legible on the surface.
+    const lines = focus
+      ? [`  negations: ${scope} — ${abstentions.length} abstention(s)`, ...abstainedLines]
+      : [
+          `  negations: ${scope} — ${negs.length} negation(s), ${abstentions.length} abstention(s)`,
+          ...negs.map((n) => `  negation ${n.relationKind} ${n.target} in ${n.scope} [${n.freshness ?? 'DRIFTED'}] (${n.nodeKey})`),
+          ...abstainedLines,
+        ];
+    return `data:\n${lines.join('\n')}\n`;
+  }
+
   // link { linked, a, b, retracted? } — the governed sameAs write door result (WP-SAMEAS). A SUCCESSFUL link
   // renders a single `  linked: <a> ≡ <b>` line; a REJECTED link (linked:false) carries its `rejected` string
   // through the handler's ok:false path → the `reason:` block (mirrors emit), so it is never shadowed here.

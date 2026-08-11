@@ -42,9 +42,12 @@ const ARITY: Record<Command, number> = {
   // `relations <unit> [out|in|both]` — the unit is the only REQUIRED positional; the direction is an OPTIONAL
   // second positional (defaults to `both`, validated by the shared verdict builder), so arity is 1.
   relations: 1,
+  // `negations <scope> [--abstained]` — the scope is the only REQUIRED positional; `--abstained` is an
+  // OPTIONAL boolean flag (focuses the render on the honest abstentions), so arity is 1 (#99b).
+  negations: 1,
 };
 
-const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine|node|link|promote|own|relations';
+const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine|node|link|promote|own|relations|negations';
 
 function isCommand(s: string): s is Command {
   return Object.prototype.hasOwnProperty.call(COMMAND_LEG, s);

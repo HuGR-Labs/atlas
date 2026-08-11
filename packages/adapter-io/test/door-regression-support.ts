@@ -78,7 +78,7 @@ export function reasonOf(rejected: string | undefined): string {
 export function keyOf(fact: GroundedFact): string {
   // A RelationNode (ADR-0015 D2) carries no `predicateSlot`; narrow it away. (This helper builds an intrinsic
   // Candidate view — a relation's identity is `relationKey`, not `nodeKey`, so relation facts don't reach here.)
-  const slot = fact.kind === 'relation' ? undefined : fact.predicateSlot;
+  const slot = fact.kind === 'relation' || fact.kind === 'negation' ? undefined : fact.predicateSlot;
   const view = { ...fact, slot } as unknown as Candidate;
   return nodeKey(view) as unknown as string;
 }

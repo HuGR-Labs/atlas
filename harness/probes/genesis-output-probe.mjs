@@ -41,7 +41,7 @@ import { parseMineReport } from './mine-report.mjs';
 /** `Tier` — `packages/contracts/src/tier.ts`. */
 const TIERS = new Set(['T0', 'T1', 'T2']);
 /** `StructRef.kind` — `packages/contracts/src/struct.ts`. */
-const ANCHOR_KINDS = new Set(['symbol', 'block', 'file', 'repo', 'project']);
+const ANCHOR_KINDS = new Set(['symbol', 'block', 'file', 'repo', 'project', 'directory']);
 /** `KnowledgeFreshness` — `packages/knowledge/src/types.ts`. */
 const FRESHNESS = new Set(['FRESH', 'DRIFTED']);
 /** `PredicateSlot` — the CLOSED vocabulary; adding a member is a spec revision (`knowledge/src/types.ts`). */

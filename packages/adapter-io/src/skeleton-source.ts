@@ -30,7 +30,7 @@
 
 import { join } from 'node:path';
 import { id } from '@atlas/kernel';
-import { build, createResolve, createDepgraph } from '@atlas/index';
+import { build, createResolve, createDepgraph, createSymbolReverse } from '@atlas/index';
 import type { Axes, FileTree, ScipOutput } from '@atlas/index';
 import { createInit } from '@atlas/tools';
 import type { Skeleton, SkeletonSource, UnitPrior, UnitPriorSource } from '@atlas/genesis';
@@ -95,6 +95,7 @@ function manifestOf(axes: Axes): Skeleton['manifest'] {
     build: () => axes,
     createResolve,
     createDepgraph,
+    createSymbolReverse,
     nodeHashOfPath: (p: string) => id({ file: p }),
   });
   // `'.'` — the WHOLE repo, spelled the way the index names it. This used to pass the absolute `repoPath`,

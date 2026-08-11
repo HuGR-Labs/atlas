@@ -125,10 +125,25 @@ Grounded relation facts are queryable BIDIRECTIONALLY and are DISTINCT from the 
 
 - New read fold `relationsOf(unitKey, direction)` over the projection's relation nodes: `direction='out'`
   returns relations where `endpointA === unitKey`; `'in'` where `endpointB === unitKey`; `'both'` = union.
-  Pure, deterministic, total (miss ⇒ empty).
-- CLI: `atlas query <unit> --relations [out|in|both]` renders the grounded relation set with freshness.
-- MCP: extend `atlas-query` result with a `relations` field (documented in the tool schema — do NOT ship an
-  undocumented field, cf. #193).
+  Pure, deterministic, total (miss ⇒ empty). **Shipped as specified.**
+
+> **AMENDED to the SHIPPED surface (honest-close, 2026-08-10).** The two bullets below were FROZEN as a
+> `--relations` FLAG on `atlas query` and a `relations` FIELD on the `atlas-query` MCP result. What shipped
+> (PR #128) is a SEPARATE command / SEPARATE tool, deliberately, and this doc is corrected to match — a
+> committed contract that describes a surface the code does not expose is itself a drift. The divergence was a
+> sound build-time decision, recorded here rather than silently left:
+
+- CLI: a SEPARATE `atlas relations <unit> [out|in|both]` command (`packages/cli/src/cli.ts:241`, registered in
+  the `COMMANDS`/parse vocab), NOT a `--relations` flag on `query`. It renders the grounded relation set with
+  freshness. Rationale: a grounded-relation read is a distinct verb from the intrinsic-fact `query` pack, and a
+  separate command keeps each door's argument surface and output shape single-purpose.
+- MCP: a SEPARATE `atlas-relations` read tool (`packages/mcp-server/src/server.ts:87` `RELATIONS_TOOL`), served
+  DIRECTLY from the injected relation leg through the SHARED verdict builder (CLI≡MCP bytes), NOT a field added
+  to `atlas-query`. It is advertised through a narrow parallel path that leaves `GOVERNANCE_SURFACE`
+  byte-for-byte closed at FIVE (server.ts) — the read tool opens no governed token, so production advertises SIX
+  advertised tools while the governed surface stays five. Its input schema is DOCUMENTED (`unit` required
+  nodeKey), honoring #193's no-undocumented-field rule. **#99b (§5 of the negation contract) inherits this exact
+  separate-command / separate-tool shape deliberately, for consistency.**
 
 **Bidirectional index (perf, D2's "promote reverse-closure"):** a relation node is indexed by BOTH endpoints
 on write so `relationsOf` is O(k) not O(repo). Carry `endpointA`/`endpointB` onto the projection row (additive

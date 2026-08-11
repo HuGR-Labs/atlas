@@ -19,6 +19,7 @@ import type {
   IndexNode,
   ResolveApi,
   ScipOutput,
+  SymbolReverseApi,
 } from '@atlas/index';
 
 /**
@@ -32,7 +33,20 @@ export interface IndexAdapterDeps {
   readonly build: (t: FileTree, s: ScipOutput) => Axes;
   readonly createResolve: (forest: AxisForest) => ResolveApi; // ← SCN-5b spy target
   readonly createDepgraph: (edges: readonly DepEdge[]) => DepgraphApi;
+  /** #99b N0 — the SYMBOL-level reverse-caller view over the SAME SCIP occurrences `build`/`deriveEdges`
+   *  read (one granularity below `createDepgraph`). Injected here alongside `createDepgraph` so the negation
+   *  door (N2) consumes it off the SAME assembled index surface, never re-deriving a second edge model. */
+  readonly createSymbolReverse: (scip: ScipOutput) => SymbolReverseApi;
   readonly nodeHashOfPath: (path: string) => Hash; // = (p) => id({ file: p })
+}
+
+/** The index surface `createIndexAdapter` assembles, WIDENED (additively) with the #99b N0 symbol-reverse
+ *  view so the negation door (N2) reaches `reverseCallers`/`holeSources` off the SAME live adapter the
+ *  depgraph rides. The two frozen tools ports are untouched — this only ADDS a sibling accessor. */
+export interface IndexAdapterSurface {
+  /** The #99b N0 symbol-level reverse-caller view, built ONCE at construction from the same `scipOutput`
+   *  the axes are (a live seam; N2 will call `reverseCallers`/`holeSources` on it). */
+  symbolReverse(): SymbolReverseApi;
 }
 
 /** The one explicit cast helper: `Hash` and `NodeKey` are same-string DISTINCT brands (contracts/hash.ts).
@@ -75,8 +89,12 @@ const asTerritory = (node: IndexNode): { name: string; owner: string; globs: str
  * (the structural build is $0-LLM + idempotent); resolve / reverse-closure run PER call and are NEVER
  * memoized (the 5a/5b teeth). Returns the union of the two frozen ports.
  */
-export function createIndexAdapter(deps: IndexAdapterDeps): MoveInIndex & QueryIndex {
+export function createIndexAdapter(deps: IndexAdapterDeps): MoveInIndex & QueryIndex & IndexAdapterSurface {
   const axes = deps.build(deps.fileTree, deps.scipOutput);
+  // #99b N0 — the symbol-reverse view, built ONCE at construction from the SAME `scipOutput` the axes are (a
+  // real production call in every wired handler, not a dormant reference model; #99a's lesson). Deterministic
+  // + pure like `build`, so a single construction-time build is byte-identical to a per-call rebuild.
+  const symbolReverseView = deps.createSymbolReverse(deps.scipOutput);
 
   /** The three-axis view the resolver walks (the SAME forest `cover` resolves over). */
   const forest = (): AxisForest => ({
@@ -148,6 +166,13 @@ export function createIndexAdapter(deps: IndexAdapterDeps): MoveInIndex & QueryI
         invariants: [],
         stale: false,
       };
+    },
+
+    // #99b N0 — the SYMBOL-level reverse-caller seam, off the SAME assembled surface `blastRadius` rides.
+    // The negation door (N2) will call `reverseCallers(target)`/`holeSources()` on it to decide `underApprox`;
+    // N0 only exposes the live view (out of scope to build the door here).
+    symbolReverse() {
+      return symbolReverseView;
     },
   };
 }

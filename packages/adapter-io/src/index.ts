@@ -48,7 +48,7 @@ export {
 export type { PromptFactory, SourceReader, SiblingReader, RelatedUnit } from './prompt.js';
 export { createUnitSourceReader, createUnitSiblingReader } from './unit-source.js'; // #182 S2 — unit bytes + ENRICH siblings
 export { createIndexAdapter } from './index-adapter.js';
-export type { IndexAdapterDeps } from './index-adapter.js';
+export type { IndexAdapterDeps, IndexAdapterSurface } from './index-adapter.js'; // IndexAdapterSurface: #99b N0 symbol-reverse seam for N2
 export { materializePoke, pokeFilePath, POKE_FILE_EXT } from './poke-file.js';
 
 // The standalone arbitrary-rev code index (COMPOSE-C) — builds `Axes` at any git rev via a memoized,
@@ -104,6 +104,10 @@ export { createDoctorSource, regroundTemplate, retireTemplate } from './doctor-s
 // builder both transports drive for byte-identical SCHEMA + VERDICT parity. It opens no governed surface: a read.
 export { createRelationLeg, relationsVerdict } from './relation-source.js';
 export type { RelationLeg, RelationsData } from './relation-source.js';
+// The grounded-negation + abstention READ leg (#99b) — the production edge for `negationsOf`/`abstentionsOf`,
+// plus the SHARED verdict builder both transports drive. Read-only, opens no governed surface; the #202 close.
+export { createNegationLeg, negationsVerdict } from './negation-source.js';
+export type { NegationLeg, NegationsData, NegationsRead } from './negation-source.js';
 
 // The PROVENANCE tripwire's READ-side refusal (`read-provenance.ts`) — the half the write doors already had.
 // Exported because the CLI entrypoint renders it (`cli/src/cli.ts`) and because a test must be able to

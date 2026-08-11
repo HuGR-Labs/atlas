@@ -39,11 +39,13 @@ import type { PromoteOut } from './governed-promote.js';
 import { createOwnLeg } from './own-source.js';
 import type { OwnLeg } from './own-source.js';
 import { createRelationLeg } from './relation-source.js';
+import { createNegationLeg } from './negation-source.js';
 import type { RelationLeg } from './relation-source.js';
+import type { NegationLeg } from './negation-source.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
 import { gitSidecarTrust } from './store-provenance.js';
 import { readProvenanceRefusal } from './read-provenance.js';
-import { assembleHandler } from './wire.js';
+import { assembleHandler, bindFreshnessOracle, edgeModelVersion } from './wire.js';
 import type { WireConfig, WireSeams, WiredHandler } from './wire.js';
 
 // The `mine` ADMISSION SUPPLY (REQ-CLI-4d), split to its own file at the LOC ceiling and RE-EXPORTED here so
@@ -103,6 +105,17 @@ export interface ComposedRuntime {
    * path, and there is nothing for `WiredHandler.handle` to route.
    */
   readonly relations: RelationLeg;
+  /**
+   * The grounded-negation + abstention READ leg (#99b / ADR-0015 D3) — `negations(scope)` returns the
+   * `family:'negation'` negatives the truth door admitted AND the honest ABSTENTIONS it filed under a scope,
+   * via the `negationsOf`/`abstentionsOf` folds. Built from `store`, the SAME object the handler's query leg
+   * reads — passed, not rebuilt — so `atlas negations <scope>` and `atlas query <scope>` are two projections
+   * of ONE store. It rides BESIDE the handler for the same reason `relations`/`own` do: it is not a `Tool`,
+   * `GOVERNANCE_SURFACE` stays 5 and `WRITE_PATHS` is untouched — a READ door, no write path. This leg is what
+   * makes `negationsOf`/`abstentionsOf` running code rather than reference models, and it is the surface that
+   * makes a fired abstention observable (closes #202).
+   */
+  readonly negations: NegationLeg;
   /**
    * The PROVENANCE refusal for this repo's durable store, or `undefined` when it is trustworthy
    * (`read-provenance.ts`). PRESENT means `.atlas/` arrived by COMMIT rather than through a door, so every
@@ -344,6 +357,14 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     // passed, not rebuilt — so `atlas relations <unit>` and `atlas query <unit>` are two projections of ONE
     // store, and a relation emitted through the emit door is visible to the very next `relations` call.
     relations: createRelationLeg(store),
+    // THE GROUNDED-NEGATION + ABSTENTION READ LEG (#99b). Same `store` the query leg reads — passed, not
+    // rebuilt — so `atlas negations <scope>` reads the SAME projection `atlas query` reads back, and a fired
+    // abstention is observable off it (#202). Read-only; no governed token, GOVERNANCE_SURFACE stays 5.
+    // N4 (billy F1): threaded the SAME family-aware freshness oracle the query readback rides — `driftDetect`
+    // over the `axes` built once above PLUS the §3 clause-4 `edgeModel === edgeModelVersion()` conjunct for a
+    // negation — so `atlas negations` surfaces a per-row FRESH/DRIFTED verdict (a re-opened scope OR an
+    // extractor bump reads DRIFTED). `currentEdgeModel` is `edgeModelVersion()`, the SAME value the door stamps.
+    negations: createNegationLeg(store, bindFreshnessOracle(axes, edgeModelVersion())),
     ...(readRefusal !== undefined ? { readRefusal } : {}),
   };
 }

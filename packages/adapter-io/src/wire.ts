@@ -11,17 +11,19 @@
 
 import { createHandler, createInit, createQuery, createReconcile } from '@atlas/tools';
 import type { ToolLegs, ToolLeg, NodeSource } from '@atlas/tools';
-import { build, createResolve, createDepgraph, nodeHashOfPath } from '@atlas/index';
+import { build, createResolve, createDepgraph, createSymbolReverse, nodeHashOfPath } from '@atlas/index';
 import type { Axes } from '@atlas/index';
 // The GROUND-1 per-fact drift oracle — the SAME import the composition root's truth-gate uses (compose.ts).
 import { driftDetect } from '@atlas/grounding';
 import { currentNodes, deriveSameAs, deriveSubsumes } from '@atlas/knowledge';
 import type { GroundedFact } from '@atlas/knowledge';
-import type { Hash } from '@atlas/contracts';
+import type { Freshness, Hash } from '@atlas/contracts';
+import type { FreshnessOracle } from './pack-shape.js';
 import { retrievalPack } from './retrieval-model.js';
 import type { CasPath } from './store.js';
 import { walkFileTree } from './fs.js';
-import { readScipOrEmpty } from './scip.js';
+import { readScipOrEmpty, planIndexers } from './scip.js';
+import type { LangId } from './scip.js';
 import { createIndexAdapter } from './index-adapter.js';
 import { createProjectionQueryIndex, underScope } from './projection-query-index.js';
 import { createDriftSource } from './git-drift.js';
@@ -40,6 +42,48 @@ import { createSiteProposer } from './llm.js';
 
 /** The one wired handler — the exact return of the frozen `createHandler` (@atlas/tools). */
 export type WiredHandler = ReturnType<typeof createHandler>;
+
+/** The every-language set the extractor plan spans (ring shape — scip.ts `LangId`). */
+const ALL_LANGS: readonly LangId[] = ['ts', 'py', 'go', 'java', 'rust', 'rb'];
+
+/**
+ * The EDGE-MODEL version string a #99b negation stamps onto `NegationNode.edgeModel` (§3 clause 4 — the ONE
+ * completeness clause `driftDetect` cannot see, since an extractor upgrade changes no file bytes). It is the
+ * DETERMINISTIC join of the PINNED per-language extractor releases (`IndexerPlan.version`) — the "edge model"
+ * that decided what edges (and thus what CALLERS) the completeness feed could see. Repo-independent (it is the
+ * set of pinned tools, not which files exist) and stable (sorted), so equal builds stamp byte-identical
+ * versions and a later re-check can compare them. An un-indexed language (`honest-hole`, no `version`) pins
+ * nothing and contributes nothing here.
+ */
+export function edgeModelVersion(): string {
+  return planIndexers([...ALL_LANGS])
+    .flatMap((p) => (p.version !== undefined ? [`${p.lang}@${p.version}`] : []))
+    .sort()
+    .join(',');
+}
+
+/**
+ * THE ONE per-fact freshness oracle, made FAMILY-AWARE (N4 · billy F1 — the honesty-axis teeth). This is the
+ * single seam every read/reconcile freshness recompute rides (`FreshnessOracle`, pack-shape.ts): the query
+ * projection readback + retrieval feed (via `resolveFreshness`) AND the #99b negation read leg. It is NOT a
+ * fork of `driftDetect` — it CALLS the sealed oracle verbatim and ADDS one conjunct, and only for a NEGATION:
+ *
+ *   - advisory / predicate / relation ⇒ `driftDetect(grounding, axes)` VERBATIM (they carry no `edgeModel`);
+ *   - negation ⇒ `driftDetect(grounding, axes) === FRESH ∧ edgeModel === currentEdgeModel ? FRESH : DRIFTED`.
+ *
+ * The `edgeModel` conjunct (§3 clause 4) is the ONE completeness clause `driftDetect` cannot see: an extractor
+ * upgrade (E1→E2) changes NO file bytes, so the scope-directory subtreeHash stays FRESH, yet E2 may newly
+ * resolve a caller of X — so a negation admitted under E1 MUST re-flag DRIFTED once the current edge model is
+ * E2. `currentEdgeModel` is `edgeModelVersion()` at READ time (the SAME function the door stamps an admitted
+ * negation's `edgeModel` with at emit), so equal builds compare byte-identical and a bumped extractor drifts.
+ */
+export function bindFreshnessOracle(axes: Axes, currentEdgeModel: string): FreshnessOracle {
+  return (fact: GroundedFact): Freshness => {
+    const base = driftDetect(fact.grounding, axes); // the sealed GROUND-1 oracle, ridden verbatim
+    if (fact.kind !== 'negation') return base; // only a negation carries the edgeModel completeness clause
+    return base === 'FRESH' && fact.edgeModel === currentEdgeModel ? 'FRESH' : 'DRIFTED';
+  };
+}
 
 /** The legs the assembler composes (frozen, referenced to pin the edge). */
 type _Legs = ToolLegs;
@@ -137,6 +181,7 @@ export function assembleHandler(config: WireConfig): WiredHandler {
     build,
     createResolve,
     createDepgraph,
+    createSymbolReverse, // #99b N0 — the symbol-reverse view for the negation door (N2), off the same surface
     nodeHashOfPath, // THE index's own minting, imported — never a local copy of `id({file:p})` (KERNEL-1)
   });
 
@@ -164,6 +209,15 @@ export function assembleHandler(config: WireConfig): WiredHandler {
     // The ratify token rides the SAME env-sourced, payload-free channel as the actor. Conditional spread
     // keeps it ABSENT (not `undefined`) when unset — `exactOptionalPropertyTypes`, so the door defaults to ''.
     ...(config.ratifyToken !== undefined ? { ratifyToken: config.ratifyToken } : {}),
+    // #99b N2 — THE NEGATION LEG's channels. `symbolReverse` is the N0 completeness feed off the SAME
+    // assembled index surface `blastRadius` rides; `axes`/`nodeHashOfPath` are the live structural rail the
+    // abstention gate resolves the scope-Merkle and the `∩ S` containment against; `edgeModel` is the pinned
+    // extractor release stamped onto an admitted negation (§3 clause 4). ABSENT `config.axes` (bare-WIRE fake)
+    // ⇒ a negation abstains fail-closed, exactly as `--by dependency` fails closed there.
+    symbolReverse: () => index.symbolReverse(),
+    ...(config.axes !== undefined ? { axes: config.axes } : {}),
+    nodeHashOfPath,
+    edgeModel: edgeModelVersion(),
   });
 
   // GOVERNED sameAs LINK (WP-SAMEAS): the second governed write door — asserts a human `a ≡ b` equivalence
@@ -186,8 +240,11 @@ export function assembleHandler(config: WireConfig): WiredHandler {
   // every row reads `DRIFTED`, fail-closed (`resolveFreshness`, pack-shape.ts). It does NOT fall back to the
   // stored `fact.freshness`, which no read path writes back and which therefore says `FRESH` forever.
   const axes = config.axes;
+  // The family-aware oracle (N4): `driftDetect` verbatim for every fact, PLUS the §3 clause-4 `edgeModel`
+  // conjunct for a negation, against the current edge model at read (`edgeModelVersion()` — the same value the
+  // door stamps at emit). ONE seam, branched on family — the query path and the negation read leg share it.
   const freshnessOracle =
-    axes === undefined ? undefined : (fact: GroundedFact) => driftDetect(fact.grounding, axes);
+    axes === undefined ? undefined : bindFreshnessOracle(axes, edgeModelVersion());
 
   // Seam-1: wrap the pure structural index-adapter with the durable projection readback, so a scope resolves
   // to its covering territory skeleton (from @atlas/index) FOLDED with the emitted facts under it (from CAS).

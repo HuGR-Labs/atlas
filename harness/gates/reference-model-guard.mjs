@@ -197,6 +197,10 @@ const LEDGER = {
   // with a zero-length pointer. Named refusal added; module still has ZERO production callers.
   'packages/knowledge/src/write/archive.ts': { values: 2, shipped: null, banner: false },
   'packages/knowledge/src/write/template.ts': { values: 3, shipped: null, banner: false },
+  // #99b N2 landed: the N2 governed-emit door (`adapter-io/src/governed-emit-negation.ts`) now VALUE-IMPORTS
+  // `negationKey` (mints an admitted negation's id AND an AbstainedRecord's address), so the row that tracked
+  // it dead-until-wired went dead→live and was REMOVED here — the ledger keeping the N1→N2 transition on the
+  // record, exactly as it forced `own.ts`'s removal one wave over.
 };
 
 const fail = [];

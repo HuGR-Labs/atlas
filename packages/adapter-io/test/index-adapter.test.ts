@@ -9,7 +9,7 @@
 import { describe, it, expect } from 'vitest';
 import { id } from '@atlas/kernel';
 import type { Hash, NodeKey } from '@atlas/contracts';
-import { build, createResolve, createDepgraph } from '@atlas/index';
+import { build, createResolve, createDepgraph, createSymbolReverse } from '@atlas/index';
 import type { AxisForest } from '@atlas/index';
 import { createIndexAdapter } from '../src/index-adapter.js';
 import { T_ref } from './harness/fix-repo.js';
@@ -27,6 +27,7 @@ const realDeps = () => ({
   build,
   createResolve,
   createDepgraph,
+  createSymbolReverse,
   nodeHashOfPath,
 });
 

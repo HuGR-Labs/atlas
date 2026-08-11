@@ -8,8 +8,8 @@
 import type { Hash } from '@atlas/contracts';
 import { asHash } from '@atlas/kernel';
 import { headSha } from '@atlas/adapter-io';
-import { reportIndexPlan, relationsVerdict } from '@atlas/adapter-io';
-import type { IndexPlanReport, OwnLeg, PromoteOut, RelationLeg, WiredHandler } from '@atlas/adapter-io';
+import { reportIndexPlan, relationsVerdict, negationsVerdict } from '@atlas/adapter-io';
+import type { IndexPlanReport, NegationLeg, OwnLeg, PromoteOut, RelationLeg, WiredHandler } from '@atlas/adapter-io';
 import type { DoctorSource, Guidance, Tool, Verdict } from '@atlas/tools';
 import { runDoctor } from './doctor.js';
 import { ensureAtlasIgnored } from './gitignore.js';
@@ -89,6 +89,18 @@ export interface CliDeps {
    * "runtime is not composed yet" guidance every other routed command gives, never a silent empty result.
    */
   readonly relations?: RelationLeg;
+  /**
+   * The composition root's grounded-negation + abstention READ leg (`ComposedRuntime.negations`, #99b) — the
+   * `negationsOf`/`abstentionsOf` folds over the durable projection. Injected on the SAME seam as
+   * `handler`/`relations`, and for the same reason: the CLI must never stand up a second runtime, or the
+   * negatives + abstentions it reads stop being the ones off the store `atlas query` reads back.
+   *
+   * It is NOT reached through `handler.handle`: it is not a `Tool`, opens no governed surface
+   * (`GOVERNANCE_SURFACE` stays 5), and writes nothing. ABSENT ⇒ `atlas negations` fails closed with the same
+   * "runtime is not composed yet" guidance every other routed command gives, never a silent empty result — the
+   * failure mode that matters most here, since a silent empty is exactly the invisible abstention #202 forbids.
+   */
+  readonly negations?: NegationLeg;
 }
 
 /** A structured error verdict for a CLI-layer failure (parse / unwired command) — guidance always present. */
@@ -252,6 +264,24 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
       );
     }
     return emit(relationsVerdict(deps.relations, positionals[0] ?? '', positionals[1]));
+  }
+
+  if (command === 'negations') {
+    // CLI-10/#99b: `atlas negations <scope> [--abstained]` — the READ-ONLY grounded-negation + abstention door.
+    // It reads the `negationsOf`/`abstentionsOf` folds (@atlas/knowledge / ADR-0015 D3) over the composition
+    // root's `negations` leg — the SAME durable projection `atlas query` reads back, never a second runtime.
+    // Like `relations`/`node`/`own` it is intercepted before the handler (not a `Tool`: opens no governed
+    // surface, GOVERNANCE_SURFACE stays 5, WRITE_PATHS untouched). Rendered through the SHARED
+    // `renderVerdict`/`emit` path (exit 0 with the negatives + abstentions on `data`; a structured error + exit
+    // 1 on an uncomposed runtime). Never a throw — `negationsVerdict` + both folds are total. The `--abstained`
+    // flag FOCUSES the render on the honest abstentions; both are always in the data, so the abstention is
+    // observable regardless (the #202 close).
+    if (!deps.negations) {
+      return emit(
+        errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'),
+      );
+    }
+    return emit(negationsVerdict(deps.negations, positionals[0] ?? '', flags.abstained === 'true'));
   }
 
   // The remaining five governance commands each route to a `Tool` through the one wired handler.

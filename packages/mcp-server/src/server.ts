@@ -2,9 +2,11 @@
 //
 // Stand up a stdio MCP server whose every GOVERNED tool call routes through the one wired handler
 // (@atlas/adapter-io), returning the frozen `Verdict` (@atlas/tools) shape. The advertised surface is
-// `GOVERNANCE_SURFACE` (exactly five, TOOLS-1, pinned) PLUS any injected READ leg — today the one read tool
-// `atlas-relations` (#99a / ADR-0015 D2), advertised via `advertisedReadTools(relations)` when a relation
-// leg is composed, so production advertises SIX tools. HONEST DIVERGENCE, stated so it is not mistaken for the
+// `GOVERNANCE_SURFACE` (exactly five, TOOLS-1, pinned) PLUS any injected READ leg — today TWO read tools,
+// `atlas-relations` (#99a / ADR-0015 D2) and `atlas-negations` (#99b / ADR-0015 D3), advertised via
+// `advertisedReadTools(relations, negations)` when their legs are composed, so production advertises SEVEN
+// tools (5 governance + 2 read). Each read tool opens NO governed token and leaves `GOVERNANCE_SURFACE`
+// byte-for-byte closed at five. HONEST DIVERGENCE, stated so it is not mistaken for the
 // designed seam: the constitution's extension point is `GOVERNANCE_SURFACE ∪ READ_SURFACE` (ADR-0006), but
 // `READ_SURFACE` has NO export site anywhere in `packages/**` (CAMPAIGN-10.3 / WP-10.A5.TOOLS is not built —
 // `npm run layer-guard` reports it DECLARED UNCOVERED). Rather than block a read tool on that unbuilt seam,
@@ -41,8 +43,8 @@ import type {
   ListToolsResult,
   Tool as SdkTool,
 } from '@modelcontextprotocol/sdk/types.js';
-import type { RelationLeg, WiredHandler } from '@atlas/adapter-io';
-import { relationsVerdict } from '@atlas/adapter-io';
+import type { NegationLeg, RelationLeg, WiredHandler } from '@atlas/adapter-io';
+import { negationsVerdict, relationsVerdict } from '@atlas/adapter-io';
 import { faultOf, GOVERNANCE_SURFACE } from '@atlas/tools';
 import type { Tool, Verdict } from '@atlas/tools';
 
@@ -113,24 +115,68 @@ export const RELATIONS_INPUT_SCHEMA = {
   additionalProperties: false,
 } as const;
 
-/** The read tools advertised beside the governance surface — the `relations` tool when a leg is injected,
- *  else none (so the closed-governance pin holds byte-for-byte when no read leg is composed). */
-export function advertisedReadTools(relations?: RelationLeg): SdkTool[] {
-  if (relations === undefined) return [];
-  return [
-    {
+/**
+ * The `atlas negations` MCP tool (#99b). Like `atlas-relations` it is a READ tool served DIRECTLY from an
+ * injected leg, NOT through `GOVERNANCE_SURFACE` — so `GOVERNANCE_SURFACE` stays 5 and the closed-surface pin
+ * is untouched. It mirrors the CLI, where `negations` is intercepted BEFORE the handler: it opens no governed
+ * surface and has no `Tool` token, so its schema is DOCUMENTED here and advertised verbatim.
+ */
+export const NEGATIONS_TOOL = 'atlas-negations';
+
+/**
+ * The DOCUMENTED input schema for `atlas-negations` (JSON-Schema). `scope` is the required scope key whose
+ * grounded negatives + abstentions to read; `abstained` is an OPTIONAL boolean (focuses the reader on the
+ * honest abstentions — both are always present in the verdict `data`, so an abstention is observable
+ * regardless, #202). Mirrors how `atlas-relations` documented `unit` (required) + `direction` (optional).
+ *
+ * WHAT IS ENFORCED, stated honestly (same posture as `RELATIONS_INPUT_SCHEMA`): `required:['scope']` IS
+ * enforced — a missing/non-string `scope` fails CLOSED at the shared `negationsVerdict` body (isError), so the
+ * required-scope contract holds identically on CLI and MCP. `additionalProperties:false` is ADVERTISED but not
+ * machine-enforced here (task #166); the tool is strictly read-only and every arg is coerced totally. #193: no
+ * undocumented field — `abstained` is the only optional field and it is read by the shared builder.
+ */
+export const NEGATIONS_INPUT_SCHEMA = {
+  type: 'object',
+  properties: {
+    scope: { type: 'string', description: 'the scope key whose grounded negatives + abstentions to read' },
+    abstained: {
+      type: 'boolean',
+      description: 'focus the reader on the honest abstentions (both negatives and abstentions are always returned; default false)',
+    },
+  },
+  required: ['scope'],
+  additionalProperties: false,
+} as const;
+
+/** The read tools advertised beside the governance surface — the `relations` (#99a) and `negations` (#99b)
+ *  tools, each when its leg is injected, else none (so the closed-governance pin holds byte-for-byte when no
+ *  read leg is composed). Order fixed: relations before negations (the order they were added), so the
+ *  advertised list is deterministic. */
+export function advertisedReadTools(relations?: RelationLeg, negations?: NegationLeg): SdkTool[] {
+  const tools: SdkTool[] = [];
+  if (relations !== undefined) {
+    tools.push({
       name: RELATIONS_TOOL,
       description:
         'Read the GROUNDED relation facts (family:relation) touching a unit, both directions (#99a / ADR-0015 D2). Read-only; opens no governed surface.',
       inputSchema: RELATIONS_INPUT_SCHEMA as unknown as SdkTool['inputSchema'],
-    },
-  ];
+    });
+  }
+  if (negations !== undefined) {
+    tools.push({
+      name: NEGATIONS_TOOL,
+      description:
+        'Read the GROUNDED negatives (family:negation) AND the honest ABSTENTIONS under a scope (#99b / ADR-0015 D3). An abstention is the door declining to decide a negative over an OPEN scope — it FIRED and is on the record (#202). Read-only; opens no governed surface.',
+      inputSchema: NEGATIONS_INPUT_SCHEMA as unknown as SdkTool['inputSchema'],
+    });
+  }
+  return tools;
 }
 
-/** The ListTools response — the closed governance surface (TOOLS-1), PLUS the `relations` read tool when a
- *  read leg is injected. With no leg the response is byte-for-byte the closed governance surface. */
-export function listTools(handler: WiredHandler, relations?: RelationLeg): ListToolsResult {
-  return { tools: [...advertisedTools(handler), ...advertisedReadTools(relations)] };
+/** The ListTools response — the closed governance surface (TOOLS-1), PLUS the `relations`/`negations` read
+ *  tools when their legs are injected. With no leg the response is byte-for-byte the closed governance surface. */
+export function listTools(handler: WiredHandler, relations?: RelationLeg, negations?: NegationLeg): ListToolsResult {
+  return { tools: [...advertisedTools(handler), ...advertisedReadTools(relations, negations)] };
 }
 
 /**
@@ -161,7 +207,13 @@ export function verdictToResult(verdict: Verdict): CallToolResult {
  * request maps to a well-formed `isError` result — the transport never throws to the SDK. The `name` is
  * passed as the `Tool` token; an off-surface token routes to the handler's fail-closed path.
  */
-export function callTool(handler: WiredHandler, name: string, args: unknown, relations?: RelationLeg): CallToolResult {
+export function callTool(
+  handler: WiredHandler,
+  name: string,
+  args: unknown,
+  relations?: RelationLeg,
+  negations?: NegationLeg,
+): CallToolResult {
   // `atlas-relations` (#99a) is served DIRECTLY from the injected read leg through the SHARED verdict builder
   // (`relationsVerdict`, @atlas/adapter-io) — the SAME body the CLI drives, so identical input yields a
   // byte-identical `Verdict` on both transports (the SCHEMA + VERDICT parity invariant). It never reaches
@@ -174,27 +226,38 @@ export function callTool(handler: WiredHandler, name: string, args: unknown, rel
     const direction = typeof a.direction === 'string' ? a.direction : undefined;
     return verdictToResult(relationsVerdict(relations, unit, direction));
   }
+  // `atlas-negations` (#99b) is served the SAME way — DIRECTLY from the injected read leg through the SHARED
+  // verdict builder (`negationsVerdict`), so identical input yields a byte-identical `Verdict` on both
+  // transports. TOTAL — a non-string `scope` coerces to `''` (then `negationsVerdict` ENFORCES
+  // `required:['scope']`, failing CLOSED to `isError`, matching the CLI) and a non-boolean `abstained` to
+  // `false`; never a throw. It never reaches `handler.handle`: it is not a `Tool` and has no governed token.
+  if (negations !== undefined && name === NEGATIONS_TOOL) {
+    const a = (typeof args === 'object' && args !== null ? args : {}) as { scope?: unknown; abstained?: unknown };
+    const scope = typeof a.scope === 'string' ? a.scope : '';
+    const abstained = a.abstained === true;
+    return verdictToResult(negationsVerdict(negations, scope, abstained));
+  }
   const verdict = handler.handle(name as Tool, args);
   return verdictToResult(verdict);
 }
 
 /** Wire the SDK `Server` over the one handler: advertise the closed surface (+ the `relations` read tool when
  *  a read leg is injected) and route every CallTool. */
-function configureServer(handler: WiredHandler, relations?: RelationLeg): Server {
+function configureServer(handler: WiredHandler, relations?: RelationLeg, negations?: NegationLeg): Server {
   const server = new Server(SERVER_INFO, { capabilities: { tools: {} } });
-  server.setRequestHandler(ListToolsRequestSchema, () => listTools(handler, relations));
+  server.setRequestHandler(ListToolsRequestSchema, () => listTools(handler, relations, negations));
   server.setRequestHandler(CallToolRequestSchema, (request) =>
-    callTool(handler, request.params.name, request.params.arguments, relations),
+    callTool(handler, request.params.name, request.params.arguments, relations, negations),
   );
   return server;
 }
 
 /** Construct the stdio MCP server over the one wired handler (MCP-1), optionally exposing the `relations`
- *  read tool when the composition root injects its leg. */
-export function createMcpServer(handler: WiredHandler, relations?: RelationLeg): McpServer {
+ *  (#99a) and `negations` (#99b) read tools when the composition root injects their legs. */
+export function createMcpServer(handler: WiredHandler, relations?: RelationLeg, negations?: NegationLeg): McpServer {
   return {
     async start(): Promise<void> {
-      const server = configureServer(handler, relations);
+      const server = configureServer(handler, relations, negations);
       const transport = new StdioServerTransport();
       await server.connect(transport);
     },
