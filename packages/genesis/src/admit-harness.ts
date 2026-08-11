@@ -13,9 +13,23 @@
 // Co-locates the frozen `PredicateApi` + `Check` re-export; the check-engine / admission semantics are
 // consumed as injected ports, never defined here.
 
-import type { NodeKey, Status, StructRef, Tier } from '@atlas/contracts';
+import type { Status, StructRef } from '@atlas/contracts';
 import type { AdvisoryNode, Check, GroundedFact, ObviousnessScore, PredicateNode, PredicateSlot } from '@atlas/knowledge';
 import type { IndexNode } from '@atlas/index';
+// WP-96-R — the relation admission's PURE legs (identity mint, set-union text, gate-0 check, drop reasons),
+// extracted to the sibling at the 400-LOC ceiling. The truth-door call + obviousness scoring stay HERE, in
+// `admitRelation` (they need module-private `scoreObviousness`); this module only mints + shapes the node.
+import {
+  buildRelation,
+  relationClaimNorm,
+  relationEndpointsResolve,
+  DROP_RELATION_MALFORMED,
+  DROP_RELATION_UNGROUNDED,
+} from './admit-relation.js';
+// WP-96-N — the negation admission's PURE legs (identity mint + gate-0 check + the one honest drop), extracted
+// to the sibling at the 400-LOC ceiling exactly as the relation legs were. The candidate is built HERE; the
+// scope-directory grounding + the abstention law stay the DOOR's (contract F4), so no truth-door call lives here.
+import { buildNegation, negationTripleResolves, DROP_NEGATION_MALFORMED } from './admit-negation.js';
 import type { Candidate, WhyNot } from './types.js';
 
 /**
@@ -49,46 +63,27 @@ export interface PredicateApi {
   teeth(check: Check, anchor: StructRef): boolean;
 }
 
-/** The citations carrier of a grounded fact — reused from the frozen node shape, NEVER redefined. */
-type FactGrounding = AdvisoryNode['grounding'];
-
-// ---- the LLM proposal: a TYPED candidate ONLY (GEN-12a) — no admission vote, no confidence field --------
-
-/**
- * A predicate candidate the LLM proposes (GEN-12a). It carries the CLAIM only — the runnable `check` is
- * SYNTHESIZED mechanically by the harness (`PredicateApi.synthesize`), never trusted from the model.
- * `scratch` is the chain-of-thought: SCRATCH ONLY (GEN-12f), never persisted onto the emitted node.
- */
-export interface PredicateProposal {
-  readonly kind: 'predicate';
-  readonly site: Candidate; // the genesis ranked SITE — the admission anchor rides `site.site.subtreeHash`
-  readonly slot: PredicateSlot; // drives SOUND-ORACLE-FIRST (GEN-12k)
-  readonly nodeKey: NodeKey; // identity carried through (minted upstream, not by a model vote)
-  readonly claimNorm: string;
-  readonly grounding: FactGrounding;
-  readonly tier: Tier;
-  readonly scratch?: string; // chain-of-thought — discarded, never a fact (GEN-12f)
-}
-
-/** An advisory candidate the LLM proposes (GEN-12e) — a grounded claim with no verdict. */
-export interface AdvisoryProposal {
-  readonly kind: 'advisory';
-  readonly site: Candidate;
-  readonly nodeKey: NodeKey;
-  readonly claimNorm: string;
-  readonly grounding: FactGrounding;
-  readonly tier: Tier;
-  readonly scratch?: string; // chain-of-thought — discarded, never a fact (GEN-12f)
-}
-
-/** A grounded abstention (GEN-12g) — a VALID outcome, never a manufactured fact. */
-export interface Abstention {
-  readonly kind: 'abstain';
-  readonly whyNot: WhyNot;
-}
-
-/** What the proposer emits for one site — a typed candidate OR a grounded abstention. NO admission authority. */
-export type Proposal = PredicateProposal | AdvisoryProposal | Abstention;
+// The LLM proposal DATA MODEL (the typed candidate shapes + the `Proposal` union) was EXTRACTED to
+// `admit-proposals.ts` at the 400-LOC godfile ceiling when WP-96 widened it with the relation/negation
+// families (ADR-0015 D2/D3) — the harness keeps the ADMISSION ENGINE, that file keeps the shapes it admits.
+// RE-EXPORTED here so `import { Proposal, RelationProposal, ... } from '@atlas/genesis'` is byte-identical.
+export type {
+  FactGrounding,
+  PredicateProposal,
+  AdvisoryProposal,
+  RelationProposal,
+  NegationProposal,
+  Abstention,
+  Proposal,
+} from './admit-proposals.js';
+import type {
+  FactGrounding,
+  PredicateProposal,
+  AdvisoryProposal,
+  RelationProposal,
+  NegationProposal,
+  Proposal,
+} from './admit-proposals.js';
 
 // ---- the injected mechanical seams (defined elsewhere; consumed here) ----------------------------------
 
@@ -161,6 +156,14 @@ const DROP_NOT_HOLDS = 'synthesized check does not compile ∧ HOLDS on current 
 const DROP_VACUOUS = 'synthesized check survives every mutant — vacuous / toothless (GEN-12j)';
 const DROP_TYPE_BROKEN = 'sound type-checker / LSP verdict is not HOLDS on the type-expressible slot (GEN-12k)';
 const DROP_UNGROUNDED = 'advisory fails the truth door — the citation does not ground (GEN-12e)';
+// RELATION drops (ADR-0015 D2, WP-96-R). The relation family is now ADMITTED — its two honest refusals
+// (`DROP_RELATION_MALFORMED` / `DROP_RELATION_UNGROUNDED`) live beside its builders in `admit-relation.ts`
+// and are imported above. The `shape-not-yet-emitted` stub reason is GONE (deleted, not commented) so a
+// resurrected stub cannot reach a ready-made string.
+// The negation family is now ADMITTED (ADR-0015 D3, WP-96-N) — its one honest refusal (`DROP_NEGATION_MALFORMED`)
+// lives beside its builders in `admit-negation.ts` and is imported above. The `shape-not-yet-emitted` stub reason
+// is GONE (deleted, not commented) so a resurrected stub cannot reach a ready-made string. The second failure
+// mode — an undecidable well-formed negative — is the DOOR's ABSTENTION (contract F4), not a genesis drop.
 // There is deliberately NO obviousness drop reason. ADR-0012: nothing is ever rejected for being obvious —
 // an obvious claim is emitted carrying `obviousness.rank === 'obvious'` and loses at ranking, where the
 // decision is recoverable. The retired `DROP_OBVIOUS` is not commented out anywhere; it is gone, so a
@@ -186,7 +189,41 @@ export function admit(p: Proposal, deps: AdmitDeps): Admission {
       return admitAdvisory(p, deps);
     case 'predicate':
       return admitPredicate(p, deps);
+    case 'relation':
+      return admitRelation(p, deps);
+    case 'negation':
+      return admitNegation(p, deps);
   }
+}
+
+/**
+ * WP-96-R — the relation family's admission (ADR-0015 D2). The EXACT sibling of `admitAdvisory`: a relation
+ * passes the SAME truth door the advisory path uses (`deps.doors.grounded` — NO new truth rule; the relation's
+ * grounding carries the 2-entry AND-fold, so "both endpoints re-derive FRESH" is what that one door already
+ * answers), and obviousness is SCORED, never gated (ADR-0012), off the canonical relation triple. It differs
+ * from the advisory in exactly two ways, both forced by the shape: (1) a gate-0 well-formedness check FIRST,
+ * because the endpoints ARE the identity (an intrinsic fact's degenerate grounding is caught downstream by
+ * `primaryAnchorId`; a relation's is caught HERE, so `relationKey` in `buildRelation` never throws out of this
+ * total function); (2) identity is minted by `relationKey`, never `nodeKey`. Pure + total: no throw, no IO.
+ */
+function admitRelation(p: RelationProposal, deps: AdmitDeps): Admission {
+  if (!relationEndpointsResolve(p)) return { outcome: 'dropped', reason: DROP_RELATION_MALFORMED };
+  if (!deps.doors.grounded(p.grounding, deps.indexState)) return { outcome: 'dropped', reason: DROP_RELATION_UNGROUNDED };
+  return { outcome: 'admitted', fact: buildRelation(p, scoreObviousness(deps.doors, relationClaimNorm(p))) };
+}
+
+/**
+ * WP-96-N — the negation family's admission (ADR-0015 D3). Unlike `admitRelation`, it does NOT call a truth
+ * door and does NOT score obviousness: a negation's soundness is a CLOSED-WORLD completeness question the DOOR
+ * decides against the N0 feed + the live scope Merkle (contract F4 — the abstention law is the door's, never
+ * re-implemented in genesis). So this leg does exactly two things: a gate-0 well-formedness check (a malformed
+ * triple has no address ⇒ DROP), then it mints the `negationKey` identity and hands over a CANDIDATE whose
+ * grounding/edgeModel the door will construct + stamp at admit. Pure + total: no truth call, no throw, no IO —
+ * `negationTripleResolves` guarantees `negationKey` (in `buildNegation`) never throws out of this function.
+ */
+function admitNegation(p: NegationProposal, _deps: AdmitDeps): Admission {
+  if (!negationTripleResolves(p)) return { outcome: 'dropped', reason: DROP_NEGATION_MALFORMED };
+  return { outcome: 'admitted', fact: buildNegation(p) };
 }
 
 /**
@@ -311,6 +348,14 @@ function buildSound(p: PredicateProposal, obviousness: ObviousnessScore): Adviso
  * obviousness score is REQUIRED here rather than optional (ADR-0012 TOTALITY: an emitted fact without a
  * score is a defect, not a default — the field is optional on the stored shape only so that pre-ADR data
  * stays readable, exactly as with `builtAt`/`sameAs`).
+ *
+ * `predicateSlot: p.slot` is CARRIED (lucy #96 Finding 1 — the predicate mine→promote→query e2e revealed the
+ * gap): the KNOW-15b identity leg is `nodeKey(predicate) = hash(primaryAnchorId ‖ predicateSlot ‖ check)`, and
+ * BOTH the staging mint (`decideStaging`) and the door (`governed-emit.ts` candidateView) read `predicateSlot`
+ * for the slot leg. Dropping it here minted a slot-FREE key, diverging from the true identity and from the
+ * SOUND-oracle arm (`buildSound`, which carries `predicateSlot`) — so a predicate at the same anchor with a
+ * different slot but equal check would collide, and the KNOW-4g read-side slot grouping was blind. Fixed at
+ * source so the slot rides the fact into CAS, identity and the read projection identically.
  */
 function buildPredicate(p: PredicateProposal, check: VerifiedCheck, obviousness: ObviousnessScore): PredicateNode {
   return {
@@ -324,6 +369,7 @@ function buildPredicate(p: PredicateProposal, check: VerifiedCheck, obviousness:
     freshness: 'FRESH',
     claims: [],
     authoring: 'PREDICATED',
+    predicateSlot: p.slot,
   };
 }
 

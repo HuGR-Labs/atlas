@@ -30,6 +30,11 @@ import type {
   EmitGate,
   EmitVerdict,
   Fact,
+  FactGrounding,
+  NegationProposal,
+  PredicateProposal,
+  Proposal,
+  RelationProposal,
   SeedProposal,
   SkeletonSource,
 } from '@atlas/genesis';
@@ -67,19 +72,57 @@ export function unwiredGate(): EmitGate {
  * the receipt is the raw seed's — the shape a hand-built skeleton fixture with one shared identity space
  * needs, and the ONLY case in which it is right.
  */
+/**
+ * Build the typed `Proposal` (admit-proposals.ts) that MATCHES a seed's fact family (WP-96-SEAM2). The
+ * mine driver invents no admission — it only maps the seed's SHAPE to the proposal shape `admit` dispatches
+ * on. The transcription is field-for-field from the frozen `*Proposal` types; nothing is synthesized here
+ * (no minted relationKey/negationKey — identity is minted downstream by WP-96-R/N).
+ *
+ * `nodeKey`/`tier` mirror the pre-widening advisory construction so advisory + predicate stay byte-identical.
+ */
+function buildProposal(seed: SeedProposal, cand: Candidate, groundingFor: (c: Candidate) => FactGrounding): Proposal {
+  const nodeKey = asNodeKey(cand.site.qualifiedPath);
+  switch (seed.kind) {
+    case 'predicate': {
+      const p: PredicateProposal = { kind: 'predicate', site: cand, slot: seed.slot, nodeKey, claimNorm: seed.claim, grounding: groundingFor(cand), tier: 'T2' };
+      return p;
+    }
+    case 'relation': {
+      // No relationKey — identity is minted DOWNSTREAM; grounding re-derives off the site (WP-96-R fills admit).
+      const p: RelationProposal = { kind: 'relation', site: cand, relationKind: seed.relationKind, endpointA: seed.endpointA, endpointB: seed.endpointB, grounding: groundingFor(cand), tier: 'T2' };
+      return p;
+    }
+    case 'negation': {
+      // NO grounding — the governed door constructs the scope-directory Merkle at admit (WP-96-N).
+      const p: NegationProposal = { kind: 'negation', site: cand, relationKind: seed.relationKind, target: seed.target, scope: seed.scope, tier: 'T2' };
+      return p;
+    }
+    default: {
+      // advisory — `kind` 'advisory' OR omitted (every existing producer/fixture). BYTE-IDENTICAL to the
+      // pre-widening construction, so every advisory back-compat test still passes.
+      const p: AdvisoryProposal = { kind: 'advisory', site: cand, nodeKey, claimNorm: seed.claim, grounding: groundingFor(cand), tier: 'T2' };
+      return p;
+    }
+  }
+}
+
 export function makeAdmitGate(deps: AdmitDeps, reground?: Reground): EmitGate {
+  // The FROZEN GROUND-3 grounding for a site — `reground(site)` in production, or (only when the caller omits
+  // it, e.g. a hand-built one-identity-space skeleton fixture) the raw seed's own site. Built once here so
+  // every grounded family (advisory / predicate / relation) derives its receipt identically. Negation carries
+  // no grounding — its door constructs the scope-directory Merkle at admit (WP-96-N), so it never calls this.
+  const groundingFor = (cand: Candidate): FactGrounding =>
+    (reground !== undefined
+      ? reground(cand.site)
+      : { entries: [{ anchor: cand.site, path: cand.site.qualifiedPath }] }) as FactGrounding;
+
   return {
     emit(seed: SeedProposal, cand: Candidate): EmitVerdict {
-      const proposal: AdvisoryProposal = {
-        kind: 'advisory',
-        site: cand,
-        nodeKey: asNodeKey(cand.site.qualifiedPath),
-        claimNorm: seed.claim,
-        grounding: (reground !== undefined
-          ? reground(cand.site)
-          : { entries: [{ anchor: cand.site, path: cand.site.qualifiedPath }] }) as AdvisoryProposal['grounding'],
-        tier: 'T2',
-      };
+      // Dispatch on the seed's FACT FAMILY (WP-96-SEAM2): build the MATCHING typed proposal from
+      // admit-proposals.ts, then hand it to the frozen `admit` — which routes advisory→admitAdvisory,
+      // predicate→admitPredicate (real), relation/negation→their WP-96-R/N stubs. Advisory is byte-identical
+      // to the pre-widening construction; a `kind`-less seed (every existing producer/fixture) IS advisory.
+      const proposal: Proposal = buildProposal(seed, cand, groundingFor);
       const verdict = admit(proposal, deps);
       if (verdict.outcome === 'admitted') {
         // [#195 b] Carry the VALIDATED answer bytes THROUGH the admitted fact so the mine emit path

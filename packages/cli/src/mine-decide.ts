@@ -15,16 +15,31 @@
 
 import type { CommitDecision } from '@atlas/adapter-io';
 import type { Fact } from '@atlas/genesis';
-import { upsert as knowledgeUpsert, normalizeCheck, primaryAnchorId, nodeKey } from '@atlas/knowledge';
+import { upsert as knowledgeUpsert, normalizeCheck, primaryAnchorId, nodeKey, relationKey, negationKey } from '@atlas/knowledge';
 import type { WriteRequest, StoreProjection, Candidate as KnowledgeCandidate } from '@atlas/knowledge';
 import { id } from '@atlas/kernel';
 import { MINED_SCOPE, MINED_TIER } from './mine-staging.js';
 import { answerReceipt } from './mine-answer.js';
-import { scrubClaimNorm, scrubCheck } from './mine-claim-scrub.js';
+import { scrubClaimNorm, scrubCheck, scrubUnit } from './mine-claim-scrub.js';
 
-/** The advisory claim body a write carries (the KNOW-4c set-union element); a predicate carries its check. */
+/** The KNOW-4c set-union element a mined write carries, per family. Advisory ⇒ its claim body; predicate ⇒
+ *  its normalized check; RELATION (ADR-0015 D2, WP-96-R) ⇒ the canonical triple `A <kind> B`, MIRRORING the
+ *  governed door's `claimNormOf(node, 'relation')` (adapter-io/src/governed-emit-identity.ts:54-57) and the
+ *  harness `relationClaimNorm` (genesis/src/admit-relation.ts) verbatim — so a MINED relation and a
+ *  governed-emitted one dedup on byte-identical set-union text and a re-mine is an idempotent UPDATE, never a
+ *  second claim. NEGATION (ADR-0015 D3, WP-96-N) ⇒ `NOT(target relationKind)@scope`, MIRRORING the negation
+ *  door's own WriteRequest `claimNorm` (governed-emit-negation.ts:251) verbatim over the WITNESS scope, so a
+ *  mined negation and a door-emitted one dedup on identical set-union text. */
 const claimNormOf = (f: Fact): string =>
-  f.kind === 'advisory' ? f.claimNorm : f.kind === 'predicate' ? normalizeCheck(f.check) : '';
+  f.kind === 'advisory'
+    ? f.claimNorm
+    : f.kind === 'predicate'
+      ? normalizeCheck(f.check)
+      : f.kind === 'relation'
+        ? `${f.endpointA} ${f.relationKind} ${f.endpointB}`
+        : f.kind === 'negation'
+          ? `NOT(${f.target} ${f.relationKind})@${f.scope}`
+          : '';
 
 /**
  * THE WHOLE PASS BODY AS ONE PURE DECISION over a staging snapshot — the seam `commitStaging` requires. It used to be
@@ -45,6 +60,42 @@ const claimNormOf = (f: Fact): string =>
  *  source (see the header there). `Fact` itself (genesis, frozen) is NOT touched; this is a CLI-local
  *  transport shape for the one hop between "this row minted with a receipt" and "the report counts it". */
 export type MintedFact = Fact & { readonly answerRef?: string };
+
+/**
+ * FAMILY-AWARE staging identity mint (bobby F1 — the load-bearing fix). MIRRORS the governed door's
+ * `resolveWriteIdentity` (packages/adapter-io/src/governed-emit-identity.ts:99-111) and the negation door's
+ * mint (governed-emit-negation.ts:163). The generic `nodeKey(view)` + `primaryAnchorId(view)` path assumes a
+ * single-anchor intrinsic node; a RELATION grounds over two distinct files, so `deepestCommonUnit` is the
+ * empty wildcard and `primaryAnchorId` THROWS `DegenerateAnchorError` (router.ts) UNGUARDED — crashing the
+ * whole mine pass inside `commitStaging`. Dispatched by family:
+ *   - relation → `relationKey(endpointA, relationKind, endpointB)` (governed-emit-identity.ts:104); the
+ *     scope-binding anchor is `endpointA`, the directed fact's SUBJECT — `primaryAnchorId` is NEVER reached.
+ *   - negation → `negationKey(relationKind, target, scope)` (negation-key.ts); anchored at its scope
+ *     directory (governed-emit-negation.ts:252) — `primaryAnchorId` is NEVER reached.
+ *   - advisory/predicate → the intrinsic `nodeKey`/`primaryAnchorId` path, BYTE-IDENTICAL to before (KNOW-15b).
+ * F3 (WP-96-N, owner-ratified 2026-08-11): for a NEGATION `f.scope` is now the PRESERVED witness directory (the
+ * identity leg), NOT `MINED_SCOPE` — so `negationKey`/`primaryAnchor` bind the real scope the negative was proven
+ * closed over. `MINED_SCOPE` rides SEPARATELY as `f.authzScope` (the door's authz gate binds it). Advisory/
+ * predicate/relation are UNCHANGED — their authz==identity scope stays `MINED_SCOPE` (stamped in `decideStaging`).
+ */
+function mintIdentity(f: Fact, view: KnowledgeCandidate): { key: string; primaryAnchor: string } {
+  if (f.kind === 'relation') {
+    return {
+      key: relationKey(f.endpointA, f.relationKind, f.endpointB) as unknown as string,
+      primaryAnchor: f.endpointA, // ARCH-9 binds a directed relation on its subject's scope (never nodeKey)
+    };
+  }
+  if (f.kind === 'negation') {
+    return {
+      key: negationKey(f.relationKind, f.target, f.scope) as unknown as string,
+      primaryAnchor: f.scope, // anchored at the scope directory the negation ranges over
+    };
+  }
+  return {
+    key: nodeKey(view) as unknown as string, // intrinsic (KNOW-15b) — advisory/predicate UNCHANGED
+    primaryAnchor: primaryAnchorId(view) as unknown as string,
+  };
+}
 
 export function decideStaging(
   staged: StoreProjection,
@@ -69,24 +120,53 @@ export function decideStaging(
     // and `view` below is spread from `f`, `nodeKey(view)` reads exactly this scrubbed `check`. Scrubbing the
     // check for CAS but not for the nodeKey preimage (or vice versa) would re-open the identity leg or split two
     // scrub-equal predicates to different addresses — WP-219; see `mine-claim-scrub.ts` for the full argument.
+    // RELATION/NEGATION (billy #96-wave Finding 2): the model-controlled IDENTITY LEGS — a relation's
+    // `endpointA`/`endpointB`, a negation's `target`/`scope` — are ALSO scrubbed at source. Unlike the advisory
+    // `claimNorm` these feed the identity KEY (`relationKey`/`negationKey` in `mintIdentity`), the `primaryAnchor`
+    // (`endpointA`/`scope`) AND the `claimNorm` set-union element — all read off THIS single scrubbed `f` below,
+    // so one scrub keeps CAS bytes and identity identically redacted (no scrub-CAS-but-raw-key split). `relationKind`
+    // is a closed enum (no credential shape) and is left raw. See `scrubUnit` in `mine-claim-scrub.ts`.
     const factScrubbed =
       factNoAnswer.kind === 'advisory'
         ? { ...factNoAnswer, claimNorm: scrubClaimNorm(factNoAnswer.claimNorm) }
         : factNoAnswer.kind === 'predicate'
           ? { ...factNoAnswer, check: scrubCheck(factNoAnswer.check) }
-          : factNoAnswer;
+          : factNoAnswer.kind === 'relation'
+            ? { ...factNoAnswer, endpointA: scrubUnit(factNoAnswer.endpointA), endpointB: scrubUnit(factNoAnswer.endpointB) }
+            : factNoAnswer.kind === 'negation'
+              ? { ...factNoAnswer, target: scrubUnit(factNoAnswer.target), scope: scrubUnit(factNoAnswer.scope) }
+              : factNoAnswer;
     // STAMP THE CANDIDATE SCOPE — PROVENANCE plus a fail-closed default (ADR-0008 kept it when the boundary
     // crossing was removed). A mined fact has no actor, so nobody owns it, and an unowned node is writable by
     // NOBODY until an admin appoints a curator. Stamped BEFORE the content hash so the bytes carry it — AND onto
     // the request below so the ROW does too.
-    const f = { ...factScrubbed, scope: MINED_SCOPE } as Fact;
+    //
+    // F3 (WP-96-N, owner-ratified 2026-08-11) — the NEGATION case is the exception, and it is load-bearing. A
+    // negation's `scope` is its IDENTITY (the witness directory it was proven closed over) AND the scope its
+    // abstention law reasons about — clobbering it with `MINED_SCOPE` (the pre-split behaviour) made every mined
+    // negation abstain `scope-empty` at promote (`MINED_SCOPE` resolves on no spatial rail) and mint the wrong
+    // `negationKey`. So the witness `scope` is PRESERVED and `MINED_SCOPE` rides as the SEPARATE `authzScope`,
+    // which the door's authz gate binds (`authzScope ?? scope`) so the orchestrator's `atlas:mined` grant
+    // authorizes it. This object IS what promote rehydrates from CAS (governed-promote.ts:142 `store.get`), so
+    // `authzScope` MUST live here on the fact bytes — not only on the row. Advisory/predicate/relation keep the
+    // `scope: MINED_SCOPE` clobber (their authz==identity scope), byte-identical to before.
+    const f = (factScrubbed.kind === 'negation'
+      // GUARD (billy #96-wave): `authzScope` MUST remain a trusted, NON-caller-supplied CONSTANT (`MINED_SCOPE`).
+      // The identity/authz split weakens "only an owner of S writes facts scoped to S" to "any authzScope-holder";
+      // it is sound ONLY because this value is hard-wired here, never forwarded from the fact/caller. A future
+      // caller-supplied `authzScope` would re-open that gap and needs its OWN authorization guard before landing.
+      ? { ...factScrubbed, authzScope: MINED_SCOPE } // witness `scope` PRESERVED (identity); authz binds MINED_SCOPE
+      : { ...factScrubbed, scope: MINED_SCOPE }) as Fact;
     // IDENTITY IS MINTED, NEVER TRUSTED — `nodeKey` is RECOMPUTED from the content by the frozen formula
     // (KNOW-15b), the SAME seam that mints contentHash/primaryAnchor; the payload's own `f.id` never routes, or
     // an author could spoof another node's identity (governed-emit.ts parity, WP-F3). Map `predicateSlot` →
     // `.slot` first: the cast is otherwise LOSSY (identity fns read `.slot`) and yields a slot-free key.
     const fSlot = f.kind === 'relation' || f.kind === 'negation' ? undefined : f.predicateSlot; // relation (D2)/negation (D3) have no slot
     const view = { ...f, slot: fSlot } as unknown as KnowledgeCandidate;
-    const key = nodeKey(view) as unknown as string;
+    // FAMILY-AWARE mint (bobby F1): a relation/negation routes by relationKey/negationKey and NEVER touches
+    // `primaryAnchorId` (which throws DegenerateAnchorError on their cross-file / directory grounding);
+    // advisory/predicate keep the intrinsic nodeKey/primaryAnchorId path byte-identically. See `mintIdentity`.
+    const { key, primaryAnchor } = mintIdentity(f, view);
     // A MINED CANDIDATE NEVER RE-AUTHORS AN ESTABLISHED ONE — belt-and-braces since ADR-0008, load-bearing before
     // it: a mined key colliding with a governed node routed UPDATE and set-unioned into it, mutating a ratified
     // T0 fact from whatever text sat in a source file (prompt-injectable, reproduced). It STAYS — a set-union
@@ -104,13 +184,29 @@ export function decideStaging(
       claimNorm: claimNormOf(f),
       // ── ADJACENCY carrier (ADDITIVE) — primary anchor + R3-optional slot for a later sibling-adjacency
       //    scan (WP-B). NOT routed; `slot` stays ABSENT when omitted (exactOptionalPropertyTypes).
-      primaryAnchor: primaryAnchorId(view) as unknown as string,
+      primaryAnchor,
       ...(fSlot !== undefined ? { slot: fSlot } : {}),
       // ── GOVERNANCE carrier (ADR-0007) — from the MINED constants, never forwarded from the fact. Neither
       //    half is routed (`RouteInputs` reads neither), so no hash and no route moves; what changes is that
-      //    the row now DECLARES what it is — what the ARCH-10 guard derives authority from.
-      scope: MINED_SCOPE,
+      //    the row now DECLARES what it is — what the ARCH-10 guard derives authority from. F3 (WP-96-N): a
+      //    NEGATION declares its WITNESS `scope` (the identity/read scope, matching the row the door produces at
+      //    promote, governed-emit-negation.ts:259) — its authz scope `MINED_SCOPE` rides on the fact's
+      //    `authzScope` (bound by the door's authz gate), NOT the row's governance `scope`.
+      scope: f.kind === 'negation' ? f.scope : MINED_SCOPE,
       tier: MINED_TIER,
+      // ── RELATION carrier (ADDITIVE — ADR-0015 D2 / #99a, WP-96-R) — the two endpoint unitKeys + kind of a
+      //    2-ended fact, forwarded so `upsert` stamps them on the ROW (`relationOf(req)`, upsert.ts:165-171)
+      //    and the read-side `relationsOf` fold indexes it by BOTH endpoints (direction preserved: A=subject,
+      //    B=object). NOT routed (`RouteInputs` reads none) — identity is the `relationKey` already in `nodeKey`.
+      //    Present ONLY on a `family:'relation'` write; absent for advisory/predicate/negation. Without this a
+      //    mined relation stages with `family:'relation'` but NO endpoint carriers, so `relationsOf` skips it
+      //    (its malformed-row guard) and the promoted relation is invisible — the READ half SEAM flagged.
+      ...(f.kind === 'relation' ? { endpointA: f.endpointA, endpointB: f.endpointB, relationKind: f.relationKind } : {}),
+      // ── NEGATION carrier (ADDITIVE — ADR-0015 D3 / #99b, WP-96-N) — the target + kind of a scoped negative,
+      //    stamped so the staged row is self-describing, MIRRORING the door's own row (`endpointB: target`,
+      //    governed-emit-negation.ts:257). NOT routed (identity is the `negationKey` already in `nodeKey`), and
+      //    NOT what promote rebuilds from (it rehydrates the whole fact from CAS). Present ONLY on a negation.
+      ...(f.kind === 'negation' ? { endpointB: f.target, relationKind: f.relationKind } : {}),
       // ── ANSWER-PROVENANCE carrier (ADDITIVE — #195 b) — the CAS id of the scrubbed answer bytes. NOT routed
       //    (`RouteInputs` reads it not), so identity is unchanged; present ONLY when the model produced the claim.
       //    The CAS id is its OWN tamper-evidence (store.get re-hashes on read) — no separate digest field.

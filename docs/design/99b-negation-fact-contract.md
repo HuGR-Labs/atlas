@@ -7,6 +7,17 @@ a transition") and the ADR names it *"the honesty core"* — the axis where the 
 [#99a RELATION contract](99a-relation-fact-contract.md) is the structural template (typed family, own identity
 mint, own door traversal, reused oracle where sound).
 
+> **AMENDMENT — F3 authz/identity split (owner-ratified 2026-08-11, WP-96-N).** The negation shape gains an
+> ADDITIVE, OPTIONAL `authzScope?: string` (§1), and the door's authz gate (§4 gate 2.1) binds
+> `authzScope ?? scope` instead of `scope`. **Identity is UNCHANGED** — `negationKey` stays
+> `(relationKind, target, scope)` over the witness directory and NEVER reads `authzScope`; the honest-abstention
+> law is UNCHANGED — it still reasons over the witness `scope`. The split exists because a MINED negation must
+> carry its real witness directory as identity (the groundable scoped-negative) while being authorized by the
+> orchestrator's `atlas:mined` grant — a miner holds no authority over an arbitrary source directory it proved
+> closed. ABSENT `authzScope` ⇒ authz binds the witness `scope` EXACTLY as this doc first shipped (human
+> `atlas emit` negations are byte-for-byte unchanged, the back-compat floor). This does not change any other
+> ratified decision of #99b (the abstention law, the §3 scope Merkle, the read surface).
+
 > **Search-before-freeze done (2026-08-10, branch `feat/negation-fact-99b` off master `d7e2029`).** No prior
 > negation work exists — `git branch -a`, `git worktree list`, and a `negation|abstain|absent` grep across
 > `packages/**/src` returned nothing but unrelated fail-closed sentinels. This is a genuine build, not a rebase.
@@ -86,6 +97,10 @@ export interface NegationNode {
   readonly claims: readonly ClaimEntry[];
   readonly authoring: 'NEGATED' | 'SUPERSEDED';
   readonly obviousness?: ObviousnessScore;   // ADR-0012, additive, absent-tolerant
+  readonly authzScope?: string;             // F3 (WP-96-N) — the scope the DOOR's authz gate binds instead of the
+                                            // witness `scope`, when present. NEVER an identity leg (negationKey
+                                            // reads the triple only) and NEVER read by the abstention law. Absent
+                                            // ⇒ authz binds the witness `scope` (human negations UNCHANGED).
 }
 
 /** The explicit honest-abstention record (owner-ratified). NOT a GroundedFact — it asserts NOTHING about the
@@ -191,8 +206,10 @@ The two mechanical facts §3 said N1 must confirm were measured by the lead befo
     witness}`** (durable, exit-legible, NOT a silent refusal). If a caller exists in S ⇒ the negative is FALSE ⇒
     reject (the claim is refuted, not abstained). Only `callers∩S==∅ ∧ !underApprox` admits the negation with the
     §3 witness as its grounding.
-  - **gate 2.1 ANCHOR/AUTHZ**: bind the write scope on `scope` (the negation's own declared scope IS its authz
-    scope — the assertion is ABOUT that scope). `primaryAnchorId` is NOT called.
+  - **gate 2.1 ANCHOR/AUTHZ**: the ANCHOR binds on the negation's witness `scope` (the assertion is ABOUT that
+    scope) and `primaryAnchorId` is NOT called. The AUTHZ gate binds **`authzScope ?? scope`** (F3, WP-96-N):
+    absent ⇒ the witness `scope` exactly as first shipped (human negations unchanged); present ⇒ the separate
+    `authzScope` (a MINED negation binds `atlas:mined` while keeping its witness directory as identity).
   - the remaining gates (2.25 incumbent keyed on `negationKey`, 2.5 ratify as advisory-class, 3 upsert+put) apply
     verbatim.
 

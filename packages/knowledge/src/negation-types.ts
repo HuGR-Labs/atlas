@@ -51,6 +51,21 @@ export interface NegationNode {
   readonly claims: readonly ClaimEntry[];
   readonly authoring: 'NEGATED' | 'SUPERSEDED';
   readonly obviousness?: ObviousnessScore; // ADR-0012 — additive, absent-tolerant (see AdvisoryNode)
+  /**
+   * THE AUTHZ SCOPE (F3 — WP-96-N, owner-ratified 2026-08-11, amends #99b/ADR-0015 D3). ADDITIVE + OPTIONAL.
+   * The scope the DOOR's authz gate binds instead of the witness `scope`, when present. It is NEVER an
+   * identity leg: `negationKey` is `(relationKind, target, scope)` over the WITNESS directory and does NOT
+   * read this field, so two negations differing only in `authzScope` are the SAME node. It is also NOT read
+   * by the honest-abstention law (scope-open / target-not-global / scope-empty), which operates on the
+   * witness `scope` — the assertion is still ABOUT that scope.
+   *   - ABSENT ⇒ authz binds the witness `scope` EXACTLY as before (human-emitted negations UNCHANGED, the
+   *     back-compat floor: an `atlas emit --negation` over `src/pay` still needs authority over `src/pay`).
+   *   - PRESENT ⇒ authz binds `authzScope`. This is what lets a MINED negation carry its WITNESS directory as
+   *     identity (so it is the real, groundable scoped-negative) while being authorized by the orchestrator's
+   *     `atlas:mined` grant — the split #99b's single-scope shape could not express (a miner holds no
+   *     authority over an arbitrary source directory it happened to prove closed).
+   */
+  readonly authzScope?: string;
 }
 
 /**

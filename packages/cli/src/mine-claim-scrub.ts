@@ -67,3 +67,25 @@ export function scrubCheck(check: Check): Check {
     ? { kind: 'index-query', query: scrubUtf8(check.query) }
     : { kind: 'assertion', expr: scrubUtf8(check.expr) };
 }
+
+/**
+ * Scrub ONE model-controlled identity-leg string — a relation endpoint (`endpointA`/`endpointB`) or a negation
+ * `target`/`scope` — BEFORE `f` is built (billy #96-wave Finding 2). THE ONE helper both new families share
+ * (the brief's "one helper" reusing the SAME `@atlas/persist` `scrub` primitive as the answer/claim/check legs).
+ *
+ * WHY THESE FIELDS AND NOT `relationKind`: `endpointA`/`endpointB` (relation) and `target`/`scope` (negation)
+ * are FREE model-emitted strings the seed carries — the exact #207/#219 leak surface. `relationKind` is a CLOSED
+ * enum (`RELATION_KINDS`), so it carries no credential shape and scrubbing it is meaningless (left raw).
+ *
+ * IDENTITY-CONSISTENCY (same law as `scrubCheck`, #219): unlike the advisory `claimNorm` (body-wording only),
+ * these fields FEED THE IDENTITY KEY — `endpointA`/`endpointB` fold into `relationKey`, `target`/`scope` into
+ * `negationKey`, and `endpointA`/`scope` are also the `primaryAnchor` — AND the `claimNorm` set-union element.
+ * So this MUST be applied at source, on the fact `mintIdentity`/`id(f)`/`claimNormOf` all read from: `mine-decide.ts`
+ * scrubs each leg ONCE, before `f` is built, so the SINGLE scrubbed value reaches CAS bytes (`id(f)`), the
+ * identity key (`relationKey`/`negationKey`), the anchor AND `claimNorm` identically — never a scrub-CAS-but-
+ * raw-identity split (which would re-open the leak on the key leg and relocate two scrub-equal facts to
+ * different addresses). A secret-shaped endpoint/target/scope scrubs to `[REDACTED]` on ALL of them at once.
+ */
+export function scrubUnit(s: string): string {
+  return scrubUtf8(s);
+}
