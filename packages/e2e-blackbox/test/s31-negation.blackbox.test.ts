@@ -49,21 +49,33 @@ const PAY = 'src/pay';
 // The OPEN scope: `uses.ts` REFERENCES a symbol no document defines ⇒ a real `unresolved` edge ⇒ a hole in S.
 const OPEN = 'src/open';
 
+// Where the DEFINED-but-uncalled target lives — outside the negated scope, so it resolves without being a caller.
+const LIB = 'src/lib';
+
 // GLOBAL SCIP symbols (NOT `local ` — the honest, groundable case). X is the negation's target over the closed
-// scope; UNDEFINED is the reference with no definition anywhere that OPENS `src/open`; Y is the (irrelevant)
-// target over the open scope — the abstention fires on scope-openness before Y's callers are ever consulted.
+// scope; it is DEFINED in `src/lib` (so it RESOLVES — #220) yet has no caller in `src/pay` (the honest,
+// groundable scoped-negative). UNDEFINED is the reference with no definition anywhere that OPENS `src/open`; Y
+// is the (irrelevant) target over the open scope — the abstention fires on scope-openness before Y is consulted.
+// PHANTOM is a GLOBAL symbol NO document defines: `(¬calls, PHANTOM, src/pay)` is VACUOUSLY true, and #220 makes
+// the door ABSTAIN `target-unresolvable` rather than ground a negative about a symbol Atlas cannot see.
 const X = 'scip . . `X`#';
 const Y = 'scip . . `Y`#';
 const UNDEFINED = 'scip . . `Undefined`#';
+const PHANTOM = 'scip . . `Phantom`#';
 
 const FILES = {
   [`${PAY}/keep.ts`]: 'export function keep() { return 1; }\n',
   [`${OPEN}/uses.ts`]: 'export function uses() { return 2; }\n',
+  [`${LIB}/def.ts`]: 'export function X() { return 0; }\n',
 };
 
-// The real SCIP the product reads: `src/open/uses.ts` REFERENCES `UNDEFINED`, which NO document DEFINES ⇒ the
-// product classifies it `unresolved` ⇒ `src/open` is OPEN. `src/pay/keep.ts` references nothing ⇒ CLOSED.
-const INDEX = [{ path: `${OPEN}/uses.ts`, references: [UNDEFINED] }];
+// The real SCIP the product reads: `src/lib/def.ts` DEFINES `X` (so X RESOLVES — #220 — while having no caller
+// in `src/pay`); `src/open/uses.ts` REFERENCES `UNDEFINED`, which NO document DEFINES ⇒ the product classifies
+// it `unresolved` ⇒ `src/open` is OPEN. `src/pay/keep.ts` references nothing ⇒ CLOSED. Nothing defines PHANTOM.
+const INDEX = [
+  { path: `${LIB}/def.ts`, defines: [X] },
+  { path: `${OPEN}/uses.ts`, references: [UNDEFINED] },
+];
 
 // Authorize the ACTOR to write BOTH scopes (KNOW-11). The abstention gate fires BEFORE authz, but a real
 // operator owns the scope it asserts over, so the policy is honest.
@@ -141,6 +153,26 @@ describe('S31 — DRIFT ON INSERTION: a new caller entering the scope drifts the
     expect(lines).toHaveLength(1); // IDENTITY SURVIVES — target/scope did not move, so it is no false orphan
     expect(lines[0]).toContain(`negation calls ${X} in ${PAY}`);
     expect(lines[0]).toContain('[DRIFTED]'); // the scope Merkle moved ⇒ re-verify the negative (honest trigger)
+  });
+});
+
+describe('S31 — #220: a PHANTOM target (defined nowhere) ABSTAINS, never a vacuous admit', () => {
+  it('emitting `(¬calls, PHANTOM, src/pay)` over a CLOSED scope ABSTAINS target-unresolvable (exit 2)', () => {
+    // `src/pay` is closed+empty (same as the X admit), but PHANTOM is a GLOBAL symbol NO document defines, so
+    // `reverseCallers(PHANTOM)` is [] BY CONSTRUCTION — indistinguishable from a genuinely-uncalled symbol. The
+    // pre-#220 door reached the closed-empty ADMIT and ground "PHANTOM is not called in src/pay" — a negative
+    // about a symbol Atlas cannot see. The fixed door ABSTAINS: it cannot prove the negative is MEANINGFUL.
+    const run = emitFact(repo, negationPayload({ target: PHANTOM, scope: PAY, relationKind: 'calls' }));
+    expect(run.exitCode).toBe(2); // an abstention travels as a REFUSAL at the emit door, never a false success
+    expect(run.stdout).toContain('abstained (target-unresolvable)');
+    expect(run.stderr).toBe(''); // fail-CLOSED refusal, never an uncaught throw
+  });
+
+  it('THE PROOF: `atlas negations src/pay --abstained` shows the durable target-unresolvable record', () => {
+    const r = runAtlas(repo.repoPath, ['negations', PAY, '--abstained']);
+    expect(r.exitCode).toBe(0);
+    const lines = abstainedLines(r.stdout);
+    expect(lines.some((l) => l.includes(`abstained calls ${PHANTOM} in ${PAY} — target-unresolvable`))).toBe(true);
   });
 });
 

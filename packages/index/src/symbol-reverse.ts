@@ -21,6 +21,15 @@ export interface SymbolReverseApi {
    *  returned so a caller can intersect it with a declared scope S to decide `underApprox` for a negation over
    *  that scope. Deterministic, sorted, deduped. Mirrors `createDepgraph`'s `unresolvedSources`, one level down. */
   holeSources(): readonly Hash[];
+  /** Does the GLOBAL symbol `symbol` have an in-index DEFINITION — i.e. can Atlas SEE it defined at all?
+   *  `true` iff `symbol` is non-`local` and appears as a `definition` occurrence somewhere in this index.
+   *
+   *  This is the predicate that separates "defined but uncalled" (a real, groundable negative) from
+   *  "Atlas cannot see this symbol defined, so `reverseCallers` is `[]` by CONSTRUCTION" (a VACUOUS negative).
+   *  Without it, `reverseCallers(phantom) === []` is indistinguishable from a genuinely uncalled symbol, and
+   *  the negation door would ground "phantom is not called in S" for a target that does not resolve at all.
+   *  A `local ` symbol is document-scoped (#189) and never resolves here. Total: never throws. */
+  resolves(symbol: string): boolean;
 }
 
 /** Deterministic, deduped, `String`-sorted `Hash[]` — the exact discipline `deriveEdges`/`dependencyAxis` use
@@ -87,6 +96,12 @@ export function createSymbolReverse(scip: ScipOutput): SymbolReverseApi {
     },
     holeSources(): readonly Hash[] {
       return holes;
+    },
+    resolves(symbol: string): boolean {
+      // The SAME predicate the two loops above use to admit a symbol at all: non-`local` AND carrying an
+      // in-index `definition`. `defs` is exactly that set, so a phantom (referenced-only, or absent) is `false`
+      // and its `reverseCallers` is `[]` HONESTLY — the caller must abstain rather than ground a vacuous negative.
+      return !isLocalSymbol(symbol) && defs.has(symbol);
     },
   };
 }

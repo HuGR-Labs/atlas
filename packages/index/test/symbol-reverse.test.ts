@@ -91,4 +91,19 @@ describe('#99b N0 — createSymbolReverse (symbol-level reverse callers)', () =>
     const rev = createSymbolReverse(scip);
     expect(rev.reverseCallers(NEVER)).toEqual([]);
   });
+
+  it('(f) #220 `resolves` — true for a defined global (even if uncalled), FALSE for a phantom or a `local`', () => {
+    const rev = createSymbolReverse(scip);
+    // GREET is defined AND called; NEVER is defined but never referenced — BOTH resolve. This is the exact
+    // discrimination the negation door needs: NEVER's `reverseCallers` is [] like a phantom's, but it RESOLVES,
+    // so "NEVER is not called in S" is a genuine, groundable negative — not a vacuous one.
+    expect(rev.resolves(GREET)).toBe(true);
+    expect(rev.resolves(NEVER)).toBe(true);
+    // UNKNOWN is referenced but has NO in-index definition ⇒ a phantom the index cannot see ⇒ does NOT resolve.
+    expect(rev.resolves(UNKNOWN)).toBe(false);
+    // a `local ` symbol is document-scoped (#189) ⇒ never resolves on the global rail.
+    expect(rev.resolves('local 0')).toBe(false);
+    // a symbol absent from the index entirely ⇒ does NOT resolve.
+    expect(rev.resolves('scip-ts npm fixture 1.0.0 `neverSeen`().')).toBe(false);
+  });
 });

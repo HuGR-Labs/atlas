@@ -52,6 +52,7 @@ function feed(callers: readonly string[], holes: readonly string[]): SymbolRever
   return {
     reverseCallers: (sym: string) => (sym === TARGET ? (callers as unknown as readonly Hash[]) : []),
     holeSources: () => holes as unknown as readonly Hash[],
+    resolves: (sym: string) => sym === TARGET, // #220 — TARGET is the in-index-defined symbol under test
   };
 }
 
@@ -157,6 +158,33 @@ describe('#99b N2 — the abstention door (the honesty core)', () => {
     expect(fact.grounding.entries[0]!.path).toBe(S);
     expect(fact.edgeModel).toBe(EDGE_MODEL); // stamped from the extractor release
     expect(fact.id).toBe(KEY); // MINTED = negationKey, never trusted from the payload
+  });
+
+  it('#220 THE TEETH: a PHANTOM target (global, no in-index definition) ABSTAINS target-unresolvable — a ' +
+    'closed-empty admit would ground a VACUOUS negative about a symbol Atlas cannot see', () => {
+    // `scip:PHANTOM#` is a well-formed GLOBAL symbol, but it is NOT the defined `TARGET`, so the feed's
+    // `resolves` is false and `reverseCallers` is [] BY CONSTRUCTION — the same [] a genuinely-uncalled real
+    // symbol has. Scope is closed-empty (no callers, no holes, S resolves), so gates (a)/(b)/(c) all pass and
+    // the pre-#220 door reached the CLOSED-EMPTY ADMIT (d), minting "PHANTOM is not called in src/pay" — a
+    // negative about a phantom. The sound door abstains. MUTANT (drop the `resolves(target)` gate): this ADMITS.
+    const PHANTOM = 'scip:PHANTOM#';
+    const out = negDoor([], []).emit(negation({ target: PHANTOM }), NaN as unknown as Hash);
+    expect(out.emitted).toBe(false); // NOT admitted — the negative is not provably MEANINGFUL
+    const rec = rehydrateProjection(ws!.store).abstained?.get(String(negationKey(KIND, PHANTOM, S)));
+    expect(rec).toBeDefined(); // durable + readable, not a silent drop
+    expect(rec!.reason).toBe('target-unresolvable');
+    // and NOTHING was admitted at the phantom's address.
+    expect(rehydrateProjection(ws!.store).current.get(String(negationKey(KIND, PHANTOM, S)))).toBeUndefined();
+  });
+
+  it('#220 CONTRAST: the SAME closed-empty scope ADMITS when the target RESOLVES — the gate discriminates ' +
+    'phantom from genuinely-uncalled, it does not blanket-abstain', () => {
+    // Identical scope/holes/callers as the phantom case above; only the target differs (TARGET resolves). Proves
+    // the #220 gate is not a sledgehammer that kills every closed-empty admit — it fires ONLY on non-resolving
+    // targets. (Belt-and-braces alongside the pre-existing closed-empty ADMIT test, keyed explicitly to #220.)
+    const out = negDoor([], []).emit(negation({ target: TARGET }), NaN as unknown as Hash);
+    expect(out.emitted).toBe(true);
+    expect(currentOf(ws!)?.family).toBe('negation');
   });
 
   it('INTEGRATION (lucy P0): a door-admitted negation SURFACES through `negationsOf` — the read fold sees the row', () => {

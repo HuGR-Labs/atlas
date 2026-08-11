@@ -16,6 +16,8 @@
 //   gate 1   ABSTENTION  : the crux. Over the scope S, using the N0 completeness feed (`SymbolReverseApi`):
 //                            · S does not resolve on the spatial rail  ⇒ ABSTAIN (`scope-empty`).
 //                            · holeSources() ∩ S ≠ ∅  (S is OPEN)      ⇒ ABSTAIN (`scope-open`, witness).
+//                            · resolves(target) == false (#220 — no    ⇒ ABSTAIN (`target-unresolvable`): the
+//                              in-index definition, a PHANTOM target)     negative would be VACUOUSLY true.
 //                            · reverseCallers(target) ∩ S ≠ ∅ (a real  ⇒ REJECT (the negative is FALSE —
 //                              caller EXISTS)                             refuted, NOT abstained).
 //                            · callers∩S == ∅ ∧ holes∩S == ∅           ⇒ ADMIT with the §3 grounding.
@@ -108,6 +110,11 @@ const REASON_TEXT: Readonly<Record<AbstainedRecord['reason'], string>> = {
   'scope-empty':
     'abstained (scope-empty): the scope directory S does not resolve on the spatial rail, so it cannot be ' +
     'grounded (a negation grounds against S\'s folded subtree-Merkle). Name a directory that exists in the tree',
+  'target-unresolvable':
+    'abstained (target-unresolvable): the target is a GLOBAL symbol Atlas cannot see DEFINED in this index, so ' +
+    '"it is not called in S" would be VACUOUSLY true — a negative about a phantom, not a groundable fact. A ' +
+    'durable AbstainedRecord was written; read it back with the negation read surface. Name a symbol that ' +
+    'resolves to a definition Atlas can see (or index the module that defines it), then re-emit',
 };
 
 /** Build the ABSTAINED emitted-false verdict + its durable record at the negation's own `negationKey`. */
@@ -194,6 +201,14 @@ export function emitNegation(deps: GovernedEmitDeps, raw: NegationNode): EmitOut
   //       ⚠ This is the SOUND condition — `holeSources() ∩ S`, NOT `reverseCallers(target) == []`.
   const openSources = inScope(symbolReverse.holeSources(), byHash, scope);
   if (openSources.length > 0) return writeAbstention(deps, key, record('scope-open', openSources));
+  //   (c0) TARGET RESOLVES? #220 — `reverseCallers(target)` is `[]` for a global symbol with NO in-index
+  //        definition BY CONSTRUCTION (symbol-reverse.ts), so without this gate the (d) admit below would
+  //        ground "target is not called in S" for a PHANTOM — a negative about a symbol Atlas cannot see
+  //        defined, VACUOUSLY true and indistinguishable from a genuinely-uncalled real symbol. Cannot prove
+  //        the negative is MEANINGFUL ⇒ ABSTAIN (honest fail-closed), never admit. It is neither refuted (no
+  //        proven caller) nor scope-open (S may be perfectly closed); the defect is the TARGET, so it earns its
+  //        own reason. Ordered after the scope gates (a/b) — an unresolvable scope is the more basic refusal.
+  if (!symbolReverse.resolves(target)) return writeAbstention(deps, key, record('target-unresolvable', []));
   //   (c) a real caller in S? The negative is FALSE ⇒ REJECT (a decision, not an abstention — no record).
   const callersInScope = inScope(symbolReverse.reverseCallers(target), byHash, scope);
   if (callersInScope.length > 0) return { emitted: false, rejected: REJECTED_NEGATION_REFUTED };

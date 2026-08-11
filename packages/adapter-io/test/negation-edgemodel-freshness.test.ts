@@ -57,7 +57,9 @@ function axesDrifted(): Axes {
   return { spatial, territory: empty, dependency: empty, edges: [] };
 }
 
-const emptyFeed: SymbolReverseApi = { reverseCallers: () => [], holeSources: () => [] };
+// `resolves: () => true`: TARGET is a real, in-index-defined symbol that simply has no callers — the genuine
+// closed-empty scoped-negative this suite ADMITS (#220 gate 1c0 passes; the defect it guards is a phantom target).
+const emptyFeed: SymbolReverseApi = { reverseCallers: () => [], holeSources: () => [], resolves: () => true };
 
 function negation(): NegationNode {
   return {
