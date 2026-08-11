@@ -1,0 +1,131 @@
+# #96 — Genesis output contract: emit the typed knowledge vocabulary through the governed door
+
+> **Status:** contract frozen 2026-08-10. Owner ratified two load-bearing decisions the same day:
+> (1) genesis emits **through the governed door**, not a lower-trust parallel path; (2) close **#96-full
+> (all 4 fact shapes)** before the #95 benchmark. Frozen on measured surfaces (bobby's architecture map,
+> `master 935276c`); every structural claim below was read in the code, not assumed.
+
+## 0. The crux
+
+Genesis mines facts but emits only **one** of Atlas's four fact shapes (advisory), and it reaches the store
+through its own **staging sidecar**, not the governed door. So the product that is *about* typed, governed,
+scoped knowledge produces a single untyped-beyond-advisory, T2-only stream. #96 makes genesis emit the
+**full typed vocabulary** — advisory · predicate · relation · negation — and routes every mined fact
+**through the governed door** so it faces the same 16-gate ladder a human `atlas emit` faces.
+
+## 1. Measured current state (`master 935276c`, bobby [M])
+
+- **The mine path is SEVERED from the projection (this is a feature — closes #87).** `mine.ts:23-25`
+  fixtures make `loadProjection`/`persistProjection`/`commitProjection` throw; the pass writes its own
+  staging sidecar via `DiskStore.commitStaging` (`mine.ts:288`). It runs the **S2 admission gate only**
+  (`mine-gate.ts` → `admit-harness.ts`), never the governance ladder.
+- **The governed door already runs over staging.** `atlas promote` (`adapter-io/src/governed-promote.ts`,
+  reachable `bin.ts → cli.ts:206 → promote.ts`) reads the staging sidecar, rehydrates each row from CAS,
+  and feeds it to `createGovernedEmit(...).emit` with **`origin:'promoted'`** (`compose.ts:342`) — which
+  removes the KNOW-18 fast-path so the full ladder incl. the KNOW-8 `ratify()` actually runs. **This is
+  the reconciliation the owner ratified; it exists and is shipped.** (bobby Option B.)
+- **The proposer knows 3 shapes, not 4.** `admit-harness.ts:91` `type Proposal = PredicateProposal |
+  AdvisoryProposal | Abstention`. The `admit()` switch (`:182-189`) has cases `abstain`/`advisory`/
+  `predicate` — **no `relation`, no `negation`.** `admitPredicate` (`:206`) exists but the CLI never
+  reaches it: `mine-gate.ts:73` hard-codes `kind:'advisory'` on every candidate it builds.
+- **All four WRITE doors exist.** advisory + predicate (`upsert.ts`), relation (`#99a`,
+  `relationWellFormed`/`relationKey`), negation (`#99b`, `emitNegation`, `NegationNode`). The asymmetry is
+  entirely on the **propose+admit** side.
+- **The four node shapes (identity legs are MINTED, never trusted):**
+  - `AdvisoryNode` — `{kind, nodeKey, claimNorm, grounding, tier, obviousness?}`.
+  - `PredicateNode` — advisory + a mechanically-synthesized+attested `check` (never model-supplied).
+  - `RelationNode` (`types.ts:109`) — `{kind:'relation', relationKind, endpointA, endpointB, grounding,
+    tier, scope?}`; identity = `relationKey = hash(endpointA ‖ relationKind ‖ endpointB)`.
+  - `NegationNode` (`negation-types.ts:41`) — `{kind:'negation', id, tier, relationKind, target, scope,
+    grounding, edgeModel, freshness, claims, authoring}`; its honest-abstention sibling is
+    `AbstainedRecord` (`reason: 'scope-open'|'target-not-global'|'scope-empty'`).
+- **Shared prerequisite (UNVERIFIED, [A] — WP-0 must confirm):** a mined fact is scoped `atlas:mined`
+  (`mine-staging.ts:39`). Governed gate 2 (`actorInScope`) refuses any actor not granted that scope, and
+  compose resolves `actor = ATLAS_ACTOR ?? gitUserEmail ?? ''`. bobby found **no default policy grant** for
+  `atlas:mined` in a shipped `policy.json`. Without it, `atlas promote` refuses **every** row at gate 2.
+
+## 2. The decided design
+
+**Door: Option B (bobby).** Mine STAYS severed and writes typed candidates to staging; **`atlas promote`
+is the governed door.** Option A (mine calls `governedEmit` inline) is **REJECTED** — it destroys severance
+(#87) and either auto-accepts with no ratifier (KNOW-8 becomes false via the KNOW-18 fast-path) or forges
+`origin:'promoted'` dishonestly. #96 therefore builds **no new write path**; it unlocks the four proposal
+**shapes** upstream of an already-governed door, and makes the shape survive staging→promote unchanged
+(staging already carries `family: f.kind` at `mine-decide.ts:95` and CAS-stores the whole node).
+
+**The four shapes, each = a `Proposal` variant + an `admit()` case + a proposer lens that produces it:**
+
+| shape | proposal type | admit door | write door | status |
+|---|---|---|---|---|
+| advisory | `AdvisoryProposal` ✅ | `admitAdvisory` ✅ | ✅ | **ships today** |
+| predicate | `PredicateProposal` ✅ | `admitPredicate` ✅ | ✅ | blocked on **#219** + mine-gate/proposer |
+| relation | **new** `RelationProposal` | **new** `admitRelation` | ✅ #99a | build propose+admit |
+| negation | **new** `NegationProposal` (+abstain→`AbstainedRecord`) | **new** `admitNegation` | ✅ #99b | build propose+admit |
+
+**Proposal shape rule (mirrors the existing pattern):** a `*Proposal` carries the fact's **claim + identity
+legs + grounding + tier**, and NOTHING mechanical. The harness mints identity (`relationKey`/`negationKey`),
+runs grounding, and (predicate only) synthesizes+attests the `check`. The model never supplies a verdict, a
+score, a check, or a minted key — exactly as `PredicateProposal` does today (`admit-harness.ts:62-71`).
+
+- `RelationProposal = {kind:'relation', site, relationKind, endpointA, endpointB, grounding, tier,
+  scope?, scratch?}`. `admitRelation` grounds it (the endpoints must resolve; the citation must
+  re-derive) and yields a `RelationNode`; identity `relationKey` is minted, never trusted.
+- `NegationProposal = {kind:'negation', site, relationKind, target, scope, grounding, tier, scratch?}`.
+  `admitNegation` enforces the **honest-abstention law** (#99b): if the scope is open / target not global /
+  scope empty it yields an `AbstainedRecord`, never a fabricated negative; otherwise a `NegationNode`.
+
+## 3. The #219 ordering constraint (HARD)
+
+A predicate's `claimNorm = normalizeCheck(check)` folds into its **nodeKey** (KNOW-15c) **and** `id(f)`
+hashes `check` into CAS — **both unscrubbed today** (`mine-claim-scrub.ts` scrubs the advisory branch only;
+`:23-27` reports the predicate leg as an unmeasured second gap). The instant a mine pass emits a
+**predicate**, this goes live (a credential shape in a synthesized check reaches CAS raw and pollutes node
+identity — the #207/#118/#121 class). **Therefore: #219 (scrub predicate `check` before CAS) MUST land and
+merge before WP-96-P is dispatched.** Relation and negation are NOT on the `check`/`claimNorm` identity leg
+and are **not** blocked on #219.
+
+## 4. Decomposition (WP cards) + DAG
+
+**Conflict map:** WP-96-R and WP-96-N both edit `admit-harness.ts` (the `Proposal` union + the `admit()`
+switch) — NOT disjoint. Eliminate the shared file first: **WP-96-SEAM** widens the union + adds
+`admitRelation`/`admitNegation` as typed stubs (throwing `not-yet` or returning a structured drop), so R and
+N then fill **disjoint functions** and never collide on the switch.
+
+| WP | scope (disjoint after SEAM) | dep-on | gate |
+|---|---|---|---|
+| **WP-96-0** POLICY | verify/add the `atlas:mined` actor grant so `atlas promote` accepts a mined row; a black-box test that a promoted advisory row lands in the projection | — | reachability proof (a mined row actually promotes) |
+| **WP-219** SCRUB | scrub predicate `check`/`claimNorm` before `id(f)`/nodeKey (the existing #219 card; consistent scrub of the nodeKey preimage too) | — | **blocks WP-96-P** |
+| **WP-96-SEAM** | widen `Proposal` union (+`RelationProposal`,`NegationProposal`) + `admit()` switch cases as typed stubs; freeze the two new proposal types | — | tsc + the union is exhaustive again |
+| **WP-96-P** PREDICATE | `mine-gate` builds `PredicateProposal` (not hardcoded advisory) + proposer predicate lens produces predicate candidates | WP-219, WP-96-SEAM | a mine pass emits an admitted predicate that promotes + is queryable |
+| **WP-96-R** RELATION | fill `admitRelation` (ground + mint `relationKey`) + proposer relation lens | WP-96-SEAM | a mined relation promotes; both endpoints resolve; direction preserved |
+| **WP-96-N** NEGATION | fill `admitNegation` (honest-abstention law → `AbstainedRecord`; else `NegationNode`) + proposer negation lens | WP-96-SEAM | a mined negation promotes; an open/empty scope ABSTAINS, never fabricates |
+| **WP-96-E2E** | one black-box story per shape: `mine → atlas promote → governed door → atlas query` returns the typed fact with correct family/scope/tier/ids | all above | the whole pipeline, subprocess black-box |
+
+```
+WP-96-0 (policy) ─────────────────────────────┐
+WP-96-SEAM ──┬─────────────► WP-96-R ──────────┤
+             ├─────────────► WP-96-N ──────────┼──► WP-96-E2E
+WP-219 ──────┴► WP-96-P ────────────────────────┘
+```
+
+## 5. DoD (every WP) + exit predicate
+
+- tsc `-b` exit 0; the 5 gates (godfile≤400 / layer / spec-conformance / id-integrity / reference-model);
+  the full suite green. Every touched file ≤400 LOC (`mine.ts` 370, `admit-harness.ts` — check headroom).
+- **Reachability, not a reference model:** each shape WP proves a *mine pass* emits the shape AND it
+  *promotes through the governed door* AND it is *queryable* — not merely that a type or an admit function
+  exists (reference-model-vs-shipped-path is the repeated trap here: `admitPredicate` existed for months
+  with zero callers).
+- **Honesty:** the proposer never supplies identity/verdict/score/check; abstention stays a first-class
+  outcome (a negation over an open scope ABSTAINS). Each brief must answer *"what did my framing get wrong"*.
+- **Exit predicate for #96:** `atlas mine` over a fixture repo yields, through `atlas promote`, at least one
+  admitted+queryable fact of **each** of the four shapes, each carrying minted identity, `atlas:mined`
+  scope, and the correct family — with a black-box test per shape. Only then is #96 closed and #95 unblocked.
+
+## 6. Ratification / open items owed at build time
+- **WP-0 must VERIFY** the `atlas:mined` policy grant (bobby [A], unread). If absent, promotion refuses
+  every row and no shape can be proven end-to-end — WP-0 is the true gate-zero, ahead of every shape WP.
+- The proposer **lens** side (how a scope-routed persona proposes each shape) is the genesis-team-scope-miner
+  design; #96 provides the shape MACHINERY, the lens WP supplies the prompt discipline (GEN-12: one bounded
+  proposal, derivable-from-shown-bytes, abstention valued, no self-confidence, no self-score).
+- #99c TRANSITION (the 5th shape) is explicitly OUT of #96 (deferred with the transition fact itself).
