@@ -8,9 +8,9 @@
 //
 // This suite injects a proposer that supplies EACH shape and proves the gate routes it to the MATCHING admit
 // arm: advisory → admitAdvisory (unchanged), predicate → admitPredicate (REAL — synthesize+HOLDS+teeth ⇒ it
-// ADMITS, proving the predicate path is live end-to-end through the gate), relation → the admitRelation stub
-// (`…WP-96-R`), negation → the admitNegation stub (`…WP-96-N`). The default proposer still emits advisory, so
-// the whole existing mine + genesis suite is the back-compat control — advisory is byte-identical.
+// ADMITS), relation → admitRelation (REAL since WP-96-R — grounds+mints a RelationNode, direction preserved),
+// negation → the admitNegation stub (`…WP-96-N`). The default proposer still emits advisory, so the whole
+// existing mine + genesis suite is the back-compat control — advisory is byte-identical.
 
 import { describe, it, expect } from 'vitest';
 import { makeAdmitGate } from '../src/mine.js';
@@ -81,16 +81,20 @@ describe('WP-96-SEAM2 — the gate dispatches on the seed\'s fact FAMILY', () =>
     expect(factStatus(v.fact)).toBe('HOLDS'); //        earned through verify+teeth, the live predicate path
   });
 
-  it('a RELATION seed → reaches the admitRelation stub (shape-not-yet-emitted … WP-96-R)', () => {
+  it('a RELATION seed → reaches admitRelation (REAL, WP-96-R) and ADMITS a relation node end-to-end', () => {
     const { deps, synthCalls } = admitAllDeps();
     const gate = makeAdmitGate(deps);
     const seed: SeedProposal = { kind: 'relation', cand, claim: 'svc depends on repo', relationKind: 'depends-on', endpointA: 'pkg/svc.ts::svc', endpointB: 'pkg/repo.ts::repo' };
 
     const v = gate.emit(seed, cand);
-    expect(v.emitted).toBe(false);
-    if (v.emitted) throw new Error('unreachable');
-    expect(v.whyNot.reason).toContain('shape-not-yet-emitted');
-    expect(v.whyNot.reason).toContain('WP-96-R');
+    expect(v.emitted).toBe(true);
+    if (!v.emitted) throw new Error('unreachable');
+    expect(factKind(v.fact)).toBe('relation'); //       a RelationNode, not a mislabelled advisory
+    const r = v.fact as unknown as { endpointA: string; endpointB: string; relationKind: string; obviousness?: { by: string } };
+    expect(r.endpointA).toBe('pkg/svc.ts::svc'); //     direction preserved: A is the SUBJECT
+    expect(r.endpointB).toBe('pkg/repo.ts::repo'); //   B is the OBJECT
+    expect(r.relationKind).toBe('depends-on');
+    expect(r.obviousness?.by).toBe('harness-predicate'); // scored, never self-scored (ADR-0012)
     expect(synthCalls()).toBe(0); //                    relation never touches the predicate check engine
   });
 

@@ -16,6 +16,16 @@
 import type { Status, StructRef } from '@atlas/contracts';
 import type { AdvisoryNode, Check, GroundedFact, ObviousnessScore, PredicateNode, PredicateSlot } from '@atlas/knowledge';
 import type { IndexNode } from '@atlas/index';
+// WP-96-R — the relation admission's PURE legs (identity mint, set-union text, gate-0 check, drop reasons),
+// extracted to the sibling at the 400-LOC ceiling. The truth-door call + obviousness scoring stay HERE, in
+// `admitRelation` (they need module-private `scoreObviousness`); this module only mints + shapes the node.
+import {
+  buildRelation,
+  relationClaimNorm,
+  relationEndpointsResolve,
+  DROP_RELATION_MALFORMED,
+  DROP_RELATION_UNGROUNDED,
+} from './admit-relation.js';
 import type { Candidate, WhyNot } from './types.js';
 
 /**
@@ -142,14 +152,14 @@ const DROP_NOT_HOLDS = 'synthesized check does not compile ∧ HOLDS on current 
 const DROP_VACUOUS = 'synthesized check survives every mutant — vacuous / toothless (GEN-12j)';
 const DROP_TYPE_BROKEN = 'sound type-checker / LSP verdict is not HOLDS on the type-expressible slot (GEN-12k)';
 const DROP_UNGROUNDED = 'advisory fails the truth door — the citation does not ground (GEN-12e)';
-// The two SEAM STUBS (ADR-0015 D2/D3). The relation/negation shapes have a typed proposal slot and an
-// exhaustive admit case, but their real grounding/mint is NOT built here — WP-96-R fills `admitRelation`
-// and WP-96-N fills `admitNegation`. Until then each returns this structured `shape-not-yet-emitted` drop,
-// so the switch is total (tsc) and the seam is honest: a shape with no admission logic emits NOTHING, never
-// a forced fact. The reason is a NAMED constant so the later WP replaces one branch and cannot silently
-// leave the stub reachable.
-const DROP_RELATION_NOT_EMITTED =
-  'shape-not-yet-emitted: the relation family (ADR-0015 D2) has a typed proposal slot but no admission logic — WP-96-R';
+// RELATION drops (ADR-0015 D2, WP-96-R). The relation family is now ADMITTED — its two honest refusals
+// (`DROP_RELATION_MALFORMED` / `DROP_RELATION_UNGROUNDED`) live beside its builders in `admit-relation.ts`
+// and are imported above. The `shape-not-yet-emitted` stub reason is GONE (deleted, not commented) so a
+// resurrected stub cannot reach a ready-made string.
+// The negation SEAM STUB (ADR-0015 D3). The negation shape has a typed proposal slot and an exhaustive admit
+// case, but its real grounding/mint is NOT built here — WP-96-N fills `admitNegation`. Until then it returns
+// this structured `shape-not-yet-emitted` drop, so the switch is total (tsc) and the seam is honest: a shape
+// with no admission logic emits NOTHING, never a forced fact. NAMED so WP-96-N replaces one branch cleanly.
 const DROP_NEGATION_NOT_EMITTED =
   'shape-not-yet-emitted: the negation family (ADR-0015 D3) has a typed proposal slot but no admission logic — WP-96-N';
 // There is deliberately NO obviousness drop reason. ADR-0012: nothing is ever rejected for being obvious —
@@ -185,13 +195,19 @@ export function admit(p: Proposal, deps: AdmitDeps): Admission {
 }
 
 /**
- * WP-96-R SEAM STUB — the relation family's admission (ADR-0015 D2). A relation grounds over TWO endpoints
- * and mints its identity by `relationKey`, NOT `nodeKey`; that grounding/mint is WP-96-R's build and is
- * deliberately not implemented here. Returns the structured `shape-not-yet-emitted` drop so the shape has an
- * exhaustive, honest slot without forcing a fact. `deps` is unused by design until R wires the door.
+ * WP-96-R — the relation family's admission (ADR-0015 D2). The EXACT sibling of `admitAdvisory`: a relation
+ * passes the SAME truth door the advisory path uses (`deps.doors.grounded` — NO new truth rule; the relation's
+ * grounding carries the 2-entry AND-fold, so "both endpoints re-derive FRESH" is what that one door already
+ * answers), and obviousness is SCORED, never gated (ADR-0012), off the canonical relation triple. It differs
+ * from the advisory in exactly two ways, both forced by the shape: (1) a gate-0 well-formedness check FIRST,
+ * because the endpoints ARE the identity (an intrinsic fact's degenerate grounding is caught downstream by
+ * `primaryAnchorId`; a relation's is caught HERE, so `relationKey` in `buildRelation` never throws out of this
+ * total function); (2) identity is minted by `relationKey`, never `nodeKey`. Pure + total: no throw, no IO.
  */
-function admitRelation(_p: RelationProposal, _deps: AdmitDeps): Admission {
-  return { outcome: 'dropped', reason: DROP_RELATION_NOT_EMITTED };
+function admitRelation(p: RelationProposal, deps: AdmitDeps): Admission {
+  if (!relationEndpointsResolve(p)) return { outcome: 'dropped', reason: DROP_RELATION_MALFORMED };
+  if (!deps.doors.grounded(p.grounding, deps.indexState)) return { outcome: 'dropped', reason: DROP_RELATION_UNGROUNDED };
+  return { outcome: 'admitted', fact: buildRelation(p, scoreObviousness(deps.doors, relationClaimNorm(p))) };
 }
 
 /**

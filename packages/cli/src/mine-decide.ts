@@ -22,9 +22,20 @@ import { MINED_SCOPE, MINED_TIER } from './mine-staging.js';
 import { answerReceipt } from './mine-answer.js';
 import { scrubClaimNorm, scrubCheck } from './mine-claim-scrub.js';
 
-/** The advisory claim body a write carries (the KNOW-4c set-union element); a predicate carries its check. */
+/** The KNOW-4c set-union element a mined write carries, per family. Advisory ⇒ its claim body; predicate ⇒
+ *  its normalized check; RELATION (ADR-0015 D2, WP-96-R) ⇒ the canonical triple `A <kind> B`, MIRRORING the
+ *  governed door's `claimNormOf(node, 'relation')` (adapter-io/src/governed-emit-identity.ts:54-57) and the
+ *  harness `relationClaimNorm` (genesis/src/admit-relation.ts) verbatim — so a MINED relation and a
+ *  governed-emitted one dedup on byte-identical set-union text and a re-mine is an idempotent UPDATE, never a
+ *  second claim. Negation stays `''` (WP-96-N — untouched here). */
 const claimNormOf = (f: Fact): string =>
-  f.kind === 'advisory' ? f.claimNorm : f.kind === 'predicate' ? normalizeCheck(f.check) : '';
+  f.kind === 'advisory'
+    ? f.claimNorm
+    : f.kind === 'predicate'
+      ? normalizeCheck(f.check)
+      : f.kind === 'relation'
+        ? `${f.endpointA} ${f.relationKind} ${f.endpointB}`
+        : '';
 
 /**
  * THE WHOLE PASS BODY AS ONE PURE DECISION over a staging snapshot — the seam `commitStaging` requires. It used to be
@@ -148,6 +159,14 @@ export function decideStaging(
       //    the row now DECLARES what it is — what the ARCH-10 guard derives authority from.
       scope: MINED_SCOPE,
       tier: MINED_TIER,
+      // ── RELATION carrier (ADDITIVE — ADR-0015 D2 / #99a, WP-96-R) — the two endpoint unitKeys + kind of a
+      //    2-ended fact, forwarded so `upsert` stamps them on the ROW (`relationOf(req)`, upsert.ts:165-171)
+      //    and the read-side `relationsOf` fold indexes it by BOTH endpoints (direction preserved: A=subject,
+      //    B=object). NOT routed (`RouteInputs` reads none) — identity is the `relationKey` already in `nodeKey`.
+      //    Present ONLY on a `family:'relation'` write; absent for advisory/predicate/negation. Without this a
+      //    mined relation stages with `family:'relation'` but NO endpoint carriers, so `relationsOf` skips it
+      //    (its malformed-row guard) and the promoted relation is invisible — the READ half SEAM flagged.
+      ...(f.kind === 'relation' ? { endpointA: f.endpointA, endpointB: f.endpointB, relationKind: f.relationKind } : {}),
       // ── ANSWER-PROVENANCE carrier (ADDITIVE — #195 b) — the CAS id of the scrubbed answer bytes. NOT routed
       //    (`RouteInputs` reads it not), so identity is unchanged; present ONLY when the model produced the claim.
       //    The CAS id is its OWN tamper-evidence (store.get re-hashes on read) — no separate digest field.
