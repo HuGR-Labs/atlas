@@ -10,11 +10,18 @@
 // Confusing the two has cost real work here. A suite over `packages/tools/src/guard.ts` was driven to zero
 // surviving mutants and raised ZERO shipped confidence, because the door the CLI actually uses is
 // `packages/adapter-io/src/store.ts` and `guard.ts` has no production caller at all. The vocabulary read as
-// coverage. Fifty-four modules across nine packages are in that state; the ledger below is all of them.
+// coverage. Modules across nine packages are in that state; the ledger below is all of them, and the
+// gate-checked DECLARED COUNTS above — not any integer quoted in this prose — say how many.
 //
 // So: reference models are LEGAL, and each one is written down. A module that becomes one without being
 // written down fails this gate. Nothing here deletes code and nothing here wires code — the ledger only
 // forces the classification to be DECLARED rather than discovered by the next reviewer.
+//
+// ── DECLARED COUNTS (gate-checked; a drift here FAILS this gate) ────────────────────────────────────────
+//   declared-modules: 52 · dead-value-exports: 220 · type-reachable: 6
+//   These three are read back from THIS file and asserted against the measured tree at the foot of the run
+//   (see "THE HEADER STATES COUNTS, AND THIS CHECKS THEM"). No count is QUOTED anywhere else in this
+//   header — a quoted integer that nothing checks is exactly what rotted here (task #143); this one cannot.
 //
 // ── WHAT IT FORBIDS ──────────────────────────────────────────────────────────────────────────────────
 //   (1) A NEW reference model  — a module whose exported values acquire zero production callers, absent
@@ -34,11 +41,12 @@
 // `packages/tools/src/transport.ts` is reachable — but ONLY through `import type { PhasePushSource }` at
 // `packages/adapter-io/src/poke-file.ts`. Its TYPES are a live contract; its VALUES (`createTransport`)
 // never run. Calling that "dead" would be wrong and would get the entry deleted along with a real seam.
-// Seven modules are in that state and carry `types: true`. The distinction is compiler-enforced, not guessed:
+// The modules in that state carry `types: true` (their number is the type-reachable count in the checked
+// DECLARED COUNTS header above). The distinction is compiler-enforced, not guessed:
 // this repo builds with `verbatimModuleSyntax: true`, under which a type-only import MUST be written
 // `import type` / `import { type X }`, so the syntax and the emit cannot disagree. The analyser was
 // nonetheless cross-checked against the emitted `dist/**/src/**.js` (types already erased by tsc) and the
-// two agreed on all 54 modules. See harness/lib/reachability.mjs.
+// two agreed on every declared module. See harness/lib/reachability.mjs.
 //
 // ── LIMITS, STATED ───────────────────────────────────────────────────────────────────────────────────
 // Reachability is DIRECT, not transitive from an entrypoint (reachability.mjs says why). A closed ring of
@@ -205,6 +213,39 @@ const LEDGER = {
 
 const fail = [];
 const measured = new Map(referenceModels(PKGS).map((r) => [r.path, r]));
+const values = [...measured.values()].reduce((n, r) => n + r.values, 0);
+const typed = [...measured.values()].filter((r) => r.typeReachable).length;
+
+// (0) THE HEADER STATES COUNTS, AND THIS CHECKS THEM. The prose header no longer QUOTES any count — a
+// quoted integer rots, which is precisely what task #143 found (54/Seven had drifted from the tree's 52/6).
+// What the header carries instead is one STRUCTURED `DECLARED COUNTS` line; the gate reads it back from its
+// own source and asserts it against the measured tree. Change a number up there and this leg goes RED, so
+// the header is now a self-checking artifact rather than an un-checkable claim.
+{
+  const selfSource = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+  const declared = selfSource.match(
+    /declared-modules:\s*(\d+)[^\n]*dead-value-exports:\s*(\d+)[^\n]*type-reachable:\s*(\d+)/,
+  );
+  if (declared === null) {
+    fail.push(
+      'HEADER COUNTS MISSING — the gate-checked `DECLARED COUNTS` line is gone from this file\'s header.\n' +
+        '      Restore it (see the top of this file): it is the only self-checking statement of how many\n' +
+        '      reference models the tree carries, and dropping it is how an un-checkable integer sneaks back.',
+    );
+  } else {
+    const want = { 'declared-modules': measured.size, 'dead-value-exports': values, 'type-reachable': typed };
+    const got = { 'declared-modules': +declared[1], 'dead-value-exports': +declared[2], 'type-reachable': +declared[3] };
+    for (const key of Object.keys(want)) {
+      if (want[key] !== got[key]) {
+        fail.push(
+          `HEADER COUNT DRIFT — ${key}\n` +
+            `      The header's DECLARED COUNTS line says ${got[key]}, the analyser measures ${want[key]}.\n` +
+            `      Correct the number in the header comment to ${want[key]} — do not silence this check.`,
+        );
+      }
+    }
+  }
+}
 
 // (1) a NEW reference model — the leg this gate exists for.
 for (const [path, row] of measured) {
@@ -318,8 +359,6 @@ if (fail.length > 0) {
   process.exit(1);
 }
 
-const typed = [...measured.values()].filter((r) => r.typeReachable).length;
-const values = [...measured.values()].reduce((n, r) => n + r.values, 0);
 const bannered = Object.values(LEDGER).filter((e) => e.banner === true).length;
 const total = Object.keys(LEDGER).length;
 console.log(
