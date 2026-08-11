@@ -112,7 +112,7 @@ export interface AbstainedRecord {
   readonly relationKind: RelationKind;
   readonly target: string;
   readonly scope: string;
-  readonly reason: 'scope-open' | 'target-not-global' | 'scope-empty';   // WHY it could not decide (closed set)
+  readonly reason: 'scope-open' | 'target-not-global' | 'scope-empty' | 'target-unresolvable';   // WHY it could not decide (closed set)
   readonly witness: { readonly underApproxSources: readonly string[] };  // the unresolved/dynamic edges that opened S
 }
 ```
@@ -203,9 +203,12 @@ The two mechanical facts §3 said N1 must confirm were measured by the lead befo
     GLOBAL symbol** (not `local`) — else the door emits an `AbstainedRecord{reason:'target-not-global'}`.
   - **gate 1 TRUTH DOOR — the abstention gate (the honesty core).** Compute `reverseCallers(target)` over the
     scope. If `underApprox` (scope open) ⇒ **do NOT admit the negation; emit `AbstainedRecord{reason:'scope-open',
-    witness}`** (durable, exit-legible, NOT a silent refusal). If a caller exists in S ⇒ the negative is FALSE ⇒
-    reject (the claim is refuted, not abstained). Only `callers∩S==∅ ∧ !underApprox` admits the negation with the
-    §3 witness as its grounding.
+    witness}`** (durable, exit-legible, NOT a silent refusal). If **`target` does not RESOLVE** — a global symbol
+    with no in-index definition, a phantom (`resolves(target)==false`, #220) ⇒ **do NOT admit; emit
+    `AbstainedRecord{reason:'target-unresolvable'}`**, because `reverseCallers` is `[]` for a phantom BY
+    CONSTRUCTION, so "not called in S" would be VACUOUSLY true — a negative about a symbol Atlas cannot see.
+    If a caller exists in S ⇒ the negative is FALSE ⇒ reject (the claim is refuted, not abstained). Only
+    `callers∩S==∅ ∧ !underApprox ∧ resolves(target)` admits the negation with the §3 witness as its grounding.
   - **gate 2.1 ANCHOR/AUTHZ**: the ANCHOR binds on the negation's witness `scope` (the assertion is ABOUT that
     scope) and `primaryAnchorId` is NOT called. The AUTHZ gate binds **`authzScope ?? scope`** (F3, WP-96-N):
     absent ⇒ the witness `scope` exactly as first shipped (human negations unchanged); present ⇒ the separate

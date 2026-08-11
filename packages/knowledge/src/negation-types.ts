@@ -56,7 +56,7 @@ export interface NegationNode {
    * The scope the DOOR's authz gate binds instead of the witness `scope`, when present. It is NEVER an
    * identity leg: `negationKey` is `(relationKind, target, scope)` over the WITNESS directory and does NOT
    * read this field, so two negations differing only in `authzScope` are the SAME node. It is also NOT read
-   * by the honest-abstention law (scope-open / target-not-global / scope-empty), which operates on the
+   * by the honest-abstention law (scope-open / target-not-global / scope-empty / target-unresolvable), which operates on the
    * witness `scope` — the assertion is still ABOUT that scope.
    *   - ABSENT ⇒ authz binds the witness `scope` EXACTLY as before (human-emitted negations UNCHANGED, the
    *     back-compat floor: an `atlas emit --negation` over `src/pay` still needs authority over `src/pay`).
@@ -86,6 +86,9 @@ export interface AbstainedRecord {
   readonly relationKind: RelationKind;
   readonly target: string;
   readonly scope: string;
-  readonly reason: 'scope-open' | 'target-not-global' | 'scope-empty'; // WHY it could not decide (closed set)
+  // WHY it could not decide (closed set). `target-unresolvable` (#220): the target is a global symbol Atlas
+  // cannot SEE defined, so "it is not called in S" would be VACUOUSLY true — the door abstains instead of
+  // grounding a negative about a phantom. Distinct from `target-not-global` (a syntactically `local ` symbol).
+  readonly reason: 'scope-open' | 'target-not-global' | 'scope-empty' | 'target-unresolvable';
   readonly witness: { readonly underApproxSources: readonly string[] }; // the unresolved/dynamic edges that opened S
 }
