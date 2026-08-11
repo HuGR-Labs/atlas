@@ -7,9 +7,13 @@
 // `StructRef` (contracts) and `GroundedFact` (knowledge) are IMPORTED, NEVER redefined; `Candidate`/`WhyNot`
 // are GENESIS-HOME (distinct from the @atlas/knowledge staging `Candidate`, which is a fact-in-waiting).
 
-import type { StructRef, Tier } from '@atlas/contracts';
+import type { StructRef } from '@atlas/contracts';
 import type { GroundedFact } from '@atlas/knowledge';
 import type { Axes, Manifest } from '@atlas/index';
+// `GenesisBudget` lives in `budget-types.ts` (extracted below at the LOC ceiling) but is USED here by
+// `ExtractApi.extract` — imported for local use in ADDITION to the re-export, since `export type {...}
+// from` does not bring a name into this file's own scope.
+import type { GenesisBudget } from './budget-types.js';
 
 /**
  * A seeded fact. Genesis does NOT mint a competing node record — a fact it seeds IS the steady-state
@@ -238,6 +242,41 @@ export interface GenesisReport {
    *  this change may not edit. Every path in the run controller SETS IT, ALWAYS, INCLUDING ZERO — a field
    *  that appeared only when non-zero would read as "this never happens". */
   readonly modelCalls?: number;
+  /** [#210] WHICH model produced this run's answers — "which CLI + version", NOT a cost basis
+   *  (`captureModelIdentity`, mine-proposer.ts; ADR-0011). Wired ⇒ the captured identity string (cmd+args
+   *  plus a best-effort `--version` probe); unwired ⇒ the sentinel `'unwired:no-model-configured'` (the SAME
+   *  literal `NO_MODEL_IDENTITY` names at the cli layer — genesis does not import it, since the cli sits
+   *  ABOVE genesis in the ARCH layering and importing upward would invert it; the two copies are kept in
+   *  sync BY VALUE, checked by a cross-package test, never by a shared runtime import).
+   *
+   *  OPTIONAL in the TYPE only, for the `modelCalls` frozen-fixture reason above; every path in the run
+   *  controller SETS IT, including the unwired sentinel — a field that appeared only when a real model ran
+   *  would make "which model" unreadable on exactly the runs an operator most needs to ask that about. */
+  readonly modelIdentity?: string;
+  /** [#209] THE WITNESS, part 1: a count of the admitted facts that carry an answer-provenance receipt
+   *  (`answerRef`, #195 leg b — the CAS id of the model's answer bytes as actually STORED; a content-address,
+   *  so `answerRef` itself already IS the digest of that stored content — no separate per-fact digest field
+   *  exists or is needed, #195's later revision). A fact minted before #195, or authored outside the mine
+   *  door (e.g. `atlas emit`), carries no `answerRef` and is not counted — fail-closed, an absent receipt is
+   *  never fabricated into a phantom one.
+   *
+   *  SCOPED CLAIM, PRECISELY: next to `modelCalls` (issued), this makes the CARDINALITY gap between "issued"
+   *  and "stored" visible in the artifact, and every counted `answerRef` is independently dereferenceable to
+   *  real stored bytes (per-answer traceability). It does NOT, by itself, prove no dropped answer was masked
+   *  by a stale-but-valid `answerRef` substituted at the same rank — nothing on the ISSUED side is
+   *  fingerprinted at emission time, so a full issued-vs-stored equivalence proof is a FURTHER step this
+   *  field does not claim. */
+  readonly answersStored?: number;
+  /** [#209] THE WITNESS, part 2: a stable digest (the kernel's default BLAKE3 encoder, KERNEL-2) over the
+   *  SORTED `answerRef`s counted by `answersStored`. Two runs whose STORED answer SETS differ produce a
+   *  DIFFERENT digest even when every other report field (including `modelCalls`) agrees — the property the
+   *  2026-08-04 byte-identical-report defect needed and did not have: that run's answers were 87.5%
+   *  destroyed and its report was indistinguishable from a clean one. Sorted, not admission-order, so two
+   *  runs that stored the SAME set in a different order witness IDENTICALLY, and two that stored a
+   *  DIFFERENT set never do. Present iff `answersStored` is (same optionality reason); the digest over the
+   *  EMPTY set (no admitted fact carries a receipt) is still a real, present value — "no receipts" is a fact
+   *  this field records honestly, never an excuse to omit it. */
+  readonly answersDigest?: string;
   readonly cost?: CostReport; // [FLAG] GEN-13/A-13 require per-stage cost; §Surface literal omits it
   readonly resumeToken?: ResumeToken; // present only on a partial/interrupted run (GEN-8)
   /** The per-site run ledger (GEN-8/12g). OPTIONAL for the same reason `cost` is: the §Surface literal
@@ -247,82 +286,19 @@ export interface GenesisReport {
   readonly coverage?: RunCoverage;
 }
 
-// ── GEN-13 / GEN-14 cost-discipline surface, co-located here (was ref/budget.ts) ──────────────────────
-// Consumed by extract.ts + loops.ts + cost-policy.ts + run-controller.ts (≥2), so housed here beside the
-// shared model rather than in one impl file. CHEAP BY DEFAULT (base tier = exactly one LLM call/site);
-// ESCALATE BY VALUE (extra mechanisms switch on only under `high-value ∧ uncertain`). The REVIEW / ENRICH /
-// EXPAND deepening loops are GOVERNED (GEN-14): opt-in, budget-gated, fixpoint-stopping — all off ⇒ Δ=0.
-
-/**
- * One governed deepening loop (GEN-14). REVIEW / ENRICH / EXPAND are each opt-in or default-shallow,
- * budget-gated, with a fixpoint stop (a no-revision round / marginal value `< ε` / loop-until-dry on the
- * 2-door bar). No loop runs unbounded; the loops are the DEPTH DIAL, never a change to the default cost.
- *
- * [PINNED — oracle-pin-map §12] the fixpoint/ε carrier. GEN-14 names the stop conditions in prose; the
- * minimal carrier is `enabled` (the on/off gate) + `maxDepth` (the bounded depth dial, 0 at base) +
- * `epsilon` (the marginal-value-`<ε` stop leg). No speculative fields beyond the three named stops.
- */
-export interface LoopConfig {
-  readonly enabled: boolean; // default false — loops-off ⇒ single-pass baseline (GEN-13/14, Δ=0)
-  readonly maxDepth: number; // the bounded depth dial — 0 at the base tier
-  readonly epsilon: number; // marginal-value stop: halt a round when value gain < ε // DEFINE default, owner-tunable
-}
-
-/** The three governed deepening loops (GEN-14). With all three off, genesis cost == the single cheap pass. */
-export interface DeepeningLoops {
-  readonly review: LoopConfig;
-  readonly enrich: LoopConfig;
-  readonly expand: LoopConfig;
-}
-
-/**
- * The GEN-2 MARGINAL-VALUE STOP — a FIXED scheduler policy, NOT a tunable `GenesisBudget` field
- * (atlas-genesis:117). The scheduler keeps a trailing window of the last 20 ranked sites and HALTS
- * admission once that window admits fewer than 4 (a `< 20%` admit-rate). Named here at the type layer
- * (zero-runtime literal-type consts) so the policy is documented where the budget lives; it is applied by
- * the scheduler, never carried on `GenesisBudget`. [PINNED — oracle-pin-map §12, transcribed :117.]
- */
-export interface MarginalValueStop {
-  readonly window: 20; // trailing window size (sites)
-  readonly minAdmits: 4; // halt below this many admits in the window (fewer than 4 of 20 ⇒ < 20%)
-}
-
-/**
- * The genesis cost policy (GEN-13). Carries the hard site ceiling + the governed deepening loops.
- *   - `ceiling`   — the hard `--budget` site ceiling; default `min(frontier_size, 200)` (GEN-2).
- *   - `deepening` — the three governed loops; ALL off ⇒ cost == single-pass baseline (GEN-14).
- *
- * The GEN-2 marginal-value stop is the fixed `MarginalValueStop` policy (above), NOT a field here.
- */
-export interface GenesisBudget {
-  readonly ceiling: number; // hard site budget — default min(frontier_size, 200) (GEN-2)
-  readonly deepening: DeepeningLoops; // governed loops — all off ⇒ single-pass baseline (GEN-14)
-}
-
-/**
- * The S2 mechanisms a site MAY escalate to beyond the base single grounded proposal (GEN-13). All OFF at
- * the base tier (an empty set ⇒ exactly one LLM call/site); each switches on ONLY under the escalation
- * predicate `(high-value ∧ uncertain)`.
- */
-export type Mechanism = 'self-consistency' | 'refuter' | 'check-synthesis' | 'codeql';
-
-/** The escalation decision for one site (GEN-13). Base tier ⇒ `mechanisms == []` (exactly one call). */
-export interface EscalationDecision {
-  readonly tier: Tier; // the site's (candidate) tier — refuter fires only for `T0`, checks for `tier≥T1`
-  readonly mechanisms: readonly Mechanism[]; // base ⇒ [] (one call); escalated subset otherwise
-}
-
-export interface BudgetApi {
-  /** GEN-13 escalation. The predicate `(high-value ∧ uncertain)` is the ONLY gate that switches extra
-   *  mechanisms on; a base-tier site returns `mechanisms: []` (exactly one LLM call — no self-consistency,
-   *  no refuter, no check synthesis). Semgrep is preferred before CodeQL; the refuter fires only for
-   *  `T0`-candidates. */
-  escalate(cand: Candidate, budget: GenesisBudget): EscalationDecision;
-
-  /** GEN-13 per-stage cost under the ceiling — the `GenesisReport` cost breakdown. LLM-call count is a
-   *  function of the PPR frontier, never of file/line count (GEN-3). */
-  report(): CostReport;
-}
+// ── GEN-13 / GEN-14 cost-discipline surface — EXTRACTED to `budget-types.ts` at the 400-LOC godfile
+// ceiling (this WP, #210/#209 — see that file's header). `LoopConfig` / `DeepeningLoops` / `MarginalValueStop`
+// / `GenesisBudget` / `Mechanism` / `EscalationDecision` / `BudgetApi` all now live there and are RE-EXPORTED
+// below so the package surface (`import type { GenesisBudget } from '@atlas/genesis'`) is byte-identical.
+export type {
+  LoopConfig,
+  DeepeningLoops,
+  MarginalValueStop,
+  GenesisBudget,
+  Mechanism,
+  EscalationDecision,
+  BudgetApi,
+} from './budget-types.js';
 
 // ── S2 extract surface, co-located here (was ref/extract.ts) ──────────────────────────────────────────
 // Consumed by extract.ts + loops.ts (≥2), so housed here beside the shared model. S2 is the ONLY LLM entry
