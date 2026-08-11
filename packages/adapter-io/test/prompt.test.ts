@@ -23,6 +23,7 @@ import type { Candidate, MinedSignals } from '@atlas/genesis';
 
 import { createFileSourceReader, createPromptFactory, PromptError, shippedTemplatePath } from '../src/prompt.js';
 import type { SourceReader } from '../src/prompt.js';
+import { ABSTAIN_SENTINEL } from '../src/llm.js';
 
 const created: string[] = [];
 afterEach(() => {
@@ -351,6 +352,18 @@ describe('createPromptFactory — evidenceSpan addresses the bytes, and never a 
     const shipped = readFileSync(shippedTemplatePath(), 'utf8');
     for (const ask of ['{{SPAN}}', 'span', 'offset', 'byte range', 'quote']) {
       expect(shipped.toLowerCase()).not.toContain(ask);
+    }
+  });
+
+  it('#201/#202 COUPLING — both shipped prompts instruct the exact ABSTAIN_SENTINEL the gate reads', () => {
+    // teeth (breaks-on "the prompt drops/renames the NO-FACT token while llm.ts keeps ABSTAIN_SENTINEL"):
+    // the sentinel abstention only works if the model is TOLD the same word the gate matches. Prompt and gate
+    // are two files; this pins them together, so a divergent edit to either goes red instead of silently
+    // reopening the #201 prose-refusal-becomes-fact hole.
+    const barePath = shippedTemplatePath();
+    const enrichedPath = barePath.replace(/propose\.md$/, 'propose-enriched.md');
+    for (const p of [barePath, enrichedPath]) {
+      expect(readFileSync(p, 'utf8')).toContain(ABSTAIN_SENTINEL);
     }
   });
 });

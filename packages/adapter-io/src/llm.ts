@@ -16,6 +16,38 @@ import { execFileSync } from 'node:child_process';
 
 import type { Candidate, SeedProposal, SiteProposer } from '@atlas/genesis';
 
+/**
+ * [#201/#202] The explicit abstention token. Measured: with a real model, "output NOTHING to abstain"
+ * NEVER fired — 0 abstentions in 300 calls across two prompts (#202), because a model resists producing
+ * empty output and instead emits a one-line PROSE refusal ("No fact qualifies", "Nothing non-obvious here"),
+ * which the sanity gate below then admits as a fabricated CLAIM (#201). An empty answer is not a channel a
+ * responsive model will use. So the prompt gives it a POSITIVE abstention ACTION — emit this token — and the
+ * gate maps that token back to the same GEN-12 model-abstained outcome as empty stdout. This is the I-CALM
+ * lever the prompt already cites (explicitly rewarding "no answer" improves selective behaviour): the token
+ * IS the reward.
+ *
+ * MATCHING — `isAbstainToken` below. Compared case-INSENSITIVELY, and only after stripping surrounding
+ * FORMATTING/PUNCTUATION from the ends (backticks, quotes, asterisks, brackets, trailing period). That end-
+ * strip is not cosmetic: it was MEASURED (#201/#202 sentinel probe, 2026-08-11) — Sonnet 4.6 abstained on
+ * 5/6 trivial units with a bare `NO-FACT` and on the 6th emitted the same token wrapped in markdown
+ * backticks (`` `NO-FACT` ``), which a whole-answer equality check would have miscounted as a fabricated
+ * fact. The strip touches only the ENDS, so an answer with any real WORDS beyond the token (e.g. "NO-FACT is
+ * returned when the cache is cold") keeps a non-empty remainder and stays a CLAIM — there is no substring
+ * path that could swallow a genuine fact.
+ *
+ * COUPLING: both shipped prompt templates MUST instruct this exact token; `llm.test.ts` and `prompt.test.ts`
+ * pin that (the prompt says the word, the gate reads the word — change one, a test goes red).
+ */
+export const ABSTAIN_SENTINEL = 'NO-FACT';
+
+/** True iff the whole answer is the abstain sentinel, ignoring case and surrounding formatting/punctuation
+ *  (see `ABSTAIN_SENTINEL`). Interior words survive the end-strip, so only a bare (optionally wrapped) token
+ *  abstains — never an answer that merely mentions it. */
+export function isAbstainToken(answer: string): boolean {
+  const stripped = answer.trim().replace(/^[\s`'"*.[\](){}]+|[\s`'"*.[\](){}]+$/g, '');
+  return stripped.toUpperCase() === ABSTAIN_SENTINEL;
+}
+
 /** The bounded spend envelope for the one call — a hard cost cap + a wall-clock timeout (ADAPT-LLM-1). */
 export interface LlmBudget {
   readonly costCap: number;
@@ -115,8 +147,9 @@ export interface ModelCommand {
  * local runtime, or a `curl` wrapper satisfies it equally, so substitution is a config edit.
  *
  * The two verdict rules are what keep the result unambiguous:
- *   - **EMPTY stdout ⇒ abstention** (`claim: null`). No JSON, no parser, hence no parse-failure mode.
- *     Abstention is a valid, unpressured outcome (GEN-12).
+ *   - **EMPTY stdout (or the `ABSTAIN_SENTINEL` token) ⇒ abstention** (`claim: null`). No JSON, no parser,
+ *     hence no parse-failure mode. Abstention is a valid, unpressured outcome (GEN-12); the sentinel is the
+ *     explicit-action form of it (#201/#202), mapped identically by `admitModelAnswer`.
  *   - **Non-zero exit / timeout / missing command ⇒ THROW.** A broken configuration MUST NOT be able to
  *     present itself as "this repo has no facts" — that fail-silent shape is the one failure that would
  *     invalidate a whole genesis run invisibly.
@@ -155,6 +188,11 @@ export function createCommandClient(command: ModelCommand): ModelClient {
  *      Fail ⇒ `answer-malformed:not-utf8`.
  *   2. NON-EMPTY — an empty / whitespace-only answer is the model DECLINING to answer (GEN-12), not a
  *      corruption. It stays `{ claim: null }` UNTAGGED, preserving the existing abstention semantics.
+ *   2b. NOT THE ABSTAIN SENTINEL — [#201/#202] an answer that IS `ABSTAIN_SENTINEL` (via `isAbstainToken`:
+ *      case-insensitive, surrounding formatting/punctuation stripped) is the model taking the explicit
+ *      abstention ACTION the prompt offers. It is the SAME GEN-12 model-abstained outcome as empty —
+ *      `{ claim: null }` UNTAGGED — not a malformed answer. Checked before the splice test so the token is
+ *      never mistaken for content.
  *   3. SINGLE-RESPONSE — reject the splice/interleave class the 2026-08-04 contamination produced
  *      (byte-overlapping concatenation of multiple concurrent answers). See `isSplicedAnswer`.
  *      Fail ⇒ `answer-malformed:multi-response`.
@@ -165,6 +203,7 @@ function admitModelAnswer(buf: Buffer): CompletionResult {
   if (!Buffer.from(text, 'utf8').equals(buf)) return { claim: null, abstainReason: 'answer-malformed:not-utf8' };
   const claim = text.trim();
   if (claim === '') return { claim: null }; //                    empty ⇒ GEN-12 model-abstained, untagged
+  if (isAbstainToken(claim)) return { claim: null }; //           [#201/#202] explicit abstain token ⇒ GEN-12, untagged
   if (isSplicedAnswer(text)) return { claim: null, abstainReason: 'answer-malformed:multi-response' };
   return { claim, rawAnswer: text }; //                          rawAnswer = the exact validated answer bytes
 }
