@@ -20,6 +20,7 @@ import type { WriteRequest, StoreProjection, Candidate as KnowledgeCandidate } f
 import { id } from '@atlas/kernel';
 import { MINED_SCOPE, MINED_TIER } from './mine-staging.js';
 import { answerReceipt } from './mine-answer.js';
+import { scrubClaimNorm } from './mine-claim-scrub.js';
 
 /** The advisory claim body a write carries (the KNOW-4c set-union element); a predicate carries its check. */
 const claimNormOf = (f: Fact): string =>
@@ -52,11 +53,19 @@ export function decideStaging(
     // `rawAnswer` (attached by mine-gate.ts) is a RECEIPT INPUT, never a part of identity. Stripped here, the
     // fact's contentHash and nodeKey are byte-identical to a fact mined without provenance.
     const { rawAnswer, ...factNoAnswer } = raw as Fact & { readonly rawAnswer?: string };
+    // SCRUB THE CLAIM BEFORE ANYTHING HASHES OR STORES IT (KNOW-11, T0) — `claimNorm` is identity-bearing
+    // (KNOW-4c) and becomes part of the fact object `id(f)` hashes into CAS, so it cannot be stripped like
+    // `rawAnswer`; it must be scrubbed at source instead, same as the answer (`mine-answer.ts`). Advisory
+    // only — see `mine-claim-scrub.ts` for why a predicate's `check` is a separate, unmeasured identity leg
+    // left untouched here. This must run BEFORE `f` is built so `id(f)`/`nodeKey`/`claimNormOf` all see the
+    // one (scrubbed) claim text — no raw copy survives anywhere downstream.
+    const factScrubbed =
+      factNoAnswer.kind === 'advisory' ? { ...factNoAnswer, claimNorm: scrubClaimNorm(factNoAnswer.claimNorm) } : factNoAnswer;
     // STAMP THE CANDIDATE SCOPE — PROVENANCE plus a fail-closed default (ADR-0008 kept it when the boundary
     // crossing was removed). A mined fact has no actor, so nobody owns it, and an unowned node is writable by
     // NOBODY until an admin appoints a curator. Stamped BEFORE the content hash so the bytes carry it — AND onto
     // the request below so the ROW does too.
-    const f = { ...factNoAnswer, scope: MINED_SCOPE } as Fact;
+    const f = { ...factScrubbed, scope: MINED_SCOPE } as Fact;
     // IDENTITY IS MINTED, NEVER TRUSTED — `nodeKey` is RECOMPUTED from the content by the frozen formula
     // (KNOW-15b), the SAME seam that mints contentHash/primaryAnchor; the payload's own `f.id` never routes, or
     // an author could spoof another node's identity (governed-emit.ts parity, WP-F3). Map `predicateSlot` →
