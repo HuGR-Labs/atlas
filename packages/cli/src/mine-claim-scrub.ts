@@ -41,6 +41,10 @@
 
 import { scrub } from '@atlas/persist';
 import type { Check } from '@atlas/knowledge';
+// `FactGrounding = AdvisoryNode['grounding']` — the SAME `Grounding` type, re-exported by @atlas/genesis (an
+// already-declared @atlas/cli edge). Imported from here rather than @atlas/grounding directly so this leg adds
+// no new architecture edge (ARCH-1): mine-gate.ts uses the identical alias for exactly this reason.
+import type { FactGrounding } from '@atlas/genesis';
 
 /** The one whole-buffer scrub both legs share — `@atlas/persist` `scrub` (the same `mine-answer.ts` uses for
  *  the answer), which redacts credential SHAPES to an ASCII placeholder and preserves valid UTF-8, so the
@@ -88,4 +92,30 @@ export function scrubCheck(check: Check): Check {
  */
 export function scrubUnit(s: string): string {
   return scrubUtf8(s);
+}
+
+/**
+ * Scrub a mined fact's GROUNDING before `f` is built (#222 — defense-in-depth, the shared CAS surface every
+ * family's `id(f)` carries). A mined advisory/predicate/relation fact carries `grounding: reground(cand.site)`
+ * (mine-gate.ts), and `mine-decide.ts` PUTs the whole fact — grounding included — into CAS, so the two free-text
+ * legs of each entry reach CAS raw unless scrubbed here: `anchor.qualifiedPath` (the axes resolution key) and the
+ * human `path`. Both are DERIVED FROM THE STRUCTURAL FRONTIER (`cand.site`), NOT from model output, so this is
+ * NOT a measured live leak — it is the KNOW-11 "nothing credential-shaped reaches CAS raw" invariant applied to
+ * the ONE fact leg the endpoint/target/scope scrubs (scrubUnit) did not yet cover, so a repo whose own path text
+ * happened to carry a credential shape cannot smuggle it into CAS through the grounding.
+ *
+ * DELIBERATELY LEFT RAW: `anchor.subtreeHash` (the GROUND-1 drift oracle — a structural hash, never a credential,
+ * and load-bearing for freshness), `anchor.kind` (a closed enum), `displayLines`/`span` (a nav hint / a
+ * content-addressed offset range, neither free credential text). `scrub` is a no-op on any string with no
+ * credential shape, so a normal path passes through byte-identical and `id(f)` is UNCHANGED for every non-secret
+ * fact — this narrows CAS bytes ONLY where a credential shape was present, exactly as the other legs do. Total.
+ */
+export function scrubGrounding(g: FactGrounding): FactGrounding {
+  return {
+    entries: g.entries.map((e) => ({
+      ...e,
+      anchor: { ...e.anchor, qualifiedPath: scrubUtf8(e.anchor.qualifiedPath) },
+      path: scrubUtf8(e.path),
+    })),
+  };
 }
