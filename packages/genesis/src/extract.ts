@@ -7,6 +7,7 @@
 // a seed's self-declaration is NEVER consulted (GEN-4d). The ranking, the 2-door gate, and the escalation
 // defaults are CALLED through the injected `ExtractDeps` seams, never authored here.
 
+import type { PredicateSlot, RelationKind } from '@atlas/knowledge';
 import type { Candidate, ExtractApi, ExtractResult, Fact, GenesisBudget, WhyNot } from './types.js';
 
 // ── GEN-2 marginal-value stop — the FIXED scheduler policy (atlas-genesis:117, types.ts) ──────────────
@@ -26,13 +27,20 @@ export function defaultCeiling(frontierSize: number): number {
 }
 
 /**
- * A proposed seed from ONE bounded S2 call (GEN-12: the model only PROPOSES; admission is mechanical and
- * lives at the gate). Opaque to the driver — it is routed straight to `EmitGate.emit`. A model MAY attach
- * a self-declaration (`selfAsserted` / `confidence`); the driver NEVER reads it (GEN-4d) — admission is the
- * gate's verdict alone.
+ * The fields EVERY proposed seed carries, whatever its fact family (WP-96-SEAM2). Opaque to the driver —
+ * the whole seed is routed straight to `EmitGate.emit`. A model MAY attach a self-declaration
+ * (`selfAsserted` / `confidence`); the driver NEVER reads it (GEN-4d) — admission is the gate's verdict alone.
  */
-export interface SeedProposal {
+interface SeedBase {
   readonly cand: Candidate;
+  /**
+   * The trimmed CLAIM text. REQUIRED on every family (not just advisory): the existing advisory gates read
+   * `seed.claim` off the un-narrowed `SeedProposal` unconditionally (mine-fixtures / e2e / genesis gates),
+   * so widening the seed into a union whose members lacked `claim` would break `tsc` at every one of those
+   * readers. So `claim` stays a shared, required base field — a relation/negation seed still carries a human
+   * claim string (unread by the relation/negation proposal it builds, which grounds off its own legs). This
+   * is the one place THIS WP overrides the brief's per-shape field list; see the returned card's framing note.
+   */
   readonly claim: string;
   /**
    * [#195c] The VALIDATED answer bytes as a string — the untrimmed answer envelope the model returned, of
@@ -46,6 +54,50 @@ export interface SeedProposal {
   readonly selfAsserted?: boolean; // IGNORED by the driver (GEN-4d) — never promotes a seed
   readonly confidence?: number; //    IGNORED by the driver (GEN-4d) — never promotes a seed
 }
+
+/**
+ * An ADVISORY seed (GEN-12e) — the ORIGINAL shape, and the ONLY one the default proposer produces. `kind` is
+ * OPTIONAL so every existing producer/fixture (which omits it) stays a valid advisory seed byte-for-byte.
+ */
+export interface AdvisorySeed extends SeedBase {
+  readonly kind?: 'advisory';
+}
+
+/** A PREDICATE seed (GEN-12) — carries the `slot` that drives SOUND-ORACLE-FIRST at admission (GEN-12k). */
+export interface PredicateSeed extends SeedBase {
+  readonly kind: 'predicate';
+  readonly slot: PredicateSlot;
+}
+
+/**
+ * A RELATION seed (ADR-0015 D2, #99a) — the two location-free endpoint unitKeys + the closed `relationKind`.
+ * NO relationKey: identity is minted DOWNSTREAM, never proposed by the model (KNOW-15b parity).
+ */
+export interface RelationSeed extends SeedBase {
+  readonly kind: 'relation';
+  readonly relationKind: RelationKind;
+  readonly endpointA: string; // location-free unitKey of A (subject)
+  readonly endpointB: string; // location-free unitKey of B (object)
+}
+
+/**
+ * A NEGATION seed (ADR-0015 D3, #99b) — names the (relationKind, target, scope) the negative is ABOUT. NO
+ * grounding: the governed door CONSTRUCTS the scope-directory Merkle grounding at admit (WP-96-N), not the seed.
+ */
+export interface NegationSeed extends SeedBase {
+  readonly kind: 'negation';
+  readonly relationKind: RelationKind; // the NEGATED relation (shares #99a's closed vocabulary)
+  readonly target: string; //            location-free GLOBAL symbol key the negative is about
+  readonly scope: string; //             the CLOSED scope (a DIRECTORY key) the witness ranges over
+}
+
+/**
+ * A proposed seed from ONE bounded S2 call (GEN-12: the model only PROPOSES; admission is mechanical and
+ * lives at the gate), discriminated by its fact FAMILY (`kind`). Widened from advisory-only by WP-96-SEAM2
+ * so a mine pass can carry a predicate / relation / negation shape and the gate can dispatch on it; the
+ * default proposer still emits advisory (a `kind`-less `AdvisorySeed`), so back-compat is byte-identical.
+ */
+export type SeedProposal = AdvisorySeed | PredicateSeed | RelationSeed | NegationSeed;
 
 /**
  * The single bounded LLM call per site (GEN-2). CALLED, never defined here (the proposer/admission engine

@@ -23,7 +23,7 @@ import {
   defaultCeiling,
   MARGINAL_WINDOW,
   MARGINAL_MIN_ADMITS,
-  type SeedProposal,
+  type AdvisorySeed,
   type SiteProposer,
   type EmitGate,
 } from '../src/extract.js';
@@ -74,7 +74,7 @@ interface Recorder {
 const recorder = (): Recorder => ({ calls: [] });
 
 /** A bounded proposer that records EACH call (order + count) and returns a seed per site. */
-const seedProposer = (rec: Recorder, extra?: Partial<SeedProposal>): SiteProposer => ({
+const seedProposer = (rec: Recorder, extra?: Partial<AdvisorySeed>): SiteProposer => ({
   propose(c) {
     rec.calls.push(idOf(c));
     return { cand: c, claim: `claim@${idOf(c)}`, ...extra };

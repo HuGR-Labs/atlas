@@ -7,7 +7,7 @@ import { asSubtreeHash, asNodeKey } from '@atlas/kernel';
 import type { StructRef } from '@atlas/contracts';
 import type { Candidate, Fact, MinedSignals } from '@atlas/genesis';
 import type { GenesisBudget } from '@atlas/genesis';
-import { runExtract, defaultCeiling, type SeedProposal, type SiteProposer, type EmitGate } from '../src/extract.js';
+import { runExtract, defaultCeiling, type AdvisorySeed, type SiteProposer, type EmitGate } from '../src/extract.js';
 
 const ZERO: MinedSignals = { hotspot: 0, szzBugCommits: 0, coChanged: [], owners: [], messages: [] };
 const siteOf = (id: string, st = `st-${id}`): StructRef => ({ kind: 'symbol', qualifiedPath: `beacon/${id}.ts::${id}`, subtreeHash: asSubtreeHash(st) });
@@ -17,7 +17,7 @@ const OFF = { enabled: false, maxDepth: 0, epsilon: 0 } as const;
 const budgetOf = (n: number): GenesisBudget => ({ ceiling: defaultCeiling(n), deepening: { review: OFF, enrich: OFF, expand: OFF } });
 const factFor = (c: Candidate, claim: string): Fact => ({ kind: 'advisory', id: asNodeKey(`nk-${c.site.qualifiedPath}`), tier: 'T2', claimNorm: claim, grounding: { entries: [{ anchor: c.site, path: c.site.qualifiedPath }] }, freshness: 'FRESH', claims: [], authoring: 'ADVISORY', obviousness: { rank: 'non-obvious', by: 'harness-predicate' } }) as unknown as Fact;
 const rec = () => ({ calls: [] as string[] });
-const seedProposer = (r: { calls: string[] }, extra?: Partial<SeedProposal>): SiteProposer => ({ propose(c) { r.calls.push(idOf(c)); return { cand: c, claim: `claim@${idOf(c)}`, ...extra }; } });
+const seedProposer = (r: { calls: string[] }, extra?: Partial<AdvisorySeed>): SiteProposer => ({ propose(c) { r.calls.push(idOf(c)); return { cand: c, claim: `claim@${idOf(c)}`, ...extra }; } });
 const abstainProposer = (r: { calls: string[] }): SiteProposer => ({ propose(c) { r.calls.push(idOf(c)); return null; } });
 const emitAll = (): EmitGate => ({ emit: (s, c) => ({ emitted: true, fact: factFor(c, s.claim) }) });
 const rejectAll = (): EmitGate => ({ emit: (_s, c) => ({ emitted: false, whyNot: { site: c.site, reason: 'ungrounded — the truth door' } }) });
