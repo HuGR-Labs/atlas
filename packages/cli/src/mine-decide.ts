@@ -20,7 +20,7 @@ import type { WriteRequest, StoreProjection, Candidate as KnowledgeCandidate } f
 import { id } from '@atlas/kernel';
 import { MINED_SCOPE, MINED_TIER } from './mine-staging.js';
 import { answerReceipt } from './mine-answer.js';
-import { scrubClaimNorm, scrubCheck, scrubUnit } from './mine-claim-scrub.js';
+import { scrubClaimNorm, scrubCheck, scrubUnit, scrubGrounding } from './mine-claim-scrub.js';
 
 /** The KNOW-4c set-union element a mined write carries, per family. Advisory ⇒ its claim body; predicate ⇒
  *  its normalized check; RELATION (ADR-0015 D2, WP-96-R) ⇒ the canonical triple `A <kind> B`, MIRRORING the
@@ -109,7 +109,16 @@ export function decideStaging(
     // [#195 b] SEPARATE the answer-provenance transport field from the fact BEFORE anything hashes the fact:
     // `rawAnswer` (attached by mine-gate.ts) is a RECEIPT INPUT, never a part of identity. Stripped here, the
     // fact's contentHash and nodeKey are byte-identical to a fact mined without provenance.
-    const { rawAnswer, ...factNoAnswer } = raw as Fact & { readonly rawAnswer?: string };
+    const { rawAnswer, ...factRaw } = raw as Fact & { readonly rawAnswer?: string };
+    // [#222] SCRUB THE GROUNDING FIRST — the anchor `qualifiedPath` + human `path` are the LAST free-text legs
+    // of the fact that reach CAS through `puts.push(f)` below (advisory/predicate/relation carry
+    // `grounding = reground(cand.site)` from mine-gate.ts; a negation carries none at staging — its door builds
+    // the scope Merkle at admit). Done BEFORE the per-kind ternary so the ONE scrubbed grounding rides through
+    // every branch's spread into `f`, and `id(f)` hashes it identically. Defense-in-depth: `qualifiedPath` is
+    // DERIVED FROM THE STRUCTURAL FRONTIER (`cand.site`), not model output — so this is not a measured live leak,
+    // it is KNOW-11 ("nothing credential-shaped reaches CAS raw") closed over the leg the scrubUnit legs did not
+    // cover. `scrub` is a no-op on a non-credential string, so `id(f)` is byte-identical for every non-secret fact.
+    const factNoAnswer = { ...factRaw, grounding: scrubGrounding(factRaw.grounding) };
     // SCRUB THE IDENTITY-BEARING CLAIM BODY BEFORE ANYTHING HASHES OR STORES IT (KNOW-11, T0) — per kind,
     // because the claim body is a DIFFERENT field on each: an advisory carries `claimNorm` (KNOW-4c), a
     // predicate carries `check` (its claim body is `normalizeCheck(f.check)`, see `claimNormOf`). Neither can
