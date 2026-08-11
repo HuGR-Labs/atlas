@@ -19,7 +19,7 @@
 
 import { join } from 'node:path';
 import type { Hash } from '@atlas/contracts';
-import { build } from '@atlas/index';
+import { build, createSymbolReverse, nodeHashOfPath } from '@atlas/index';
 import type { Axes } from '@atlas/index';
 import { bindGate, isGrounded, driftDetect } from '@atlas/grounding';
 import { bindReconcile, currentNodes } from '@atlas/knowledge';
@@ -242,7 +242,12 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
   // `foldAstUnits` is a no-op until `initAst()` has been awaited (the entrypoint bins do this once, before
   // composeRuntime); this keeps composeRuntime SYNC for its many direct callers while the production doors
   // (which spawn these bins) get real sub-file granularity.
-  const axes = build(foldAstUnits(walkFileTree(repoPath)), readScipOrEmpty(scipPath));
+  const scipOutput = readScipOrEmpty(scipPath);
+  const axes = build(foldAstUnits(walkFileTree(repoPath)), scipOutput);
+  // #96 F2 — the SAME N0 completeness view the emit leg rides (`() => index.symbolReverse()`, wire.ts:217),
+  // built ONCE off the SAME `scipOutput` the axes above are built from, so the promote leg (below) reaches
+  // `emitNegation` with its deps satisfied instead of fail-closing `scope-empty` for every promoted negation.
+  const symbolReverseView = createSymbolReverse(scipOutput);
 
   // The REAL reconcile drift seams (COMPOSE-C). `revIndex` builds the code index at an arbitrary rev:
   //   - `reDerives`         — a fact re-derives iff its grounding is still FRESH at the topic sha.
@@ -341,6 +346,15 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
       actor,
       origin: 'promoted',
       ...(ratifyToken !== undefined ? { ratifyToken } : {}),
+      // #96 F2 — THE NEGATION LEG's channels, threaded IDENTICALLY to the emit leg (wire.ts:217-220): the N0
+      // completeness feed, the live structural `axes`, the sealed path→docHash minting, and the pinned edge
+      // model. Without them `emitNegation` fail-closes and ABSTAINS `scope-empty` for EVERY promoted negation
+      // (governed-emit-negation.ts:178), so a mined negation could never be admitted through promote. The
+      // promote leg is composed from the SAME parts as emit (comment above), and these deps are part of that.
+      symbolReverse: () => symbolReverseView,
+      axes,
+      nodeHashOfPath,
+      edgeModel: edgeModelVersion(),
     }).emit,
   });
 
