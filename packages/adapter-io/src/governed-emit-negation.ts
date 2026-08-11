@@ -224,6 +224,10 @@ export function emitNegation(deps: GovernedEmitDeps, raw: NegationNode): EmitOut
   //    its witness directory as IDENTITY (the real scoped-negative) while the orchestrator's `atlas:mined`
   //    grant authorizes it. This is the ONLY behavioural change to the door's authz; identity (`negationKey`
   //    over the witness `scope`) and the honest-abstention law (both above) are untouched — they never read it.
+  // GUARD (billy #96-wave): `node.authzScope` MUST be a trusted, NON-caller-supplied constant (today ONLY the
+  // miner's hard-wired `MINED_SCOPE`, stamped in `mine-decide.ts`). Binding `authzScope ?? scope` weakens "only
+  // an owner of S writes facts scoped to S" to "any authzScope-holder"; that is sound ONLY while no untrusted
+  // path can set `authzScope`. A future caller-supplied `authzScope` would need a NEW guard here before this gate.
   const authzScope = node.authzScope ?? scope;
   if (!actorInScope(deps.policy, deps.actor, authzScope)) return { emitted: false, rejected: REJECTED_UNAUTHORIZED };
   // 2.1 ANCHOR — bind the write scope on the negation's OWN scope. `primaryAnchorId` is NOT called: a negation

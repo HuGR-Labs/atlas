@@ -20,7 +20,7 @@ import type { WriteRequest, StoreProjection, Candidate as KnowledgeCandidate } f
 import { id } from '@atlas/kernel';
 import { MINED_SCOPE, MINED_TIER } from './mine-staging.js';
 import { answerReceipt } from './mine-answer.js';
-import { scrubClaimNorm, scrubCheck } from './mine-claim-scrub.js';
+import { scrubClaimNorm, scrubCheck, scrubUnit } from './mine-claim-scrub.js';
 
 /** The KNOW-4c set-union element a mined write carries, per family. Advisory ⇒ its claim body; predicate ⇒
  *  its normalized check; RELATION (ADR-0015 D2, WP-96-R) ⇒ the canonical triple `A <kind> B`, MIRRORING the
@@ -120,12 +120,22 @@ export function decideStaging(
     // and `view` below is spread from `f`, `nodeKey(view)` reads exactly this scrubbed `check`. Scrubbing the
     // check for CAS but not for the nodeKey preimage (or vice versa) would re-open the identity leg or split two
     // scrub-equal predicates to different addresses — WP-219; see `mine-claim-scrub.ts` for the full argument.
+    // RELATION/NEGATION (billy #96-wave Finding 2): the model-controlled IDENTITY LEGS — a relation's
+    // `endpointA`/`endpointB`, a negation's `target`/`scope` — are ALSO scrubbed at source. Unlike the advisory
+    // `claimNorm` these feed the identity KEY (`relationKey`/`negationKey` in `mintIdentity`), the `primaryAnchor`
+    // (`endpointA`/`scope`) AND the `claimNorm` set-union element — all read off THIS single scrubbed `f` below,
+    // so one scrub keeps CAS bytes and identity identically redacted (no scrub-CAS-but-raw-key split). `relationKind`
+    // is a closed enum (no credential shape) and is left raw. See `scrubUnit` in `mine-claim-scrub.ts`.
     const factScrubbed =
       factNoAnswer.kind === 'advisory'
         ? { ...factNoAnswer, claimNorm: scrubClaimNorm(factNoAnswer.claimNorm) }
         : factNoAnswer.kind === 'predicate'
           ? { ...factNoAnswer, check: scrubCheck(factNoAnswer.check) }
-          : factNoAnswer;
+          : factNoAnswer.kind === 'relation'
+            ? { ...factNoAnswer, endpointA: scrubUnit(factNoAnswer.endpointA), endpointB: scrubUnit(factNoAnswer.endpointB) }
+            : factNoAnswer.kind === 'negation'
+              ? { ...factNoAnswer, target: scrubUnit(factNoAnswer.target), scope: scrubUnit(factNoAnswer.scope) }
+              : factNoAnswer;
     // STAMP THE CANDIDATE SCOPE — PROVENANCE plus a fail-closed default (ADR-0008 kept it when the boundary
     // crossing was removed). A mined fact has no actor, so nobody owns it, and an unowned node is writable by
     // NOBODY until an admin appoints a curator. Stamped BEFORE the content hash so the bytes carry it — AND onto
@@ -141,6 +151,10 @@ export function decideStaging(
     // `authzScope` MUST live here on the fact bytes — not only on the row. Advisory/predicate/relation keep the
     // `scope: MINED_SCOPE` clobber (their authz==identity scope), byte-identical to before.
     const f = (factScrubbed.kind === 'negation'
+      // GUARD (billy #96-wave): `authzScope` MUST remain a trusted, NON-caller-supplied CONSTANT (`MINED_SCOPE`).
+      // The identity/authz split weakens "only an owner of S writes facts scoped to S" to "any authzScope-holder";
+      // it is sound ONLY because this value is hard-wired here, never forwarded from the fact/caller. A future
+      // caller-supplied `authzScope` would re-open that gap and needs its OWN authorization guard before landing.
       ? { ...factScrubbed, authzScope: MINED_SCOPE } // witness `scope` PRESERVED (identity); authz binds MINED_SCOPE
       : { ...factScrubbed, scope: MINED_SCOPE }) as Fact;
     // IDENTITY IS MINTED, NEVER TRUSTED — `nodeKey` is RECOMPUTED from the content by the frozen formula

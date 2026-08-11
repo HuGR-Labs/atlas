@@ -348,6 +348,14 @@ function buildSound(p: PredicateProposal, obviousness: ObviousnessScore): Adviso
  * obviousness score is REQUIRED here rather than optional (ADR-0012 TOTALITY: an emitted fact without a
  * score is a defect, not a default — the field is optional on the stored shape only so that pre-ADR data
  * stays readable, exactly as with `builtAt`/`sameAs`).
+ *
+ * `predicateSlot: p.slot` is CARRIED (lucy #96 Finding 1 — the predicate mine→promote→query e2e revealed the
+ * gap): the KNOW-15b identity leg is `nodeKey(predicate) = hash(primaryAnchorId ‖ predicateSlot ‖ check)`, and
+ * BOTH the staging mint (`decideStaging`) and the door (`governed-emit.ts` candidateView) read `predicateSlot`
+ * for the slot leg. Dropping it here minted a slot-FREE key, diverging from the true identity and from the
+ * SOUND-oracle arm (`buildSound`, which carries `predicateSlot`) — so a predicate at the same anchor with a
+ * different slot but equal check would collide, and the KNOW-4g read-side slot grouping was blind. Fixed at
+ * source so the slot rides the fact into CAS, identity and the read projection identically.
  */
 function buildPredicate(p: PredicateProposal, check: VerifiedCheck, obviousness: ObviousnessScore): PredicateNode {
   return {
@@ -361,6 +369,7 @@ function buildPredicate(p: PredicateProposal, check: VerifiedCheck, obviousness:
     freshness: 'FRESH',
     claims: [],
     authoring: 'PREDICATED',
+    predicateSlot: p.slot,
   };
 }
 
