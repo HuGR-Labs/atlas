@@ -42,7 +42,14 @@ function walk(node: ts.Node, visit: (n: ts.Node) => void): void {
 
 /** Does `expr` provably flow from a bare `<scrubName>(...)` call — directly, or through a chain of resolvable
  *  const initializers? Fail-closed on a parameter / import / unresolvable identifier, same shape as the #121
- *  original. */
+ *  original.
+ *
+ *  DELIBERATELY TEXTUAL, and NOT the load-bearing control (billy WP-219 review #1). This audit walks for a
+ *  `scrubName(...)` call in the initializer; a sequence expression `(scrubCheck(x), x)` computes the scrub and
+ *  then discards it, and this walk reports GREEN on that mutant. The REAL teeth are the runtime
+ *  stored-CAS-byte assertions in `mine-predicate-check-scrub.test.ts` (`stored.check.expr`/`dec.put`/`row.claims`
+ *  `.not.toContain(SECRET)`), which go RED on exactly that mutant. The AST audit and the runtime test are
+ *  COMPLEMENTARY: the leak escapes only if BOTH are removed. Do not over-trust this audit in isolation. */
 function flowsFromScrub(expr: ts.Expression, inits: ReadonlyMap<string, ts.Expression>, scrubName: string, depth = 0): boolean {
   if (depth > 8) return false;
   let direct = false;

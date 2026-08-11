@@ -94,6 +94,21 @@ describe('decideStaging — the mined PREDICATE check is scrubbed before it ever
     expect(stored.check.expr).toContain('[REDACTED]'); // redacted at source, record preserved
   });
 
+  it('the OTHER `Check` arm — `index-query` — is scrubbed too (both union arms carry free model text, billy #2)', () => {
+    const store = freshStore();
+    const queryFact = {
+      ...(predicateFactFor(cand, 'unused') as unknown as { check: unknown }),
+      check: { kind: 'index-query', query: `find calls where arg == "${SECRET}"` },
+    } as unknown as Fact;
+    const dec = decideStaging(emptyStore(), [queryFact], new Map());
+    expect(JSON.stringify(dec.put)).not.toContain(SECRET); // the `query` arm never reaches the CAS batch raw
+    for (const o of dec.put!) store.put(o);
+    const row = [...dec.next!.current.values()][0]!;
+    const stored = store.get(asHash(row.contentHash)) as unknown as { check: { query: string } };
+    expect(stored.check.query).not.toContain(SECRET);
+    expect(stored.check.query).toContain('[REDACTED]');
+  });
+
   it('MEASURE-FIRST: a secret in a predicate check does NOT appear in the nodeKey PREIMAGE (identity leg)', () => {
     const expr = `assert token == "${SECRET}"`;
     const dec = decideStaging(emptyStore(), [predicateFactFor(cand, expr)], new Map());
