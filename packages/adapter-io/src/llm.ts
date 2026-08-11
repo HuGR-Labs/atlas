@@ -14,7 +14,7 @@
 
 import { execFileSync } from 'node:child_process';
 
-import type { Candidate, SiteProposer } from '@atlas/genesis';
+import type { Candidate, SeedProposal, SiteProposer } from '@atlas/genesis';
 
 /** The bounded spend envelope for the one call — a hard cost cap + a wall-clock timeout (ADAPT-LLM-1). */
 export interface LlmBudget {
@@ -22,9 +22,24 @@ export interface LlmBudget {
   readonly timeoutMs: number;
 }
 
-/** The raw model verdict at a site: a claim, or `null` when the model ABSTAINED here (GEN-12). */
+/**
+ * The raw model verdict at a site: a claim, or `null` when the model ABSTAINED here (GEN-12).
+ *
+ * [#195 leg (c)] The claim is only produced AFTER the admission sanity gate (`admitModelAnswer`) passes on
+ * the raw stdout bytes. Two provenance carriers ride alongside it so W-MINE can trace a fact back to what
+ * produced it, and W-MINE can build a grounded abstention when it cannot:
+ *   - `rawAnswer` — the VALIDATED answer text (the exact bytes that passed the gate, decoded as a string),
+ *     present ONLY when `claim !== null`. Downstream (W-MINE) scrubs this and puts it to CAS; this seam
+ *     does not scrub and never touches CAS. It is the untrimmed answer — `claim` is its trimmed projection.
+ *   - `abstainReason` — on a MALFORMED-answer abstention, the sub-reason a grounded `WhyNot('answer-malformed')`
+ *     is built from (`'answer-malformed:not-utf8'` | `'answer-malformed:multi-response'`). The plain GEN-12
+ *     model-abstained case (empty / whitespace-only stdout) stays UNTAGGED (`undefined`): an empty answer is
+ *     the model declining to answer, not a corruption of one.
+ */
 export interface CompletionResult {
-  readonly claim: string | null; // null ⇒ the model abstained at this site
+  readonly claim: string | null; //          null ⇒ the model abstained at this site
+  readonly rawAnswer?: string; //             the validated answer bytes as a string; present iff claim !== null
+  readonly abstainReason?: string; //         a malformed-answer sub-reason; undefined for a plain GEN-12 abstain
 }
 
 /** The single, synchronous model seam — one bounded completion per prompt (matches the frozen sync
@@ -48,7 +63,20 @@ export function createSiteProposer(deps: {
     propose(cand: Candidate) {
       const prompt = deps.buildPrompt(cand);
       const r = deps.client.complete(prompt, deps.budget); // EXACTLY ONE bounded call — no retry/loop
-      return r.claim === null ? null : { cand, claim: r.claim };
+      if (r.claim === null) {
+        // [#195c] Split the abstention so the MALFORMED case is OBSERVABLE. A tagged `abstainReason` (the
+        // sanity gate's `answer-malformed:*`) returns a DISTINCT `{ abstain }` the driver builds a greppable
+        // grounded WhyNot from; an UNTAGGED null (empty / model-declined) stays the plain GEN-12 abstention.
+        return r.abstainReason !== undefined ? { abstain: r.abstainReason } : null;
+      }
+      // [#195c] Forward the VALIDATED answer bytes on the now-TYPED `SeedProposal.rawAnswer` field so W-MINE
+      // scrubs-and-puts them to CAS as the fact's `answerRef`; this seam does not scrub and never touches CAS.
+      const seed: SeedProposal = {
+        cand,
+        claim: r.claim,
+        ...(r.rawAnswer !== undefined ? { rawAnswer: r.rawAnswer } : {}),
+      };
+      return seed;
     },
   };
 }
@@ -100,11 +128,12 @@ export interface ModelCommand {
 export function createCommandClient(command: ModelCommand): ModelClient {
   return {
     complete(prompt: string, budget: LlmBudget): CompletionResult {
-      let out: string;
+      let out: Buffer;
       try {
         out = execFileSync(command.cmd, command.args as string[], {
           input: prompt, // the prompt is piped, never placed on the command line
-          encoding: 'utf8',
+          // NO `encoding`: stdout is read as a RAW Buffer. With `encoding:'utf8'` Node silently maps invalid
+          // bytes to U+FFFD, masking exactly the corruption the #195c sanity gate exists to reject.
           timeout: budget.timeoutMs,
           stdio: ['pipe', 'pipe', 'pipe'], // stderr CAPTURED — never inherited (the fleet-wide F7 property)
         });
@@ -113,10 +142,47 @@ export function createCommandClient(command: ModelCommand): ModelClient {
         if (completed === null) throw new ModelCommandError(classifyModelFailure(e), describeModelFailure(command, e));
         out = completed;
       }
-      const claim = out.trim();
-      return { claim: claim === '' ? null : claim }; // EMPTY ⇒ abstained (GEN-12), never a fabricated claim
+      return admitModelAnswer(out); // #195c: the admission sanity gate — fail-closed to a tagged abstention
     },
   };
+}
+
+/**
+ * [#195 leg (c)] The admission SANITY GATE on the model's raw stdout bytes, BEFORE they can become a claim.
+ * Three fail-closed checks; any failure returns a grounded ABSTENTION, never a fabricated claim:
+ *   1. VALID UTF-8 — round-trip the raw bytes (`Buffer.from(text).equals(buf)`). Reading stdout as a Buffer
+ *      is what makes this observable: `encoding:'utf8'` would already have replaced bad bytes with U+FFFD.
+ *      Fail ⇒ `answer-malformed:not-utf8`.
+ *   2. NON-EMPTY — an empty / whitespace-only answer is the model DECLINING to answer (GEN-12), not a
+ *      corruption. It stays `{ claim: null }` UNTAGGED, preserving the existing abstention semantics.
+ *   3. SINGLE-RESPONSE — reject the splice/interleave class the 2026-08-04 contamination produced
+ *      (byte-overlapping concatenation of multiple concurrent answers). See `isSplicedAnswer`.
+ *      Fail ⇒ `answer-malformed:multi-response`.
+ * On success the VALIDATED (untrimmed) text rides back as `rawAnswer`; `claim` is its trimmed projection.
+ */
+function admitModelAnswer(buf: Buffer): CompletionResult {
+  const text = buf.toString('utf8');
+  if (!Buffer.from(text, 'utf8').equals(buf)) return { claim: null, abstainReason: 'answer-malformed:not-utf8' };
+  const claim = text.trim();
+  if (claim === '') return { claim: null }; //                    empty ⇒ GEN-12 model-abstained, untagged
+  if (isSplicedAnswer(text)) return { claim: null, abstainReason: 'answer-malformed:multi-response' };
+  return { claim, rawAnswer: text }; //                          rawAnswer = the exact validated answer bytes
+}
+
+/**
+ * The SINGLE-RESPONSE predicate (#195 §4 — specified at build time from the 2026-08-04 incident, not perfect
+ * by contract, only required to REJECT a spliced fixture and ADMIT a normal single answer). The answer
+ * channel is "one line of prose or an abstention" (`prompt.ts:134`), so a well-formed answer is a single
+ * content block of ordinary text. Two orthogonal fingerprints of the incident's byte-overlapping
+ * concatenation of concurrent answers:
+ *   (a) INTERLEAVE — a C0 control byte a single prose answer never carries (anything below U+0020 except
+ *       TAB/LF/CR). Concurrent writers racing one pipe inject stray control/NUL bytes at the splice seam.
+ *   (b) MULTI-ENVELOPE — more than one non-empty line after trimming: a concatenation of ≥2 top-level
+ *       answers, where a conforming single answer is one line of prose.
+ */
+function isSplicedAnswer(text: string): boolean {
+  if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(text)) return true; // (a) C0 control byte (not TAB/LF/CR) = interleave seam
+  return text.split('\n').filter((line) => line.trim() !== '').length > 1; // (b) >1 response envelope
 }
 
 /**
@@ -138,12 +204,14 @@ export function createCommandClient(command: ModelCommand): ModelClient {
  * into ADR-0011 Decision 1 rather than living only here.
  *
  * `null` ⇒ not salvageable, let the caller throw. `status` must be EXACTLY `0`: `null` means the child was
- * killed by a signal, and a non-zero status is a genuine failure — neither may be salvaged.
+ * killed by a signal, and a non-zero status is a genuine failure — neither may be salvaged. Returns the raw
+ * stdout BUFFER (stdout is captured with no `encoding`, so the thrown error carries it as a Buffer) — the
+ * salvaged bytes pass through the same #195c sanity gate as the happy path.
  */
-function salvageEarlyExit(e: unknown): string | null {
+function salvageEarlyExit(e: unknown): Buffer | null {
   const err = e as { code?: unknown; status?: unknown; stdout?: unknown } | null;
   if (err?.code !== 'EPIPE' || err.status !== 0) return null;
-  return typeof err.stdout === 'string' ? err.stdout : '';
+  return Buffer.isBuffer(err.stdout) ? err.stdout : Buffer.alloc(0);
 }
 
 /** Classify a thrown `execFileSync` error. `ENOENT` is the absent command; `ETIMEDOUT`/`SIGTERM` is the

@@ -51,7 +51,9 @@ const WAIT_SLICE_MS = 250;
 
 /** The pool's answer for one site — the proposer's seed, or the fault that stopped it. */
 export type PoolResult =
-  | { readonly ok: true; readonly seed: SeedProposal | null }
+  // [#195c] `{ abstain }` rides alongside `SeedProposal | null` (see `PoolAnswer`, mine-worker.ts): a
+  // malformed-answer abstention must reach the main-thread admit loop DISTINCT from a plain model-abstain.
+  | { readonly ok: true; readonly seed: SeedProposal | { readonly abstain: string } | null }
   | { readonly ok: false; readonly error: Error };
 
 export interface ProposerPool {
@@ -199,7 +201,11 @@ export function makeVisitAll(
       // identity-equal, and the gate receives both the seed and the candidate — so handing it a cloned
       // `seed.cand` would put two different objects for one site into a seam that has every right to
       // expect one.
-      const held: SiteProposer = { propose: () => (r.seed === null ? null : { ...r.seed, cand }) };
+      // A `{ abstain }` seed carries no candidate, so it is passed THROUGH untouched; only a real
+      // `SeedProposal` is rebuilt around the LOCAL `cand` (the identity-equality reason above).
+      const held: SiteProposer = {
+        propose: () => (r.seed === null || 'abstain' in r.seed ? r.seed : { ...r.seed, cand }),
+      };
       try {
         attempts.push({ ok: true, value: visitWith(cand, held) });
       } catch (error) {

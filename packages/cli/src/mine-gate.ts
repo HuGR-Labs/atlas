@@ -29,6 +29,7 @@ import type {
   Candidate,
   EmitGate,
   EmitVerdict,
+  Fact,
   SeedProposal,
   SkeletonSource,
 } from '@atlas/genesis';
@@ -80,7 +81,17 @@ export function makeAdmitGate(deps: AdmitDeps, reground?: Reground): EmitGate {
         tier: 'T2',
       };
       const verdict = admit(proposal, deps);
-      if (verdict.outcome === 'admitted') return { emitted: true, fact: verdict.fact };
+      if (verdict.outcome === 'admitted') {
+        // [#195 b] Carry the VALIDATED answer bytes THROUGH the admitted fact so the mine emit path
+        // (`mine-decide.ts`) can scrub-and-put them to CAS and stamp `answerRef` (the CAS id) on the ROW.
+        // It rides as a NON-IDENTITY transport field only: `mine-decide.ts` STRIPS `rawAnswer` before any
+        // `id(fact)`/`nodeKey`, so a provenance receipt never enters the fact's content hash or identity.
+        const fact: Fact =
+          seed.rawAnswer !== undefined
+            ? ({ ...verdict.fact, rawAnswer: seed.rawAnswer } as unknown as Fact)
+            : verdict.fact;
+        return { emitted: true, fact };
+      }
       const reason = verdict.outcome === 'dropped' ? verdict.reason : verdict.whyNot.reason;
       return { emitted: false, whyNot: { site: cand.site, reason } };
     },

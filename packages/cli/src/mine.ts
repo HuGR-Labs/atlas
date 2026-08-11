@@ -43,17 +43,16 @@ import type {
   SkeletonSource,
 } from '@atlas/genesis';
 import { createDiskStore, headSha, createSkeletonSource, gitSidecarTrust } from '@atlas/adapter-io';
-import { resolveProposer } from './mine-proposer.js';
+import { resolveProposer, NO_MODEL_IDENTITY } from './mine-proposer.js';
 import { resolveFrontier } from './mine-frontier.js';
 import { createProposerPool, makeVisitAll, proposerPoolAvailable } from './mine-pool.js';
 import type { ProposerPool, SiteVisit } from './mine-pool.js';
 import { composedGate } from './mine-gate.js';
-import type { CommitDecision, CommitRefusal, DiskStore } from '@atlas/adapter-io';
-import { upsert as knowledgeUpsert, normalizeCheck, primaryAnchorId, nodeKey } from '@atlas/knowledge';
-import type { WriteRequest, StoreProjection, Candidate as KnowledgeCandidate } from '@atlas/knowledge';
-import { id } from '@atlas/kernel';
+import { decideStaging } from './mine-decide.js';
+import type { MintedFact } from './mine-decide.js';
+import type { CommitRefusal, DiskStore } from '@atlas/adapter-io';
 import { join } from 'node:path';
-import { MINED_SCOPE, MINED_TIER, StagingCommitError as StagingRefusalError } from './mine-staging.js';
+import { StagingCommitError as StagingRefusalError } from './mine-staging.js';
 import { foldVerdict } from './mine-render.js';
 import type { MinePass } from './mine-render.js';
 import type { CliVerdict } from './render.js';
@@ -92,6 +91,11 @@ export interface MineDeps {
    *  defaulted to `process.env`. Threaded so a test is HERMETIC: without it `runMine(repo)` reads the
    *  developer's own `~/.config/atlas/model.json` and would execute their model binary in a unit test. */
   readonly env?: NodeJS.ProcessEnv;
+  /** [#210] Override the model identity `resolveProposer` would have derived — the seam an injected-proposer
+   *  TEST uses to assert a specific identity lands on the report, since an injected `proposer` bypasses
+   *  `resolveProposer` entirely (see `withDefaults`) and so carries no identity of its own. Production never
+   *  supplies this: the CLI path always leaves it unset and inherits `resolveProposer`'s own capture. */
+  readonly modelIdentity?: string;
 }
 
 /** The two pass-level events the frozen `GenesisReport` has no field for: a wiring FAULT that the
@@ -124,9 +128,6 @@ function defaultSkeleton(repoPath: string): SkeletonSource {
   return createSkeletonSource(repoPath);
 }
 
-/** The advisory claim body a write carries (the KNOW-4c set-union element); a predicate carries its check. */
-const claimNormOf = (f: Fact): string => (f.kind === 'advisory' ? f.claimNorm : f.kind === 'predicate' ? normalizeCheck(f.check) : '');
-
 /** The admission seam resolution (mine-gate.ts) — RE-EXPORTED so the module surface is unchanged by the
  *  file split. `makeAdmitGate` now HAS a production caller: `composedGate`, the REQ-CLI-4d supply this
  *  driver falls back to below. */
@@ -157,6 +158,10 @@ interface ResolvedDeps {
   readonly deps: MineDeps;
   readonly modelWired: boolean;
   readonly promptDigest?: string;
+  /** [#210] ALWAYS present — `NO_MODEL_IDENTITY` when no model is wired, never absent-that-reads-as-unasked.
+   *  Read off `deps.modelIdentity` (an injected-proposer test's override), else `resolveProposer`'s own
+   *  capture, else the sentinel. */
+  readonly modelIdentity: string;
 }
 
 /** Fill the injectable seams: a real adapter for the store, honest fail-closed seams for the rest. */
@@ -198,7 +203,16 @@ function withDefaults(repoPath: string, deps?: Partial<MineDeps>): ResolvedDeps 
   // `??` above, so `deps?.proposer !== undefined` is ALWAYS FALSE on the CLI path — which is how a run with
   // `llmCalls 2` printed "no proposer model is wired" four lines away from its own cost.
   const modelWired = deps?.proposer !== undefined || (resolved?.wired ?? false);
-  return { deps: d, modelWired, ...(resolved?.promptDigest !== undefined ? { promptDigest: resolved.promptDigest } : {}) };
+  // [#210] identity: an injected override wins (a test asserting a specific stamp over an injected proposer),
+  // else `resolveProposer`'s own capture (the CLI path, `resolved` undefined only when a proposer WAS
+  // injected), else the honest sentinel — NEVER left undefined, which is what let the port go dormant.
+  const modelIdentity = deps?.modelIdentity ?? resolved?.modelIdentity ?? NO_MODEL_IDENTITY;
+  return {
+    deps: d,
+    modelWired,
+    modelIdentity,
+    ...(resolved?.promptDigest !== undefined ? { promptDigest: resolved.promptDigest } : {}),
+  };
 }
 
 /**
@@ -216,6 +230,7 @@ export function buildControllerDeps(
   onRefusal?: (r: CommitRefusal) => void,
   watch?: PassWatch,
   pool?: ProposerPool,
+  modelIdentity?: string,
 ): ControllerDeps {
   // THE ONE PER-SITE EXPRESSION — both `visit` and `visitAll` route through it, so neither can produce
   // different facts for a site: there is exactly one place facts come from (see `SiteVisit`, mine-pool.ts).
@@ -233,70 +248,16 @@ export function buildControllerDeps(
   // knowledge because it cannot REACH it, not because a check says no. Reproduced at a REAL minted-key collision
   // (a mined nodeKey EQUAL to a ratified T0 node's): `projection.json` comes back byte-identical.
   const grounded = new Map<string, Fact>(); // KNOW-15 idempotent grounded set, keyed by the MINTED nodeKey (0 duplicates)
+  // [#209] the answer-provenance receipts of every row this pass has SETTLED with one — cumulative across
+  // commits the SAME way `grounded` is (a `Set`, not a per-call list), so a contended retry that re-mints the
+  // same key never double-counts and a `resume`/`rerun` leg folds in on top of what an earlier leg witnessed.
+  // Read by `answerReceipts` below; fail-closed — a row that minted with NO `answerRef` (MintedFact carries
+  // none) contributes nothing.
+  const answerRefs = new Set<string>();
 
-  /**
-   * THE WHOLE PASS BODY AS ONE PURE DECISION over a staging snapshot — the seam `commitStaging` requires. It used to be
-   * `loadStaging() ?? emptyStore()` at pass start plus `persistStaging` per site: atomic (no torn read, no annihilation) but
-   * UNCONDITIONAL, hence last-writer-wins BY DEFINITION — two concurrent passes rehydrate one snapshot, each compute a whole-Map
-   * replacement, and the second publish erases the first's candidates while BOTH exit 0 reporting what they "seeded" (MEASURED at
-   * 8 processes × 5 sites: 40 reported committed, 5 durable). `commitStaging` re-runs this from scratch on every lost compare-and-
-   * swap — hence PURE: no writes (CAS objects ride out in `put`, ordered before publication), no clock, no random. ESTABLISHED is
-   * recomputed per attempt: a key in THIS snapshot this pass did not itself write. A pass-start set computed once is not re-
-   * runnable and missed a row a CONCURRENT pass staged after we started, which the old code then set-unioned into; the exclusion
-   * is `grounded`/`minted`, not the running projection, so a pass can still make a SECOND claim about a symbol it just wrote.
-   */
-  const decide = (staged: StoreProjection, incoming: readonly Fact[]): CommitDecision<Map<string, Fact>> => {
-    let projection = staged;
-    const minted = new Map<string, Fact>(); // what THIS attempt would write; folded into `grounded` only on settle
-    const puts: unknown[] = []; // the CAS bytes the protocol makes durable BEFORE publishing the rows naming them
-    for (const raw of incoming) {
-      // STAMP THE CANDIDATE SCOPE — PROVENANCE plus a fail-closed default (ADR-0008 kept it when the boundary
-      // crossing was removed). A mined fact has no actor, so nobody owns it, and an unowned node is writable by
-      // NOBODY until an admin appoints a curator. Stamped BEFORE the content hash so the bytes carry it — AND onto
-      // the request below so the ROW does too; the request used to omit both halves, so every staged row recorded
-      // `scope`/`tier` as `undefined` while this file claimed the two agreed.
-      const f = { ...raw, scope: MINED_SCOPE } as Fact;
-      // IDENTITY IS MINTED, NEVER TRUSTED — `nodeKey` is RECOMPUTED from the content by the frozen formula
-      // (KNOW-15b), the SAME seam that mints contentHash/primaryAnchor; the payload's own `f.id` never routes, or
-      // an author could spoof another node's identity (governed-emit.ts parity, WP-F3). Map `predicateSlot` →
-      // `.slot` first: the cast is otherwise LOSSY (identity fns read `.slot`) and yields a slot-free key.
-      const fSlot = f.kind === 'relation' || f.kind === 'negation' ? undefined : f.predicateSlot; // relation (D2)/negation (D3) have no slot
-      const view = { ...f, slot: fSlot } as unknown as KnowledgeCandidate;
-      const key = nodeKey(view) as unknown as string;
-      // A MINED CANDIDATE NEVER RE-AUTHORS AN ESTABLISHED ONE — belt-and-braces since ADR-0008, load-bearing before
-      // it: a mined key colliding with a governed node routed UPDATE and set-unioned into it, mutating a ratified
-      // T0 fact from whatever text sat in a source file (prompt-injectable, reproduced). It STAYS — a set-union
-      // between two candidates is just as unreviewable.
-      if (staged.current.has(key) && !grounded.has(key) && !minted.has(key)) continue;
-      const req: WriteRequest = {
-        nodeKey: key,
-        contentHash: id(f) as unknown as string,
-        family: f.kind,
-        claimNorm: claimNormOf(f),
-        // ── ADJACENCY carrier (ADDITIVE) — primary anchor + R3-optional slot for a later sibling-adjacency
-        //    scan (WP-B). NOT routed; `slot` stays ABSENT when omitted (exactOptionalPropertyTypes).
-        primaryAnchor: primaryAnchorId(view) as unknown as string,
-        ...(fSlot !== undefined ? { slot: fSlot } : {}),
-        // ── GOVERNANCE carrier (ADR-0007) — from the MINED constants, never forwarded from the fact. Neither
-        //    half is routed (`RouteInputs` reads neither), so no hash and no route moves; what changes is that
-        //    the row now DECLARES what it is — what the ARCH-10 guard derives authority from.
-        scope: MINED_SCOPE,
-        tier: MINED_TIER,
-      };
-      // BYTES BEFORE THE ROW, as the governed door does — here by handing them to the protocol, which puts them
-      // before it publishes. A row naming a contentHash absent from CAS is a node whose fact can never be read
-      // back, and the doors correctly refuse a node whose class they cannot read: a recoverable corruption became
-      // an unrecoverable DoS (reproduced), and promotion runs through those same doors.
-      puts.push(f);
-      projection = knowledgeUpsert(projection, req).store; // route the write-decision
-      minted.set(key, f);
-    }
-    // `next` is published even when nothing was minted, keeping the write cadence identical to the
-    // `persistStaging`-per-site one it replaces — so a mutant seeding from `emptyStore()` still publishes that
-    // empty store and is caught (SCN-CLI-4d's first case).
-    return { out: minted, next: projection, put: puts };
-  };
-
+  // THE WHOLE PASS BODY AS ONE PURE DECISION is `decideStaging` (mine-decide.ts) — extracted at the LOC ceiling
+  // when #195 added the scrub→CAS answer-receipt to the write. `grounded` is threaded in (the caller keeps it
+  // across settled commits); the decision stays a pure function of `(staged, incoming, grounded)`.
   return {
     plan: (repo, rev, _scope): Plan => ({ malformed: false, skeleton: scan.scan(repo, rev), sites: mine.mine(repo, rev) }),
     // A `ModelCommandError` is REPORTED on its way past, then re-thrown unchanged so GEN-8c still classifies
@@ -324,18 +285,28 @@ export function buildControllerDeps(
     upsert: (incoming): readonly Fact[] => {
       // THE CANDIDATE SIDECAR, NEVER THE KNOWLEDGE PROJECTION. An unconditional persist carries no decision
       // to re-run and so cannot be made concurrency-safe, which is why this door is the only one left.
-      const r = d.store.commitStaging<Map<string, Fact>>((staged) => decide(staged, incoming));
+      const r = d.store.commitStaging<Map<string, MintedFact>>((staged) => decideStaging(staged, incoming, grounded));
       if (!r.settled) {
         // VISIBLE. Nothing was written, so returning the grounded set unchanged would report a successful
         // pass over a write that did not happen — the silent loss this seam removes.
         onRefusal?.(r.refusal);
         throw new StagingRefusalError(r.refusal);
       }
-      for (const [key, f] of r.out) grounded.set(key, f); // fold in only what actually settled
+      // fold in only what actually settled — and [#209] its answerRef alongside it, when the row minted one.
+      for (const [key, f] of r.out) {
+        grounded.set(key, f);
+        if (f.answerRef !== undefined) answerRefs.add(f.answerRef);
+      }
       return [...grounded.values()];
     },
     changed: (_prior, _rev) => ({ idChanged: false, stateChanged: false, changedBuckets: [] }),
     handoffTo: () => d.handoffTo(),
+    // [#210] threaded, never re-derived — see `withDefaults`/`resolveProposer` for where the string is built.
+    ...(modelIdentity !== undefined ? { modelIdentity } : {}),
+    // [#209] the FINAL accumulated set at report-assembly time (`answerRefs` is a closure over the whole
+    // pass, so a call after several `upsert`s — or after a `resume`/`rerun` leg — reads everything settled so
+    // far, never just the last batch).
+    answerReceipts: () => [...answerRefs],
   };
 }
 
@@ -366,7 +337,7 @@ export function driveMinePass(repoPath: string, deps?: Partial<MineDeps>): MineP
   const usePool = resolved.modelWired && deps?.proposer === undefined && proposerPoolAvailable();
   const pool = usePool ? createProposerPool(repoPath, d.env ?? process.env) : undefined;
   try {
-    const ports = buildControllerDeps(repoPath, d, (r) => void (refusal = r), watch, pool);
+    const ports = buildControllerDeps(repoPath, d, (r) => void (refusal = r), watch, pool, resolved.modelIdentity);
     const report = makeRunController(ports).genesis(repoPath, d.rev, d.budget, d.scope);
     if (fault !== undefined) throw fault; // a misconfigured model is not a mining outcome
     return {
