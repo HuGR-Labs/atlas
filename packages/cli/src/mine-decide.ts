@@ -15,7 +15,7 @@
 
 import type { CommitDecision } from '@atlas/adapter-io';
 import type { Fact } from '@atlas/genesis';
-import { upsert as knowledgeUpsert, normalizeCheck, primaryAnchorId, nodeKey } from '@atlas/knowledge';
+import { upsert as knowledgeUpsert, normalizeCheck, primaryAnchorId, nodeKey, relationKey, negationKey } from '@atlas/knowledge';
 import type { WriteRequest, StoreProjection, Candidate as KnowledgeCandidate } from '@atlas/knowledge';
 import { id } from '@atlas/kernel';
 import { MINED_SCOPE, MINED_TIER } from './mine-staging.js';
@@ -45,6 +45,40 @@ const claimNormOf = (f: Fact): string =>
  *  source (see the header there). `Fact` itself (genesis, frozen) is NOT touched; this is a CLI-local
  *  transport shape for the one hop between "this row minted with a receipt" and "the report counts it". */
 export type MintedFact = Fact & { readonly answerRef?: string };
+
+/**
+ * FAMILY-AWARE staging identity mint (bobby F1 — the load-bearing fix). MIRRORS the governed door's
+ * `resolveWriteIdentity` (packages/adapter-io/src/governed-emit-identity.ts:99-111) and the negation door's
+ * mint (governed-emit-negation.ts:163). The generic `nodeKey(view)` + `primaryAnchorId(view)` path assumes a
+ * single-anchor intrinsic node; a RELATION grounds over two distinct files, so `deepestCommonUnit` is the
+ * empty wildcard and `primaryAnchorId` THROWS `DegenerateAnchorError` (router.ts) UNGUARDED — crashing the
+ * whole mine pass inside `commitStaging`. Dispatched by family:
+ *   - relation → `relationKey(endpointA, relationKind, endpointB)` (governed-emit-identity.ts:104); the
+ *     scope-binding anchor is `endpointA`, the directed fact's SUBJECT — `primaryAnchorId` is NEVER reached.
+ *   - negation → `negationKey(relationKind, target, scope)` (negation-key.ts); anchored at its scope
+ *     directory (governed-emit-negation.ts:252) — `primaryAnchorId` is NEVER reached.
+ *   - advisory/predicate → the intrinsic `nodeKey`/`primaryAnchorId` path, BYTE-IDENTICAL to before (KNOW-15b).
+ * NOTE (WP-96-N): `f.scope` here is the stamped `MINED_SCOPE` (the F3 authz-vs-identity split that keeps the
+ * real witness directory is WP-96-N's job); this WP only proves the mint routes by family, never collapses.
+ */
+function mintIdentity(f: Fact, view: KnowledgeCandidate): { key: string; primaryAnchor: string } {
+  if (f.kind === 'relation') {
+    return {
+      key: relationKey(f.endpointA, f.relationKind, f.endpointB) as unknown as string,
+      primaryAnchor: f.endpointA, // ARCH-9 binds a directed relation on its subject's scope (never nodeKey)
+    };
+  }
+  if (f.kind === 'negation') {
+    return {
+      key: negationKey(f.relationKind, f.target, f.scope) as unknown as string,
+      primaryAnchor: f.scope, // anchored at the scope directory the negation ranges over
+    };
+  }
+  return {
+    key: nodeKey(view) as unknown as string, // intrinsic (KNOW-15b) — advisory/predicate UNCHANGED
+    primaryAnchor: primaryAnchorId(view) as unknown as string,
+  };
+}
 
 export function decideStaging(
   staged: StoreProjection,
@@ -86,7 +120,10 @@ export function decideStaging(
     // `.slot` first: the cast is otherwise LOSSY (identity fns read `.slot`) and yields a slot-free key.
     const fSlot = f.kind === 'relation' || f.kind === 'negation' ? undefined : f.predicateSlot; // relation (D2)/negation (D3) have no slot
     const view = { ...f, slot: fSlot } as unknown as KnowledgeCandidate;
-    const key = nodeKey(view) as unknown as string;
+    // FAMILY-AWARE mint (bobby F1): a relation/negation routes by relationKey/negationKey and NEVER touches
+    // `primaryAnchorId` (which throws DegenerateAnchorError on their cross-file / directory grounding);
+    // advisory/predicate keep the intrinsic nodeKey/primaryAnchorId path byte-identically. See `mintIdentity`.
+    const { key, primaryAnchor } = mintIdentity(f, view);
     // A MINED CANDIDATE NEVER RE-AUTHORS AN ESTABLISHED ONE — belt-and-braces since ADR-0008, load-bearing before
     // it: a mined key colliding with a governed node routed UPDATE and set-unioned into it, mutating a ratified
     // T0 fact from whatever text sat in a source file (prompt-injectable, reproduced). It STAYS — a set-union
@@ -104,7 +141,7 @@ export function decideStaging(
       claimNorm: claimNormOf(f),
       // ── ADJACENCY carrier (ADDITIVE) — primary anchor + R3-optional slot for a later sibling-adjacency
       //    scan (WP-B). NOT routed; `slot` stays ABSENT when omitted (exactOptionalPropertyTypes).
-      primaryAnchor: primaryAnchorId(view) as unknown as string,
+      primaryAnchor,
       ...(fSlot !== undefined ? { slot: fSlot } : {}),
       // ── GOVERNANCE carrier (ADR-0007) — from the MINED constants, never forwarded from the fact. Neither
       //    half is routed (`RouteInputs` reads neither), so no hash and no route moves; what changes is that

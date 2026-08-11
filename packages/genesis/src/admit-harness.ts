@@ -13,7 +13,7 @@
 // Co-locates the frozen `PredicateApi` + `Check` re-export; the check-engine / admission semantics are
 // consumed as injected ports, never defined here.
 
-import type { NodeKey, Status, StructRef, Tier } from '@atlas/contracts';
+import type { Status, StructRef } from '@atlas/contracts';
 import type { AdvisoryNode, Check, GroundedFact, ObviousnessScore, PredicateNode, PredicateSlot } from '@atlas/knowledge';
 import type { IndexNode } from '@atlas/index';
 import type { Candidate, WhyNot } from './types.js';
@@ -49,46 +49,27 @@ export interface PredicateApi {
   teeth(check: Check, anchor: StructRef): boolean;
 }
 
-/** The citations carrier of a grounded fact — reused from the frozen node shape, NEVER redefined. */
-type FactGrounding = AdvisoryNode['grounding'];
-
-// ---- the LLM proposal: a TYPED candidate ONLY (GEN-12a) — no admission vote, no confidence field --------
-
-/**
- * A predicate candidate the LLM proposes (GEN-12a). It carries the CLAIM only — the runnable `check` is
- * SYNTHESIZED mechanically by the harness (`PredicateApi.synthesize`), never trusted from the model.
- * `scratch` is the chain-of-thought: SCRATCH ONLY (GEN-12f), never persisted onto the emitted node.
- */
-export interface PredicateProposal {
-  readonly kind: 'predicate';
-  readonly site: Candidate; // the genesis ranked SITE — the admission anchor rides `site.site.subtreeHash`
-  readonly slot: PredicateSlot; // drives SOUND-ORACLE-FIRST (GEN-12k)
-  readonly nodeKey: NodeKey; // identity carried through (minted upstream, not by a model vote)
-  readonly claimNorm: string;
-  readonly grounding: FactGrounding;
-  readonly tier: Tier;
-  readonly scratch?: string; // chain-of-thought — discarded, never a fact (GEN-12f)
-}
-
-/** An advisory candidate the LLM proposes (GEN-12e) — a grounded claim with no verdict. */
-export interface AdvisoryProposal {
-  readonly kind: 'advisory';
-  readonly site: Candidate;
-  readonly nodeKey: NodeKey;
-  readonly claimNorm: string;
-  readonly grounding: FactGrounding;
-  readonly tier: Tier;
-  readonly scratch?: string; // chain-of-thought — discarded, never a fact (GEN-12f)
-}
-
-/** A grounded abstention (GEN-12g) — a VALID outcome, never a manufactured fact. */
-export interface Abstention {
-  readonly kind: 'abstain';
-  readonly whyNot: WhyNot;
-}
-
-/** What the proposer emits for one site — a typed candidate OR a grounded abstention. NO admission authority. */
-export type Proposal = PredicateProposal | AdvisoryProposal | Abstention;
+// The LLM proposal DATA MODEL (the typed candidate shapes + the `Proposal` union) was EXTRACTED to
+// `admit-proposals.ts` at the 400-LOC godfile ceiling when WP-96 widened it with the relation/negation
+// families (ADR-0015 D2/D3) — the harness keeps the ADMISSION ENGINE, that file keeps the shapes it admits.
+// RE-EXPORTED here so `import { Proposal, RelationProposal, ... } from '@atlas/genesis'` is byte-identical.
+export type {
+  FactGrounding,
+  PredicateProposal,
+  AdvisoryProposal,
+  RelationProposal,
+  NegationProposal,
+  Abstention,
+  Proposal,
+} from './admit-proposals.js';
+import type {
+  FactGrounding,
+  PredicateProposal,
+  AdvisoryProposal,
+  RelationProposal,
+  NegationProposal,
+  Proposal,
+} from './admit-proposals.js';
 
 // ---- the injected mechanical seams (defined elsewhere; consumed here) ----------------------------------
 
@@ -161,6 +142,16 @@ const DROP_NOT_HOLDS = 'synthesized check does not compile ∧ HOLDS on current 
 const DROP_VACUOUS = 'synthesized check survives every mutant — vacuous / toothless (GEN-12j)';
 const DROP_TYPE_BROKEN = 'sound type-checker / LSP verdict is not HOLDS on the type-expressible slot (GEN-12k)';
 const DROP_UNGROUNDED = 'advisory fails the truth door — the citation does not ground (GEN-12e)';
+// The two SEAM STUBS (ADR-0015 D2/D3). The relation/negation shapes have a typed proposal slot and an
+// exhaustive admit case, but their real grounding/mint is NOT built here — WP-96-R fills `admitRelation`
+// and WP-96-N fills `admitNegation`. Until then each returns this structured `shape-not-yet-emitted` drop,
+// so the switch is total (tsc) and the seam is honest: a shape with no admission logic emits NOTHING, never
+// a forced fact. The reason is a NAMED constant so the later WP replaces one branch and cannot silently
+// leave the stub reachable.
+const DROP_RELATION_NOT_EMITTED =
+  'shape-not-yet-emitted: the relation family (ADR-0015 D2) has a typed proposal slot but no admission logic — WP-96-R';
+const DROP_NEGATION_NOT_EMITTED =
+  'shape-not-yet-emitted: the negation family (ADR-0015 D3) has a typed proposal slot but no admission logic — WP-96-N';
 // There is deliberately NO obviousness drop reason. ADR-0012: nothing is ever rejected for being obvious —
 // an obvious claim is emitted carrying `obviousness.rank === 'obvious'` and loses at ranking, where the
 // decision is recoverable. The retired `DROP_OBVIOUS` is not commented out anywhere; it is gone, so a
@@ -186,7 +177,30 @@ export function admit(p: Proposal, deps: AdmitDeps): Admission {
       return admitAdvisory(p, deps);
     case 'predicate':
       return admitPredicate(p, deps);
+    case 'relation':
+      return admitRelation(p, deps);
+    case 'negation':
+      return admitNegation(p, deps);
   }
+}
+
+/**
+ * WP-96-R SEAM STUB — the relation family's admission (ADR-0015 D2). A relation grounds over TWO endpoints
+ * and mints its identity by `relationKey`, NOT `nodeKey`; that grounding/mint is WP-96-R's build and is
+ * deliberately not implemented here. Returns the structured `shape-not-yet-emitted` drop so the shape has an
+ * exhaustive, honest slot without forcing a fact. `deps` is unused by design until R wires the door.
+ */
+function admitRelation(_p: RelationProposal, _deps: AdmitDeps): Admission {
+  return { outcome: 'dropped', reason: DROP_RELATION_NOT_EMITTED };
+}
+
+/**
+ * WP-96-N SEAM STUB — the negation family's admission (ADR-0015 D3). The governed door constructs the
+ * scope-directory grounding and mints `negationKey` at admit; that is WP-96-N's build, not this seam's.
+ * Returns the structured `shape-not-yet-emitted` drop — an honest slot, never a manufactured negative.
+ */
+function admitNegation(_p: NegationProposal, _deps: AdmitDeps): Admission {
+  return { outcome: 'dropped', reason: DROP_NEGATION_NOT_EMITTED };
 }
 
 /**
