@@ -20,7 +20,7 @@ import type { WriteRequest, StoreProjection, Candidate as KnowledgeCandidate } f
 import { id } from '@atlas/kernel';
 import { MINED_SCOPE, MINED_TIER } from './mine-staging.js';
 import { answerReceipt } from './mine-answer.js';
-import { scrubClaimNorm } from './mine-claim-scrub.js';
+import { scrubClaimNorm, scrubCheck } from './mine-claim-scrub.js';
 
 /** The advisory claim body a write carries (the KNOW-4c set-union element); a predicate carries its check. */
 const claimNormOf = (f: Fact): string =>
@@ -59,14 +59,22 @@ export function decideStaging(
     // `rawAnswer` (attached by mine-gate.ts) is a RECEIPT INPUT, never a part of identity. Stripped here, the
     // fact's contentHash and nodeKey are byte-identical to a fact mined without provenance.
     const { rawAnswer, ...factNoAnswer } = raw as Fact & { readonly rawAnswer?: string };
-    // SCRUB THE CLAIM BEFORE ANYTHING HASHES OR STORES IT (KNOW-11, T0) — `claimNorm` is identity-bearing
-    // (KNOW-4c) and becomes part of the fact object `id(f)` hashes into CAS, so it cannot be stripped like
-    // `rawAnswer`; it must be scrubbed at source instead, same as the answer (`mine-answer.ts`). Advisory
-    // only — see `mine-claim-scrub.ts` for why a predicate's `check` is a separate, unmeasured identity leg
-    // left untouched here. This must run BEFORE `f` is built so `id(f)`/`nodeKey`/`claimNormOf` all see the
-    // one (scrubbed) claim text — no raw copy survives anywhere downstream.
+    // SCRUB THE IDENTITY-BEARING CLAIM BODY BEFORE ANYTHING HASHES OR STORES IT (KNOW-11, T0) — per kind,
+    // because the claim body is a DIFFERENT field on each: an advisory carries `claimNorm` (KNOW-4c), a
+    // predicate carries `check` (its claim body is `normalizeCheck(f.check)`, see `claimNormOf`). Neither can
+    // be stripped like `rawAnswer` — both become part of the fact object `id(f)` hashes into CAS — so both are
+    // scrubbed at source, same as the answer (`mine-answer.ts`). This MUST run BEFORE `f` is built so the ONE
+    // scrubbed claim body reaches every downstream consumer with NO raw copy: for advisory, `id(f)`/`claimNormOf`;
+    // for predicate, `id(f)` AND the `nodeKey` preimage — because `check` folds into node identity (KNOW-15c),
+    // and `view` below is spread from `f`, `nodeKey(view)` reads exactly this scrubbed `check`. Scrubbing the
+    // check for CAS but not for the nodeKey preimage (or vice versa) would re-open the identity leg or split two
+    // scrub-equal predicates to different addresses — WP-219; see `mine-claim-scrub.ts` for the full argument.
     const factScrubbed =
-      factNoAnswer.kind === 'advisory' ? { ...factNoAnswer, claimNorm: scrubClaimNorm(factNoAnswer.claimNorm) } : factNoAnswer;
+      factNoAnswer.kind === 'advisory'
+        ? { ...factNoAnswer, claimNorm: scrubClaimNorm(factNoAnswer.claimNorm) }
+        : factNoAnswer.kind === 'predicate'
+          ? { ...factNoAnswer, check: scrubCheck(factNoAnswer.check) }
+          : factNoAnswer;
     // STAMP THE CANDIDATE SCOPE — PROVENANCE plus a fail-closed default (ADR-0008 kept it when the boundary
     // crossing was removed). A mined fact has no actor, so nobody owns it, and an unowned node is writable by
     // NOBODY until an admin appoints a curator. Stamped BEFORE the content hash so the bytes carry it — AND onto
