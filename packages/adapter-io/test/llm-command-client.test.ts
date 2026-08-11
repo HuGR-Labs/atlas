@@ -35,6 +35,7 @@ describe('createCommandClient — the operator-supplied model command (ADR-0011 
     const client = createCommandClient({ cmd: 'cat', args: [] }); // `cat` echoes its stdin
     expect(client.complete('a non-obvious grounded claim', budget)).toStrictEqual({
       claim: 'a non-obvious grounded claim',
+      rawAnswer: 'a non-obvious grounded claim', // #195c: the validated answer bytes ride back for W-MINE
     });
   });
 
@@ -49,7 +50,7 @@ describe('createCommandClient — the operator-supplied model command (ADR-0011 
     // teeth (breaks-on "the adapter is switched to `shell: true`"): a shell would EXPAND `$HOME` and treat
     // `;` as a command separator. Literal pass-through is what makes an argv array safe by construction.
     const client = createCommandClient({ cmd: 'printf', args: ['%s', '$HOME; rm -rf /'] });
-    expect(client.complete('ignored', budget)).toStrictEqual({ claim: '$HOME; rm -rf /' });
+    expect(client.complete('ignored', budget)).toStrictEqual({ claim: '$HOME; rm -rf /', rawAnswer: '$HOME; rm -rf /' });
   });
 
   describe('abstention (GEN-12) — a valid, unpressured outcome', () => {
@@ -77,7 +78,7 @@ describe('createCommandClient — the operator-supplied model command (ADR-0011 
       // teeth (breaks-on "the `salvageEarlyExit` branch is removed"): the call throws `nonzero-exit`, so a
       // model command that reads a prefix and exits reports a hard failure on a run that produced a claim.
       const client = createCommandClient({ cmd: 'printf', args: ['%s', 'A-REAL-CLAIM'] });
-      expect(client.complete(hugePrompt, budget)).toStrictEqual({ claim: 'A-REAL-CLAIM' });
+      expect(client.complete(hugePrompt, budget)).toStrictEqual({ claim: 'A-REAL-CLAIM', rawAnswer: 'A-REAL-CLAIM' });
     });
 
     it('EPIPE with a NON-ZERO exit status is still a failure — the salvage is not a blanket catch', () => {
@@ -115,6 +116,59 @@ describe('createCommandClient — the operator-supplied model command (ADR-0011 
       const client = createCommandClient({ cmd: 'atlas-no-such-model-binary-xyzzy', args: ['-m', 'x'] });
       const err = failureOf(() => client.complete('anything', budget));
       expect(err.message).toContain('atlas-no-such-model-binary-xyzzy -m x');
+    });
+  });
+
+  // ── #195 leg (c): the admission SANITY GATE, exercised end-to-end through a real subprocess ────────────
+  // The bytes are produced by `printf` (octal escapes for the corrupt/control cases) so the RAW-BUFFER path
+  // is what is under test — a mocked child would assert the mock, not the U+FFFD masking this gate defeats.
+  describe('#195c admission sanity gate — malformed answers fail closed to a TAGGED abstention', () => {
+    it('a NORMAL single answer ⇒ a claim AND the validated rawAnswer (the exact bytes that passed)', () => {
+      // teeth: rawAnswer is the UNTRIMMED validated text; the claim is its trimmed projection. Dropping the
+      // rawAnswer carrier means W-MINE has nothing to scrub-and-put to CAS.
+      const client = createCommandClient({ cmd: 'printf', args: ['greet formats via a template literal\\n'] });
+      expect(client.complete('anything', budget)).toStrictEqual({
+        claim: 'greet formats via a template literal',
+        rawAnswer: 'greet formats via a template literal\n',
+      });
+    });
+
+    it('a SPLICED/concatenated multi-answer ⇒ abstain `answer-malformed:multi-response` (the 2026-08-04 class)', () => {
+      // teeth (breaks-on "the single-response prong is removed"): two concatenated answers are the exact
+      // shape the broken shim delivered; without this prong they flow straight to `claimNorm`.
+      const client = createCommandClient({ cmd: 'printf', args: ['answer one\\nanswer two\\n'] });
+      expect(client.complete('anything', budget)).toStrictEqual({
+        claim: null,
+        abstainReason: 'answer-malformed:multi-response',
+      });
+    });
+
+    it('an interleaved answer carrying a C0 control byte ⇒ abstain `answer-malformed:multi-response`', () => {
+      // \001 (0x01) is a control byte a single prose answer never carries — the byte-overlap/interleave seam
+      // of concurrent writers racing one pipe. It is VALID UTF-8, so this exercises the splice prong, not the
+      // utf-8 prong.
+      const client = createCommandClient({ cmd: 'printf', args: ['front\\001back'] });
+      expect(client.complete('anything', budget)).toStrictEqual({
+        claim: null,
+        abstainReason: 'answer-malformed:multi-response',
+      });
+    });
+
+    it('INVALID UTF-8 bytes ⇒ abstain `answer-malformed:not-utf8` (never salvaged as a U+FFFD claim)', () => {
+      // \377\376 (0xFF 0xFE) is not valid UTF-8. teeth (breaks-on "stdout is read with encoding:'utf8'"):
+      // that mutation maps these bytes to U+FFFD and admits a fabricated claim instead of abstaining.
+      const client = createCommandClient({ cmd: 'printf', args: ['\\377\\376'] });
+      expect(client.complete('anything', budget)).toStrictEqual({
+        claim: null,
+        abstainReason: 'answer-malformed:not-utf8',
+      });
+    });
+
+    it('EMPTY stdout stays the UNTAGGED GEN-12 abstention — an empty answer is declining, not corruption', () => {
+      // teeth (breaks-on "empty is tagged answer-malformed:empty"): the model-abstained case must NOT be
+      // reported as a malformed answer, or every legitimate abstention reads as contamination.
+      const client = createCommandClient({ cmd: 'true', args: [] });
+      expect(client.complete('anything', budget)).toStrictEqual({ claim: null });
     });
   });
 });

@@ -4,6 +4,8 @@
 // question — where does the model come from, and what happens when it does not. `mine.ts` keeps the run
 // composition; this file keeps the proposer resolution.
 
+import { execFileSync } from 'node:child_process';
+
 import {
   createCommandClient,
   createPromptFactory,
@@ -13,7 +15,36 @@ import {
   loadModelConfig,
   shippedEnrichedTemplatePath,
 } from '@atlas/adapter-io';
+import type { ModelCommand } from '@atlas/adapter-io';
 import type { SiteProposer } from '@atlas/genesis';
+
+/** The sentinel `modelIdentity` for the fail-closed default: no model was wired, so nothing produced a
+ *  fact. It is a STATE, honestly named — never a fabricated identity. */
+export const NO_MODEL_IDENTITY = 'unwired:no-model-configured';
+
+/**
+ * [#210] Capture a STABLE identity for the resolved proposer model, for W-REPORT to stamp on the run report
+ * so a run is reproducible w.r.t. what produced it. It is `cmd + args` plus a BEST-EFFORT `--version` probe:
+ * on success the trimmed output is appended; on any failure (missing binary, non-zero exit, no `--version`,
+ * timeout) the identity records cmd+args and NOTES the probe failed — a version is NEVER fabricated.
+ *
+ * HONESTY CONSTRAINT (#210): this is "which CLI + version", NOT a cost basis. `claude -p` is an AGENTIC CLI,
+ * so measured prompt bytes are a lower bound on billed input; nothing here computes a price/token/cost from
+ * it, mirroring `llm.ts`'s refusal to pretend a subprocess reports a spend.
+ */
+export function captureModelIdentity(cmd: ModelCommand): string {
+  const base = [cmd.cmd, ...cmd.args].join(' ');
+  try {
+    const version = execFileSync(cmd.cmd, ['--version'], {
+      encoding: 'utf8',
+      timeout: 5_000,
+      stdio: ['ignore', 'pipe', 'ignore'], // no stdin, capture stdout, discard stderr
+    }).trim();
+    return version === '' ? `${base} (version unavailable: --version produced no output)` : `${base} @ ${version}`;
+  } catch {
+    return `${base} (version unavailable: --version probe failed)`;
+  }
+}
 
 /** The opt-in ENRICH arm (A4-LEVER.md): when set truthy, the proposer shows the model each target unit's
  *  same-file CONTEXT siblings, fixing the cross-unit precision trap (#201). Default OFF ⇒ the shipped
@@ -56,6 +87,7 @@ export interface ResolvedProposer {
   readonly proposer: SiteProposer;
   readonly wired: boolean; //           a real operator-configured model, not the abstaining default
   readonly promptDigest?: string; //    the digest of the prompt artifact (absent ⇒ no prompt was loaded)
+  readonly modelIdentity: string; //    [#210] which CLI + version produced answers (NO_MODEL_IDENTITY if none)
 }
 
 /**
@@ -77,7 +109,8 @@ export interface ResolvedProposer {
 export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = process.env): ResolvedProposer {
   const cfg = loadModelConfig(repoPath, env); // throws on malformed — never silently "no model"
   const propose = cfg?.roles.propose;
-  if (cfg === null || propose === undefined) return { proposer: defaultProposer(), wired: false };
+  if (cfg === null || propose === undefined)
+    return { proposer: defaultProposer(), wired: false, modelIdentity: NO_MODEL_IDENTITY };
   // #182 S2 — the UNIT-granular reader. It WRAPS `createFileSourceReader(repoPath)` (all three of its
   // containment/symlink/fd checks intact) and narrows a `::` site to the unit's own bytes; a bare-path
   // site reads exactly as before, which is what lets one binary serve both A/B arms.
@@ -96,5 +129,5 @@ export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = proce
     budget: { costCap: cfg.costCap, timeoutMs: cfg.timeoutMs },
     buildPrompt: prompts.build,
   });
-  return { proposer, wired: true, promptDigest: String(prompts.digest) };
+  return { proposer, wired: true, promptDigest: String(prompts.digest), modelIdentity: captureModelIdentity(propose) };
 }
