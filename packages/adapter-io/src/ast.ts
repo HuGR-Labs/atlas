@@ -245,10 +245,20 @@ function itemNode(filePath: string, src: string, decl: Declaration, ordinal: num
 /** Parse one TS/TSX file `content` into its ordered item child nodes. A parse that yields an error tree
  *  (or throws) returns `[]` — an honest EMPTY refinement, never a fabricated unit. */
 function itemsOf(filePath: string, src: string, grammar: TsLanguage, priors: Map<string, UnitPrior>): FileTree[] {
+  // web-tree-sitter's `Parser` and the `Tree` it returns are HANDLES into the WASM heap; GC of the JS
+  // wrapper does NOT free the underlying allocation — only an explicit `.delete()` does. Held in the
+  // enclosing scope so the `finally` can release BOTH on every exit (parse ok, error tree, or throw). The
+  // returned `FileTree` is fully materialized (every `SyntaxNode` read has been sliced into a plain string)
+  // before the `finally` runs, so both handles are dead by then — deleting them changes no output, it only
+  // stops a long-lived process (`createRevIndex` builds a fresh index per rev, N per process) from leaking
+  // one Parser + one Tree per parsed file WITHOUT BOUND (finding #211: the only unbounded per-build resource
+  // in the arbitrary-rev build path; measured NOT to corrupt a hash, but unbounded growth all the same).
+  let parser: Parser | undefined;
+  let tree: ReturnType<Parser['parse']> | undefined;
   try {
-    const parser = new Parser();
+    parser = new Parser();
     parser.setLanguage(grammar);
-    const tree = parser.parse(src);
+    tree = parser.parse(src);
     const root = tree.rootNode;
     if (root.hasError) return [];
     const items = root.namedChildren.map(unwrapExport).filter((d) => ITEM_KINDS.has(d.node.type));
@@ -262,6 +272,18 @@ function itemsOf(filePath: string, src: string, grammar: TsLanguage, priors: Map
     });
   } catch {
     return [];
+  } finally {
+    // Each guarded on its own so a double-free / partial state can never turn the total fold into a throw.
+    try {
+      tree?.delete();
+    } catch {
+      /* already freed / never allocated — ignore */
+    }
+    try {
+      parser?.delete();
+    } catch {
+      /* already freed / never allocated — ignore */
+    }
   }
 }
 
