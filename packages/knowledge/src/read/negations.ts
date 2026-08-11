@@ -27,24 +27,28 @@
 // lives in @atlas/knowledge, which cannot reach adapter-io's `underScope`).
 
 import type { StoreProjection } from '../write/router.js';
+import type { CurrentNode } from '../write/upsert.js';
+import type { KnowledgeFreshness } from '../types.js';
 import type { AbstainedRecord } from '../negation-types.js';
 import { isPrefix } from './anchor-match.js';
 
 /** One grounded NEGATIVE the truth door admitted. `nodeKey` is the negation's identity (`negationKey`, the
  *  row's key); `relationKind`/`target`/`scope` are the identity legs stamped on the row's frozen carriers.
- *  There is deliberately no `freshness` here, exactly as the sibling `RelationEdge` carries none: FRESH/DRIFTED
- *  is a property of the grounding against the built `Axes` (`driftDetect`), which a pure fold over the
- *  projection ROWS does not hold. The recompute belongs to the reconcile/doctor freshness path, NOT this fold.
- *  HONEST STATUS (billy F1/F3, 2026-08-10): that per-negation freshness recompute — driftDetect AND the
- *  `edgeModel` completeness-version conjunct (§3 clause 4) — is NOT YET WIRED for negations; it is a NAMED N4
- *  DoD item. So `atlas negations` today lists an admitted negative WITHOUT a freshness signal: a consumer must
- *  run `atlas doctor` to learn whether a listed negative still holds (a re-opened scope drifts the dir hash, so
- *  doctor marks it DRIFTED). Do not read the absence of `freshness` as "always fresh". */
+ *
+ *  `freshness` (N4, billy F1/F3 — WIRED) is the per-negation structural verdict, resolved through the injected
+ *  `freshnessOf` recompute the ADAPTER supplies (it holds the built `Axes` + the CAS bytes this pure fold
+ *  cannot reach). It is the §3 FOUR-clause verdict: `driftDetect(grounding, axes) === FRESH ∧ edgeModel ===
+ *  currentEdgeModel`. The `edgeModel` conjunct is the ONE completeness clause `driftDetect` cannot see — an
+ *  extractor upgrade changes no file bytes, so a negation admitted under edge-model E1 must read DRIFTED once
+ *  the current edge model is E2. A re-opened/stale scope drifts the directory subtreeHash and reads DRIFTED too
+ *  (billy F3's observability). ABSENT the recompute (the bare fold / a pre-wiring caller) ⇒ `DRIFTED`,
+ *  fail-closed — never "always fresh". */
 export interface GroundedNegation {
   readonly nodeKey: string;
   readonly relationKind: string;
   readonly target: string; // the GLOBAL symbol X the negative is ABOUT (¬∃ · →X) — the endpointB carrier
   readonly scope: string; //  the CLOSED scope S the witness ranges over — the governance carrier
+  readonly freshness: KnowledgeFreshness; // §3 4-clause verdict (driftDetect ∧ edgeModel), resolved by the adapter
 }
 
 /** Lexicographic string comparator — total, no locale (the one the sibling read folds sort by). */
@@ -66,8 +70,18 @@ function scopeCovers(queryScope: string, rowScope: string): boolean {
  * rather than throwing (the projection is untrusted input, the stance `sameas.ts`/`relations.ts` take), and
  * an empty projection yields `[]`. Deterministic: sorted by `(scope, relationKind, target, nodeKey)`, so
  * equal input is byte-identical output.
+ *
+ * `freshnessOf` (N4) is the per-negation §3 recompute, injected by the ADAPTER because it needs the built
+ * `Axes` + the CAS bytes a pure knowledge fold cannot reach (`driftDetect(grounding, axes) === FRESH ∧
+ * edgeModel === currentEdgeModel`, negation-source.ts). ABSENT ⇒ every row reads `DRIFTED`, fail-closed —
+ * exactly the discipline `resolveFreshness` (pack-shape.ts) applies for the bare-WIRE query path, never a
+ * silent "always fresh".
  */
-export function negationsOf(projection: StoreProjection, scope?: string): readonly GroundedNegation[] {
+export function negationsOf(
+  projection: StoreProjection,
+  scope?: string,
+  freshnessOf?: (node: CurrentNode) => KnowledgeFreshness,
+): readonly GroundedNegation[] {
   const filter = typeof scope === 'string' && scope.length > 0 ? scope : undefined;
   const out: GroundedNegation[] = [];
   for (const node of projection.current.values()) {
@@ -77,7 +91,8 @@ export function negationsOf(projection: StoreProjection, scope?: string): readon
     const s = node.scope;
     if (typeof k !== 'string' || typeof target !== 'string' || typeof s !== 'string') continue; // malformed ⇒ skip
     if (filter !== undefined && !scopeCovers(filter, s)) continue;
-    out.push({ nodeKey: node.nodeKey, relationKind: k, target, scope: s });
+    const freshness = freshnessOf?.(node) ?? 'DRIFTED'; // fail-closed: no recompute ⇒ never asserted FRESH
+    out.push({ nodeKey: node.nodeKey, relationKind: k, target, scope: s, freshness });
   }
   return out.sort(
     (x, y) =>

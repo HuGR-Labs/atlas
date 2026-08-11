@@ -119,7 +119,7 @@ function renderData(data: unknown): string {
   // data still carries both arrays, so parity + observability hold); the default shows negatives AND
   // abstentions, so a fired abstention is visible without any flag.
   if (Array.isArray(d.negations)) {
-    const negs = d.negations as readonly { nodeKey: string; relationKind: string; target: string; scope: string }[];
+    const negs = d.negations as readonly { nodeKey: string; relationKind: string; target: string; scope: string; freshness?: string }[];
     const absts = d.abstentions as readonly { relationKind: string; target: string; scope: string; reason: string }[] | undefined;
     const abstentions = Array.isArray(absts) ? absts : [];
     const scope = typeof d.scope === 'string' ? d.scope : '';
@@ -127,11 +127,13 @@ function renderData(data: unknown): string {
     const abstainedLines = abstentions.map(
       (a) => `  abstained ${a.relationKind} ${a.target} in ${a.scope} — ${a.reason}`,
     );
+    // N4: each grounded negative renders its per-row §3 freshness verdict (FRESH/DRIFTED) — a re-opened scope
+    // or an extractor-model bump reads DRIFTED, so "does this negative still hold" is legible on the surface.
     const lines = focus
       ? [`  negations: ${scope} — ${abstentions.length} abstention(s)`, ...abstainedLines]
       : [
           `  negations: ${scope} — ${negs.length} negation(s), ${abstentions.length} abstention(s)`,
-          ...negs.map((n) => `  negation ${n.relationKind} ${n.target} in ${n.scope} (${n.nodeKey})`),
+          ...negs.map((n) => `  negation ${n.relationKind} ${n.target} in ${n.scope} [${n.freshness ?? 'DRIFTED'}] (${n.nodeKey})`),
           ...abstainedLines,
         ];
     return `data:\n${lines.join('\n')}\n`;

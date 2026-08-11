@@ -18,7 +18,7 @@ const Y = 'src/orders/place.ts::place';
 
 /** A seeded read leg: ONE grounded negative under `src/payments` AND ONE fired abstention under `src/orders`. */
 const seededLeg: NegationLeg = () => ({
-  negations: [{ nodeKey: 'neg:1', relationKind: 'calls', target: X, scope: 'src/payments' }],
+  negations: [{ nodeKey: 'neg:1', relationKind: 'calls', target: X, scope: 'src/payments', freshness: 'FRESH' }],
   abstentions: [
     { kind: 'abstained', id: asNodeKey('abs:1'), relationKind: 'calls', target: Y, scope: 'src/orders', reason: 'scope-open', witness: { underApproxSources: ['src/x.ts::dyn'] } },
   ],
@@ -52,7 +52,7 @@ describe('#99b — `atlas negations` is a real command that reaches a real leg',
     const out = writes.join('');
     expect(out).toContain('status: ok');
     expect(out).toContain('negations: src — 1 negation(s), 1 abstention(s)');
-    expect(out).toContain(`negation calls ${X} in src/payments (neg:1)`);
+    expect(out).toContain(`negation calls ${X} in src/payments [FRESH] (neg:1)`); // N4: per-row §3 freshness verdict
     // THE #202 CLOSE: the abstention that fired is on the screen, with its reason — not silently dropped.
     expect(out).toContain(`abstained calls ${Y} in src/orders — scope-open`);
   });

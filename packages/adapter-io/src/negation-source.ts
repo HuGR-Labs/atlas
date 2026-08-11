@@ -24,8 +24,11 @@
 // and an AbstainedRecord directly); the end-to-end emit→persist→read of an abstention is N2+N4's close.
 
 import { abstentionsOf, negationsOf } from '@atlas/knowledge';
-import type { AbstainedRecord, GroundedNegation } from '@atlas/knowledge';
+import type { AbstainedRecord, CurrentNode, GroundedFact, GroundedNegation, KnowledgeFreshness } from '@atlas/knowledge';
 import type { Guidance, Verdict } from '@atlas/tools';
+import type { Hash } from '@atlas/contracts';
+import { resolveFreshness } from './pack-shape.js';
+import type { FreshnessOracle } from './pack-shape.js';
 import { rehydrateProjection } from './store.js';
 import type { DiskStore } from './store.js';
 
@@ -56,11 +59,30 @@ export interface NegationsData {
  *  `atlas doctor` read. Provenance is guarded where it is for the sibling read legs: on the CLI a COMMITTED /
  *  provenance-refused store is refused at the entrypoint (`cli.ts` `readRefusal`, before dispatch); over MCP
  *  that refusal is not threaded (`mcp-server/src/bin.ts` applies it to NO read), a PRE-EXISTING MCP-wide gap
- *  this read-only leg inherits, not one #99b introduces. */
-export function createNegationLeg(store: DiskStore): NegationLeg {
+ *  this read-only leg inherits, not one #99b introduces.
+ *
+ *  `freshness` (N4 · billy F1) is the family-aware per-fact oracle the composition root binds (`bindFreshnessOracle`,
+ *  wire.ts) — `driftDetect(grounding, axes)` PLUS the §3 clause-4 `edgeModel === currentEdgeModel` conjunct for a
+ *  negation. It is the SAME seam the query readback rides, threaded here so `atlas negations` surfaces a FRESH/DRIFTED
+ *  verdict per row (a re-opened scope drifts the dir subtreeHash, an extractor bump drifts the edgeModel — both read
+ *  DRIFTED). ABSENT (the bare-WIRE assembly with no composition-root axes) ⇒ every row reads `DRIFTED`, fail-closed —
+ *  the exact `resolveFreshness` discipline the query path applies, never a silent "always fresh". */
+export function createNegationLeg(store: DiskStore, freshness?: FreshnessOracle): NegationLeg {
+  // The per-negation freshness recompute the pure `negationsOf` fold cannot do itself: read the WHOLE fact back
+  // from CAS (the bytes ARE the fact — its §3 grounding + `edgeModel`) and run it through the family-aware
+  // oracle. A CAS miss / absent oracle ⇒ `DRIFTED` (`resolveFreshness`, fail-closed). The oracle already
+  // collapses STALE→DRIFTED for a negation; `resolveFreshness` collapses the advisory STALE the same way here.
+  const freshnessOf = (node: CurrentNode): KnowledgeFreshness => {
+    const fact = store.get(node.contentHash as Hash) as GroundedFact | undefined;
+    if (fact === undefined) return 'DRIFTED';
+    return resolveFreshness(freshness, fact) === 'FRESH' ? 'FRESH' : 'DRIFTED';
+  };
   return (scope) => {
     const projection = rehydrateProjection(store);
-    return { negations: negationsOf(projection, scope), abstentions: abstentionsOf(projection, scope) };
+    return {
+      negations: negationsOf(projection, scope, freshnessOf),
+      abstentions: abstentionsOf(projection, scope),
+    };
   };
 }
 

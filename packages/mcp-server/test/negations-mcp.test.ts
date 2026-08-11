@@ -34,7 +34,7 @@ const fakeHandler: WiredHandler = {
 const X = 'src/payments/charge.ts::charge';
 /** A fake read leg: ONE grounded negative + ONE fired abstention under the scope, both always returned. */
 const fakeLeg: NegationLeg = () => ({
-  negations: [{ nodeKey: 'neg:1', relationKind: 'calls', target: X, scope: 'src/payments' }],
+  negations: [{ nodeKey: 'neg:1', relationKind: 'calls', target: X, scope: 'src/payments', freshness: 'FRESH' }],
   abstentions: [
     { kind: 'abstained', id: asNodeKey('abs:1'), relationKind: 'calls', target: 'src/o.ts::p', scope: 'src/orders', reason: 'scope-open', witness: { underApproxSources: ['src/x.ts::dyn'] } },
   ],

@@ -45,7 +45,7 @@ import type { NegationLeg } from './negation-source.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
 import { gitSidecarTrust } from './store-provenance.js';
 import { readProvenanceRefusal } from './read-provenance.js';
-import { assembleHandler } from './wire.js';
+import { assembleHandler, bindFreshnessOracle, edgeModelVersion } from './wire.js';
 import type { WireConfig, WireSeams, WiredHandler } from './wire.js';
 
 // The `mine` ADMISSION SUPPLY (REQ-CLI-4d), split to its own file at the LOC ceiling and RE-EXPORTED here so
@@ -360,7 +360,11 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     // THE GROUNDED-NEGATION + ABSTENTION READ LEG (#99b). Same `store` the query leg reads — passed, not
     // rebuilt — so `atlas negations <scope>` reads the SAME projection `atlas query` reads back, and a fired
     // abstention is observable off it (#202). Read-only; no governed token, GOVERNANCE_SURFACE stays 5.
-    negations: createNegationLeg(store),
+    // N4 (billy F1): threaded the SAME family-aware freshness oracle the query readback rides — `driftDetect`
+    // over the `axes` built once above PLUS the §3 clause-4 `edgeModel === edgeModelVersion()` conjunct for a
+    // negation — so `atlas negations` surfaces a per-row FRESH/DRIFTED verdict (a re-opened scope OR an
+    // extractor bump reads DRIFTED). `currentEdgeModel` is `edgeModelVersion()`, the SAME value the door stamps.
+    negations: createNegationLeg(store, bindFreshnessOracle(axes, edgeModelVersion())),
     ...(readRefusal !== undefined ? { readRefusal } : {}),
   };
 }
