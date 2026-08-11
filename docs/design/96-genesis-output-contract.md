@@ -141,6 +141,19 @@ WP-219 ✅ ────► WP-96-P ───────────────
   admitted+queryable fact of **each** of the four shapes, each carrying minted identity, `atlas:mined`
   scope, and the correct family — with a black-box test per shape. Only then is #96 closed and #95 unblocked.
 
+## 5b. F3 — negation governance (OWNER-RATIFIED 2026-08-11): split authz-scope from identity-scope
+
+bobby's F3 found a mined negation cannot promote: its `scope` is BOTH its identity leg (`negationKey` over
+directory S) AND its authz binding, and the orchestrator holds `atlas:mined`, not authority over an arbitrary
+source directory S. **Owner ratified the principled fix: give negation the SAME clean split relation already
+has** — an **authz-scope** (`atlas:mined`, the mining namespace the orchestrator owns) SEPARATE from the
+**identity/witness-scope** (directory S, unchanged, still `negationKey`'s leg). This **amends #99b / ADR-0015
+D3** (a ratified invariant), so WP-96-N carries the co-amendment across `negation-types.ts` (add the authz
+field), `governed-emit-negation.ts` (authz binds the new field, not the directory), the #99b spec/ADR text,
+and the goldens — with owner ratification recorded here (2026-08-11). Identity (`negationKey` over S) and the
+door-constructed grounding are UNCHANGED. WP-96-N is therefore no longer a small "candidate + lens" WP: it
+owns this governance split first, then the candidate + lens. It stays gated behind WP-96-SEAM + WP-96-COMPOSE.
+
 ## 6. Ratification / open items owed at build time
 - **WP-0 must VERIFY** the `atlas:mined` policy grant (bobby [A], unread). If absent, promotion refuses
   every row and no shape can be proven end-to-end — WP-0 is the true gate-zero, ahead of every shape WP.
