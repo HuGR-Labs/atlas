@@ -28,7 +28,7 @@ scoped knowledge produces a single untyped-beyond-advisory, T2-only stream. #96 
   AdvisoryProposal | Abstention`. The `admit()` switch (`:182-189`) has cases `abstain`/`advisory`/
   `predicate` — **no `relation`, no `negation`.** `admitPredicate` (`:206`) exists but the CLI never
   reaches it: `mine-gate.ts:73` hard-codes `kind:'advisory'` on every candidate it builds.
-- **All four WRITE doors exist.** advisory + predicate (`upsert.ts`), relation (`#99a`,
+- **The WRITE doors already exist for every shape.** advisory + predicate (`upsert.ts`), relation (`#99a`,
   `relationWellFormed`/`relationKey`), negation (`#99b`, `emitNegation`, `NegationNode`). The asymmetry is
   entirely on the **propose+admit** side.
 - **The four node shapes (identity legs are MINTED, never trusted):**
