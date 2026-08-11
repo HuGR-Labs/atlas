@@ -20,21 +20,50 @@
 // the same bytes really are the same public claim, and content-address dedup collapsing them is correct,
 // not a defect (`mine-claim-scrub.test.ts` pins that two DISTINCT non-secret claims still diverge).
 //
-// SCOPE — ADVISORY ONLY, ON PURPOSE. A predicate fact's `claimNorm` is `normalizeCheck(f.check)`, and
-// `f.check` also folds into the predicate `nodeKey` (KNOW-15c: "a distinct check ⇒ distinct node"). Scrubbing
-// `check.expr`/`check.query` would touch that identity leg — a materially bigger design decision than the
-// one this fix makes, and the interaction (predicate identity via a scrubbed check) is UNMEASURED. Left as
-// a known, reported second gap (framing error), not silently folded into this fix.
+// THE TWO LEGS — advisory `claimNorm` (below) AND predicate `check` (`scrubCheck`, WP-219). The advisory leg
+// was closed by #207; the PREDICATE leg was the second, then-unmeasured gap this module's header flagged and
+// WP-219 now measures + closes. A predicate fact's identity-bearing claim body is `normalizeCheck(f.check)`
+// (mine-decide.ts `claimNormOf`), and — UNLIKE advisory `claimNorm` — `f.check` also folds into the predicate
+// `nodeKey` (KNOW-15c: "a distinct check ⇒ a distinct node"; router.ts preimage `{a, c: normalizeCheck(check),
+// s}`). So a credential shape in a synthesized `check` reached CAS raw through `id(f)` AND polluted node
+// identity through the nodeKey preimage — a DOUBLE-leg leak, same class as #207 / #118 / #121, latent only
+// because mine-gate.ts hardcodes kind:'advisory' today (#96 is about to make it emit predicates).
+//
+// IDENTITY-CONSISTENCY, THE DESIGN CONSTRAINT THAT MAKES THE PREDICATE LEG DIFFERENT FROM THE ADVISORY ONE:
+// because `check` feeds `nodeKey`, this CANNOT be a CAS-only redaction. `mine-decide.ts` scrubs `f.check` ONCE,
+// before `f` is built (exactly as it scrubs `claimNorm` before building `f`), so the SAME scrubbed check bytes
+// feed `id(f)`/`contentHash` AND the nodeKey preimage (`view` is spread from `f`, so `nodeKey(view)` reads the
+// scrubbed `check`). A scrub-for-storage / raw-for-identity split would (a) re-open the leak on the identity
+// leg and (b) relocate two scrub-equal predicates to DIFFERENT addresses; scrubbing the one `check` at source
+// forecloses both. It only narrows `contentHash`/`nodeKey` where the raw bytes differ ONLY in a credential
+// shape — two predicates whose checks scrub-equal really are the same public predicate, so collapsing them is
+// correct (`mine-predicate-check-scrub.test.ts` pins that two DISTINCT non-secret checks still diverge).
 
 import { scrub } from '@atlas/persist';
+import type { Check } from '@atlas/knowledge';
+
+/** The one whole-buffer scrub both legs share — `@atlas/persist` `scrub` (the same `mine-answer.ts` uses for
+ *  the answer), which redacts credential SHAPES to an ASCII placeholder and preserves valid UTF-8, so the
+ *  result round-trips losslessly through the CAS object `mine-decide.ts` hashes. */
+const scrubUtf8 = (s: string): string => Buffer.from(scrub(Buffer.from(s, 'utf8'))).toString('utf8');
 
 /**
- * Scrub a mined ADVISORY claim's body — the same whole-buffer `@atlas/persist` `scrub` `mine-answer.ts`
- * uses for the answer, applied here BEFORE the claim becomes part of any hashed/stored bytes. `scrub` only
- * redacts credential SHAPES to an ASCII placeholder and preserves valid UTF-8, so the result round-trips
- * losslessly through the CAS object `mine-decide.ts` hashes.
+ * Scrub a mined ADVISORY claim's body — applied BEFORE the claim becomes part of any hashed/stored bytes.
  */
 export function scrubClaimNorm(claimNorm: string): string {
-  const scrubbed = scrub(Buffer.from(claimNorm, 'utf8'));
-  return Buffer.from(scrubbed).toString('utf8');
+  return scrubUtf8(claimNorm);
+}
+
+/**
+ * Scrub a mined PREDICATE fact's `check` body — the `expr` (assertion) or `query` (index-query) leg of the
+ * `Check` tagged union — BEFORE `f` is built, so the ONE scrubbed check feeds `id(f)`/`contentHash` AND the
+ * `nodeKey` preimage (`normalizeCheck(check)`) identically. Returns a NEW `Check` of the same kind with the
+ * scrubbed body; the kind tag itself carries no secret and is preserved so `normalizeCheck` and the evaluator
+ * still discriminate the leg. See the identity-consistency note in this module's header for why this must be
+ * the single source of the check bytes rather than a CAS-only redaction.
+ */
+export function scrubCheck(check: Check): Check {
+  return check.kind === 'index-query'
+    ? { kind: 'index-query', query: scrubUtf8(check.query) }
+    : { kind: 'assertion', expr: scrubUtf8(check.expr) };
 }
