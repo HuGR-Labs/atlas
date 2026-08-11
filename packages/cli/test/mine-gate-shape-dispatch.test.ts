@@ -9,12 +9,15 @@
 // This suite injects a proposer that supplies EACH shape and proves the gate routes it to the MATCHING admit
 // arm: advisory → admitAdvisory (unchanged), predicate → admitPredicate (REAL — synthesize+HOLDS+teeth ⇒ it
 // ADMITS), relation → admitRelation (REAL since WP-96-R — grounds+mints a RelationNode, direction preserved),
-// negation → the admitNegation stub (`…WP-96-N`). The default proposer still emits advisory, so the whole
-// existing mine + genesis suite is the back-compat control — advisory is byte-identical.
+// negation → admitNegation (REAL since WP-96-N — mints negationKey over the witness scope, hands over a
+// CANDIDATE the door grounds at admit). The default proposer still emits advisory, so the whole existing mine +
+// genesis suite is the back-compat control — advisory is byte-identical.
 
 import { describe, it, expect } from 'vitest';
 import { makeAdmitGate } from '../src/mine.js';
 import { asSubtreeHash } from '@atlas/kernel';
+import { negationKey } from '@atlas/knowledge';
+import type { RelationKind } from '@atlas/knowledge';
 import type { StructRef, Status } from '@atlas/contracts';
 import type { Check } from '@atlas/knowledge';
 import type { IndexNode } from '@atlas/index';
@@ -98,16 +101,33 @@ describe('WP-96-SEAM2 — the gate dispatches on the seed\'s fact FAMILY', () =>
     expect(synthCalls()).toBe(0); //                    relation never touches the predicate check engine
   });
 
-  it('a NEGATION seed → reaches the admitNegation stub (shape-not-yet-emitted … WP-96-N)', () => {
-    const { deps } = admitAllDeps();
+  it('a NEGATION seed → reaches admitNegation (REAL, WP-96-N) and ADMITS a negation CANDIDATE end-to-end', () => {
+    const { deps, synthCalls } = admitAllDeps();
     const gate = makeAdmitGate(deps);
     const seed: SeedProposal = { kind: 'negation', cand, claim: 'no caller reaches svc', relationKind: 'calls', target: 'pkg/svc.ts::svc', scope: 'pkg/' };
 
     const v = gate.emit(seed, cand);
+    expect(v.emitted).toBe(true);
+    if (!v.emitted) throw new Error('unreachable');
+    expect(factKind(v.fact)).toBe('negation'); //       a NegationNode candidate, not a mislabelled advisory
+    const n = v.fact as unknown as { relationKind: string; target: string; scope: string; id: string; grounding: { entries: unknown[] } };
+    expect(n.target).toBe('pkg/svc.ts::svc'); //        the location-free target the negative is ABOUT
+    expect(n.scope).toBe('pkg/'); //                    the WITNESS scope, preserved as the identity leg
+    expect(n.relationKind).toBe('calls');
+    expect(n.id).toBe(String(negationKey('calls', 'pkg/svc.ts::svc', 'pkg/'))); // MINTED, never trusted
+    expect(n.grounding.entries).toHaveLength(0); //     the DOOR constructs the §3 grounding at admit, not genesis
+    expect(synthCalls()).toBe(0); //                    negation never touches the predicate check engine
+  });
+
+  it('a MALFORMED negation seed (off-vocabulary relationKind) → the honest genesis DROP, never a forced fact', () => {
+    const { deps } = admitAllDeps();
+    const gate = makeAdmitGate(deps);
+    const seed: SeedProposal = { kind: 'negation', cand, claim: 'x', relationKind: 'implements' as unknown as RelationKind, target: 'pkg/svc.ts::svc', scope: 'pkg/' };
+
+    const v = gate.emit(seed, cand);
     expect(v.emitted).toBe(false);
     if (v.emitted) throw new Error('unreachable');
-    expect(v.whyNot.reason).toContain('shape-not-yet-emitted');
-    expect(v.whyNot.reason).toContain('WP-96-N');
+    expect(v.whyNot.reason).toContain('malformed negation'); // DROP_NEGATION_MALFORMED — no address to mint
   });
 
   it('threads rawAnswer (#195b) onto the admitted fact for a shape that carries it', () => {

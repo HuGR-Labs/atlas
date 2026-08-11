@@ -26,8 +26,11 @@
 //                          CURRENT folded scope-Merkle (`resolveCurrent`, the insertion-sensitive dir hash a
 //                          new caller entering S drifts). `edgeModel` stamped = the extractor release (§3
 //                          clause 4, the ONE completeness clause `driftDetect` cannot see).
-//   gate 2.1 ANCHOR/AUTHZ: the write scope binds on the negation's OWN `scope` (the assertion IS about S);
-//                          `primaryAnchorId` is NEVER called — a negation routes by `negationKey`.
+//   gate 2.1 ANCHOR/AUTHZ: the ANCHOR binds on the negation's OWN witness `scope` (the assertion IS about S)
+//                          and `primaryAnchorId` is NEVER called — a negation routes by `negationKey`. The
+//                          AUTHZ gate binds `authzScope ?? scope` (F3, WP-96-N): absent ⇒ the witness `scope`
+//                          exactly as #99b shipped (human negations unchanged), present ⇒ the separate
+//                          `authzScope` (a MINED negation binds `atlas:mined` while keeping its witness identity).
 //   gates 2.25 / 2.5 / 3 : incumbent keyed on `negationKey`, ratify as ADVISORY-class (no `check`), upsert+put
 //                          with family 'negation' — VERBATIM the main door's atomic-commit machinery, reused.
 //
@@ -214,8 +217,15 @@ export function emitNegation(deps: GovernedEmitDeps, raw: NegationNode): EmitOut
   if (addressed.rejected !== undefined) return { emitted: false, rejected: addressed.rejected };
   const contentHash = addressed.hash;
 
-  // 2. AUTHZ — the actor must be in the negation's declared scope (the assertion IS about that scope).
-  if (!actorInScope(deps.policy, deps.actor, scope)) return { emitted: false, rejected: REJECTED_UNAUTHORIZED };
+  // 2. AUTHZ — the actor must be in the negation's AUTHZ scope. F3 (WP-96-N, owner-ratified 2026-08-11): the
+  //    gate binds `node.authzScope ?? scope`. ABSENT ⇒ binds the witness `scope` EXACTLY as before (a human
+  //    `atlas emit` negation carries no `authzScope`, so it still needs authority over the very scope it
+  //    asserts about — #99b back-compat, UNCHANGED). PRESENT ⇒ binds `authzScope`, so a MINED negation can keep
+  //    its witness directory as IDENTITY (the real scoped-negative) while the orchestrator's `atlas:mined`
+  //    grant authorizes it. This is the ONLY behavioural change to the door's authz; identity (`negationKey`
+  //    over the witness `scope`) and the honest-abstention law (both above) are untouched — they never read it.
+  const authzScope = node.authzScope ?? scope;
+  if (!actorInScope(deps.policy, deps.actor, authzScope)) return { emitted: false, rejected: REJECTED_UNAUTHORIZED };
   // 2.1 ANCHOR — bind the write scope on the negation's OWN scope. `primaryAnchorId` is NOT called: a negation
   //     is anchored at the scope directory and routes by `negationKey`. Reuses the existing scope-authz path.
   if (!scopeOwnsAnchor(deps.policy, scope, scope)) return { emitted: false, rejected: REJECTED_UNAUTHORIZED_ANCHOR };

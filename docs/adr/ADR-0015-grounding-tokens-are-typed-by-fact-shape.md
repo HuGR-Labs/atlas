@@ -137,6 +137,20 @@ pure edit is already handled by the split; the residue is re-scoped at #99c.
 > is now an open design question rather than a named home. This amendment corrects the forward references above; it
 > does not change any ratified decision of ADR-0015 (the typed-token model, the D2/D3/D4 split, the sequencing).
 
+> **Amendment 2026-08-11 (D3 authz/identity split — F3, owner-ratified, WP-96-N):** D3 keeps `scope` as an
+> IDENTITY leg (the witness directory a negation was proven closed over — `negationKey(relationKind, target,
+> scope)`, unchanged) AND as the scope its abstention law reasons about. That single scope also served as the
+> WRITE-AUTHZ binding, which blocked the negation from being MINED: the explorer holds `atlas:mined`, not
+> authority over an arbitrary source directory it happened to prove closed, so a mined negation over `src/pay`
+> was rejected unauthorized. The ratified fix ADDS a SEPARATE, additive/optional `authzScope` to the negation
+> shape; the door's authz gate binds **`authzScope ?? scope`**. Identity and the abstention law are UNCHANGED —
+> `negationKey` never reads `authzScope`, and abstention still reasons over the witness `scope`. Absent
+> `authzScope` ⇒ authz binds the witness `scope` exactly as D3 first shipped (human-emitted negations unchanged).
+> A mined negation carries its witness `scope` (identity) AND `authzScope: atlas:mined` (authz). This refines D3
+> only in the authz binding; it does not change the typed-token model, the completeness-witness grounding (§3), or
+> the abstention discipline. Details + the identity/authz separation live in
+> [99b §1/§4](../design/99b-negation-fact-contract.md).
+
 ## What the owner must ratify
 
 1. **The typed-token model (D1–D4)** — that a grounding token is chosen by fact shape, amending the GROUND-1

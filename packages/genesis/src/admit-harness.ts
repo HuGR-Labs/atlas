@@ -26,6 +26,10 @@ import {
   DROP_RELATION_MALFORMED,
   DROP_RELATION_UNGROUNDED,
 } from './admit-relation.js';
+// WP-96-N — the negation admission's PURE legs (identity mint + gate-0 check + the one honest drop), extracted
+// to the sibling at the 400-LOC ceiling exactly as the relation legs were. The candidate is built HERE; the
+// scope-directory grounding + the abstention law stay the DOOR's (contract F4), so no truth-door call lives here.
+import { buildNegation, negationTripleResolves, DROP_NEGATION_MALFORMED } from './admit-negation.js';
 import type { Candidate, WhyNot } from './types.js';
 
 /**
@@ -156,12 +160,10 @@ const DROP_UNGROUNDED = 'advisory fails the truth door — the citation does not
 // (`DROP_RELATION_MALFORMED` / `DROP_RELATION_UNGROUNDED`) live beside its builders in `admit-relation.ts`
 // and are imported above. The `shape-not-yet-emitted` stub reason is GONE (deleted, not commented) so a
 // resurrected stub cannot reach a ready-made string.
-// The negation SEAM STUB (ADR-0015 D3). The negation shape has a typed proposal slot and an exhaustive admit
-// case, but its real grounding/mint is NOT built here — WP-96-N fills `admitNegation`. Until then it returns
-// this structured `shape-not-yet-emitted` drop, so the switch is total (tsc) and the seam is honest: a shape
-// with no admission logic emits NOTHING, never a forced fact. NAMED so WP-96-N replaces one branch cleanly.
-const DROP_NEGATION_NOT_EMITTED =
-  'shape-not-yet-emitted: the negation family (ADR-0015 D3) has a typed proposal slot but no admission logic — WP-96-N';
+// The negation family is now ADMITTED (ADR-0015 D3, WP-96-N) — its one honest refusal (`DROP_NEGATION_MALFORMED`)
+// lives beside its builders in `admit-negation.ts` and is imported above. The `shape-not-yet-emitted` stub reason
+// is GONE (deleted, not commented) so a resurrected stub cannot reach a ready-made string. The second failure
+// mode — an undecidable well-formed negative — is the DOOR's ABSTENTION (contract F4), not a genesis drop.
 // There is deliberately NO obviousness drop reason. ADR-0012: nothing is ever rejected for being obvious —
 // an obvious claim is emitted carrying `obviousness.rank === 'obvious'` and loses at ranking, where the
 // decision is recoverable. The retired `DROP_OBVIOUS` is not commented out anywhere; it is gone, so a
@@ -211,12 +213,17 @@ function admitRelation(p: RelationProposal, deps: AdmitDeps): Admission {
 }
 
 /**
- * WP-96-N SEAM STUB — the negation family's admission (ADR-0015 D3). The governed door constructs the
- * scope-directory grounding and mints `negationKey` at admit; that is WP-96-N's build, not this seam's.
- * Returns the structured `shape-not-yet-emitted` drop — an honest slot, never a manufactured negative.
+ * WP-96-N — the negation family's admission (ADR-0015 D3). Unlike `admitRelation`, it does NOT call a truth
+ * door and does NOT score obviousness: a negation's soundness is a CLOSED-WORLD completeness question the DOOR
+ * decides against the N0 feed + the live scope Merkle (contract F4 — the abstention law is the door's, never
+ * re-implemented in genesis). So this leg does exactly two things: a gate-0 well-formedness check (a malformed
+ * triple has no address ⇒ DROP), then it mints the `negationKey` identity and hands over a CANDIDATE whose
+ * grounding/edgeModel the door will construct + stamp at admit. Pure + total: no truth call, no throw, no IO —
+ * `negationTripleResolves` guarantees `negationKey` (in `buildNegation`) never throws out of this function.
  */
-function admitNegation(_p: NegationProposal, _deps: AdmitDeps): Admission {
-  return { outcome: 'dropped', reason: DROP_NEGATION_NOT_EMITTED };
+function admitNegation(p: NegationProposal, _deps: AdmitDeps): Admission {
+  if (!negationTripleResolves(p)) return { outcome: 'dropped', reason: DROP_NEGATION_MALFORMED };
+  return { outcome: 'admitted', fact: buildNegation(p) };
 }
 
 /**

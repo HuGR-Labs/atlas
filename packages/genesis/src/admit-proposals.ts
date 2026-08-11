@@ -72,8 +72,9 @@ export interface RelationProposal {
  * (packages/knowledge/src/negation-types.ts:41) MINUS the harness/door-minted legs (`negationKey`/id,
  * `edgeModel`, freshness, authoring, claims). NO `grounding`: the governed door CONSTRUCTS it at admit from
  * the scope directory's subtree-Merkle (bobby F4; governed-emit-negation.ts:199-201) — the proposer names
- * only the (relationKind, target, scope) it is a negative about. `scope` stays the directory/witness identity
- * leg for now (the authz-vs-identity split is WP-96-N, amends #99b — out of THIS WP). Admission is WP-96-N.
+ * only the (relationKind, target, scope) it is a negative about. `scope` is the directory/witness IDENTITY leg;
+ * the F3 authz-vs-identity split (WP-96-N, owner-ratified 2026-08-11, amends #99b) is the OPTIONAL `authzScope`
+ * below, kept SEPARATE from the identity `scope`. Admission is WP-96-N (`admitNegation` → `buildNegation`).
  */
 export interface NegationProposal {
   readonly kind: 'negation';
@@ -82,6 +83,11 @@ export interface NegationProposal {
   readonly target: string; // location-free GLOBAL symbol key X the negative is ABOUT (¬∃ · →X) — identity leg
   readonly scope: string; // the CLOSED scope S (a DIRECTORY key) the witness ranges over — identity leg
   readonly tier: Tier;
+  // ── AUTHZ SCOPE (ADDITIVE, OPTIONAL — F3, WP-96-N) — the scope the DOOR's authz gate binds instead of the
+  //    witness `scope`, when present. NEVER an identity leg (`negationKey` reads the triple only) and NEVER read
+  //    by the abstention law. Absent on a human proposal (authz falls back to the witness `scope`); the MINED
+  //    path stamps it `atlas:mined` downstream (mine-decide.ts). Carried onto the candidate by `buildNegation`.
+  readonly authzScope?: string;
   readonly scratch?: string; // chain-of-thought — discarded, never a fact (GEN-12f)
 }
 

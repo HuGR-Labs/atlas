@@ -85,14 +85,22 @@ describe('decideStaging — family-aware identity mint (WP-96-SEAM · bobby F1)'
     expect(row.primaryAnchor).toBe(END_A); // the directed relation binds on its SUBJECT endpoint
   });
 
-  it('a NEGATION fact mints its negationKey — anchored at its scope directory', () => {
+  it('a NEGATION fact mints its negationKey over the PRESERVED witness scope — F3 authz/identity split (WP-96-N)', () => {
     let dec!: ReturnType<typeof decideStaging>;
     expect(() => { dec = decideStaging(emptyStore(), [negationFact()], new Map()); }).not.toThrow();
     const row = [...dec.next!.current.values()][0]!;
     expect(row.family).toBe('negation');
-    // `scope` is stamped to MINED_SCOPE upstream (the authz-vs-identity split is WP-96-N) — the mint reads it.
-    expect(row.nodeKey).toBe(negationKey('calls', 'pkg/x.ts::orphan', MINED_SCOPE) as unknown as string);
-    expect(row.primaryAnchor).toBe(MINED_SCOPE);
+    // F3: the witness `scope` ('pkg/payments') is PRESERVED as identity — NOT clobbered to MINED_SCOPE. The
+    // mint reads the witness, so `negationKey`/`primaryAnchor` bind the real scope the negative ranges over.
+    expect(row.nodeKey).toBe(negationKey('calls', 'pkg/x.ts::orphan', 'pkg/payments') as unknown as string);
+    expect(row.primaryAnchor).toBe('pkg/payments');
+    // and the ROW's governance scope is the witness too (matching the row the door produces at promote).
+    expect(row.scope).toBe('pkg/payments');
+    // MINED_SCOPE rides SEPARATELY as `authzScope` on the FACT BYTES promote rehydrates from CAS — the door's
+    // authz gate binds `authzScope ?? scope`, so the orchestrator's `atlas:mined` grant authorizes it.
+    const staged = [...dec.out.values()][0]! as unknown as { authzScope?: string; scope: string };
+    expect(staged.authzScope).toBe(MINED_SCOPE);
+    expect(staged.scope).toBe('pkg/payments'); // witness identity preserved on the fact object too
   });
 
   it('REGRESSION — an ADVISORY row keeps its EXACT prior nodeKey (the intrinsic path is byte-identical)', () => {
