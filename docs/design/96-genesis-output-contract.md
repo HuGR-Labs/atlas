@@ -55,8 +55,17 @@ scoped knowledge produces a single untyped-beyond-advisory, T2-only stream. #96 
 is the governed door.** Option A (mine calls `governedEmit` inline) is **REJECTED** — it destroys severance
 (#87) and either auto-accepts with no ratifier (KNOW-8 becomes false via the KNOW-18 fast-path) or forges
 `origin:'promoted'` dishonestly. #96 therefore builds **no new write path**; it unlocks the four proposal
-**shapes** upstream of an already-governed door, and makes the shape survive staging→promote unchanged
-(staging already carries `family: f.kind` at `mine-decide.ts:95` and CAS-stores the whole node).
+**shapes** upstream of an already-governed door.
+
+**CORRECTION (bobby contract cold-review 2026-08-10, F1) — the shape does NOT "survive staging unchanged".**
+Staging **re-mints identity GENERICALLY** for every family: `mine-decide.ts:81` `nodeKey(view)` and `:99`
+`primaryAnchorId(view)` both assume a single-anchor intrinsic node. For a **relation** (grounding spans two
+files) `deepestCommonUnit` is `''` → `primaryAnchorId` throws `DegenerateAnchorError` (`router.ts:335`),
+**unguarded inside `commitStaging` (`mine.ts:288`)** → the first mined relation **crashes the whole pass**.
+The governed door already dispatches correctly — `resolveWriteIdentity` (`governed-emit-identity.ts:99-111`)
+routes relation→`relationKey`, negation→`negationKey`, else intrinsic `nodeKey`. **The staging mint MUST
+mirror it.** This makes `mine-decide.ts` a shared surface WP-96-R *and* WP-96-N both edit — so the SEAM is
+widened to own the family-aware staging mint (below), and R/N never touch identity minting.
 
 **The four shapes, each = a `Proposal` variant + an `admit()` case + a proposer lens that produces it:**
 
@@ -91,26 +100,31 @@ and are **not** blocked on #219.
 
 ## 4. Decomposition (WP cards) + DAG
 
-**Conflict map:** WP-96-R and WP-96-N both edit `admit-harness.ts` (the `Proposal` union + the `admit()`
-switch) — NOT disjoint. Eliminate the shared file first: **WP-96-SEAM** widens the union + adds
-`admitRelation`/`admitNegation` as typed stubs (throwing `not-yet` or returning a structured drop), so R and
-N then fill **disjoint functions** and never collide on the switch.
+**Conflict map (revised after bobby F1):** the shared surface is **`mine-decide.ts`** (the family-blind
+staging mint), not just `admit-harness.ts`. Both are eliminated first by **WP-96-SEAM**, which owns (i) the
+`Proposal` union widening + `admit()` stub cases in `admit-harness.ts`, AND (ii) the **family-aware staging
+identity mint** in `mine-decide.ts` — mirroring `resolveWriteIdentity` (relation→`relationKey`,
+negation→`negationKey`, else intrinsic `nodeKey`) AND a family-aware `scope` stamp that does **not** overwrite
+a negation's identity-scope with `atlas:mined` (F3). After SEAM, R/N fill disjoint `admit*` functions and
+touch neither identity minting nor `mine-decide.ts`.
 
 | WP | scope (disjoint after SEAM) | dep-on | gate |
 |---|---|---|---|
 | **WP-96-0** POLICY | ~~verify/add grant~~ **grant confirmed present** (`.atlas/policy.json:15`); reduced to a black-box test that a mined advisory row lands in the projection **via `atlas promote`** (not `atlas emit`) | — | reachability proof (a mined row actually promotes) |
-| **WP-219** SCRUB | scrub predicate `check`/`claimNorm` before `id(f)`/nodeKey (the existing #219 card; consistent scrub of the nodeKey preimage too) | — | **blocks WP-96-P** |
-| **WP-96-SEAM** | widen `Proposal` union (+`RelationProposal`,`NegationProposal`) + `admit()` switch cases as typed stubs; freeze the two new proposal types | — | tsc + the union is exhaustive again |
-| **WP-96-P** PREDICATE | `mine-gate` builds `PredicateProposal` (not hardcoded advisory) + proposer predicate lens produces predicate candidates | WP-219, WP-96-SEAM | a mine pass emits an admitted predicate that promotes + is queryable |
-| **WP-96-R** RELATION | fill `admitRelation` (ground + mint `relationKey`) + proposer relation lens | WP-96-SEAM | a mined relation promotes; both endpoints resolve; direction preserved |
-| **WP-96-N** NEGATION | fill `admitNegation` (honest-abstention law → `AbstainedRecord`; else `NegationNode`) + proposer negation lens | WP-96-SEAM | a mined negation promotes; an open/empty scope ABSTAINS, never fabricates |
+| **WP-219** SCRUB | ✅ **DONE** (`fix/219-predicate-check-scrub` `d1a40e1`, awaiting billy cold-review + merge) — scrub `f.check` once before `f` so `id(f)` + `nodeKey` see one scrubbed check | — | **blocks WP-96-P** |
+| **WP-96-SEAM** | widen `Proposal` union (+`RelationProposal`,`NegationProposal` minus `grounding` — F4) + `admit()` stub cases; **+ family-aware staging mint in `mine-decide.ts`** (identity dispatch + scope stamp, F1/F3) | — | a relation row STAGES without `DegenerateAnchorError`; tsc; union exhaustive |
+| **WP-96-COMPOSE** | wire the negation completeness deps (`symbolReverse`/`axes`/`nodeHashOfPath`/`edgeModel`) into the **promote leg** at `compose.ts:337`, mirroring `wire.ts:217-220` — else every promoted negation abstains `scope-empty` (F2) | — | a negation reaches `emitNegation` with its deps satisfied |
+| **WP-96-P** PREDICATE | `mine-gate` builds `PredicateProposal` (not hardcoded advisory) + proposer predicate lens | WP-219, WP-96-SEAM | a mine pass emits an admitted predicate that promotes + is queryable |
+| **WP-96-R** RELATION | fill `admitRelation` (ground; identity minted by SEAM) + proposer relation lens | WP-96-SEAM | a mined relation promotes; both endpoints resolve; direction preserved |
+| **WP-96-N** NEGATION | fill `admitNegation` (produce a `NegationNode` **candidate** only — abstention is the DOOR's job, F4) + proposer negation lens | WP-96-SEAM, WP-96-COMPOSE, **F3 decision** | a mined negation promotes into an admitted `NegationNode` |
 | **WP-96-E2E** | one black-box story per shape: `mine → atlas promote → governed door → atlas query` returns the typed fact with correct family/scope/tier/ids | all above | the whole pipeline, subprocess black-box |
 
 ```
-WP-96-0 (policy) ─────────────────────────────┐
-WP-96-SEAM ──┬─────────────► WP-96-R ──────────┤
-             ├─────────────► WP-96-N ──────────┼──► WP-96-E2E
-WP-219 ──────┴► WP-96-P ────────────────────────┘
+WP-96-0 (policy) ───────────────────────────────────────┐
+WP-96-SEAM ──┬──────────────────────► WP-96-R ───────────┤
+             ├─ (F3 decision) ─┐                          │
+WP-96-COMPOSE ─────────────────┴────► WP-96-N ────────────┼──► WP-96-E2E
+WP-219 ✅ ────► WP-96-P ───────────────────────────────────┘
 ```
 
 ## 5. DoD (every WP) + exit predicate
