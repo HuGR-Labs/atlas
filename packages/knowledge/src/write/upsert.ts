@@ -289,6 +289,11 @@ export function upsert(
         ...(req.primaryAnchor !== undefined ? { primaryAnchor: req.primaryAnchor } : {}), // req wins, else `...prior`
         ...(req.slot !== undefined ? { slot: req.slot } : {}),
         ...governanceOf(req), // a new VERSION of a node keeps the node's governance — never a re-classification
+        // DELIBERATE OMISSION (#195, contract §5 scopes the stamp to CREATE/UPDATE): `answerProvenanceOf`
+        // and `relationOf` are NOT re-stamped here, so a superseded version keeps `...prior`'s `answerRef` —
+        // a receipt for the bytes that produced the PRIOR body, now stale for the re-minted one. Accepted as
+        // a known-latent inconsistency, not a silent drop; closing it means binding a fresh receipt to the
+        // supersede event, a bigger change than this wave's leg (b).
       });
       break;
     }
