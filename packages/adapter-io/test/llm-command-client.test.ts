@@ -13,7 +13,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { createCommandClient, ModelCommandError } from '../src/llm.js';
+import { ABSTAIN_SENTINEL, createCommandClient, ModelCommandError } from '../src/llm.js';
 import type { LlmBudget } from '../src/llm.js';
 
 /** A generous wall-clock for the commands that are expected to finish immediately. */
@@ -169,6 +169,42 @@ describe('createCommandClient — the operator-supplied model command (ADR-0011 
       // reported as a malformed answer, or every legitimate abstention reads as contamination.
       const client = createCommandClient({ cmd: 'true', args: [] });
       expect(client.complete('anything', budget)).toStrictEqual({ claim: null });
+    });
+  });
+
+  // ── #201/#202 the explicit ABSTAIN SENTINEL — a positive abstention ACTION, mapped to the same GEN-12 null
+  describe('#201/#202 explicit abstain sentinel — a token, not silence', () => {
+    it('the sentinel token alone ⇒ the UNTAGGED GEN-12 abstention (identical to empty stdout)', () => {
+      // teeth (breaks-on "the sentinel prong is removed from admitModelAnswer"): a responsive model emits
+      // this token instead of nothing, and without the prong it is admitted as a fabricated one-line CLAIM —
+      // exactly the #201 prose-refusal-becomes-fact bug the sentinel exists to close.
+      const client = createCommandClient({ cmd: 'printf', args: [`${ABSTAIN_SENTINEL}\\n`] });
+      expect(client.complete('a trivial unit', budget)).toStrictEqual({ claim: null });
+    });
+
+    it('the sentinel is matched CASE-INSENSITIVELY on the fully-trimmed answer', () => {
+      // teeth (breaks-on "the toUpperCase()/trim is dropped"): a model that lowercases or pads the token
+      // would slip past a strict-equality check and its abstention would be recorded as a fact.
+      const client = createCommandClient({ cmd: 'printf', args: ['  no-fact \\n'] });
+      expect(client.complete('a trivial unit', budget)).toStrictEqual({ claim: null });
+    });
+
+    it('the sentinel wrapped in markdown BACKTICKS ⇒ abstain (the measured Sonnet 4.6 case, #201/#202 probe)', () => {
+      // teeth (breaks-on "the end-strip in isAbstainToken is removed"): on the 2026-08-11 probe the model
+      // abstained on 5/6 trivial units with a bare token and on the 6th emitted `` `NO-FACT` `` — a strict
+      // whole-answer equality would have booked that abstention as a fabricated fact. The end-strip is why not.
+      const client = createCommandClient({ cmd: 'printf', args: ['`NO-FACT`\\n'] });
+      expect(client.complete('a trivial unit', budget)).toStrictEqual({ claim: null });
+    });
+
+    it('the sentinel wrapped in PROSE is NOT an abstention — only the whole-answer token abstains', () => {
+      // teeth (breaks-on "the match is `includes` instead of whole-answer equality"): a real fact that merely
+      // mentions the token must survive as a claim. Substring-matching would let the sentinel eat genuine facts.
+      const client = createCommandClient({ cmd: 'printf', args: ['NO-FACT is returned when the cache is cold\\n'] });
+      expect(client.complete('a real unit', budget)).toStrictEqual({
+        claim: 'NO-FACT is returned when the cache is cold',
+        rawAnswer: 'NO-FACT is returned when the cache is cold\n',
+      });
     });
   });
 });

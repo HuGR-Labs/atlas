@@ -25,6 +25,13 @@ justification travels with the prompt without being sent to it.
     Note the standing caveat: an abstention signal is partly an artifact of phrasing (arXiv 2507.16199), so
     the refusal RATE is only readable as a quality signal with this prompt held fixed — which the provenance
     hash is what makes possible.
+  · ABSTENTION IS A TOKEN, NOT SILENCE — [#201/#202] measured: "output NOTHING to abstain" NEVER fired (0 in
+    300 calls). A responsive model will not emit empty output; it emits a one-line PROSE refusal instead,
+    which the sanity gate then admits as a fabricated fact (#201). So abstention is given a POSITIVE ACTION —
+    emit the token `NO-FACT` — which is the I-CALM reward made concrete. `llm.ts` maps that exact token
+    (case-insensitive, whole-answer) back to the identical GEN-12 abstention as empty stdout. The token
+    string is COUPLED to `ABSTAIN_SENTINEL` in llm.ts and pinned by test — the prompt says the word the gate
+    reads.
   · NOT A RESTATED SIGNATURE — "non-obvious AND actionable, not a restated signature" is the harness's
     obviousness predicate (`TwoDoorBar.nonObvious`, admit-harness.ts). Since ADR-0012 it SCORES rather than
     rejects: a restated signature is stored with `obviousness.rank === 'obvious'` and loses at ranking. The
@@ -56,8 +63,9 @@ engineer would NOT already know from its name and signature, and that would chan
   so you can state a fact about them.
 - Restating the signature, the types, or the name is not a fact. Neither is a summary of what the code
   plainly does.
-- If the TARGET unit holds no such fact, output NOTHING AT ALL. Most units hold none. An empty answer is a
-  correct, expected result — it is recorded as a deliberate abstention, never as a failure.
+- If the TARGET unit holds no such fact, output the single token `NO-FACT` and nothing else. Most units
+  hold none. That is a correct, expected result — it is recorded as a deliberate abstention, never as a
+  failure. Do NOT explain, apologise, or describe why: the bare token `NO-FACT` IS the abstention.
 
-Output exactly one line of plain prose, or nothing. No preamble, no reasoning, no confidence, no
-formatting.
+Output either exactly one line of plain prose stating the fact, or the single token `NO-FACT`. No preamble,
+no reasoning, no confidence, no formatting.
