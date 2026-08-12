@@ -27,10 +27,16 @@ a genesis run is three artifacts and no others:
 | the staging sidecar — the **candidate rows** | `.atlas/staging.<g>.json` | `WireProjection` of `CurrentNode` (`packages/adapter-io/src/sidecar.ts`) |
 | the knowledge projection — the **promoted rows** | `.atlas/projection.<g>.json` | the same `WireProjection` at a different file |
 
-There is no fourth. In particular **there is no run ledger**: `GenesisReport`
-(`packages/genesis/src/types.ts`) carries `seeded`, `ratified`, `open`, `llmCalls`, `budgetSpent` and an
-optional `cost`/`resumeToken`, and it carries **no abstention field**. §5 (GOC-8) is where that costs
-something.
+There is no fourth **facts** artifact on disk. There **is** a run ledger, but it rides on the run's
+`GenesisReport` rather than in the store: `GenesisReport`
+(`packages/genesis/src/types.ts`) carries `seeded`, `ratified`, `open`, `llmCalls`, `budgetSpent`, an
+optional `cost`/`resumeToken`, and an optional **`coverage: RunCoverage`** — the durable per-site ledger
+(`packages/genesis/src/types.ts:148-203`). `RunCoverage` holds `frontier`, `planned`, and one `SiteOutcome`
+row per planned site; each row is `seeded`, `abstained`, `unrecorded`, `interrupted` or `unvisited`, and an
+`abstained` row keeps its grounded GEN-12 `WhyNot` — so an abstention is now recorded, not dropped. It is
+`ADDITIVE + ABSENT-TOLERANT`: a report from before the ledger simply has no `coverage`, which reads as
+UNEVALUABLE, never as a run that covered nothing. §5 (GOC-8) is where that ledger — and what it still cannot
+prove from the store alone — is spelled out.
 
 ---
 
@@ -205,12 +211,14 @@ grounding, no address is claimed twice, and every fact is readable back through 
 
 ### What is NOT checkable, and why — stated so it cannot be mistaken for coverage
 
-1. **Totality against the frontier, from the store alone.** A genesis run leaves **no durable record of which
-   sites it visited**. `GenesisReport` has no abstention field, and the controller drops the per-site
-   `WhyNot`s anyway (`packages/genesis/src/run-controller.ts`: `visit` returns `.facts` only). So a site that
-   abstained and a site that was silently dropped are **indistinguishable in every artifact the product
-   writes**. The only site ledger a run produces is what it *prints*, which is why the probe takes
-   `--report <file>` and why, without one, GOC-8 is reported **UNEVALUABLE** rather than passed.
+1. **Totality against the frontier, from the STORE alone.** The on-disk store (CAS, staging, projection)
+   carries **no per-site ledger**; the sites a run visited are recorded on the run's `GenesisReport.coverage`
+   (`RunCoverage`, `packages/genesis/src/types.ts:148-203`), not in the store. Since #175 that coverage **is**
+   a durable per-site record: one `SiteOutcome` per planned site, and an `abstained` row keeps its grounded
+   GEN-12 `WhyNot` (`packages/cli/src/mine-render.ts:135-172` prints the block, one row per site). So a site
+   that abstained and a site that was silently dropped **are** now distinguishable — but on the report, not in
+   the store. That is why the probe takes `--report <file>` and why, without one, GOC-8 is reported
+   **UNEVALUABLE** rather than passed: it is reconciling the frontier against a ledger the store does not hold.
 2. **Per-site abstention accounting, in general.** Even with the report, the residual is attributable only on
    the one branch whose prose names it (`N site(s) visited and every one abstained`, `mine-render.ts`). On any
    other branch the probe says so rather than doing arithmetic it cannot justify — a site may yield more than
