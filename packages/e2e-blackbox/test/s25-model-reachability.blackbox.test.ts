@@ -25,9 +25,10 @@
 // occurrences ⇒ real dep edges ⇒ a real ranked frontier) and a command that ECHOES a claim, so the model
 // path is not merely constructed but TRAVELLED.
 //
-// NO LIVE MODEL. `roles.propose.cmd` is `echo`: a deterministic, offline stand-in that returns a fixed
-// non-empty claim. What is under test is REACHABILITY — that the site's bytes could be produced, the prompt
-// built, the command run and its answer carried back — never what a model would say.
+// NO LIVE MODEL. `roles.propose.cmd` is `printf`: a deterministic, offline stand-in that prints a fixed
+// `atlas-fact` block (ADR-0017's parseable candidate). What is under test is REACHABILITY — that the site's
+// bytes could be produced, the prompt built, the command run and its block-carried answer parsed back — never
+// what a model would say.
 
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -37,11 +38,15 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
 
-/** The claim the stand-in "model" emits on stdout. Non-empty ⇒ a proposal, not an abstention (llm.ts:117). */
+/** The claim the stand-in "model" emits. Carried inside an `atlas-fact` block ⇒ a proposal (ADR-0017). */
 const CLAIM = 'charge() re-reads the ledger before it applies the discount';
 
-/** A valid operator config whose command ECHOES `CLAIM` — the model path is travelled, not just built. */
-const ECHOING = JSON.stringify({ roles: { propose: { cmd: 'echo', args: [CLAIM] } } });
+/** The ADR-0017 candidate block, printed verbatim by `printf '%s'` (no shell, no escape processing). */
+const factBlock = (claim: string): string => '```atlas-fact\n{"claim": ' + JSON.stringify(claim) + '}\n```\n';
+
+/** A valid operator config whose command PRINTS `CLAIM` as a fact block — the model path is travelled, not
+ *  just built, and the block is parsed by the shipped block-count admission gate (ADR-0017). */
+const ECHOING = JSON.stringify({ roles: { propose: { cmd: 'printf', args: ['%s', factBlock(CLAIM)] } } });
 
 /** The corpus: `greet` is DEFINED in util.ts and REFERENCED in app.ts (⇒ one resolved dep edge, two
  *  participating nodes ⇒ two structural seeds), plus one reference defined nowhere (⇒ an `unresolved`
@@ -104,6 +109,32 @@ describe('S25 — a configured model is REACHED at every ranked site, and the ru
     // row. Reachability that stops one step short of the store is the weaker story, and this is the step.
     expect(run.stdout).toContain('genesis: seeded 2 candidate fact(s)');
     expect(run.stdout).not.toContain('no proposer model is wired'); // never blamed for an absence it does not own
+  });
+
+  // ── ADR-0017 block-count admission, end-to-end through the injectable proposer seam (#221) ──────────────
+  it('ONE block ⇒ fact (the BITE above); REASONING with NO block ⇒ abstain, never a fabricated fact', () => {
+    // The reason-freely decline: the wired model emits free reasoning and no `atlas-fact` block. It is a real
+    // call at every site (llmCalls > 0), but nothing is seeded — a safe miss, never a fabrication. teeth
+    // (breaks-on "0 blocks is admitted as a claim"): this would seed 2 and the run would fabricate facts.
+    const reasoningOnly = JSON.stringify({ roles: { propose: { cmd: 'printf', args: ['%s', 'I considered this unit; nothing here is non-obvious.\nThe name already says it.\n'] } } });
+    const run = runAtlas(indexedRepo().repoPath, ['mine', '.'], { ATLAS_MODEL_CONFIG: operatorConfig(reasoningOnly) });
+
+    expect(run.exitCode).toBe(0);
+    expect(run.stdout).toContain('genesis: seeded 0 candidate fact(s)');
+    expect(run.stdout).toContain('every one abstained');
+    expect(run.stdout).not.toContain('no proposer model is wired'); // the model WAS wired — it declined
+  });
+
+  it('TWO blocks ⇒ abstain `answer-malformed:multi-response` (the concurrent-answer splice guard, block-count)', () => {
+    // Two concatenated candidate blocks are the 2026-08-04 splice shape. teeth (breaks-on "the ≥2-block prong
+    // is dropped"): both blocks would flow to the store; here the run seeds nothing and the splice sub-reason
+    // is greppable in the ledger.
+    const twoBlocks = JSON.stringify({ roles: { propose: { cmd: 'printf', args: ['%s', factBlock('claim one') + factBlock('claim two')] } } });
+    const run = runAtlas(indexedRepo().repoPath, ['mine', '.'], { ATLAS_MODEL_CONFIG: operatorConfig(twoBlocks) });
+
+    expect(run.exitCode).toBe(0);
+    expect(run.stdout).toContain('genesis: seeded 0 candidate fact(s)');
+    expect(run.stdout).toContain('answer-malformed:multi-response'); // the structural splice guard fired
   });
 
   it('the run carries the PROMPT ARTIFACT DIGEST it proposed under (ADR-0011 D3 provenance)', () => {
