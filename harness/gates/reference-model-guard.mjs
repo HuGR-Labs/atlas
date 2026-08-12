@@ -18,7 +18,7 @@
 // forces the classification to be DECLARED rather than discovered by the next reviewer.
 //
 // ── DECLARED COUNTS (gate-checked; a drift here FAILS this gate) ────────────────────────────────────────
-//   declared-modules: 53 · dead-value-exports: 221 · type-reachable: 6
+//   declared-modules: 54 · dead-value-exports: 222 · type-reachable: 6
 //   These three are read back from THIS file and asserted against the measured tree at the foot of the run
 //   (see "THE HEADER STATES COUNTS, AND THIS CHECKS THEM"). No count is QUOTED anywhere else in this
 //   header — a quoted integer that nothing checks is exactly what rotted here (task #143); this one cannot.
@@ -173,6 +173,7 @@ const LEDGER = {
   'packages/genesis/src/loops.ts': { values: 8, shipped: null, banner: false },
   'packages/genesis/src/seed.ts': { values: 5, shipped: null, banner: false },
   'packages/genesis/src/usefulness.ts': { values: 2, shipped: null, banner: false },
+  'packages/genesis/src/reverify.ts': { values: 1, shipped: null, banner: true }, // SPIKE-1 R2 — the re-verify / auto-invalidation path; no product door yet (P1/H1a wire it)
   // ── the PROVEN fact-verifier family (dependency + count + negation) is NO LONGER HERE: it moved dead → live.
   //    `packages/adapter-io/src/verify-fact-source.ts` (`createVerifyFactLeg`) value-imports all three oracles
   //    and is wired to `atlas verify-fact` through the composition root (compose.ts → bin.ts), so
