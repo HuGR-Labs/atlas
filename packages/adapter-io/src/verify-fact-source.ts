@@ -11,8 +11,10 @@
 //
 // ── WHAT THIS MODULE OWNS ────────────────────────────────────────────────────────────────────────────────
 // TWO things, mirroring `negation-source.ts`: the feed build (`createVerifyFactLeg`) and the SHARED verdict
-// shaping (`verifyFactVerdict`) so a claim yields a byte-identical `Verdict` on every transport that drives it.
-// The oracles own the decision logic and the scope predicate; none of that is restated here.
+// shaping (`verifyFactVerdict`), transport-agnostic by construction so a claim yields a byte-identical `Verdict`
+// on any transport wired to drive it. TODAY exactly ONE transport is wired: the `atlas verify-fact` CLI verb
+// (compose → bin → cli). No MCP tool is advertised for it yet. The oracles own the decision logic and the scope
+// predicate; none of that is restated here.
 //
 // ── WHY THE FEED IS BUILT ONCE, NOT RE-READ PER CALL (the one difference from the read legs) ──────────────
 // `negation-source.ts` re-reads `rehydrateProjection(store)` per call because it reads the MUTABLE knowledge
@@ -110,7 +112,7 @@ const reject = (rejected: string, next: string): Verdict<VerifyFactData> => ({
 
 /** Options a `verify-fact` invocation carries beyond `kind`/`target` — the scope (required), the completeness
  *  world (optional, defaults to the scope), and the count-only `min`/`exact`. All strings as parsed off argv;
- *  coercion + validation happen HERE at the one shared body so both transports reject identically. */
+ *  coercion + validation happen HERE at the one shared body so any transport wired to it rejects identically. */
 export interface VerifyFactOpts {
   readonly scope?: string | undefined;
   readonly world?: string | undefined;
@@ -122,7 +124,8 @@ export interface VerifyFactOpts {
  * The SHARED verdict builder — the SCHEMA + VERDICT parity source. Any transport calls this over the SAME
  * `VerifyFactLeg`, so identical arguments yield a byte-identical `Verdict` (`data` + `guidance`). TOTAL: a
  * malformed invocation (unknown kind, empty target/scope, non-positive-integer `min` for a count) fails CLOSED
- * to a structured `ok:false` verdict (exit 1 on the CLI, `isError` on MCP), never a throw. An oracle ABSTAIN
+ * to a structured `ok:false` verdict (exit 1 on the wired CLI transport; the same `ok:false` shape any future
+ * transport would surface as its own error), never a throw. An oracle ABSTAIN
  * or REFUTE is `ok:true` carrying the verdict on `data` — the sound gate declining to decide is a valid
  * answer, not a usage error, so it is exit 0 with the honest verdict, exactly as `atlas negations` surfaces an
  * abstention rather than hiding it (#202). `worldScope` defaults to `scope` when `--world` is omitted; for the
