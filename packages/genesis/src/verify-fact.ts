@@ -23,7 +23,8 @@
 // TRANSCRIBED verbatim (byte-identical predicate — cite the source, never invent a second one) in the ONE
 // shared home `scope-predicate.ts`, imported here as `anyInScope` — a single copy for the whole PROVEN
 // family, not one transcription per oracle (see that module's header). `pathOfHash` is supplied by the
-// CALLER — see `harness/probes/verify-fact.mjs`, which builds it straight off the SCIP feed's own
+// CALLER — see `packages/adapter-io/src/verify-fact-source.ts` (`createVerifyFactLeg`, the production feed
+// wired to `atlas verify-fact`), which builds it straight off the SCIP feed's own
 // `documents[].relativePath`, provably every hash `SymbolReverseApi` can ever return: `createSymbolReverse`
 // mints `nodeHashOfPath(doc.relativePath)` for exactly those documents and no others
 // (`packages/index/src/symbol-reverse.ts`), so that is a deliberate MINIMAL-but-COMPLETE restriction of

@@ -18,7 +18,7 @@
 // forces the classification to be DECLARED rather than discovered by the next reviewer.
 //
 // ── DECLARED COUNTS (gate-checked; a drift here FAILS this gate) ────────────────────────────────────────
-//   declared-modules: 55 · dead-value-exports: 223 · type-reachable: 7
+//   declared-modules: 52 · dead-value-exports: 220 · type-reachable: 6
 //   These three are read back from THIS file and asserted against the measured tree at the foot of the run
 //   (see "THE HEADER STATES COUNTS, AND THIS CHECKS THEM"). No count is QUOTED anywhere else in this
 //   header — a quoted integer that nothing checks is exactly what rotted here (task #143); this one cannot.
@@ -173,13 +173,11 @@ const LEDGER = {
   'packages/genesis/src/loops.ts': { values: 8, shipped: null, banner: false },
   'packages/genesis/src/seed.ts': { values: 5, shipped: null, banner: false },
   'packages/genesis/src/usefulness.ts': { values: 2, shipped: null, banner: false },
-  // ── the PROVEN fact-verifier family (dependency + count + negation). Pure, sound, $0-LLM oracles over ──
-  //    the live SymbolReverseApi; no production caller yet (the probe/IO seam + genesis wiring are
-  //    follow-ups), so they are reference models until wired. `verify-fact` carries types: true — its
-  //    `FactVerdict` is value-adjacent type-imported by verify-count/verify-negation.
-  'packages/genesis/src/verify-fact.ts': { values: 1, types: true, shipped: null, banner: false },
-  'packages/genesis/src/verify-count.ts': { values: 1, shipped: null, banner: false },
-  'packages/genesis/src/verify-negation.ts': { values: 1, shipped: null, banner: false },
+  // ── the PROVEN fact-verifier family (dependency + count + negation) is NO LONGER HERE: it moved dead → live.
+  //    `packages/adapter-io/src/verify-fact-source.ts` (`createVerifyFactLeg`) value-imports all three oracles
+  //    and is wired to `atlas verify-fact` through the composition root (compose.ts → bin.ts), so
+  //    `verify{Dependency,Count,Negation}` now have production callers and the analyser measures them LIVE.
+  //    Their entries were DELETED, not amended — exactly the own.ts dead→live transition documented above.
 
   // ── @atlas/grounding — PARTLY wired: `driftDetect` / `bindGate` / `isGrounded` / `ground` reach ────────
   //    adapter-io. `ground` joined them when the mine admission supply landed: the GROUND-3 anchor builder

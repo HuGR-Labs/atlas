@@ -24,7 +24,7 @@
 // so "N callers" means "N distinct files/units", the granularity `reverseCallers` reports. `underScope` /
 // `countInScope` live in the shared `scope-predicate.ts` (one transcription for the whole family). `pathOfHash`
 // and `isLocal` are supplied by the CALLER exactly as `verifyDependency` requires them (see
-// `harness/probes/verify-fact.mjs`).
+// `packages/adapter-io/src/verify-fact-source.ts`, `createVerifyFactLeg`).
 
 import type { Hash } from '@atlas/contracts';
 import type { SymbolReverseApi } from '@atlas/index';

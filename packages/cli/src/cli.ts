@@ -8,8 +8,8 @@
 import type { Hash } from '@atlas/contracts';
 import { asHash } from '@atlas/kernel';
 import { headSha } from '@atlas/adapter-io';
-import { reportIndexPlan, relationsVerdict, negationsVerdict } from '@atlas/adapter-io';
-import type { IndexPlanReport, NegationLeg, OwnLeg, PromoteOut, RelationLeg, WiredHandler } from '@atlas/adapter-io';
+import { reportIndexPlan, relationsVerdict, negationsVerdict, verifyFactVerdict } from '@atlas/adapter-io';
+import type { IndexPlanReport, NegationLeg, OwnLeg, PromoteOut, RelationLeg, VerifyFactLeg, WiredHandler } from '@atlas/adapter-io';
 import type { DoctorSource, Guidance, Tool, Verdict } from '@atlas/tools';
 import { runDoctor } from './doctor.js';
 import { ensureAtlasIgnored } from './gitignore.js';
@@ -101,6 +101,18 @@ export interface CliDeps {
    * failure mode that matters most here, since a silent empty is exactly the invisible abstention #202 forbids.
    */
   readonly negations?: NegationLeg;
+  /**
+   * The composition root's sound-genesis PROVEN-family feed (`ComposedRuntime.verifyFact`) — the
+   * `verify{Dependency,Count,Negation}` oracles (@atlas/genesis) over the live symbol-reverse view. Injected on
+   * the SAME seam as `relations`/`negations`, and for the same reason: the CLI must never stand up a second
+   * runtime, or the index it proves over stops being the one the composed handler reads.
+   *
+   * It is NOT reached through `handler.handle`: it is not a `Tool`, opens no governed surface
+   * (`GOVERNANCE_SURFACE` stays 5), and writes nothing — a program oracle over the code index. ABSENT ⇒
+   * `atlas verify-fact` fails closed with the same "runtime is not composed yet" guidance every other routed
+   * command gives, never a silent proof over nothing.
+   */
+  readonly verifyFact?: VerifyFactLeg;
 }
 
 /** A structured error verdict for a CLI-layer failure (parse / unwired command) — guidance always present. */
@@ -282,6 +294,31 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
       );
     }
     return emit(negationsVerdict(deps.negations, positionals[0] ?? '', flags.abstained === 'true'));
+  }
+
+  if (command === 'verify-fact') {
+    // The sound-genesis PROVEN-family read door — `atlas verify-fact <kind> <target> --scope <s> [--world <w>]
+    // [--min <n>] [--exact]`. It PROVES / REFUTES / ABSTAINS on a typed dependency/count/negation claim over the
+    // composition root's `verifyFact` leg — the SAME symbol-reverse view built off the index the wired handler
+    // reads, never a second runtime. Like `relations`/`negations`/`node` it is intercepted before the handler
+    // (not a `Tool`: opens no governed surface, GOVERNANCE_SURFACE stays 5, WRITE_PATHS untouched). Rendered
+    // through the SHARED `verifyFactVerdict`/`emit` path — exit 0 carrying the oracle's verdict on `data`
+    // (proven/refuted/abstain are all valid ANSWERS, not errors — the sound gate declining to decide is exit 0,
+    // never a crash); a structured error + exit 1 on a malformed invocation OR an uncomposed runtime. Never a
+    // throw — `verifyFactVerdict` + all three oracles are total.
+    if (!deps.verifyFact) {
+      return emit(
+        errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'),
+      );
+    }
+    return emit(
+      verifyFactVerdict(deps.verifyFact, positionals[0] ?? '', positionals[1] ?? '', {
+        scope: flags.scope,
+        world: flags.world,
+        min: flags.min,
+        exact: flags.exact === 'true',
+      }),
+    );
   }
 
   // The remaining five governance commands each route to a `Tool` through the one wired handler.
