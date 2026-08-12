@@ -67,11 +67,20 @@ export function resolveCurrent(src: Axes, qualifiedPath: string): SubtreeHash | 
 
 /**
  * GROUND-2 real-grounding predicate: `true` iff `g` has ≥1 entry AND every entry's `anchor.subtreeHash`
- * is non-empty. The conjunct is `every` (AND), never `some` (OR) — one empty anchor sinks the grounding.
- * Conforms to the frozen `GroundApi.isGrounded`. Pure + total.
+ * is a NON-EMPTY STRING. The conjunct is `every` (AND), never `some` (OR) — one bad anchor sinks it.
+ * Conforms to the frozen `GroundApi.isGrounded`. Pure + total — and total is LOAD-BEARING here, not a
+ * nicety: `subtreeHash`'s brand (`@atlas/contracts` `SubtreeHash = string & {brand}`) evaporates at
+ * runtime, and every value reaching this predicate may have come through `JSON.parse`, an SDK-parsed MCP
+ * argument, or a CAS blob — none of which enforce the brand. Reading `.length` off the raw field (as a
+ * prior revision did) THREW on `undefined`/`null` and fail-OPEN read a non-string carrier of `.length`
+ * (an array, `{length:5}`, a boxed `String`) as grounded — and `driftDetect` calls this FIRST
+ * (`¬isGrounded ⇒ DRIFTED`), so that throw propagated up the SEALED drift oracle and broke its own
+ * "no throw" contract. The `typeof … === 'string'` guard makes only an actual non-empty string pass,
+ * fail-CLOSED on everything else. This body is BYTE-IDENTICAL to `knowledge`'s door-side copy
+ * (`ratify/fastpath.ts`) — the two are kept from diverging by `test/fastpath-isgrounded-parity.test.ts`.
  */
 export const isGrounded: GroundApi['isGrounded'] = (g: Grounding): boolean =>
-  g.entries.length >= 1 && g.entries.every((e) => e.anchor.subtreeHash.length > 0);
+  g.entries.length >= 1 && g.entries.every((e) => typeof e.anchor.subtreeHash === 'string' && e.anchor.subtreeHash.length > 0);
 
 /**
  * GROUND-1/2/3/5 local freshness verdict against the built-index snapshot `src`. Conforms to the frozen
