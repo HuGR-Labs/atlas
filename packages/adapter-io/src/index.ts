@@ -108,6 +108,10 @@ export type { RelationLeg, RelationsData } from './relation-source.js';
 // plus the SHARED verdict builder both transports drive. Read-only, opens no governed surface; the #202 close.
 export { createNegationLeg, negationsVerdict } from './negation-source.js';
 export type { NegationLeg, NegationsData, NegationsRead } from './negation-source.js';
+// The sound-genesis PROVEN family's production feed + shared verdict — the ONE caller that makes
+// verify{Dependency,Count,Negation} (@atlas/genesis) running code rather than ledgered reference models.
+export { createVerifyFactLeg, verifyFactVerdict } from './verify-fact-source.js';
+export type { VerifyFactLeg, VerifyFactData, VerifyFactOpts, VerifyKind, VerifyReq } from './verify-fact-source.js';
 
 // The PROVENANCE tripwire's READ-side refusal (`read-provenance.ts`) — the half the write doors already had.
 // Exported because the CLI entrypoint renders it (`cli/src/cli.ts`) and because a test must be able to

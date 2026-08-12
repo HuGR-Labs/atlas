@@ -42,6 +42,8 @@ import { createRelationLeg } from './relation-source.js';
 import { createNegationLeg } from './negation-source.js';
 import type { RelationLeg } from './relation-source.js';
 import type { NegationLeg } from './negation-source.js';
+import { createVerifyFactLeg } from './verify-fact-source.js';
+import type { VerifyFactLeg } from './verify-fact-source.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
 import { gitSidecarTrust } from './store-provenance.js';
 import { readProvenanceRefusal } from './read-provenance.js';
@@ -116,6 +118,13 @@ export interface ComposedRuntime {
    * makes a fired abstention observable (closes #202).
    */
   readonly negations: NegationLeg;
+  /**
+   * The sound-genesis PROVEN-family feed (`atlas verify-fact`) — PROVES / REFUTES / ABSTAINS on a typed
+   * dependency/count/negation claim over the live symbol-reverse view (built off the SAME `scipOutput` the
+   * `axes` are). A READ door (not a `Tool`, writes nothing) and the ONE production caller that makes
+   * `verify{Dependency,Count,Negation}` (@atlas/genesis) running code — see `verify-fact-source.ts`.
+   */
+  readonly verifyFact: VerifyFactLeg;
   /**
    * The PROVENANCE refusal for this repo's durable store, or `undefined` when it is trustworthy
    * (`read-provenance.ts`). PRESENT means `.atlas/` arrived by COMMIT rather than through a door, so every
@@ -379,6 +388,9 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     // negation — so `atlas negations` surfaces a per-row FRESH/DRIFTED verdict (a re-opened scope OR an
     // extractor bump reads DRIFTED). `currentEdgeModel` is `edgeModelVersion()`, the SAME value the door stamps.
     negations: createNegationLeg(store, bindFreshnessOracle(axes, edgeModelVersion())),
+    // THE SOUND-GENESIS PROVEN-FAMILY FEED (`atlas verify-fact`). Off the SAME `scipOutput` the axes ride — a
+    // program oracle over the immutable code index, built once and closed over (see verify-fact-source.ts).
+    verifyFact: createVerifyFactLeg(scipOutput),
     ...(readRefusal !== undefined ? { readRefusal } : {}),
   };
 }

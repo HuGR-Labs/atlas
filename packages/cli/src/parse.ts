@@ -45,9 +45,12 @@ const ARITY: Record<Command, number> = {
   // `negations <scope> [--abstained]` — the scope is the only REQUIRED positional; `--abstained` is an
   // OPTIONAL boolean flag (focuses the render on the honest abstentions), so arity is 1 (#99b).
   negations: 1,
+  // `verify-fact <kind> <target> --scope <s> [--world <w>] [--min <n>] [--exact]` — the class and the target
+  // symbol are BOTH required positionals (the scope + count bounds ride valued flags), so arity is 2.
+  'verify-fact': 2,
 };
 
-const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine|node|link|promote|own|relations|negations';
+const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine|node|link|promote|own|relations|negations|verify-fact';
 
 function isCommand(s: string): s is Command {
   return Object.prototype.hasOwnProperty.call(COMMAND_LEG, s);
@@ -55,10 +58,11 @@ function isCommand(s: string): s is Command {
 
 /**
  * Flags that carry a VALUE token, accepting both the joined `--flag=v` and the space `--flag v` forms.
- * `--at` (the emit anchor rev) is valued; everything else stays a bare boolean. Any unknown flag simply
- * folds into the bag (a bare `--x` becomes `'true'`) — it is never a parse error, preserving totality.
+ * Valued today: `--at`/`--by` (emit anchor rev / query axis) and `--scope`/`--world`/`--min` (verify-fact's
+ * claim scope, completeness world, and count lower bound). Everything else stays a bare boolean. Any unknown
+ * flag simply folds into the bag (a bare `--x` becomes `'true'`) — never a parse error, preserving totality.
  */
-const VALUED_FLAGS = new Set(['at', 'by']);
+const VALUED_FLAGS = new Set(['at', 'by', 'scope', 'world', 'min']);
 
 /**
  * Fold one `-x`/`--x`/`--x=y`/`--x y` token into the flag bag — a bare flag is `'true'`. For a VALUED flag in

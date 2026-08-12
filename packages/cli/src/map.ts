@@ -6,7 +6,7 @@
 import { WRITE_PATHS } from '@atlas/tools';
 import type { Tool, Verdict } from '@atlas/tools';
 
-/** The finite command surface — EXACTLY these ten, no more (CLI-1a). Order fixed; membership load-bearing.
+/** The finite command surface — EXACTLY these thirteen, no more (CLI-1a). Order fixed; membership load-bearing.
  *  [EXTENDED — WP-SAMEAS] `link` joins as the CLI door of the governed sameAs write (routes to `atlas-link`).
  *  [EXTENDED — WP-PROMOTE] `promote` joins as the CLI door of the governed promotion of staged candidates. It
  *  binds `atlas-emit`, the door it actually publishes through (ADR-0008: a curator door is an ordinary USE of
@@ -17,7 +17,7 @@ import type { Tool, Verdict } from '@atlas/tools';
  *  [EXTENDED — #99a] `relations` joins as the CLI door of the grounded-relation read fold (`relationsOf`,
  *  ADR-0015 D2). Like `own` it binds `atlas-query` — a READ authority oracle — so `GOVERNANCE_SURFACE` stays 5
  *  and `WRITE_PATHS` is untouched; `authorityOf` DERIVES that from `WRITE_PATHS`, it is not asserted here. */
-export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations'] as const;
+export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'verify-fact'] as const;
 export type Command = (typeof COMMANDS)[number];
 
 /** The leg a command routes to — a governance `Tool`, or the genesis entry (data-only; NOT executed here —
@@ -62,6 +62,10 @@ export const COMMAND_LEG: Record<Command, Leg> = {
   //                           before the handler (cli.ts) and driven over the composition root's `negations`
   //                           leg, which reads the SAME durable projection. Carries NO write authority — it
   //                           opens no governed token, GOVERNANCE_SURFACE stays 5, WRITE_PATHS untouched.
+  'verify-fact': 'atlas-query', // READ authority oracle (sound-genesis PROVEN family); intercepted before the
+  //                               handler (cli.ts) and driven over the composition root's `verifyFact` leg, a
+  //                               program oracle over the code index. Carries NO write authority — it opens no
+  //                               governed token, GOVERNANCE_SURFACE stays 5, WRITE_PATHS untouched.
   own: 'atlas-query', // READ authority oracle (RETR-12 `own_<scope>` briefing); intercepted before the handler
   //                     (cli.ts) and driven over the composition root's `own` leg, which reads the SAME
   //                     durable store this leg's query readback rides. Carries NO write authority — the

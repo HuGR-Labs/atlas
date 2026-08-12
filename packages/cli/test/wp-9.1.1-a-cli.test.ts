@@ -50,9 +50,9 @@ afterEach(() => vi.restoreAllMocks());
 // ── REQ-CLI-1 — total command surface ─────────────────────────────────────────────────────────────
 
 describe('SCN-CLI-1a — every command maps to exactly one leg', () => {
-  it('is total (12 keys) and mutually-exclusive over the ratified table', () => {
+  it('is total (13 keys) and mutually-exclusive over the ratified table', () => {
     // totality: every command in the finite surface has exactly one leg.
-    expect(COMMANDS).toEqual(['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations']);
+    expect(COMMANDS).toEqual(['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'verify-fact']);
     expect(Object.keys(COMMAND_LEG).sort()).toEqual([...COMMANDS].sort());
     expect(COMMAND_LEG).toEqual({
       init: 'atlas-init',
@@ -70,6 +70,8 @@ describe('SCN-CLI-1a — every command maps to exactly one leg', () => {
       //                           handler, a projection of the same durable store; carries no write authority
       negations: 'atlas-query', // READ authority oracle (#99b grounded-negation + abstention folds) — intercepted
       //                           before the handler, a projection of the same durable store; no write authority
+      'verify-fact': 'atlas-query', // READ authority oracle (sound-genesis PROVEN family) — intercepted before the
+      //                               handler, a program oracle over the code index; carries no write authority
     });
     // teeth: a command bound to zero legs (totality) or two legs (uniqueness) — each key resolves to one string.
     for (const c of COMMANDS) {

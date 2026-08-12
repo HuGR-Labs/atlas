@@ -22,7 +22,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const GUARD = join(dirname(fileURLToPath(import.meta.url)), 'godfile-guard.mjs');
-const CAP = 400;
+const TARGET = 400; // requested bar — exceeding it warns, never fails
+const HARD = 600; // enforced bar — exceeding it fails
 
 let root;
 
@@ -73,8 +74,8 @@ describe('godfile-guard', () => {
     expect(out).toMatch(/1 harness/);
   });
 
-  it('flags an UNTRACKED over-cap file under packages/ — the file has never been `git add`ed', () => {
-    write('packages/core/src/godfile.ts', CAP + 50);
+  it('FAILS an UNTRACKED over-HARD file under packages/ — the file has never been `git add`ed', () => {
+    write('packages/core/src/godfile.ts', HARD + 50);
     expect(git('status', '--porcelain')).toMatch(/\?\? packages\/core\/src\/godfile\.ts/);
     const { code, out } = run();
     expect(code).toBe(1);
@@ -83,8 +84,8 @@ describe('godfile-guard', () => {
     expect(run().code).toBe(0);
   });
 
-  it('flags an over-cap file under harness/ — the gates are subject to the bar they enforce', () => {
-    write('harness/gates/godfile.mjs', CAP + 50);
+  it('FAILS an over-HARD file under harness/ — the gates are subject to the bar they enforce', () => {
+    write('harness/gates/godfile.mjs', HARD + 50);
     git('add', '-A');
     const { code, out } = run();
     expect(code).toBe(1);
@@ -93,27 +94,40 @@ describe('godfile-guard', () => {
     expect(run().code).toBe(0);
   });
 
-  // The boundary is where the ceiling is either a real bar or one line of slack nobody measured, and it is
-  // pinned here because it was load-bearing the day the walk widened: `harness/gates/layer-guard.mjs`
-  // measured EXACTLY 400 and therefore passed. `> CAP`, not `>= CAP` — asserted, not assumed.
-  it('is EXCLUSIVE at the boundary: exactly CAP passes, CAP+1 fails', () => {
-    write('packages/core/src/edge.ts', CAP);
-    expect(run().code).toBe(0);
-    write('packages/core/src/edge.ts', CAP + 1);
+  // A file in (TARGET, HARD] is over the requested bar but allowed: exit 0, and the file is NAMED under the
+  // target-warning so the 400-line discipline stays visible. This is the whole point of the two-tier policy.
+  it('WARNS but passes for a file over TARGET and under HARD — named, exit 0', () => {
+    write('packages/core/src/warned.ts', TARGET + 50);
     const { code, out } = run();
-    expect(code).toBe(1);
-    expect(out).toMatch(new RegExp(`${CAP + 1}\\s+packages/core/src/edge\\.ts`));
+    expect(code).toBe(0);
+    expect(out).toMatch(/over the 400-LOC target/);
+    expect(out).toMatch(new RegExp(`${TARGET + 50}\\s+packages/core/src/warned\\.ts`));
+    rmSync(join(root, 'packages/core/src/warned.ts'));
+  });
+
+  // Both boundaries are EXCLUSIVE (`> TARGET`, `> HARD`): a file measuring exactly the number is under it.
+  it('is EXCLUSIVE at both boundaries: exactly TARGET is silent, TARGET+1 warns, exactly HARD passes, HARD+1 fails', () => {
+    write('packages/core/src/edge.ts', TARGET);
+    expect(run().out).not.toMatch(/over the 400-LOC target/); // exactly TARGET: not even warned
+    write('packages/core/src/edge.ts', TARGET + 1);
+    expect(run().code).toBe(0); // over target, still passes
+    write('packages/core/src/edge.ts', HARD);
+    expect(run().code).toBe(0); // exactly HARD: passes
+    write('packages/core/src/edge.ts', HARD + 1);
+    const { code, out } = run();
+    expect(code).toBe(1); // over HARD: fails
+    expect(out).toMatch(new RegExp(`${HARD + 1}\\s+packages/core/src/edge\\.ts`));
     rmSync(join(root, 'packages/core/src/edge.ts'));
   });
 
   it('respects .gitignore rather than a denylist of its own — dist/ is out of scope', () => {
-    write('packages/core/dist/generated.ts', CAP + 50);
+    write('packages/core/dist/generated.ts', HARD + 50);
     expect(run().code).toBe(0);
     rmSync(join(root, 'packages/core/dist'), { recursive: true });
   });
 
   it('exempts .d.ts, which is generated output, not a module', () => {
-    write('packages/core/src/huge.d.ts', CAP + 50);
+    write('packages/core/src/huge.d.ts', HARD + 50);
     expect(run().code).toBe(0);
     rmSync(join(root, 'packages/core/src/huge.d.ts'));
   });
