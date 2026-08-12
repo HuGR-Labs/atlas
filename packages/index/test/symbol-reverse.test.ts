@@ -107,3 +107,60 @@ describe('#99b N0 — createSymbolReverse (symbol-level reverse callers)', () =>
     expect(rev.resolves('scip-ts npm fixture 1.0.0 `neverSeen`().')).toBe(false);
   });
 });
+
+// #189 CROSS-PACKAGE CANON-AND-VERIFY. `scip-typescript` records a cross-package reference against the
+// callee package's PUBLISHED-TYPES descriptor (`dist/`X.d.ts``) while the DEFINITION carries the SOURCE
+// descriptor (`src/`X.ts``). `canonicalizeSymbol` rewrites the former to the latter so the caller is
+// bucketed under the src-form the negation door / verify-fact query with — but ONLY when it lands on a real
+// in-index definition (fail-closed). These fixtures mirror the exact shapes measured on `.atlas/index.scip`.
+const SRC_DEF = 'scip-typescript npm @atlas/index 0.0.0 src/`build.ts`/nodeHashOfPath.';
+const DIST_REF_DTS = 'scip-typescript npm @atlas/index 0.0.0 dist/`build.d.ts`/nodeHashOfPath.';
+// a dist-form reference whose src-form is NOT defined in-index (a callee we cannot see) — must stay a hole.
+const DIST_REF_GHOST = 'scip-typescript npm @atlas/index 0.0.0 dist/`ghost.d.ts`/phantom.';
+
+const crossPkgScip: ScipOutput = {
+  documents: [
+    // the DEFINING package indexes the src form.
+    { relativePath: 'packages/index/src/build.ts', occurrences: [{ symbol: SRC_DEF, role: 'definition' }] },
+    // a CROSS-PACKAGE caller references the published dist/.d.ts form.
+    { relativePath: 'packages/genesis/src/verify-fact.ts', occurrences: [{ symbol: DIST_REF_DTS, role: 'reference' }] },
+    // a caller of a dist-form symbol we have NO src def for — the fail-closed case.
+    { relativePath: 'packages/tools/src/x.ts', occurrences: [{ symbol: DIST_REF_GHOST, role: 'reference' }] },
+  ],
+};
+
+describe('#189 cross-package canon-and-verify — a dist/.d.ts reference resolves onto the src definition', () => {
+  it('(g) a cross-package dist-form caller becomes VISIBLE in reverseCallers of the SRC-form symbol', () => {
+    const rev = createSymbolReverse(crossPkgScip);
+    // The negation door / verify-fact query the SRC-form symbol; the cross-package caller (recorded in
+    // dist-form) must appear under it — the whole point of canon. Before canon this returned [].
+    expect(asStrings(rev.reverseCallers(SRC_DEF))).toContain(H('packages/genesis/src/verify-fact.ts'));
+    // and that caller doc is NO LONGER a hole (it resolved via canon), so a scope containing it reads CLOSED.
+    expect(asStrings(rev.holeSources())).not.toContain(H('packages/genesis/src/verify-fact.ts'));
+  });
+
+  it('(h) FAIL-CLOSED TEETH: a dist-form reference whose canon does NOT resolve STAYS a hole — never a fabricated caller', () => {
+    const rev = createSymbolReverse(crossPkgScip);
+    // `dist/`ghost.d.ts`/phantom.` canonicalises to `src/`ghost.ts`/phantom.`, which is NOT defined in-index.
+    // Canon-and-verify must reject it: the caller doc stays an honest hole, and NO src symbol gains a caller.
+    // A mutant that trusted canon WITHOUT the `defs.has` verify (canon-and-assume) would fabricate a caller
+    // here and drop the doc from holeSources — the exact false-edge / false-negation vector this teeth kills.
+    expect(asStrings(rev.holeSources())).toContain(H('packages/tools/src/x.ts'));
+    expect(rev.reverseCallers('scip-typescript npm @atlas/index 0.0.0 src/`ghost.ts`/phantom.')).toEqual([]);
+    // the ghost src-form never had a definition ⇒ it must not resolve either.
+    expect(rev.resolves('scip-typescript npm @atlas/index 0.0.0 src/`ghost.ts`/phantom.')).toBe(false);
+  });
+
+  it('(i) canon leaves a same-package src-form reference untouched (no over-rewrite)', () => {
+    const samePkg: ScipOutput = {
+      documents: [
+        { relativePath: 'packages/index/src/build.ts', occurrences: [{ symbol: SRC_DEF, role: 'definition' }] },
+        { relativePath: 'packages/index/src/rollup.ts', occurrences: [{ symbol: SRC_DEF, role: 'reference' }] },
+      ],
+    };
+    const rev = createSymbolReverse(samePkg);
+    // a src-form reference already resolves directly — canon must be a no-op on it, not corrupt the bucket.
+    expect(asStrings(rev.reverseCallers(SRC_DEF))).toEqual([H('packages/index/src/rollup.ts')]);
+    expect(rev.holeSources()).toEqual([]);
+  });
+});
