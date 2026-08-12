@@ -205,6 +205,9 @@ Recorded because the first draft's own §Decision asserted things a cold review 
 1. **"a ratified `T0` node can never be quietly re-served as `T2`."** False. Declaring `tier:'T3'` made the
    comparison `0 < undefined` — i.e. "not a downgrade" — so `T0 → T3 → T2` walked past the guard in two
    commands with no `billy` token, and the invariant vanished from every read. Every off-lattice shape worked.
+   (Note: "vanished" here, and "ambiguity"/"refused-ambiguity" elsewhere in this codebase's comments —
+   e.g. `git-drift.ts:161`, `rev-index.ts:75` — are informal prose describing behaviour, not names of a
+   formal `DriftClass` enum or classifier states; no such enum exists.)
 2. **"the JOIN of its two endpoints' tiers."** Insufficient against a transitive relation (two-hop bypass).
 3. A fix for an unrelated availability bug (`mine` writing rows whose CAS bytes were absent) turned an
    unreachable capture into a live one, because a scope-less node had been carved out of the scope check.
@@ -283,7 +286,7 @@ Recorded because the first draft's own §Decision asserted things a cold review 
     leg → `SCN-GL-9b`; `sameAsClassOf`'s dangling-peer inclusion → `SCN-SA-2` / `SCN-SA-4` /
     `PROP-SAMEAS-1`; its reverse-direction `touches` half → `SCN-SA-3`; one-sided `REJECTED_UNVERIFIABLE`
     → `SCN-GL-10` / `SCN-GL-11`.
-  Each of the five above was mutation-verified by its author AND re-verified independently by the lead;
+  Each of the four above was mutation-verified by its author AND re-verified independently by the lead;
   the two the lead re-ran personally are `SCN-TIER-4` and the `sameAsClassOf` dangling-peer leg.
 - Two independent cold-review seats returned **REJECT** and **FIX-FIRST** on the first draft. Every finding
   they reproduced is either fixed above or recorded as an open task (#87, #88).
