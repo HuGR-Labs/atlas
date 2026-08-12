@@ -149,21 +149,41 @@ describe('SPIKE-1 R1 · AC-31 — per-candidate answerRef isolation (scrub-whole
   it('two candidates from one envelope isolate: tampering B fails B\'s read, A still resolves; scrub precedes slice', () => {
     const { casPath, store, dispose } = freshStore();
     try {
-      // SCRUB-ORDER (§3.3): scrub the WHOLE proposer envelope ONCE, THEN slice the SCRUBBED bytes per candidate.
-      // Splitting BEFORE scrub would reintroduce the #97/#119 cross-boundary credential straddle. Candidate A
-      // carries a real GitHub-token SHAPE so scrub is genuinely exercised (redacted to `[REDACTED]`).
-      const BOUNDARY = '\n===CANDIDATE-BOUNDARY===\n';
-      const candidateARaw = 'A: verify depends on checkToken; token ghp_ABCDEF123456 is here';
-      const candidateBRaw = 'B: verify depends on checkToken via an alternate call path';
-      const envelope = UTF8.encode(candidateARaw + BOUNDARY + candidateBRaw);
+      // SCRUB-ORDER (§3.3): scrub the WHOLE proposer envelope ONCE, THEN slice the SCRUBBED bytes per
+      // candidate. The order is LOAD-BEARING, and this fixture makes a credential STRADDLE the A|B slice
+      // boundary (the exact #97/#119 hazard §3.3 exists to close), NOT sit safely inside one candidate:
+      //   · candidate A ends with `ghp_ABC` — a github-token PREFIX + only 3 body chars (INCOMPLETE alone), and
+      //   · candidate B starts with `DEF123456` — the rest of the body, with NO prefix of its own.
+      // The A|B boundary is a pure BYTE OFFSET (`sliceARaw.length`), never a delimiter substring — so it can
+      // fall in the middle of a token, which is the whole point. Concatenated, `ghp_ABCDEF123456` is a COMPLETE
+      // token; split first, neither half matches. (Empirically confirmed against @atlas/persist scrub.)
+      const RAW_TOKEN = 'ghp_ABCDEF123456';
+      const sliceARaw = 'candidate A: verify depends on checkToken; key ghp_ABC';
+      const sliceBRaw = 'DEF123456 and candidate B continues here';
+      const envelope = UTF8.encode(sliceARaw + sliceBRaw); // one buffer, boundary at sliceARaw.length
 
-      const scrubbed = new TextDecoder().decode(scrub(envelope)); // scrub(whole) — ONCE
-      const [sliceA, sliceB] = scrubbed.split(BOUNDARY); // slice the SCRUBBED output
-      expect(sliceB).toBeDefined();
+      const dec = new TextDecoder();
+      const scrubbedWhole = dec.decode(scrub(envelope)); // scrub(WHOLE) — ONCE, the SHIPPED order
+      // The straddling secret is redacted: it never reaches CAS in either candidate's slice (KNOW-11).
+      expect(scrubbedWhole).not.toContain(RAW_TOKEN);
+      expect(scrubbedWhole).toContain('[REDACTED]');
 
-      // scrub actually fired: the raw secret never reaches CAS, only its placeholder does (KNOW-11).
-      expect(sliceA).not.toContain('ghp_ABCDEF123456');
+      // THE CONTROL that pins the ORDER (billy's straddle witness). Slice-FIRST — scrub each raw half in
+      // ISOLATION and concatenate — leaves the RAW token whole: `ghp_ABC` (3 body chars) and `DEF123456` (no
+      // prefix) each fail to match on their own, so the credential survives into CAS. This is the exact leak a
+      // slice-then-scrub regression reopens, and it is why scrub-whole-THEN-slice is REQUIRED, not merely used.
+      const sliceFirst = dec.decode(scrub(UTF8.encode(sliceARaw))) + dec.decode(scrub(UTF8.encode(sliceBRaw)));
+      expect(sliceFirst).toContain(RAW_TOKEN); // ← order-sensitive: the raw secret SURVIVES the wrong order
+
+      // Now slice the SCRUBBED output per candidate (a byte offset in the scrubbed stream — the redaction that
+      // consumed the straddle belongs to the boundary, so A carries it and B is the tail). Neither slice can
+      // carry the raw token, because it is already gone from the whole.
+      const cut = scrubbedWhole.indexOf('[REDACTED]') + '[REDACTED]'.length;
+      const sliceA = scrubbedWhole.slice(0, cut);
+      const sliceB = scrubbedWhole.slice(cut);
       expect(sliceA).toContain('[REDACTED]');
+      expect(sliceA).not.toContain(RAW_TOKEN);
+      expect(sliceB).not.toContain(RAW_TOKEN);
 
       // Per-candidate put ⇒ per-candidate answerRef, isolated by CAS id.
       const answerRefA = store.put(sliceA) as unknown as string;
@@ -177,8 +197,6 @@ describe('SPIKE-1 R1 · AC-31 — per-candidate answerRef isolation (scrub-whole
 
       // A is untouched: its ref still resolves to A's authentic scrubbed slice.
       expect(store.get(asH(answerRefA))).toBe(sliceA);
-
-      // NON-VACUOUS: had scrub NOT preceded the slice, `sliceA` would carry the raw token — asserted absent above.
     } finally {
       dispose();
     }
