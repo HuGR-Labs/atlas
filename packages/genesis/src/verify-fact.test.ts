@@ -87,4 +87,29 @@ describe('verifyDependency — the positive dual of the #99b negation door gate-
       oracle: 'symbol-reverse',
     });
   });
+
+  // TEETH (0-FP floor): the proven branch's `sourceScope` containment MUST be segment-wise, never a
+  // substring. A real caller in a SIBLING dir whose name has `sourceScope` as a string prefix
+  // (`src/pay` ⊂ `src/paycheck`, the #153 trap) is NOT under `src/pay` — asserting `refuted` here kills
+  // both the `underScope`→`.includes` drift mutant and the "drop the sourceScope containment" mutant
+  // that the original 5 fixtures left alive (a false `proven`, the worst outcome this oracle exists to prevent).
+  it("NOT proven: a real caller sits in a sibling dir that only STRING-prefixes sourceScope (#153)", () => {
+    const reverse = feed({ callers: ['src/paycheck/billing.ts'] }); // caller exists, but NOT under 'src/pay'
+    expect(verifyDependency(claim(), reverse, pathOfHash, isLocal)).toEqual({
+      verdict: 'refuted', // no caller under sourceScope, and worldScope='src' is closed (no hole)
+      oracle: 'symbol-reverse',
+    });
+  });
+
+  // TEETH: the same segment-wise discipline on the `worldScope` containment (the closed-world gate). A
+  // hole in a sibling dir that only string-prefixes `worldScope` must NOT open the world — else a
+  // `.includes` drift turns an honest `refuted` into a spurious `scope-open` abstain (recall loss), and
+  // symmetrically guards the boundary from the other side.
+  it("refuted, not scope-open: a hole sits in a sibling dir that only STRING-prefixes worldScope (#153)", () => {
+    const reverse = feed({ callers: [], holes: ['src/paycheck/hole.ts'] }); // hole NOT under worldScope='src/pay'
+    expect(verifyDependency(claim({ worldScope: 'src/pay' }), reverse, pathOfHash, isLocal)).toEqual({
+      verdict: 'refuted',
+      oracle: 'symbol-reverse',
+    });
+  });
 });
