@@ -1,6 +1,28 @@
 # ADR-0019 — the sound-predicate amendment: typed args, source-carrier ast-body checks, specificity teeth
 
-- **Status:** Proposed (v2, 2026-08-11). Grounded against master `4bb54a5`, and — unlike v1 — grounded in a
+- **Status: NOT RATIFIABLE YET (v2 cold review, 2026-08-11).** billy (T0): **F1 is CLOSED** — the source-carrier
+  + specificity/unrelated-swap teeth genuinely proves claim-encoding, no false-admit survives; fingerprint
+  unrepresentable; render-from-args clean; buildSound inert. But TWO BLOCKERs remain (enumeration + a real
+  structural inconsistency), fixes below, before owner ratification:
+  - **BLOCKER (lucy) — steady-state carrier inconsistency.** The stored ast-body predicate re-verifies via the
+    FROZEN `EvaluatorApi.evaluate(check, IndexNode)` at reconcile/status (`evaluator.ts:240,264`, `status.ts:76`)
+    — which cannot carry source, so it either throws (`.expr` on undefined) or degrades every stored ast-body
+    predicate to NA forever, contradicting the DoD "evaluate non-NA." FIX: either widen `EvaluatorApi.evaluate`
+    to carry source-at-sha (a THIRD ratified surface to list) OR pin it to return NA for ast-body AND accept
+    stored ast-body predicates re-verify only via a source-carrier reconcile leg (decide + enumerate).
+  - **BLOCKER (lucy) — the governed door rejects ast-body.** `isCheck`/`familyOf` (`governed-emit-identity.ts:19,36`)
+    accept only index-query/assertion → an ast-body predicate is REJECTED_MALFORMED_FAMILY on the shipped
+    promote/emit path. FIX: extend `isCheck` (not only the reason string).
+  - **MAJOR (lucy) — `renderClaim` doesn't exist; claim IS persisted.** The predicate's claim today is
+    `normalizeCheck(check)` via `claimNormOf` (`mine-decide.ts:37`, the CAS dedup key — persisted), pinned by
+    s11 + wp-96 goldens. "Rendered at display, never persisted" is false. FIX: either keep `normalizeCheck` as
+    the persisted claim key + a display renderer, or change it and update both goldens — enumerate.
+  - **MODERATE (billy) — evaluate/verdictFor not in the six; pin NA for ast-body** (same seam as lucy BLOCKER 1).
+    LOW: `absence` teeth is un-passable as written (swap of an absent target is a no-op → always DROP) — invert
+    (INSERT inner → must flip) or mark follow-on; `orderBefore` must state BOTH swaps flip.
+  A v3 folding these is required before ratification. The F1 SOUNDNESS core (source-carrier + specificity teeth)
+  is CONFIRMED; the residue is enumeration + the steady-state carrier decision.
+- **Status (v2 as written):** Proposed (v2, 2026-08-11). Grounded against master `4bb54a5`, and — unlike v1 — grounded in a
   WORKING SPIKE (`scratchpad/s2-sound/teeth-spike.mjs`, `TEETH-SPIKE-RESULT.md`) that MEASURES the F1-fix
   mechanism against controls, rather than asserting "encodes by construction." The ONE owner-gated amendment
   that makes shipped `atlas mine` admit facts by mechanical TRUTH instead of aboutness. Supersedes withdrawn
