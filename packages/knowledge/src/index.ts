@@ -37,3 +37,6 @@ export * from './ratify/ratify.js';      // KNOW-8  — T0 → human+billy (neve
 export * from './ratify/fastpath.js';    // KNOW-18 — auto-accept ONLY grounded∧lowRisk∧T2∧advisory∧¬contested (route(candidate, ctx))
 // Campaign-6:
 export * from './lifecycle/hits.js';        // WP-6.18.KNOW — served-fact hits ledger + door-2 threshold calibration + decay/re-entry
+// DESIGN_sound_genesis_v2 · SPIKE-1:
+export * from './proven/receipt.js';        // WP-R1 — the per-clause receipt a PROVEN dependency fact carries (frozen type, contract §1)
+export * from './proven/store.js';          // WP-R1 — the proven-store map: nodeKey→id(receipt) membership + the §3.4 admission rule
