@@ -109,34 +109,42 @@ describe('#99b N0 — createSymbolReverse (symbol-level reverse callers)', () =>
 });
 
 // #189 CROSS-PACKAGE CANON-AND-VERIFY. `scip-typescript` records a cross-package reference against the
-// callee package's PUBLISHED-TYPES descriptor (`dist/`X.d.ts``) while the DEFINITION carries the SOURCE
-// descriptor (`src/`X.ts``). `canonicalizeSymbol` rewrites the former to the latter so the caller is
+// callee package's PUBLISHED-TYPES descriptor while the DEFINITION carries the SOURCE descriptor. TWO dist
+// layouts occur (both must resolve): NESTED `dist/src/`X.d.ts`` (tsc default, 11 of 12 packages) and FLAT
+// `dist/`X.d.ts`` (@atlas/contracts). `canonicalizeSymbol` rewrites either to `src/`X.ts`` so the caller is
 // bucketed under the src-form the negation door / verify-fact query with — but ONLY when it lands on a real
 // in-index definition (fail-closed). These fixtures mirror the exact shapes measured on `.atlas/index.scip`.
 const SRC_DEF = 'scip-typescript npm @atlas/index 0.0.0 src/`build.ts`/nodeHashOfPath.';
-const DIST_REF_DTS = 'scip-typescript npm @atlas/index 0.0.0 dist/`build.d.ts`/nodeHashOfPath.';
+const DIST_REF_NESTED = 'scip-typescript npm @atlas/index 0.0.0 dist/src/`build.d.ts`/nodeHashOfPath.'; // tsc default
+const DIST_REF_FLAT = 'scip-typescript npm @atlas/index 0.0.0 dist/`build.d.ts`/nodeHashOfPath.'; // contracts-style
 // a dist-form reference whose src-form is NOT defined in-index (a callee we cannot see) — must stay a hole.
-const DIST_REF_GHOST = 'scip-typescript npm @atlas/index 0.0.0 dist/`ghost.d.ts`/phantom.';
+const DIST_REF_GHOST = 'scip-typescript npm @atlas/index 0.0.0 dist/src/`ghost.d.ts`/phantom.';
 
 const crossPkgScip: ScipOutput = {
   documents: [
     // the DEFINING package indexes the src form.
     { relativePath: 'packages/index/src/build.ts', occurrences: [{ symbol: SRC_DEF, role: 'definition' }] },
-    // a CROSS-PACKAGE caller references the published dist/.d.ts form.
-    { relativePath: 'packages/genesis/src/verify-fact.ts', occurrences: [{ symbol: DIST_REF_DTS, role: 'reference' }] },
+    // a CROSS-PACKAGE caller referencing the NESTED published descriptor (the dominant layout — untested by
+    // the first cut, which is exactly why cross-package recall was still 0 for 11 of 12 packages).
+    { relativePath: 'packages/genesis/src/verify-fact.ts', occurrences: [{ symbol: DIST_REF_NESTED, role: 'reference' }] },
+    // a second caller referencing the FLAT published descriptor (contracts-style) — both layouts must resolve.
+    { relativePath: 'packages/adapter-io/src/y.ts', occurrences: [{ symbol: DIST_REF_FLAT, role: 'reference' }] },
     // a caller of a dist-form symbol we have NO src def for — the fail-closed case.
     { relativePath: 'packages/tools/src/x.ts', occurrences: [{ symbol: DIST_REF_GHOST, role: 'reference' }] },
   ],
 };
 
 describe('#189 cross-package canon-and-verify — a dist/.d.ts reference resolves onto the src definition', () => {
-  it('(g) a cross-package dist-form caller becomes VISIBLE in reverseCallers of the SRC-form symbol', () => {
+  it('(g) a cross-package dist-form caller becomes VISIBLE in reverseCallers of the SRC-form symbol — BOTH layouts', () => {
     const rev = createSymbolReverse(crossPkgScip);
-    // The negation door / verify-fact query the SRC-form symbol; the cross-package caller (recorded in
-    // dist-form) must appear under it — the whole point of canon. Before canon this returned [].
-    expect(asStrings(rev.reverseCallers(SRC_DEF))).toContain(H('packages/genesis/src/verify-fact.ts'));
-    // and that caller doc is NO LONGER a hole (it resolved via canon), so a scope containing it reads CLOSED.
+    // The negation door / verify-fact query the SRC-form symbol; both cross-package callers (recorded in
+    // dist-form — one NESTED, one FLAT) must appear under it. Before canon both returned []; before the
+    // nested-layout fix the genesis (NESTED) caller was still missing while adapter-io (FLAT) resolved.
+    expect(asStrings(rev.reverseCallers(SRC_DEF))).toContain(H('packages/genesis/src/verify-fact.ts')); // NESTED
+    expect(asStrings(rev.reverseCallers(SRC_DEF))).toContain(H('packages/adapter-io/src/y.ts')); // FLAT
+    // and those caller docs are NO LONGER holes (they resolved via canon), so a scope containing them reads CLOSED.
     expect(asStrings(rev.holeSources())).not.toContain(H('packages/genesis/src/verify-fact.ts'));
+    expect(asStrings(rev.holeSources())).not.toContain(H('packages/adapter-io/src/y.ts'));
   });
 
   it('(h) FAIL-CLOSED TEETH: a dist-form reference whose canon does NOT resolve STAYS a hole — never a fabricated caller', () => {

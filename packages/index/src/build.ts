@@ -155,33 +155,40 @@ export const isLocalSymbol = (symbol: string): boolean => symbol.startsWith('loc
 
 /**
  * CANON-AND-VERIFY (#189 cross-package): a reference into another in-repo package is recorded by
- * `scip-typescript` against that package's PUBLISHED TYPES descriptor — `dist/`X.d.ts`` — while the
- * DEFINITION lives at the SOURCE descriptor — `src/`X.ts``. They are DISTINCT symbol strings, so a
- * cross-package caller is invisible to the src-form definition (its edge under-approximates to
- * `unresolved`, and `reverseCallers`/the negation door never see it). This rewrites the published-types
- * descriptor to its source form so the two coincide: only the `dist/` namespace descriptor and the
- * `.d.ts` file-descriptor extension are touched — scheme, package manager, package name, and version are
- * BYTE-PRESERVED, so the rewrite can only ever name a symbol in the SAME package.
+ * `scip-typescript` against that package's PUBLISHED TYPES descriptor while the DEFINITION lives at the
+ * SOURCE descriptor. They are DISTINCT symbol strings, so a cross-package caller is invisible to the
+ * src-form definition (its edge under-approximates to `unresolved`, and `reverseCallers`/the negation
+ * door never see it). Two dist LAYOUTS occur in this monorepo (both handled), differing only by whether
+ * `tsc` preserved the `src/` rootDir under `outDir`:
+ *   - NESTED (`tsc` default, `dist/src/…`): ` dist/src/`X.d.ts`  ↔  ` src/`X.ts`     (11 of 12 packages)
+ *   - FLAT   (declaration at dist root):    ` dist/`X.d.ts`      ↔  ` src/`X.ts`     (`@atlas/contracts`)
+ * This rewrites the dist descriptor to its source form: strip a leading `dist/` (and its optional `src/`
+ * segment), keep any intermediate directories, and swap the `.d.ts` file extension for `.ts`. Scheme,
+ * package manager, package name, and version are BYTE-PRESERVED, so the rewrite can only ever name a
+ * symbol in the SAME package.
  *
  * This is a CANDIDATE, never an assertion: it does a pure string rewrite and the CALLER must confirm the
  * result actually resolves (`defs.has(canon)`) before trusting it. A symbol with no `dist/…d.ts`
  * descriptor is returned UNCHANGED (so `defs.get(canon)` just re-misses and it stays a hole — fail-closed),
- * and a package whose `dist` layout does not mirror `src` simply fails the `defs` check and stays a hole
- * too. The soundness comes from the VERIFY at the call site, not from this regex — a too-narrow match only
- * ever LOSES a recoverable edge (stays honest hole), never fabricates one. Idempotent; total; pure.
+ * and any dist symbol whose source form is NOT defined in-index simply fails the `defs` check and stays a
+ * hole too. The soundness comes from the VERIFY at the call site, not from this regex — a too-narrow match
+ * only ever LOSES a recoverable edge (stays honest hole), never fabricates one. Idempotent; total; pure.
  *
- * MEASURED on this repo's `.atlas/index.scip` (2026-08-12): 38/38 distinct `@atlas` dist-form references
- * canonicalise onto a real in-index definition (0 miss), recovering 2876 previously-`unresolved`
- * reference occurrences across 290 caller documents. External npm targets (`typescript`, `@types/node`)
- * carry no `dist/…d.ts` @atlas descriptor and correctly stay holes.
+ * MEASURED on this repo's `.atlas/index.scip` (2026-08-12, independently over EVERY unresolved reference
+ * occurrence — NOT a regex-filtered subset, the self-confirmation trap the first cut fell into): 795/855
+ * distinct `@atlas` dist-form references canonicalise onto a real in-index definition, recovering 13215
+ * previously-`unresolved` reference occurrences across all 12 packages. The ~60 that stay holes are inner
+ * type-literal members (`…typeLiteral22:field`) whose declaration-emit numbering differs from source —
+ * correctly left as holes by the verify. External npm targets (`typescript`, `@types/node`) carry no
+ * `@atlas/…dist/…d.ts` descriptor and stay holes.
  *
- * RESIDUAL ASSUMPTION (lucy cold-review 2026-08-12): soundness rests on `dist/X.d.ts` mirroring `src/X.ts`
- * 1:1. A bundler that FLATTENS several source files into one `.d.ts` could canonicalise onto a real-but-
- * WRONG `src` symbol that still passes `defs.has` — the one shape the verify cannot catch. Holds for
- * `tsc --declaration` per-file output (this repo); revisit if the build emits bundled declarations.
+ * RESIDUAL ASSUMPTION (lucy cold-review 2026-08-12): soundness rests on the dist `.d.ts` descriptor path
+ * mirroring the `src` `.ts` path. A bundler that FLATTENS several source files into one `.d.ts` could
+ * canonicalise onto a real-but-WRONG `src` symbol that still passes `defs.has` — the one shape the verify
+ * cannot catch. Holds for `tsc --declaration` per-file output (this repo); revisit for bundled declarations.
  */
 export const canonicalizeSymbol = (symbol: string): string =>
-  symbol.replace(/ dist\/((?:[^`]*\/)?`[^`]+)\.d\.ts`/, ' src/$1.ts`');
+  symbol.replace(/ dist\/(?:src\/)?((?:[^`]*\/)?`[^`]+)\.d\.ts`/, ' src/$1.ts`');
 
 /**
  * Derive the depends-on edge ledger from the SCIP occurrences alone. A `reference` whose symbol has an
