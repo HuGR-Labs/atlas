@@ -36,6 +36,7 @@
 // Harness invariant (harness/README.md): no `@atlas/*` import.
 
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { appendFileSync, readFileSync, writeSync } from 'node:fs';
 
 const MODEL = process.env.METERED_MODEL || 'claude-sonnet-4-6';
@@ -55,9 +56,44 @@ if (!SIDECAR || SIDECAR.trim() === '') {
 /** Read the WHOLE prompt from stdin as bytes (fd 0). Atlas pipes the prompt in; we pass it through unread. */
 const prompt = readFileSync(0);
 
-/** Append exactly one JSON line to the sidecar. Never truncates (appendFileSync = O_APPEND). */
+/**
+ * ── THE POOL-SAFE SITE KEY (bench axis A3, defect (a)) ─────────────────────────────────────────────────────
+ * Under `atlas mine`'s concurrency pool (packages/cli/src/mine.ts, usePool), propose calls run in parallel, so
+ * the sidecar's `ts` order is NOT the site-visit order — per-site cost is unrecoverable from a bare timestamp.
+ * The wrapper is a FRESH subprocess per call and its ONLY per-call input is the prompt piped on its own stdin,
+ * so the site key must be recovered from THAT (each subprocess reads its own prompt; nothing crosses the pool).
+ *
+ * We do NOT set a per-call env/arg from the mine call site: llm.ts (`createCommandClient`) pipes the prompt and
+ * runs a FIXED operator-supplied argv — it sets no per-call env and varies no arg. An explicit rank/index token
+ * would require editing packages/ (the model seam), which this seat may not touch. So we key off the prompt the
+ * seam ALREADY hands us:
+ *   • `site` — the anchored unit, recovered from the `<unit path="…" name="…">` header both shipped templates
+ *     emit (prompts/propose.md, propose-enriched.md). Reconstructed as the qualifiedPath (`path::name`, or a
+ *     bare `path` for a file/repo anchor where name===path). `null` when a custom template omits the header.
+ *   • `prompt_sha256` — a template-independent fingerprint over the exact prompt bytes. ALWAYS present, so a
+ *     call→site join survives even a template that carries no `<unit>` header, and two rows with the same
+ *     fingerprint are, by construction, the same site (same file+unit+source ⇒ same prompt).
+ * Both are pool-safe: they are derived from this call's own stdin, independent of any interleaving.
+ */
+function deriveSiteKey(promptBuf) {
+  const prompt_sha256 = createHash('sha256').update(promptBuf).digest('hex');
+  const m = /<unit path="([^"]*)" name="([^"]*)">/.exec(promptBuf.toString('utf8'));
+  if (m === null) return { site: null, prompt_sha256 };
+  const [, path, name] = m;
+  // Reconstruct the qualifiedPath: `<file>::<symbol>`, or a bare path for a file/repo anchor (name===path).
+  const site = name === path ? path : `${path}::${name}`;
+  return { site, prompt_sha256 };
+}
+
+const SITE = deriveSiteKey(prompt);
+
+/** Append exactly one JSON line to the sidecar. Never truncates (appendFileSync = O_APPEND). Every row carries
+ *  the pool-safe site key so a concurrent run's per-site cost is recoverable (see `deriveSiteKey`). */
 function recordSidecar(fields) {
-  appendFileSync(SIDECAR, JSON.stringify({ ts: new Date().toISOString(), model: MODEL, ...fields }) + '\n');
+  appendFileSync(
+    SIDECAR,
+    JSON.stringify({ ts: new Date().toISOString(), model: MODEL, site: SITE.site, prompt_sha256: SITE.prompt_sha256, ...fields }) + '\n',
+  );
 }
 
 /**
