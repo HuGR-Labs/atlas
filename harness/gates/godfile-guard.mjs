@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 // godfile-guard — the standing LOC ceiling. A source file over CAP lines is a "godfile": it hides
 // coupling, defeats review, and is the #1 correlate of drift. The bar Orchestra enforces on seats is
-// enforced on Orchestra itself (same doctrine as ci.yml). Fails the build with the offending list.
+// enforced on Orchestra itself (same doctrine as ci.yml). A file over the TARGET is WARNED; a file over
+// the HARD ceiling fails the build with the offending list (owner-set two-tier policy, see below).
 //
 // ── SCOPE, AND THE TWO HOLES THAT USED TO BE IN IT ───────────────────────────────────────────────────
 // Product code under `packages/**` (`.ts`, excluding `.d.ts`) AND the harness itself under `harness/**`
 // (`.mjs`). Docs (`docs/**`, `*.md`) and generated output (`dist/`, `*.d.ts`) are exempt — long specs are
-// legitimate, long modules are not. CAP is intentionally a single tunable constant.
+// legitimate, long modules are not. The two ceilings are single tunable constants (TARGET, HARD).
 //
 //   UNTRACKED. The file list was `git ls-files packages`, which lists only what git has ALREADY RECORDED.
 //   A brand-new 900-line module, written and never `git add`ed, was invisible: the guard printed OK, and
@@ -35,7 +36,12 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const CAP = 400; // max lines per source file. One-line change to retune the whole fleet bar.
+// Two-tier ceiling (owner-set 2026-08-12): TARGET is the bar we ASK for; HARD is the bar we ENFORCE.
+// A file in (TARGET, HARD] is WARNED — over the target, still allowed — so the 400-line discipline stays
+// visible without blocking work on a module that legitimately needs the slack. A file over HARD FAILS the
+// build. `> TARGET` / `> HARD` are both exclusive (a file measuring exactly the number is under it).
+const TARGET = 400; // the requested ceiling — exceeding it warns, never fails.
+const HARD = 600; // the enforced ceiling — exceeding it fails the build.
 
 // Repo root, OVERRIDABLE so the gate's own test can point it at a fixture repo. Without this the untracked
 // and harness legs could only be checked by hand against the live tree — precisely the "trust me" the gate
@@ -67,7 +73,8 @@ try {
 
 const files = [...new Set(listed)].filter((p) => SCOPES.some((s) => p.startsWith(`${s.dir}/`) && s.include(p))).sort();
 
-const offenders = [];
+const offenders = []; // over HARD — fail the build
+const warnings = []; // in (TARGET, HARD] — over the requested bar, allowed
 for (const path of files) {
   let lines;
   try {
@@ -75,16 +82,26 @@ for (const path of files) {
   } catch {
     continue; // deleted-but-staged edge; skip
   }
-  if (lines > CAP) offenders.push({ path, lines });
+  if (lines > HARD) offenders.push({ path, lines });
+  else if (lines > TARGET) warnings.push({ path, lines });
+}
+
+// Warnings are printed on every run, pass or fail: the 400-line discipline stays visible even though
+// exceeding it no longer blocks. Printed BEFORE the fail branch so no path reports a result without them.
+if (warnings.length > 0) {
+  warnings.sort((a, b) => b.lines - a.lines);
+  console.log(`godfile-guard: ${warnings.length} file(s) over the ${TARGET}-LOC target (allowed, ≤${HARD}):`);
+  for (const { path, lines } of warnings) console.log(`  ${lines}\t${path}`);
+  console.log('');
 }
 
 if (offenders.length > 0) {
   offenders.sort((a, b) => b.lines - a.lines);
-  console.error(`godfile-guard: ${offenders.length} file(s) over the ${CAP}-LOC ceiling:`);
+  console.error(`godfile-guard: ${offenders.length} file(s) over the ${HARD}-LOC hard ceiling:`);
   for (const { path, lines } of offenders) console.error(`  ${lines}\t${path}`);
-  console.error(`\nSplit each into cohesive units ≤${CAP} lines. No #[allow], no bypass — fix at the root.`);
+  console.error(`\nSplit each into cohesive units (target ≤${TARGET}, hard limit ${HARD}). No #[allow], no bypass — fix at the root.`);
   process.exit(1);
 }
 
 const per = SCOPES.map((s) => `${files.filter((p) => p.startsWith(`${s.dir}/`)).length} ${s.dir}`).join(' + ');
-console.log(`godfile-guard: OK — ${files.length} source file(s) (${per}), tracked AND untracked, all ≤${CAP} LOC.`);
+console.log(`godfile-guard: OK — ${files.length} source file(s) (${per}), tracked AND untracked, all ≤${HARD} LOC (target ${TARGET}).`);
