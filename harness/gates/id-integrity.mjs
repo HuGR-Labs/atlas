@@ -80,8 +80,14 @@ const KNOWN = new Map(
         // so the ledger reported it STALE on its own. Removed at the source: the shrink-only rule working
         // exactly as designed, and the second entry this ledger has proved cannot rot into an exemption.)
         ['ID-3 REQ-MCP-1d', 'added by ADR-0006; has a golden (SCN-MCP-1d-1) but no WP card'],
-        ['ID-3 REQ-MCP-1e', 'added by ADR-0006; carried by no WP card'],
+        ['ID-3 REQ-MCP-1e', 'added by ADR-0006; carried by no WP card — now has a real test witness ' +
+          '(SCN-MCP-1e-1, packages/mcp-server/test/surface-conformance-req-mcp-1e.test.ts), but ID-3 checks ' +
+          'WP-card SCHEDULING (a source_reqs:/acceptance: pointer), not test existence, so this entry stays ' +
+          'ratcheted until a WP card structurally schedules REQ-MCP-1e / SCN-MCP-1e-1'],
         ['ID-3 SCN-MCP-1d-1', 'the golden for the orphaned REQ-MCP-1d; not held-out, and in no WP acceptance list'],
+        ['ID-3 SCN-MCP-1e-1', 'the new witness for REQ-MCP-1e (packages/mcp-server/test/surface-conformance-req-mcp-1e.test.ts); ' +
+          'not held-out, and in no WP acceptance list — same shape as the SCN-MCP-1d-1 entry above, for the ' +
+          'same reason (REQ-MCP-1e is carried by no WP card either)'],
       ],
 );
 

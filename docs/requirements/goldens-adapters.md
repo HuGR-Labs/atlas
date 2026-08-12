@@ -741,6 +741,14 @@ Then they are equal, and both equal the closed `Tool` union
 teeth: breaks-on "a leg bound at the composition root for a token absent from the advertised list — it is invocable over MCP, unadvertised, and invisible to every surface pin (the pre-ADR-0006 state, where callTool dispatched on legs[tool] with no membership check)"
 gen: exhaustive
 
+### SCN-MCP-1e-1 — advertised and invocable are both traced to the ONE source, never computed separately   (guard, added ADR-0006)
+source: REQ-MCP-1e
+Given the advertised tool set (`advertisedTools`, derived from `GOVERNANCE_SURFACE`) and the dispatch path (`callTool`, which forwards every non-read-tool name to `handler.handle` unfiltered)
+When both are probed against the SAME production `GOVERNANCE_SURFACE` — the advertised names for exact (ordered) equality, and the dispatch path for whether an off-surface name still reaches `handler.handle` unfiltered by any independent list inside `callTool`
+Then the advertised set equals `GOVERNANCE_SURFACE` byte-for-byte and `callTool` carries no second membership computation of its own, so the two sets cannot diverge without an edit to `GOVERNANCE_SURFACE` itself
+teeth: breaks-on "advertisedTools reads from a second hardcoded literal array instead of GOVERNANCE_SURFACE.map(...), OR callTool grows its own allowlist/blocklist before forwarding to handler.handle — either is the advertised and invocable sets being COMPUTED SEPARATELY, which is exactly what REQ-MCP-1e forbids"
+gen: conformance
+
 ### SCN-MCP-1c-1 — every MCP call routes through the shared handler and matches the CLI verdict   (happy)
 source: REQ-MCP-1c
 Given the tool call `query greet` over both transports
@@ -781,28 +789,29 @@ gen: conformance
 
 ## Coverage ledger (S3 completeness facet)
 
-- **REQ coverage:** 57/58 REQ have ≥1 SCN — every REQ except **REQ-MCP-1e**.   <!-- AMENDED 2026-08-02 -->
+- **REQ coverage:** 58/58 REQ have ≥1 SCN.   <!-- AMENDED 2026-08-12: SCN-MCP-1e-1 closes REQ-MCP-1e -->
   <!-- COUNTED, not restated: this ledger read "55/55" while the two files already held 57 REQs and 57 SCNs
        before the amendment below — REQ-MCP-1d/1e and SCN-MCP-1d-1 landed with the governed-write-doors
-       amendment (8cd1cb9) and the ledger was not recounted, leaving REQ-MCP-1e with no SCN here. That gap is
-       NOT this seat's to close (it belongs to the tools/MCP surface, whose own ledger states its coverage is
-       carried by e2e/white-box teeth); it is named rather than absorbed into a fresh number. -->
-- **SCN count:** 60 — 56 as frozen, +1 `SCN-MCP-1d-1` (the write-doors amendment), +3 `SCN-ADAPTER-1e-1/2/3`
-  (the tracked-symlink amendment). Two extras sit under one REQ each: REQ-ADAPTER-7b (the supersede-ordering
-  witness in both delivery orders, distinct from the idempotence witness) and REQ-ADAPTER-1e (three
-  properties of one rule: the link text, the unrefined fold, the included broken/dir links).
+       amendment (8cd1cb9) and the ledger was not recounted, leaving REQ-MCP-1e with no SCN here. It sat at
+       57/58, every REQ except REQ-MCP-1e, until `packages/mcp-server/test/surface-conformance-req-mcp-1e.test.ts`
+       (SCN-MCP-1e-1) landed and closed the gap — recounted here, not absorbed into a fresh number. -->
+- **SCN count:** 61 — 56 as frozen, +1 `SCN-MCP-1d-1` (the write-doors amendment), +3 `SCN-ADAPTER-1e-1/2/3`
+  (the tracked-symlink amendment), +1 `SCN-MCP-1e-1` (the REQ-MCP-1e witness). Two extras sit under one REQ
+  each: REQ-ADAPTER-7b (the supersede-ordering witness in both delivery orders, distinct from the idempotence
+  witness) and REQ-ADAPTER-1e (three properties of one rule: the link text, the unrefined fold, the included
+  broken/dir links).
 - **Guard coverage:** every guard/`If-then` REQ has a guard SCN with an interesting witness —
   ADAPTER-1b/1c, **1e**, 2b/2c, 3b/3c, 4c, 5b, 6c, 7c, 8c, 9b, 10b/10c, 11a/11c, 12b, WIRE-1b, CLI-1b/1c, 2b/2c,
-  4b/4c, MCP-1b, 2a/2b/2c. No antecedent-failure vacuity: each guard SCN non-trivially enters the guarded
+  4b/4c, MCP-1b, **1e**, 2a/2b/2c. No antecedent-failure vacuity: each guard SCN non-trivially enters the guarded
   state (a real dangling ref, a real un-indexed language adjacent to real edges, a real supersede in both
   orders, a real rebase that changes the sha, a tool that genuinely throws).
-- **Teeth (Gate 3):** 60/60 SCN name the exact mutant of their REQ they flip to BROKEN on (counted: 60 `teeth:`
-  lines for 60 SCN headings); none vacuous. The three ADAPTER-1e teeth are not hypothetical — the walker
+- **Teeth (Gate 3):** 61/61 SCN name the exact mutant of their REQ they flip to BROKEN on (counted: 61 `teeth:`
+  lines for 61 SCN headings); none vacuous. The three ADAPTER-1e teeth are not hypothetical — the walker
   mutants they name were APPLIED to the shipped source and killed by the suite. The
   durable-store teeth (ADAPTER-6b/6c/7a/7b/12a/12b) bite the flush→fresh-process→read-back seam a memory-only
   golden cannot see (per the ADAPTER-7 anti-rot). **100% teeth coverage.**
-- **gen histogram:** conformance 46 (counted; 43 frozen + SCN-MCP-1d-1 + the three ADAPTER-1e SCNs, whose
-  oracle is the `link-repo` fixture above) · exhaustive 7 (CLI-1a, CLI-2a/2b/2c, MCP-1a/1b/1c) · PBT 6
+- **gen histogram:** conformance 47 (counted; 43 frozen + SCN-MCP-1d-1 + the three ADAPTER-1e SCNs + SCN-MCP-1e-1,
+  whose oracle is the `link-repo` fixture above / the shared `GOVERNANCE_SURFACE` oracle) · exhaustive 7 (CLI-1a, CLI-2a/2b/2c, MCP-1a/1b/1c) · PBT 6
   (ADAPTER-7a/7b-idempotence/7b-supersede/7c + CLI-1b/1c malformed-argv fuzz arm) · residue 0.
 - **Method-tag → gen mapping (audit):** all 15 `reference-model` INVs → `conformance`; the `PBT` INV (ADAPTER-7)
   → `PBT`. The 3 `exhaustive` INVs → `exhaustive` for their finite-enumeration SCNs; CLI-1's malformed-`argv`
