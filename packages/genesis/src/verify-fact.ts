@@ -20,8 +20,9 @@
 // `@atlas/genesis` is L8 (ARCHITECTURE.md), strictly BELOW the ring `@atlas/adapter-io` sits in
 // (`harness/gates/layer-guard.mjs` ARCH-1/2) — importing `underScope` from adapter-io here would be a
 // FORBIDDEN upward edge (genesis may only import from packages strictly below it). So `underScope` is
-// TRANSCRIBED verbatim below (byte-identical predicate — cite the source, never invent a second one; it CAN
-// drift if `anchor-scope.ts` changes and nothing here would notice). `pathOfHash` is supplied by the
+// TRANSCRIBED verbatim (byte-identical predicate — cite the source, never invent a second one) in the ONE
+// shared home `scope-predicate.ts`, imported here as `anyInScope` — a single copy for the whole PROVEN
+// family, not one transcription per oracle (see that module's header). `pathOfHash` is supplied by the
 // CALLER — see `harness/probes/verify-fact.mjs`, which builds it straight off the SCIP feed's own
 // `documents[].relativePath`, provably every hash `SymbolReverseApi` can ever return: `createSymbolReverse`
 // mints `nodeHashOfPath(doc.relativePath)` for exactly those documents and no others
@@ -30,19 +31,7 @@
 
 import type { Hash } from '@atlas/contracts';
 import type { SymbolReverseApi } from '@atlas/index';
-
-/** `true` iff `anchor` lies UNDER `scope` — TRANSCRIBED verbatim from `anchor-scope.ts`'s `underScope`
- *  (@atlas/adapter-io, `src/anchor-scope.ts`; layering forbids importing it here, see module header above).
- *  A SEGMENT-WISE prefix test on the anchor's FILE-PATH portion (the text before the first `::`,
- *  `/`-split), NOT a raw `startsWith`. Total: an empty scope trivially covers every anchor. */
-function underScope(anchor: string, scope: string): boolean {
-  const filePath = anchor.split('::')[0] ?? anchor;
-  const anchorSegs = filePath.split('/');
-  const scopeSegs = scope.split('/');
-  if (scopeSegs.length > anchorSegs.length) return false;
-  for (let i = 0; i < scopeSegs.length; i++) if (scopeSegs[i] !== anchorSegs[i]) return false;
-  return true;
-}
+import { anyInScope } from './scope-predicate.js';
 
 /** One "scope A depends on global symbol B" claim. `worldScope` is the directory the completeness check
  *  ranges over — retained as the `scope-open` diagnostic discriminant. (It formerly gated a REFUTE; that
@@ -74,19 +63,6 @@ export type FactVerdict = {
 };
 
 const abstain = (reason: string): FactVerdict => ({ verdict: 'abstain', reason, oracle: 'symbol-reverse' });
-
-/** The subset test `∩ S` reduces to: does ANY hash in `hashes` have a KNOWN path (fail-closed on an
- *  unmapped hash — never assume it is in scope) lying UNDER `scope`? */
-function anyInScope(
-  hashes: readonly Hash[],
-  pathOfHash: (h: Hash) => string | undefined,
-  scope: string,
-): boolean {
-  return hashes.some((h) => {
-    const p = pathOfHash(h);
-    return p !== undefined && underScope(p, scope);
-  });
-}
 
 /**
  * PROVE/REFUTE/ABSTAIN on `claim`, over the live `reverse` completeness feed (`SymbolReverseApi`,
