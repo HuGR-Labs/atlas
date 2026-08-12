@@ -162,6 +162,11 @@ export const isLocalSymbol = (symbol: string): boolean => symbol.startsWith('loc
  * `tsc` preserved the `src/` rootDir under `outDir`:
  *   - NESTED (`tsc` default, `dist/src/…`): ` dist/src/`X.d.ts`  ↔  ` src/`X.ts`     (11 of 12 packages)
  *   - FLAT   (declaration at dist root):    ` dist/`X.d.ts`      ↔  ` src/`X.ts`     (`@atlas/contracts`)
+ * A THIRD emission — `tsc` also compiles `test/` (tsconfig `include: ["src","test"]`, no `rootDir`), so a
+ * `dist/test/X.d.ts` descriptor exists. `(?:src/)?` strips only `src/`, so it canonicalises to `src/test/X.ts`
+ * whose real source is `test/X.ts` — a WRONG candidate, but no package has a `src/test/` def, so it always
+ * fails `defs.has` and stays a hole (fail-closed incompleteness, not unsoundness; test files are not
+ * cross-package call targets, so recovering them buys nothing — left un-handled on purpose).
  * This rewrites the dist descriptor to its source form: strip a leading `dist/` (and its optional `src/`
  * segment), keep any intermediate directories, and swap the `.d.ts` file extension for `.ts`. Scheme,
  * package manager, package name, and version are BYTE-PRESERVED, so the rewrite can only ever name a
