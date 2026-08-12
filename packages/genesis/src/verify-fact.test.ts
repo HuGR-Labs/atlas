@@ -52,10 +52,11 @@ describe('verifyDependency — the positive dual of the #99b negation door gate-
     });
   });
 
-  it('refuted: no caller anywhere, and the world scope is CLOSED (no hole under it)', () => {
+  it("abstain('no-caller-in-scope'): no caller under sourceScope, world closed — NOT refuted (cross-pkg completeness not guaranteed, PV-recall 2026-08-12)", () => {
     const reverse = feed({ callers: [], holes: ['other/unrelated.ts'] }); // hole exists but OUTSIDE worldScope='src'
     expect(verifyDependency(claim(), reverse, pathOfHash, isLocal)).toEqual({
-      verdict: 'refuted',
+      verdict: 'abstain',
+      reason: 'no-caller-in-scope',
       oracle: 'symbol-reverse',
     });
   });
@@ -90,25 +91,28 @@ describe('verifyDependency — the positive dual of the #99b negation door gate-
 
   // TEETH (0-FP floor): the proven branch's `sourceScope` containment MUST be segment-wise, never a
   // substring. A real caller in a SIBLING dir whose name has `sourceScope` as a string prefix
-  // (`src/pay` ⊂ `src/paycheck`, the #153 trap) is NOT under `src/pay` — asserting `refuted` here kills
-  // both the `underScope`→`.includes` drift mutant and the "drop the sourceScope containment" mutant
-  // that the original 5 fixtures left alive (a false `proven`, the worst outcome this oracle exists to prevent).
+  // (`src/pay` ⊂ `src/paycheck`, the #153 trap) is NOT under `src/pay` — asserting NOT-proven here kills
+  // both the `underScope`→`.includes` drift mutant (which would return `proven`) and the "drop the
+  // sourceScope containment" mutant that the original 5 fixtures left alive (a false `proven`, the worst
+  // outcome this oracle exists to prevent).
   it("NOT proven: a real caller sits in a sibling dir that only STRING-prefixes sourceScope (#153)", () => {
     const reverse = feed({ callers: ['src/paycheck/billing.ts'] }); // caller exists, but NOT under 'src/pay'
     expect(verifyDependency(claim(), reverse, pathOfHash, isLocal)).toEqual({
-      verdict: 'refuted', // no caller under sourceScope, and worldScope='src' is closed (no hole)
+      verdict: 'abstain', // no caller under sourceScope ⇒ abstain (never refuted — see FactVerdict)
+      reason: 'no-caller-in-scope',
       oracle: 'symbol-reverse',
     });
   });
 
-  // TEETH: the same segment-wise discipline on the `worldScope` containment (the closed-world gate). A
-  // hole in a sibling dir that only string-prefixes `worldScope` must NOT open the world — else a
-  // `.includes` drift turns an honest `refuted` into a spurious `scope-open` abstain (recall loss), and
-  // symmetrically guards the boundary from the other side.
-  it("refuted, not scope-open: a hole sits in a sibling dir that only STRING-prefixes worldScope (#153)", () => {
+  // TEETH: the same segment-wise discipline on the `worldScope` containment (the scope-open diagnostic). A
+  // hole in a sibling dir that only string-prefixes `worldScope` must NOT count as in-scope — else a
+  // `.includes` drift flips the abstain reason from 'no-caller-in-scope' to 'scope-open'. The verdict is
+  // abstain either way (never proven), but the reason discriminates and kills the mutant.
+  it("abstain 'no-caller-in-scope', not 'scope-open': a hole sits in a sibling dir that only STRING-prefixes worldScope (#153)", () => {
     const reverse = feed({ callers: [], holes: ['src/paycheck/hole.ts'] }); // hole NOT under worldScope='src/pay'
     expect(verifyDependency(claim({ worldScope: 'src/pay' }), reverse, pathOfHash, isLocal)).toEqual({
-      verdict: 'refuted',
+      verdict: 'abstain',
+      reason: 'no-caller-in-scope',
       oracle: 'symbol-reverse',
     });
   });
