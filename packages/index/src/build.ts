@@ -154,6 +154,48 @@ const edgeKey = (e: DepEdge): string => `${String(e.from)}\0${e.to === null ? ''
 export const isLocalSymbol = (symbol: string): boolean => symbol.startsWith('local ');
 
 /**
+ * CANON-AND-VERIFY (#189 cross-package): a reference into another in-repo package is recorded by
+ * `scip-typescript` against that package's PUBLISHED TYPES descriptor while the DEFINITION lives at the
+ * SOURCE descriptor. They are DISTINCT symbol strings, so a cross-package caller is invisible to the
+ * src-form definition (its edge under-approximates to `unresolved`, and `reverseCallers`/the negation
+ * door never see it). Two dist LAYOUTS occur in this monorepo (both handled), differing only by whether
+ * `tsc` preserved the `src/` rootDir under `outDir`:
+ *   - NESTED (`tsc` default, `dist/src/…`): ` dist/src/`X.d.ts`  ↔  ` src/`X.ts`     (11 of 12 packages)
+ *   - FLAT   (declaration at dist root):    ` dist/`X.d.ts`      ↔  ` src/`X.ts`     (`@atlas/contracts`)
+ * A THIRD emission — `tsc` also compiles `test/` (tsconfig `include: ["src","test"]`, no `rootDir`), so a
+ * `dist/test/X.d.ts` descriptor exists. `(?:src/)?` strips only `src/`, so it canonicalises to `src/test/X.ts`
+ * whose real source is `test/X.ts` — a WRONG candidate, but no package has a `src/test/` def, so it always
+ * fails `defs.has` and stays a hole (fail-closed incompleteness, not unsoundness; test files are not
+ * cross-package call targets, so recovering them buys nothing — left un-handled on purpose).
+ * This rewrites the dist descriptor to its source form: strip a leading `dist/` (and its optional `src/`
+ * segment), keep any intermediate directories, and swap the `.d.ts` file extension for `.ts`. Scheme,
+ * package manager, package name, and version are BYTE-PRESERVED, so the rewrite can only ever name a
+ * symbol in the SAME package.
+ *
+ * This is a CANDIDATE, never an assertion: it does a pure string rewrite and the CALLER must confirm the
+ * result actually resolves (`defs.has(canon)`) before trusting it. A symbol with no `dist/…d.ts`
+ * descriptor is returned UNCHANGED (so `defs.get(canon)` just re-misses and it stays a hole — fail-closed),
+ * and any dist symbol whose source form is NOT defined in-index simply fails the `defs` check and stays a
+ * hole too. The soundness comes from the VERIFY at the call site, not from this regex — a too-narrow match
+ * only ever LOSES a recoverable edge (stays honest hole), never fabricates one. Idempotent; total; pure.
+ *
+ * MEASURED on this repo's `.atlas/index.scip` (2026-08-12, independently over EVERY unresolved reference
+ * occurrence — NOT a regex-filtered subset, the self-confirmation trap the first cut fell into): 795/855
+ * distinct `@atlas` dist-form references canonicalise onto a real in-index definition, recovering 13215
+ * previously-`unresolved` reference occurrences across all 12 packages. The ~60 that stay holes are inner
+ * type-literal members (`…typeLiteral22:field`) whose declaration-emit numbering differs from source —
+ * correctly left as holes by the verify. External npm targets (`typescript`, `@types/node`) carry no
+ * `@atlas/…dist/…d.ts` descriptor and stay holes.
+ *
+ * RESIDUAL ASSUMPTION (lucy cold-review 2026-08-12): soundness rests on the dist `.d.ts` descriptor path
+ * mirroring the `src` `.ts` path. A bundler that FLATTENS several source files into one `.d.ts` could
+ * canonicalise onto a real-but-WRONG `src` symbol that still passes `defs.has` — the one shape the verify
+ * cannot catch. Holds for `tsc --declaration` per-file output (this repo); revisit for bundled declarations.
+ */
+export const canonicalizeSymbol = (symbol: string): string =>
+  symbol.replace(/ dist\/(?:src\/)?((?:[^`]*\/)?`[^`]+)\.d\.ts`/, ' src/$1.ts`');
+
+/**
  * Derive the depends-on edge ledger from the SCIP occurrences alone. A `reference` whose symbol has an
  * in-index `definition` ⇒ a `resolved` edge to the defining document; a `reference` with NO in-index
  * definition (every cross-language / FFI target — unseeable by a single-language indexer) ⇒ an `unresolved`
@@ -180,7 +222,9 @@ function deriveEdges(scip: ScipOutput): DepEdge[] {
     const from = docHash(doc.relativePath);
     for (const occ of doc.occurrences) {
       if (occ.role !== 'reference' || isLocalSymbol(occ.symbol)) continue;
-      const target = defs.get(occ.symbol);
+      // CANON-AND-VERIFY (#189): a same-package hit wins as-is; else try the src-form of a published-types
+      // (`dist/…d.ts`) descriptor and take it ONLY if it resolves to a real in-index definition.
+      const target = defs.get(occ.symbol) ?? defs.get(canonicalizeSymbol(occ.symbol));
       const edge: DepEdge =
         target !== undefined ? { from, to: target, kind: 'resolved' } : { from, to: null, kind: 'unresolved' };
       const k = edgeKey(edge);

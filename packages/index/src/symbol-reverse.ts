@@ -7,7 +7,7 @@
 // clock, deterministic (sorted + deduped ⇒ a rebuild is byte-identical, exactly as `deriveEdges` sorts).
 
 import type { Hash } from '@atlas/contracts';
-import { isLocalSymbol, nodeHashOfPath } from './build.js';
+import { canonicalizeSymbol, isLocalSymbol, nodeHashOfPath } from './build.js';
 import type { ScipOutput } from './types.js';
 
 /** The reverse-caller query for a GLOBAL symbol, one granularity below the doc-level `depgraph`. Pure + total. */
@@ -46,11 +46,13 @@ const sortedDeduped = (hashes: Iterable<Hash>): readonly Hash[] => {
  * its EXACT classification (single edge model, no second one invented):
  *   - `defs: Map<globalSymbol, docHash>` from `role==='definition'` occurrences of NON-`local` symbols,
  *     first-definition-wins — byte-for-byte `deriveEdges`'s `defs`.
- *   - a `reference` occurrence of a NON-`local` symbol whose symbol HAS an in-index definition is a RESOLVED
- *     caller of that symbol (its document is a caller of that symbol) — `deriveEdges`'s resolved branch.
- *   - a `reference` occurrence of a NON-`local` symbol with NO in-index definition is the `unresolved` hole —
- *     `deriveEdges`'s `else` branch — so its document is a hole source (and it is NOT a resolved caller of that
- *     unseeable target: `reverseCallers` of a symbol with no in-index definition is `[]`).
+ *   - a `reference` occurrence of a NON-`local` symbol whose symbol HAS an in-index definition — directly, OR
+ *     after `canonicalizeSymbol` rewrites its published-types (`dist/…d.ts`) descriptor to the source form
+ *     (#189 cross-package, canon-and-verify) — is a RESOLVED caller, bucketed under the SRC-form symbol
+ *     (`deriveEdges`'s resolved branch, which canonicalises identically).
+ *   - a `reference` occurrence of a NON-`local` symbol with NO in-index definition even after canon is the
+ *     `unresolved` hole — `deriveEdges`'s `else` branch — so its document is a hole source (and it is NOT a
+ *     resolved caller of that unseeable target: `reverseCallers` of a symbol with no in-index definition is `[]`).
  *  `local ` symbols contribute nothing on either side (SCIP document-scoping, #189) — the same exclusion
  *  `deriveEdges` applies in BOTH loops. `dynamic` is an `EdgeKind` the frozen `ScipOccurrence` projection cannot
  *  express (it carries `role` only, never a dynamic role), so — exactly as in `deriveEdges` — the only hole this
@@ -75,10 +77,20 @@ export function createSymbolReverse(scip: ScipOutput): SymbolReverseApi {
     const from = nodeHashOfPath(doc.relativePath);
     for (const occ of doc.occurrences) {
       if (occ.role !== 'reference' || isLocalSymbol(occ.symbol)) continue;
-      if (defs.has(occ.symbol)) {
-        const bucket = callersBySymbol.get(occ.symbol) ?? [];
+      // CANON-AND-VERIFY (#189): resolve a same-package hit as-is, else the src-form of a published-types
+      // (`dist/…d.ts`) descriptor — but ONLY if it lands on a real in-index definition. The caller is then
+      // bucketed under the SRC-form symbol (the form `reverseCallers`/`resolves` are queried with), so a
+      // cross-package caller becomes VISIBLE to the negation door instead of an honest-but-blind hole. A
+      // ref whose canon does not resolve stays a hole (fail-closed) — see `canonicalizeSymbol` (build.ts).
+      const resolved = defs.has(occ.symbol)
+        ? occ.symbol
+        : defs.has(canonicalizeSymbol(occ.symbol))
+          ? canonicalizeSymbol(occ.symbol)
+          : undefined;
+      if (resolved !== undefined) {
+        const bucket = callersBySymbol.get(resolved) ?? [];
         bucket.push(from);
-        callersBySymbol.set(occ.symbol, bucket);
+        callersBySymbol.set(resolved, bucket);
       } else {
         holeSourceSet.add(String(from)); // `unresolved` (or, in a richer projection, `dynamic`) — a hole source
       }

@@ -156,6 +156,42 @@ describe('INDEX-3 — mechanical SCIP-derived build (visible goldens)', () => {
     expect(edges).toEqual([]);
   });
 
+  it('#189 cross-package canon: a `dist/…d.ts` reference resolves to the src definition; a ghost dist ref stays unresolved', () => {
+    // `scip-typescript` records a CROSS-PACKAGE reference against the callee's PUBLISHED-TYPES descriptor
+    // (`… dist/`X.d.ts`/Sym`) while the DEFINITION carries the SOURCE descriptor (`… src/`X.ts`/Sym`).
+    // `canonicalizeSymbol` (build.ts) rewrites the former to the latter — canon-and-VERIFY: taken ONLY when
+    // it lands on a real in-index definition, else the ref stays an honest `unresolved` hole.
+    const SRC_DEF = 'scip-typescript npm @atlas/index 0.0.0 src/`build.ts`/nodeHashOfPath.';
+    const DIST_REF = 'scip-typescript npm @atlas/index 0.0.0 dist/src/`build.d.ts`/nodeHashOfPath.'; // NESTED (tsc default)
+    const DIST_GHOST = 'scip-typescript npm @atlas/index 0.0.0 dist/src/`ghost.d.ts`/phantom.'; // canon src has NO def
+    const xpkgTree: FileTree = {
+      path: 'repo:x',
+      children: [
+        { path: 'file:packages/index/src/build.ts', children: [], content: 'def' },
+        { path: 'file:packages/genesis/src/verify-fact.ts', children: [], content: 'caller' },
+        { path: 'file:packages/tools/src/x.ts', children: [], content: 'ghost-caller' },
+      ],
+    };
+    const xpkgScip: ScipOutput = {
+      documents: [
+        { relativePath: 'packages/index/src/build.ts', occurrences: [{ symbol: SRC_DEF, role: 'definition' }] },
+        { relativePath: 'packages/genesis/src/verify-fact.ts', occurrences: [{ symbol: DIST_REF, role: 'reference' }] },
+        { relativePath: 'packages/tools/src/x.ts', occurrences: [{ symbol: DIST_GHOST, role: 'reference' }] },
+      ],
+    };
+    const edges = build(xpkgTree, xpkgScip).edges;
+    const defHash = nodeHashOfPath('packages/index/src/build.ts');
+    const callerHash = nodeHashOfPath('packages/genesis/src/verify-fact.ts');
+    const ghostHash = nodeHashOfPath('packages/tools/src/x.ts');
+    // THE TEETH (kills the "delete deriveEdges canon" mutant M1): the cross-package dist-form caller must
+    // resolve to the src definition — WITHOUT canon this is an `unresolved`/`to:null` edge, not this.
+    expect(edges).toContainEqual({ from: callerHash, to: defHash, kind: 'resolved' });
+    // FAIL-CLOSED: the ghost dist ref canonicalises to a src symbol with no definition ⇒ stays unresolved,
+    // never a fabricated resolved edge (a mutant dropping the `defs.has(canon)` verify would forge one).
+    expect(edges).toContainEqual({ from: ghostHash, to: null, kind: 'unresolved' });
+    expect(edges.some((e) => e.from === ghostHash && e.kind === 'resolved')).toBe(false);
+  });
+
   it('SCN-INDEX-17a-1 (#191): dependency axis ADDRESSES, does not COMMIT — content moves the spatial hash, never the dependency hash', () => {
     // Same tree shape, same SCIP edges — ONLY `file:cas.ts`'s content differs between the two builds.
     const edited: FileTree = {
