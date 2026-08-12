@@ -15,9 +15,12 @@
 // it does NOT redefine it, and it computes NO hash itself (the subtreeHash compute lives in GROUND /
 // grounding-ref/subtree.ts and is re-checked there — SEAM: consume-only, no raw hashing here).
 //
-// BUILD-AHEAD: `@atlas/grounding` ships zero runtime yet (its barrel is `export type *`), so the oracle
-// is injected as a `DriftApi` dependency (types-only import) rather than statically imported — the
-// binding is written against the FROZEN grounding interface + a fixture oracle, ahead of GROUND's impl.
+// SEAM (dependency injection, not a runtime gap): the oracle is injected as a `DriftApi` dependency
+// (types-only import of the FROZEN interface) rather than statically imported. NOTE — the original reason
+// stated here, "`@atlas/grounding` ships zero runtime yet (its barrel is `export type *`)", is FALSE and
+// was corrected (#204): `drift.js` value-exports `isGrounded`/`driftDetect` at `grounding/src/index.ts`.
+// The injection is a deliberate LAYER SEAM (bind the frozen interface, keep this module oracle-agnostic and
+// testable against a fixture), NOT a workaround for a missing impl.
 //
 // SCOPE (card exclusions): NOT the subtreeHash compute (owned by GROUND); NOT the write-decision/upsert
 // (EPIC-13); NOT the drift mechanical/semantic split nor the advisory→STALE router (EPIC-12 / GROUND-13).
