@@ -162,8 +162,8 @@ describe('INDEX-3 — mechanical SCIP-derived build (visible goldens)', () => {
     // `canonicalizeSymbol` (build.ts) rewrites the former to the latter — canon-and-VERIFY: taken ONLY when
     // it lands on a real in-index definition, else the ref stays an honest `unresolved` hole.
     const SRC_DEF = 'scip-typescript npm @atlas/index 0.0.0 src/`build.ts`/nodeHashOfPath.';
-    const DIST_REF = 'scip-typescript npm @atlas/index 0.0.0 dist/`build.d.ts`/nodeHashOfPath.';
-    const DIST_GHOST = 'scip-typescript npm @atlas/index 0.0.0 dist/`ghost.d.ts`/phantom.'; // canon src has NO def
+    const DIST_REF = 'scip-typescript npm @atlas/index 0.0.0 dist/src/`build.d.ts`/nodeHashOfPath.'; // NESTED (tsc default)
+    const DIST_GHOST = 'scip-typescript npm @atlas/index 0.0.0 dist/src/`ghost.d.ts`/phantom.'; // canon src has NO def
     const xpkgTree: FileTree = {
       path: 'repo:x',
       children: [
