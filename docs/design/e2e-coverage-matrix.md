@@ -5,16 +5,22 @@
 > bin / `atlas-mcp` stdio) test — OR is an explicit, documented non-behavior. `[BB]`=covered by
 > e2e-blackbox s1–s5; `[gap]`=works, no BB test; `[FINDING]`=behavior wrong/unreachable → fix-or-document.
 
-## New FINDINGS the enumeration surfaced (beyond coverage)
-- **N1 `--accept-reground` is a NO-OP** — `tools/src/reconcile.ts:84-87` voids the option, `regroundedCount=0` always. The flag does nothing. → fix (wire the reground-accept path) OR document as unimplemented.
-- **N2 `byDependency` / `byTrigger` unreachable end-to-end** — `RetrievalApi` (`index/src/retrieval.ts:81-89`) is never constructed in `wire.ts`; `atlas query` only does scope resolution. 2 of 3 retrieval modes are dead-to-users (echoes the subsumes-unreachable finding). → wire them OR document scope-only.
-- **N3 `loadProjection` THROWS on corrupt `projection.json`** — `store.ts:131` `JSON.parse` unwrapped, violating the total-`undefined` contract `get` honors (`store.ts:99`). **Genuine totality bug.** → fix (total-undefined).
-- **N4 corrupt-but-present SCIP throws** through `composeRuntime` — `scip.ts:43` guards only MISSING; a corrupt `.scip` `deserializeSCIP`-throws. → fix (fail-closed to empty) OR document.
-- **N5 `--depth` is a DEAD flag** — validated (`parse.ts:100`), read by no leg. → wire OR remove.
-- **N6 `resolveNode` / `poke` / transport-resolve not user-reachable** — exist as library surface, no CLI/MCP door. → document (likely orchestrator-owned) OR expose.
-- **N7 tier-ratification NOT composed into the emit door (governance hole)** — the governed emit door (`governed-emit.ts`, `wire.ts:153`) is truth→authz→upsert ONLY; the ratify/fastpath machinery (`knowledge/src/ratify/{ratify,fastpath}.ts`: T0→human+billy, fast-path T2-advisory) is NEVER composed into `atlas emit`. So a T0 fact bypasses the human+billy gate at the actual write door. → fix (compose ratify into the door) OR document (ratification is orchestrator/genesis-owned, upstream of emit). **Highest-risk finding.**
+## New FINDINGS the enumeration surfaced (beyond coverage) — HISTORICAL RECORD, ALL FIXED
 
-> **SEVERITY: N3 + N4 are BOOT-CRASHERS** — a corrupt `.atlas/projection.json` (`compose.ts:137`) or a corrupt-present `.atlas/index.scip` (`compose.ts:128`) throws through `composeRuntime`, crashing BOTH bins at startup (not just the read path). Total-failure, not a degraded read. Must-fix.
+> The 7 findings below (N1–N7) are recorded here as they were **originally surfaced** by the exhaustive
+> enumeration, before any fix landed. Every one of them is now resolved — see "Status of the findings"
+> immediately after this block for the current, authoritative state (what fixed each, and where). This
+> section is kept as the historical trace of what the enumeration found, not as a list of open problems.
+
+- **N1 `--accept-reground` is a NO-OP** — `tools/src/reconcile.ts:84-87` voids the option, `regroundedCount=0` always. The flag does nothing. → fix (wire the reground-accept path) OR document as unimplemented. **[FIXED — see below]**
+- **N2 `byDependency` / `byTrigger` unreachable end-to-end** — `RetrievalApi` (`index/src/retrieval.ts:81-89`) is never constructed in `wire.ts`; `atlas query` only does scope resolution. 2 of 3 retrieval modes are dead-to-users (echoes the subsumes-unreachable finding). → wire them OR document scope-only. **[FIXED — see below]**
+- **N3 `loadProjection` THROWS on corrupt `projection.json`** — `store.ts:131` `JSON.parse` unwrapped, violating the total-`undefined` contract `get` honors (`store.ts:99`). **Genuine totality bug.** → fix (total-undefined). **[FIXED — see below]**
+- **N4 corrupt-but-present SCIP throws** through `composeRuntime` — `scip.ts:43` guards only MISSING; a corrupt `.scip` `deserializeSCIP`-throws. → fix (fail-closed to empty) OR document. **[FIXED — see below]**
+- **N5 `--depth` is a DEAD flag** — validated (`parse.ts:100`), read by no leg. → wire OR remove. **[FIXED — removed, see below]**
+- **N6 `resolveNode` / `poke` / transport-resolve not user-reachable** — exist as library surface, no CLI/MCP door. → document (likely orchestrator-owned) OR expose. **[FIXED — see below]**
+- **N7 tier-ratification NOT composed into the emit door (governance hole)** — the governed emit door (`governed-emit.ts`, `wire.ts:153`) is truth→authz→upsert ONLY; the ratify/fastpath machinery (`knowledge/src/ratify/{ratify,fastpath}.ts`: T0→human+billy, fast-path T2-advisory) is NEVER composed into `atlas emit`. So a T0 fact bypasses the human+billy gate at the actual write door. → fix (compose ratify into the door) OR document (ratification is orchestrator/genesis-owned, upstream of emit). Was the **highest-risk finding at the time it was surfaced. [FIXED — RATIFY gate now composed into `governed-emit.ts`, see below]**
+
+> **SEVERITY AT DISCOVERY: N3 + N4 were BOOT-CRASHERS** — a corrupt `.atlas/projection.json` (`compose.ts:137`) or a corrupt-present `.atlas/index.scip` (`compose.ts:128`) threw through `composeRuntime`, crashing BOTH bins at startup (not just the read path). Total-failure, not a degraded read. Both fixed — see below.
 
 ## Status of the findings (N1–N7 + W3-surfaced N8–N14)
 - **N1** `--accept-reground` → FIXED (`reconcile.ts:93` counts `mechanical.length`, no phantom write). **N2** byDependency/byTrigger → FIXED (s9: byDependency real via the designed retrieval surface; byTrigger dormant-documented). **N3/N4** boot-crashers → FIXED (total-undefined / fail-closed-empty). **N5** `--depth` → REMOVED. **N6** node/poke → FIXED-read (`atlas node`, s10) + DOC-push (orchestrator-owned). **N7** tier-ratify → FIXED (RATIFY gate composed into `governed-emit.ts`). **N8** walkFileTree → FIXED. **N9** doctor drift class → FIXED.
