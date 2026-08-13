@@ -7,6 +7,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # ears-coamend-guard diffs REQ blocks against merge-base(origin/master); needs full history
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -21,5 +23,6 @@ jobs:
       - run: npm run command-doc-guard  # every shipped CLI command has a reference page, and vice versa
       - run: npm run adr-citation-guard  # every ADR-NNNN cited under docs/ resolves to docs/adr/ADR-NNNN-*.md
       - run: npm run req-clause-guard  # every REQ's normative-clause still occurs in the invariant it cites
+      - run: npm run ears-coamend-guard  # a changed normative-clause must co-amend its EARS phrase in the same commit (#198)
       - run: npm run doc-transcript-guard  # every documented command transcript is re-run against the built binary, or named as unverifiable
       - run: npm test                # vitest run — own-suite + held-out GATE + totality fences
