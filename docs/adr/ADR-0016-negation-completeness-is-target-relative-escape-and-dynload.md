@@ -272,3 +272,22 @@ rows"; leg-level teeth: `test/dynamic-reach.test.ts`; door-level `ns[key]()`: `t
 (re-run `escape-ts-oracle-agree.mjs` to re-confirm 0-unsound), which moves SHIPPED recall 37.4 % → ~75.7 % while
 keeping 0-false-admit. The LLM-proposer (A1/A3 cost) arm — cheap OpenRouter models per the owner directive — is a
 separate measurement: the gate is deterministic/no-LLM, so the number above is model-independent.
+
+### The A1/A3 PROPOSER arm (measured 2026-08-13, #95)
+
+The gate above carries no LLM. A realistic miner needs a PROPOSER that reads a scope S and suggests negatives
+for the gate to rule on. `test/negation-proposer-bench.test.ts` runs that proposer on a CHEAP model (DeepSeek
+`deepseek-chat-v3.1` via the local Anthropic-compatible gateway on the owner's OpenRouter credits) and feeds
+every "not-uses" suggestion through the SAME shipped gate + tsc oracle (shared via `test/support/neg-bench-lib.ts`).
+Run: 8 scopes (strided across the repo, not cherry-picked), 14 targets each, 112 judgments.
+
+- **Proposer intrinsic accuracy**: DeepSeek agreed with tsc on **111/112 (99.1%)** uses/not-uses calls.
+- **Pipeline output**: 112 "not-uses" proposals → **51 ADMITTED** true groundable negatives. **A1 precision
+  (admitted ∧ true / admitted) = 100.00%, 0 FALSE-ADMITS.**
+- **THE KEY PROPERTY — the sound gate makes a fallible cheap proposer SAFE**: the 1 wrong "not-uses" (a symbol
+  that IS called) was NOT emitted — the gate abstained/refuted it. No LLM error can produce a false negative fact,
+  because the gate, not the LLM, decides. This is what lets Atlas use a $0.0003/fact model with zero precision risk.
+- **A3 cost (gateway-metered, never estimated)**: **$0.017 total, ~$0.00034 per admitted fact** (45k in / 5k out).
+- Corroborates the parse-gap finding LIVE: scopes containing the unparseable barrel files (adapter-io/src,
+  grounding/src, kernel/src) admitted 0 (all `scope-dynamic`); clean scopes admitted 9–11 of 14. The grammar
+  upgrade lifts the proposer's realized yield too, not just the exhaustive-sweep recall.
