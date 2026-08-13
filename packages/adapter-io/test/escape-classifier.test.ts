@@ -1,15 +1,17 @@
 // @atlas/adapter-io — test/escape-classifier.test.ts (#99 sound-negation escape analysis)
 //
-// Acceptance suite for the tsEscapeClassifier + computeEscaping engine, transcribed FROZEN
-// against a repo-wide tsc escape oracle (1135/1135 atlas-export targets, 0 unsound). Pins
-// each proven SAFE/ESCAPE verdict individually, plus the aggregation rule (any non-safe ref
-// wins). Grammar loaded the same way `ast-parser-lifecycle.test.ts` does: directly via
-// web-tree-sitter + `tree-sitter-typescript.wasm`, no eager module-level load.
+// Acceptance suite for the tsEscapeClassifier, transcribed FROZEN against a repo-wide tsc escape
+// oracle (1135/1135 atlas-export targets, 0 unsound). Pins each proven SAFE/ESCAPE verdict
+// individually: `isSafe(node) === true` ⇒ the reference stays a static reference the index sees
+// (non-escaping); `false` ⇒ it flows into shared mutable state (escaping). The production escape
+// leg (`escape/target-escapes.ts`) drives this SAME classifier over SCIP-range ⋈ tree-sitter
+// occurrences and applies the aggregation rule (any non-safe ref ⇒ the symbol escapes), covered
+// end-to-end in `escape-assemble.test.ts`. Grammar loaded the same way `ast-parser-lifecycle.test.ts`
+// does: directly via web-tree-sitter + `tree-sitter-typescript.wasm`, no eager module-level load.
 
 import { createRequire } from 'node:module';
 import Parser from 'web-tree-sitter';
 import { describe, it, expect, beforeAll } from 'vitest';
-import { computeEscaping, type EscapeRef } from '../src/escape/engine.js';
 import { tsEscapeClassifier } from '../src/escape/classifier.js';
 
 const require = createRequire(import.meta.url);
@@ -26,8 +28,6 @@ const SRC = [
   'register(argName);',
   'const z = asOperand as unknown as Foo;',
   'const el = subscriptBase[0];',
-  'sharedName(1);',
-  'call(sharedName);',
 ].join('\n');
 
 /** Depth-first collection of every `identifier`/`type_identifier` node whose text is `name`,
@@ -45,10 +45,6 @@ function findIdentifiers(root: SyntaxNode, name: string): SyntaxNode[] {
   return hits;
 }
 
-function refFor(symbol: string, node: SyntaxNode): EscapeRef {
-  return { symbol, docRoot: node.tree.rootNode, range: [node.startPosition.row, node.startPosition.column] };
-}
-
 /** Nth (0-based) occurrence of `name`, asserting it exists — keeps call sites destructure-free
  *  and type-clean (findIdentifiers returns an array, not a fixed-length tuple). */
 function nthIdentifier(root: SyntaxNode, name: string, n = 0): SyntaxNode {
@@ -58,7 +54,7 @@ function nthIdentifier(root: SyntaxNode, name: string, n = 0): SyntaxNode {
   return node;
 }
 
-describe('#99 tsEscapeClassifier + computeEscaping — proven SAFE/ESCAPE verdicts', () => {
+describe('#99 tsEscapeClassifier — proven SAFE/ESCAPE verdicts', () => {
   let root: SyntaxNode;
 
   beforeAll(async () => {
@@ -72,67 +68,42 @@ describe('#99 tsEscapeClassifier + computeEscaping — proven SAFE/ESCAPE verdic
     root = tree.rootNode;
   });
 
-  it('callee of a call ⇒ NON-escaping [teeth: drop the call_expression rule ⇒ RED]', () => {
-    const node = nthIdentifier(root, 'fooCallee');
-    const escaped = computeEscaping([refFor('fooCallee', node)], tsEscapeClassifier);
-    expect(escaped.has('fooCallee')).toBe(false);
+  const safe = (name: string, n = 0): boolean => tsEscapeClassifier.isSafe(nthIdentifier(root, name, n));
+
+  it('callee of a call ⇒ SAFE/non-escaping [teeth: drop the call_expression rule ⇒ RED]', () => {
+    expect(safe('fooCallee')).toBe(true);
   });
 
-  it('constructor of `new` ⇒ NON-escaping [teeth: drop the new_expression rule ⇒ RED]', () => {
-    const node = nthIdentifier(root, 'WidgetCtor');
-    const escaped = computeEscaping([refFor('WidgetCtor', node)], tsEscapeClassifier);
-    expect(escaped.has('WidgetCtor')).toBe(false);
+  it('constructor of `new` ⇒ SAFE/non-escaping [teeth: drop the new_expression rule ⇒ RED]', () => {
+    expect(safe('WidgetCtor')).toBe(true);
   });
 
-  it('type annotation position (type_identifier) ⇒ NON-escaping [teeth: drop rule (1) ⇒ RED]', () => {
-    const node = nthIdentifier(root, 'TypeOnlyName');
-    const escaped = computeEscaping([refFor('TypeOnlyName', node)], tsEscapeClassifier);
-    expect(escaped.has('TypeOnlyName')).toBe(false);
+  it('type annotation position (type_identifier) ⇒ SAFE/non-escaping [teeth: drop rule (1) ⇒ RED]', () => {
+    expect(safe('TypeOnlyName')).toBe(true);
   });
 
-  it('typeof value in a type position ⇒ NON-escaping [teeth: drop type_query from TS_TYPE_CTX ⇒ RED]', () => {
-    const node = nthIdentifier(root, 'valueInTypeof');
-    const escaped = computeEscaping([refFor('valueInTypeof', node)], tsEscapeClassifier);
-    expect(escaped.has('valueInTypeof')).toBe(false);
+  it('typeof value in a type position ⇒ SAFE/non-escaping [teeth: drop type_query from TS_TYPE_CTX ⇒ RED]', () => {
+    expect(safe('valueInTypeof')).toBe(true);
   });
 
-  it('ReturnType<typeof X> value in a type position ⇒ NON-escaping', () => {
-    const node = nthIdentifier(root, 'valueInTypeof2');
-    const escaped = computeEscaping([refFor('valueInTypeof2', node)], tsEscapeClassifier);
-    expect(escaped.has('valueInTypeof2')).toBe(false);
+  it('ReturnType<typeof X> value in a type position ⇒ SAFE/non-escaping', () => {
+    expect(safe('valueInTypeof2')).toBe(true);
   });
 
-  it('import binding ⇒ NON-escaping [teeth: drop import_specifier from TS_LINKAGE ⇒ RED]', () => {
-    const node = nthIdentifier(root, 'importedName');
-    const escaped = computeEscaping([refFor('importedName', node)], tsEscapeClassifier);
-    expect(escaped.has('importedName')).toBe(false);
+  it('import binding ⇒ SAFE/non-escaping [teeth: drop import_specifier from TS_LINKAGE ⇒ RED]', () => {
+    expect(safe('importedName')).toBe(true);
   });
 
   it('call argument ⇒ ESCAPE [teeth: mark call_expression args safe ⇒ RED]', () => {
-    const node = nthIdentifier(root, 'argName');
-    const escaped = computeEscaping([refFor('argName', node)], tsEscapeClassifier);
-    expect(escaped.has('argName')).toBe(true);
+    expect(safe('argName')).toBe(false);
   });
 
   it('operand of `X as T` ⇒ ESCAPE — the critical regression case (TS_TYPE_CTX must NOT contain '
     + 'as_expression/satisfies_expression) [teeth: add as_expression to TS_TYPE_CTX ⇒ RED]', () => {
-    const node = nthIdentifier(root, 'asOperand');
-    const escaped = computeEscaping([refFor('asOperand', node)], tsEscapeClassifier);
-    expect(escaped.has('asOperand')).toBe(true);
+    expect(safe('asOperand')).toBe(false);
   });
 
   it('subscript/element-access base ⇒ ESCAPE [teeth: mark subscript_expression object safe ⇒ RED]', () => {
-    const node = nthIdentifier(root, 'subscriptBase');
-    const escaped = computeEscaping([refFor('subscriptBase', node)], tsEscapeClassifier);
-    expect(escaped.has('subscriptBase')).toBe(true);
-  });
-
-  it('aggregation: a safe callee ref + an escaping argument ref for the SAME symbol ⇒ ESCAPE '
-    + '(any non-safe ref wins) [teeth: short-circuit on first ref ⇒ RED]', () => {
-    const calleeNode = nthIdentifier(root, 'sharedName', 0);
-    const argNode = nthIdentifier(root, 'sharedName', 1);
-    const refs: EscapeRef[] = [refFor('sharedName', calleeNode), refFor('sharedName', argNode)];
-    const escaped = computeEscaping(refs, tsEscapeClassifier);
-    expect(escaped.has('sharedName')).toBe(true);
+    expect(safe('subscriptBase')).toBe(false);
   });
 });

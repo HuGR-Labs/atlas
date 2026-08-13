@@ -123,8 +123,11 @@ this ships enabled.
 
 ## Implementation (seam — lead's call, not a ratification item)
 
-- `escape(X)` reuses the shipped `@atlas/adapter-io/escape` engine (`computeEscaping` + `tsEscapeClassifier`),
-  fed raw SCIP occurrences (with ranges) ⋈ tree-sitter positions, keyed on **canonicalized** symbols (point 1).
+- `escape(X)` reuses the shipped `@atlas/adapter-io/escape` `tsEscapeClassifier` (the one per-language piece),
+  driven directly by a generic range⋈node join, fed raw SCIP occurrences (with ranges) ⋈ tree-sitter positions,
+  keyed on **canonicalized** symbols (point 1). (The generic `computeEscaping` aggregation wrapper shipped under
+  M1 was REMOVED in M2b — superseded before it had a production caller: the assembler inlines the join with
+  witness sites + a fail-closed null-node verdict the `Set`-returning wrapper could not provide.)
 - the `dynamic-reach(S)` signal is a tree-sitter scan of S's files for the four channels above
   (`import(nonliteral)` / `require(nonliteral)` / `ns[nonliteral]` on a namespace-import binding /
   `eval` / `new Function`) — localized to the door's adapter (does not touch the sealed `@atlas/index` layer).
@@ -191,9 +194,10 @@ the sound fallback (no recall regression, no false-admit).
    negative; abstain durably otherwise) is UNCHANGED.
 2. **The soundy boundary is canon-completeness, re-measured per indexer** — the gate is enabled for an indexer
    only after its canon-completeness residual is measured ~0; otherwise it abstains via the retained `scope-open`.
-3. **Escape is language-parametric** — the per-language piece is the ~15-line classifier + grammar; the engine
-   (`engine.ts`) names no language. Proven on TypeScript in-tree (100 %/0-unsound vs the tsc oracle) and
-   corroborated on Python out-of-tree (a second grammar via the same engine, correct verdicts). This honors the
+3. **Escape is language-parametric** — the per-language piece is the ~15-line classifier (`classifier.ts`) +
+   grammar; the generic range⋈node join that drives it names no language. Proven on TypeScript in-tree
+   (100 %/0-unsound vs the tsc oracle) and corroborated on Python out-of-tree (a second grammar + classifier via
+   the same generic join, correct verdicts). This honors the
    #99 "genesis runs on any codebase" non-negotiable; a full in-tree Python proof is a devDep away if required.
 
 ## Reproduction (all committed + re-runnable; run from the repo root after `scip-typescript index`)
@@ -208,8 +212,8 @@ the sound fallback (no recall regression, no false-admit).
   `harness/probes/escape-recall-ceiling.mjs`.
 - 0-recall of the shipped scope-blanket door (92 % holes): `MCP-Statemachine/scripts/spike-negation-a1.mjs`.
 - 2nd-language (Python) parametricity — CORROBORATING, OUT-OF-TREE (requires `tree-sitter-wasms`, not an atlas
-  dep): the session probe; ratification item 3 rests primarily on the engine's grammar-agnostic CODE
-  (`engine.ts` names no language) + the TS number above. If in-tree proof is required, add `tree-sitter-python`
+  dep): the session probe; ratification item 3 rests primarily on the grammar-agnostic join CODE (only
+  `classifier.ts` names a language) + the TS number above. If in-tree proof is required, add `tree-sitter-python`
   as a devDep and commit a runnable Python fixture test.
 - module + teeth (in-tree): `packages/adapter-io/src/escape/{classifier,engine}.ts`, `test/escape-classifier.test.ts`.
 

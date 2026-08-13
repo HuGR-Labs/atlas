@@ -3,10 +3,13 @@
 // Builds the `escape(X)` leg the negation door's v2 gate consumes (`NegationEmitDeps.targetEscapes`). It reads
 // RAW SCIP occurrences (with RANGES) via `deserializeSCIP` — the frozen `readScip`/`readScipOrEmpty` in this
 // package PROJECT RANGES AWAY, so we must deserialize the dump ourselves — joins each reference occurrence's
-// range to a tree-sitter node (`descendantForPosition`), and runs the SHIPPED language-blind escape engine
-// (`computeEscaping` + `tsEscapeClassifier`) to decide, PER CANONICAL SYMBOL, whether any reference sits in a
-// non-safe position. The result is a `Map<canonicalSymbol, witnessSites[]>` computed ONCE; `targetEscapes(X)`
-// is then a pure lookup — canonicalize X the SAME way and return its witnesses (or `[]` ⇒ X does not escape).
+// range to a tree-sitter node (`descendantForPosition`), and classifies it with the SHIPPED language-blind
+// `tsEscapeClassifier` to decide, PER CANONICAL SYMBOL, whether any reference sits in a non-safe position. The
+// classifier is driven DIRECTLY (not via a generic aggregation wrapper) because this leg needs two things a
+// `Set`-returning aggregate cannot give: WITNESS SITES for the durable abstention record, and a FAIL-CLOSED
+// verdict on an un-locatable node (see the loop below). The result is a `Map<canonicalSymbol, witnessSites[]>`
+// computed ONCE; `targetEscapes(X)` is then a pure lookup — canonicalize X the SAME way and return its
+// witnesses (or `[]` ⇒ X does not escape).
 //
 // This is a faithful port of `harness/probes/escape-ts-oracle-agree.mjs`'s SCIP-range ⋈ tree-sitter join.
 //
@@ -14,7 +17,8 @@
 //   · CANONICALIZE every symbol (occurrences AND the query target) before keying — an un-canonicalized
 //     cross-package `dist/*.d.ts` ref never unifies with its source definition, so a real escape in another
 //     package becomes invisible ⇒ a false "non-escaping". Both sides go through `@atlas/index
-//     canonicalizeSymbol` (the caller contract in `engine.ts`).
+//     canonicalizeSymbol` (the classifier's caller contract — a raw occurrence ⋈ tree-sitter join keyed on
+//     the CANONICAL src-form symbol).
 //   · FAIL-CLOSED: an occurrence we cannot LOCATE (no range, or `descendantForPosition` returns null) is
 //     treated as ESCAPING (a witness), never as safe; a TS doc we cannot READ/PARSE makes every symbol it
 //     references ESCAPING. The shipped engine treats an un-locatable node as SAFE (it costs recall to be
@@ -119,12 +123,12 @@ export function buildTargetEscapes(config: TargetEscapesConfig): ((target: strin
     }
 
     try {
-      // The SCIP-range ⋈ tree-sitter join, per occurrence — this IS `engine.ts`'s `computeEscaping` body
-      // (`descendantForPosition` → `tsEscapeClassifier.isSafe`), the shipped engine's ONE per-language piece,
-      // inlined for two reasons the engine's `Set`-returning shape cannot serve: it must yield WITNESS SITES
-      // (the durable abstention record needs them), and it must FAIL-CLOSED on an un-locatable node (the
-      // engine reads a null node as SAFE — sound-costing recall the other way, which a false-admit gate
-      // cannot afford). A symbol lands in `witnesses` iff ANY of its refs is non-safe OR un-locatable.
+      // The SCIP-range ⋈ tree-sitter join, per occurrence: `descendantForPosition` → `tsEscapeClassifier.isSafe`,
+      // the shipped classifier's ONE per-language piece. Driven directly (no generic aggregation wrapper) for
+      // two reasons a `Set`-returning aggregate cannot serve: it must yield WITNESS SITES (the durable
+      // abstention record needs them), and it must FAIL-CLOSED on an un-locatable node (a null node read as
+      // SAFE would cost soundness — which a false-admit gate cannot afford). A symbol lands in `witnesses` iff
+      // ANY of its refs is non-safe OR un-locatable.
       for (const o of refs) {
         const sym = canonicalizeSymbol(o.symbol);
         const range = o.range ?? [];

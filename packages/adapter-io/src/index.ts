@@ -116,8 +116,6 @@ export type { VerifyFactLeg, VerifyFactData, VerifyFactOpts, VerifyKind, VerifyR
 // Sound-negation escape analysis (#99): a target that never escapes into shared state is
 // groundable as a negative from the static index alone. Engine is language-blind; only the
 // classifier + grammar are per-language.
-export { computeEscaping } from './escape/engine.js';
-export type { EscapeRef } from './escape/engine.js';
 export { tsEscapeClassifier } from './escape/classifier.js';
 export type { EscapeClassifier } from './escape/classifier.js';
 
