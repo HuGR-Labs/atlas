@@ -215,7 +215,7 @@ the sound fallback (no recall regression, no false-admit).
   dep): the session probe; ratification item 3 rests primarily on the grammar-agnostic join CODE (only
   `classifier.ts` names a language) + the TS number above. If in-tree proof is required, add `tree-sitter-python`
   as a devDep and commit a runnable Python fixture test.
-- module + teeth (in-tree): `packages/adapter-io/src/escape/{classifier,engine}.ts`, `test/escape-classifier.test.ts`.
+- module + teeth (in-tree): `packages/adapter-io/src/escape/{classifier,target-escapes,dynamic-reach}.ts`, `test/escape-classifier.test.ts` (the M1 `engine.ts` wrapper was superseded by the inlined SCIP⋈tree-sitter join and removed — `27b21e8`).
 
 ## Review provenance
 
@@ -226,3 +226,49 @@ scratchpad (unreproducible). Both are resolved in this revision: the gate's `dyn
 channel (measured free on Atlas), and every cited number is a committed, re-runnable probe above. The escape and
 disjointness pillars were upheld mechanically; the cold review's core value — a found counterexample, not a
 rubber stamp — is folded in here.
+
+## M3 BENCHMARK — MEASURED end-to-end (2026-08-13, #95)
+
+The v2 door was driven over the **exhaustive** candidate pool on Atlas itself — every joinable export target X
+(1295) × every real `packages/*/src` scope S (19), keeping the meaningful negations (X defined OUTSIDE S):
+**23 181 (X, S) pairs**, `relationKind:'calls'`. Ground truth is an **independent second extractor** — a
+`ts.createProgram` built in the benchmark (NOT the SCIP index the gate reads) recording, per target, the files
+where it is CALLED. The gate under test is the SHIPPED door (`createGovernedEmit(...).emit` on a `kind:'negation'`
+node), authz made permissive so a gate-1 ADMIT surfaces as `emitted:true`. Re-runnable:
+`ATLAS_NEG_BENCH=1 npx vitest run packages/adapter-io/test/negation-bench.test.ts` (needs a fresh
+`scip-typescript index`).
+
+**Headline (the soundness claim, SOTA — soundy generate-and-check):**
+- **0 FALSE-ADMITS over 8 622 admits — admit-precision 100.00 %.** Every negation the gate admitted is TRUE per
+  the independent tsc oracle. This is the whole point of the gate; a single false-admit would break it.
+- 0 over-refute (every REFUTE corresponds to a real tsc reference).
+
+**Net-recall (the #99 win, 0 % floor → measured):**
+- SHIPPED (sound) recall: **37.4 %** (8 622 / 23 031 true scoped-negatives admitted) — vs the #99b blanket's
+  ~0 %. Verdict split: admit 37.2 %, `scope-dynamic` 38.8 %, `escape-open` 23.5 %, refute 0.4 %.
+- `escape-open` 23.5 % ≈ the predicted ~26.5 % target-escape rate — the escape analysis behaves as designed.
+
+**Honest finding — the recall sink is a GRAMMAR PARSE GAP, not real dynamic reachability.** All 38.8 %
+`scope-dynamic` abstentions trace to a `:unparsed` fail-close: the pinned `tree-sitter-typescript@0.23.2` cannot
+parse two modern TS forms present in **11 production files** (`export type * from …` and inline
+`readonly x: import('…').T` type annotations — the package barrels + `wire.ts` + `governed-emit-identity.ts`), so
+`parseTsDoc` rejects the whole file on `rootNode.hasError` and the M2b hardening (correctly) fail-closes it as a
+channel. This is **SOUND** (a file we cannot parse might hide a channel) but costs recall. A **parse-tolerant
+ceiling arm** (drop `:unparsed`/`:js-unscanned`, keep only REAL channels) measures the recall the sound gate would
+reach once those files parse: **75.7 %** (17 424 / 23 031) — matching the design ceiling (73.6 % non-escaping)
+almost exactly — with the ceiling arm's extra 8 802 admits **all still TRUE per tsc (0 false-admits)**. So the
+gate leaves **38.2 recall points on the table purely to the grammar's parse gaps**, recoverable by upgrading the
+grammar (NOT by loosening the gate). NOTE: this reconciles the earlier `negation-dynreach-cost.mjs` "0 % of 14
+scopes" number — that probe measured REAL channels only and predates the M2b `hasError`→fail-closed + JS-family
+hardening that introduced the `:unparsed` witnesses.
+
+**Adversarial rows (owner directive — the reproduced `ns[key]()` + all 5 hardened channels):** each driven through
+the real `buildDynamicReach` over a synthetic S; every one FIRES (⇒ the door abstains `scope-dynamic`, never a
+false-admit): `ns[key]()`, `import(nonliteral)`, `require(nonliteral)` (incl. member callee), `eval` (incl. member
+callee), `new Function`, JS-family fail-closed. In-suite table: `test/negation-bench.test.ts` "adversarial channel
+rows"; leg-level teeth: `test/dynamic-reach.test.ts`; door-level `ns[key]()`: `test/negation-door-v2-escape.test.ts`.
+
+**FOLLOW-UP (not this ADR):** upgrade `tree-sitter-typescript` past `export type *` / inline `import()`-type support
+(re-run `escape-ts-oracle-agree.mjs` to re-confirm 0-unsound), which moves SHIPPED recall 37.4 % → ~75.7 % while
+keeping 0-false-admit. The LLM-proposer (A1/A3 cost) arm — cheap OpenRouter models per the owner directive — is a
+separate measurement: the gate is deterministic/no-LLM, so the number above is model-independent.
