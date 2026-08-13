@@ -113,6 +113,14 @@ export type { NegationLeg, NegationsData, NegationsRead } from './negation-sourc
 export { createVerifyFactLeg, verifyFactVerdict } from './verify-fact-source.js';
 export type { VerifyFactLeg, VerifyFactData, VerifyFactOpts, VerifyKind, VerifyReq } from './verify-fact-source.js';
 
+// Sound-negation escape analysis (#99): a target that never escapes into shared state is
+// groundable as a negative from the static index alone. Engine is language-blind; only the
+// classifier + grammar are per-language.
+export { computeEscaping } from './escape/engine.js';
+export type { EscapeRef } from './escape/engine.js';
+export { tsEscapeClassifier } from './escape/classifier.js';
+export type { EscapeClassifier } from './escape/classifier.js';
+
 // The PROVENANCE tripwire's READ-side refusal (`read-provenance.ts`) — the half the write doors already had.
 // Exported because the CLI entrypoint renders it (`cli/src/cli.ts`) and because a test must be able to
 // assert on the DISCRIMINANT (`UntrustedStoreError.reason`) rather than on a substring of refusal prose.
