@@ -135,6 +135,31 @@ this ships enabled.
 - `scope-open` is RETAINED for the canon-completeness fail-closed and any indexer that has not passed the
   per-indexer canon check — the honest fallback to the old blanket behaviour.
 
+**M2b landed + HARDENED (assembler side, cold-reviewed by lucy — every silent narrowing turned fail-closed or
+gated).** The two legs are built in `escape/target-escapes.ts` (raw SCIP ranges via `deserializeSCIP` ⋈
+tree-sitter, over **canonicalized** symbols) and `escape/dynamic-reach.ts` (door-local tree-sitter scan), wired
+at both `createGovernedEmit` sites (`compose.ts`, `wire.ts`), both-or-neither. The cold review found five
+false-admit paths against the "any codebase" spec (none reachable on atlas today — TS-only, tracked src,
+scip-typescript, scopes under `packages/*/src`); all closed in one round:
+- **Indexer gate (ADR item 2, mechanized):** `buildTargetEscapes` builds ONLY when the SCIP `metadata.toolInfo.name`
+  is `scip-typescript` (the scheme `canonicalizeSymbol` is proven on); any other indexer ⇒ `undefined` ⇒ blanket
+  fallback. This is the per-indexer canon-completeness enablement, in code (not just prose).
+- **Channel #3 strengthened from syntactic `ns[k]` to `ns ESCAPES`:** a namespace binding referenced in ANY
+  non-safe position (computed subscript, argument `f(ns)` / `Reflect.get(ns,k)`, assignment, computed
+  destructuring `const {[k]:x}=ns`) is a channel; only static `ns.member` / `ns['literal']` stay safe (recall
+  preserved). Subsumes the old syntactic form AND its siblings — the sound generalization of "a member of `ns`
+  reached with no occurrence for it".
+- **Channels #2/#4 broadened to member-callee forms** (`module.require(v)`, `globalThis.eval(s)`), not only the
+  bare identifier.
+- **JS-family (`.js/.jsx/.mjs/.cjs`) fail-closed:** such a file under S is a channel witness (this door parses
+  only the TS grammar and a JS file CAN host every construct) — never a silent skip. A genuinely other-language
+  file (`.py`/…) is skipped.
+- **Stale-range guard:** the escape join fails closed (ESCAPING) when a (possibly stale) SCIP range resolves to a
+  node whose text is not the reference's own descriptor name.
+- **Documented residual (soundy boundary, stated not hidden):** the scan sees only `walkFileTree`'s output
+  (git-tracked + readable) — a negation is a claim about the committed/indexed tree, so an untracked working-copy
+  file is out of the model, and a tracked-but-unreadable file is a whole-index degrade (SCIP can't see it either).
+
 **WIRED (M2a landed — door side).** The seam is now concrete on `NegationEmitDeps` (`governed-emit-negation.ts`)
 as two ADDITIVE + OPTIONAL legs: `targetEscapes(target): string[]` (the escape sites of X — empty ⇒ ¬escape) and
 `dynamicReach(scope): string[]` (S's opaque channels — empty ⇒ none). The door runs the target-relative gate
