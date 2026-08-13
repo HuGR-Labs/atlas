@@ -93,6 +93,89 @@ function grammarFor(path: string): TsLanguage | undefined {
   return undefined;
 }
 
+/** `true` iff `path` is a TS/TSX source this adapter's grammar parses — INDEPENDENT of warmup (a pure
+ *  extension test). The sound-negation assemblers (`escape/target-escapes.ts`, `escape/dynamic-reach.ts`)
+ *  use it to tell "not my language, skip" (a `.py`/`.rb` file cannot host a TS reference or a JS dynamic
+ *  channel) from "my language but I could not parse it" (fail-closed) — the two must diverge for soundness. */
+export function isTsPath(path: string): boolean {
+  return path.endsWith('.tsx') || path.endsWith('.ts') || path.endsWith('.mts') || path.endsWith('.cts');
+}
+
+/** `true` once `initAst()` has warmed BOTH grammars. The gate the sound-negation escape/dynamic-reach
+ *  assemblers read to decide whether they can be built AT ALL: an un-warmed process parses nothing, so an
+ *  assembler built there would return an empty escape/dynamic map — an UNSOUND "nothing escapes / no dynamic
+ *  channel". Rather than lie, the assemblers degrade to ABSENT legs (the door falls back to the sound blanket)
+ *  exactly as `foldAstUnits` degrades to a no-op refinement here. */
+export function astWarmed(): boolean {
+  return TS_LANG !== null && TSX_LANG !== null;
+}
+
+/** A parsed document with its root held open. The caller OWNS the WASM handles — call `dispose()` when done
+ *  (the same explicit `.delete()` `itemsOf` uses: GC of the JS wrapper never frees the underlying heap). */
+export interface ParsedDoc {
+  readonly root: SyntaxNode;
+  dispose(): void;
+}
+
+/**
+ * Parse `content` under the grammar for `path` into a held-open root, or `undefined` when the grammars are
+ * not warmed / the language is unparsed / the parse yields an ERROR tree / the parse throws. Reuses the SAME
+ * module-level grammar singletons `foldAstUnits` reads — the ONE grammar-loading path in this package, never a
+ * second `Parser.Language.load`.
+ *
+ * FAIL-CLOSED CONTRACT for the callers: distinguish `isTsPath(path)` FIRST — a `false` there is "not my
+ * language" (skip, no witness), whereas `isTsPath(path) === true` with an `undefined` return here is "my
+ * language but I could not read it", which the escape/dynamic-reach assemblers treat as an escape / a dynamic
+ * channel (never a silent skip). `hasError` folds into `undefined` on purpose: the same honesty `itemsOf`
+ * applies to the fold — a tree the grammar could not fully recognise is not one we classify positions over.
+ */
+export function parseTsDoc(path: string, content: string): ParsedDoc | undefined {
+  const grammar = grammarFor(path);
+  if (grammar === undefined) return undefined;
+  let parser: Parser | undefined;
+  let tree: ReturnType<Parser['parse']> | undefined;
+  const free = (): void => {
+    try {
+      tree?.delete();
+    } catch {
+      /* already freed / never allocated */
+    }
+    try {
+      parser?.delete();
+    } catch {
+      /* already freed / never allocated */
+    }
+  };
+  try {
+    parser = new Parser();
+    parser.setLanguage(grammar);
+    tree = parser.parse(content);
+    if (tree.rootNode.hasError) {
+      free(); // an error tree is NOT classified — free both handles and report "could not parse".
+      return undefined;
+    }
+    const held = { tree, parser };
+    return {
+      root: tree.rootNode,
+      dispose(): void {
+        try {
+          held.tree.delete();
+        } catch {
+          /* already freed */
+        }
+        try {
+          held.parser.delete();
+        } catch {
+          /* already freed */
+        }
+      },
+    };
+  } catch {
+    free(); // a throw mid-parse: free whatever was allocated before reporting "could not parse".
+    return undefined;
+  }
+}
+
 /**
  * A top-level declaration PLUS the one fact about its wrapper (#182).
  *

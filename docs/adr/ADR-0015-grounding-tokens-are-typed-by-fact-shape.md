@@ -151,6 +151,17 @@ pure edit is already handled by the split; the residue is re-scoped at #99c.
 > the abstention discipline. Details + the identity/authz separation live in
 > [99b §1/§4](../design/99b-negation-fact-contract.md).
 
+> **Amendment 2026-08-13 (D3 completeness test is TARGET-RELATIVE — ADR-0016, owner-ratified):** D3's honest-
+> abstention LAW is unchanged (admit only a PROVEN-complete negative; abstain durably otherwise). What ADR-0016
+> refines is the completeness TEST: the shipped door proved completeness by a scope-blanket proxy
+> (`holeSources() ∩ S == ∅`), which abstains on 92 % of real files (every dir statically imports node/npm) — 0
+> recall. ADR-0016 replaces it with a TARGET-RELATIVE test — a negative "X un-relationKind'd in S" is complete iff
+> `resolves(X) ∧ ¬escape(X) ∧ ¬dynamic-reach(S)` (a hole about some OTHER undefined symbol can never be a hidden
+> reference to a resolvable X; the only channels to X are X's value escaping, or an opaque dispatch in S — both
+> gated). `holeSources` is retained as the canon-completeness fallback. Measured 0 %→86.2 % sound-groundable, 0
+> unsound. The soundy boundary moves from "any hole in S" to per-indexer canon-completeness. Full argument +
+> committed reproduction: [ADR-0016](ADR-0016-negation-completeness-is-target-relative-escape-and-dynload.md).
+
 ## What the owner must ratify
 
 1. **The typed-token model (D1–D4)** — that a grounding token is chosen by fact shape, amending the GROUND-1

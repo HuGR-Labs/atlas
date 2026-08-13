@@ -29,6 +29,8 @@ import { createProjectionQueryIndex, underScope } from './projection-query-index
 import { createDriftSource } from './git-drift.js';
 import { headSha } from './run-git.js';
 import { createGovernedEmit } from './governed-emit.js';
+import { buildTargetEscapes } from './escape/target-escapes.js';
+import { buildDynamicReach } from './escape/dynamic-reach.js';
 import { createGovernedLink } from './governed-link.js';
 import { loadPolicy } from './policy.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
@@ -170,7 +172,10 @@ export function assembleHandler(config: WireConfig): WiredHandler {
   // singletons; when the composition root has awaited `initAst()` (the bins do, before composeRuntime) it
   // folds real units, otherwise it is a safe additive NO-OP (file/dir nodes only) — so wire tests that never
   // warm up keep their exact prior behavior.
-  const fileTree = foldAstUnits(walkFileTree(config.repoPath));
+  // Capture the RAW (unfolded) tree so the sound-negation `dynamicReach` leg scans file bytes off the SAME
+  // walk `build` folds (no second FS traversal, no divergent view). `fileTree` is the folded index input.
+  const rawTree = walkFileTree(config.repoPath);
+  const fileTree = foldAstUnits(rawTree);
   // DEGRADE gracefully on a fresh repo: a MISSING `.scip` dump (no `.atlas/index.scip` yet) is an empty
   // files-only index, never a throw. `readScipOrEmpty` is the ONE shared missing-file guard (scip.ts) — the
   // twin of the one `compose.ts` applies for the Axes build (COMPOSE-B).
@@ -201,6 +206,17 @@ export function assembleHandler(config: WireConfig): WiredHandler {
   // PROVENANCE: threaded from the composition root onto the ONE store both doors ride (see `WireConfig`).
   const store = createDiskStore(config.casPath, currentHead, config.trusted);
 
+  // ADR-0016 M2b — the TWO v2 negation closure legs, built ONCE off the SAME `scipPath`/`repoPath`/`rawTree`
+  // as the other emit-leg deps. Both-or-neither (a half-gate is never run): if either cannot be built SOUNDLY
+  // (AST grammars not warmed — `assembleHandler` is sync and a wire-only fake never calls `initAst()` — or the
+  // dump is unreadable) the door falls back to the sound `holeSources() ∩ S` blanket, exactly as #99b shipped.
+  const negTargetEscapes = buildTargetEscapes({ scipPath: config.scipPath, repoPath: config.repoPath });
+  const negDynamicReach = buildDynamicReach(rawTree);
+  const escapeLegs =
+    negTargetEscapes !== undefined && negDynamicReach !== undefined
+      ? { targetEscapes: negTargetEscapes, dynamicReach: negDynamicReach }
+      : {};
+
   const governedEmit = createGovernedEmit({
     store,
     gate: config.seams.gate,
@@ -218,6 +234,8 @@ export function assembleHandler(config: WireConfig): WiredHandler {
     ...(config.axes !== undefined ? { axes: config.axes } : {}),
     nodeHashOfPath,
     edgeModel: edgeModelVersion(),
+    // ADR-0016 M2b — the v2 target-relative legs (both or neither; empty spread ⇒ the sound blanket fallback).
+    ...escapeLegs,
   });
 
   // GOVERNED sameAs LINK (WP-SAMEAS): the second governed write door — asserts a human `a ≡ b` equivalence

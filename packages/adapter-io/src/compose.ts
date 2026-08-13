@@ -34,6 +34,8 @@ import { createRevIndex } from './rev-index.js';
 import { runGit, headSha } from './run-git.js';
 import { createDoctorSource, isMechanicalAt } from './doctor-source.js';
 import { createGovernedEmit } from './governed-emit.js';
+import { buildTargetEscapes } from './escape/target-escapes.js';
+import { buildDynamicReach } from './escape/dynamic-reach.js';
 import { createGovernedPromote } from './governed-promote.js';
 import type { PromoteOut } from './governed-promote.js';
 import { createOwnLeg } from './own-source.js';
@@ -252,11 +254,26 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
   // composeRuntime); this keeps composeRuntime SYNC for its many direct callers while the production doors
   // (which spawn these bins) get real sub-file granularity.
   const scipOutput = readScipOrEmpty(scipPath);
-  const axes = build(foldAstUnits(walkFileTree(repoPath)), scipOutput);
+  // Capture the RAW (unfolded) file tree so the sound-negation `dynamicReach` leg can scan file bytes off the
+  // SAME walk `build` folds — no second FS traversal, no divergent view of what the repo contains.
+  const rawTree = walkFileTree(repoPath);
+  const axes = build(foldAstUnits(rawTree), scipOutput);
   // #96 F2 — the SAME N0 completeness view the emit leg rides (`() => index.symbolReverse()`, wire.ts:217),
   // built ONCE off the SAME `scipOutput` the axes above are built from, so the promote leg (below) reaches
   // `emitNegation` with its deps satisfied instead of fail-closing `scope-empty` for every promoted negation.
   const symbolReverseView = createSymbolReverse(scipOutput);
+
+  // ADR-0016 M2b — the TWO v2 negation closure legs, built ONCE off the same `scipPath`/`repoPath`/`rawTree`
+  // the other legs ride. `targetEscapes` = `escape(X)` (raw SCIP ranges ⋈ tree-sitter, canonicalized);
+  // `dynamicReach` = the door-local opaque-channel scan of S. Both return `undefined` when they cannot be
+  // built SOUNDLY (AST grammars not warmed — `composeRuntime` is sync for many callers, so `initAst()` may not
+  // have run — or the dump is unreadable). The door runs the target-relative gate IFF BOTH are wired; if either
+  // is absent it falls back to the sound `holeSources() ∩ S` blanket, so we wire NEITHER unless BOTH exist (a
+  // half-gate is never run). This mirrors the `foldAstUnits` no-op-until-`initAst` degrade a few lines above.
+  const targetEscapes = buildTargetEscapes({ scipPath, repoPath });
+  const dynamicReach = buildDynamicReach(rawTree);
+  const escapeLegs =
+    targetEscapes !== undefined && dynamicReach !== undefined ? { targetEscapes, dynamicReach } : {};
 
   // The REAL reconcile drift seams (COMPOSE-C). `revIndex` builds the code index at an arbitrary rev:
   //   - `reDerives`         — a fact re-derives iff its grounding is still FRESH at the topic sha.
@@ -364,6 +381,8 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
       axes,
       nodeHashOfPath,
       edgeModel: edgeModelVersion(),
+      // ADR-0016 M2b — the v2 target-relative legs (both or neither; empty spread ⇒ the sound blanket fallback).
+      ...escapeLegs,
     }).emit,
   });
 
