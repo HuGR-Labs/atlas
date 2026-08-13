@@ -18,7 +18,7 @@
 // forces the classification to be DECLARED rather than discovered by the next reviewer.
 //
 // ── DECLARED COUNTS (gate-checked; a drift here FAILS this gate) ────────────────────────────────────────
-//   declared-modules: 52 · dead-value-exports: 220 · type-reachable: 6
+//   declared-modules: 54 · dead-value-exports: 222 · type-reachable: 6
 //   These three are read back from THIS file and asserted against the measured tree at the foot of the run
 //   (see "THE HEADER STATES COUNTS, AND THIS CHECKS THEM"). No count is QUOTED anywhere else in this
 //   header — a quoted integer that nothing checks is exactly what rotted here (task #143); this one cannot.
@@ -173,6 +173,7 @@ const LEDGER = {
   'packages/genesis/src/loops.ts': { values: 8, shipped: null, banner: false },
   'packages/genesis/src/seed.ts': { values: 5, shipped: null, banner: false },
   'packages/genesis/src/usefulness.ts': { values: 2, shipped: null, banner: false },
+  'packages/genesis/src/reverify.ts': { values: 1, shipped: null, banner: true }, // SPIKE-1 R2 — the re-verify / auto-invalidation path; no product door yet (P1/H1a wire it)
   // ── the PROVEN fact-verifier family (dependency + count + negation) is NO LONGER HERE: it moved dead → live.
   //    `packages/adapter-io/src/verify-fact-source.ts` (`createVerifyFactLeg`) value-imports all three oracles
   //    and is wired to `atlas verify-fact` through the composition root (compose.ts → bin.ts), so
@@ -210,6 +211,11 @@ const LEDGER = {
   // with a zero-length pointer. Named refusal added; module still has ZERO production callers.
   'packages/knowledge/src/write/archive.ts': { values: 2, shipped: null, banner: false },
   'packages/knowledge/src/write/template.ts': { values: 3, shipped: null, banner: false },
+  // ── SPIKE-1 R1 taproot: the proven-store map + §3.4 admission rule. `bindProvenStore` has no product ──
+  //    caller YET — R2 / P1 / H1a wire it — so it is a declared reference model until that dead→live edge,
+  //    exactly like own.ts / the verify-fact family were before their doors landed. receipt.ts is NOT here:
+  //    it exports only TYPES (zero dead VALUE exports), so the analyser never sees it as a reference model.
+  'packages/knowledge/src/proven/store.ts': { values: 1, shipped: null, banner: true },
   // #99b N2 landed: the N2 governed-emit door (`adapter-io/src/governed-emit-negation.ts`) now VALUE-IMPORTS
   // `negationKey` (mints an admitted negation's id AND an AbstainedRecord's address), so the row that tracked
   // it dead-until-wired went dead→live and was REMOVED here — the ledger keeping the N1→N2 transition on the

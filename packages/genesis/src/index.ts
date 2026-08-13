@@ -31,3 +31,4 @@ export * from './usefulness.js';     // WP-6.18.GEN   — hits-calibrated seeds 
 export * from './verify-fact.js';    // spike/verify-fact — the positive-dual dependency-fact oracle (proven/refuted/abstain)
 export * from './verify-count.js';   // spike/verify-fact — the COUNT class: ≥N distinct callers under scope (sound lower bound)
 export * from './verify-negation.js'; // spike/verify-fact — the NEGATION class: refute any-world, prove closed-world (#220 dual)
+export * from './reverify.js';        // SPIKE-1 R2 — the auto-invalidation / re-verify path (rev-pin + unit-drift + answer-tamper + oracle re-run)
