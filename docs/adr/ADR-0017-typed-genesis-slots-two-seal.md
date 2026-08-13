@@ -10,16 +10,28 @@ precedent), #226 (the independent adjudication panel). Full reasoning:
 
 `PredicateSlot` (`packages/knowledge/src/types.ts:283`) is a closed, normative 12-member vocabulary, and
 `nodeKey = hash(primaryAnchorId ‖ predicateSlot)` is designed to collide facts of the *same* type at the
-*same* place so they UPDATE/union instead of proliferating. Measured on RUN2's 200 clean facts:
-`predicateSlot` is **absent in 200/200**, so identity collapses onto the anchor — two facts of *different*
-types about one place (an `ownership` and a `security-property`) evict each other. Atlas was built for typed
-knowledge; genesis produces untyped prose. This is a product-shape gap, bigger than #182.
+*same* place so they UPDATE/union instead of proliferating. The #196 measurement (RUN2, `e4882a3`) found
+`predicateSlot` **absent in 200/200** mined facts, so identity collapses onto the anchor and two facts of
+*different* types about one place evict each other.
 
-The decisive constraint: the 12 slots do **not** admit one uniform check. `dependency` and `definition` are
-structurally provable (a `reverseCallers ∩ scope ≠ ∅` positive existence via `verifyDependency`; a SCIP
-`definition`-occurrence via `symbol-reverse.ts`). The other ~8 — `invariant, contract, precondition,
-postcondition, sideeffect, ownership, perf-bound, security-property, gotcha, rationale` — are about what the
-prose *means* and admit **no** sound mechanical oracle in principle.
+**Corrected root cause (measured on current master `7de5faf`, not the stale card).** The gap is NOT a
+missing design — the typed-slot admission ENGINE exists and is tested (`genesis/src/admit-harness.ts`,
+GEN-12k; #225 E&V + #229 completed its legs): a proposer proposes a typed `PredicateProposal` carrying a
+`slot`, `admit-harness` mints the fact CARRYING `predicateSlot: p.slot` (line 342), and `governed-emit.ts`
+folds the slot into `nodeKey` and stores it. What is unwired is the SHIPPED `atlas mine` path: its gate
+proposes **advisories only** (`cli/src/mine-gate.ts` `makeAdmitGate`), and its admission supply
+(`adapter-io/src/compose-mine-admission.ts:75`) hands the engine **fail-closed STUB oracles** —
+`typeOracle: { expressible: () => false, diagnose: () => 'NA' }` and `predicate: { synthesize: () => null,
+… }` — explicitly documented there as "a predicate path wired later must supply real ones." So a predicate
+candidate can never be admitted-with-slot; every mined fact falls back to a slotless advisory. The absent
+slot is a **reference-model-vs-shipped** gap (the engine is real and inert), not an absent classifier.
+
+The 12 slots split by *how* a slot is checkable — and the engine already models this split. `dependency`
+(`verifyDependency`) and `definition` (SCIP `definition`-occurrence, `symbol-reverse.ts`) are structurally
+provable; the `typeOracle`'s `expressible`/`diagnose` additionally covers the **type-expressible** slots the
+compiler/LSP can decide (`admit-harness.ts` names `contract` / `ownership` / visibility) — so MORE than two
+slots are provable once a real oracle is supplied. The genuinely non-expressible remainder (`gotcha`,
+`rationale`, and any slot no oracle can decide) is what needs the validated leg.
 
 ## Decision (ratified)
 
@@ -60,9 +72,15 @@ Genesis emits a typed slot per fact under a **two-seal** classifier, mirroring t
 
 ## Build path (a separate campaign, to be decomposed + cold-reviewed)
 
-(a) a `slot → oracle` map (proven-able slots + their oracles: `dependency`→`verifyDependency`,
-`definition`→SCIP def-site; probe `precondition`/`postcondition` for an assert/contract oracle); (b) the
-proposer emits a proposed slot; (c) the proven gate (reuse `admit-harness`/`verify-*`) + the validated panel
-(reuse #226); (d) the seal field + nodeKey leg + absent-tolerant goldens; (e) a benchmark on real mined
-facts — per-slot precision, **0 false-proven**, measured false-rate on **validated**. lucy cold-review on the
-identity/seal change before merge.
+Because the engine already exists, this is a **wiring + real-oracle** campaign, not a from-scratch build:
+
+(a) **Supply real oracles** into `compose-mine-admission.ts` — replace the `expressible: () => false` /
+`synthesize: () => null` stubs with the real type-checker/LSP `typeOracle` and the real check synthesizer
+from the #225/#229 machinery, so `admit-harness`'s already-tested proven path actually runs. (b) **Wire the
+predicate leg into `atlas mine`** — let `mine-gate`/the lenses forward `PredicateProposal`s (with slots), not
+advisories only, so a proven fact carries its slot. (c) Add the **validated** leg (independent #226 panel) for
+the non-expressible slots, with the `validated` seal. (d) The `seal` field (parallel to `obviousness`); the
+nodeKey slot leg already exists in `governed-emit.ts` — add absent-tolerant goldens. (e) A benchmark on real
+mined facts — per-slot precision, **0 false-proven**, measured false-rate on **validated**. lucy cold-review
+on the identity/seal change before merge. NOTE — measure-first per WP: re-confirm each leg's state on the
+then-current master (the #196 card measured `e4882a3`; the engine has advanced since, so trust the tree).

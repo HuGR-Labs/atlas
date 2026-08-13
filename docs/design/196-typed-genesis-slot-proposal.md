@@ -23,8 +23,19 @@ identity. Two downstream consequences already live in the tree: `own-source.ts` 
 `predicateSlot === 'definition'`, a read path that currently matches nothing; and KNOW-10's closed-slot gate
 (#152) has nothing to enforce because no producer emits a slot.
 
-Atlas was designed for **typed** knowledge (12 types, including `ownership` and `security-property`), and
-genesis produces **untyped prose**. Closing this is bigger than #182 and changes what the product is.
+Atlas was designed for **typed** knowledge (12 types, including `ownership` and `security-property`).
+
+> **CORRECTION (measured on current master `7de5faf`, added after the first draft — the #196 card measured
+> the stale `e4882a3`).** The root cause is NOT a missing classifier. The typed-slot admission ENGINE exists
+> and is tested (`genesis/src/admit-harness.ts`, GEN-12k; #225 E&V + #229 completed its legs): a proposer
+> proposes a `PredicateProposal` with a `slot`, the harness mints `predicateSlot: p.slot`, and
+> `governed-emit.ts` folds it into `nodeKey`. What is unwired is the SHIPPED `atlas mine`: it proposes
+> **advisories only** (`mine-gate.ts` `makeAdmitGate`) and its admission supply
+> (`compose-mine-admission.ts:75`) hands the engine **fail-closed stub oracles** (`expressible: () => false`,
+> `synthesize: () => null`), documented there as "a predicate path wired later must supply real ones." So no
+> predicate is admitted-with-slot and facts fall back to slotless advisory — a **reference-model-vs-shipped**
+> gap. The two-seal design below is still the right target; the work is WIRING real oracles + the validated
+> leg, not designing/building the engine.
 
 ## 2. The one genuine design fork
 
