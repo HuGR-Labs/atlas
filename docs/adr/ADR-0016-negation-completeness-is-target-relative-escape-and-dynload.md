@@ -135,6 +135,19 @@ this ships enabled.
 - `scope-open` is RETAINED for the canon-completeness fail-closed and any indexer that has not passed the
   per-indexer canon check — the honest fallback to the old blanket behaviour.
 
+**WIRED (M2a landed — door side).** The seam is now concrete on `NegationEmitDeps` (`governed-emit-negation.ts`)
+as two ADDITIVE + OPTIONAL legs: `targetEscapes(target): string[]` (the escape sites of X — empty ⇒ ¬escape) and
+`dynamicReach(scope): string[]` (S's opaque channels — empty ⇒ none). The door runs the target-relative gate
+IFF **both** legs are wired (never a half-gate); with either absent it falls back to the `holeSources() ∩ S`
+blanket byte-identically to #99b. Order on the v2 path: phantom guard (`resolves(X)`, #220) → `escape-open` →
+`scope-dynamic` → refuted (`reverseCallers(X) ∩ S`) → admit. Proven at the composed door in
+`negation-door-v2-escape.test.ts` (8 teeth incl. the recall win and the `ns[key]()` false-admit); the shipped
+`negation-door.test.ts` (15) stays green unchanged (fallback path untouched). **PENDING (M2b — assembler side):**
+build `targetEscapes` from raw SCIP ranges (`deserializeSCIP`) ⋈ the escape engine over **canonicalized**
+symbols, and `dynamicReach` from a door-local tree-sitter scan, then populate both legs at the two
+`createGovernedEmit` sites (`compose.ts` promote leg + `wire.ts` emit leg). Until M2b lands the live door runs
+the sound fallback (no recall regression, no false-admit).
+
 ## Teeth (what a test must kill)
 
 - an escaping X admitted as un-called ⇒ RED (a false-admit; the whole point of the `¬escape` leg).

@@ -24,6 +24,11 @@
 //                          ⚠ SOUNDNESS (billy): the open-scope test is `holeSources() ∩ S ≠ ∅`, NOT the naive
 //                          `reverseCallers(target) == []` — the latter reads `[]` for a local/undefined target
 //                          over an OPEN world too, which is the exact false-negative §0 forbids.
+//                          ADR-0016 (#99): when the TWO v2 closure legs (`targetEscapes`+`dynamicReach`) are
+//                          wired, the OPEN test is REPLACED by the SOUND TARGET-RELATIVE gate
+//                          (`¬escape(X) ∧ ¬dynamic-reach(S)`) — abstaining `escape-open` / `scope-dynamic` — which
+//                          admits the ~92% of real files the blanket `holeSources() ∩ S` abstains (≈0 recall).
+//                          The blanket stays as the fallback (either leg absent): the door never runs a half-gate.
 //   §3 grounding         : constructed AT ADMIT — ONE `kind:'directory'` entry at S whose `subtreeHash` is S's
 //                          CURRENT folded scope-Merkle (`resolveCurrent`, the insertion-sensitive dir hash a
 //                          new caller entering S drifts). `edgeModel` stamped = the extractor release (§3
@@ -79,6 +84,30 @@ export interface NegationEmitDeps {
   /** The pinned extractor release (`IndexerPlan.version`) stamped onto an admitted negation's `edgeModel` (§3
    *  clause 4 — the ONE completeness clause `driftDetect` cannot see: an upgrade changes no file bytes). */
   readonly edgeModel?: string;
+  /**
+   * ADR-0016 (#99, target-relative completeness) — the TWO v2 closure legs. When BOTH are wired the door runs
+   * the SOUND target-relative gate (`¬escape(X) ∧ ¬dynamic-reach(S)`) instead of the canon blanket
+   * `holeSources() ∩ S` — which abstains on ~92% of real files (any hole anywhere in S) and yields ~0 recall.
+   * ADDITIVE + OPTIONAL: absent (a legacy caller, or only one leg wired) ⇒ the door FALLS BACK to the sound
+   * blanket `scope-open` test EXACTLY as #99b shipped. Wiring only ONE of the two is treated as absent (both
+   * legs are required to prove closure) — the door never runs a half-gate.
+   *
+   * `targetEscapes(target)` — the escape sites of X (the ADR-0016 `escape(X)` predicate, computed by the
+   * language-blind escape engine over X's occurrences ⋈ tree-sitter). EMPTY ⇒ X does not escape ⇒ every use of
+   * X is a static reference the index already sees (a pure-TYPE X is trivially non-escaping — its refs are all
+   * type-position, so it returns empty here too). NON-EMPTY ⇒ ABSTAIN `escape-open`, witness = the sites.
+   * CALLER CONTRACT: X and every occurrence MUST be canonicalized (`@atlas/index canonicalizeSymbol`) BEFORE
+   * the engine runs — an un-canonicalized cross-package ref makes a real escape invisible (a false-admit).
+   */
+  readonly targetEscapes?: (target: string) => readonly string[];
+  /**
+   * `dynamicReach(scope)` — the opaque runtime channels IN S (`import(nonliteral)` | `require(nonliteral)` |
+   * `ns[nonliteral]` on a namespace-import binding | `eval` | `new Function`) that could reach ANY target with
+   * NO emitted occurrence, defeating the occurrence-based escape/reverse-caller closure. EMPTY ⇒ S has no such
+   * channel. NON-EMPTY ⇒ ABSTAIN `scope-dynamic`, witness = the channels. This is the catch-all that closes the
+   * one false-admit the pure escape check cannot (a static `import * as ns; ns[key]()` reaching X invisibly).
+   */
+  readonly dynamicReach?: (scope: string) => readonly string[];
 }
 
 /** Malformed-negation refusal (fail-closed verdict) — the door's own gate-0.1 shape check on the caller's OWN
@@ -115,6 +144,17 @@ const REASON_TEXT: Readonly<Record<AbstainedRecord['reason'], string>> = {
     '"it is not called in S" would be VACUOUSLY true — a negative about a phantom, not a groundable fact. A ' +
     'durable AbstainedRecord was written; read it back with the negation read surface. Name a symbol that ' +
     'resolves to a definition Atlas can see (or index the module that defines it), then re-emit',
+  'escape-open':
+    'abstained (escape-open): the target X ESCAPES — a reference of X sits in a non-safe position (an argument, ' +
+    'an assignment RHS, a collection element, a member/subscript base, or the operand of `X as T`), so X flows ' +
+    'into shared mutable state where a scope that never imports X could still reach it at runtime. The index ' +
+    'under-sees X, so "uncalled in S" cannot be proven. A durable AbstainedRecord was written (witness = the ' +
+    'escape sites); read it back with the negation read surface (ADR-0016)',
+  'scope-dynamic':
+    'abstained (scope-dynamic): the scope S has an OPAQUE runtime channel (import(nonliteral) | require(nonliteral) ' +
+    '| ns[nonliteral] | eval | new Function) that could reach the target with NO emitted occurrence, defeating ' +
+    'the occurrence-based closure. A durable AbstainedRecord was written (witness = the channels); read it back ' +
+    'with the negation read surface. Remove the dynamic channel or narrow S, then re-emit (ADR-0016)',
 };
 
 /** Build the ABSTAINED emitted-false verdict + its durable record at the negation's own `negationKey`. */
@@ -196,20 +236,47 @@ export function emitNegation(deps: GovernedEmitDeps, raw: NegationNode): EmitOut
   if (subtreeHash === undefined) return writeAbstention(deps, key, record('scope-empty', []));
 
   const byHash = indexPathsByHash(axes.spatial, nodeHashOfPath);
-  //   (b) scope OPEN? An unresolved/dynamic reference ANYWHERE in S under-approximates the graph ⇒ ABSTAIN
-  //       scope-open, WITH the offending docHashes as the witness (durable + readable, NOT a silent refuse).
-  //       ⚠ This is the SOUND condition — `holeSources() ∩ S`, NOT `reverseCallers(target) == []`.
-  const openSources = inScope(symbolReverse.holeSources(), byHash, scope);
-  if (openSources.length > 0) return writeAbstention(deps, key, record('scope-open', openSources));
-  //   (c0) TARGET RESOLVES? #220 — `reverseCallers(target)` is `[]` for a global symbol with NO in-index
-  //        definition BY CONSTRUCTION (symbol-reverse.ts), so without this gate the (d) admit below would
-  //        ground "target is not called in S" for a PHANTOM — a negative about a symbol Atlas cannot see
-  //        defined, VACUOUSLY true and indistinguishable from a genuinely-uncalled real symbol. Cannot prove
-  //        the negative is MEANINGFUL ⇒ ABSTAIN (honest fail-closed), never admit. It is neither refuted (no
-  //        proven caller) nor scope-open (S may be perfectly closed); the defect is the TARGET, so it earns its
-  //        own reason. Ordered after the scope gates (a/b) — an unresolvable scope is the more basic refusal.
-  if (!symbolReverse.resolves(target)) return writeAbstention(deps, key, record('target-unresolvable', []));
+  //   (b) THE SCOPE-CLOSURE TEST — the crux. ADR-0016 (#99, target-relative completeness): when BOTH v2 legs
+  //       are wired, run the SOUND TARGET-RELATIVE gate (`¬escape(X) ∧ ¬dynamic-reach(S)`), which ADMITS the
+  //       ~92% of real files the canon blanket `holeSources() ∩ S` abstains (any hole ANYWHERE in S ⇒ ~0
+  //       recall). Absent (a legacy caller, or only ONE leg) ⇒ FALL BACK to that blanket, byte-identical to
+  //       #99b (sound, low-recall — the door never runs a half-gate). BOTH branches then share (c)/(d).
+  const targetEscapes = deps.targetEscapes;
+  const dynamicReach = deps.dynamicReach;
+  if (targetEscapes !== undefined && dynamicReach !== undefined) {
+    // v2 TARGET-RELATIVE. Order: phantom guard first (target-relative, the most basic), then X's closure, then S's.
+    //   (c0) TARGET RESOLVES? — #220. A phantom's negative is vacuous; abstain BEFORE the closure legs, whose
+    //        escape/dynamic verdicts about a symbol Atlas cannot see defined would be meaningless.
+    if (!symbolReverse.resolves(target)) return writeAbstention(deps, key, record('target-unresolvable', []));
+    //   (b1) DOES X ESCAPE? A non-safe reference position flows X into shared state the index under-sees ⇒
+    //        "uncalled in S" is unprovable ⇒ ABSTAIN escape-open (witness = the sites). SOUNDNESS: with ¬escape,
+    //        disjointness (symbol-reverse.ts) makes every reference of X a resolved caller OR a hole-that-is-not-X,
+    //        so gate (c)'s `reverseCallers(X) ∩ S == ∅` becomes a COMPLETE "no reference to X in S".
+    const escapeSites = targetEscapes(target);
+    if (escapeSites.length > 0) return writeAbstention(deps, key, record('escape-open', [...escapeSites].sort()));
+    //   (b2) DOES S HAVE A DYNAMIC CHANNEL? An opaque `import(nonliteral)`/`ns[key]`/`eval` could reach X with
+    //        NO emitted occurrence, defeating the occurrence-based closure ⇒ ABSTAIN scope-dynamic (witness).
+    const dynChannels = dynamicReach(scope);
+    if (dynChannels.length > 0) return writeAbstention(deps, key, record('scope-dynamic', [...dynChannels].sort()));
+  } else {
+    //   FALLBACK (v2 machinery absent) — the #99b canon blanket, UNCHANGED. `holeSources() ∩ S` is the SOUND
+    //   over-approximation: an unresolved/dynamic reference ANYWHERE in S under-approximates the graph ⇒ ABSTAIN
+    //   scope-open, WITH the offending docHashes as the witness (durable + readable, NOT a silent refuse).
+    //   ⚠ This is the SOUND condition — `holeSources() ∩ S`, NOT `reverseCallers(target) == []`.
+    const openSources = inScope(symbolReverse.holeSources(), byHash, scope);
+    if (openSources.length > 0) return writeAbstention(deps, key, record('scope-open', openSources));
+    //   (c0) TARGET RESOLVES? #220 — `reverseCallers(target)` is `[]` for a global symbol with NO in-index
+    //        definition BY CONSTRUCTION (symbol-reverse.ts), so without this gate the (d) admit below would
+    //        ground "target is not called in S" for a PHANTOM — a negative about a symbol Atlas cannot see
+    //        defined, VACUOUSLY true and indistinguishable from a genuinely-uncalled real symbol. Cannot prove
+    //        the negative is MEANINGFUL ⇒ ABSTAIN (honest fail-closed), never admit. It is neither refuted (no
+    //        proven caller) nor scope-open (S may be perfectly closed); the defect is the TARGET, so it earns its
+    //        own reason. Ordered after the scope gates (a/b) — an unresolvable scope is the more basic refusal.
+    if (!symbolReverse.resolves(target)) return writeAbstention(deps, key, record('target-unresolvable', []));
+  }
   //   (c) a real caller in S? The negative is FALSE ⇒ REJECT (a decision, not an abstention — no record).
+  //       SOUND in BOTH branches: v2 established X's closure (b1) so `∩ S == ∅` is complete; the fallback
+  //       established S's closure (no holes) so a resolved caller is the only remaining reference form.
   const callersInScope = inScope(symbolReverse.reverseCallers(target), byHash, scope);
   if (callersInScope.length > 0) return { emitted: false, rejected: REJECTED_NEGATION_REFUTED };
 

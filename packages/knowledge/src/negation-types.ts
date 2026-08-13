@@ -89,6 +89,17 @@ export interface AbstainedRecord {
   // WHY it could not decide (closed set). `target-unresolvable` (#220): the target is a global symbol Atlas
   // cannot SEE defined, so "it is not called in S" would be VACUOUSLY true — the door abstains instead of
   // grounding a negative about a phantom. Distinct from `target-not-global` (a syntactically `local ` symbol).
-  readonly reason: 'scope-open' | 'target-not-global' | 'scope-empty' | 'target-unresolvable';
+  //   ADR-0016 (#99, target-relative completeness) adds two v2 causes — the TWO closure legs the target-relative
+  //   gate proves, each abstained (durable) rather than silently dropped when it cannot be proven:
+  //     · `escape-open`   — the TARGET X ESCAPES: some reference of X sits in a non-safe syntactic position
+  //       (argument, assignment RHS, collection element, member/subscript base, the operand of `X as T`), so
+  //       X flows into shared mutable state where a scope that never imports X could still reach it at runtime.
+  //       The index under-sees X ⇒ "uncalled in S" is not provable. `witness.underApproxSources` = the escape sites.
+  //     · `scope-dynamic` — the SCOPE S has an opaque runtime channel (`import(nonliteral)` | `require(nonliteral)`
+  //       | `ns[nonliteral]` on a namespace-import binding | `eval` | `new Function`) that could reach X with no
+  //       emitted occurrence. `witness.underApproxSources` = the offending channels. Conservative abstain.
+  //   Both REPLACE the canon blanket `scope-open` on the target-relative path; `scope-open` remains the fallback
+  //   (machinery absent) — see docs/adr/ADR-0016-*.
+  readonly reason: 'scope-open' | 'target-not-global' | 'scope-empty' | 'target-unresolvable' | 'escape-open' | 'scope-dynamic';
   readonly witness: { readonly underApproxSources: readonly string[] }; // the unresolved/dynamic edges that opened S
 }
