@@ -118,10 +118,39 @@ export interface ParsedDoc {
 }
 
 /**
+ * LENGTH-PRESERVING normalization of THREE constructs the pinned `tree-sitter-typescript@0.23.2` (the latest
+ * published; a version bump does NOT fix these) cannot parse, so a file carrying any of them yields an ERROR
+ * tree and `parseTsDoc` fail-closes the WHOLE file — which the #99 M3 benchmark measured costing ~38 recall
+ * points on Atlas (11 real production files, `negation-bench.test.ts`), with ZERO real dynamic channels behind
+ * the abstentions. Each rewrite blanks bytes to spaces so EVERY OTHER offset is unchanged — the SCIP-range ⋈
+ * tree-sitter join (`target-escapes.ts`) still lands on the same identifiers, and no VALUE occurrence's text or
+ * position moves. SOUNDNESS (the whole point of the gate): each construct is provably NOT a value channel and
+ * NOT an escape site, so making it parse cannot hide one:
+ *   1. a NUL byte (a single `\u0000`) — this codebase's unforgeable claim-norm delimiter (governed-emit-identity.ts) lives
+ *      INSIDE string/template literals; tree-sitter rejects a NUL in a string. Blanking it touches only string
+ *      interiors — never an identifier, a call, or an import.
+ *   2. `export type * [as ns] from '…'` (TS 5.0) — a TYPE-ONLY re-export; blanking the `type` keyword makes it
+ *      the value form `export * from '…'`, which is still neither a channel nor an escape.
+ *   3. `import('…').Ident[]` — an import-TYPE annotation followed by `[]` (the grammar parses `import('…').Ident`
+ *      but not its array form); blanking the trailing `[]` leaves a type annotation, which is runtime-erased.
+ * Anything ELSE that will not parse is UNTOUCHED and still fail-closes at the `hasError` gate below (the re-check
+ * is preserved) — this rescues ONLY these three known-safe forms, never a general "ignore parse errors".
+ * Exported so a teeth test can drive it directly (`ast-normalize.test.ts`).
+ */
+export function normalizeForGrammarGaps(content: string): string {
+  return content
+    .replace(/\u0000/g, ' ')
+    .replace(/(\bexport\s+)type(\s+\*)/g, (_m, a: string, b: string) => `${a}    ${b}`)
+    .replace(/(import\(\s*['"][^'"]*['"]\s*\)(?:\s*\.\s*\w+)+)\[\]/g, (_m, a: string) => `${a}  `);
+}
+
+/**
  * Parse `content` under the grammar for `path` into a held-open root, or `undefined` when the grammars are
  * not warmed / the language is unparsed / the parse yields an ERROR tree / the parse throws. Reuses the SAME
  * module-level grammar singletons `foldAstUnits` reads — the ONE grammar-loading path in this package, never a
- * second `Parser.Language.load`.
+ * second `Parser.Language.load`. The bytes handed to the grammar are `normalizeForGrammarGaps(content)` — a
+ * length-preserving rescue of three known-safe constructs the pinned grammar cannot parse (see above); any
+ * OTHER unparseable content still fails the `hasError` gate below.
  *
  * FAIL-CLOSED CONTRACT for the callers: distinguish `isTsPath(path)` FIRST — a `false` there is "not my
  * language" (skip, no witness), whereas `isTsPath(path) === true` with an `undefined` return here is "my
@@ -149,7 +178,7 @@ export function parseTsDoc(path: string, content: string): ParsedDoc | undefined
   try {
     parser = new Parser();
     parser.setLanguage(grammar);
-    tree = parser.parse(content);
+    tree = parser.parse(normalizeForGrammarGaps(content));
     if (tree.rootNode.hasError) {
       free(); // an error tree is NOT classified — free both handles and report "could not parse".
       return undefined;

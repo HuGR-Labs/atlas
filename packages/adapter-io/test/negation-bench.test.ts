@@ -93,8 +93,8 @@ describe.skipIf(!RUN)('#95/#99 M3 — adversarial channel rows (each MUST make t
     /* eslint-enable no-console */
   }, 60_000);
 
-  it('EVIDENCE for the recall diagnosis: on atlas, EVERY scope-dynamic witness is a tree-sitter :unparsed ' +
-    'fail-close (a grammar parse gap), NOT a real dynamic channel', async () => {
+  it('REGRESSION GUARD (#233 closed the parse gap): atlas has ZERO scope-dynamic witnesses — 0 :unparsed ' +
+    'fail-closes AND 0 real dynamic channels [teeth: revert normalizeForGrammarGaps ⇒ 11 :unparsed ⇒ RED]', async () => {
     await initAst();
     const dr = buildDynamicReach(walkFileTree(ROOT))!;
     const idx = deserializeSCIP(readFileSync(SCIP));
@@ -106,12 +106,15 @@ describe.skipIf(!RUN)('#95/#99 M3 — adversarial channel rows (each MUST make t
       if (w.endsWith(':unparsed')) { unparsed++; unparsedFiles.add(w.replace(/:0:0:unparsed$/, '')); } else real++;
     }
     /* eslint-disable no-console */
-    console.log('\n=== atlas scope-dynamic cause (per-scope-union witnesses) ===');
+    console.log('\n=== atlas scope-dynamic cause (per-scope-union witnesses) — post-#233 ===');
     console.log(`  REAL dynamic channels: ${real}   :unparsed fail-closes: ${unparsed}`);
-    console.log(`  unparseable prod files (${unparsedFiles.size}): ${[...unparsedFiles].sort().join(', ')}`);
-    console.log('=============================================================\n');
+    if (unparsedFiles.size) console.log(`  unparseable prod files (${unparsedFiles.size}): ${[...unparsedFiles].sort().join(', ')}`);
+    console.log('=======================================================================\n');
     /* eslint-enable no-console */
-    expect(real).toBe(0); // the recall sink on atlas is PURELY the parse gap, not real dynamic reachability
+    // #233: the grammar-gap parse rescue (ast.ts normalizeForGrammarGaps) makes the 11 formerly-unparseable
+    // production files parse ⇒ no fail-close abstention. If this regresses, unparsed jumps back to 11.
+    expect(unparsed).toBe(0);
+    expect(real).toBe(0); // still no real dynamic reachability on atlas
   }, 60_000);
 });
 

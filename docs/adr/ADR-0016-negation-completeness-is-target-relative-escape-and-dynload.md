@@ -291,3 +291,21 @@ Run: 8 scopes (strided across the repo, not cherry-picked), 14 targets each, 112
 - Corroborates the parse-gap finding LIVE: scopes containing the unparseable barrel files (adapter-io/src,
   grounding/src, kernel/src) admitted 0 (all `scope-dynamic`); clean scopes admitted 9–11 of 14. The grammar
   upgrade lifts the proposer's realized yield too, not just the exhaustive-sweep recall.
+
+### UPDATE — the grammar parse gap is CLOSED (#233, 2026-08-13)
+
+The M3 follow-up landed: `packages/adapter-io/src/ast.ts` `normalizeForGrammarGaps` — a LENGTH-PRESERVING rescue
+of the three constructs the pinned `tree-sitter-typescript@0.23.2` (the latest published) cannot parse
+(`export type *`, `import('…').T[]`, a NUL delimiter byte), applied inside `parseTsDoc` before the grammar,
+with the `hasError` re-check preserved for everything else. Each construct is provably type-only or a string
+interior — never a value channel/escape — so making it parse cannot hide one (teeth: `test/ast-normalize.test.ts`).
+Re-measured on a fresh index, exhaustive pool (23,199 pairs):
+
+- **SHIPPED (sound) recall: 37.4% → 80.9%** (18,654 / 23,049) — the 11 formerly-unparseable files now parse, so
+  `scope-dynamic` abstentions drop from 38.8% to **0**. Only `escape-open` (18.1%, real target escapes) remains.
+- **0 FALSE-ADMITS over 18,654 admits** — soundness preserved at >2× the admit volume (the whole risk of the
+  change, measured clean). `escape-ts-oracle-agree.mjs` still 100% / 0-unsound.
+- The proposer arm's realized yield rises with it (the barrel scopes that admitted 0 now admit).
+
+The residual is now the honest one the design always named: escaping targets (~18%) abstain (they would need
+real points-to). The `scope-dynamic` leg stays live and sound — it just no longer fires on a parse artifact.
