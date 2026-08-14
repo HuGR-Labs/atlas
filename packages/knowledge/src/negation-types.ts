@@ -5,12 +5,13 @@
 // ceiling on the sibling #99a leg. RE-EXPORTED by `types.ts` (`export type { NegationNode, AbstainedRecord }`)
 // so the package surface — `import type { NegationNode } from '@atlas/knowledge'` — is byte-identical to
 // having declared them inline. `RelationKind`/`ObviousnessScore` stay owned by `types.ts` and are imported
-// here (a type-only cycle, erased at runtime). See docs/design/99b-negation-fact-contract.md §1.
+// here (a type-only cycle, erased at runtime). `Seal` (ADR-0017) is imported the same way. See
+// docs/design/99b-negation-fact-contract.md §1.
 
 import type { Tier, NodeKey } from '@atlas/contracts';
 import type { ClaimEntry } from '@atlas/kernel';
 import type { Grounding } from '@atlas/grounding';
-import type { KnowledgeFreshness, RelationKind, ObviousnessScore } from './types.js';
+import type { KnowledgeFreshness, RelationKind, ObviousnessScore, Seal } from './types.js';
 
 /**
  * A SCOPED grounded NEGATIVE (ADR-0015 D3, #99b — "the honesty core"). Structurally a sibling of
@@ -51,6 +52,7 @@ export interface NegationNode {
   readonly claims: readonly ClaimEntry[];
   readonly authoring: 'NEGATED' | 'SUPERSEDED';
   readonly obviousness?: ObviousnessScore; // ADR-0012 — additive, absent-tolerant (see AdvisoryNode)
+  readonly seal?: Seal; // ADR-0017 — two-seal provenance, additive/absent-tolerant (see AdvisoryNode)
   /**
    * THE AUTHZ SCOPE (F3 — WP-96-N, owner-ratified 2026-08-11, amends #99b/ADR-0015 D3). ADDITIVE + OPTIONAL.
    * The scope the DOOR's authz gate binds instead of the witness `scope`, when present. It is NEVER an
