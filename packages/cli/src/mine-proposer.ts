@@ -126,6 +126,12 @@ export interface ResolvedProposer {
  * EXECUTE the operator's model binary.
  */
 export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = process.env): ResolvedProposer {
+  // [ADR-0017] VALIDATE THE ARM FIRST — a misspelled `ATLAS_MINE_SLOT` is a misconfiguration, and it must
+  // throw BEFORE the no-model early return below, or a typo (`dependncy`) would be silently swallowed as a
+  // clean zero-config abstention in the exact same fail-silent shape `resolveMineSlot`'s throw exists to
+  // prevent (Luna cold-review F4). Config validation, like `loadModelConfig`'s own throw, precedes the
+  // "is a model even wired" question. The resolved arm is read again below (byte-identically) for the wired path.
+  const slot = resolveMineSlot(env);
   const cfg = loadModelConfig(repoPath, env); // throws on malformed — never silently "no model"
   const propose = cfg?.roles.propose;
   if (cfg === null || propose === undefined)
@@ -139,7 +145,7 @@ export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = proce
   // Otherwise the ADVISORY arm: the anchored-unit-only prompt (default) or, opt-in ENRICH (ATLAS_ENRICH), the
   // enriched template that also shows the target's same-file context siblings — the fact stays anchored to the
   // target (KNOW-15g), only what the model SEES widens. Advisory keeps `parseClaim` UNSET (advisory default).
-  const slot = resolveMineSlot(env);
+  // `slot` was already resolved (and validated) at the top of this function.
   const prompts =
     slot === 'dependency'
       ? createPromptFactory({ source: createUnitSourceReader(repoPath), templatePath: shippedDependencyTemplatePath() })
