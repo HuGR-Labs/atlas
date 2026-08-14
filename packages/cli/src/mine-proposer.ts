@@ -12,10 +12,12 @@ import {
   createSiteProposer,
   createUnitSiblingReader,
   createUnitSourceReader,
+  dependencyClaimParser,
   loadModelConfig,
+  shippedDependencyTemplatePath,
   shippedEnrichedTemplatePath,
 } from '@atlas/adapter-io';
-import type { ModelCommand } from '@atlas/adapter-io';
+import type { ClaimParser, ModelCommand } from '@atlas/adapter-io';
 import type { SiteProposer } from '@atlas/genesis';
 
 /** The sentinel `modelIdentity` for the fail-closed default: no model was wired, so nothing produced a
@@ -60,6 +62,23 @@ export function enrichEnabled(env: NodeJS.ProcessEnv): boolean {
   const v = env[ENRICH_ENV];
   if (v === undefined) return false;
   return !['', '0', 'false', 'off', 'no'].includes(v.trim().toLowerCase());
+}
+
+/** [ADR-0017] The mining ARM selector. Unset ⇒ the shipped ADVISORY arm (byte-identical). `dependency` ⇒
+ *  the ADR-0017 dependency arm: the `DEPENDS-ON:` prompt + `dependencyClaimParser`, so `atlas mine` emits
+ *  typed dependency `PredicateSeed`s the sound oracle proves-or-drops. Selected by env like ENRICH so the
+ *  flip stays a MEASURED decision, never a silent behaviour change. Other values are rejected (see
+ *  `resolveMineSlot`) rather than silently treated as advisory — a typo must not degrade the arm invisibly. */
+export const MINE_SLOT_ENV = 'ATLAS_MINE_SLOT';
+
+/** Resolve the mining arm from `env`. `undefined`/`''` ⇒ `'advisory'`; `'dependency'` (case-insensitive,
+ *  trimmed) ⇒ `'dependency'`; ANY OTHER value THROWS — a misspelled arm is a misconfiguration, and silently
+ *  falling back to advisory would mine the wrong family while reporting success (the fail-silent trap #167). */
+export function resolveMineSlot(env: NodeJS.ProcessEnv): 'advisory' | 'dependency' {
+  const v = env[MINE_SLOT_ENV]?.trim().toLowerCase();
+  if (v === undefined || v === '') return 'advisory';
+  if (v === 'advisory' || v === 'dependency') return v;
+  throw new Error(`${MINE_SLOT_ENV}=${JSON.stringify(env[MINE_SLOT_ENV])} is not a known mining arm — use 'advisory' or 'dependency'`);
 }
 
 /** The honest fail-closed default proposer: no model is wired, so the model abstains at every site
@@ -107,6 +126,12 @@ export interface ResolvedProposer {
  * EXECUTE the operator's model binary.
  */
 export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = process.env): ResolvedProposer {
+  // [ADR-0017] VALIDATE THE ARM FIRST — a misspelled `ATLAS_MINE_SLOT` is a misconfiguration, and it must
+  // throw BEFORE the no-model early return below, or a typo (`dependncy`) would be silently swallowed as a
+  // clean zero-config abstention in the exact same fail-silent shape `resolveMineSlot`'s throw exists to
+  // prevent (Luna cold-review F4). Config validation, like `loadModelConfig`'s own throw, precedes the
+  // "is a model even wired" question. The resolved arm is read again below (byte-identically) for the wired path.
+  const slot = resolveMineSlot(env);
   const cfg = loadModelConfig(repoPath, env); // throws on malformed — never silently "no model"
   const propose = cfg?.roles.propose;
   if (cfg === null || propose === undefined)
@@ -114,20 +139,29 @@ export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = proce
   // #182 S2 — the UNIT-granular reader. It WRAPS `createFileSourceReader(repoPath)` (all three of its
   // containment/symlink/fd checks intact) and narrows a `::` site to the unit's own bytes; a bare-path
   // site reads exactly as before, which is what lets one binary serve both A/B arms.
-  // Default: the anchored-unit-only prompt. Opt-in ENRICH (ATLAS_ENRICH): also show the target's same-file
-  // context siblings via the enriched template — the fact stays anchored to the target (KNOW-15g), only what
-  // the model SEES widens.
-  const prompts = enrichEnabled(env)
-    ? createPromptFactory({
-        source: createUnitSourceReader(repoPath),
-        related: createUnitSiblingReader(repoPath),
-        templatePath: shippedEnrichedTemplatePath(),
-      })
-    : createPromptFactory({ source: createUnitSourceReader(repoPath) });
+  //
+  // [ADR-0017] The mining ARM selects BOTH the template and the claim parser (they are COUPLED — the prompt
+  // writes the grammar the parser reads). `dependency` ⇒ the `DEPENDS-ON:` template + `dependencyClaimParser`.
+  // Otherwise the ADVISORY arm: the anchored-unit-only prompt (default) or, opt-in ENRICH (ATLAS_ENRICH), the
+  // enriched template that also shows the target's same-file context siblings — the fact stays anchored to the
+  // target (KNOW-15g), only what the model SEES widens. Advisory keeps `parseClaim` UNSET (advisory default).
+  // `slot` was already resolved (and validated) at the top of this function.
+  const prompts =
+    slot === 'dependency'
+      ? createPromptFactory({ source: createUnitSourceReader(repoPath), templatePath: shippedDependencyTemplatePath() })
+      : enrichEnabled(env)
+        ? createPromptFactory({
+            source: createUnitSourceReader(repoPath),
+            related: createUnitSiblingReader(repoPath),
+            templatePath: shippedEnrichedTemplatePath(),
+          })
+        : createPromptFactory({ source: createUnitSourceReader(repoPath) });
+  const parseClaim: ClaimParser | undefined = slot === 'dependency' ? dependencyClaimParser : undefined;
   const proposer = createSiteProposer({
     client: createCommandClient(propose),
     budget: { costCap: cfg.costCap, timeoutMs: cfg.timeoutMs },
     buildPrompt: prompts.build,
+    ...(parseClaim !== undefined ? { parseClaim } : {}),
   });
   return { proposer, wired: true, promptDigest: String(prompts.digest), modelIdentity: captureModelIdentity(propose) };
 }

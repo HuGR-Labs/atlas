@@ -75,6 +75,14 @@ export function shippedEnrichedTemplatePath(): string {
   return join(packageRoot(dirname(fileURLToPath(import.meta.url))), 'prompts', 'propose-enriched.md');
 }
 
+/** The DEPENDENCY proposal template (ADR-0017 dependency slot, opt-in `ATLAS_MINE_SLOT=dependency` arm) —
+ *  resolved the same package-root way as `shippedTemplatePath`. Asks the model for one `DEPENDS-ON:
+ *  <target> @ <scope>` line (or `NO-FACT`); paired with `dependencyClaimParser` (llm.ts). Uses only
+ *  `{{PATH}}`/`{{UNIT}}`/`{{SOURCE}}` — no `{{RELATED}}` — so it loads with no sibling reader injected. */
+export function shippedDependencyTemplatePath(): string {
+  return join(packageRoot(dirname(fileURLToPath(import.meta.url))), 'prompts', 'propose-dependency.md');
+}
+
 /** Walk up to the nearest directory containing `package.json`. Bounded by the filesystem root, so a module
  *  outside any package yields its own directory rather than looping. */
 function packageRoot(from: string): string {
