@@ -81,16 +81,78 @@ export interface ModelClient {
   complete(prompt: string, budget: LlmBudget): CompletionResult;
 }
 
+/**
+ * The outcome of turning a model's raw CLAIM line into a typed `SeedProposal` — or a grounded ABSTENTION
+ * when the claim does not match the arm's expected grammar. A `ClaimParser` is the seam that makes ONE
+ * proposer binary serve every fact family (ADR-0017): the advisory arm parses every claim as an advisory
+ * seed; the dependency arm parses the closed `DEPENDS-ON:` grammar into a typed dependency `PredicateSeed`
+ * and abstains on anything else. The parser NEVER admits — admission is the gate's alone (GEN-4/12).
+ */
+export type ClaimParser = (claim: string, cand: Candidate, rawAnswer?: string) => SeedProposal | { readonly abstain: string };
+
+/** The DEFAULT arm: every non-abstaining claim is an ADVISORY seed (the ORIGINAL, byte-identical shape). The
+ *  `rawAnswer` provenance rides through unchanged (#195c). This is what `createSiteProposer` uses when no
+ *  parser is injected, so the shipped advisory mine is unaffected by the dependency arm's existence. */
+export const advisoryClaimParser: ClaimParser = (claim, cand, rawAnswer) => ({
+  cand,
+  claim,
+  ...(rawAnswer !== undefined ? { rawAnswer } : {}),
+});
+
+/**
+ * The DEPENDENCY grammar (ADR-0017 dependency slot). One line: `DEPENDS-ON: <target> @ <scope>`. The ` @ `
+ * separator carries a space on EACH side and is the split point — GREEDY on `<target>` so a symbol that
+ * itself contains an `@` (e.g. an npm `pkg@version` specifier) keeps it, and the LAST ` @ ` before the
+ * trailing directory is the delimiter. `<scope>` is a directory key with no interior ` @ `. COUPLED to
+ * `prompts/propose-dependency.md`, which writes exactly this grammar; `llm.test.ts` pins the pair.
+ */
+const DEPENDS_ON_RE = /^DEPENDS-ON:\s*(.+)\s+@\s+(\S.*?)\s*$/i;
+
+/** The reason a dependency-arm answer that is not the abstain token AND does not match the `DEPENDS-ON:`
+ *  grammar abstains under — a MALFORMED proposal, fail-closed to a grounded abstention rather than a
+ *  fabricated advisory (a prose line in a dependency mine is the model failing to follow the grammar, not a
+ *  fact about a different family). Greppable, mirroring `llm.ts`'s `answer-malformed:*` reasons. */
+export const DEP_UNPARSEABLE_REASON = 'dependency-answer-unparseable';
+
+/**
+ * The DEPENDENCY arm parser (ADR-0017). A claim matching the `DEPENDS-ON: <target> @ <scope>` grammar with a
+ * non-empty target AND scope becomes a typed dependency `PredicateSeed{ slot:'dependency', target, scope }`;
+ * `claim` keeps the raw line (the human-readable set-union body) and `rawAnswer` rides through (#195c).
+ * Anything else ABSTAINS with `DEP_UNPARSEABLE_REASON` — NEVER falls back to an advisory seed, so a
+ * dependency mine emits only dependency facts (or grounded abstentions), and the sound oracle (`admitPredicate`'s
+ * dependency leg) still owns whether a well-formed pair is PROVEN or dropped.
+ */
+export const dependencyClaimParser: ClaimParser = (claim, cand, rawAnswer) => {
+  const m = DEPENDS_ON_RE.exec(claim.trim());
+  if (m === null) return { abstain: DEP_UNPARSEABLE_REASON };
+  const target = (m[1] ?? '').trim();
+  const scope = (m[2] ?? '').trim();
+  if (target === '' || scope === '') return { abstain: DEP_UNPARSEABLE_REASON };
+  return {
+    kind: 'predicate',
+    slot: 'dependency',
+    target,
+    scope,
+    cand,
+    claim,
+    ...(rawAnswer !== undefined ? { rawAnswer } : {}),
+  };
+};
+
 /** Construct the S2 `SiteProposer` — ONE bounded model call per site, abstention allowed (ADAPT-LLM-1).
  *  The `SiteProposer` return type is frozen; the model client, budget, and prompt-builder are INJECTED so
  *  this seam hardcodes no model and no prompt (D5). `propose` makes exactly one `client.complete` call —
  *  no retry, no loop — and returns a candidate proposal the driver GATES (never auto-trusted, never written
- *  to a store — GEN-4/12, golden 11c). Self-declaration fields are never read or emitted (GEN-4d). */
+ *  to a store — GEN-4/12, golden 11c). Self-declaration fields are never read or emitted (GEN-4d).
+ *  `parseClaim` (ADR-0017) turns the raw claim into the arm's typed seed — DEFAULT `advisoryClaimParser`,
+ *  so the shipped advisory mine is byte-identical; the dependency arm injects `dependencyClaimParser`. */
 export function createSiteProposer(deps: {
   client: ModelClient;
   budget: LlmBudget;
   buildPrompt: (cand: Candidate) => string;
+  parseClaim?: ClaimParser;
 }): SiteProposer {
+  const parseClaim = deps.parseClaim ?? advisoryClaimParser;
   return {
     propose(cand: Candidate) {
       const prompt = deps.buildPrompt(cand);
@@ -101,14 +163,11 @@ export function createSiteProposer(deps: {
         // grounded WhyNot from; an UNTAGGED null (empty / model-declined) stays the plain GEN-12 abstention.
         return r.abstainReason !== undefined ? { abstain: r.abstainReason } : null;
       }
-      // [#195c] Forward the VALIDATED answer bytes on the now-TYPED `SeedProposal.rawAnswer` field so W-MINE
-      // scrubs-and-puts them to CAS as the fact's `answerRef`; this seam does not scrub and never touches CAS.
-      const seed: SeedProposal = {
-        cand,
-        claim: r.claim,
-        ...(r.rawAnswer !== undefined ? { rawAnswer: r.rawAnswer } : {}),
-      };
-      return seed;
+      // [ADR-0017] The arm's parser shapes the typed seed (advisory by default; dependency when injected). It
+      // forwards the VALIDATED answer bytes on `SeedProposal.rawAnswer` (#195c) so W-MINE scrubs-and-puts them
+      // to CAS as the fact's `answerRef`; this seam does not scrub and never touches CAS. A parser may itself
+      // abstain (e.g. a dependency answer that does not match the grammar) — routed like any GEN-12 abstention.
+      return parseClaim(r.claim, cand, r.rawAnswer);
     },
   };
 }

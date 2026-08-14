@@ -30,7 +30,8 @@ export { createForge } from './git-forge.js';
 // git seam (#74, `run-git.ts`) that crosses the package boundary (the mine driver injects it). `runGit` + the
 // error classifier/backoff primitives stay module-internal, consumed intra-package via relative import.
 export { headSha } from './run-git.js';
-export { createSiteProposer } from './llm.js';
+export { createSiteProposer, advisoryClaimParser, dependencyClaimParser, DEP_UNPARSEABLE_REASON } from './llm.js';
+export type { ClaimParser } from './llm.js'; // ADR-0017 — the per-arm claim→seed parser seam
 // ADR-0011 D1 — the one concrete model adapter (an operator-supplied command). The port's own type name
 // is deliberately NOT written here: golden 11a audits it TEXTUALLY across `packages/*/src`, so keeping
 // the name in exactly one file is a stronger property than 'only one importer', and worth the terseness.
@@ -43,6 +44,7 @@ export {
   createFileSourceReader,
   shippedTemplatePath,
   shippedEnrichedTemplatePath, // ENRICH arm (A4-LEVER) — the {{RELATED}}-bearing template
+  shippedDependencyTemplatePath, // ADR-0017 dependency arm — the DEPENDS-ON prompt
   PromptError,
 } from './prompt.js'; // ADR-0011 D3
 export type { PromptFactory, SourceReader, SiblingReader, RelatedUnit } from './prompt.js';
