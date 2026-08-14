@@ -67,6 +67,8 @@ export interface AdvisorySeed extends SeedBase {
 export interface PredicateSeed extends SeedBase {
   readonly kind: 'predicate';
   readonly slot: PredicateSlot;
+  readonly target?: string; // ADR-0017 dependency-slot leg — the global symbol X the fact depends on (absent for non-oracle slots)
+  readonly scope?: string; //  ADR-0017 dependency-slot leg — the directory key S the dependency witness ranges over
 }
 
 /**
