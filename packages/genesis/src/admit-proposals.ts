@@ -29,6 +29,8 @@ export interface PredicateProposal {
   readonly kind: 'predicate';
   readonly site: Candidate; // the genesis ranked SITE — the admission anchor rides `site.site.subtreeHash`
   readonly slot: PredicateSlot; // drives SOUND-ORACLE-FIRST (GEN-12k)
+  readonly target?: string; // ADR-0017 dependency-slot leg — the global symbol X the fact depends on (absent for non-oracle slots)
+  readonly scope?: string; //  ADR-0017 dependency-slot leg — the directory key S the dependency witness ranges over
   readonly nodeKey: NodeKey; // identity carried through (minted upstream, not by a model vote)
   readonly claimNorm: string;
   readonly grounding: FactGrounding;
