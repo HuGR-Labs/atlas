@@ -72,15 +72,39 @@ Genesis emits a typed slot per fact under a **two-seal** classifier, mirroring t
 
 ## Build path (a separate campaign, to be decomposed + cold-reviewed)
 
-Because the engine already exists, this is a **wiring + real-oracle** campaign, not a from-scratch build:
+> **CORRECTION 2 (measured on master `149100f`, 2026-08-13 — the binary, not this ADR's first draft).** The
+> first draft called this a "wiring" campaign because "the engine already exists." An admit-harness engine
+> DOES exist, but a per-oracle census of PRODUCTION code (not test fixtures) shows most legs this section
+> names as ready-to-wire **do not exist as production code** — only ONE proven oracle is genuinely wireable
+> now. The honest inventory:
+>
+> | leg | ADR-first-draft claim | measured on `149100f` |
+> |---|---|---|
+> | `dependency` proven oracle | "#224 machinery" | **REAL & wired** — `atlas verify-fact` (`verify-fact.ts` + `verify-fact-source.ts` over `SymbolReverseApi`), PROVE/ABSTAIN, sound-in-any-world. This is the one true proven leg. Rides a **separate seam** from admit-harness's `typeOracle`/`predicate`, though. |
+> | check `synthesize` (cand→Check) | "the real check synthesizer from #225" | **DOES NOT EXIST in production.** #225 built the `evaluator` (the *verify* leg: `Check`→HOLDS/BROKEN), never a *synthesizer*. Every production `synthesize` is `() => null`; all real ones are test fixtures. |
+> | tsc/LSP `typeOracle` | "the real type-checker/LSP typeOracle" | **DOES NOT EXIST.** `expressible: () => false` everywhere in production; the only non-false `expressible` are test fixtures. No slot is ever type-expressible in the shipped path. |
+> | validated ensemble gate (#226) | "independent #226 panel" | **NOT a production admission leg.** #226 is a benchmark-adjudication *skill* (κ/α), not a shipped gate. An independent-ensemble admission door is greenfield (it can reuse the panel's logic + the gateway ensemble, but the door itself must be built). |
+> | proposer emits a slot | (implicit) | **Partial.** `buildProposal` (`mine-gate.ts:87`) already mints `PredicateProposal{slot: seed.slot}` when `seed.kind==='predicate'`; `mine-decide` reads an `fSlot`. What is missing is a proposer that actually EMITS `seed.kind==='predicate'` with a slot (the DeepSeek #150 arm today emits advisory). |
+> | `nodeKey` slot leg | "already exists" | **TRUE** — `governed-emit.ts` folds `predicateSlot` into identity + stores it. |
+>
+> **Corrected scope (owner fork below).** Only the `dependency` proven leg is *wiring*. The validated-ensemble
+> gate is greenfield-but-bounded (reuse #226 + gateway). The tsc `typeOracle` and the general check
+> `synthesize` are **unbounded greenfield** and, per the anti-overengineering bar, should be DEFERRED — the
+> remaining structural slots fall to `validated` (or abstain) until a synthesizer exists, not built in this
+> campaign. So the honest #196 campaign is: **proposer-emits-slot + dependency-proven leg + validated-ensemble
+> leg + seal field + goldens + bench**, with tsc-oracle/synthesizer explicitly out of scope. Owner ratifies
+> the cut before dispatch.
 
-(a) **Supply real oracles** into `compose-mine-admission.ts` — replace the `expressible: () => false` /
-`synthesize: () => null` stubs with the real type-checker/LSP `typeOracle` and the real check synthesizer
-from the #225/#229 machinery, so `admit-harness`'s already-tested proven path actually runs. (b) **Wire the
-predicate leg into `atlas mine`** — let `mine-gate`/the lenses forward `PredicateProposal`s (with slots), not
-advisories only, so a proven fact carries its slot. (c) Add the **validated** leg (independent #226 panel) for
-the non-expressible slots, with the `validated` seal. (d) The `seal` field (parallel to `obviousness`); the
-nodeKey slot leg already exists in `governed-emit.ts` — add absent-tolerant goldens. (e) A benchmark on real
-mined facts — per-slot precision, **0 false-proven**, measured false-rate on **validated**. lucy cold-review
-on the identity/seal change before merge. NOTE — measure-first per WP: re-confirm each leg's state on the
-then-current master (the #196 card measured `e4882a3`; the engine has advanced since, so trust the tree).
+The legs, corrected:
+
+(a) **Wire the one real proven oracle** — bridge `atlas verify-fact`'s dependency oracle into the mine
+admission so a `dependency`-slot predicate is admitted **iff** it PROVES (`proven | abstain`), sealed
+`proven`. (Probe `definition` via SCIP def-site — cheap; include only if a WP confirms it.) The stubbed
+admit-harness `typeOracle`/general-`synthesize` legs stay fail-closed — NOT built here. (b) **Proposer emits a
+slot** — the DeepSeek #150 arm proposes `seed.kind==='predicate'` with a `slot`; `buildProposal` already
+forwards it. (c) **Build the validated leg** — an independent-ensemble admission door (reuse the #226 panel
+logic + the gateway for the distinct-family ensemble) for the semantic slots, sealed `validated`. (d) The
+`seal` field (parallel to `obviousness`); the nodeKey slot leg already exists — add absent-tolerant goldens.
+(e) A benchmark on real mined facts — per-slot precision, **0 false-proven**, measured false-rate on
+**validated**. lucy cold-review on the identity/seal change before merge. NOTE — measure-first per WP: the
+`149100f` census above is the current truth; re-confirm each leg on the then-current master before building.
