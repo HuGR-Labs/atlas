@@ -63,6 +63,34 @@ describe('COMPOSE-A — createGovernedEmit (truth-door · authz · upsert · dur
     expect(spy.store.get(contentHash)).toEqual(node);
   });
 
+  it('SCN-GE-3-seal — a `seal` value (ADR-0017, WP-196a) round-trips through the SAME CAS read-back path', () => {
+    // `seal` rides on the whole GroundedFact node exactly as `obviousness` does: no special-cased fold
+    // in the door, no separate projection-row carrier (CurrentNode carries neither field) — it is
+    // persisted and re-read because the door persists/reads the WHOLE node object (invariant 6). This
+    // WP does not decide WHEN a seal is set; the fixture below sets it only to prove the CARRIER works.
+    const spy = makeStoreSpy();
+    const { emit } = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice' });
+    const node = { ...advisory('core'), seal: 'proven' as const };
+    const out = emit(node, AT);
+
+    expect(out.emitted).toBe(true);
+    const contentHash = out.id!;
+    const readBack = spy.store.get(contentHash) as typeof node | undefined;
+    expect(readBack?.seal).toBe('proven'); // TEETH: a door that dropped `seal` on the spread would read undefined
+    expect(readBack).toEqual(node);
+  });
+
+  it('SCN-GE-3-seal-absent — a seal-less (legacy) fact still emits + reads back clean (back-compat)', () => {
+    const spy = makeStoreSpy();
+    const { emit } = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice' });
+    const node = advisory('core'); // no `seal` — every stored fact today
+    const out = emit(node, AT);
+
+    expect(out.emitted).toBe(true);
+    const readBack = spy.store.get(out.id!) as (typeof node & { seal?: unknown }) | undefined;
+    expect(readBack?.seal).toBeUndefined(); // absent-tolerant: no crash, nothing fabricated
+  });
+
   it('SCN-GE-4 — empty ATLAS_ACTOR ⇒ denied fail-closed (no actor is in any scope)', () => {
     const spy = makeStoreSpy();
     const { emit } = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: '' });

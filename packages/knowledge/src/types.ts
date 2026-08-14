@@ -119,6 +119,7 @@ export interface RelationNode {
   readonly authoring: 'RELATED' | 'SUPERSEDED';
   readonly scope?: string; // KNOW-11a — the write scope (authz); the 2.1 anchor gate binds on `endpointA`
   readonly obviousness?: ObviousnessScore; // ADR-0012 — additive, absent-tolerant (see AdvisoryNode)
+  readonly seal?: Seal; // ADR-0017 — two-seal provenance, additive/absent-tolerant (see AdvisoryNode)
 }
 
 // The #99b scoped-negative shapes (ADR-0015 D3) — `NegationNode` (the FOURTH `GroundedFact` variant) and its
@@ -137,6 +138,14 @@ export type { NegationNode, AbstainedRecord };
  * Widening this union later is additive.
  */
 export type ObviousnessRank = 'obvious' | 'non-obvious';
+
+/**
+ * The two-seal provenance vocabulary (ADR-0017 — two-seal typed genesis). Records HOW a mined fact's
+ * type/slot was decided: `proven` — a mechanical oracle discharged it; `validated` — an independent
+ * LLM-ensemble agreed. ADDITIVE + absent-tolerant, exactly like `obviousness` (ADR-0012) below — this
+ * type only makes the field EXIST; it never decides WHEN a seal is set (that is the admit path's job).
+ */
+export type Seal = 'proven' | 'validated';
 
 /**
  * The STORED, AUDITABLE obviousness score (GEN-4 / GROUND-7, ADR-0012 — owner-ratified 2026-08-02).
@@ -207,6 +216,7 @@ export interface AdvisoryNode {
    *  same way KNOW-11's "every fact MUST carry a scope" is — not by the type, because ~17 merged
    *  `GroundedFact` literals predate the field and a required field would make them unreadable. */
   readonly obviousness?: ObviousnessScore;
+  readonly seal?: Seal; // ADR-0017 — two-seal provenance. ADDITIVE + absent-tolerant, same discipline as `obviousness`.
 }
 
 /**
@@ -237,6 +247,7 @@ export interface PredicateNode {
   readonly scope?: string; // R3 — KNOW-11a
   readonly predicateSlot?: PredicateSlot; // R3 — KNOW-15b nodeKey leg / KNOW-4g grouping
   readonly obviousness?: ObviousnessScore; // ADR-0012 — the stored obviousness score (see AdvisoryNode)
+  readonly seal?: Seal; // ADR-0017 — two-seal provenance (see AdvisoryNode)
 }
 
 // [FLAG — `ClaimEntry` reference divergence] atlas-knowledge:26 defines a Knowledge-local
