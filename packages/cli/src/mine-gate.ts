@@ -38,9 +38,10 @@ import type {
   SeedProposal,
   SkeletonSource,
 } from '@atlas/genesis';
-import { buildMineAdmission } from '@atlas/adapter-io';
+import { buildMineAdmission, readScipOrEmpty } from '@atlas/adapter-io';
 import type { Reground } from '@atlas/adapter-io';
 import { asNodeKey } from '@atlas/kernel';
+import { join } from "node:path";
 
 /** The abstention an UNSUPPLIED gate serves. Exported because it is the fingerprint of the defect above:
  *  a golden that cannot name this string cannot tell a working gate from an absent one, and that
@@ -157,7 +158,8 @@ export function makeAdmitGate(deps: AdmitDeps, reground?: Reground): EmitGate {
 export function composedGate(skeleton: SkeletonSource, repoPath: string, rev: string): EmitGate {
   let gate: EmitGate | undefined;
   const resolve = (): EmitGate => {
-    const { deps, reground } = buildMineAdmission(skeleton.skeleton(repoPath, rev).axes);
+    const sk = skeleton.skeleton(repoPath, rev);
+    const { deps, reground } = buildMineAdmission(sk.axes, readScipOrEmpty(join(repoPath, ".atlas", "index.scip")));
     return makeAdmitGate(deps, reground);
   };
   return { emit: (seed, cand) => (gate ??= resolve()).emit(seed, cand) };

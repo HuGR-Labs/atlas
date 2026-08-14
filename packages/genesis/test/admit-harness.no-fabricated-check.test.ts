@@ -112,9 +112,11 @@ describe('WP-FIX-6.KNOW — no node ships HOLDS on a check that was never evalua
       'kind',
       'obviousness',
       'predicateSlot',
+      'seal', // ADR-0017 — the sound-oracle arm IS proven, so it carries the `proven` seal (still NO check, NO status)
       'tier',
     ]);
     expect(a.fact.kind).toBe('advisory');
+    expect((a.fact as { seal?: string }).seal).toBe('proven');
     expect('check' in a.fact).toBe(false);
     expect('status' in a.fact).toBe(false);
     expect(JSON.stringify(a.fact)).not.toContain('type-checker/LSP diagnostics');

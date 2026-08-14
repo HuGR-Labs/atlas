@@ -17,10 +17,11 @@
 // same kind as the store / drift source / history source already built next door, so it lands here.
 
 import type { StructRef } from '@atlas/contracts';
-import type { Axes } from '@atlas/index';
+import type { Axes, ScipOutput } from '@atlas/index';
 import { driftDetect, ground } from '@atlas/grounding';
 import type { Grounding } from '@atlas/grounding';
 import type { AdmitDeps } from '@atlas/genesis';
+import { createVerifyFactLeg } from "./verify-fact-source.js";
 
 /** Re-derive a mined site's grounding receipt against the built index — the FROZEN GROUND-3 anchor builder
  *  (`ground`), never a hand-built receipt. Supplied to the driver so the anchor a staged row RECORDS is the
@@ -65,7 +66,8 @@ export interface MineAdmission {
  * (`AdmitDeps` is total) and not faked into something permissive — synthesize yields no check, the oracle
  * expresses nothing, the teeth never flip, `K` is 0. A predicate path wired later must supply real ones.
  */
-export function buildMineAdmission(axes: Axes): MineAdmission {
+export function buildMineAdmission(axes: Axes, scipOutput: ScipOutput): MineAdmission {
+  const verifyDep = createVerifyFactLeg(scipOutput);
   const deps: AdmitDeps = {
     doors: {
       grounded: (grounding) => driftDetect(grounding, axes) === 'FRESH',
@@ -73,6 +75,13 @@ export function buildMineAdmission(axes: Axes): MineAdmission {
     },
     predicate: { synthesize: () => null, verify: () => 'NA', teeth: () => false },
     typeOracle: { expressible: () => false, diagnose: () => 'NA' },
+    // A `dependency` req yields only a `FactVerdict` (`proven`/`abstain` — never `refuted`, which is the
+    // negation-only closed-world verdict); collapse any non-`proven` to `abstain` so the leg's type is exact
+    // and the sound-conservative fallback holds even for the impossible verdict.
+    verifyDependency: (target, scope) =>
+      verifyDep({ kind: 'dependency', claim: { sourceScope: scope, target, worldScope: scope } }).verdict === 'proven'
+        ? 'proven'
+        : 'abstain',
     refine: () => null,
     indexState: axes.spatial,
     K: 0,
