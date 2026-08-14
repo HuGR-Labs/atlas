@@ -133,6 +133,7 @@ export interface AdmitDeps {
   readonly predicate: PredicateApi; // synthesize/verify/teeth (CodeQL/Semgrep, KNOW-16)
   readonly doors: TwoDoorBar; // the advisory 2-door bar (CAMPAIGN-4)
   readonly typeOracle: TypeOracle; // sound-oracle-first (GEN-12k)
+  readonly verifyDependency?: (target: string, scope: string) => "proven" | "abstain"; // GEN-12-dep: sound symbol-reverse oracle (verify-fact positive dual)
   readonly refine: (check: Check, site: Candidate) => Check | null; // CEGIS refine; `null` = no change
   readonly indexState: IndexNode; // current code (KNOW-16 evaluate carrier)
   readonly K: number; // refine budget (GEN-13 default K≤1)
@@ -155,6 +156,9 @@ const DROP_NO_CHECK = 'no admissible synthesized check for a checkable candidate
 const DROP_NOT_HOLDS = 'synthesized check does not compile ∧ HOLDS on current code, after refine ≤K (GEN-12c/12d)';
 const DROP_VACUOUS = 'synthesized check survives every mutant — vacuous / toothless (GEN-12j)';
 const DROP_TYPE_BROKEN = 'sound type-checker / LSP verdict is not HOLDS on the type-expressible slot (GEN-12k)';
+const DROP_DEP_UNWIRED = "dependency slot but no verifyDependency leg supplied (GEN-12-dep)";
+const DROP_DEP_MALFORMED = "dependency proposal missing target/scope (GEN-12-dep)";
+const DROP_DEP_ABSTAIN = "the sound dependency oracle did not witness the edge — abstained, not proven (GEN-12-dep)";
 const DROP_UNGROUNDED = 'advisory fails the truth door — the citation does not ground (GEN-12e)';
 // RELATION drops (ADR-0015 D2, WP-96-R). The relation family is now ADMITTED — its two honest refusals
 // (`DROP_RELATION_MALFORMED` / `DROP_RELATION_UNGROUNDED`) live beside its builders in `admit-relation.ts`
@@ -241,6 +245,15 @@ function admitAdvisory(p: AdvisoryProposal, deps: AdmitDeps): Admission {
  * synthesized-check path: compile ∧ HOLDS (refine ≤K, else drop) ∧ TEETH (flip on ≥1 mutant, else vacuous).
  */
 function admitPredicate(p: PredicateProposal, deps: AdmitDeps): Admission {
+  if (p.slot === "dependency") {
+    if (deps.verifyDependency === undefined) return { outcome: "dropped", reason: DROP_DEP_UNWIRED };
+    const t = p.target, s = p.scope;
+    if (typeof t !== "string" || !t || typeof s !== "string" || !s) return { outcome: "dropped", reason: DROP_DEP_MALFORMED };
+    if (deps.verifyDependency(t, s) !== "proven") return { outcome: "dropped", reason: DROP_DEP_ABSTAIN };
+    if (!deps.doors.grounded(p.grounding, deps.indexState)) return { outcome: "dropped", reason: DROP_UNGROUNDED };
+    return { outcome: "admitted", fact: buildSound(p, scoreObviousness(deps.doors, p.claimNorm)), label: LIKELY_INVARIANT };
+  }
+
   // GEN-12k — a type-expressible slot uses the SOUND `$0` type-checker / LSP, not a synthesized query.
   if (deps.typeOracle.expressible(p.slot)) {
     if (deps.typeOracle.diagnose(p.site, p.slot) !== 'HOLDS') return { outcome: 'dropped', reason: DROP_TYPE_BROKEN };
@@ -340,6 +353,7 @@ function buildSound(p: PredicateProposal, obviousness: ObviousnessScore): Adviso
     claims: [],
     authoring: 'ADVISORY',
     predicateSlot: p.slot,
+    seal: "proven",
   };
 }
 

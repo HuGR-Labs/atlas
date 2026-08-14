@@ -69,7 +69,7 @@ describe('SCN-CLI-4d-1 — a non-empty frontier reaches the GATE\'S verdict, not
     const repo = makeIndexedRepo();
     // The PRODUCTION axes — the same `SkeletonSource` the pass ranks its sites out of, never a second walk.
     const axes = createSkeletonSource(repo).skeleton(repo, 'HEAD').axes;
-    const { deps, reground } = buildMineAdmission(axes);
+    const { deps, reground } = buildMineAdmission(axes, { documents: [] });
     const gate = makeAdmitGate(deps, reground);
 
     const site: StructRef = { kind: 'file', qualifiedPath: 'src/util.ts', subtreeHash: asSubtreeHash('not-the-current-hash') };

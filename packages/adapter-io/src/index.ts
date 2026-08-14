@@ -6,7 +6,7 @@
 // One-way DAG leaf: nothing in the core imports this.
 
 export { walkFileTree } from './fs.js';
-export { readScip, planIndexers, HONEST_HOLE, SCIP_INDEX_REL } from './scip.js';
+export { readScip, readScipOrEmpty, planIndexers, HONEST_HOLE, SCIP_INDEX_REL } from './scip.js';
 export type { LangId, IndexerPlan } from './scip.js';
 // The `atlas doctor index` diagnosis (the PRODUCTION caller of `planIndexers`, which had none). Atlas plans
 // the per-language SCIP index and prints the command; the OPERATOR runs it. Nothing here spawns a process.
