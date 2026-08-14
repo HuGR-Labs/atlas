@@ -145,6 +145,15 @@ export function makeGitSbx(): GitSbx {
     topicTip,
     cGreet,
     r0: mainTip,
-    cleanup: () => rmSync(repoPath, { recursive: true, force: true }),
+    cleanup: () => {
+      try {
+        rmSync(repoPath, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      } catch (err) {
+        // Teardown must never fail an otherwise-green suite. rmSync on a live git repo dir can race
+        // ENOTEMPTY/EBUSY/EPERM under CI load even with maxRetries; warn and move on (regression: git-sbx
+        // teardown flaked the gate, passed clean in isolation).
+        console.warn(`git-sbx cleanup: could not remove ${repoPath}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    },
   };
 }
