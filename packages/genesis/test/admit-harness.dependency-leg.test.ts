@@ -113,7 +113,9 @@ describe('ADR-0017 dependency-slot leg — admit(deps)', () => {
   });
 
   it('verifyDependency undefined ⇒ dropped (unwired)', () => {
-    const a = admit(depProposal(), makeDeps({ verifyDependency: undefined }));
+    // The base `makeDeps` supplies NO `verifyDependency`, so an empty override IS the unwired case.
+    // (Passing `verifyDependency: undefined` explicitly violates exactOptionalPropertyTypes.)
+    const a = admit(depProposal(), makeDeps({}));
     expect(a.outcome).toBe('dropped');
     if (a.outcome !== 'dropped') throw new Error('unreachable');
     expect(a.reason).toContain('GEN-12-dep');
