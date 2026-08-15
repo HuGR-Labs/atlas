@@ -18,11 +18,11 @@ describe('#196a — resolveMineSlot gates the arm, default advisory', () => {
     expect(resolveMineSlot(withSlot('  '))).toBe('advisory');
   });
 
-  it.each(['advisory', 'dependency', 'DEPENDENCY', ' Dependency '])('accepts the known arm %j (trimmed, case-insensitive)', (v) => {
+  it.each(['advisory', 'dependency', 'DEPENDENCY', ' Dependency ', 'count', 'COUNT', ' Count '])('accepts the known arm %j (trimmed, case-insensitive)', (v) => {
     expect(resolveMineSlot(withSlot(v))).toBe(v.trim().toLowerCase());
   });
 
-  it.each(['dependncy', 'relation', 'advisor', 'dep'])('THROWS on the unknown arm %j (no silent advisory fallback)', (v) => {
+  it.each(['dependncy', 'relation', 'advisor', 'dep', 'cont', 'counts'])('THROWS on the unknown arm %j (no silent advisory fallback)', (v) => {
     expect(() => resolveMineSlot(withSlot(v))).toThrow(/not a known mining arm/);
   });
 

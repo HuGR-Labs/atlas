@@ -162,6 +162,60 @@ export function makeDependencyClaimParser(resolveDep: DepResolver): ClaimParser 
   };
 }
 
+/**
+ * The COUNT grammar (#196c candidate-grounded — the CARDINALITY dual of the dependency arm). One line:
+ * `COUNT: <name>` — a single exported symbol NAME the model SELECTED from the closed candidate list of THIS
+ * unit's externally-called exports. The model NEVER emits the number: a stray digit or `@` breaks the `\S+`-
+ * then-end match and abstains. COUPLED to `prompts/propose-count.md`; `llm-count-parser.test.ts` pins the pair.
+ */
+const COUNT_RE = /^COUNT:\s*(\S+)\s*$/i;
+
+/** The reason a count-arm answer that is neither the abstain token nor a `COUNT: <name>` line abstains under —
+ *  fail-closed to a grounded abstention rather than a fabricated advisory, exactly as `DEP_UNPARSEABLE_REASON`. */
+export const COUNT_UNPARSEABLE_REASON = 'count-answer-unparseable';
+
+/** Resolve a picked count NAME to THIS unit's OWN externally-called export — the SYMBOL plus the harness-derived
+ *  witnessed lower bound (`atLeast`, distinct caller units) and the `scope` that bound ranges over — or `null`
+ *  when the name is not such an export of the unit (off-candidate-list guess / own-vocab / uncalled / typo). The
+ *  MODEL NEVER SUPPLIES THE NUMBER: `atLeast` is computed by the index (`UnitExportsApi.resolveExportFor`), so a
+ *  hallucinated count has no slot to enter. Injected + per-unit for the SAME reason as `DepResolver` (the #196a
+ *  lucy BLOCKER: an index-wide name lookup let an off-list name ride an unrelated file's same-named symbol). */
+export type CountResolver = (
+  name: string,
+  site: StructRef,
+) => { readonly symbol: string; readonly atLeast: number; readonly scope: string } | null;
+
+/**
+ * The COUNT arm parser FACTORY (#196c candidate-grounded). A claim matching `COUNT: <name>` whose `<name>`
+ * RESOLVES (via the injected `resolveCount`) to THIS unit's own externally-called export becomes a typed
+ * `PredicateSeed{ slot:'count', target: <the resolved SYMBOL>, scope, atLeast }` — `target` is the REAL symbol
+ * (the fact is bound to the unit's specific export, not a bare name), and `atLeast`/`scope` are the HARNESS'S,
+ * derived from the live index so `verifyCount` re-proves `witnessed >= atLeast` by construction (a sound lower
+ * bound). A name that does NOT resolve (off the candidate list, own-vocab, uncalled, a typo) ABSTAINS with
+ * `COUNT_UNPARSEABLE_REASON` — the lucy BLOCKER discipline, verbatim from the dependency arm. `claim` keeps the
+ * raw human line; `rawAnswer` rides through (#195c). Never an advisory seed, never a model-supplied number.
+ */
+export function makeCountClaimParser(resolveCount: CountResolver): ClaimParser {
+  return (claim, cand, rawAnswer) => {
+    const m = COUNT_RE.exec(claim.trim());
+    if (m === null) return { abstain: COUNT_UNPARSEABLE_REASON };
+    const name = (m[1] ?? '').trim();
+    if (name === '') return { abstain: COUNT_UNPARSEABLE_REASON };
+    const r = resolveCount(name, cand.site);
+    if (r === null) return { abstain: COUNT_UNPARSEABLE_REASON }; // not an externally-called export of THIS unit
+    return {
+      kind: 'predicate',
+      slot: 'count',
+      target: r.symbol, // the RESOLVED symbol — the fact's identity is bound to the unit's specific export
+      scope: r.scope, //  the callers' common segment-prefix the witnessed bound ranges over (harness-derived)
+      atLeast: r.atLeast, // the WITNESSED distinct caller-unit count — the sound lower bound, NEVER the model's
+      cand,
+      claim,
+      ...(rawAnswer !== undefined ? { rawAnswer } : {}),
+    };
+  };
+}
+
 /** Construct the S2 `SiteProposer` — ONE bounded model call per site, abstention allowed (ADAPT-LLM-1).
  *  The `SiteProposer` return type is frozen; the model client, budget, and prompt-builder are INJECTED so
  *  this seam hardcodes no model and no prompt (D5). `propose` makes exactly one `client.complete` call —

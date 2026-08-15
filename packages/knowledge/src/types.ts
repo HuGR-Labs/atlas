@@ -303,6 +303,7 @@ export type PredicateSlot =
   | 'gotcha'
   | 'rationale'
   | 'dependency'
+  | 'count'
   | 'definition';
 
 /**
@@ -327,6 +328,7 @@ export interface Candidate {
   readonly slot: PredicateSlot;
   readonly target?: string; // ADR-0017 dependency-slot leg — the global symbol X the fact depends on (absent for non-oracle slots)
   readonly scope?: string; //  ADR-0017 dependency-slot leg — the directory key S the dependency witness ranges over
+  readonly atLeast?: number; // #196c count-slot leg — the WITNESSED lower bound N (distinct caller units); absent for non-count slots
   readonly check?: Check; // PINNED → Check (predicate candidates only)
   readonly grounding: Grounding;
   readonly provenance: ClaimProvenance;

@@ -85,6 +85,14 @@ export function shippedDependencyTemplatePath(): string {
   return join(packageRoot(dirname(fileURLToPath(import.meta.url))), 'prompts', 'propose-dependency.md');
 }
 
+/** The COUNT proposal template (#196c cardinality slot, opt-in `ATLAS_MINE_SLOT=count` arm) — resolved the same
+ *  package-root way as `shippedTemplatePath`. Asks the model for one `COUNT: <name>` line (or `NO-FACT`), the
+ *  name SELECTED from the closed `{{CANDIDATES}}` list of the unit's externally-called exports; paired with
+ *  `makeCountClaimParser` (llm.ts). Uses `{{PATH}}`/`{{UNIT}}`/`{{SOURCE}}`/`{{CANDIDATES}}` — no `{{RELATED}}`. */
+export function shippedCountTemplatePath(): string {
+  return join(packageRoot(dirname(fileURLToPath(import.meta.url))), 'prompts', 'propose-count.md');
+}
+
 /** Walk up to the nearest directory containing `package.json`. Bounded by the filesystem root, so a module
  *  outside any package yields its own directory rather than looping. */
 function packageRoot(from: string): string {

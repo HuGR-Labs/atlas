@@ -86,6 +86,16 @@ export function buildMineAdmission(axes: Axes, scipOutput: ScipOutput): MineAdmi
       verifyDep({ kind: 'dependency', claim: { sourceScope: scope, target, worldScope: scope } }).verdict === 'proven'
         ? 'proven'
         : 'abstain',
+    // [#196c candidate-grounded] The CARDINALITY dual. `target` is the unit's OWN exported SYMBOL and `atLeast`
+    // is the HARNESS-derived witnessed count (`makeCountClaimParser` over `UnitExportsApi.resolveExportFor`) —
+    // the model never supplied the number. The gate RE-PROVES via the SAME sound leg: `verifyCount` counts the
+    // symbol's distinct callers under `scope` and returns `proven` iff `witnessed ≥ atLeast` (a sound lower
+    // bound, sound in ANY world — LOWER-BOUND mode, `exact` deliberately UNSET, since an equality is a
+    // closed-world claim we are not making). `proven`/`abstain` only (never `refuted`).
+    verifyCount: (target, scope, atLeast) =>
+      verifyDep({ kind: 'count', claim: { sourceScope: scope, target, worldScope: scope, atLeast } }).verdict === 'proven'
+        ? 'proven'
+        : 'abstain',
     refine: () => null,
     indexState: axes.spatial,
     K: 0,
