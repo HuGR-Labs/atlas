@@ -23,45 +23,44 @@ export interface UnitDepsApi {
   /** The cross-unit dependency NAMES a unit references — the CANDIDATE set shown to the model (prompt side).
    *  Empty for an unknown path or a unit with no cross-unit dep. Deterministic, sorted, deduped by name. */
   candidatesFor(unitPath: string): readonly string[];
-  /** The DEFINED global symbols whose terminal descriptor name is `name` — the gate's name→symbol resolution.
-   *  A model picks a NAME from `candidatesFor`; the gate resolves it to the real SCIP symbol(s) to hand the
-   *  sound oracle (which then confirms a caller exists in scope). Empty when no defined global carries the
-   *  name. Deterministic, sorted, deduped. */
-  symbolsNamed(name: string): readonly string[];
+  /** Resolve a picked NAME to THIS UNIT'S OWN cross-unit dependency symbol — the gate/parser binding that keeps
+   *  the admitted fact tied to the unit (lucy cold-review BLOCKER: an index-wide name→symbol lookup let a name
+   *  outside the unit's candidate list ride an unrelated sibling's same-named symbol). `null` when `name` is not
+   *  a cross-unit dependency name of `unitPath` (an off-list guess, a builtin, a typo) — the caller then abstains.
+   *  Deterministic: on the rare intra-unit terminal-name collision, the lexically-first symbol (a real dep of
+   *  this unit either way). This is the SOUND resolution — the symbol is provably referenced by this unit. */
+  resolveDepFor(unitPath: string, name: string): string | null;
 }
 
 /** The terminal identifier of a SCIP descriptor chain — the human name a reader (and the model) sees:
- *  `…/Hash#` → `Hash`, `…/charge().` → `charge`, `…/X.` → `X`, `…/ns/` → `ns`. Empty when the tail is not an
- *  identifier (e.g. a meta `:` descriptor). Matches the extractor validated against the live index. */
+ *  `…/Hash#` → `Hash`, `…/charge().` → `charge`, `…/X.` → `X`, `…/ns/` → `ns`. Empty when the tail is not a
+ *  plain identifier — a measured 28% of this repo's definitions (overload-disambiguated methods `foo(2).`,
+ *  backtick-escaped names carrying spaces/dots, `meta:` / type-parameter `[T]` / parameter `(name)`
+ *  descriptors). Those FAIL SAFE — dropped from both the candidate set and resolution, never mis-extracted to a
+ *  WRONG name (verified over the live 29,677-def index) — so they cost RECALL, never soundness. Widening the
+ *  extractor is the recall follow-up; it is deliberately conservative here. */
 export function symbolTerminalName(symbol: string): string {
   const m = symbol.match(/([A-Za-z0-9_$]+)\s*(?:#|\(\)\.|\.|\/)?$/);
   return m ? m[1]! : '';
 }
 
 /**
- * Build the unit-dependency view over one SCIP output. Two indexes, assembled once:
+ * Build the unit-dependency view over one SCIP output. One index, assembled once:
  *   - `defDoc: Map<globalSymbol, defDocHash>` — first-definition-wins over non-`local` `definition`
  *     occurrences, mirroring `deriveEdges`'s `defs` but RETAINING the defining document (the cross-unit
  *     discriminant `deriveEdges` projects away).
- *   - `symbolsByName: Map<terminalName, Set<globalSymbol>>` — every DEFINED global symbol, bucketed by its
- *     terminal descriptor name (the gate's resolution index).
- * `candidatesFor` then walks a unit's `reference` occurrences and keeps the non-`local` ones whose resolved
- * symbol (direct, or `canonicalizeSymbol` for a `dist/…d.ts` cross-package ref, #189) is DEFINED IN ANOTHER
- * document — exactly the sound cross-unit dependency set.
+ * Both lookups are computed from ONE per-unit walk (`crossUnitDepMap`): a unit's `reference` occurrences whose
+ * resolved symbol (direct, or `canonicalizeSymbol` for a `dist/…d.ts` cross-package ref, #189) is DEFINED IN
+ * ANOTHER document — exactly the sound cross-unit dependency set, keyed by terminal name. `candidatesFor` is
+ * its key-set; `resolveDepFor` is its lookup. There is NO index-wide name→symbol map — resolution is per-unit,
+ * so an admitted fact's symbol is provably referenced by the unit it is attributed to (lucy BLOCKER fix).
  */
 export function createUnitDeps(scip: ScipOutput): UnitDepsApi {
   const defDoc = new Map<string, string>();
-  const symbolsByName = new Map<string, Set<string>>();
   for (const doc of scip.documents) {
     const h = String(nodeHashOfPath(doc.relativePath));
     for (const occ of doc.occurrences) {
-      if (occ.role !== 'definition' || isLocalSymbol(occ.symbol)) continue;
-      if (!defDoc.has(occ.symbol)) defDoc.set(occ.symbol, h);
-      const n = symbolTerminalName(occ.symbol);
-      if (n === '') continue;
-      const bucket = symbolsByName.get(n) ?? new Set<string>();
-      bucket.add(occ.symbol);
-      symbolsByName.set(n, bucket);
+      if (occ.role === 'definition' && !isLocalSymbol(occ.symbol) && !defDoc.has(occ.symbol)) defDoc.set(occ.symbol, h);
     }
   }
 
@@ -72,24 +71,33 @@ export function createUnitDeps(scip: ScipOutput): UnitDepsApi {
 
   const docByPath = new Map(scip.documents.map((d) => [d.relativePath, d]));
 
-  return {
-    candidatesFor(unitPath: string): readonly string[] {
-      const doc = docByPath.get(unitPath);
-      if (doc === undefined) return [];
+  /** name → the unit's OWN cross-unit dependency symbol (lexically-first on a rare intra-unit name collision).
+   *  Memoized per unit path — the same walk backs both `candidatesFor` (keys) and `resolveDepFor` (lookup). */
+  const cache = new Map<string, ReadonlyMap<string, string>>();
+  const crossUnitDepMap = (unitPath: string): ReadonlyMap<string, string> => {
+    const memo = cache.get(unitPath);
+    if (memo !== undefined) return memo;
+    const doc = docByPath.get(unitPath);
+    const byName = new Map<string, string>();
+    if (doc !== undefined) {
       const self = String(nodeHashOfPath(unitPath));
-      const names = new Set<string>();
       for (const occ of doc.occurrences) {
         if (occ.role !== 'reference' || isLocalSymbol(occ.symbol)) continue;
         const resolved = resolvedDef(occ.symbol);
         if (resolved === undefined) continue; //          external/builtin/unresolved — not a cross-unit dep
         if (defDoc.get(resolved) === self) continue; //   defined IN this unit — its own vocabulary, not a dep
         const n = symbolTerminalName(resolved);
-        if (n !== '') names.add(n);
+        if (n === '') continue;
+        const prev = byName.get(n);
+        if (prev === undefined || resolved < prev) byName.set(n, resolved); // deterministic: lexically-first symbol
       }
-      return [...names].sort();
-    },
-    symbolsNamed(name: string): readonly string[] {
-      return [...(symbolsByName.get(name) ?? [])].sort();
-    },
+    }
+    cache.set(unitPath, byName);
+    return byName;
+  };
+
+  return {
+    candidatesFor: (unitPath) => [...crossUnitDepMap(unitPath).keys()].sort(),
+    resolveDepFor: (unitPath, name) => crossUnitDepMap(unitPath).get(name) ?? null,
   };
 }

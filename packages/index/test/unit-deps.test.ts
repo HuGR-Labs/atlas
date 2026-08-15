@@ -51,11 +51,16 @@ describe('#196a createUnitDeps — the candidate-grounded recall source', () => 
     expect(deps.candidatesFor('src/nope.ts')).toEqual([]);
   });
 
-  it('symbolsNamed resolves a terminal name to its DEFINED global symbol(s) — the gate leg', () => {
-    expect(deps.symbolsNamed('Hash')).toEqual([HASH]);
-    expect(deps.symbolsNamed('charge')).toEqual([CHARGE]);
-    // a name with no in-index DEFINITION (external) resolves to nothing — the gate then abstains.
-    expect(deps.symbolsNamed('statSync')).toEqual([]);
+  it('resolveDepFor binds a picked name to THIS UNIT\'S OWN cross-unit symbol — the gate/parser leg', () => {
+    // pay depends on Hash (cross-unit) ⇒ resolves to the real symbol.
+    expect(deps.resolveDepFor('src/pay/pay.ts', 'Hash')).toBe(HASH);
+    // teeth (lucy BLOCKER): `charge` IS a defined global, but it is pay's OWN symbol, not a cross-unit dep of
+    // pay — an index-wide lookup would resolve it; the per-unit resolver returns null so it is NOT admitted.
+    expect(deps.resolveDepFor('src/pay/pay.ts', 'charge')).toBeNull();
+    // an off-list name (external / not referenced by this unit) ⇒ null ⇒ the parser abstains.
+    expect(deps.resolveDepFor('src/pay/pay.ts', 'statSync')).toBeNull();
+    // contracts does not depend on Hash cross-unit (it DEFINES it) ⇒ null for that unit.
+    expect(deps.resolveDepFor('src/contracts/hash.ts', 'Hash')).toBeNull();
   });
 
   it('symbolTerminalName extracts the human name across descriptor suffixes', () => {

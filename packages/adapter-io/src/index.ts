@@ -30,8 +30,8 @@ export { createForge } from './git-forge.js';
 // git seam (#74, `run-git.ts`) that crosses the package boundary (the mine driver injects it). `runGit` + the
 // error classifier/backoff primitives stay module-internal, consumed intra-package via relative import.
 export { headSha } from './run-git.js';
-export { createSiteProposer, advisoryClaimParser, dependencyClaimParser, DEP_UNPARSEABLE_REASON } from './llm.js';
-export type { ClaimParser } from './llm.js'; // ADR-0017 — the per-arm claim→seed parser seam
+export { createSiteProposer, advisoryClaimParser, makeDependencyClaimParser, DEP_UNPARSEABLE_REASON } from './llm.js';
+export type { ClaimParser, DepResolver } from './llm.js'; // ADR-0017 — the per-arm claim→seed parser seam + #196a resolver
 // ADR-0011 D1 — the one concrete model adapter (an operator-supplied command). The port's own type name
 // is deliberately NOT written here: golden 11a audits it TEXTUALLY across `packages/*/src`, so keeping
 // the name in exactly one file is a stronger property than 'only one importer', and worth the terseness.
@@ -49,7 +49,7 @@ export {
 } from './prompt.js'; // ADR-0011 D3
 export type { PromptFactory, SourceReader, SiblingReader, RelatedUnit, CandidateReader } from './prompt.js';
 export { createUnitSourceReader, createUnitSiblingReader } from './unit-source.js'; // #182 S2 — unit bytes + ENRICH siblings
-export { createUnitDepCandidates } from './unit-candidates.js'; // #196a — candidate-grounded dep names (prompt-side recall)
+export { createUnitDepCandidates, createDepResolver } from './unit-candidates.js'; // #196a — candidate-grounded dep names (prompt) + per-unit name→symbol resolver (gate)
 export { createIndexAdapter } from './index-adapter.js';
 export type { IndexAdapterDeps, IndexAdapterSurface } from './index-adapter.js'; // IndexAdapterSurface: #99b N0 symbol-reverse seam for N2
 export { materializePoke, pokeFilePath, POKE_FILE_EXT } from './poke-file.js';

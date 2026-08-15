@@ -69,7 +69,6 @@ export interface MineAdmission {
  */
 export function buildMineAdmission(axes: Axes, scipOutput: ScipOutput): MineAdmission {
   const verifyDep = createVerifyFactLeg(scipOutput);
-  const unitDeps = createUnitDeps(scipOutput);
   const deps: AdmitDeps = {
     doors: {
       grounded: (grounding) => driftDetect(grounding, axes) === 'FRESH',
@@ -77,18 +76,14 @@ export function buildMineAdmission(axes: Axes, scipOutput: ScipOutput): MineAdmi
     },
     predicate: { synthesize: () => null, verify: () => 'NA', teeth: () => false },
     typeOracle: { expressible: () => false, diagnose: () => 'NA' },
-    // [#196a candidate-grounded] The proposer emits a HUMAN NAME (`target`), not a SCIP symbol string — the
-    // sound oracle keys on the latter, so a bare name never resolves (measured: recall 0). RESOLVE the name to
-    // its DEFINED global symbol(s) (`symbolsNamed`) and prove ANY one against the scope. Soundness is preserved:
-    // the oracle still requires a WITNESSED caller in `scope` for the chosen symbol — resolution only maps the
-    // name to the identifier the oracle can check, it never relaxes the witness. `proven` iff some symbol named
-    // `target` has a caller in `scope`; else `abstain` (an unresolvable name — a builtin / a typo / a name no
-    // in-scope unit calls — is honestly not proven). A `dependency` verdict is `proven`/`abstain` only (never
-    // `refuted`, the negation-only closed-world verdict).
+    // [#196a candidate-grounded] `target` is ALREADY the unit's own cross-unit dependency SYMBOL — the parser
+    // resolved the picked name to it PER-UNIT (`makeDependencyClaimParser` over `UnitDepsApi.resolveDepFor`),
+    // so the fact is bound to the unit's specific dependency (lucy BLOCKER: an index-wide name lookup here let an
+    // off-list name ride an unrelated file's same-named symbol). The gate re-PROVES that exact symbol against the
+    // scope via the sound oracle: `proven` iff it has a witnessed caller in `scope`, else `abstain`. A
+    // `dependency` verdict is `proven`/`abstain` only (never `refuted`, the negation-only closed-world verdict).
     verifyDependency: (target, scope) =>
-      unitDeps
-        .symbolsNamed(target)
-        .some((sym) => verifyDep({ kind: 'dependency', claim: { sourceScope: scope, target: sym, worldScope: scope } }).verdict === 'proven')
+      verifyDep({ kind: 'dependency', claim: { sourceScope: scope, target, worldScope: scope } }).verdict === 'proven'
         ? 'proven'
         : 'abstain',
     refine: () => null,

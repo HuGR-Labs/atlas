@@ -14,6 +14,7 @@
 
 import { execFileSync } from 'node:child_process';
 
+import type { StructRef } from '@atlas/contracts';
 import type { Candidate, SeedProposal, SiteProposer } from '@atlas/genesis';
 
 /**
@@ -116,8 +117,9 @@ export const DEP_UNPARSEABLE_REASON = 'dependency-answer-unparseable';
 
 /** The DIRECTORY of a mined unit — the scope its dependency witness ranges over. The unit's `qualifiedPath` is
  *  `<file>` or `<file>::<symbol>` (struct.ts); take the file, then its parent directory (forward-slash paths,
- *  repo-relative). A top-level file (no `/`) yields `''` — the repo root, which the oracle reads as "any unit
- *  in the repo", the honest widest scope for a rootless unit. */
+ *  repo-relative). A top-level file (no `/`) yields `''`, which the scope predicate matches NOTHING against
+ *  (`underScope` splits `''` to `['']`, never length 0) — so a rootless unit's dependency ALWAYS abstains. That
+ *  is fail-closed, not a hole: an over-wide "whole repo" scope is exactly what we must not grant. */
 function unitScopeOf(qualifiedPath: string): string {
   const at = qualifiedPath.indexOf('::');
   const file = at === -1 ? qualifiedPath : qualifiedPath.slice(0, at);
@@ -125,29 +127,40 @@ function unitScopeOf(qualifiedPath: string): string {
   return slash === -1 ? '' : file.slice(0, slash);
 }
 
+/** Resolve a picked dependency NAME to THIS unit's OWN cross-unit dependency symbol — or `null` when the name
+ *  is not a real cross-unit dependency of the unit (an off-candidate-list guess / builtin / typo). Injected
+ *  because the name→symbol binding is the INDEX's business (`UnitDepsApi.resolveDepFor`) and must be per-unit:
+ *  an index-wide name lookup let an off-list name ride an unrelated file's same-named symbol (lucy BLOCKER). */
+export type DepResolver = (name: string, site: StructRef) => string | null;
+
 /**
- * The DEPENDENCY arm parser (ADR-0017, #196a candidate-grounded). A claim matching `DEPENDS-ON: <name>` with a
- * non-empty name becomes a typed dependency `PredicateSeed{ slot:'dependency', target: <name>, scope: <unit dir> }`
- * — the `scope` DERIVED from the mined unit (never the model's guess). The gate resolves `<name>` to its real
- * SCIP symbol(s) and the sound oracle proves-or-drops (`buildMineAdmission.verifyDependency`). `claim` keeps
- * the raw line and `rawAnswer` rides through (#195c). Anything else ABSTAINS with `DEP_UNPARSEABLE_REASON` —
- * NEVER falls back to an advisory seed, so a dependency mine emits only dependency facts or grounded abstentions.
+ * The DEPENDENCY arm parser FACTORY (ADR-0017, #196a candidate-grounded). A claim matching `DEPENDS-ON: <name>`
+ * whose `<name>` RESOLVES (via the injected `resolveDep`) to THIS unit's own cross-unit dependency symbol
+ * becomes a typed `PredicateSeed{ slot:'dependency', target: <the resolved SYMBOL>, scope: <unit dir> }` — the
+ * target is the REAL symbol (so the fact is bound to the unit's specific dependency, not a bare name), and the
+ * sound oracle re-proves it. A name that does NOT resolve (off the candidate list, a builtin, a typo) ABSTAINS
+ * with `DEP_UNPARSEABLE_REASON` — closing the lucy BLOCKER where an off-list name was admitted via a sibling's
+ * same-named symbol. `claim` keeps the raw human line; `rawAnswer` rides through (#195c). Never an advisory seed.
  */
-export const dependencyClaimParser: ClaimParser = (claim, cand, rawAnswer) => {
-  const m = DEPENDS_ON_RE.exec(claim.trim());
-  if (m === null) return { abstain: DEP_UNPARSEABLE_REASON };
-  const target = (m[1] ?? '').trim();
-  if (target === '') return { abstain: DEP_UNPARSEABLE_REASON };
-  return {
-    kind: 'predicate',
-    slot: 'dependency',
-    target,
-    scope: unitScopeOf(cand.site.qualifiedPath),
-    cand,
-    claim,
-    ...(rawAnswer !== undefined ? { rawAnswer } : {}),
+export function makeDependencyClaimParser(resolveDep: DepResolver): ClaimParser {
+  return (claim, cand, rawAnswer) => {
+    const m = DEPENDS_ON_RE.exec(claim.trim());
+    if (m === null) return { abstain: DEP_UNPARSEABLE_REASON };
+    const name = (m[1] ?? '').trim();
+    if (name === '') return { abstain: DEP_UNPARSEABLE_REASON };
+    const symbol = resolveDep(name, cand.site);
+    if (symbol === null) return { abstain: DEP_UNPARSEABLE_REASON }; // not a cross-unit dep of THIS unit
+    return {
+      kind: 'predicate',
+      slot: 'dependency',
+      target: symbol, // the RESOLVED symbol — the fact's identity is bound to the unit's specific dependency
+      scope: unitScopeOf(cand.site.qualifiedPath),
+      cand,
+      claim,
+      ...(rawAnswer !== undefined ? { rawAnswer } : {}),
+    };
   };
-};
+}
 
 /** Construct the S2 `SiteProposer` — ONE bounded model call per site, abstention allowed (ADAPT-LLM-1).
  *  The `SiteProposer` return type is frozen; the model client, budget, and prompt-builder are INJECTED so

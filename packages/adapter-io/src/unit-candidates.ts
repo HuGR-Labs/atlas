@@ -12,6 +12,7 @@ import { createUnitDeps } from '@atlas/index';
 import type { ScipOutput } from '@atlas/index';
 
 import type { CandidateReader } from './prompt.js';
+import type { DepResolver } from './llm.js';
 
 /** The FILE portion of a `qualifiedPath` — the prefix up to the FIRST `::` (mirrors `unit-source.ts`'s helper;
  *  candidates are a UNIT-level (per-file) property, so a `::symbol` site resolves to its file's dep set). */
@@ -26,4 +27,14 @@ function filePathOf(qualifiedPath: string): string {
 export function createUnitDepCandidates(scip: ScipOutput): CandidateReader {
   const deps = createUnitDeps(scip);
   return { candidates: (site: StructRef): readonly string[] => deps.candidatesFor(filePathOf(site.qualifiedPath)) };
+}
+
+/** The gate/parser-side resolver: a picked dependency NAME → the mined unit's OWN cross-unit dependency symbol
+ *  (`UnitDepsApi.resolveDepFor`), `null` when the name is not a cross-unit dep of that unit. Bound PER-UNIT (via
+ *  the site's file), which is what keeps an admitted fact tied to the unit it names — an index-wide name lookup
+ *  let an off-candidate name ride an unrelated file's same-named symbol (lucy BLOCKER). Pairs with
+ *  `makeDependencyClaimParser` (llm.ts), which puts the resolved SYMBOL on the seed's `target`. */
+export function createDepResolver(scip: ScipOutput): DepResolver {
+  const deps = createUnitDeps(scip);
+  return (name: string, site: StructRef): string | null => deps.resolveDepFor(filePathOf(site.qualifiedPath), name);
 }

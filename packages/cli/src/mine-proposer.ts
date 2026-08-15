@@ -10,13 +10,14 @@ import { join } from 'node:path';
 
 import {
   createCommandClient,
+  createDepResolver,
   createPromptFactory,
   createSiteProposer,
   createUnitDepCandidates,
   createUnitSiblingReader,
   createUnitSourceReader,
-  dependencyClaimParser,
   loadModelConfig,
+  makeDependencyClaimParser,
   readScipOrEmpty,
   shippedDependencyTemplatePath,
   shippedEnrichedTemplatePath,
@@ -150,14 +151,16 @@ export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = proce
   // enriched template that also shows the target's same-file context siblings — the fact stays anchored to the
   // target (KNOW-15g), only what the model SEES widens. Advisory keeps `parseClaim` UNSET (advisory default).
   // `slot` was already resolved (and validated) at the top of this function.
+  // [#196a candidate-grounded] The dependency arm reads the index ONCE and drives BOTH the prompt-side candidate
+  // list (the names the model selects from) AND the gate-side per-unit resolver (name → the unit's own cross-unit
+  // symbol). Reading it once keeps them derived from the SAME `.atlas/index.scip` the gate reads, so the closed
+  // list the model sees and the symbol the parser binds can never disagree.
+  const depScip = slot === 'dependency' ? readScipOrEmpty(join(repoPath, '.atlas', 'index.scip')) : undefined;
   const prompts =
-    slot === 'dependency'
-      ? // [#196a candidate-grounded] The dependency arm injects the CANDIDATE reader (the unit's real cross-unit
-        // dep names, from the same `.atlas/index.scip` the gate reads) so the model SELECTS from a closed list
-        // rather than naming freely. Empty/absent index ⇒ empty candidate lists ⇒ the model abstains, never fabricates.
-        createPromptFactory({
+    depScip !== undefined
+      ? createPromptFactory({
           source: createUnitSourceReader(repoPath),
-          candidates: createUnitDepCandidates(readScipOrEmpty(join(repoPath, '.atlas', 'index.scip'))),
+          candidates: createUnitDepCandidates(depScip),
           templatePath: shippedDependencyTemplatePath(),
         })
       : enrichEnabled(env)
@@ -167,7 +170,10 @@ export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = proce
             templatePath: shippedEnrichedTemplatePath(),
           })
         : createPromptFactory({ source: createUnitSourceReader(repoPath) });
-  const parseClaim: ClaimParser | undefined = slot === 'dependency' ? dependencyClaimParser : undefined;
+  // The dependency parser resolves the picked NAME to the unit's own cross-unit SYMBOL (per-unit — lucy BLOCKER)
+  // and puts that symbol on the seed's `target`, so the fact is bound to the unit's specific dependency.
+  const parseClaim: ClaimParser | undefined =
+    depScip !== undefined ? makeDependencyClaimParser(createDepResolver(depScip)) : undefined;
   const proposer = createSiteProposer({
     client: createCommandClient(propose),
     budget: { costCap: cfg.costCap, timeoutMs: cfg.timeoutMs },
