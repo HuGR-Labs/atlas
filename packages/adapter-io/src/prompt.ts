@@ -32,9 +32,10 @@ const O_READ_NO_SYMLINK =
 /** Why a prompt could not be built. Thrown, never papered over — see `NO_SOURCE` in particular. */
 export type PromptRefusal =
   | 'template-unreadable'
-  | 'template-has-no-source-slot' //  a template that never interpolates the code would send an empty ask
-  | 'template-has-no-related-slot' // a `related` reader was injected but the template omits {{RELATED}}
-  | 'source-unreadable'; //           sending a source-less prompt is what invites a fabricated fact
+  | 'template-has-no-source-slot' //   a template that never interpolates the code would send an empty ask
+  | 'template-has-no-related-slot' //  a `related` reader was injected but the template omits {{RELATED}}
+  | 'template-has-no-candidates-slot' // a `candidates` reader was injected but the template omits {{CANDIDATES}}
+  | 'source-unreadable'; //            sending a source-less prompt is what invites a fabricated fact
 
 export class PromptError extends Error {
   constructor(
@@ -52,6 +53,7 @@ const SLOT_SOURCE = '{{SOURCE}}';
 const SLOT_PATH = '{{PATH}}';
 const SLOT_UNIT = '{{UNIT}}';
 const SLOT_RELATED = '{{RELATED}}';
+const SLOT_CANDIDATES = '{{CANDIDATES}}';
 
 /**
  * The shipped template, resolved from the PACKAGE ROOT — the nearest ancestor holding a `package.json`.
@@ -117,6 +119,15 @@ export interface SiblingReader {
   readSiblings(site: StructRef): readonly RelatedUnit[];
 }
 
+/** [#196a candidate-grounded] Resolve the CLOSED CANDIDATE LIST a dependency proposer selects from — the
+ *  unit's real cross-unit dependency NAMES, computed mechanically from the index (`UnitDepsApi.candidatesFor`).
+ *  Injected for the same reason as `SourceReader`: which symbols a unit depends on is the index's business,
+ *  not the prompt's. The model may only SELECT from this list, which is what makes the pick sound (it resolves
+ *  to a real symbol the gate re-proves) instead of a free-form guess. Total: an unknown/no-dep site yields `[]`. */
+export interface CandidateReader {
+  candidates(site: StructRef): readonly string[];
+}
+
 /** A prompt builder plus the digest of the template it was built from — the pair is what makes an override
  *  auditable. `digest` is the sealed kernel `id` (never a hand-rolled hash — KERNEL-1/2a) over the template
  *  TEXT AS READ, comments included, **NFC-normalized**.
@@ -170,6 +181,10 @@ export function createPromptFactory(deps: {
    *  and `build` interpolates the sibling context; the grounding anchor and `evidenceSpan` are UNTOUCHED — a
    *  related unit is what the model SEES, never what the fact is anchored to (KNOW-15g). */
   related?: SiblingReader;
+  /** [#196a] OPT-IN candidate list for the CANDIDATE-GROUNDED dependency arm. ABSENT ⇒ unchanged. PRESENT ⇒
+   *  the template MUST carry `{{CANDIDATES}}` and `build` interpolates the unit's real cross-unit dep NAMES,
+   *  the closed set the model SELECTS from. Does not touch the anchor or `evidenceSpan`. */
+  candidates?: CandidateReader;
 }): PromptFactory {
   const path = deps.templatePath ?? shippedTemplatePath();
   let raw: string;
@@ -178,7 +193,7 @@ export function createPromptFactory(deps: {
   } catch (e) {
     throw new PromptError('template-unreadable', `the prompt template at ${path} could not be read: ${String(e)}`);
   }
-  const template = assertUsable(stripComments(raw), path, deps.related !== undefined);
+  const template = assertUsable(stripComments(raw), path, deps.related !== undefined, deps.candidates !== undefined);
   const digest = id({ promptTemplate: raw } as never);
   // The GROUND-10 seam, not a local digest: a blake3↔stub encoder swap flows through spans exactly as it
   // flows through every anchor. `bindSpan` refuses anything that is not a real in-bounds byte range.
@@ -208,6 +223,9 @@ export function createPromptFactory(deps: {
       // LAST — are never re-scanned for a slot token. A related unit is CONTEXT the model sees; it is not
       // grounded and does not touch `evidenceSpan`/the anchor above.
       const related = deps.related === undefined ? '' : renderRelated(deps.related.readSiblings(site));
+      // [#196a] The CANDIDATE list (opt-in) — the unit's real cross-unit dep names the model selects from. Also
+      // interpolated BEFORE the source, for the same reason. Never touches the anchor/`evidenceSpan`.
+      const candidates = deps.candidates === undefined ? '' : deps.candidates.candidates(site).join(', ');
       return template
         .split(SLOT_PATH)
         .join(filePathOf(site))
@@ -215,6 +233,8 @@ export function createPromptFactory(deps: {
         .join(unitNameOf(site))
         .split(SLOT_RELATED)
         .join(related)
+        .split(SLOT_CANDIDATES)
+        .join(candidates)
         .split(SLOT_SOURCE)
         .join(source);
     },
@@ -295,7 +315,7 @@ function stripComments(text: string): string {
  *  quiet degradation on every site. When a `related` reader is injected, the template MUST carry `{{RELATED}}`
  *  too — otherwise the enriched context is silently dropped and the ENRICH arm would run as the bare arm
  *  while claiming otherwise, the exact "wired but not functional" trap. */
-function assertUsable(template: string, path: string, requireRelated: boolean): string {
+function assertUsable(template: string, path: string, requireRelated: boolean, requireCandidates: boolean): string {
   if (!template.includes(SLOT_SOURCE)) {
     throw new PromptError(
       'template-has-no-source-slot',
@@ -308,6 +328,13 @@ function assertUsable(template: string, path: string, requireRelated: boolean): 
       'template-has-no-related-slot',
       `the prompt template at ${path} never interpolates ${SLOT_RELATED}, but a sibling reader was injected ` +
         `— the enriched context would be silently dropped. Use the enriched template, or drop the reader`,
+    );
+  }
+  if (requireCandidates && !template.includes(SLOT_CANDIDATES)) {
+    throw new PromptError(
+      'template-has-no-candidates-slot',
+      `the prompt template at ${path} never interpolates ${SLOT_CANDIDATES}, but a candidate reader was ` +
+        `injected — the candidate list would be silently dropped. Use the candidate-grounded template, or drop the reader`,
     );
   }
   return template;

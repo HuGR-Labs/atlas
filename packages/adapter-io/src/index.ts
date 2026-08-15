@@ -47,8 +47,9 @@ export {
   shippedDependencyTemplatePath, // ADR-0017 dependency arm — the DEPENDS-ON prompt
   PromptError,
 } from './prompt.js'; // ADR-0011 D3
-export type { PromptFactory, SourceReader, SiblingReader, RelatedUnit } from './prompt.js';
+export type { PromptFactory, SourceReader, SiblingReader, RelatedUnit, CandidateReader } from './prompt.js';
 export { createUnitSourceReader, createUnitSiblingReader } from './unit-source.js'; // #182 S2 — unit bytes + ENRICH siblings
+export { createUnitDepCandidates } from './unit-candidates.js'; // #196a — candidate-grounded dep names (prompt-side recall)
 export { createIndexAdapter } from './index-adapter.js';
 export type { IndexAdapterDeps, IndexAdapterSurface } from './index-adapter.js'; // IndexAdapterSurface: #99b N0 symbol-reverse seam for N2
 export { materializePoke, pokeFilePath, POKE_FILE_EXT } from './poke-file.js';

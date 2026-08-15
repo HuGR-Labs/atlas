@@ -18,6 +18,7 @@
 
 import type { StructRef } from '@atlas/contracts';
 import type { Axes, ScipOutput } from '@atlas/index';
+import { createUnitDeps } from '@atlas/index';
 import { driftDetect, ground } from '@atlas/grounding';
 import type { Grounding } from '@atlas/grounding';
 import type { AdmitDeps } from '@atlas/genesis';
@@ -68,6 +69,7 @@ export interface MineAdmission {
  */
 export function buildMineAdmission(axes: Axes, scipOutput: ScipOutput): MineAdmission {
   const verifyDep = createVerifyFactLeg(scipOutput);
+  const unitDeps = createUnitDeps(scipOutput);
   const deps: AdmitDeps = {
     doors: {
       grounded: (grounding) => driftDetect(grounding, axes) === 'FRESH',
@@ -75,11 +77,18 @@ export function buildMineAdmission(axes: Axes, scipOutput: ScipOutput): MineAdmi
     },
     predicate: { synthesize: () => null, verify: () => 'NA', teeth: () => false },
     typeOracle: { expressible: () => false, diagnose: () => 'NA' },
-    // A `dependency` req yields only a `FactVerdict` (`proven`/`abstain` — never `refuted`, which is the
-    // negation-only closed-world verdict); collapse any non-`proven` to `abstain` so the leg's type is exact
-    // and the sound-conservative fallback holds even for the impossible verdict.
+    // [#196a candidate-grounded] The proposer emits a HUMAN NAME (`target`), not a SCIP symbol string — the
+    // sound oracle keys on the latter, so a bare name never resolves (measured: recall 0). RESOLVE the name to
+    // its DEFINED global symbol(s) (`symbolsNamed`) and prove ANY one against the scope. Soundness is preserved:
+    // the oracle still requires a WITNESSED caller in `scope` for the chosen symbol — resolution only maps the
+    // name to the identifier the oracle can check, it never relaxes the witness. `proven` iff some symbol named
+    // `target` has a caller in `scope`; else `abstain` (an unresolvable name — a builtin / a typo / a name no
+    // in-scope unit calls — is honestly not proven). A `dependency` verdict is `proven`/`abstain` only (never
+    // `refuted`, the negation-only closed-world verdict).
     verifyDependency: (target, scope) =>
-      verifyDep({ kind: 'dependency', claim: { sourceScope: scope, target, worldScope: scope } }).verdict === 'proven'
+      unitDeps
+        .symbolsNamed(target)
+        .some((sym) => verifyDep({ kind: 'dependency', claim: { sourceScope: scope, target: sym, worldScope: scope } }).verdict === 'proven')
         ? 'proven'
         : 'abstain',
     refine: () => null,

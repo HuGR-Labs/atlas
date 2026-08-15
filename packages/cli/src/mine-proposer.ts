@@ -6,14 +6,18 @@
 
 import { execFileSync } from 'node:child_process';
 
+import { join } from 'node:path';
+
 import {
   createCommandClient,
   createPromptFactory,
   createSiteProposer,
+  createUnitDepCandidates,
   createUnitSiblingReader,
   createUnitSourceReader,
   dependencyClaimParser,
   loadModelConfig,
+  readScipOrEmpty,
   shippedDependencyTemplatePath,
   shippedEnrichedTemplatePath,
 } from '@atlas/adapter-io';
@@ -148,7 +152,14 @@ export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = proce
   // `slot` was already resolved (and validated) at the top of this function.
   const prompts =
     slot === 'dependency'
-      ? createPromptFactory({ source: createUnitSourceReader(repoPath), templatePath: shippedDependencyTemplatePath() })
+      ? // [#196a candidate-grounded] The dependency arm injects the CANDIDATE reader (the unit's real cross-unit
+        // dep names, from the same `.atlas/index.scip` the gate reads) so the model SELECTS from a closed list
+        // rather than naming freely. Empty/absent index ⇒ empty candidate lists ⇒ the model abstains, never fabricates.
+        createPromptFactory({
+          source: createUnitSourceReader(repoPath),
+          candidates: createUnitDepCandidates(readScipOrEmpty(join(repoPath, '.atlas', 'index.scip'))),
+          templatePath: shippedDependencyTemplatePath(),
+        })
       : enrichEnabled(env)
         ? createPromptFactory({
             source: createUnitSourceReader(repoPath),

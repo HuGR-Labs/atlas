@@ -100,13 +100,13 @@ export const advisoryClaimParser: ClaimParser = (claim, cand, rawAnswer) => ({
 });
 
 /**
- * The DEPENDENCY grammar (ADR-0017 dependency slot). One line: `DEPENDS-ON: <target> @ <scope>`. The ` @ `
- * separator carries a space on EACH side and is the split point — GREEDY on `<target>` so a symbol that
- * itself contains an `@` (e.g. an npm `pkg@version` specifier) keeps it, and the LAST ` @ ` before the
- * trailing directory is the delimiter. `<scope>` is a directory key with no interior ` @ `. COUPLED to
- * `prompts/propose-dependency.md`, which writes exactly this grammar; `llm.test.ts` pins the pair.
+ * The DEPENDENCY grammar (ADR-0017 dependency slot, #196a candidate-grounded). One line: `DEPENDS-ON: <name>`
+ * — a single symbol NAME the model SELECTED from the closed candidate list the prompt showed it. The `scope`
+ * is NOT asked of the model (a guessed directory was pure error): it is DERIVED from the mined unit's own path.
+ * COUPLED to `prompts/propose-dependency.md`, which writes exactly this grammar; `llm-dependency-parser.test.ts`
+ * pins the pair.
  */
-const DEPENDS_ON_RE = /^DEPENDS-ON:\s*(.+)\s+@\s+(\S.*?)\s*$/i;
+const DEPENDS_ON_RE = /^DEPENDS-ON:\s*(\S+)\s*$/i;
 
 /** The reason a dependency-arm answer that is not the abstain token AND does not match the `DEPENDS-ON:`
  *  grammar abstains under — a MALFORMED proposal, fail-closed to a grounded abstention rather than a
@@ -114,25 +114,35 @@ const DEPENDS_ON_RE = /^DEPENDS-ON:\s*(.+)\s+@\s+(\S.*?)\s*$/i;
  *  fact about a different family). Greppable, mirroring `llm.ts`'s `answer-malformed:*` reasons. */
 export const DEP_UNPARSEABLE_REASON = 'dependency-answer-unparseable';
 
+/** The DIRECTORY of a mined unit — the scope its dependency witness ranges over. The unit's `qualifiedPath` is
+ *  `<file>` or `<file>::<symbol>` (struct.ts); take the file, then its parent directory (forward-slash paths,
+ *  repo-relative). A top-level file (no `/`) yields `''` — the repo root, which the oracle reads as "any unit
+ *  in the repo", the honest widest scope for a rootless unit. */
+function unitScopeOf(qualifiedPath: string): string {
+  const at = qualifiedPath.indexOf('::');
+  const file = at === -1 ? qualifiedPath : qualifiedPath.slice(0, at);
+  const slash = file.lastIndexOf('/');
+  return slash === -1 ? '' : file.slice(0, slash);
+}
+
 /**
- * The DEPENDENCY arm parser (ADR-0017). A claim matching the `DEPENDS-ON: <target> @ <scope>` grammar with a
- * non-empty target AND scope becomes a typed dependency `PredicateSeed{ slot:'dependency', target, scope }`;
- * `claim` keeps the raw line (the human-readable set-union body) and `rawAnswer` rides through (#195c).
- * Anything else ABSTAINS with `DEP_UNPARSEABLE_REASON` — NEVER falls back to an advisory seed, so a
- * dependency mine emits only dependency facts (or grounded abstentions), and the sound oracle (`admitPredicate`'s
- * dependency leg) still owns whether a well-formed pair is PROVEN or dropped.
+ * The DEPENDENCY arm parser (ADR-0017, #196a candidate-grounded). A claim matching `DEPENDS-ON: <name>` with a
+ * non-empty name becomes a typed dependency `PredicateSeed{ slot:'dependency', target: <name>, scope: <unit dir> }`
+ * — the `scope` DERIVED from the mined unit (never the model's guess). The gate resolves `<name>` to its real
+ * SCIP symbol(s) and the sound oracle proves-or-drops (`buildMineAdmission.verifyDependency`). `claim` keeps
+ * the raw line and `rawAnswer` rides through (#195c). Anything else ABSTAINS with `DEP_UNPARSEABLE_REASON` —
+ * NEVER falls back to an advisory seed, so a dependency mine emits only dependency facts or grounded abstentions.
  */
 export const dependencyClaimParser: ClaimParser = (claim, cand, rawAnswer) => {
   const m = DEPENDS_ON_RE.exec(claim.trim());
   if (m === null) return { abstain: DEP_UNPARSEABLE_REASON };
   const target = (m[1] ?? '').trim();
-  const scope = (m[2] ?? '').trim();
-  if (target === '' || scope === '') return { abstain: DEP_UNPARSEABLE_REASON };
+  if (target === '') return { abstain: DEP_UNPARSEABLE_REASON };
   return {
     kind: 'predicate',
     slot: 'dependency',
     target,
-    scope,
+    scope: unitScopeOf(cand.site.qualifiedPath),
     cand,
     claim,
     ...(rawAnswer !== undefined ? { rawAnswer } : {}),
