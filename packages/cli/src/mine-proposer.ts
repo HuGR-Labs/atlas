@@ -10,15 +10,19 @@ import { join } from 'node:path';
 
 import {
   createCommandClient,
+  createCountResolver,
   createDepResolver,
   createPromptFactory,
   createSiteProposer,
+  createUnitCountCandidates,
   createUnitDepCandidates,
   createUnitSiblingReader,
   createUnitSourceReader,
   loadModelConfig,
+  makeCountClaimParser,
   makeDependencyClaimParser,
   readScipOrEmpty,
+  shippedCountTemplatePath,
   shippedDependencyTemplatePath,
   shippedEnrichedTemplatePath,
 } from '@atlas/adapter-io';
@@ -76,14 +80,15 @@ export function enrichEnabled(env: NodeJS.ProcessEnv): boolean {
  *  `resolveMineSlot`) rather than silently treated as advisory — a typo must not degrade the arm invisibly. */
 export const MINE_SLOT_ENV = 'ATLAS_MINE_SLOT';
 
-/** Resolve the mining arm from `env`. `undefined`/`''` ⇒ `'advisory'`; `'dependency'` (case-insensitive,
- *  trimmed) ⇒ `'dependency'`; ANY OTHER value THROWS — a misspelled arm is a misconfiguration, and silently
- *  falling back to advisory would mine the wrong family while reporting success (the fail-silent trap #167). */
-export function resolveMineSlot(env: NodeJS.ProcessEnv): 'advisory' | 'dependency' {
+/** Resolve the mining arm from `env`. `undefined`/`''` ⇒ `'advisory'`; `'dependency'`/`'count'` (case-
+ *  insensitive, trimmed) ⇒ that arm; ANY OTHER value THROWS — a misspelled arm is a misconfiguration, and
+ *  silently falling back to advisory would mine the wrong family while reporting success (the fail-silent trap
+ *  #167). `count` is the #196c cardinality dual of `dependency` — same throw-on-typo discipline. */
+export function resolveMineSlot(env: NodeJS.ProcessEnv): 'advisory' | 'dependency' | 'count' {
   const v = env[MINE_SLOT_ENV]?.trim().toLowerCase();
   if (v === undefined || v === '') return 'advisory';
-  if (v === 'advisory' || v === 'dependency') return v;
-  throw new Error(`${MINE_SLOT_ENV}=${JSON.stringify(env[MINE_SLOT_ENV])} is not a known mining arm — use 'advisory' or 'dependency'`);
+  if (v === 'advisory' || v === 'dependency' || v === 'count') return v;
+  throw new Error(`${MINE_SLOT_ENV}=${JSON.stringify(env[MINE_SLOT_ENV])} is not a known mining arm — use 'advisory', 'dependency' or 'count'`);
 }
 
 /** The honest fail-closed default proposer: no model is wired, so the model abstains at every site
@@ -130,6 +135,10 @@ export interface ResolvedProposer {
  * — three cli tests go red on any machine that has one, and once the source reader works a unit test would
  * EXECUTE the operator's model binary.
  */
+/** The candidate-grounded arms that read the code index (`.atlas/index.scip`) to drive BOTH the prompt-side
+ *  candidate list and the gate-side per-unit resolver: `dependency` (#196a fan-out) and `count` (#196c fan-in).
+ *  The advisory/ENRICH arms do not. Reading the index ONCE per arm keeps the closed list the model sees and the
+ *  symbol the parser binds derived from the SAME projection the gate reads (they can never disagree). */
 export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = process.env): ResolvedProposer {
   // [ADR-0017] VALIDATE THE ARM FIRST — a misspelled `ATLAS_MINE_SLOT` is a misconfiguration, and it must
   // throw BEFORE the no-model early return below, or a typo (`dependncy`) would be silently swallowed as a
@@ -151,17 +160,19 @@ export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = proce
   // enriched template that also shows the target's same-file context siblings — the fact stays anchored to the
   // target (KNOW-15g), only what the model SEES widens. Advisory keeps `parseClaim` UNSET (advisory default).
   // `slot` was already resolved (and validated) at the top of this function.
-  // [#196a candidate-grounded] The dependency arm reads the index ONCE and drives BOTH the prompt-side candidate
-  // list (the names the model selects from) AND the gate-side per-unit resolver (name → the unit's own cross-unit
-  // symbol). Reading it once keeps them derived from the SAME `.atlas/index.scip` the gate reads, so the closed
-  // list the model sees and the symbol the parser binds can never disagree.
-  const depScip = slot === 'dependency' ? readScipOrEmpty(join(repoPath, '.atlas', 'index.scip')) : undefined;
+  // [#196a/#196c candidate-grounded] The dependency AND count arms read the index ONCE and drive BOTH the
+  // prompt-side candidate list (the names the model selects from) AND the gate-side per-unit resolver (name →
+  // the unit's own symbol, plus — for count — the harness-derived witnessed number). Reading it once keeps them
+  // derived from the SAME `.atlas/index.scip` the gate reads, so the closed list the model sees and the symbol
+  // the parser binds can never disagree. `dependency` is fan-OUT (`DEPENDS-ON:`); `count` is its fan-IN dual
+  // (`COUNT:`) — the model SELECTS a name, the harness derives the number, the sound oracle re-proves.
+  const slotScip = slot === 'dependency' || slot === 'count' ? readScipOrEmpty(join(repoPath, '.atlas', 'index.scip')) : undefined;
   const prompts =
-    depScip !== undefined
+    slotScip !== undefined
       ? createPromptFactory({
           source: createUnitSourceReader(repoPath),
-          candidates: createUnitDepCandidates(depScip),
-          templatePath: shippedDependencyTemplatePath(),
+          candidates: slot === 'count' ? createUnitCountCandidates(slotScip) : createUnitDepCandidates(slotScip),
+          templatePath: slot === 'count' ? shippedCountTemplatePath() : shippedDependencyTemplatePath(),
         })
       : enrichEnabled(env)
         ? createPromptFactory({
@@ -170,10 +181,15 @@ export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = proce
             templatePath: shippedEnrichedTemplatePath(),
           })
         : createPromptFactory({ source: createUnitSourceReader(repoPath) });
-  // The dependency parser resolves the picked NAME to the unit's own cross-unit SYMBOL (per-unit — lucy BLOCKER)
-  // and puts that symbol on the seed's `target`, so the fact is bound to the unit's specific dependency.
+  // The predicate parser resolves the picked NAME to the unit's own SYMBOL (per-unit — the #196a lucy BLOCKER)
+  // and puts that symbol on the seed's `target`. The count parser ALSO puts the harness-derived `atLeast`/`scope`
+  // on the seed (the model never supplies the number), so the fact is bound to the unit's specific export.
   const parseClaim: ClaimParser | undefined =
-    depScip !== undefined ? makeDependencyClaimParser(createDepResolver(depScip)) : undefined;
+    slotScip === undefined
+      ? undefined
+      : slot === 'count'
+        ? makeCountClaimParser(createCountResolver(slotScip))
+        : makeDependencyClaimParser(createDepResolver(slotScip));
   const proposer = createSiteProposer({
     client: createCommandClient(propose),
     budget: { costCap: cfg.costCap, timeoutMs: cfg.timeoutMs },

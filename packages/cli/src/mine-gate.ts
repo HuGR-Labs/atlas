@@ -85,8 +85,9 @@ function buildProposal(seed: SeedProposal, cand: Candidate, groundingFor: (c: Ca
   const nodeKey = asNodeKey(cand.site.qualifiedPath);
   switch (seed.kind) {
     case 'predicate': {
-      // ADR-0017 dependency slot: FORWARD the `target`/`scope` identity legs (SEAM2) so the sound oracle leg
-      // (`admitPredicate`) can PROVE the dependency. Absent for non-oracle slots (exactOptionalPropertyTypes).
+      // ADR-0017 dependency slot / #196c count slot: FORWARD the `target`/`scope` identity legs (SEAM2) and the
+      // count `atLeast` leg so the sound oracle leg (`admitPredicate`) can PROVE the fact. Absent for non-oracle
+      // slots (exactOptionalPropertyTypes ⇒ conditional spread, never `{ x: undefined }`).
       const p: PredicateProposal = {
         kind: 'predicate',
         site: cand,
@@ -97,6 +98,7 @@ function buildProposal(seed: SeedProposal, cand: Candidate, groundingFor: (c: Ca
         tier: 'T2',
         ...(seed.target !== undefined ? { target: seed.target } : {}),
         ...(seed.scope !== undefined ? { scope: seed.scope } : {}),
+        ...(seed.atLeast !== undefined ? { atLeast: seed.atLeast } : {}),
       };
       return p;
     }
