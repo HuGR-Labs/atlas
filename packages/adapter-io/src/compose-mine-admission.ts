@@ -18,6 +18,7 @@
 
 import type { StructRef } from '@atlas/contracts';
 import type { Axes, ScipOutput } from '@atlas/index';
+import { createUnitDeps } from '@atlas/index';
 import { driftDetect, ground } from '@atlas/grounding';
 import type { Grounding } from '@atlas/grounding';
 import type { AdmitDeps } from '@atlas/genesis';
@@ -75,9 +76,12 @@ export function buildMineAdmission(axes: Axes, scipOutput: ScipOutput): MineAdmi
     },
     predicate: { synthesize: () => null, verify: () => 'NA', teeth: () => false },
     typeOracle: { expressible: () => false, diagnose: () => 'NA' },
-    // A `dependency` req yields only a `FactVerdict` (`proven`/`abstain` — never `refuted`, which is the
-    // negation-only closed-world verdict); collapse any non-`proven` to `abstain` so the leg's type is exact
-    // and the sound-conservative fallback holds even for the impossible verdict.
+    // [#196a candidate-grounded] `target` is ALREADY the unit's own cross-unit dependency SYMBOL — the parser
+    // resolved the picked name to it PER-UNIT (`makeDependencyClaimParser` over `UnitDepsApi.resolveDepFor`),
+    // so the fact is bound to the unit's specific dependency (lucy BLOCKER: an index-wide name lookup here let an
+    // off-list name ride an unrelated file's same-named symbol). The gate re-PROVES that exact symbol against the
+    // scope via the sound oracle: `proven` iff it has a witnessed caller in `scope`, else `abstain`. A
+    // `dependency` verdict is `proven`/`abstain` only (never `refuted`, the negation-only closed-world verdict).
     verifyDependency: (target, scope) =>
       verifyDep({ kind: 'dependency', claim: { sourceScope: scope, target, worldScope: scope } }).verdict === 'proven'
         ? 'proven'

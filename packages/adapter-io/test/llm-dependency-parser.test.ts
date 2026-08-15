@@ -15,10 +15,15 @@ import type { SubtreeHash } from '@atlas/contracts';
 import {
   advisoryClaimParser,
   createSiteProposer,
-  dependencyClaimParser,
+  makeDependencyClaimParser,
   DEP_UNPARSEABLE_REASON,
 } from '../src/llm.js';
-import type { CompletionResult, LlmBudget, ModelClient } from '../src/llm.js';
+import type { CompletionResult, DepResolver, LlmBudget, ModelClient } from '../src/llm.js';
+
+// A stub per-unit resolver (the index's job in production): a name known to be THIS unit's cross-unit dep
+// resolves to its real SCIP symbol; anything else (off the candidate list) resolves to null ⇒ the parser abstains.
+const stubResolve: DepResolver = (name) => (name === 'ledgerModule' ? 'SYM:ledgerModule#' : name === 'foo' ? 'SYM:foo().' : null);
+const dependencyClaimParser = makeDependencyClaimParser(stubResolve);
 
 const cand: Candidate = {
   site: { kind: 'symbol', qualifiedPath: 'src/pay/charge.ts::charge', subtreeHash: 'st-charge' as unknown as SubtreeHash },
@@ -33,30 +38,36 @@ function spyClient(result: CompletionResult): ModelClient {
   return { complete: () => result };
 }
 
-describe('dependencyClaimParser — ADR-0017 the DEPENDS-ON grammar → typed dependency seed', () => {
-  it('a well-formed line ⇒ predicate seed with slot/target/scope, claim retained', () => {
-    const seed = dependencyClaimParser('DEPENDS-ON: ledgerModule @ src/pay', cand, 'DEPENDS-ON: ledgerModule @ src/pay');
+// The `cand` site is `src/pay/charge.ts::charge` (below) ⇒ the derived unit scope is `src/pay`.
+describe('makeDependencyClaimParser — #196a candidate-grounded: DEPENDS-ON: <name> → typed dependency seed', () => {
+  it('a RESOLVED name ⇒ predicate seed whose target is the real SYMBOL (bound to the unit), scope = unit dir', () => {
+    const seed = dependencyClaimParser('DEPENDS-ON: ledgerModule', cand, 'DEPENDS-ON: ledgerModule');
     expect(seed).toStrictEqual({
       kind: 'predicate',
       slot: 'dependency',
-      target: 'ledgerModule',
-      scope: 'src/pay',
+      target: 'SYM:ledgerModule#', // the RESOLVED symbol (not the bare name) — bound to the unit's specific dep
+      scope: 'src/pay', //           DERIVED from cand.site (src/pay/charge.ts::charge), never asked of the model
       cand,
-      claim: 'DEPENDS-ON: ledgerModule @ src/pay',
-      rawAnswer: 'DEPENDS-ON: ledgerModule @ src/pay',
+      claim: 'DEPENDS-ON: ledgerModule', // the raw human line is retained
+      rawAnswer: 'DEPENDS-ON: ledgerModule',
     });
   });
 
   it('the prefix is case-insensitive and rawAnswer is optional', () => {
-    const seed = dependencyClaimParser('depends-on: foo @ lib', cand);
-    expect(seed).toStrictEqual({ kind: 'predicate', slot: 'dependency', target: 'foo', scope: 'lib', cand, claim: 'depends-on: foo @ lib' });
+    const seed = dependencyClaimParser('depends-on: foo', cand);
+    expect(seed).toStrictEqual({ kind: 'predicate', slot: 'dependency', target: 'SYM:foo().', scope: 'src/pay', cand, claim: 'depends-on: foo' });
     expect(seed).not.toHaveProperty('rawAnswer'); // absent when the caller passes none (#195c)
   });
 
-  it('an @-bearing target keeps its @ — the LAST " @ " before the directory splits', () => {
-    const seed = dependencyClaimParser('DEPENDS-ON: pkg@1.2.3 @ src/vendor', cand);
-    // teeth: a first-@ split would give target 'pkg' + scope '1.2.3 @ src/vendor'.
-    expect(seed).toMatchObject({ target: 'pkg@1.2.3', scope: 'src/vendor' });
+  it('an OFF-CANDIDATE-LIST name (resolver returns null) ⇒ abstain — the lucy BLOCKER fix', () => {
+    // teeth: `bogus` parses as a well-formed DEPENDS-ON line but is NOT this unit's cross-unit dep (resolver
+    // → null), so it is NOT admitted. Before the fix, a name-only gate would have proven it via any sibling's
+    // same-named symbol in the directory.
+    expect(dependencyClaimParser('DEPENDS-ON: bogus', cand)).toStrictEqual({ abstain: DEP_UNPARSEABLE_REASON });
+  });
+
+  it('a trailing " @ scope" is NOT parsed — the model emits only a NAME (a stray scope makes the line unparseable)', () => {
+    expect(dependencyClaimParser('DEPENDS-ON: foo @ lib', cand)).toStrictEqual({ abstain: DEP_UNPARSEABLE_REASON });
   });
 
   it('a prose line that is not the grammar ⇒ grounded abstention, NEVER a fabricated advisory', () => {
@@ -65,9 +76,8 @@ describe('dependencyClaimParser — ADR-0017 the DEPENDS-ON grammar → typed de
     });
   });
 
-  it('an empty target OR empty scope ⇒ abstain', () => {
-    expect(dependencyClaimParser('DEPENDS-ON:  @ src', cand)).toStrictEqual({ abstain: DEP_UNPARSEABLE_REASON });
-    expect(dependencyClaimParser('DEPENDS-ON: foo @   ', cand)).toStrictEqual({ abstain: DEP_UNPARSEABLE_REASON });
+  it('an empty name ⇒ abstain', () => {
+    expect(dependencyClaimParser('DEPENDS-ON:   ', cand)).toStrictEqual({ abstain: DEP_UNPARSEABLE_REASON });
   });
 });
 
@@ -79,9 +89,9 @@ describe('advisoryClaimParser — the DEFAULT arm stays byte-identical to the sh
 });
 
 describe('createSiteProposer — the injected parser shapes the seed and routes its abstention', () => {
-  it('with dependencyClaimParser: a DEPENDS-ON answer ⇒ a typed dependency seed', () => {
-    const proposer = createSiteProposer({ client: spyClient({ claim: 'DEPENDS-ON: foo @ src', rawAnswer: 'DEPENDS-ON: foo @ src' }), budget, buildPrompt, parseClaim: dependencyClaimParser });
-    expect(proposer.propose(cand)).toMatchObject({ kind: 'predicate', slot: 'dependency', target: 'foo', scope: 'src' });
+  it('with dependencyClaimParser: a RESOLVED DEPENDS-ON answer ⇒ a typed dependency seed (target = symbol)', () => {
+    const proposer = createSiteProposer({ client: spyClient({ claim: 'DEPENDS-ON: foo', rawAnswer: 'DEPENDS-ON: foo' }), budget, buildPrompt, parseClaim: dependencyClaimParser });
+    expect(proposer.propose(cand)).toMatchObject({ kind: 'predicate', slot: 'dependency', target: 'SYM:foo().', scope: 'src/pay' });
   });
 
   it('with dependencyClaimParser: a non-grammar claim ⇒ { abstain } (routed like a GEN-12 abstention)', () => {
