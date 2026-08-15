@@ -134,6 +134,7 @@ export interface AdmitDeps {
   readonly doors: TwoDoorBar; // the advisory 2-door bar (CAMPAIGN-4)
   readonly typeOracle: TypeOracle; // sound-oracle-first (GEN-12k)
   readonly verifyDependency?: (target: string, scope: string) => "proven" | "abstain"; // GEN-12-dep: sound symbol-reverse oracle (verify-fact positive dual)
+  readonly verifyCount?: (target: string, scope: string, atLeast: number) => "proven" | "abstain"; // GEN-12-count: sound cardinality oracle (#196c — verifyCount lower-bound)
   readonly refine: (check: Check, site: Candidate) => Check | null; // CEGIS refine; `null` = no change
   readonly indexState: IndexNode; // current code (KNOW-16 evaluate carrier)
   readonly K: number; // refine budget (GEN-13 default K≤1)
@@ -159,6 +160,9 @@ const DROP_TYPE_BROKEN = 'sound type-checker / LSP verdict is not HOLDS on the t
 const DROP_DEP_UNWIRED = "dependency slot but no verifyDependency leg supplied (GEN-12-dep)";
 const DROP_DEP_MALFORMED = "dependency proposal missing target/scope (GEN-12-dep)";
 const DROP_DEP_ABSTAIN = "the sound dependency oracle did not witness the edge — abstained, not proven (GEN-12-dep)";
+const DROP_COUNT_UNWIRED = "count slot but no verifyCount leg supplied (GEN-12-count)";
+const DROP_COUNT_MALFORMED = "count proposal missing target/scope or atLeast not a positive integer (GEN-12-count)";
+const DROP_COUNT_ABSTAIN = "the sound count oracle did not witness ≥ atLeast callers — abstained, not proven (GEN-12-count)";
 const DROP_UNGROUNDED = 'advisory fails the truth door — the citation does not ground (GEN-12e)';
 // RELATION drops (ADR-0015 D2, WP-96-R). The relation family is now ADMITTED — its two honest refusals
 // (`DROP_RELATION_MALFORMED` / `DROP_RELATION_UNGROUNDED`) live beside its builders in `admit-relation.ts`
@@ -250,6 +254,21 @@ function admitPredicate(p: PredicateProposal, deps: AdmitDeps): Admission {
     const t = p.target, s = p.scope;
     if (typeof t !== "string" || !t || typeof s !== "string" || !s) return { outcome: "dropped", reason: DROP_DEP_MALFORMED };
     if (deps.verifyDependency(t, s) !== "proven") return { outcome: "dropped", reason: DROP_DEP_ABSTAIN };
+    if (!deps.doors.grounded(p.grounding, deps.indexState)) return { outcome: "dropped", reason: DROP_UNGROUNDED };
+    return { outcome: "admitted", fact: buildSound(p, scoreObviousness(deps.doors, p.claimNorm)), label: LIKELY_INVARIANT };
+  }
+
+  // GEN-12-count (#196c) — the CARDINALITY dual of the dependency arm, and it MUST precede the synthesized-check
+  // path below: without this branch a `count` seed falls through to `predicate.synthesize`, where an unrelated
+  // check could admit a count fact `verifyCount` never proved (a count "proven" by the wrong mechanism). The gate
+  // RE-CHECKS the seed's number (`isPositiveInt`) rather than trusting it — the model never supplies a count, but
+  // a malformed seed must still drop, never ride the oracle blind.
+  if (p.slot === "count") {
+    if (deps.verifyCount === undefined) return { outcome: "dropped", reason: DROP_COUNT_UNWIRED };
+    const t = p.target, s = p.scope, n = p.atLeast;
+    if (typeof t !== "string" || !t || typeof s !== "string" || !s || typeof n !== "number" || !Number.isInteger(n) || n < 1)
+      return { outcome: "dropped", reason: DROP_COUNT_MALFORMED };
+    if (deps.verifyCount(t, s, n) !== "proven") return { outcome: "dropped", reason: DROP_COUNT_ABSTAIN };
     if (!deps.doors.grounded(p.grounding, deps.indexState)) return { outcome: "dropped", reason: DROP_UNGROUNDED };
     return { outcome: "admitted", fact: buildSound(p, scoreObviousness(deps.doors, p.claimNorm)), label: LIKELY_INVARIANT };
   }
