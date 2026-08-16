@@ -52,6 +52,21 @@ describe('foldEnsembleVotes — the ~0-FP conservative default', () => {
     // the SAME votes under the strictly stronger default ⇒ abstain
     expect(foldEnsembleVotes(votes, CONSERVATIVE_POLICY)).toBe('abstain');
   });
+
+  it('AC-F6b: the HALLUCINATED veto has teeth INDEPENDENT of the true-fraction — a relaxed policy whose fraction PASSES still abstains on a HALLUCINATED', () => {
+    // Under the CONSERVATIVE default the veto is masked (minTrueFraction 1.0 already rejects any non-true vote),
+    // so this isolates it: a relaxed fraction that a 2/3 true-count SATISFIES, yet a single HALLUCINATED must
+    // still veto ⇒ abstain. Deleting the `maxHallucinated` guard flips THIS case to 'validated'.
+    const votes: RaterVerdict[] = ['GROUNDED_TRUE', 'GROUNDED_TRUE', 'HALLUCINATED'];
+    const relaxed: EnsemblePolicy = { minRaters: 3, minTrueFraction: 0.5, maxHallucinated: 0 };
+    // 2 GROUNDED_TRUE ≥ ceil(0.5 * 3) = 2 (fraction PASSES) — only the veto can reject this:
+    expect(foldEnsembleVotes(votes, relaxed)).toBe('abstain');
+    // and maxHallucinated is a THRESHOLD, not a boolean: allowing 1 admits this, 2 vetoes it.
+    expect(foldEnsembleVotes(votes, { minRaters: 3, minTrueFraction: 0.5, maxHallucinated: 1 })).toBe('validated');
+    expect(
+      foldEnsembleVotes(['GROUNDED_TRUE', 'HALLUCINATED', 'HALLUCINATED'], { minRaters: 3, minTrueFraction: 0.3, maxHallucinated: 1 }),
+    ).toBe('abstain');
+  });
 });
 
 describe('makeEnsemblePort — map lookup + fold, fail-closed on absent evidence', () => {
