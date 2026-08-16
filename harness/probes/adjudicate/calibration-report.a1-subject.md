@@ -32,10 +32,11 @@ wrong-callee, wrong-default, past-comment-as-present, fabricated-behavior) was c
 - **n is small (20).** Wilson95% on the false-admit is wide ([0.018, 0.404]). Expansion is additive: append
   `(code, fact, label)` pairs to `fixtures.mjs`. The interval, not the point, is the honest claim.
 - **Reproducibility is by RECORD** (HELM / lm-eval discipline), not by forcing T=0: the row is reproducible
-  because the instrument is fully logged — frozen prompt digest `01c7bc130eb7f384`, the model + run date
-  (`a1-subject-verdicts.json`), and the raw per-fixture verdicts (committed). Re-running the same model against
-  the same frozen prompt reproduces it; any answer drift on a rerun is itself a measurement to report, not a
-  hole. Temperature is a recorded knob, not a precondition.
+  because the instrument is fully logged — frozen prompt digest `01c7bc130eb7f384`, the **exact model snapshot
+  `claude-sonnet-5`** (read from the sub-agent transcript usage block, not guessed), the run date, and the raw
+  per-fixture verdicts (committed). Re-running the same model against the same frozen prompt reproduces it; any
+  answer drift on a rerun is itself a measurement to report, not a hole. Temperature is a recorded knob, not a
+  precondition.
 - **Measures precision, not recall.** It scores whether the model REJECTS false claims (the faculty that gates
   advisory admission), not whether it SURFACES the good facts — recall is A4's separate trail.
 - **Synthetic-clean by design.** Clean labels require knowing the truth to plant the false; that beats repo
