@@ -1,4 +1,4 @@
-// @atlas/knowledge — test/wp-closed-slot-gate.test.ts  (#152 — the closed-12 vocabulary, ENFORCED)
+// @atlas/knowledge — test/wp-closed-slot-gate.test.ts  (#152 — the closed-13 vocabulary, ENFORCED)
 //
 // KNOW-10's closed-slot rule was stated in THREE places and enforced in NONE:
 //   1. `types.ts` `PredicateSlot`  — a TYPE union. Erased at runtime, so at a value boundary it enforces

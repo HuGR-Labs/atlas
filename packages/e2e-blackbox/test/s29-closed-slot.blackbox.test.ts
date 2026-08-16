@@ -1,4 +1,4 @@
-// @atlas/e2e-blackbox — test/s29-closed-slot.blackbox.test.ts  (S29 — a fact whose predicateSlot is not one of the 12)
+// @atlas/e2e-blackbox — test/s29-closed-slot.blackbox.test.ts  (S29 — a fact whose predicateSlot is not one of the 13)
 //
 // NARRATIVE: a user (or an agent) authors a perfectly grounded, authorized, ratified fact and declares a
 // `predicateSlot` the closed vocabulary does not contain. What does the shipped product do?
@@ -110,7 +110,7 @@ function emitRaw(name: string, fact: Record<string, unknown>): ReturnType<typeof
   return runAtlas(repo.repoPath, ['emit', path, `--at=${repo.sha()}`]);
 }
 
-describe('S29 — a fact whose predicateSlot is outside the closed 12', () => {
+describe('S29 — a fact whose predicateSlot is outside the closed 13', () => {
   it('CONTROL: an IN-VOCABULARY slot is ACCEPTED and goes durable — the refusal below discriminates', () => {
     const run = emitRaw('control', factWithSlot('invariant', 'greet returns a greeting'));
     expect(run.exitCode).toBe(0);

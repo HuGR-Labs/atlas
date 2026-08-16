@@ -14,7 +14,7 @@
 epic: none (out-of-band hotfix, dispatched by the lead against a task list that had NOT been re-verified)
 id: WP-FIX-8.WRITE
 title: Delete the dead KNOW-11 authz decision (`packages/knowledge/src/write/authz.ts`) and ENFORCE the
-  closed-12 `predicateSlot` vocabulary at the production write path
+  closed-13 `predicateSlot` vocabulary at the production write path
 
 intent: >
   Two defects, one shape: **the artefact that carries the specification was not the artefact that ran.**
@@ -30,7 +30,7 @@ intent: >
   SURVIVES: it is the runtime SHAPE guard for the `(scope, tier)` pair, not part of the decision, and it
   is reached on every governed write from three production sites.
 
-  **#152 — THE CLOSED-SLOT VOCABULARY.** The 12-member `predicateSlot` set was written out in THREE
+  **#152 — THE CLOSED-SLOT VOCABULARY.** The 13-member `predicateSlot` set was written out in THREE
   places and enforced in NONE. `nodeKey = hash(primaryAnchorId ‖ predicateSlot)`, so an unrecognised slot
   did not fail — it silently minted a NEW address, which is precisely what closedness exists to prevent
   ("same topic" is decidable only because the vocabulary is finite — atlas-knowledge:150). The three

@@ -8,7 +8,7 @@
 //   15d-1 (primaryAnchorId is the COMPUTED tightest structural unit over the referenced symbols),
 //   15e-1 (an LLM-proposed anchor never enters identity — the compute is a pure fn of grounding),
 //   15g-1 (a secondary citation feeds DRIFT only, never the nodeKey),
-//   15i-1 (a slot outside the closed 12-member vocabulary is rejected),
+//   15i-1 (a slot outside the closed 13-member vocabulary is rejected),
 //   15j-1 (no LLM/clock/seq in the identity path — observable as pure determinism).
 //
 // MODELING NOTE (disciplined, flagged — cf. index/src/fold.ts precedent + 5.13-a's test):
