@@ -37,8 +37,10 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
 
-/** The claim the stand-in "model" emits on stdout. Non-empty ⇒ a proposal, not an abstention (llm.ts:117). */
-const CLAIM = 'charge() re-reads the ledger before it applies the discount';
+/** The claim text the stand-in "model" emits. [ADR-0020] The advisory arm now uses the reason-freely BLOCK
+ *  contract, so a proposal is one fenced `atlas-fact` block carrying `{"claim": ...}`; a bare line abstains. */
+const CLAIM_TEXT = 'charge() re-reads the ledger before it applies the discount';
+const CLAIM = '```atlas-fact\n' + JSON.stringify({ claim: CLAIM_TEXT }) + '\n```';
 
 /** A valid operator config whose command ECHOES `CLAIM` — the model path is travelled, not just built. */
 const ECHOING = JSON.stringify({ roles: { propose: { cmd: 'echo', args: [CLAIM] } } });

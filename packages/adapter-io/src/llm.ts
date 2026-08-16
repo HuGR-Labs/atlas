@@ -294,7 +294,7 @@ export interface ModelCommand {
  * and is deliberately not pretended: a subprocess reports no price. Spend is bounded upstream by the GEN-2
  * site ceiling and the marginal-value stop, which is where the real budget lives.
  */
-export function createCommandClient(command: ModelCommand): ModelClient {
+export function createCommandClient(command: ModelCommand, format: AnswerFormat = 'line'): ModelClient {
   return {
     complete(prompt: string, budget: LlmBudget): CompletionResult {
       let out: Buffer;
@@ -311,7 +311,7 @@ export function createCommandClient(command: ModelCommand): ModelClient {
         if (completed === null) throw new ModelCommandError(classifyModelFailure(e), describeModelFailure(command, e));
         out = completed;
       }
-      return admitModelAnswer(out); // #195c: the admission sanity gate — fail-closed to a tagged abstention
+      return admitModelAnswer(out, format); // #195c: the admission sanity gate — fail-closed to a tagged abstention
     },
   };
 }
@@ -334,15 +334,55 @@ export function createCommandClient(command: ModelCommand): ModelClient {
  *      Fail ⇒ `answer-malformed:multi-response`.
  * On success the VALIDATED (untrimmed) text rides back as `rawAnswer`; `claim` is its trimmed projection.
  */
-function admitModelAnswer(buf: Buffer): CompletionResult {
+function admitModelAnswer(buf: Buffer, format: AnswerFormat): CompletionResult {
   const text = buf.toString('utf8');
   if (!Buffer.from(text, 'utf8').equals(buf)) return { claim: null, abstainReason: 'answer-malformed:not-utf8' };
-  const claim = text.trim();
-  if (claim === '') return { claim: null }; //                    empty ⇒ GEN-12 model-abstained, untagged
-  if (isAbstainToken(claim)) return { claim: null }; //           [#201/#202] explicit abstain token ⇒ GEN-12, untagged
+  const whole = text.trim();
+  if (whole === '') return { claim: null }; //                    empty ⇒ GEN-12 model-abstained, untagged
+  if (isAbstainToken(whole)) return { claim: null }; //           [#201/#202] explicit abstain token ⇒ GEN-12, untagged
+  // The C0-control interleave seam is corruption in EITHER format — a spliced pipe injects stray control bytes
+  // regardless of whether the answer is a line or a fenced block. Checked first, before the format-specific leg.
+  if (hasControlByteSplice(text)) return { claim: null, abstainReason: 'answer-malformed:multi-response' };
+  if (format === 'block') return admitFactBlock(text);
+  //                          [ADR-0020] the SOUND-GATED slots (dependency/count/negation) keep the ONE-LINE
+  // contract: their prompts forbid reasoning, so a well-formed answer is a single content line and >1 non-empty
+  // line is the splice class. The advisory/semantic reason-freely slots use `'block'` instead (multi-line by
+  // construction), where the line-count heuristic would reject every conforming answer — see `admitFactBlock`.
   if (isSplicedAnswer(text)) return { claim: null, abstainReason: 'answer-malformed:multi-response' };
-  return { claim, rawAnswer: text }; //                          rawAnswer = the exact validated answer bytes
+  return { claim: whole, rawAnswer: text }; //                    rawAnswer = the exact validated answer bytes
 }
+
+/** [ADR-0020] The `'block'` admission: the model REASONS FREELY (scratch, discarded here) and emits exactly ONE
+ *  fenced ```atlas-fact block carrying `{"claim": "..."}`. The free reasoning is NEVER persisted (GEN-12): only
+ *  the block's `claim` survives. Zero blocks ⇒ the model reasoned then declined (untagged abstain, like empty);
+ *  ≥2 blocks ⇒ the splice class (structural replacement for the line-count heuristic, which cannot apply to a
+ *  deliberately multi-line answer); an unparseable/oversized block ⇒ tagged malformed. Fail-closed throughout. */
+function admitFactBlock(text: string): CompletionResult {
+  const blocks = factBlocks(text);
+  if (blocks.length === 0) return { claim: null }; //             reasoned-then-declined / botched format ⇒ untagged abstain
+  if (blocks.length > 1) return { claim: null, abstainReason: 'answer-malformed:multi-response' }; // ≥2 = splice
+  const body = blocks[0]!;
+  if (Buffer.byteLength(body, 'utf8') > MAX_FACT_BLOCK_BYTES) return { claim: null, abstainReason: 'answer-malformed:unparseable' };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return { claim: null, abstainReason: 'answer-malformed:unparseable' };
+  }
+  const field = (parsed as { claim?: unknown } | null)?.claim;
+  if (typeof field !== 'string' || field.trim() === '') return { claim: null, abstainReason: 'answer-malformed:unparseable' };
+  return { claim: field.trim(), rawAnswer: text }; //             rawAnswer = the whole validated envelope
+}
+
+/** Every fenced ```atlas-fact block body in the raw stdout (the reason-freely envelope, ADR-0020). */
+function factBlocks(text: string): string[] {
+  const fence = /```atlas-fact[^\n]*\n([\s\S]*?)\n```/g;
+  const bodies: string[] = [];
+  for (const m of text.matchAll(fence)) bodies.push(m[1]!);
+  return bodies;
+}
+
+const MAX_FACT_BLOCK_BYTES = 8 * 1024;
 
 /**
  * The SINGLE-RESPONSE predicate (#195 §4 — specified at build time from the 2026-08-04 incident, not perfect
@@ -356,9 +396,21 @@ function admitModelAnswer(buf: Buffer): CompletionResult {
  *       answers, where a conforming single answer is one line of prose.
  */
 function isSplicedAnswer(text: string): boolean {
-  if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(text)) return true; // (a) C0 control byte (not TAB/LF/CR) = interleave seam
-  return text.split('\n').filter((line) => line.trim() !== '').length > 1; // (b) >1 response envelope
+  if (hasControlByteSplice(text)) return true; //                          (a) C0 control byte = interleave seam
+  return text.split('\n').filter((line) => line.trim() !== '').length > 1; // (b) >1 response envelope (LINE mode only)
 }
+
+/** (a) The INTERLEAVE fingerprint alone — a C0 control byte a single answer never carries (below U+0020 except
+ *  TAB/LF/CR). Concurrent writers racing one pipe inject stray control/NUL bytes at the splice seam. Applies in
+ *  BOTH answer formats; the line-count leg (b) is LINE-mode-only (see admitModelAnswer). */
+function hasControlByteSplice(text: string): boolean {
+  return /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(text);
+}
+
+/** The model-output admission contract for a proposer (ADR-0020). `line` = the one-line prose/abstain contract
+ *  of the SOUND-GATED slots (dependency/count/negation). `block` = the reason-freely fenced-`atlas-fact` block
+ *  contract of the advisory/semantic slots, where free reasoning is scratch and only the block's `claim` survives. */
+export type AnswerFormat = 'line' | 'block';
 
 /**
  * A child that FINISHED CLEANLY but stopped reading stdin before we finished writing the prompt (`EPIPE`

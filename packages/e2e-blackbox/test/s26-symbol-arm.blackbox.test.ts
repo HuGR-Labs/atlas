@@ -30,7 +30,10 @@ import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
 
 /** The claim the stand-in "model" emits on stdout. Non-empty ⇒ a proposal, not an abstention. */
-const CLAIM = 'greet upper-cases its argument before formatting it';
+// [ADR-0020] The advisory arm now uses the reason-freely BLOCK contract: a proposal is one fenced `atlas-fact`
+// block carrying `{"claim": ...}`; a bare line abstains.
+const CLAIM_TEXT = 'greet upper-cases its argument before formatting it';
+const CLAIM = '```atlas-fact\n' + JSON.stringify({ claim: CLAIM_TEXT }) + '\n```';
 const ECHOING = JSON.stringify({ roles: { propose: { cmd: 'echo', args: [CLAIM] } } });
 
 /** `greet` is defined in util.ts and referenced in app.ts ⇒ one resolved dep edge ⇒ both files reach the

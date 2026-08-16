@@ -208,3 +208,47 @@ describe('createCommandClient — the operator-supplied model command (ADR-0011 
     });
   });
 });
+
+// [ADR-0020] The `'block'` answer format — the reason-freely advisory contract. The model reasons freely (that
+// text is scratch and parsed away) and emits exactly ONE fenced ```atlas-fact block carrying `{"claim": ...}`.
+// The sound-gated slots keep `'line'` (the default, covered above); this suite pins the block leg.
+describe("createCommandClient('block') — the reason-freely fenced-atlas-fact contract", () => {
+  const block = (claim: string): string => '```atlas-fact\n' + JSON.stringify({ claim }) + '\n```';
+
+  it('EXACTLY ONE block whose JSON `claim` is a non-empty string ⇒ that trimmed claim (reasoning discarded)', () => {
+    // stdin (the prompt) is piped; `cat` echoes it, so we feed the whole envelope — free reasoning + the block —
+    // as the prompt and read it back as the model's stdout. Only the block's `claim` may survive.
+    const client = createCommandClient({ cmd: 'cat', args: [] }, 'block');
+    const envelope = 'let me think about this unit...\nI will check the bytes.\n' + block('charge() re-reads the ledger');
+    const r = client.complete(envelope, budget);
+    expect(r.claim).toBe('charge() re-reads the ledger');
+    expect(r.rawAnswer).toBe(envelope); //                        the whole validated envelope rides back
+  });
+
+  it('ZERO blocks (reasoned then declined / botched format) ⇒ untagged abstention, never a fabricated claim', () => {
+    const client = createCommandClient({ cmd: 'cat', args: [] }, 'block');
+    expect(client.complete('I thought about it and there is no non-obvious fact here.', budget)).toStrictEqual({ claim: null });
+  });
+
+  it('TWO blocks ⇒ the splice class (tagged multi-response), never a silent pick of the first', () => {
+    const client = createCommandClient({ cmd: 'cat', args: [] }, 'block');
+    const two = block('first fact') + '\nand also\n' + block('second fact');
+    expect(client.complete(two, budget)).toStrictEqual({ claim: null, abstainReason: 'answer-malformed:multi-response' });
+  });
+
+  it('a block whose body is not JSON ⇒ tagged malformed (fail-closed, never a raw-text claim)', () => {
+    const client = createCommandClient({ cmd: 'cat', args: [] }, 'block');
+    const bad = '```atlas-fact\nthis is not json\n```';
+    expect(client.complete(bad, budget)).toStrictEqual({ claim: null, abstainReason: 'answer-malformed:unparseable' });
+  });
+
+  it('a block whose JSON has an empty `claim` ⇒ tagged malformed', () => {
+    const client = createCommandClient({ cmd: 'cat', args: [] }, 'block');
+    expect(client.complete(block('   '), budget)).toStrictEqual({ claim: null, abstainReason: 'answer-malformed:unparseable' });
+  });
+
+  it('the explicit abstain sentinel still abstains in block mode (checked before the block leg)', () => {
+    const client = createCommandClient({ cmd: 'cat', args: [] }, 'block');
+    expect(client.complete(ABSTAIN_SENTINEL, budget)).toStrictEqual({ claim: null });
+  });
+});
