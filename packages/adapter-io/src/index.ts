@@ -102,6 +102,11 @@ export {
 } from './governed-link-retract.js';
 export { composeRuntime, buildHeuristic, buildGate, buildMineAdmission } from './compose.js';
 export type { ComposedRuntime, MineAdmission, Reground } from './compose.js';
+// ADR-0017 #196b Wave 2 — the VALIDATED ensemble fold: the PURE fold from N independent rater votes to the
+// `verifyValidated` port verdict, plus the map→port adapter. No model call here; the orchestrator materializes
+// the votes and this only folds them (the ~0-FP conservative default; the bench sweeps the policy).
+export { foldEnsembleVotes, makeEnsemblePort, CONSERVATIVE_POLICY } from './verify-validated-ensemble.js';
+export type { RaterVerdict, EnsemblePolicy } from './verify-validated-ensemble.js';
 // The `own_<scope>` READ leg (RETR-12) — the production feed that gives `@atlas/retrieval`'s `createOwn` its
 // first caller outside its own test file. Exported because the CLI entrypoint threads it on the same injected
 // seam `promote` rides, and because a test must be able to drive the FEED (`buildOwnSources`) directly rather
