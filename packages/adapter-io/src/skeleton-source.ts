@@ -121,6 +121,14 @@ function workingTreeAxes(
   // unit the frontier can seed and a unit the frontier can rank are the same set by construction — there
   // is no second walk to fall out of step with this one, and no re-parse to pay for.
   const folded = foldAstUnitsWithPriors(walk(repoPath));
+  // #197 — RESET the instance-global priors to EXACTLY this fold's set before repopulating. The map is
+  // path-keyed and instance-lived; without the clear it is `.set()`-only, so a `(repo, rev)` folded EARLIER
+  // on the same source leaks its priors at any path THIS fold does not re-state. On the shipped path this is
+  // dormant — `atlas mine` builds one source per process for one (repo, HEAD) (mine.ts) — but the cache is a
+  // per-fold view, not an accumulator, so a future multi-repo/multi-rev reuser of one instance must read
+  // THIS fold's priors, not a stale peer's. UNKNOWN (a path this fold lacks) must read `undefined` so the
+  // frontier comparator degrades to address order, never asserts a prior from a DIFFERENT tree.
+  priors.clear();
   for (const [path, p] of folded.priors) priors.set(path, p);
   return build(folded.tree, scip(join(repoPath, SCIP_REL)));
 }
