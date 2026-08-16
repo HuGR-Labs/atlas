@@ -108,7 +108,7 @@ new language grammar is **out of appetite** and is deferred explicitly below.
 | id | design parameter | cites |
 |---|---|---|
 | **DP-1** | `anchors` — the index-unit lister (`qualifiedPath` · kind · `subtreeHash`) | FR-A1 |
-| **DP-2** | `slots` — the closed 12-member vocabulary lister | FR-A2 |
+| **DP-2** | `slots` — the closed 13-member vocabulary lister | FR-A2 |
 | **DP-3** | `draft` — the payload composer (mints identity, computes grounding, stamps the rev, reports the route) | FR-A2, FR-A6 |
 | **DP-4** | `check` — the dry-run gate evaluator | FR-A3 |
 | **DP-5** | **the ONE grounding computer** — a single seam shared by the planners and the truth-gate | FR-A1, FR-A2, FR-A6 |
@@ -173,7 +173,7 @@ seam; the write surface is a closed set behind a CI pin.
 | **AUTH-2** planners carry zero write authority | §3.3 C2; `doctor` precedent | run every planner against a read-only store; bytes written == 0 | ⟂ | ADR-0004 · rejected: a "safe" write door for drafts | none — strictly weaker than the alternative |
 | **AUTH-3** anchors faithful + total | `fs.ts:38` already fails closed to empty on non-git | anchors(fixture) == the built index's unit set; non-git ⇒ empty, not a throw | ⟂ | ADR-0004 | none |
 | **AUTH-4** language-hole honesty | `ast.ts:45,48` loads only TS/TSX grammars; the dogfood repo was 185 `.rs` files | on a Rust fixture, output is file-level **and** carries an explicit hole marker | ⟂ | ADR-0004 · rejected: silent file-level fallback; adding grammars now | UX cost: the user learns Atlas is partly blind. Accepted — honestidade inegociável |
-| **AUTH-5** slots = the closed vocabulary | `knowledge/src/types.ts:166-178` (12 members, closed) | the listed set deep-equals the `PredicateSlot` union | ⟂ | — (transcription) | none |
+| **AUTH-5** slots = the closed vocabulary | `knowledge/src/types.ts:166-178` (13 members, closed) | the listed set deep-equals the `PredicateSlot` union | ⟂ | — (transcription) | none |
 | **AUTH-6** draft is structurally valid | §2.3 the emit door's read set | every field the emit door reads is present; identity == `nodeKey(candidate)` | ⟂ | ADR-0004 | none |
 | **AUTH-7** draft is rev-stamped | extension 7a of UC-1 | a draft carries the rev; emitting at a different rev names the rev mismatch | ⟂ | ADR-0004 · rejected: leaving the failure to the gate's generic message | +1 field |
 | **AUTH-8** draft→emit round-trip | FR-A6 — **the acceptance property of the whole surface** | draft@R then emit `--at R` on an unchanged repo ⇒ accepted | depends on AUTH-1/6 by construction; kept because it is the *observable* outcome | ADR-0004 | none |

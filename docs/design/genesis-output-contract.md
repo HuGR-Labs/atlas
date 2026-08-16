@@ -57,7 +57,7 @@ is always the `AdvisoryNode` arm: the mine admission gate constructs an `Advisor
 | `claims` | `readonly ClaimEntry[]` | derived | empty on a mined advisory. **Not** the row's `claims` — see §2 |
 | `authoring` | `'ADVISORY' \| 'SUPERSEDED'` | derived | `'ADVISORY'` on birth |
 | `scope` | `string` | **supplied from a constant** | `MINED_SCOPE = 'atlas:mined'`, same file, same discipline as `tier` |
-| `predicateSlot` | `PredicateSlot` | supplied | from the **closed** 12-member vocabulary; it is folded into `id` |
+| `predicateSlot` | `PredicateSlot` | supplied | from the **closed** 13-member vocabulary; it is folded into `id` |
 | `check`, `status` | `Check`, `Status` | — | **absent**. Present only on the `PredicateNode` arm |
 
 Promotion adds a **row** — a `CurrentNode` (`packages/knowledge/src/write/upsert.ts`) — in the projection,

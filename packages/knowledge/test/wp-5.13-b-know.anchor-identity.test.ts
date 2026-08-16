@@ -8,7 +8,7 @@
 //   15d-1 (primaryAnchorId is the COMPUTED tightest structural unit over the referenced symbols),
 //   15e-1 (an LLM-proposed anchor never enters identity — the compute is a pure fn of grounding),
 //   15g-1 (a secondary citation feeds DRIFT only, never the nodeKey),
-//   15i-1 (a slot outside the closed 12-member vocabulary is rejected),
+//   15i-1 (a slot outside the closed 13-member vocabulary is rejected),
 //   15j-1 (no LLM/clock/seq in the identity path — observable as pure determinism).
 //
 // MODELING NOTE (disciplined, flagged — cf. index/src/fold.ts precedent + 5.13-a's test):
@@ -128,8 +128,8 @@ describe('WP-5.13-b.KNOW — primaryAnchorId is the computed tightest unit (KNOW
 });
 
 describe('WP-5.13-b.KNOW — closed slot vocabulary (KNOW-15i)', () => {
-  it('SCN-KNOW-15i-1: a slot outside the closed 12-member vocabulary is rejected', () => {
-    expect(PREDICATE_SLOTS).toHaveLength(12); // the closed set is exactly 12 (adding one is a `cv` bump)
+  it('SCN-KNOW-15i-1: a slot outside the closed 13-member vocabulary is rejected', () => {
+    expect(PREDICATE_SLOTS).toHaveLength(13); // the closed set is exactly 13 (adding one is a `cv` bump)
     for (const s of PREDICATE_SLOTS) expect(isKnownSlot(s)).toBe(true);
     expect(isKnownSlot('freeform-note')).toBe(false); // free-text slot rejected
     expect(isKnownSlot('')).toBe(false);

@@ -99,15 +99,15 @@ describe('WP-5.14.KNOW — templated write, 0 free prose (KNOW-10 visible golden
     expect(validateTemplate(wellFormed())).toBe(true);
   });
 
-  it('teeth-10 — the closed slot vocabulary has EXACTLY the 12 members; an off-vocab slot rejects', () => {
-    const twelve = [
+  it('teeth-10 — the closed slot vocabulary has EXACTLY the 13 members; an off-vocab slot rejects', () => {
+    const thirteen = [
       'invariant', 'contract', 'precondition', 'postcondition', 'sideeffect', 'ownership',
-      'perf-bound', 'security-property', 'gotcha', 'rationale', 'dependency', 'definition',
+      'perf-bound', 'security-property', 'gotcha', 'rationale', 'dependency', 'count', 'definition',
     ] as const;
-    for (const s of twelve) expect(isClosedSlot(s)).toBe(true);
-    expect(isClosedSlot('free-text' as unknown as (typeof twelve)[number])).toBe(false); // adding one is a `cv` bump
-    expect(isClosedSlot(undefined as unknown as (typeof twelve)[number])).toBe(false); // no-slot blob
-    expect(validateTemplate({ ...wellFormed(), slot: 'free-text' as unknown as (typeof twelve)[number] })).toBe(false);
+    for (const s of thirteen) expect(isClosedSlot(s)).toBe(true);
+    expect(isClosedSlot('free-text' as unknown as (typeof thirteen)[number])).toBe(false); // adding one is a `cv` bump
+    expect(isClosedSlot(undefined as unknown as (typeof thirteen)[number])).toBe(false); // no-slot blob
+    expect(validateTemplate({ ...wellFormed(), slot: 'free-text' as unknown as (typeof thirteen)[number] })).toBe(false);
   });
 
   it('teeth-10 — a missing claimNorm/grounding also rejects (required-field check is not partial)', () => {

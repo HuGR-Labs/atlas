@@ -11,7 +11,7 @@
 >   [`properties-authoring.md`](./properties-authoring.md); the witness is the entry point, the property is the
 >   coverage.
 > - **8 `exhaustive` INVs** (AUTH-2, AUTH-5, AUTH-9, AUTH-10, AUTH-13, CLI-5, CLI-6, MCP-3) →
->   **`gen: exhaustive`** — the input space is a finite closed set (the door set, the 12-slot union, the
+>   **`gen: exhaustive`** — the input space is a finite closed set (the door set, the 13-slot union, the
 >   route decision table, the two-state occupancy, the write-path set, the parser's command map, the leg
 >   set, the three surface constants). Enumeration IS the golden.
 > - **5 `reference-model` INVs** (AUTH-3, AUTH-4, AUTH-6, AUTH-7, AUTH-14) → **`gen: conformance`** — each
@@ -183,7 +183,7 @@ Then it fails.
 source: REQ-AUTH-5a · gen: exhaustive
 Given the closed `PredicateSlot` union
 When `slots` is invoked
-Then the returned slot set is set-equal to the union (12 members).
+Then the returned slot set is set-equal to the union (13 members).
 
 ### SCN-AUTH-5b-1 — each slot carries a meaning
 source: REQ-AUTH-5b · gen: exhaustive

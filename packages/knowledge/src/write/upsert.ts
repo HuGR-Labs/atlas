@@ -213,7 +213,7 @@ export function upsert(
   cfg: NearDupConfig = { claimNormThreshold: 1 },
 ): UpsertResult {
   // KNOW-10 / KNOW-15i — THE CLOSED-SLOT GATE (#152). FIRST, before the route is even computed: the slot is
-  // an ingredient of the identity this reducer routes on, so a value outside the closed 12 has already
+  // an ingredient of the identity this reducer routes on, so a value outside the closed 13 has already
   // corrupted the question by the time `routeWrite` answers it. ABSENT stands aside — a deliberate
   // NARROWING, measured and argued in `./closed-slot.ts`; PRESENT-and-unrecognised fails closed. Until this
   // line existed, the shipped `atlas emit` ACCEPTED an out-of-vocabulary slot and minted a new address for

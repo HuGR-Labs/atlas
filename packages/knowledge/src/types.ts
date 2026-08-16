@@ -285,7 +285,7 @@ export interface TerritoryView {
 }
 
 /**
- * The closed `predicateSlot` vocabulary (NORMATIVE). Transcribed EXACTLY — all 12 members — from
+ * The closed `predicateSlot` vocabulary (NORMATIVE). Transcribed EXACTLY — all 13 members — from
  * atlas-knowledge:166-179. The list is CLOSED: adding a slot is a spec revision that bumps the contract
  * version `cv` (atlas-knowledge:163). "Same topic" is decidable ONLY because this union is finite, which
  * is what lets `nodeKey` collide and force UPDATE/union instead of proliferating (atlas-knowledge:150).

@@ -53,7 +53,7 @@
 //                     the CLI `mine.ts` durable-write path), persist the projection sidecar durably, AND
 //                     `store.put(node)` the WHOLE GroundedFact into CAS so the content-addressed bytes ARE
 //                     the fact (driftFacts/doctor read them back — the INVARIANT).
-//   3.5 CLOSED SLOT — inside that same `upsert`: a `predicateSlot` outside the NORMATIVE 12 is refused
+//   3.5 CLOSED SLOT — inside that same `upsert`: a `predicateSlot` outside the NORMATIVE 13 is refused
 //                     (`closed-slot-violation`, #152). ABSENT is not one — a NARROWING; see closed-slot.ts.
 //
 // GATE PRECEDENCE IS AN INVARIANT, NOT AN ACCIDENT OF LAYOUT. No pair of these gates changes `emitted`

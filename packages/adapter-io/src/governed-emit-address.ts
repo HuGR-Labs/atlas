@@ -94,7 +94,7 @@ export function addressOf(node: GroundedFact): Addressed {
  * decisions about the caller's bytes.
  *
  * ── THE SECOND RE-FILE: THE CLOSED-SLOT REFUSAL (#152) — THE SAME DEFECT, ONE GATE OVER ───────────────────
- * `upsert` (@atlas/knowledge) now refuses a write whose `predicateSlot` is outside the closed 12, and it
+ * `upsert` (@atlas/knowledge) now refuses a write whose `predicateSlot` is outside the closed 13, and it
  * refuses by THROWING a named class — for the reasons its own ARCH-10 block gives, and because the door
  * discards `UpsertResult.decision`, so a returned refusal would have persisted nothing while the door
  * reported `emitted: true`. That throw arrived here having made a decision and, like the canonical-form

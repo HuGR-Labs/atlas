@@ -120,8 +120,8 @@ teeth:       breaks-on "some advisory workload path hard-requires an evaluator t
 ### PROP-KNOW-10 — templated write, no free prose (enumerated universe B)
 inv:         INV-KNOW-10
 source:      method-tags-knw.md#INV-KNOW-10                  # ptr+digest
-law:         ∀ fact f. route(f) = (allRequiredFieldsPresent(f) ∧ size(f.claimText) ≤ cap ∧ f.predicateSlot ∈ closedVocab12) ? PERSIST : REJECT; |closedVocab| == 12 exactly (adding one is a `cv` bump); 0 free-prose facts persist
-arbitrary:   the finite validity product {required-field∈(present,missing) × size∈(≤cap,>cap) × slot∈(in-12,out)} ∪ free-prose blobs (no template binding). *(guard-trigger source: reference Acceptance #9 — see goldens-knw §KNOW-10b; flagged for cold review)*
+law:         ∀ fact f. route(f) = (allRequiredFieldsPresent(f) ∧ size(f.claimText) ≤ cap ∧ f.predicateSlot ∈ closedVocab13) ? PERSIST : REJECT; |closedVocab| == 13 exactly (adding one is a `cv` bump); 0 free-prose facts persist
+arbitrary:   the finite validity product {required-field∈(present,missing) × size∈(≤cap,>cap) × slot∈(in-13,out)} ∪ free-prose blobs (no template binding). *(guard-trigger source: reference Acceptance #9 — see goldens-knw §KNOW-10b; flagged for cold review)*
 covers_reqs: [ REQ-KNOW-10a, REQ-KNOW-10b ]                 # ptr+digest
 witness:     [ SCN-KNOW-10a-1, SCN-KNOW-10b-1, SCN-KNOW-10b-2 ]
 teeth:       breaks-on "the validator drops the cap check or a required-field check for SOME field/size — the full product exposes any single-axis omission (a 700 B body, a receiptless node) the 3 cell witnesses only sample"

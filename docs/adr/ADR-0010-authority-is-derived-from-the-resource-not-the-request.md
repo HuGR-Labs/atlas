@@ -59,7 +59,7 @@ reasons, and each one alone is sufficient:
    `nodeKey` … folding a governance value into it would silently re-address every stored fact and split a
    node from its own history the first time its class was raised."* A `T0` node whose class is later raised
    would become a DIFFERENT node, orphaning its own lineage — and one `(anchor, slot)` would hold one node
-   per class, which is precisely the proliferation the closed 12-member slot vocabulary exists to prevent.
+   per class, which is precisely the proliferation the closed 13-member slot vocabulary exists to prevent.
 3. **It would move every stored hash, and the repo has no hash-version detection** (task #112). Under the
    chosen design nothing moves: `nodeKey` for the reproduction fixture is byte-identical before and after
    the fix (`822995f0…`), `router.ts` is untouched, and **no golden's pinned expectation changes**.

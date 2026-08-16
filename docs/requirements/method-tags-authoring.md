@@ -12,7 +12,7 @@
 > **Why no `formal` here (the 3-conjunct test, written not asserted).** A `formal` tag needs all three of
 > {high-consequence ∧ hard-to-recover} ∧ {combinatorial state tests cannot cover} ∧ {cheap to keep alive}.
 > Every invariant on this surface fails the **second** conjunct: the state space is a fixture repository, a
-> finite door set, a closed 12-member slot union, and a four-gate decision table. There is no unbounded
+> finite door set, a closed 13-member slot union, and a four-gate decision table. There is no unbounded
 > interleaving and no concurrency — planners are pure reads, and the one durable transition (`atlas-emit`)
 > is already governed and already modelled downstream. What this surface *does* have is an unusually high
 > density of **agreement** properties (planner ≡ gate, check ≡ door, CLI ≡ MCP), which is why the `PBT`
@@ -59,9 +59,9 @@ teeth: breaks-on "a lister that emits a hole entry with fileCount 0 or a hard-co
 method-tag: exhaustive
 fspec: —
 up-property: "closed-vocabulary totality: slots() == the closed PredicateSlot union, exactly — every member present, no non-member present — and the set is obtained BY DERIVATION from the union such that adding a member to the union surfaces it at the door with no door edit"
-down-model: "the PredicateSlot union is FINITE (12) — enumerate it completely; assert set-equality between slots() and the union; the derivation arm asserts the door reads the union rather than a literal (a type-level exhaustiveness check over the union that fails to compile if a member is unhandled)"
+down-model: "the PredicateSlot union is FINITE (13) — enumerate it completely; assert set-equality between slots() and the union; the derivation arm asserts the door reads the union rather than a literal (a type-level exhaustiveness check over the union that fails to compile if a member is unhandled)"
 anti-rot: the union itself is the mock — the door's mapping is total over the union, so a new member breaks the type-check, not a test.
-teeth: breaks-on "a hand-transcribed 12-element array that silently goes stale when a 13th slot is added — set-equality passes today and fails the day the union grows, which is exactly when nobody re-reads the door"
+teeth: breaks-on "a hand-transcribed 13-element array that silently goes stale when a 14th slot is added — set-equality passes today and fails the day the union grows, which is exactly when nobody re-reads the door"
 
 ### INV-AUTH-6
 method-tag: reference-model
@@ -83,7 +83,7 @@ teeth: breaks-on "a refusal that names the drift generically ('grounding does no
 method-tag: PBT
 fspec: —
 up-property: "round-trip acceptance: ∀ (anchor a, slot s, claim c) with a reachable at rev R, emit(draft(a,s,c,R), R) on an unchanged repository is ACCEPTED by the truth door — no exceptions across anchor kinds, languages, tiers, or claim contents"
-down-model: "the governed emit door is the oracle; generate arbitrary (anchor, slot, claim) triples from the fixture's real unit set × the 12-member slot union × arbitrary claim strings (including unicode, empty-adjacent, and very long), draft each and emit at the drafting rev, assert acceptance for every triple"
+down-model: "the governed emit door is the oracle; generate arbitrary (anchor, slot, claim) triples from the fixture's real unit set × the 13-member slot union × arbitrary claim strings (including unicode, empty-adjacent, and very long), draft each and emit at the drafting rev, assert acceptance for every triple"
 anti-rot: the emit door is the mock; this property is the ACCEPTANCE CRITERION of the campaign — if it does not hold, the surface has not delivered its outcome.
 teeth: breaks-on "a drafter correct for file anchors and wrong for symbol anchors (the `::` unit path) — the natural hand-written witness is a file anchor, so only the ∀ over the real unit set reaches the symbol case"
 
