@@ -39,9 +39,14 @@ justification travels with the prompt without being sent to it.
     asymmetry this clause must NOT cross: the model is steered toward non-obvious facts, and is never asked
     how non-obvious its own claim is — GEN-16 forbids resting the judgment on the proposer's self-assessment,
     and the score is computed by the harness over the source bytes.
-  · NO CONFIDENCE, NO REASONING, ONE LINE — GEN-4d: a self-declaration is never read, so it is never asked
-    for. GEN-12: chain-of-thought is scratch and MUST NOT be persisted as a fact, so it is never requested.
-    The output contract is `claim: string | null` (llm.ts), and empty output means abstention.
+  · REASON FREELY, THEN EMIT ONE PARSEABLE BLOCK (ADR-0020) — the earlier "no reasoning, one line" contract
+    measured 77.5% precision: forbidden from reasoning, the model read a stale/past-tense COMMENT as current
+    code and stated it as a fact (#201). ADR-0020 (measured 100%, 0 hallucination) INVERTS it: the model
+    reasons freely in a discarded scratch region, actively refutes its candidate against the bytes, THEN emits
+    exactly one fenced `atlas-fact` block carrying `claim`. GEN-4d still holds — no self-declaration is asked
+    for or read (no confidence/obviousness field). GEN-12 still holds — the reasoning is SCRATCH: the harness
+    parses only the block's `claim` and NEVER persists the free reasoning as a fact (`llm.ts admitModelAnswer`).
+    Admission is BLOCK-COUNT (llm.ts): exactly one block ⇒ its `claim`; zero blocks ⇒ abstention; ≥2 ⇒ rejected.
   · MINED SIGNALS ARE ABSENT ON PURPOSE — `Candidate.signals` (churn, SZZ, owners, commit messages) is NOT
     passed. GEN-6 forbids a signal from minting a fact; withholding the signals makes that violation
     structurally impossible instead of merely instructed against. They already did their work in ranking.
@@ -55,17 +60,28 @@ You are shown ONE anchored TARGET unit from a real codebase, and the RELATED uni
 </unit>
 
 State ONE fact about the TARGET unit — the `<unit>` above, NOT the related context — that a competent
-engineer would NOT already know from its name and signature, and that would change what they do.
+engineer would NOT already know from its name and signature, and that would change what they do. Work in two
+steps.
 
-- The fact MUST be about the TARGET unit, and MUST be derivable from the bytes shown (the target plus the
-  related context above). Do not rely on anything you know about a library, framework or convention that is
-  not visible in these bytes. The related units are there so a fact that depends on them is derivable — not
-  so you can state a fact about them.
-- Restating the signature, the types, or the name is not a fact. Neither is a summary of what the code
-  plainly does.
-- If the TARGET unit holds no such fact, output the single token `NO-FACT` and nothing else. Most units
-  hold none. That is a correct, expected result — it is recorded as a deliberate abstention, never as a
-  failure. Do NOT explain, apologise, or describe why: the bare token `NO-FACT` IS the abstention.
+STEP 1 — REASON FREELY (scratch, never stored). Read the bytes closely. Draft a candidate fact about the
+TARGET, then actively try to REFUTE it against the source:
+- Is it about the TARGET (not a related unit), and derivable from the bytes shown (the target plus the related
+  context) — or are you leaning on what you know about a library, framework or convention not visible here, or
+  on a stale/past-tense COMMENT the current code may contradict? The related units are there so a fact that
+  DEPENDS on them is derivable — not so you can state a fact about them.
+- Is it more than a restatement of the name, the signature or the types, or a summary of what the code
+  plainly does?
+Discard any candidate that does not survive. This reasoning is scratch: it is parsed away and never persisted.
 
-Output either exactly one line of plain prose stating the fact, or the single token `NO-FACT`. No preamble,
-no reasoning, no confidence, no formatting.
+STEP 2 — EMIT THE RESULT. If a fact about the TARGET survived, emit it as EXACTLY ONE fenced block tagged
+`atlas-fact`, holding a JSON object with a single `claim` field — one sentence of plain prose:
+
+```atlas-fact
+{"claim": "<the one surviving fact about the target>"}
+```
+
+Emit exactly ONE such block, and put NO fenced block anywhere in your reasoning — only the final fact is fenced.
+
+If the TARGET holds no such fact, emit NO fact block at all (a bare `NO-FACT` on its own line is also
+accepted). Most units hold none. That is a correct, expected result — recorded as a deliberate abstention,
+never a failure. A fact the bytes do not contain cannot be re-derived at source@sha and MUST NOT be emitted.

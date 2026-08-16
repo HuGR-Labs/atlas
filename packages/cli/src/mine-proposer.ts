@@ -191,7 +191,9 @@ export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = proce
         ? makeCountClaimParser(createCountResolver(slotScip))
         : makeDependencyClaimParser(createDepResolver(slotScip));
   const proposer = createSiteProposer({
-    client: createCommandClient(propose),
+    // [ADR-0017] The sound-gated slots (dependency/count) keep the ONE-LINE answer contract; the advisory slot
+    // uses the reason-freely fenced-`atlas-fact` BLOCK contract (measured 100%/0-halluc vs the one-line 77.5%).
+    client: createCommandClient(propose, slot === 'advisory' ? 'block' : 'line'),
     budget: { costCap: cfg.costCap, timeoutMs: cfg.timeoutMs },
     buildPrompt: prompts.build,
     ...(parseClaim !== undefined ? { parseClaim } : {}),
