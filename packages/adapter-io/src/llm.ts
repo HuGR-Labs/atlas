@@ -344,7 +344,7 @@ function admitModelAnswer(buf: Buffer, format: AnswerFormat): CompletionResult {
   // regardless of whether the answer is a line or a fenced block. Checked first, before the format-specific leg.
   if (hasControlByteSplice(text)) return { claim: null, abstainReason: 'answer-malformed:multi-response' };
   if (format === 'block') return admitFactBlock(text);
-  //                          [ADR-0017] the SOUND-GATED slots (dependency/count/negation) keep the ONE-LINE
+  //                          [ADR-0020] the SOUND-GATED slots (dependency/count/negation) keep the ONE-LINE
   // contract: their prompts forbid reasoning, so a well-formed answer is a single content line and >1 non-empty
   // line is the splice class. The advisory/semantic reason-freely slots use `'block'` instead (multi-line by
   // construction), where the line-count heuristic would reject every conforming answer — see `admitFactBlock`.
@@ -352,7 +352,7 @@ function admitModelAnswer(buf: Buffer, format: AnswerFormat): CompletionResult {
   return { claim: whole, rawAnswer: text }; //                    rawAnswer = the exact validated answer bytes
 }
 
-/** [ADR-0017] The `'block'` admission: the model REASONS FREELY (scratch, discarded here) and emits exactly ONE
+/** [ADR-0020] The `'block'` admission: the model REASONS FREELY (scratch, discarded here) and emits exactly ONE
  *  fenced ```atlas-fact block carrying `{"claim": "..."}`. The free reasoning is NEVER persisted (GEN-12): only
  *  the block's `claim` survives. Zero blocks ⇒ the model reasoned then declined (untagged abstain, like empty);
  *  ≥2 blocks ⇒ the splice class (structural replacement for the line-count heuristic, which cannot apply to a
@@ -374,7 +374,7 @@ function admitFactBlock(text: string): CompletionResult {
   return { claim: field.trim(), rawAnswer: text }; //             rawAnswer = the whole validated envelope
 }
 
-/** Every fenced ```atlas-fact block body in the raw stdout (the reason-freely envelope, ADR-0017). */
+/** Every fenced ```atlas-fact block body in the raw stdout (the reason-freely envelope, ADR-0020). */
 function factBlocks(text: string): string[] {
   const fence = /```atlas-fact[^\n]*\n([\s\S]*?)\n```/g;
   const bodies: string[] = [];
@@ -407,7 +407,7 @@ function hasControlByteSplice(text: string): boolean {
   return /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(text);
 }
 
-/** The model-output admission contract for a proposer (ADR-0017). `line` = the one-line prose/abstain contract
+/** The model-output admission contract for a proposer (ADR-0020). `line` = the one-line prose/abstain contract
  *  of the SOUND-GATED slots (dependency/count/negation). `block` = the reason-freely fenced-`atlas-fact` block
  *  contract of the advisory/semantic slots, where free reasoning is scratch and only the block's `claim` survives. */
 export type AnswerFormat = 'line' | 'block';
