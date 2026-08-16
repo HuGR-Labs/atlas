@@ -58,19 +58,16 @@ export interface LlmBudget {
 /**
  * The raw model verdict at a site: a claim, or `null` when the model ABSTAINED here (GEN-12).
  *
- * [#195 leg (c) / ADR-0017] The claim is only produced AFTER the admission gate (`admitModelAnswer`) passes on
+ * [#195 leg (c)] The claim is only produced AFTER the admission sanity gate (`admitModelAnswer`) passes on
  * the raw stdout bytes. Two provenance carriers ride alongside it so W-MINE can trace a fact back to what
  * produced it, and W-MINE can build a grounded abstention when it cannot:
- *   - `rawAnswer` — the VALIDATED stdout bytes decoded as a string, present ONLY when `claim !== null`. Under
- *     ADR-0017 the model REASONS FREELY and then emits one fenced `atlas-fact` block, so these bytes are the
- *     WHOLE envelope (the free reasoning plus the emitted block), NOT a one-line claim. `claim` is the parsed
- *     `claim` field of that block — it is NO LONGER a trimmed projection of `rawAnswer`. Downstream (W-MINE)
- *     scrubs this whole envelope and puts it to CAS; this seam does not scrub and never touches CAS.
+ *   - `rawAnswer` — the VALIDATED answer text (the exact bytes that passed the gate, decoded as a string),
+ *     present ONLY when `claim !== null`. Downstream (W-MINE) scrubs this and puts it to CAS; this seam
+ *     does not scrub and never touches CAS. It is the untrimmed answer — `claim` is its trimmed projection.
  *   - `abstainReason` — on a MALFORMED-answer abstention, the sub-reason a grounded `WhyNot('answer-malformed')`
- *     is built from (`'answer-malformed:not-utf8'` | `'answer-malformed:multi-response'` | `'answer-malformed:unparseable'`).
- *     The plain GEN-12 model-abstained case (empty / whitespace-only stdout, the abstain sentinel, or free
- *     reasoning that emitted NO fact block) stays UNTAGGED (`undefined`): declining to answer is not a
- *     corruption of an answer.
+ *     is built from (`'answer-malformed:not-utf8'` | `'answer-malformed:multi-response'`). The plain GEN-12
+ *     model-abstained case (empty / whitespace-only stdout) stays UNTAGGED (`undefined`): an empty answer is
+ *     the model declining to answer, not a corruption of one.
  */
 export interface CompletionResult {
   readonly claim: string | null; //          null ⇒ the model abstained at this site
@@ -285,17 +282,10 @@ export interface ModelCommand {
  * stdout. No shell, no SDK, no network primitive here, and NO VENDOR NAMED — any provider-agnostic CLI, a
  * local runtime, or a `curl` wrapper satisfies it equally, so substitution is a config edit.
  *
- * The verdict rules are what keep the result unambiguous (ADR-0017 — the proposer reasons freely, then emits
- * a parseable candidate block):
- *   - **The output carries EXACTLY ONE fenced `atlas-fact` block ⇒ its parsed `claim` is the claim.** The free
- *     reasoning above the block is scratch and is NEVER persisted as a fact (it rides only inside the scrubbed
- *     `rawAnswer` receipt).
- *   - **NO block (empty stdout, the `ABSTAIN_SENTINEL` token, or free reasoning that declined to emit one) ⇒
- *     abstention** (`claim: null`, untagged GEN-12). Abstention is a valid, unpressured outcome; the presence
- *     of a fact block — not any sentinel word — is the fact signal.
- *   - **≥ 2 blocks, or a malformed/oversize/claimless single block ⇒ a TAGGED `answer-malformed` abstention**
- *     (never a throw, never a fabricated claim). The ≥2-block rule is the 2026-08-04 concurrent-answer splice
- *     guard, now a STRUCTURAL block count rather than a fragile line count.
+ * The two verdict rules are what keep the result unambiguous:
+ *   - **EMPTY stdout (or the `ABSTAIN_SENTINEL` token) ⇒ abstention** (`claim: null`). No JSON, no parser,
+ *     hence no parse-failure mode. Abstention is a valid, unpressured outcome (GEN-12); the sentinel is the
+ *     explicit-action form of it (#201/#202), mapped identically by `admitModelAnswer`.
  *   - **Non-zero exit / timeout / missing command ⇒ THROW.** A broken configuration MUST NOT be able to
  *     present itself as "this repo has no facts" — that fail-silent shape is the one failure that would
  *     invalidate a whole genesis run invisibly.
@@ -326,82 +316,48 @@ export function createCommandClient(command: ModelCommand): ModelClient {
   };
 }
 
-/** [ADR-0017] The fixed byte cap on the parsed candidate block. A fact claim is one sentence; the free
- *  reasoning above the block is NOT parsed, so the object handed to `JSON.parse` is bounded regardless of how
- *  long the model reasoned. (The whole-stdout `execFileSync` `maxBuffer` overflow stays a hard
- *  `ModelCommandError` by design — an operator-broke-config, not a model abstain — ADR-0011's non-zero rule.) */
-const MAX_FACT_BLOCK_BYTES = 8 * 1024;
-
 /**
- * [ADR-0017] Every fenced `atlas-fact` candidate block in the raw stdout. The proposer reasons freely and then
- * emits its claim in a fenced block tagged `atlas-fact` — a distinct info string (rather than a bare ```json
- * fence) so incidental code fences inside the free reasoning are never mistaken for the candidate. The lazy
- * `[\s\S]*?` capture is linear (no ReDoS). The COUNT is the admission signal — see `admitModelAnswer`.
- */
-function factBlocks(text: string): string[] {
-  const fence = /```atlas-fact[^\n]*\n([\s\S]*?)\n```/g;
-  const bodies: string[] = [];
-  for (const m of text.matchAll(fence)) bodies.push(m[1]!);
-  return bodies;
-}
-
-/**
- * [#195 leg (c) / ADR-0017] The admission gate on the model's raw stdout bytes, BEFORE they can become a claim.
- * Fail-closed: any failure returns a grounded ABSTENTION, never a fabricated claim.
+ * [#195 leg (c)] The admission SANITY GATE on the model's raw stdout bytes, BEFORE they can become a claim.
+ * Three fail-closed checks; any failure returns a grounded ABSTENTION, never a fabricated claim:
  *   1. VALID UTF-8 — round-trip the raw bytes (`Buffer.from(text).equals(buf)`). Reading stdout as a Buffer
  *      is what makes this observable: `encoding:'utf8'` would already have replaced bad bytes with U+FFFD.
  *      Fail ⇒ `answer-malformed:not-utf8`.
  *   2. NON-EMPTY — an empty / whitespace-only answer is the model DECLINING to answer (GEN-12), not a
  *      corruption. It stays `{ claim: null }` UNTAGGED, preserving the existing abstention semantics.
- *   2b. NOT THE ABSTAIN SENTINEL — [#201/#202] a bare `ABSTAIN_SENTINEL` (via `isAbstainToken`) is the model
- *      taking the explicit abstention ACTION the prompt offers — the SAME UNTAGGED GEN-12 outcome as empty.
- *   3. INTERLEAVE — a C0 control byte a single answer never carries (byte-overlapping concatenation of
- *      concurrent writers racing one pipe, the 2026-08-04 class). Fail ⇒ `answer-malformed:multi-response`.
- *   4. BLOCK COUNT (ADR-0017, replacing the old line-count heuristic):
- *      - 0 blocks ⇒ UNTAGGED GEN-12 abstention. The model reasoned and declined (or botched the format) —
- *        the safe direction is a miss, never a fabrication; the presence of a block, not any word, is the signal.
- *      - ≥ 2 blocks ⇒ `answer-malformed:multi-response`. Two concatenated answers carry two blocks — the
- *        splice guard, now STRUCTURAL rather than a fragile line count.
- *      - exactly 1 block ⇒ bounded-parse it: oversize / non-JSON / missing-or-empty `claim` ⇒
- *        `answer-malformed:unparseable`; otherwise the trimmed `claim` field is the claim.
- * On a claim the WHOLE validated stdout envelope (free reasoning + block) rides back as `rawAnswer`; `claim`
- * is the parsed block field, NOT a trimmed projection of those bytes.
+ *   2b. NOT THE ABSTAIN SENTINEL — [#201/#202] an answer that IS `ABSTAIN_SENTINEL` (via `isAbstainToken`:
+ *      case-insensitive, surrounding formatting/punctuation stripped) is the model taking the explicit
+ *      abstention ACTION the prompt offers. It is the SAME GEN-12 model-abstained outcome as empty —
+ *      `{ claim: null }` UNTAGGED — not a malformed answer. Checked before the splice test so the token is
+ *      never mistaken for content.
+ *   3. SINGLE-RESPONSE — reject the splice/interleave class the 2026-08-04 contamination produced
+ *      (byte-overlapping concatenation of multiple concurrent answers). See `isSplicedAnswer`.
+ *      Fail ⇒ `answer-malformed:multi-response`.
+ * On success the VALIDATED (untrimmed) text rides back as `rawAnswer`; `claim` is its trimmed projection.
  */
 function admitModelAnswer(buf: Buffer): CompletionResult {
   const text = buf.toString('utf8');
   if (!Buffer.from(text, 'utf8').equals(buf)) return { claim: null, abstainReason: 'answer-malformed:not-utf8' };
-  const whole = text.trim();
-  if (whole === '') return { claim: null }; //                    empty ⇒ GEN-12 model-abstained, untagged
-  if (isAbstainToken(whole)) return { claim: null }; //           [#201/#202] explicit abstain token ⇒ GEN-12, untagged
-  if (isSplicedAnswer(text)) return { claim: null, abstainReason: 'answer-malformed:multi-response' }; // (a) interleave
-  const blocks = factBlocks(text);
-  if (blocks.length === 0) return { claim: null }; //             reasoned-then-declined / botched-format ⇒ untagged abstain
-  if (blocks.length > 1) return { claim: null, abstainReason: 'answer-malformed:multi-response' }; // ≥2 blocks = splice
-  const body = blocks[0]!;
-  if (Buffer.byteLength(body, 'utf8') > MAX_FACT_BLOCK_BYTES) return { claim: null, abstainReason: 'answer-malformed:unparseable' };
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(body);
-  } catch {
-    return { claim: null, abstainReason: 'answer-malformed:unparseable' };
-  }
-  const field = (parsed as { claim?: unknown } | null)?.claim;
-  if (typeof field !== 'string' || field.trim() === '') return { claim: null, abstainReason: 'answer-malformed:unparseable' };
-  return { claim: field.trim(), rawAnswer: text }; //            rawAnswer = the whole validated envelope
+  const claim = text.trim();
+  if (claim === '') return { claim: null }; //                    empty ⇒ GEN-12 model-abstained, untagged
+  if (isAbstainToken(claim)) return { claim: null }; //           [#201/#202] explicit abstain token ⇒ GEN-12, untagged
+  if (isSplicedAnswer(text)) return { claim: null, abstainReason: 'answer-malformed:multi-response' };
+  return { claim, rawAnswer: text }; //                          rawAnswer = the exact validated answer bytes
 }
 
 /**
- * The INTERLEAVE fingerprint (#195 §4). ADR-0017 kept leg (a) verbatim and RETIRED leg (b): under
- * reason-freely, a well-formed answer is MULTI-LINE by construction (free reasoning + a fenced block), so the
- * old "> 1 non-empty line ⇒ splice" heuristic would reject every conforming answer. The concurrent-answer
- * splice guard now lives STRUCTURALLY in `admitModelAnswer` as "≥ 2 `atlas-fact` blocks ⇒ multi-response".
- *   (a) INTERLEAVE — a C0 control byte a single answer never carries (anything below U+0020 except TAB/LF/CR).
- *       Concurrent writers racing one pipe inject stray control/NUL bytes at the splice seam.
+ * The SINGLE-RESPONSE predicate (#195 §4 — specified at build time from the 2026-08-04 incident, not perfect
+ * by contract, only required to REJECT a spliced fixture and ADMIT a normal single answer). The answer
+ * channel is "one line of prose or an abstention" (`prompt.ts:134`), so a well-formed answer is a single
+ * content block of ordinary text. Two orthogonal fingerprints of the incident's byte-overlapping
+ * concatenation of concurrent answers:
+ *   (a) INTERLEAVE — a C0 control byte a single prose answer never carries (anything below U+0020 except
+ *       TAB/LF/CR). Concurrent writers racing one pipe inject stray control/NUL bytes at the splice seam.
+ *   (b) MULTI-ENVELOPE — more than one non-empty line after trimming: a concatenation of ≥2 top-level
+ *       answers, where a conforming single answer is one line of prose.
  */
 function isSplicedAnswer(text: string): boolean {
   if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(text)) return true; // (a) C0 control byte (not TAB/LF/CR) = interleave seam
-  return false; // (b) REMOVED (ADR-0017): the fragile line count is replaced by the STRUCTURAL block count in
-  //                admitModelAnswer (≥2 `atlas-fact` blocks ⇒ splice). Leg (a) above stays the interleave check.
+  return text.split('\n').filter((line) => line.trim() !== '').length > 1; // (b) >1 response envelope
 }
 
 /**

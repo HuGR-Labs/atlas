@@ -17,9 +17,9 @@
 //
 // So the guard has to be here: the built binary, a subprocess, a real worker pool, a real `::` site.
 //
-// NO LIVE MODEL. `roles.propose.cmd` is `printf` — a deterministic, offline stand-in printing a fixed
-// `atlas-fact` block (ADR-0017's parseable candidate, the same device S25 uses). What is under test is
-// REACHABILITY through the pool, never what a model would say.
+// NO LIVE MODEL. `roles.propose.cmd` is `echo` — a deterministic, offline stand-in returning a fixed
+// non-empty claim (the same device S25 uses). What is under test is REACHABILITY through the pool, never
+// what a model would say.
 
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -29,10 +29,9 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
 
-/** The claim the stand-in "model" emits, carried inside an `atlas-fact` block ⇒ a proposal (ADR-0017). */
+/** The claim the stand-in "model" emits on stdout. Non-empty ⇒ a proposal, not an abstention. */
 const CLAIM = 'greet upper-cases its argument before formatting it';
-const factBlock = (claim: string): string => '```atlas-fact\n{"claim": ' + JSON.stringify(claim) + '}\n```\n';
-const ECHOING = JSON.stringify({ roles: { propose: { cmd: 'printf', args: ['%s', factBlock(CLAIM)] } } });
+const ECHOING = JSON.stringify({ roles: { propose: { cmd: 'echo', args: [CLAIM] } } });
 
 /** `greet` is defined in util.ts and referenced in app.ts ⇒ one resolved dep edge ⇒ both files reach the
  *  frontier. `greet` holds a closure, so the corpus carries BOTH sub-file kinds: `symbol` and `block`. */

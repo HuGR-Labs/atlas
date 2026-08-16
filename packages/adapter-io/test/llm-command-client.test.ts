@@ -19,11 +19,6 @@ import type { LlmBudget } from '../src/llm.js';
 /** A generous wall-clock for the commands that are expected to finish immediately. */
 const budget: LlmBudget = { costCap: 1, timeoutMs: 10_000 };
 
-/** [ADR-0017] The fenced `atlas-fact` candidate block the gate parses, carrying a single `claim` field. This
- *  is the wire the reason-freely prompt emits; `JSON.stringify` keeps a claim with quotes/metacharacters
- *  well-formed. A stub prints it verbatim with `printf '%s'`, so the block reaches the gate byte-for-byte. */
-const factBlock = (claim: string): string => '```atlas-fact\n{"claim": ' + JSON.stringify(claim) + '}\n```\n';
-
 /** Read the thrown error as the discriminated failure it must be — never a bare `Error`. */
 function failureOf(fn: () => unknown): ModelCommandError {
   try {
@@ -36,14 +31,11 @@ function failureOf(fn: () => unknown): ModelCommandError {
 }
 
 describe('createCommandClient — the operator-supplied model command (ADR-0011 D1)', () => {
-  it('pipes the prompt on STDIN and parses the emitted fact block into the claim', () => {
-    // `cat` echoes its stdin, so feeding it an `atlas-fact` block is the simplest end-to-end of the wire the
-    // reason-freely prompt emits: the block reaches the gate on stdout and its `claim` field is the claim.
-    const block = factBlock('a non-obvious grounded claim');
-    const client = createCommandClient({ cmd: 'cat', args: [] });
-    expect(client.complete(block, budget)).toStrictEqual({
+  it('pipes the prompt on STDIN and returns stdout as the claim', () => {
+    const client = createCommandClient({ cmd: 'cat', args: [] }); // `cat` echoes its stdin
+    expect(client.complete('a non-obvious grounded claim', budget)).toStrictEqual({
       claim: 'a non-obvious grounded claim',
-      rawAnswer: block, // ADR-0017: the whole validated envelope rides back for W-MINE (never a bare claim)
+      rawAnswer: 'a non-obvious grounded claim', // #195c: the validated answer bytes ride back for W-MINE
     });
   });
 
@@ -57,9 +49,8 @@ describe('createCommandClient — the operator-supplied model command (ADR-0011 
   it('NO SHELL — an argument carrying shell metacharacters is passed through literally', () => {
     // teeth (breaks-on "the adapter is switched to `shell: true`"): a shell would EXPAND `$HOME` and treat
     // `;` as a command separator. Literal pass-through is what makes an argv array safe by construction.
-    const block = factBlock('$HOME; rm -rf /');
-    const client = createCommandClient({ cmd: 'printf', args: ['%s', block] });
-    expect(client.complete('ignored', budget)).toStrictEqual({ claim: '$HOME; rm -rf /', rawAnswer: block });
+    const client = createCommandClient({ cmd: 'printf', args: ['%s', '$HOME; rm -rf /'] });
+    expect(client.complete('ignored', budget)).toStrictEqual({ claim: '$HOME; rm -rf /', rawAnswer: '$HOME; rm -rf /' });
   });
 
   describe('abstention (GEN-12) — a valid, unpressured outcome', () => {
@@ -86,9 +77,8 @@ describe('createCommandClient — the operator-supplied model command (ADR-0011 
     it('EPIPE with a ZERO exit status returns the stdout the child did produce', () => {
       // teeth (breaks-on "the `salvageEarlyExit` branch is removed"): the call throws `nonzero-exit`, so a
       // model command that reads a prefix and exits reports a hard failure on a run that produced a claim.
-      const block = factBlock('A-REAL-CLAIM');
-      const client = createCommandClient({ cmd: 'printf', args: ['%s', block] });
-      expect(client.complete(hugePrompt, budget)).toStrictEqual({ claim: 'A-REAL-CLAIM', rawAnswer: block });
+      const client = createCommandClient({ cmd: 'printf', args: ['%s', 'A-REAL-CLAIM'] });
+      expect(client.complete(hugePrompt, budget)).toStrictEqual({ claim: 'A-REAL-CLAIM', rawAnswer: 'A-REAL-CLAIM' });
     });
 
     it('EPIPE with a NON-ZERO exit status is still a failure — the salvage is not a blanket catch', () => {
@@ -132,59 +122,25 @@ describe('createCommandClient — the operator-supplied model command (ADR-0011 
   // ── #195 leg (c): the admission SANITY GATE, exercised end-to-end through a real subprocess ────────────
   // The bytes are produced by `printf` (octal escapes for the corrupt/control cases) so the RAW-BUFFER path
   // is what is under test — a mocked child would assert the mock, not the U+FFFD masking this gate defeats.
-  describe('#195c/ADR-0017 admission gate — the reason-freely envelope is parsed by BLOCK COUNT', () => {
-    it('reasoning THEN exactly one fenced block ⇒ the parsed claim AND the whole envelope as rawAnswer', () => {
-      // The canonical ADR-0017 shape: free reasoning above a single `atlas-fact` block. teeth: the reasoning
-      // is SCRATCH — `claim` is the parsed block field, NOT the prose; `rawAnswer` is the WHOLE envelope
-      // (reasoning + block), which W-MINE scrubs-and-puts to CAS.
-      const envelope =
-        'I weighed whether this restates the signature; it does not — it names a hidden precondition.\n\n' +
-        factBlock('greet formats via a template literal');
-      const client = createCommandClient({ cmd: 'printf', args: ['%s', envelope] });
+  describe('#195c admission sanity gate — malformed answers fail closed to a TAGGED abstention', () => {
+    it('a NORMAL single answer ⇒ a claim AND the validated rawAnswer (the exact bytes that passed)', () => {
+      // teeth: rawAnswer is the UNTRIMMED validated text; the claim is its trimmed projection. Dropping the
+      // rawAnswer carrier means W-MINE has nothing to scrub-and-put to CAS.
+      const client = createCommandClient({ cmd: 'printf', args: ['greet formats via a template literal\\n'] });
       expect(client.complete('anything', budget)).toStrictEqual({
         claim: 'greet formats via a template literal',
-        rawAnswer: envelope,
+        rawAnswer: 'greet formats via a template literal\n',
       });
     });
 
-    it('free reasoning with NO fact block ⇒ the UNTAGGED GEN-12 abstention (reasoned, then declined)', () => {
-      // teeth (breaks-on "0 blocks is treated as a claim / a malformed answer"): under reason-freely a decline
-      // is multi-line prose with no block. It must be a plain abstention (a safe miss), never a fabricated
-      // claim and never tagged as corruption. This is also what retires the old > 1-line splice heuristic.
-      const client = createCommandClient({ cmd: 'printf', args: ['%s', 'On reflection nothing here is non-obvious.\nThe name already says it.\n'] });
-      expect(client.complete('anything', budget)).toStrictEqual({ claim: null });
-    });
-
-    it('TWO fenced blocks ⇒ abstain `answer-malformed:multi-response` (the 2026-08-04 splice, now BLOCK-count)', () => {
-      // teeth (breaks-on "the ≥2-block prong is removed"): two concatenated answers each carry a block — the
-      // exact shape the broken shim delivered. The structural block count rejects them where a line count no
-      // longer can (reason-freely is multi-line by construction).
-      const client = createCommandClient({ cmd: 'printf', args: ['%s', factBlock('claim one') + factBlock('claim two')] });
+    it('a SPLICED/concatenated multi-answer ⇒ abstain `answer-malformed:multi-response` (the 2026-08-04 class)', () => {
+      // teeth (breaks-on "the single-response prong is removed"): two concatenated answers are the exact
+      // shape the broken shim delivered; without this prong they flow straight to `claimNorm`.
+      const client = createCommandClient({ cmd: 'printf', args: ['answer one\\nanswer two\\n'] });
       expect(client.complete('anything', budget)).toStrictEqual({
         claim: null,
         abstainReason: 'answer-malformed:multi-response',
       });
-    });
-
-    it('a single block with a MISSING/empty `claim` field ⇒ abstain `answer-malformed:unparseable`', () => {
-      // teeth (breaks-on "the missing-claim prong admits a claimless/typeless field"): a block that parses but
-      // carries no usable claim is a botched emission, not a fact.
-      const client = createCommandClient({ cmd: 'printf', args: ['%s', '```atlas-fact\n{"note": "no claim here"}\n```\n'] });
-      expect(client.complete('anything', budget)).toStrictEqual({ claim: null, abstainReason: 'answer-malformed:unparseable' });
-    });
-
-    it('a single block whose body is NOT valid JSON ⇒ abstain `answer-malformed:unparseable`, never a throw', () => {
-      // teeth (breaks-on "JSON.parse is not guarded"): a parse failure must fail closed to a tagged abstention,
-      // never crash the per-site visit.
-      const client = createCommandClient({ cmd: 'printf', args: ['%s', '```atlas-fact\n{not: json,,}\n```\n'] });
-      expect(client.complete('anything', budget)).toStrictEqual({ claim: null, abstainReason: 'answer-malformed:unparseable' });
-    });
-
-    it('a block body OVER the byte cap ⇒ abstain `answer-malformed:unparseable` (a fact is one sentence)', () => {
-      // teeth (breaks-on "the size cap is removed"): the reasoning scratch is unbounded but the PARSED block is
-      // not; an oversize block is refused before `JSON.parse`.
-      const client = createCommandClient({ cmd: 'printf', args: ['%s', factBlock('x'.repeat(9000))] });
-      expect(client.complete('anything', budget)).toStrictEqual({ claim: null, abstainReason: 'answer-malformed:unparseable' });
     });
 
     it('an interleaved answer carrying a C0 control byte ⇒ abstain `answer-malformed:multi-response`', () => {
@@ -241,14 +197,13 @@ describe('createCommandClient — the operator-supplied model command (ADR-0011 
       expect(client.complete('a trivial unit', budget)).toStrictEqual({ claim: null });
     });
 
-    it('the sentinel MENTIONED inside a real claim is NOT an abstention — only the whole-answer token abstains', () => {
-      // teeth (breaks-on "the match is `includes` instead of whole-answer equality"): a genuine fact whose
-      // claim text mentions the token must survive. Substring-matching would let the sentinel eat real facts.
-      const block = factBlock('NO-FACT is returned when the cache is cold');
-      const client = createCommandClient({ cmd: 'printf', args: ['%s', block] });
+    it('the sentinel wrapped in PROSE is NOT an abstention — only the whole-answer token abstains', () => {
+      // teeth (breaks-on "the match is `includes` instead of whole-answer equality"): a real fact that merely
+      // mentions the token must survive as a claim. Substring-matching would let the sentinel eat genuine facts.
+      const client = createCommandClient({ cmd: 'printf', args: ['NO-FACT is returned when the cache is cold\\n'] });
       expect(client.complete('a real unit', budget)).toStrictEqual({
         claim: 'NO-FACT is returned when the cache is cold',
-        rawAnswer: block,
+        rawAnswer: 'NO-FACT is returned when the cache is cold\n',
       });
     });
   });
