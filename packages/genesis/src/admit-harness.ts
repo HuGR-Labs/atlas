@@ -135,6 +135,7 @@ export interface AdmitDeps {
   readonly typeOracle: TypeOracle; // sound-oracle-first (GEN-12k)
   readonly verifyDependency?: (target: string, scope: string) => "proven" | "abstain"; // GEN-12-dep: sound symbol-reverse oracle (verify-fact positive dual)
   readonly verifyCount?: (target: string, scope: string, atLeast: number) => "proven" | "abstain"; // GEN-12-count: sound cardinality oracle (#196c — verifyCount lower-bound)
+  readonly verifyValidated?: (p: PredicateProposal) => "validated" | "abstain"; // ADR-0017 #196b — the independent-ensemble VALIDATED leg (non-sound). Injected; ABSENT = pre-#196b behavior (semantic slots drop DROP_NO_CHECK).
   readonly refine: (check: Check, site: Candidate) => Check | null; // CEGIS refine; `null` = no change
   readonly indexState: IndexNode; // current code (KNOW-16 evaluate carrier)
   readonly K: number; // refine budget (GEN-13 default K≤1)
@@ -164,6 +165,8 @@ const DROP_COUNT_UNWIRED = "count slot but no verifyCount leg supplied (GEN-12-c
 const DROP_COUNT_MALFORMED = "count proposal missing target/scope or atLeast not a positive integer (GEN-12-count)";
 const DROP_COUNT_ABSTAIN = "the sound count oracle did not witness ≥ atLeast callers — abstained, not proven (GEN-12-count)";
 const DROP_UNGROUNDED = 'advisory fails the truth door — the citation does not ground (GEN-12e)';
+const DROP_VALIDATED_MALFORMED = "validated candidate missing slot or nodeKey — no address to mint (ADR-0017 #196b)";
+const WHYNOT_VALIDATED_ABSTAIN = "the independent ensemble did not reach agreement on the proposed slot — abstained, not a fabricated fact (ADR-0017 #196b, validated leg)";
 // RELATION drops (ADR-0015 D2, WP-96-R). The relation family is now ADMITTED — its two honest refusals
 // (`DROP_RELATION_MALFORMED` / `DROP_RELATION_UNGROUNDED`) live beside its builders in `admit-relation.ts`
 // and are imported above. The `shape-not-yet-emitted` stub reason is GONE (deleted, not commented) so a
@@ -280,9 +283,11 @@ function admitPredicate(p: PredicateProposal, deps: AdmitDeps): Admission {
     return { outcome: 'admitted', fact: buildSound(p, scoreObviousness(deps.doors, p.claimNorm)), label: LIKELY_INVARIANT };
   }
 
-  // synthesized-check path (CodeQL/Semgrep, KNOW-16).
+  // synthesized-check path (CodeQL/Semgrep, KNOW-16). MECHANICAL PRECEDENCE: a slot a real check can
+  // synthesize mints the mechanical predicate below; the independent-ensemble VALIDATED arm (ADR-0017 #196b)
+  // is only the LAST RESORT when NO mechanical check exists — never stamp `validated` on what a check proves.
   let check = deps.predicate.synthesize(p.site);
-  if (check === null) return { outcome: 'dropped', reason: DROP_NO_CHECK };
+  if (check === null) return admitValidated(p, deps);
 
   // GEN-12c VERIFY — require HOLDS on current code; GEN-12d — a failing check is refined ≤K, then dropped.
   let verdict = deps.predicate.verify(check, deps.indexState);
@@ -299,6 +304,30 @@ function admitPredicate(p: PredicateProposal, deps: AdmitDeps): Admission {
   if (!attested.ok) return { outcome: 'dropped', reason: attested.reason }; // never forced
 
   return { outcome: 'admitted', fact: buildPredicate(p, attested.check, scoreObviousness(deps.doors, p.claimNorm)), label: LIKELY_INVARIANT };
+}
+
+/**
+ * GEN-12v (ADR-0017 validated leg, #196b) — the LAST-RESORT independent-ensemble arm, reached ONLY when no
+ * sound oracle discharged the slot AND `predicate.synthesize` produced no mechanical check. It mints a fact
+ * sealed `validated` — honestly NON-sound (an independent ensemble AGREED; no machine proved it, so NO proof
+ * label). The order is forced by honesty + cost; no reordering keeps the guarantees:
+ *   (1) UNWIRED ⇒ the pre-#196b `DROP_NO_CHECK` — a shipped run with no ensemble behaves exactly as before;
+ *   (2) MALFORMED seed (no slot / no nodeKey) ⇒ DROP, never ride the ensemble blind into a slot-free identity
+ *       (mirrors the dependency/count seed re-checks — the model never mints the address);
+ *   (3) the TRUTH DOOR runs BEFORE the ensemble is consulted — a `validated` seal is NEVER minted on
+ *       ungrounded bytes, and the expensive ensemble is not paid when grounding already fails;
+ *   (4) ensemble non-agreement is the harness's honest ABSTENTION (third outcome), never a silent drop and
+ *       never a forced fact.
+ * Pure + total: no clock, no IO, no throw.
+ */
+function admitValidated(p: PredicateProposal, deps: AdmitDeps): Admission {
+  if (deps.verifyValidated === undefined) return { outcome: 'dropped', reason: DROP_NO_CHECK };
+  if (typeof p.slot !== 'string' || !p.slot || typeof p.nodeKey !== 'string' || !p.nodeKey)
+    return { outcome: 'dropped', reason: DROP_VALIDATED_MALFORMED };
+  if (!deps.doors.grounded(p.grounding, deps.indexState)) return { outcome: 'dropped', reason: DROP_UNGROUNDED };
+  if (deps.verifyValidated(p) !== 'validated')
+    return { outcome: 'abstained', whyNot: { site: p.site.site, reason: WHYNOT_VALIDATED_ABSTAIN } };
+  return { outcome: 'admitted', fact: buildValidated(p, scoreObviousness(deps.doors, p.claimNorm)) };
 }
 
 // ---- I2: a `HOLDS` predicate cannot be BUILT out of a check nobody evaluated ---------------------------
@@ -373,6 +402,30 @@ function buildSound(p: PredicateProposal, obviousness: ObviousnessScore): Adviso
     authoring: 'ADVISORY',
     predicateSlot: p.slot,
     seal: "proven",
+  };
+}
+
+/**
+ * The VALIDATED constructor (ADR-0017 #196b) — a twin of `buildSound` that stamps `seal: 'validated'` and
+ * carries NO proof label: unlike the sound arm, NO machine checked this fact — an independent ensemble AGREED,
+ * which is honestly non-sound. It emits an AdvisoryNode carrying `predicateSlot` so the KNOW-15b identity leg
+ * and KNOW-4g read-side grouping are IDENTICAL to `buildSound`; the ONLY differences are the seal value
+ * ('validated' not 'proven') and the absent oracle label at the call site. `freshness:'FRESH'` is honest:
+ * this constructor is reached only AFTER `doors.grounded` passed.
+ */
+function buildValidated(p: PredicateProposal, obviousness: ObviousnessScore): AdvisoryNode {
+  return {
+    kind: 'advisory',
+    obviousness,
+    id: p.nodeKey,
+    tier: p.tier,
+    claimNorm: p.claimNorm,
+    grounding: p.grounding,
+    freshness: 'FRESH',
+    claims: [],
+    authoring: 'ADVISORY',
+    predicateSlot: p.slot,
+    seal: 'validated',
   };
 }
 

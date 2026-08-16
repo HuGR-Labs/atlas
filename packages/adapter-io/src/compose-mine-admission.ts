@@ -67,7 +67,14 @@ export interface MineAdmission {
  * (`AdmitDeps` is total) and not faked into something permissive — synthesize yields no check, the oracle
  * expresses nothing, the teeth never flip, `K` is 0. A predicate path wired later must supply real ones.
  */
-export function buildMineAdmission(axes: Axes, scipOutput: ScipOutput): MineAdmission {
+export function buildMineAdmission(
+  axes: Axes,
+  scipOutput: ScipOutput,
+  // ADR-0017 #196b — the independent-ensemble VALIDATED leg. OPTIONAL and DEFAULTS to `undefined`, so the
+  // shipped mine path keeps today's behavior (a semantic slot with no mechanical check drops DROP_NO_CHECK).
+  // Only the SEAM is wired here — Wave 2 supplies a real ensemble adapter; this file invents none.
+  verifyValidated?: AdmitDeps['verifyValidated'],
+): MineAdmission {
   const verifyDep = createVerifyFactLeg(scipOutput);
   const deps: AdmitDeps = {
     doors: {
@@ -99,6 +106,9 @@ export function buildMineAdmission(axes: Axes, scipOutput: ScipOutput): MineAdmi
     refine: () => null,
     indexState: axes.spatial,
     K: 0,
+    // ADR-0017 #196b — forward the injected ensemble leg VERBATIM. Conditionally spread so an omitted leg
+    // stays ABSENT (exactOptionalPropertyTypes), never set to `undefined` — the pre-#196b behavior.
+    ...(verifyValidated !== undefined ? { verifyValidated } : {}),
   };
   // GROUND-3, fact-level fail-closed: a site whose path does not resolve on a content-committing axis
   // yields `{ entries: [] }`, which `isGrounded` rejects and `driftDetect` reads DRIFTED ⇒ the truth door
