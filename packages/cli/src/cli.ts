@@ -189,11 +189,27 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
     // llmCalls 0 · resume at rank -1`) with neither the command name nor its stderr. Exit 2, like the other
     // two — a run that legitimately ran out of budget still exits 1 with its report, so the two are
     // distinguishable from the outside.
+    //
+    // `UnaddressableCasObjectError` (#140) is the FOURTH name here, and for the same shape of reason: the
+    // candidate sidecar's write door (`@atlas/adapter-io` `sidecar-commit.ts`) throws it as its OWN
+    // fail-closed floor when a decision names a CAS object the store cannot address — nothing durable is
+    // written, but the throw crosses `drive.ts`'s per-site loop (`ports.upsert` at genesis GEN-8a, OUTSIDE
+    // the per-site GEN-8c fault boundary, which only wraps `visit`) unrecognized. Left uncaught, the operator
+    // gets a raw stack trace instead of a verdict — fail-closed-SILENT, contradicting ADR-0003's "a refusal
+    // is FAIL-CLOSED-VISIBLE on both transports". The store's own message already carries the
+    // `unaddressable-cas-object` discriminant verbatim (matching `governed-emit-address.ts`'s `commitRefusalOf`
+    // re-file of the SAME error on the `emit` door), so it travels unchanged onto the `reason:` line.
     try {
       return emitCli(await runMine(process.cwd()));
     } catch (e) {
       const name = (e as { name?: unknown } | null)?.name;
-      if (name !== 'ModelConfigError' && name !== 'PromptError' && name !== 'ModelCommandError') throw e;
+      if (
+        name !== 'ModelConfigError' &&
+        name !== 'PromptError' &&
+        name !== 'ModelCommandError' &&
+        name !== 'UnaddressableCasObjectError'
+      )
+        throw e;
       return emitCli(renderRefusal(refusalVerdict((e as Error).message)));
     }
   }

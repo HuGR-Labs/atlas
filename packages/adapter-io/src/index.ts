@@ -37,6 +37,10 @@ export type { ClaimParser, DepResolver, CountResolver } from './llm.js'; // ADR-
 // the name in exactly one file is a stronger property than 'only one importer', and worth the terseness.
 export { createCommandClient, ModelCommandError } from './llm.js';
 export type { ModelCommand, ModelFailure } from './llm.js';
+// The candidate-sidecar write door's fail-closed floor: a decision naming a CAS object the store cannot
+// address (#136/#140). Exported so a caller that catches it by class — the CLI `mine` catch re-files it as a
+// governed refusal (`cli.ts`), mirroring `ModelCommandError` above — tests against the real error, not a copy.
+export { UnaddressableCasObjectError } from './sidecar-commit.js';
 export { loadModelConfig, modelConfigPath, ModelConfigError } from './model-config.js'; // ADR-0011 D2
 export type { ModelConfig, ModelRole } from './model-config.js';
 export {
