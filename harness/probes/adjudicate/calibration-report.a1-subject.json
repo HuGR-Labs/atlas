@@ -4,7 +4,7 @@
   "instrument": {
     "fixtures_file": "harness/probes/adjudicate/fixtures.mjs",
     "fixtures_sha256_16": "01c7bc130eb7f384",
-    "subject": "sonnet (Agent tool, fresh context, 1 pass/fixture)",
+    "subject": "claude sonnet (Agent tool, fresh context, 1 pass/fixture)",
     "judge_in_correctness_loop": false
   },
   "n": {
@@ -160,9 +160,14 @@
       "verdict": "HALLUCINATED"
     }
   ],
+  "run": {
+    "model": "claude sonnet (Agent tool, fresh context, 1 pass/fixture)",
+    "date": "2026-08-16",
+    "prompt_digest": "01c7bc130eb7f384"
+  },
   "limits": [
     "n=20 small; Wilson95% wide",
-    "T=0 and model snapshot NOT pinned via Agent dispatch — method proven, not yet snapshot-locked",
+    "reproducible by record (model + date + prompt digest + committed verdicts), not by forced T=0",
     "precision only, not recall",
     "synthetic-clean fixtures by design"
   ],
