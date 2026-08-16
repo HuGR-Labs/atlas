@@ -293,6 +293,16 @@ export function upsert(
         ...governanceOf(req), // re-states scope / re-states-or-RAISES tier; omitted ⇒ `...prior` stands
         ...relationOf(req), // RELATION carrier (ADR-0015 D2) — re-evidencing a relation re-states its endpoints
         ...answerProvenanceOf(req), // ANSWER-PROVENANCE carrier (#195 b) — re-mining re-states the receipt; else `...prior`
+        // CARRY-FORWARD ON A RAISE IS DELIBERATE for `answerRef` and `sameAs` — the anti-laundering severance
+        // above is scoped to `claims` ON PURPOSE, and dropping either here would be WRONG, not safer:
+        //   · `answerRef` is opaque mine provenance (its CAS id is its own tamper-evidence) and is served by
+        //     NO read path as governing-band content, so it carries no claim a raise could launder;
+        //   · `sameAs` is not set on this door at all — it is a SIGNED act of the SEPARATE `atlas-link` door
+        //     (its own authz + ratifier over the whole merged class, `sameAsClassOf`), and `deriveSameAs`
+        //     surfaces it as an EDGE (nodeKey pair), never folding a peer's claim/tier across it. Severing it
+        //     on an unrelated emit-tier raise would silently SHRINK a governed equivalence class and
+        //     under-charge every gate that priced it (see the SUPERSEDE-branch note below). Both ride
+        //     `...prior` by design; pinned in `test/upsert-raise-carry-forward.test.ts`.
       });
       break;
     }
