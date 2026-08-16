@@ -92,6 +92,17 @@ LLM-Modulo self-verify fails 2402.01817 · hallucination two-axis survey Huang A
 prompt-as-instrument 2510.05152 / 2604.11581 · temperature 2603.28304 (freeze T=0). Reproducibility =
 frozen prompt digest + T=0 + logged model snapshot (HELM / lm-eval-harness discipline).
 
+## Cost (A3) needs no special metered run
+
+The sub-agent transcript already carries the full `usage` block (input / output / cache-write / cache-read
+tokens) **and the exact model snapshot** per call. So A3 = read those token counts and multiply by a recorded
+rate card — there is no separate "metered mining" apparatus to build and no money-ceremony to authorize; the
+meter is the transcript. Tokens are the measured quantity; the dollar figure is `tokens × rate_card` with the
+rate card logged alongside (label it if the exact `claude-sonnet-5` price is assumed rather than confirmed,
+per [[premissa-sem-evidencia-e-teoria]]). Per-site cost during real mining is the same read over the proposer
+sub-agents' transcripts. (Demonstration from this session's 20 A1 subject calls: 760,841 tokens total,
+~38k/call, model `claude-sonnet-5` — the meter works end to end.)
+
 ## Build state
 
 - Frozen artifact: `harness/probes/adjudicate/fixtures.mjs` (20 planted pairs + `renderPrompt`) and

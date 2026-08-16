@@ -1,6 +1,8 @@
 {
   "_note": "Verdicts from the A1 subject-test: one fresh sonnet sub-agent (Agent tool) per fixture, fed the frozen renderPrompt(fixtures.mjs) verbatim, one pass each, model-in-loop = sub-agents (never claude -p). Ground truth is the fixture label; scoring is a deterministic string-compare (subject-score.mjs). Run 2026-08-16.",
-  "subject": "claude sonnet (Agent tool, fresh context, 1 pass/fixture)",
+  "subject": "claude-sonnet-5 (Agent tool, fresh context, 1 pass/fixture)",
+  "model_snapshot": "claude-sonnet-5",
+  "model_snapshot_source": "sub-agent transcript usage block (exact snapshot recorded per call)",
   "run_date": "2026-08-16",
   "fixtures_sha256_16": "01c7bc130eb7f384",
   "verdicts": {

@@ -4,7 +4,7 @@
   "instrument": {
     "fixtures_file": "harness/probes/adjudicate/fixtures.mjs",
     "fixtures_sha256_16": "01c7bc130eb7f384",
-    "subject": "claude sonnet (Agent tool, fresh context, 1 pass/fixture)",
+    "subject": "claude-sonnet-5 (Agent tool, fresh context, 1 pass/fixture)",
     "judge_in_correctness_loop": false
   },
   "n": {
@@ -161,7 +161,7 @@
     }
   ],
   "run": {
-    "model": "claude sonnet (Agent tool, fresh context, 1 pass/fixture)",
+    "model": "claude-sonnet-5 (Agent tool, fresh context, 1 pass/fixture)",
     "date": "2026-08-16",
     "prompt_digest": "01c7bc130eb7f384"
   },
