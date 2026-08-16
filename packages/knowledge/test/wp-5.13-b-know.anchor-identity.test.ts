@@ -128,8 +128,8 @@ describe('WP-5.13-b.KNOW — primaryAnchorId is the computed tightest unit (KNOW
 });
 
 describe('WP-5.13-b.KNOW — closed slot vocabulary (KNOW-15i)', () => {
-  it('SCN-KNOW-15i-1: a slot outside the closed 12-member vocabulary is rejected', () => {
-    expect(PREDICATE_SLOTS).toHaveLength(12); // the closed set is exactly 12 (adding one is a `cv` bump)
+  it('SCN-KNOW-15i-1: a slot outside the closed 13-member vocabulary is rejected', () => {
+    expect(PREDICATE_SLOTS).toHaveLength(13); // the closed set is exactly 13 (adding one is a `cv` bump)
     for (const s of PREDICATE_SLOTS) expect(isKnownSlot(s)).toBe(true);
     expect(isKnownSlot('freeform-note')).toBe(false); // free-text slot rejected
     expect(isKnownSlot('')).toBe(false);

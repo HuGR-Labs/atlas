@@ -2,10 +2,10 @@
 //
 // No free prose, ever (KNOW-10, atlas-knowledge:203; method-tags-knw:81-86). Implements the FROZEN
 // `TemplateApi` (co-located below): a staged `Candidate` PERSISTS iff it carries every required template
-// field, its `claimText` is within the byte cap, AND its `slot` is one of the closed 12 (`PredicateSlot`);
+// field, its `claimText` is within the byte cap, AND its `slot` is one of the closed 13 (`PredicateSlot`);
 // any violation ⇒ REJECT — 0 free-prose facts persist. The reject/persist route is a TOTAL, mutually-
 // exclusive AND over the finite validity product {required-field∈(present,missing) × size∈(≤cap,>cap) ×
-// slot∈(in-vocab-12, out)}. Pure — no clock, no IO, no hashing.
+// slot∈(in-vocab-13, out)}. Pure — no clock, no IO, no hashing.
 //
 // BIND note (template.ts FLAG resolved): the frozen signature gates the staging `Candidate` (it carries the
 // proposed `slot` + claim body), so the required-field check runs over the Candidate-carried template fields
@@ -30,7 +30,7 @@
 // `isClosedSlot` below delegates there; it does not restate the vocabulary and it is not the enforcement point.
 
 import type { Candidate, PredicateSlot } from '../types.js';
-// THE one runtime copy of the closed 12 (#152). See `isClosedSlot` below.
+// THE one runtime copy of the closed 13 (#152). See `isClosedSlot` below.
 import { isKnownSlot } from './router.js';
 
 // ── frozen TemplateApi surface, co-located here (was ref/template.ts) ─────────────────────────────────
@@ -59,12 +59,12 @@ export type ClaimTextCapBytes = 512;
 
 export interface TemplateApi {
   /** Per-kind template + closed-slot validator (KNOW-10). `true` iff the fact carries every required
-   *  template field, is within its cap, AND its `slot` is one of the closed 12 (`PredicateSlot`); else
+   *  template field, is within its cap, AND its `slot` is one of the closed 13 (`PredicateSlot`); else
    *  REJECT — no free-prose fact ever persists (atlas-knowledge:203; method-tags-knw:84). Pure + total.
    *  Typed on the staging `Candidate` (which carries the proposed `slot` + claim body the validator gates). */
   validateTemplate(fact: Candidate): boolean;
 
-  /** Closed-vocabulary membership: `true` iff `slot` is one of the 12 (`PredicateSlot`). A fact whose
+  /** Closed-vocabulary membership: `true` iff `slot` is one of the 13 (`PredicateSlot`). A fact whose
    *  `slot` is outside the closed set is rejected (atlas-knowledge:220). Pure. */
   isClosedSlot(slot: PredicateSlot): boolean;
 }
@@ -81,10 +81,10 @@ function isNonEmptyString(v: unknown): v is string {
   return typeof v === 'string' && v.length > 0;
 }
 
-/** Closed-vocabulary membership (KNOW-10): `true` iff `slot` is one of the 12. A free-prose blob with no
+/** Closed-vocabulary membership (KNOW-10): `true` iff `slot` is one of the 13. A free-prose blob with no
  *  slot binding (`slot` absent / out-of-vocab) yields `false` — the totality guard at the value boundary.
  *
- *  DELEGATES to `isKnownSlot` (router.ts) rather than restating the 12 (#152). This function used to own a
+ *  DELEGATES to `isKnownSlot` (router.ts) rather than restating the 13 (#152). This function used to own a
  *  SECOND `CLOSED_SLOTS` literal, so the vocabulary was written out three times — here, in `router.ts`, and
  *  as the `PredicateSlot` union — and enforced in none of them. One runtime list now, in the file that
  *  computes the `nodeKey` the closedness protects; a `cv` bump edits one place. The KNOW-10 name is kept
@@ -106,7 +106,7 @@ function hasRequiredFields(fact: Candidate): boolean {
 }
 
 /** Per-kind template + closed-slot validator (KNOW-10). `true` iff required-fields-present ∧ claimText ≤
- *  512 B ∧ slot ∈ closed-12; else REJECT. Total + mutually-exclusive over the finite validity product. */
+ *  512 B ∧ slot ∈ closed-13; else REJECT. Total + mutually-exclusive over the finite validity product. */
 export function validateTemplate(fact: Candidate): boolean {
   if (!hasRequiredFields(fact)) return false; // missing-field cell (F2)
   if (UTF8.encode(fact.claimText).length > CLAIM_TEXT_CAP_BYTES) return false; // over-cap cell (F3)

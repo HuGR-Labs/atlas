@@ -49,16 +49,16 @@ const OUT_OF_VOCAB: ReadonlyArray<readonly [string, unknown]> = [
 ];
 
 describe('#152 A — ONE runtime list: the KNOW-10 and KNOW-15i guards are the same set, by delegation', () => {
-  it('the vocabulary is exactly 12 members, and they are PRINTED (never a bare count)', () => {
+  it('the vocabulary is exactly 13 members, and they are PRINTED (never a bare count)', () => {
     // eslint-disable-next-line no-console
     console.log({ closedVocabulary: [...PREDICATE_SLOTS] });
     expect([...PREDICATE_SLOTS]).toStrictEqual([
       'invariant', 'contract', 'precondition', 'postcondition', 'sideeffect', 'ownership',
-      'perf-bound', 'security-property', 'gotcha', 'rationale', 'dependency', 'definition',
+      'perf-bound', 'security-property', 'gotcha', 'rationale', 'dependency', 'count', 'definition',
     ]);
   });
 
-  it('isClosedSlot ≡ isKnownSlot over the 12 AND over every out-of-vocabulary shape', () => {
+  it('isClosedSlot ≡ isKnownSlot over the 13 AND over every out-of-vocabulary shape', () => {
     for (const s of PREDICATE_SLOTS) {
       expect(isKnownSlot(s)).toBe(true);
       expect(isClosedSlot(s)).toBe(true);
@@ -99,7 +99,7 @@ describe('#152 B/C — the gate at `upsert`: present-and-unrecognised REFUSES, a
     expect(store.cas.size).toBe(0);
   });
 
-  it('every one of the 12 is ACCEPTED and routes normally — the gate is not an always-refuse mutant', () => {
+  it('every one of the 13 is ACCEPTED and routes normally — the gate is not an always-refuse mutant', () => {
     const accepted: PredicateSlot[] = [];
     for (const s of PREDICATE_SLOTS) {
       const out = upsert(emptyStore(), req(s));
@@ -125,7 +125,7 @@ describe('#152 B/C — the gate at `upsert`: present-and-unrecognised REFUSES, a
 });
 
 describe('#152 D — the refusal names the value, the vocabulary and the door, and is recognised by VALUE', () => {
-  it('the reason text carries the offending value and all 12 members', () => {
+  it('the reason text carries the offending value and all 13 members', () => {
     const text = closedSlotRefusalText('free-text-whatever');
     // eslint-disable-next-line no-console
     console.log({ reason: text });

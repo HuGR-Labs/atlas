@@ -61,7 +61,7 @@ is the direct obstacle to the owner's requirement that every new door exist on b
 | field | hand-authorable? | why not |
 |---|---|---|
 | `kind`, `tier`, `claimNorm`, `freshness`, `claims`, `authoring`, `scope` | ✅ | plain values |
-| `predicateSlot` | ⚠️ | a **closed 12-member vocabulary** (`types.ts:166-178`) discoverable only by reading source |
+| `predicateSlot` | ⚠️ | a **closed 13-member vocabulary** (`types.ts:166-178`) discoverable only by reading source |
 | `grounding.entries[].anchor.qualifiedPath` | ❌ | must match a **real index node key**; for a symbol it is the folded `file::<start>:<kind>:<name>` unit path (`adapter-io/src/ast.ts`) |
 | `grounding.entries[].anchor.subtreeHash` | ❌ | the **drift oracle** — the hash the emit gate re-derives. Only obtainable by running `build(foldAstUnits(walkFileTree(repo)), …)` |
 | `id` | ❌ **and ignored** | must be `nodeKey(candidate)`; but `governed-emit.ts:118` **mints its own and never trusts the payload** (WP-F3). A required field that is dead weight. |
@@ -160,7 +160,7 @@ Extensions (per-step negative space — lens 4; this is where completeness is ea
 | 2b | path is in a **non-TypeScript** language | return **file-level units only, and say so** — `ast.ts` loads only the TS/TSX grammars, so a Rust/Python repo has no `::` symbol anchors. Silent file-level fallback is the dishonest option |
 | 2c | repo is not a git repo | fail closed to empty, not a throw (`fs.ts:38` already does this) |
 | 3a | the anchor is a directory | permitted (a spatial node); flag that its hash moves whenever any child moves |
-| 4a | slot not in the closed 12 | reject with the full list, not a type error |
+| 4a | slot not in the closed 13 | reject with the full list, not a type error |
 | 5a | claim is empty | reject |
 | 5b | a fact already exists at this (anchor, slot) | say so — this will be an **UPDATE**, not a CREATE (same `nodeKey`) |
 | 5c | tier is T0 | warn: this will route to full-ratify and needs the `billy` token |

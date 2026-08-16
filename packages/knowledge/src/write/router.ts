@@ -155,18 +155,18 @@ export * from './upsert.js';
 // (`defaultEncoder` + `canonicalForm`) and branded via `asNodeKey` — NO raw hashing (SEAM).
 //
 // BIND (vs the frozen RouterApi + types.ts): `predicateSlot` is the required `Candidate.slot`
-// (closed 12-member `PredicateSlot`, R3-surfaced on `GroundedFact` too); `check` presence discriminates
+// (closed 13-member `PredicateSlot`, R3-surfaced on `GroundedFact` too); `check` presence discriminates
 // predicate vs advisory. The move-aware RE-ANCHORING matcher (rename/move ⇒ same nodeKey) and the
 // near-synonym similarity threshold are UPSTREAM + OPEN-DEFINE parametric (SCN-KNOW-15f-2 θ / 15h-2 τ,
 // `residue`): they fix the VALUE of the nodeKey oracle-input the router routes over — NOT re-modeled
 // here, and NO verification is invented for an unpinned threshold (method-tags-knw §Refuse-to-model).
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 
-/** The closed `predicateSlot` vocabulary (NORMATIVE — all 12 members, `PredicateSlot` in types.ts). CLOSED:
+/** The closed `predicateSlot` vocabulary (NORMATIVE — all 13 members, `PredicateSlot` in types.ts). CLOSED:
  *  adding a slot is a `cv` bump. Finiteness is what lets a `nodeKey` collide + force UPDATE/union
  *  instead of proliferating parallel nodes (atlas-knowledge:150 / SCN-KNOW-15i-1).
  *
- *  THE ONE RUNTIME COPY (#152). The 12 members were transcribed in THREE places and enforced in none:
+ *  THE ONE RUNTIME COPY (#152). The members were transcribed in THREE places and enforced in none:
  *  the `PredicateSlot` union (types.ts — a TYPE, erased at runtime, so it enforces nothing at a value
  *  boundary), a second `CLOSED_SLOTS` literal in `template.ts` (KNOW-10), and this list. `template.ts`'s
  *  `isClosedSlot` now DELEGATES to {@link isKnownSlot} rather than restating the members, so a `cv` bump
@@ -184,11 +184,12 @@ export const PREDICATE_SLOTS: readonly PredicateSlot[] = [
   'gotcha',
   'rationale',
   'dependency',
+  'count',
   'definition',
 ];
 const SLOT_SET: ReadonlySet<string> = new Set(PREDICATE_SLOTS);
 
-/** Closed-vocabulary membership guard (KNOW-15i / KNOW-10). A slot outside the 12 enumerated members is
+/** Closed-vocabulary membership guard (KNOW-15i / KNOW-10). A slot outside the 13 enumerated members is
  *  rejected — a free-text slot never collides, so `nodeKey` never forces UPDATE and the store would
  *  proliferate. TOTAL over `unknown`: `Set.has` never throws and never coerces, so an array, an object with
  *  a `toString`, a `Symbol` or an absent value all answer `false` at the value boundary where the erased

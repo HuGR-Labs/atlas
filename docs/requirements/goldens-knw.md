@@ -61,17 +61,17 @@ the key returns exactly one current node. Mutual-exclusion: no candidate matches
 ## Enumerated universe B — template validation (KNOW-10 / KNOW-15i)
 
 Per-kind template required fields (advisory) `= {claimNorm, claimText, provenance, owner, scope, grounding, predicateSlot}`;
-cap `claimText ≤ 512 bytes`; `predicateSlot ∈` the **closed 12-slot vocabulary** `{invariant, contract,
+cap `claimText ≤ 512 bytes`; `predicateSlot ∈` the **closed 13-slot vocabulary** `{invariant, contract,
 precondition, postcondition, sideeffect, ownership, perf-bound, security-property, gotcha, rationale,
-dependency, definition}` (reference §closed vocabulary — exactly 12; adding one is a `cv` bump). Route = PERSIST
-iff all-clean, else REJECT (`{required-field∈(present,missing) × size∈(≤cap,>cap) × slot∈(in-12,out)}`):
+dependency, count, definition}` (reference §closed vocabulary — exactly 13; adding one is a `cv` bump). Route = PERSIST
+iff all-clean, else REJECT (`{required-field∈(present,missing) × size∈(≤cap,>cap) × slot∈(in-13,out)}`):
 
 | candidate | required fields | size | slot | **⇒ route** (cell) |
 |---|---|---|---|---|
-| **F1** | all 7 present | `claimText` 120 B ≤ cap | `invariant` (in-12) | **PERSIST** |
+| **F1** | all 7 present | `claimText` 120 B ≤ cap | `invariant` (in-13) | **PERSIST** |
 | **F2** | `provenance` **absent** | 120 B | `invariant` | **REJECT** — missing-field |
 | **F3** | all 7 present | `claimText` 700 B **> cap** | `invariant` | **REJECT** — over-cap |
-| **F4** | all 7 present | 120 B | `freeform-note` **out-of-12** | **REJECT** — slot-out-of-vocab |
+| **F4** | all 7 present | 120 B | `freeform-note` **out-of-13** | **REJECT** — slot-out-of-vocab |
 | **F5** | free-prose blob, **no template binding / no slot** | — | — | **REJECT** — free-prose |
 
 ---
@@ -844,9 +844,9 @@ gen: exhaustive   # exact-equality boundary; the fuzzy/cross-location residue is
 
 ### SCN-KNOW-15i-1 — a slot outside the closed vocabulary is rejected   (guard)
 source: REQ-KNOW-15i
-Given **F4** — a fact whose `predicateSlot = freeform-note` (outside the closed 12-slot vocabulary), otherwise well-formed
+Given **F4** — a fact whose `predicateSlot = freeform-note` (outside the closed 13-slot vocabulary), otherwise well-formed
 When it is validated / routed
-Then the route is **REJECT** — and the closed slot set has exactly the 12 enumerated members (adding one is a `cv` bump)
+Then the route is **REJECT** — and the closed slot set has exactly the 13 enumerated members (adding one is a `cv` bump)
 teeth: breaks-on "the slot-membership check is dropped (free-text slot allowed) — an out-of-vocab slot never collides, so `nodeKey` never forces UPDATE and the store proliferates parallel nodes"
 gen: exhaustive   # cell F4 slot leg (shares universe B with KNOW-10)
 

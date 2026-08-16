@@ -7,7 +7,7 @@
 // will find it; the vocabulary itself stays in `router.ts`, which computes the identity it protects.
 //
 // ── WHY THIS GATE EXISTS (#152) ──────────────────────────────────────────────────────────────────────────
-// The 12-member `predicateSlot` vocabulary was stated in THREE places and enforced in NONE. Measured on the
+// The 13-member `predicateSlot` vocabulary was stated in THREE places and enforced in NONE. Measured on the
 // BUILT `dist` through the shipped `atlas emit` binary in a subprocess: a grounded, authorized, ratified
 // fact declaring `predicateSlot: 'free-text-whatever'` was ACCEPTED — exit 0, `status: ok`, durable — and
 // the SAME fact at slot `invariant`, and again with the slot ABSENT, each minted a DIFFERENT content id.
@@ -88,12 +88,12 @@ export function closedSlotRefusalText(slot: unknown): string {
   const kind = Array.isArray(slot) ? 'array' : slot === null ? 'null' : typeof slot;
   const shown = typeof slot === 'string' ? `'${slot}'` : `${/^[aeiou]/.test(kind) ? 'an' : 'a'} ${kind} value`;
   return (
-    `${CLOSED_SLOT_DISCRIMINANT}: this write declares predicateSlot ${shown}, which is not one of the closed 12. ` +
+    `${CLOSED_SLOT_DISCRIMINANT}: this write declares predicateSlot ${shown}, which is not one of the closed 13. ` +
     `The vocabulary is CLOSED (KNOW-10 / KNOW-15i): ${PREDICATE_SLOTS.map((s) => `'${s}'`).join(', ')}. ` +
     'It is closed because node identity is hash(primaryAnchorId + predicateSlot), so an unrecognised slot ' +
     'does not collide with anything — it silently mints a NEW address at the same anchor and the store ' +
-    'proliferates parallel nodes that never merge. Re-state the claim under one of the 12; adding a ' +
-    'thirteenth is a contract-version (`cv`) bump, not a write. Refused by the governed write door ' +
+    'proliferates parallel nodes that never merge. Re-state the claim under one of the 13; adding a ' +
+    'fourteenth is a contract-version (`cv`) bump, not a write. Refused by the governed write door ' +
     '(atlas-emit / atlas-link) before anything was persisted'
   );
 }

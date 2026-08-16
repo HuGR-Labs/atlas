@@ -134,7 +134,7 @@ describe('S29 — a fact whose predicateSlot is outside the closed 12', () => {
     const reason = reasonLine(run.stdout);
     expect(reason).toContain("'free-text-whatever'");
     for (const s of ['invariant', 'contract', 'precondition', 'postcondition', 'sideeffect', 'ownership',
-      'perf-bound', 'security-property', 'gotcha', 'rationale', 'dependency', 'definition']) {
+      'perf-bound', 'security-property', 'gotcha', 'rationale', 'dependency', 'count', 'definition']) {
       expect(reason).toContain(`'${s}'`);
     }
     expect(generations()).toStrictEqual(before); // nothing went durable

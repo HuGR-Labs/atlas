@@ -99,8 +99,8 @@ anti-rot: `knowledge/ref/store.ts` is the mock; a code path that hard-requires a
 ### INV-KNOW-10
 method-tag: exhaustive
 fspec: —
-up-property: "template-validation routing is total + mutually-exclusive: a fact missing a required template field, over its cap, or with a `predicateSlot` outside the closed 12-slot vocabulary is **REJECTED**; a well-formed fact is **PERSISTED**; 0 free-prose facts persist"
-down-model: "enumerate the finite validity product {required-field∈(present,missing) × size∈(≤cap,>cap) × slot∈(in-vocab-12, out)}; assert the reject/persist route per cell, and that the closed slot set has exactly the 12 enumerated members (adding one is a `cv` bump)"
+up-property: "template-validation routing is total + mutually-exclusive: a fact missing a required template field, over its cap, or with a `predicateSlot` outside the closed 13-slot vocabulary is **REJECTED**; a well-formed fact is **PERSISTED**; 0 free-prose facts persist"
+down-model: "enumerate the finite validity product {required-field∈(present,missing) × size∈(≤cap,>cap) × slot∈(in-vocab-13, out)}; assert the reject/persist route per cell, and that the closed slot set has exactly the 13 enumerated members (adding one is a `cv` bump)"
 anti-rot: `knowledge/ref/template.ts` (the per-kind template + closed-slot validator) is the mock in the emit unit tests; a free-text-slot or missing-field path that persists diverges from the enumerated table.
 
 ### INV-KNOW-11 ⚠️ **AMENDED 2026-08-03 (owner-ratified)** — reverses the `owner` fence added by #178/PR#105; see req-knw.md#REQ-KNOW-11a for the measurement.

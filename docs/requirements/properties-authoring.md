@@ -34,7 +34,7 @@ teeth:       breaks-on "a planner that writes an index memo to `.atlas/cache` �
 inv:         INV-AUTH-8
 source:      ./method-tags-authoring.md#INV-AUTH-8 @sha256:ab37c0d1
 law:         ∀ rev R, anchor a reachable at R, slot s ∈ PredicateSlot, claim c ≠ ∅. emit(draft(a, s, c, R), R) on an unchanged repo == ACCEPTED   — `rejections == 0`
-arbitrary:   arb over the fixture's REAL unit set (file · dir · symbol · grammar-less file) × the full 12-member slot union × arb claim strings (unicode, very long, punctuation-heavy, near-empty); repo held byte-identical between draft and emit
+arbitrary:   arb over the fixture's REAL unit set (file · dir · symbol · grammar-less file) × the full 13-member slot union × arb claim strings (unicode, very long, punctuation-heavy, near-empty); repo held byte-identical between draft and emit
 covers_reqs: [ REQ-AUTH-8a, REQ-AUTH-8b ]
 witness:     [ SCN-AUTH-8a-1, SCN-AUTH-8b-1 ]
 teeth:       breaks-on "a drafter correct for file anchors and wrong for the folded `::` symbol unit path — the natural hand-written witness is a file anchor, so only the ∀ over the real unit set reaches the symbol case. **This is the acceptance property of CAMPAIGN-10: if it does not hold, the surface has not delivered its outcome.**"
@@ -92,7 +92,7 @@ teeth:       breaks-on "an MCP-side JSON round-trip that drops an `undefined`-va
 
 **Honest scope statement.** These seven properties cover the 29 REQs whose coverage a witness cannot
 close. The other 44 REQs are covered by **enumeration over a finite closed set** (the door set, the
-12-slot union, the route table, the occupancy states, the write-path set, the command map, the leg set) or
+13-slot union, the route table, the occupancy states, the write-path set, the command map, the leg set) or
 by **conformance against a named oracle** — both of which are exhaustive by construction for their space,
 so a `∀` would add ceremony, not coverage. This split is the S2 method-tag decision, not a shortcut:
 see [`method-tags-authoring.md`](./method-tags-authoring.md) §tag distribution.
