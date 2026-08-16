@@ -34,11 +34,16 @@ export function foldEnsembleVotes(
   policy: EnsemblePolicy = CONSERVATIVE_POLICY,
 ): 'validated' | 'abstain' {
   const n = votes.length;
-  if (n < policy.minRaters) return 'abstain';
+  // `Math.max(1, …)`: an ensemble NEVER validates on zero votes, whatever the policy sweeps to — the "no
+  // evidence ⇒ never validated" promise is a property of the primitive, not of a caller-supplied minRaters.
+  if (n < Math.max(1, policy.minRaters)) return 'abstain';
   const hallucinated = votes.filter((v) => v === 'HALLUCINATED').length;
   if (hallucinated > policy.maxHallucinated) return 'abstain';
   const groundedTrue = votes.filter((v) => v === 'GROUNDED_TRUE').length;
-  if (groundedTrue < Math.ceil(policy.minTrueFraction * n)) return 'abstain';
+  // `- 1e-9` before ceil: `minTrueFraction * n` can float-drift a hair ABOVE an exact integer (0.28*50 =
+  // 14.000000000000002 → ceil 15 instead of 14), which would silently demand one extra true vote and skew the
+  // bench's fractional-policy recall curve. The epsilon (≫ the ~1e-15 drift, ≪ any real 1-vote gap) cancels it.
+  if (groundedTrue < Math.ceil(policy.minTrueFraction * n - 1e-9)) return 'abstain';
   return 'validated';
 }
 

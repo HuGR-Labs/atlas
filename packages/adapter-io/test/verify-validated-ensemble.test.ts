@@ -67,6 +67,20 @@ describe('foldEnsembleVotes — the ~0-FP conservative default', () => {
       foldEnsembleVotes(['GROUNDED_TRUE', 'HALLUCINATED', 'HALLUCINATED'], { minRaters: 3, minTrueFraction: 0.3, maxHallucinated: 1 }),
     ).toBe('abstain');
   });
+
+  it('AC-F6c: the fraction threshold is float-exact — 0.28×50 = 14 exactly, not 15 (no drifted extra vote)', () => {
+    // 14 GROUNDED_TRUE + 36 ABSTAIN, n=50. ceil(0.28*50) must be 14, not 15 (0.28*50 float-drifts to
+    // 14.000000000000002). Without the -1e-9 correction this demands a 15th true vote ⇒ abstain.
+    const votes: RaterVerdict[] = [...Array(14).fill('GROUNDED_TRUE'), ...Array(36).fill('ABSTAIN')] as RaterVerdict[];
+    expect(votes.length).toBe(50);
+    expect(foldEnsembleVotes(votes, { minRaters: 3, minTrueFraction: 0.28, maxHallucinated: 50 })).toBe('validated');
+  });
+
+  it('AC-F6d: empty votes NEVER validate, even under a degenerate minRaters≤0 policy (no-evidence promise is unconditional)', () => {
+    // A swept policy with minRaters 0 must NOT let zero votes satisfy groundedTrue(0) ≥ ceil(0·0)=0 ⇒ validated.
+    expect(foldEnsembleVotes([], { minRaters: 0, minTrueFraction: 0, maxHallucinated: 0 })).toBe('abstain');
+    expect(foldEnsembleVotes([], { minRaters: -5, minTrueFraction: 1, maxHallucinated: 0 })).toBe('abstain');
+  });
 });
 
 describe('makeEnsemblePort — map lookup + fold, fail-closed on absent evidence', () => {
