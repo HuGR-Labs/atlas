@@ -1,0 +1,819 @@
+{
+  "kind": "a4-recall-pool-pilot",
+  "method_doc": "docs/design/95a-recall-a4-methodology.md",
+  "run_date": "2026-08-16",
+  "model": "claude-sonnet-5",
+  "corpus": [
+    "packages/persist/src/scrub-scan.ts::canonicalise",
+    "packages/genesis/src/align.ts::makeAlign",
+    "packages/knowledge/src/write/upsert.ts::currentNodes",
+    "packages/persist/src/diff.ts::diffLogs",
+    "packages/memory/src/rules.ts::surfaceBudget",
+    "packages/genesis/src/cost-policy.ts::defaultKind",
+    "packages/adapter-io/src/escape/dynamic-reach.ts::buildDynamicReach",
+    "packages/memory/src/awareness.ts::facetOf",
+    "packages/memory/src/awareness.ts::rollup",
+    "packages/adapter-io/src/unit-count-candidates.ts::createUnitCountCandidates"
+  ],
+  "miners": [
+    "atlas (propose.md advisory miner)",
+    "baseline-lister (ungated raw-LLM)",
+    "comment-extractor (mechanical)"
+  ],
+  "denominator_true_facts": 64,
+  "recall_at_pool": {
+    "atlas": {
+      "found": 10,
+      "total": 64,
+      "pct": 15.6
+    },
+    "lister": {
+      "found": 63,
+      "total": 64,
+      "pct": 98.4
+    },
+    "comment": {
+      "found": 2,
+      "total": 64,
+      "pct": 3.1
+    }
+  },
+  "per_shape": {
+    "predicate": {
+      "total": 44,
+      "atlas": 9,
+      "lister": 43,
+      "comment": 2
+    },
+    "dependency": {
+      "total": 4,
+      "atlas": 0,
+      "lister": 4,
+      "comment": 0
+    },
+    "negation": {
+      "total": 6,
+      "atlas": 0,
+      "lister": 6,
+      "comment": 0
+    },
+    "advisory": {
+      "total": 9,
+      "atlas": 1,
+      "lister": 9,
+      "comment": 0
+    },
+    "relation": {
+      "total": 1,
+      "atlas": 0,
+      "lister": 1,
+      "comment": 0
+    }
+  },
+  "caveats": [
+    "recall@pool over-states absolute recall (report as recall@pool(3), never bare recall)",
+    "low Atlas recall largely reflects the one-fact-per-unit propose.md design vs lister asked for ALL",
+    "0% negation/relation is a pilot artifact (ran advisory miner only; those doors ship post-#99)",
+    "truth-adjudication is an LLM judge on real facts (weak link); adjudicator variance; n=10 units"
+  ],
+  "adjudicated_clusters": {
+    "1": [
+      {
+        "true": true,
+        "sources": [
+          "atlas",
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "dependency"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "dependency"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "negation"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "negation"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      }
+    ],
+    "2": [
+      {
+        "true": true,
+        "sources": [
+          "atlas",
+          "lister"
+        ],
+        "shape": "advisory"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "advisory"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "negation"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "negation"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      }
+    ],
+    "3": [
+      {
+        "true": true,
+        "sources": [
+          "atlas",
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "advisory"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "advisory"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "advisory"
+      }
+    ],
+    "4": [
+      {
+        "true": true,
+        "sources": [
+          "atlas",
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "other"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "other"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "negation"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "negation"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "other"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "dependency"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "negation"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "advisory"
+      }
+    ],
+    "5": [
+      {
+        "true": true,
+        "sources": [
+          "atlas",
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "negation"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "advisory"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      }
+    ],
+    "6": [
+      {
+        "true": true,
+        "sources": [
+          "atlas",
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "other"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "dependency"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "advisory"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "other"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "other"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "other"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "dependency"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "other"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "advisory"
+      }
+    ],
+    "7": [
+      {
+        "true": true,
+        "sources": [
+          "atlas",
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "comment",
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "comment",
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "dependency"
+      }
+    ],
+    "8": [
+      {
+        "true": true,
+        "sources": [
+          "atlas",
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "advisory"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "relation"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "dependency"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "advisory"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "advisory"
+      }
+    ],
+    "9": [
+      {
+        "true": true,
+        "sources": [
+          "atlas"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      }
+    ],
+    "10": [
+      {
+        "true": true,
+        "sources": [
+          "atlas",
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": true,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "predicate"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "dependency"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "dependency"
+      },
+      {
+        "true": false,
+        "sources": [
+          "lister"
+        ],
+        "shape": "other"
+      }
+    ]
+  }
+}
