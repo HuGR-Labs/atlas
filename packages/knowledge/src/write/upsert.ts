@@ -21,7 +21,7 @@ import { isKnownSlot, routeWrite } from './router.js';
 // The KNOW-10/KNOW-15i closed-slot REFUSAL (#152) — extracted at the LOC ceiling. Read that file's header
 // before changing the gate below: it carries the measurement, the harm, and the ABSENT-slot decision.
 import { ClosedSlotError } from './closed-slot.js';
-import { isWeakerTier } from '../ratify/tier.js';
+import { isTier, isWeakerTier } from '../ratify/tier.js';
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 // The upsert reducer — applies a routed write to a store PROJECTION, so "every write is an upsert"
@@ -260,9 +260,29 @@ export function upsert(
       break;
     case 'UPDATE': {
       const prior = current.get(req.nodeKey)!; // nodeKeyHit ⇒ present
-      const claims = prior.claims.includes(req.claimNorm)
-        ? prior.claims // set-union: dedup by claimNorm (idempotent)
-        : [...prior.claims, req.claimNorm];
+      // ANTI-LAUNDERING (ARCH-D3b security fix): a write that RAISES the node to a GOVERNING class (T0/T1)
+      // REPLACES the claim set instead of unioning it. The node carries ONE governance tier over a SET of
+      // claims, so a blind union let a legitimate tier-raise relabel every pre-existing weaker-tier claim —
+      // including one a DIFFERENT, un-ratified author had seeded at the same (anchor, slot) — as ratified at
+      // the new tier, serving it in the tier≥T1 governing band (TOOLS-6). The raiser vouches for what THEY
+      // (re-)assert, not for whatever advisories predate them; a raise is a supersession point for the
+      // place, mirroring the SUPERSEDE branch's own `claims: [req.claimNorm]`. Same-tier accretion is
+      // preserved (unioned) — those claims share the incumbent's already-cleared authority. `req.tier` is
+      // absent ⇒ no class change ⇒ union. Downgrades never reach here (refused `governance-downgrade`
+      // upstream). `isTier` guards the governing test the SAME way the read band does (`bands.ts`:
+      // `isTier(t) && t !== 'T2'`, NEVER the bare `t !== 'T2'`): an OFF-LATTICE `req.tier` — reachable from a
+      // COMMITTED `.atlas/` projection that never passed a door — is not a governing class and not a raise, so
+      // it falls through to the union default (master behaviour preserved), never a spurious claim-drop.
+      const raises =
+        req.tier !== undefined &&
+        isTier(req.tier) &&
+        req.tier !== 'T2' &&
+        (prior.tier === undefined || isWeakerTier(prior.tier, req.tier));
+      const claims = raises
+        ? [req.claimNorm] // the raiser's own assertion only — prior weaker claims do not inherit the new tier
+        : prior.claims.includes(req.claimNorm)
+          ? prior.claims // set-union: dedup by claimNorm (idempotent)
+          : [...prior.claims, req.claimNorm];
       cas.add(req.contentHash);
       current.set(req.nodeKey, {
         ...prior, // ADJACENCY: `...prior` carries prior anchor/slot; the req's WIN below when present
