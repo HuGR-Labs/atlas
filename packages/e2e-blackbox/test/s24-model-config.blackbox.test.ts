@@ -106,7 +106,9 @@ describe('S24 — the operator model config, through the real `atlas mine` door'
     // teeth (breaks-on "the template is resolved module-relative instead of from the package root"): the
     // built binary looks in `dist/prompts/`, finds nothing, and every run exits 2 with TEMPLATE_REFUSAL.
     repo ??= makeFixtureRepo({ files: { 'src/charge.ts': 'export function charge(): void {}\n' } });
-    const run = runAtlas(repo.repoPath, ['mine', '.'], { ATLAS_MODEL_CONFIG: operatorConfig(VALID) });
+    // ATLAS_MINE_SLOT pinned to the advisory arm: this story tests the operator-config door, not the multi-arm
+    // default (which is proven in s-sound-default + the mine-arms unit suite).
+    const run = runAtlas(repo.repoPath, ['mine', '.'], { ATLAS_MODEL_CONFIG: operatorConfig(VALID), ATLAS_MINE_SLOT: 'advisory' });
 
     expect(run.stdout + run.stderr).not.toMatch(TEMPLATE_REFUSAL);
     expect(run.exitCode).toBe(0);
@@ -121,7 +123,7 @@ describe('S24 — the operator model config, through the real `atlas mine` door'
     const planted = join(repo.repoPath, '.atlas', 'model.json');
     writeFileSync(planted, VALID); // byte-identical to the config that runs fine from outside
 
-    const run = runAtlas(repo.repoPath, ['mine', '.'], { ATLAS_MODEL_CONFIG: planted });
+    const run = runAtlas(repo.repoPath, ['mine', '.'], { ATLAS_MODEL_CONFIG: planted, ATLAS_MINE_SLOT: 'advisory' });
 
     expect(run.exitCode).toBe(2); // a governed refusal, not a crash and not a silent pass
     expect(run.stdout).toContain('refusing to read the model command from inside the repository');
@@ -146,7 +148,7 @@ describe('S24 — the operator model config, through the real `atlas mine` door'
     const variantRepo = join(dirname(repo.repoPath), basename(repo.repoPath).toUpperCase());
     const viaVariant = join(variantRepo, '.atlas', 'model.json');
 
-    const run = runAtlas(repo.repoPath, ['mine', '.'], { ATLAS_MODEL_CONFIG: viaVariant });
+    const run = runAtlas(repo.repoPath, ['mine', '.'], { ATLAS_MODEL_CONFIG: viaVariant, ATLAS_MINE_SLOT: 'advisory' });
 
     // ANTI-VACUITY: the probe said this volume folds; assert it folds for THIS repo, or the case proves
     // nothing about a second spelling.
@@ -159,7 +161,7 @@ describe('S24 — the operator model config, through the real `atlas mine` door'
   it('a MALFORMED config refuses — it never degrades into "this repo has no facts"', () => {
     // Doubles as the anti-vacuity control for the first case: refusals demonstrably DO surface here.
     repo ??= makeFixtureRepo({ files: { 'src/charge.ts': 'export function charge(): void {}\n' } });
-    const run = runAtlas(repo.repoPath, ['mine', '.'], { ATLAS_MODEL_CONFIG: operatorConfig('{ not json') });
+    const run = runAtlas(repo.repoPath, ['mine', '.'], { ATLAS_MODEL_CONFIG: operatorConfig('{ not json'), ATLAS_MINE_SLOT: 'advisory' });
 
     expect(run.exitCode).toBe(2);
     expect(run.stdout).toContain('is not valid JSON');
@@ -170,7 +172,7 @@ describe('S24 — the operator model config, through the real `atlas mine` door'
   it('an ABSENT config is a state, not an error — the zero-config run completes and explains itself', () => {
     repo ??= makeFixtureRepo({ files: { 'src/charge.ts': 'export function charge(): void {}\n' } });
     const absent = join(operatorConfig('{}'), '..', 'no-such-model.json');
-    const run = runAtlas(repo.repoPath, ['mine', '.'], { ATLAS_MODEL_CONFIG: absent });
+    const run = runAtlas(repo.repoPath, ['mine', '.'], { ATLAS_MODEL_CONFIG: absent, ATLAS_MINE_SLOT: 'advisory' });
 
     expect(run.exitCode).toBe(0);
     expect(run.stdout).toContain('mine: 0 candidate facts');

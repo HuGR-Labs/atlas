@@ -25,13 +25,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { UnaddressableCasObjectError } from '@atlas/adapter-io';
 
-// Mock ONLY `runMine` — `cli.ts` imports nothing else from this module — so `main(['mine', '.'])` exercises the
-// real catch/render path over a thrown error, with no need for a repo, a model, or a durable store.
-vi.mock('../src/mine.js', () => ({ runMine: vi.fn() }));
-import { runMine } from '../src/mine.js';
+// Mock ONLY `runMineArms` — `cli.ts` imports nothing else from this module — so `main(['mine', '.'])` exercises
+// the real catch/render path over a thrown error, with no need for a repo, a model, or a durable store.
+// [SOUND-DEFAULT-MINE] `cli.ts` now drives the multi-arm `runMineArms` (was `runMine`); the mine-catch this
+// pins is BYTE-IDENTICAL — only the mocked symbol name follows the call site the frozen seam moved.
+vi.mock('../src/mine.js', () => ({ runMineArms: vi.fn() }));
+import { runMineArms } from '../src/mine.js';
 import { main } from '../src/cli.js';
 
-const runMineMock = vi.mocked(runMine);
+const runMineMock = vi.mocked(runMineArms);
 
 /** The discriminant — everything before the first `:` (the `reasonOf` rule, ADR-0007). */
 const reasonOf = (s: string): string => s.split(':')[0]!;

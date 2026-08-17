@@ -134,7 +134,9 @@ describe('S26 — atlas doctor index: Atlas plans the SCIP index, the operator r
   it('4. `mine` on an unindexed repo now POINTS at the leg that explains it (the loop closes)', () => {
     const bare = makeFixtureRepo({ files: { 'src/a.ts': 'export const a = 1;\n' } });
     try {
-      const mine = runAtlas(bare.repoPath, ['mine', '.']);
+      // ATLAS_MINE_SLOT pinned to the advisory arm: this story tests the unindexed-repo diagnostic leg, not
+      // the multi-arm default (which is proven in s-sound-default + the mine-arms unit suite).
+      const mine = runAtlas(bare.repoPath, ['mine', '.'], { ATLAS_MINE_SLOT: 'advisory' });
       expect(mine.stdout).toContain('0 sites visited');
       // It still refuses to blame the unreached model, AND it now names where the answer is.
       expect(mine.stdout).toContain('wiring a model would not change this 0');

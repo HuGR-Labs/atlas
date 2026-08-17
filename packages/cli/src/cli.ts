@@ -15,7 +15,7 @@ import { runDoctor } from './doctor.js';
 import { ensureAtlasIgnored } from './gitignore.js';
 import { COMMAND_LEG } from './map.js';
 import { marshalArgs } from './marshal.js';
-import { runMine } from './mine.js';
+import { runMineArms } from './mine.js';
 import { runOwn } from './own.js';
 import { runPromote } from './promote.js';
 import { parse } from './parse.js';
@@ -173,8 +173,11 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
   }
 
   if (command === 'mine') {
-    // CLI-4: `mine` drives the FROZEN genesis run-controller (`runMine`) over the repo at cwd as ONE governed
-    // pass, projecting the outcome to a `CliVerdict`. It routes NOT through `deps.handler` (genesis is its own
+    // CLI-4 / SOUND-DEFAULT-MINE: `mine` drives the FROZEN genesis run-controller (`runMineArms`) over the repo
+    // at cwd. A DEFAULT run mines the SOUND-by-default union (advisory + dependency + count) as one governed
+    // pass PER ARM; an explicit `ATLAS_MINE_SLOT` isolates a single arm (the bench harness). Each pass is the
+    // frozen single-arm controller; the multi-arm loop lives at THIS driver level, and the outcome projects to a
+    // MERGED `CliVerdict`. It routes NOT through `deps.handler` (genesis is its own
     // composed driver, mine.ts) but its rendered `CliVerdict` reaches the console over the SAME emit/exit path
     // as every other command (uniform bytes). Every mined write is CANDIDATE-only (GEN-4/12); never throws.
     // [ADR-0011] A misconfigured MODEL is not a mining outcome. It must stay loud — rendering it as
@@ -200,7 +203,7 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
     // `unaddressable-cas-object` discriminant verbatim (matching `governed-emit-address.ts`'s `commitRefusalOf`
     // re-file of the SAME error on the `emit` door), so it travels unchanged onto the `reason:` line.
     try {
-      return emitCli(await runMine(process.cwd()));
+      return emitCli(await runMineArms(process.cwd()));
     } catch (e) {
       const name = (e as { name?: unknown } | null)?.name;
       if (

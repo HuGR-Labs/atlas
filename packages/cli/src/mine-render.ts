@@ -165,16 +165,20 @@ export function coverageLines(r: GenesisReport): readonly string[] {
   return [head, ...r.coverage.sites.map(siteLine)];
 }
 
-/** Fold a finished pass to the CLI's process outcome. `renderVerdict` (render.ts) projects a handler
- *  `Verdict`, not a `GenesisReport`, so the fold is direct: a partial/interrupted run is a non-zero exit.
- *  An empty pass EXPLAINS itself with `mineWhyEmpty` — the cause is computed from the report, so the line
- *  stays true whether the 0 came from an empty frontier or from an unwired model (WP-F6). */
-export function foldVerdict(pass: MinePass, ceiling?: number): CliVerdict {
+/**
+ * The pass BODY — every line `foldVerdict` builds BELOW the `genesis:`+`cost:` header, in order:
+ * frontier-drop, prompt-provenance, staging-refusal, the `mineWhyEmpty` cause (the #129/#163 honesty leg that
+ * names WHY a pass is empty and points at `atlas doctor index`), the partial line, then the coverage ledger.
+ *
+ * Extracted so the MULTI-ARM fold (`foldArms`, mine-arms.ts) can give each arm the SAME full body a single-arm
+ * run gets — never just the coverage ledger, which would drop the why-empty next-step and leave a default
+ * `atlas mine` on an unindexed repo a dead end. `foldVerdict` composes it verbatim, so the single-arm output
+ * stays byte-identical (the mine-render + single-arm suites are the proof of that faithfulness).
+ */
+export function passBodyLines(pass: MinePass, ceiling?: number): readonly string[] {
   const r = pass.report;
   const why = mineWhyEmpty(mineOutcome(r, pass.modelWired, ceiling));
-  const lines = [
-    `genesis: seeded ${r.seeded.length} candidate fact(s); ratified ${r.ratified.length}`,
-    `cost: llmCalls ${r.llmCalls} · budgetSpent ${r.budgetSpent}`,
+  return [
     ...opt(frontierDropLine(pass.seedsDropped)),
     ...opt(promptProvenanceLine(pass.promptDigest)),
     // NAMED, above the generic partial line: a refused staging commit wrote NOTHING, and "did not run to
@@ -186,6 +190,19 @@ export function foldVerdict(pass: MinePass, ceiling?: number): CliVerdict {
     // covered; it goes below the prose so the three lines `mine.md` pins verbatim keep their position, and
     // it is unconditional so that "no ledger" can only ever mean "this run has none", never "we skipped it".
     ...coverageLines(r),
+  ];
+}
+
+/** Fold a finished pass to the CLI's process outcome. `renderVerdict` (render.ts) projects a handler
+ *  `Verdict`, not a `GenesisReport`, so the fold is direct: a partial/interrupted run is a non-zero exit.
+ *  An empty pass EXPLAINS itself with `mineWhyEmpty` — the cause is computed from the report, so the line
+ *  stays true whether the 0 came from an empty frontier or from an unwired model (WP-F6). */
+export function foldVerdict(pass: MinePass, ceiling?: number): CliVerdict {
+  const r = pass.report;
+  const lines = [
+    `genesis: seeded ${r.seeded.length} candidate fact(s); ratified ${r.ratified.length}`,
+    `cost: llmCalls ${r.llmCalls} · budgetSpent ${r.budgetSpent}`,
+    ...passBodyLines(pass, ceiling),
   ];
   const failed = r.resumeToken !== undefined || pass.refusal !== undefined;
   return { exitCode: failed ? 1 : 0, stdout: `${lines.join('\n')}\n` };

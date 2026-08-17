@@ -44,6 +44,7 @@ import type {
 } from '@atlas/genesis';
 import { createDiskStore, headSha, createSkeletonSource, gitSidecarTrust } from '@atlas/adapter-io';
 import { resolveProposer, NO_MODEL_IDENTITY } from './mine-proposer.js';
+import type { MineSlot } from './mine-proposer.js';
 import { resolveFrontier } from './mine-frontier.js';
 import { createProposerPool, makeVisitAll, proposerPoolAvailable } from './mine-pool.js';
 import type { ProposerPool, SiteVisit } from './mine-pool.js';
@@ -61,6 +62,11 @@ import type { CliVerdict } from './render.js';
  *  unchanged by the file split. */
 export { mineOutcome, mineWhyEmpty } from './mine-render.js';
 export type { MineOutcome, MinePass } from './mine-render.js';
+
+/** [SOUND-DEFAULT-MINE] The DRIVER-LEVEL multi-arm loop (mine-arms.ts) — RE-EXPORTED so `runMineArms` and its
+ *  per-arm collector reach the CLI and the suites off the same module surface as the single-pass drivers. */
+export { driveMineArms, runMineArms, foldArms } from './mine-arms.js';
+export type { ArmPass, PassRunner } from './mine-arms.js';
 
 /**
  * The injected seams the `mine` driver assembles into `ControllerDeps`. Every member is INJECTABLE
@@ -91,6 +97,11 @@ export interface MineDeps {
    *  defaulted to `process.env`. Threaded so a test is HERMETIC: without it `runMine(repo)` reads the
    *  developer's own `~/.config/atlas/model.json` and would execute their model binary in a unit test. */
   readonly env?: NodeJS.ProcessEnv;
+  /** [SOUND-DEFAULT-MINE] The mining ARM this single pass runs, threaded to `resolveProposer` as its
+   *  explicit-slot override so the multi-arm driver (`runMineArms`) can drive a specific arm WITHOUT mutating
+   *  `process.env`. Omitted ⇒ byte-identical to today (`resolveMineSlot(env)` picks the arm). Ignored when a
+   *  `proposer` is injected — an injected proposer bypasses `resolveProposer` entirely (see `withDefaults`). */
+  readonly slot?: MineSlot;
   /** [#210] Override the model identity `resolveProposer` would have derived — the seam an injected-proposer
    *  TEST uses to assert a specific identity lands on the report, since an injected `proposer` bypasses
    *  `resolveProposer` entirely (see `withDefaults`) and so carries no identity of its own. Production never
@@ -169,7 +180,7 @@ function withDefaults(repoPath: string, deps?: Partial<MineDeps>): ResolvedDeps 
   const rev = deps?.rev ?? 'HEAD';
   // Resolved ONCE, and only when the caller injected no proposer — resolution reads the operator's config
   // off disk, and an injected proposer means that file is none of this pass's business.
-  const resolved = deps?.proposer === undefined ? resolveProposer(repoPath, deps?.env ?? process.env) : undefined;
+  const resolved = deps?.proposer === undefined ? resolveProposer(repoPath, deps?.env ?? process.env, deps?.slot) : undefined;
   // HOISTED out of the literal below: the REQ-CLI-4d gate is built over THE SAME `SkeletonSource` this pass
   // ranks its sites from, so the gate and the frontier can never resolve two different indexes.
   const skeleton = deps?.skeleton ?? defaultSkeleton(repoPath);

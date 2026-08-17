@@ -93,9 +93,12 @@ describe('S26 — the symbol arm is REACHED through the proposer pool, and arm F
     // resolves, the prompt factory refuses for want of bytes, and this run exits 1 with site 2 INTERRUPTED
     // and sites 3-6 UNVISITED. Verified RED against exactly that deletion, with a rebuild, before this file
     // was committed — and verified that the entire unit suite stayed green through the same deletion.
+    // ATLAS_MINE_SLOT pinned to the advisory arm: this story tests the FRONTIER dimension (symbol vs file)
+    // under advisory, not the multi-arm default (which is proven in s-sound-default + the mine-arms unit suite).
     const run = runAtlas(indexedRepo().repoPath, ['mine', '.'], {
       ATLAS_MODEL_CONFIG: operatorConfig(ECHOING),
       ATLAS_FRONTIER: 'symbol',
+      ATLAS_MINE_SLOT: 'advisory',
     });
     const sites = sitesOf(run.stdout);
 
@@ -119,7 +122,7 @@ describe('S26 — the symbol arm is REACHED through the proposer pool, and arm F
   it('arm FILE is the default and is UNCHANGED — the same binary, the shipped frontier', () => {
     // I6 at the outermost boundary there is. If sub-file seeding ever becomes the default, this goes red
     // before any consumer of `atlas mine` discovers it in the field.
-    const run = runAtlas(indexedRepo().repoPath, ['mine', '.'], { ATLAS_MODEL_CONFIG: operatorConfig(ECHOING) });
+    const run = runAtlas(indexedRepo().repoPath, ['mine', '.'], { ATLAS_MODEL_CONFIG: operatorConfig(ECHOING), ATLAS_MINE_SLOT: 'advisory' });
 
     expect(run.exitCode).toBe(0);
     expect(sitesOf(run.stdout)).toEqual([
@@ -134,6 +137,7 @@ describe('S26 — the symbol arm is REACHED through the proposer pool, and arm F
     const typo = runAtlas(indexedRepo().repoPath, ['mine', '.'], {
       ATLAS_MODEL_CONFIG: operatorConfig(ECHOING),
       ATLAS_FRONTIER: 'symbols',
+      ATLAS_MINE_SLOT: 'advisory',
     });
 
     expect(typo.exitCode).toBe(0);

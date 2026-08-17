@@ -94,7 +94,9 @@ describe('S26 — atlas promote: the governed route out of staging', () => {
     // NO `ATLAS_MODEL_CONFIG` is passed, and that is now the operative cause of the 0 — the admission gate
     // is wired (REQ-CLI-4d), the proposer is not, so every site abstains before the gate is ever asked.
     const repo = repoWith(CURATOR_POLICY);
-    const mine = runAtlas(repo.repoPath, ['mine', '.']);
+    // ATLAS_MINE_SLOT pinned to the advisory arm: this story tests the promote route out of staging, not the
+    // multi-arm default (which is proven in s-sound-default + the mine-arms unit suite).
+    const mine = runAtlas(repo.repoPath, ['mine', '.'], { ATLAS_MINE_SLOT: 'advisory' });
     expect(mine.exitCode).toBe(0);
     expect(mine.stdout).toContain('genesis: seeded 0 candidate fact(s); ratified 0');
 
