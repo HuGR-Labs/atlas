@@ -46,8 +46,6 @@ describe('WP-196a.SEAL — `seal` is additive + absent-tolerant on every obvious
 
     const sealed: AdvisoryNode = { ...legacy, seal: 'proven' };
     expect(sealed.seal).toBe('proven');
-    const validated: AdvisoryNode = { ...legacy, seal: 'validated' };
-    expect(validated.seal).toBe('validated');
   });
 
   it('SCN-196a-1b: PredicateNode accepts `seal` the same way', () => {
@@ -84,9 +82,9 @@ describe('WP-196a.SEAL — `seal` is additive + absent-tolerant on every obvious
       freshness: 'FRESH',
       claims: [],
       authoring: 'RELATED',
-      seal: 'validated',
+      seal: 'proven',
     };
-    expect(node.seal).toBe('validated');
+    expect(node.seal).toBe('proven');
   });
 
   it('SCN-196a-1d: NegationNode accepts `seal` the same way', () => {
@@ -113,7 +111,7 @@ describe('WP-196a.SEAL — nodeKey (KNOW-15b/15c write-routing identity) does NO
   // exactly how `governed-emit.ts` builds its `candidateView` — a structurally-wider object narrowed
   // through `as unknown as Candidate` — so this asserts what `nodeKey` is actually handed in production,
   // not merely what the `Candidate` type declares.
-  function candWithSeal(seal: 'proven' | 'validated' | undefined): Candidate {
+  function candWithSeal(seal: 'proven' | undefined): Candidate {
     const base = {
       claimText: 'the claim body prose',
       claimNorm: 'cn-fixed',
@@ -125,11 +123,9 @@ describe('WP-196a.SEAL — nodeKey (KNOW-15b/15c write-routing identity) does NO
     return { ...base, ...(seal !== undefined ? { seal } : {}) } as unknown as Candidate;
   }
 
-  it('SCN-196a-2: advisory nodeKey is IDENTICAL whether `seal` is absent, `proven`, or `validated`', () => {
+  it('SCN-196a-2: advisory nodeKey is IDENTICAL whether `seal` is absent or `proven`', () => {
     const noSeal = candWithSeal(undefined);
     const proven = candWithSeal('proven');
-    const validated = candWithSeal('validated');
     expect(nodeKey(proven)).toBe(nodeKey(noSeal));
-    expect(nodeKey(validated)).toBe(nodeKey(noSeal));
   });
 });

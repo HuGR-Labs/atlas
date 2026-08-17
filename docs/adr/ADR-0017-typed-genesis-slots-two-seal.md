@@ -1,10 +1,32 @@
 # ADR-0017 — Genesis emits typed facts via a two-seal slot classifier
 
-**Status:** ACCEPTED — owner-ratified 2026-08-13.
+**Status:** ACCEPTED — owner-ratified 2026-08-13; AMENDED to one-seal (proven-only) — owner-ratified 2026-08-16 (see CORRECTION 3).
 **Supersedes/relates:** #196 (the measured gap), #152 (KNOW-10 closed-slot gate with no producer), #99 /
 ADR-0016 (the negation sound-gate pattern this reuses), ADR-0012 (the additive/absent-tolerant field
 precedent), #226 (the independent adjudication panel). Full reasoning:
 `docs/design/196-typed-genesis-slot-proposal.md`.
+
+> **CORRECTION 3 (owner-ratified 2026-08-16 — the `validated` seal is CUT; genesis ships proven-only).** The
+> owner ruled that genesis ships **sound-by-default** and the `validated` semantic seal is **retired**, not
+> built. Rationale (measured, the #196b lens-2 audit): there is **no sound mechanical way to plant semantic
+> ground-truth**, so the `validated` seal's honesty could only ever rest on a same-family LLM-ensemble whose
+> reliability is an unmeasured number the bench cannot soundly produce — and a non-sound seal shipped beside a
+> sound one dilutes the one strong claim (`proven`) the product has. So, superseding Decision points 3 and
+> build-leg (c) below:
+> - `Seal` narrows to **`proven`** only (`packages/knowledge/src/types.ts`). The seal FIELD stays on nodes;
+>   sound facts carry `seal:'proven'`, and **advisory prose carries NO seal** — grounded-only, which is
+>   honest: grounded is aboutness, not proof.
+> - Build-path leg **(c) "build the validated leg" is WITHDRAWN**. The inert `verifyValidated` port,
+>   `admitValidated` / `buildValidated` arms, and the `verify-validated-ensemble` adapter (Wave-1/2a, never
+>   wired to any shipped path — 0 production callers) are DELETED. A semantic slot with no mechanical oracle
+>   **drops** (`DROP_NO_CHECK`) or is emitted as **advisory prose** — never minted as a sealed fact.
+> - Two-seal becomes **one-seal**, and this does NOT delete advisory mining: advisory prose (the 100%-precision
+>   #223 arm, the bulk of the knowledge output) STAYS; it simply carries no truth-seal. "Sound by default"
+>   means the default `atlas mine` run ADDS the sound arms (dependency / count) BESIDE advisory, each fact
+>   honestly sealed — it never swaps prose out.
+> - Supersedes CORRECTION (2026-08-17, same-family ensemble), now moot: there is no ensemble. The `proven`
+>   core of this ADR (sound oracle, 0-false-proven, never mixed) is unchanged and is the entire seal
+>   vocabulary now.
 
 ## Context
 
