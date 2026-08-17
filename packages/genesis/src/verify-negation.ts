@@ -68,8 +68,9 @@ const abstain = (reason: string): NegationVerdict => ({ verdict: 'abstain', reas
  *      would VACUOUSLY prove the negation) ⇒ abstain('target-unresolvable').
  *   3. a real caller of `target` lies under `scope` ⇒ REFUTED — a witnessed counterexample, SOUND IN ANY
  *      WORLD (no closed-world requirement; the negation is simply false).
- *   4. no caller under `scope`, AND a hole lies under THAT SAME `scope` (`holeSources() ∩ scope ≠ ∅`) ⇒
- *      abstain('scope-open') — an unseen reference could exist inside S, so the absence cannot be trusted.
+ *   4. no caller under `scope`, AND a hole lies under THAT SAME `scope` — an `unresolved` hole
+ *      (`holeSources()`) OR a COLLAPSED cross-package ref (`opaqueRefSources()`, #99) ⇒ abstain('scope-open')
+ *      — an unseen reference could exist inside S, so the absence cannot be trusted.
  *   5. no caller under `scope`, AND S is hole-free ⇒ PROVEN — a sound closed-world negative over S.
  */
 export function verifyNegation(
@@ -92,6 +93,15 @@ export function verifyNegation(
   // No caller witnessed under scope. PROVING the absence is closed-world OVER THAT SAME SCOPE: a hole under S
   // could be an unseen caller of target. Checking holes in exactly S (not a separate, possibly under-sized
   // world) is what makes `proven` sound by construction — see the module header.
-  if (anyInScope(reverse.holeSources(), pathOfHash, scope)) return abstain('scope-open');
+  // The completeness holes are the UNION of two classes: CLASS-1 the benign external `unresolved` holes
+  // (`holeSources()`) AND CLASS-2 the COLLAPSED cross-package refs (`opaqueRefSources()`, #99) — a `local `
+  // ref the indexer emitted for a cross-package call, whose real target vanished from `reverseCallers`. Either
+  // one inside S means an unseen reference could exist there, so the closed-world `proven` is unsound.
+  if (
+    anyInScope(reverse.holeSources(), pathOfHash, scope) ||
+    anyInScope(reverse.opaqueRefSources(), pathOfHash, scope)
+  ) {
+    return abstain('scope-open');
+  }
   return { verdict: 'proven', oracle: 'symbol-reverse' };
 }

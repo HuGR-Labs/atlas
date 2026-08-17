@@ -20,7 +20,7 @@ import type { DiskStore } from '../../src/store.js';
 import { createGovernedEmit } from '../../src/governed-emit.js';
 import { walkFileTree } from '../../src/fs.js';
 import { foldAstUnits, initAst } from '../../src/ast.js';
-import { readScipOrEmpty } from '../../src/scip.js';
+import { readScipOrEmpty, readScipIndexerName } from '../../src/scip.js';
 import { buildTargetEscapes } from '../../src/escape/target-escapes.js';
 import { buildDynamicReach } from '../../src/escape/dynamic-reach.js';
 import { underScope } from '../../src/anchor-scope.js';
@@ -172,7 +172,9 @@ export async function setupNegBench(ROOT: string, SCIP: string): Promise<NegBenc
   const scipOutput = readScipOrEmpty(SCIP);
   const rawTree = walkFileTree(ROOT);
   const axes = build(foldAstUnits(rawTree), scipOutput);
-  const symbolReverse = createSymbolReverse(scipOutput);
+  // #99 — thread the real indexer identity so the collapsed-local gate (`opaqueRefSources`) engages on the
+  // scip-typescript index the bench runs over (the whole point of the F4 arm: the CLASS-2 false-admits abstain).
+  const symbolReverse = createSymbolReverse(scipOutput, { indexerName: readScipIndexerName(SCIP) });
   const te = buildTargetEscapes({ scipPath: SCIP, repoPath: ROOT });
   const dr = buildDynamicReach(rawTree);
   if (!te || !dr) throw new Error('v2 legs failed to build (astWarmed? scip-typescript indexer?)');
