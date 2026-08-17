@@ -44,9 +44,15 @@ wrong-callee, wrong-default, past-comment-as-present, fabricated-behavior) was c
 
 ## What is the STRONG number
 
-The `proven` seal (dependency / count / negation), not this. Negation already reports **0-false-admit over
-18,654 admits vs the tsc oracle** on real atlas code (#232) — a mechanical 0-FP claim needing no LLM. The
-advisory subject-test above is the honest secondary number for the shape that has no sound oracle.
+The `proven` seal (dependency / count / negation), not this. Negation is **0-false-admit vs the tsc oracle on
+ANY index build** (#232; corrected 2026-08-17 per #178/#181 — the earlier "18,654 admits / recall 80.9%" was a
+specific 2026-08-12 dist-form snapshot, not a build-invariant figure) — a mechanical 0-FP claim needing no LLM;
+its RECALL is index-build-dependent (32.5% operating on the committed dist-form index, 4.25% on a dist-absent
+misbuild). Dependency and count are 0-false-admit by a witnessed-existence oracle, sound in any world. The
+advisory subject-test above is the honest secondary number for the shape that has no sound oracle. **Genesis
+now ships SOUND-by-default (#183), so a default `atlas mine` emits these proven facts beside advisory prose;
+the advisory prose carries no truth-seal (the `validated` seal was cut, #182) and its precision is exactly the
+faculty this subject-test measures.**
 
 ## Supersedes
 
