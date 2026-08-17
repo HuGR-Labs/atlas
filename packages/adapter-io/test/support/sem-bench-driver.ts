@@ -101,7 +101,14 @@ export async function assembleSemBench(ROOT: string, SCIP: string): Promise<SemB
   const mk = (arm: Arm, claim: Claim, kind: Row['kind']): Row => ({ claim, label: deriveLabel(claim, tsc), kind, arm });
   const push = (row: Row): void => { const { outcome, reason } = driveClaim(row); driven.push({ row, outcome, reason }); };
   const capd: Record<string, number> = {};
-  const under = (k: string): boolean => (capd[k] = (capd[k] ?? 0) + 1) <= CAP;
+  // dep-F (dependency tsc-FALSE) is EXHAUSTIVE — never capped (lucy Fix 1). A capped prefix orders by
+  // deterministic iteration, so a dependency false-admit beyond the cap would be SYSTEMATICALLY invisible and
+  // the `dependency.falseAdmit==0` headline could be vacuously green. Uncapping it makes the 0 a COMPLETE
+  // measurement over the whole dep-F population, matching the (naturally sub-cap) count/negation FALSE arms.
+  // The admit path for dep-F is pure + cheap (a symbol-reverse lookup, no per-row tsc program), so exhausting
+  // it stays well within wall-clock. Its full size is LOGGED below, never silent.
+  const UNCAPPED = new Set(['dep-F']);
+  const under = (k: string): boolean => { const n = (capd[k] = (capd[k] ?? 0) + 1); return UNCAPPED.has(k) || n <= CAP; };
 
   // ── DEPENDENCY + COUNT + NEGATION arms: iterate (target external to scope) ──
   for (const t of B.targets) {
@@ -110,7 +117,12 @@ export async function assembleSemBench(ROOT: string, SCIP: string): Promise<SemB
       const called = B.calledInScope(t, scope);
       // dependency: TRUE=called (base), FALSE=not-called (assert-absent)
       if (called ? under('dep-T') : under('dep-F')) push(mk('dependency', { arm: 'dependency', target: t.symbol, scope }, called ? 'base' : 'dependency-assert-absent'));
-      // negation: TRUE=not-called (base), FALSE=called (negation-flip)
+      // negation: TRUE=not-called (base), FALSE=called (negation-flip). NOTE (lucy Fix 2): this arm MEASURES a
+      // real DOOR unsoundness, not an instrument bug — the shipped closed-world door admits a large fraction of
+      // the tsc-FALSE negatives (~80.86%) because scip-typescript emits cross-package refs as `local` symbols
+      // that `createSymbolReverse` drops (packages/index/src/symbol-reverse.ts:79), so `reverseCallers` misses
+      // those callers and the disjointness completeness at governed-emit-negation.ts:251-254 fails on a
+      // scip-typescript index (the canon-completeness guard is un-wired — ADR-0016:102-104). Reported, not hidden.
       if (!called ? under('neg-T') : under('neg-F')) push(mk('negation', { arm: 'negation', target: t.symbol, scope }, !called ? 'base' : 'negation-flip'));
       // count: TRUE=(atLeast 1, called), FALSE=(boundary flip: atLeast = witnessed+1)
       if (called && under('cnt-T')) push(mk('count', { arm: 'count', target: t.symbol, scope, atLeast: 1 }, 'base'));
@@ -164,8 +176,11 @@ export async function assembleSemBench(ROOT: string, SCIP: string): Promise<SemB
     if (mutateSamples.length >= 80) break;
   }
 
-  const which = Object.entries(capd).filter(([, v]) => v > CAP).map(([k]) => k);
-  if (which.length) console.log(`[sem-bench] pools capped at ${CAP}: ${which.join(', ')} (larger — bounded, not silent)`); // eslint-disable-line no-console
+  const which = Object.entries(capd).filter(([k, v]) => v > CAP && !UNCAPPED.has(k)).map(([k]) => k);
+  /* eslint-disable no-console */
+  if (which.length) console.log(`[sem-bench] pools capped at ${CAP}: ${which.join(', ')} (larger — bounded, not silent)`);
+  console.log(`[sem-bench] dep-F EXHAUSTIVE (uncapped): ${capd['dep-F'] ?? 0} rows — dependency.falseAdmit is a COMPLETE measurement, not a capped prefix`);
+  /* eslint-enable no-console */
 
   return { B, driven, arm0Reasons, mutateSamples, negTeeth, counts: { targets: B.targets.length, scopes: B.scopes.length }, driveClaim };
 }

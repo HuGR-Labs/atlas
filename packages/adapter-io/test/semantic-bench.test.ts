@@ -113,6 +113,10 @@ describe('#196b WP-1 — the instrument PROVES ITSELF (pure, no substrate, no sp
   });
 
   it('AC-6 (independence spine) — the scorer AND the label-store import NO gate symbol', () => {
+    // SCOPE (lucy Fix 3): this grep is scoped to the two LABEL/SCORER files and is STATIC-IMPORT-only. A future
+    // dynamic `import()` of a gate symbol, or a label routed indirectly through the driver / `buildOracle`, would
+    // not be caught here — the driver (`sem-bench-driver.ts`) legitimately imports `admit`, and independence is a
+    // property of the label+scorer path only. Widening this to a dependency-graph check is out of this WP's scope.
     for (const f of ['bench-scorer.ts', 'mutation-contract.ts']) {
       const src = readFileSync(presolve(SUPPORT, f), 'utf8');
       // IMPORT lines only — a prose mention in a comment is fine; a live `import ... from` is the circularity.
@@ -210,9 +214,28 @@ describe.skipIf(!RUN)('#196b WP-1 — drives the SHIPPED admission over atlas-se
     console.log(`  negation TEETH (closed-world refutation disabled): falseAdmit=${fmt(teeth.negation.falseAdmit)}  <= must be > 0`);
     console.log('==================================================================================\n');
     /* eslint-enable no-console */
-    // dependency + count: the POSITIVE-dual gate ABSTAINS on a tsc-false claim (a witnessed existence is sound
-    // in any world; it never fabricates a caller) ⇒ 0 false-admit. This is the mechanical guarantee, and it HELD.
-    expect(s.dependency.falseAdmit).toBe(0);
+    // dependency: the POSITIVE-dual gate ABSTAINS on a tsc-false claim unless the SOUND oracle PROVES a
+    // witnessed caller edge (admit-harness.ts:259 — `verifyDependency(t,s) !== 'proven' ⇒ DROP_DEP_ABSTAIN`);
+    // a witnessed existence never fabricates a caller. dep-F is now EXHAUSTIVE (uncapped — lucy Fix 1), so this
+    // is a COMPLETE measurement, not a capped prefix that could hide a false-admit past the cap. And exhausting
+    // it FALSIFIED the old vacuous `toBe(0)`: the shipped door admits a small residual (17/23577 = 0.07%) of
+    // tsc-FALSE dependency rows. EVERY one of them is a symbol tsc NEVER sees as a callee anywhere (callFiles==0
+    // globally — a pure TYPE / reference symbol like `Check`/`Candidate`/`GroundedFact`), REFERENCED in the
+    // scope in type position. This is an ORACLE-DEFINITION gap, not a fabricated caller: the bench's tsc oracle
+    // models "calls" as call-expression callees (`buildOracle`'s `isCallee`, neg-bench-lib.ts:81), while the
+    // door's `verifyDependency` witnesses any SCIP reference edge. So the door proves a real DEPENDENCY edge for
+    // a symbol the call-only oracle labels un-called. The assertion below is the HONEST, COMPLETE positive-dual
+    // guarantee: over the whole population the door fabricates NO caller for a CALL-ELIGIBLE symbol — every
+    // residual admit is a globally-never-callee type/reference symbol. A future regression that admitted a
+    // tsc-false dependency for a genuinely callable symbol (callFiles>0) would make this go RED.
+    const bySymDep = new Map(sb.B.targets.map((t) => [t.symbol, t] as const));
+    const depFalseAdmits = sb.driven.filter((d) => d.row.arm === 'dependency' && d.row.label === 'FALSE' && d.outcome.admitted);
+    for (const d of depFalseAdmits) {
+      const t = bySymDep.get(d.row.claim.target)!;
+      expect(sb.B.oracle.get(t.key)!.callFiles.size, `dependency false-admit on a CALL-ELIGIBLE symbol (${t.name}) — a fabricated caller, not an oracle-definition gap`).toBe(0);
+    }
+    // count: complete over its (naturally sub-cap) population — a boundary flip `atLeast = witnessed+1` on a
+    // symbol with a REAL caller, which `verifyCount`'s sound lower-bound can never prove ⇒ genuinely 0 admits.
     expect(s.count.falseAdmit).toBe(0);
     // TEETH (non-vacuity): the negation pool CONTAINS tsc-false negatives the closed-world door refutes; a door
     // with that refutation DISABLED (refute→admit) is caught ⇒ falseAdmit strictly rises. Proves the 0-arms are
@@ -228,8 +251,25 @@ describe.skipIf(!RUN)('#196b WP-1 — drives the SHIPPED admission over atlas-se
     // (131/162 tsc-false negatives admitted). A SOUND instrument REPORTS this; it does not assert the falsehood.
     expect(s.negation.falseAdmit).not.toBeNull(); // MEASURED — the number is the finding, judged by a human
     expect(s.relation.falseAdmit).not.toBeNull();
+    // WHY negation is nonzero (~80.86%, a DOOR property — not an instrument bug; adjudicated REAL by a security
+    // seat): scip-typescript emits a cross-package reference as a SCIP `local` symbol, which `createSymbolReverse`
+    // DROPS at packages/index/src/symbol-reverse.ts:79 (`isLocalSymbol(occ.symbol) ⇒ continue`). So
+    // `reverseCallers(X)` cannot see those callers, and the disjointness completeness the door's soundness rests on
+    // (governed-emit-negation.ts:251-254 — `reverseCallers(X) ∩ S == ∅` "becomes a COMPLETE no-reference") FAILS on
+    // a scip-typescript-built index: the door admits "X not called in S" while tsc witnesses a cross-package call.
+    // The canon-completeness guard that would catch this is UN-WIRED (ADR-0016:102-104). The instrument REPORTS
+    // this measured door unsoundness; it never asserts the falsehood negation==0.
+    // WHY relation is 100%: `admitRelation` (admit-harness.ts:220) is a PURE grounding gate — both endpoints
+    // re-derive FRESH, and there is NO direction oracle, so a direction-reversed edge (B→A where only A→B holds)
+    // grounds identically and is admitted. A door property too (no direction check), reported not asserted-away.
     // eslint-disable-next-line no-console
-    console.log(`FINDING: negation door false-admit = ${fmt(s.negation.falseAdmit)} (cross-package unsound), relation = ${fmt(s.relation.falseAdmit)} (no direction oracle). AC-6 negation==0 FALSIFIED by measurement.`);
+    console.log(
+      `FINDING: negation door false-admit = ${fmt(s.negation.falseAdmit)} (cross-package unsound — scip 'local' refs `
+      + `dropped at symbol-reverse.ts:79 break disjointness completeness), relation = ${fmt(s.relation.falseAdmit)} `
+      + `(no direction oracle in admitRelation), dependency = ${fmt(s.dependency.falseAdmit)} residual (all `
+      + `${depFalseAdmits.length} type/reference symbols — call-vs-reference oracle gap, no fabricated caller). `
+      + `AC-6 negation==0 FALSIFIED by measurement.`,
+    );
   });
 
   it('AC-12 — every planted-FALSE the gate rejects drops for the TRUTH reason, never malformed/ungrounded', () => {
@@ -265,6 +305,10 @@ describe.skipIf(!RUN)('#196b WP-1 — drives the SHIPPED admission over atlas-se
   });
 
   it('AC-15 — reproducible: re-scoring + re-driving over the pinned substrate yields identical per-arm numbers', () => {
+    // SCOPE (lucy Fix 3): this proves the SCORER is deterministic and a SINGLE-ROW re-drive is stable — NOT a full
+    // fresh re-assembly (`assembleSemBench` again), which is elided for cost (a second tsc program + thousands of
+    // gate calls). Cross-process reproducibility of the numbers rests on the pinned substrate (AC-7) + the sound
+    // deterministic gate, not on re-running assembly here.
     const again = score(sb.driven.map((d) => d.row), sb.driven.map((d) => d.outcome));
     expect(again).toEqual(s);
     const row = sb.driven.find((d) => d.row.arm === 'count')!.row;
