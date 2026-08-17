@@ -18,7 +18,7 @@
 // forces the classification to be DECLARED rather than discovered by the next reviewer.
 //
 // ── DECLARED COUNTS (gate-checked; a drift here FAILS this gate) ────────────────────────────────────────
-//   declared-modules: 53 · dead-value-exports: 223 · type-reachable: 6
+//   declared-modules: 52 · dead-value-exports: 220 · type-reachable: 6
 //   These three are read back from THIS file and asserted against the measured tree at the foot of the run
 //   (see "THE HEADER STATES COUNTS, AND THIS CHECKS THEM"). No count is QUOTED anywhere else in this
 //   header — a quoted integer that nothing checks is exactly what rotted here (task #143); this one cannot.
@@ -117,7 +117,6 @@ const LEDGER = {
 
   // ── @atlas/adapter-io — the outer ring, where a reader is most likely to assume "shipped". ────────────
   'packages/adapter-io/src/poke-file.ts': { values: 3, shipped: null, banner: true }, // the third transport; nothing constructs it (task #36)
-  'packages/adapter-io/src/verify-validated-ensemble.ts': { values: 3, shipped: null, banner: true }, // ADR-0017 #196b validated fold; the Wave-2 bench caller is not built yet
 
   // ── @atlas/memory — a CLOSED PACKAGE. No module anywhere outside `packages/memory` value-imports it; ──
   //    the sole cross-package edge is one `import type` in genesis/src/seed.ts. Its internal modules make
