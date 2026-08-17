@@ -100,9 +100,12 @@ The honest #95 story splits by seal, and the strong claim needs no LLM at all:
   recovers recall. Recall is not a single citable number until the index build is pinned/frozen. Defensible
   headline: negation is **sound (0-false-admit) on any build**; recall is build-dependent (32.5% operating,
   4.25% on a dist-absent misbuild).
-- **`validated`** (advisory / semantic) — no sound oracle exists (field-level limit), so it is measured by the
+- **advisory (unsealed, semantic)** — no sound oracle exists (field-level limit), so it is measured by the
   planted subject-test above and reported as **false-admit-rate + n (+ optional Wilson CI)**, never as
-  "accuracy," never overclaimed.
+  "accuracy," never overclaimed. **(Corrected 2026-08-16: this bullet used to read "`validated` seal". The
+  `validated` seal is CUT — genesis ships proven-only, ADR-0017 CORRECTION 3. Advisory prose now carries NO
+  truth-seal; the planted subject-test measures the precision of that UNSEALED advisory faculty, not a seal.
+  The measurement is unchanged; only the label the seal gave it is gone.)**
 
 Terminology is Huang et al. (ACM TOIS 10.1145/3703155): *grounded* = the faithfulness axis, *true* = the
 factuality axis. We did not coin it.
