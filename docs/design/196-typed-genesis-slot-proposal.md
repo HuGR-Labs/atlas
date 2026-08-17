@@ -1,5 +1,13 @@
 # Typed genesis output — the predicate-slot classification proposal (#196)
 
+> **SUPERSEDED IN PART (2026-08-16): the two-seal recommendation is now ONE-seal.** This doc's `validated`
+> seal (the independent-ensemble arm for semantic slots) was CUT by owner ratification — genesis ships
+> proven-only. See ADR-0017 CORRECTION 3 for the ratified decision and rationale (no sound way to plant
+> semantic ground-truth; a non-sound seal beside a sound one dilutes the `proven` claim). The `proven`
+> analysis below (sound oracle for dependency/count/definition) stands; wherever this doc proposes a
+> `validated` seal / ensemble leg, read it as WITHDRAWN — a semantic slot with no mechanical oracle emits
+> unsealed advisory prose or drops, never a sealed fact.
+
 > **Status: PROPOSAL, awaiting owner ratification.** The task is explicit: this is a design question, not
 > an execution card — do not dispatch a build before the owner has ratified the approach. This document
 > states the problem as measured, the one genuine design fork, a recommendation, and the blast radius, so

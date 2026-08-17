@@ -140,12 +140,11 @@ export type { NegationNode, AbstainedRecord };
 export type ObviousnessRank = 'obvious' | 'non-obvious';
 
 /**
- * The two-seal provenance vocabulary (ADR-0017 — two-seal typed genesis). Records HOW a mined fact's
- * type/slot was decided: `proven` — a mechanical oracle discharged it; `validated` — an independent
- * LLM-ensemble agreed. ADDITIVE + absent-tolerant, exactly like `obviousness` (ADR-0012) below — this
+ * The seal provenance vocabulary. Records HOW a mined fact's type/slot was decided: `proven` — a mechanical
+ * oracle discharged it. ADDITIVE + absent-tolerant, exactly like `obviousness` (ADR-0012) below — this
  * type only makes the field EXIST; it never decides WHEN a seal is set (that is the admit path's job).
  */
-export type Seal = 'proven' | 'validated';
+export type Seal = 'proven';
 
 /**
  * The STORED, AUDITABLE obviousness score (GEN-4 / GROUND-7, ADR-0012 — owner-ratified 2026-08-02).
