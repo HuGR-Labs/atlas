@@ -16,8 +16,13 @@ atlas mine <repo>
 - `<repo>` — required by the parser (arity 1), and **currently ignored**: the entrypoint calls
   `runMineArms(process.cwd())` (`packages/cli/src/cli.ts`). Measured: `atlas mine /definitely/not/a/repo` run
   from a demo repository mined that demo repository and exited `0`. Pass `.` and run it from the repo root.
-- No flags. The budget ceiling and scope seams exist in `MineDeps` but no CLI flag reaches them, so do not
-  look for `--budget` or `--scope`.
+- No flags — but one **environment variable** reaches the budget seam. `ATLAS_MINE_BUDGET=N` caps the run at
+  **N sites** (a positive integer): the sites over the cap are left `unvisited` with `cause: ceiling`, and it
+  applies to **each** arm of a default multi-arm run. It is an env, not a flag (like `ATLAS_MINE_SLOT`), and
+  it is opt-in: unset ⇒ the default ceiling `min(frontier, 200)`, byte-identical to before. A non-positive or
+  non-integer value **throws** rather than silently mining the 200 default. Use it to bound the real spend of
+  a metered run. The **scope** seam exists in `MineDeps` but no env or flag reaches it, so do not look for
+  `--scope`.
 
 ### Sound by default — the arms
 

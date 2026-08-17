@@ -43,7 +43,7 @@ import type {
   SkeletonSource,
 } from '@atlas/genesis';
 import { createDiskStore, headSha, createSkeletonSource, gitSidecarTrust } from '@atlas/adapter-io';
-import { resolveProposer, NO_MODEL_IDENTITY } from './mine-proposer.js';
+import { resolveProposer, resolveMineBudget, NO_MODEL_IDENTITY } from './mine-proposer.js';
 import type { MineSlot } from './mine-proposer.js';
 import { resolveFrontier } from './mine-frontier.js';
 import { createProposerPool, makeVisitAll, proposerPoolAvailable } from './mine-pool.js';
@@ -187,6 +187,11 @@ function withDefaults(repoPath: string, deps?: Partial<MineDeps>): ResolvedDeps 
   // #182 — the frontier arm, resolved ONCE from the threaded env and this pass's own skeleton source, so
   // the seam that enumerates units and the seam that orders them are the same object (one fold, one truth).
   const frontier: FrontierOptions = deps?.frontier ?? resolveFrontier(deps?.env ?? process.env, skeleton);
+  // [MINE-BUDGET-CAP] An INJECTED budget always wins (a test pins its own ceiling); only when none is injected
+  // does the CLI path read `ATLAS_MINE_BUDGET`. Unset ⇒ `undefined`, so the controller's `defaultBudget`
+  // applies and the run is byte-identical to today (the cap is opt-in). This rides `deps.budget` on through
+  // `runMineArms` too, so EACH arm the multi-arm loop drives is capped at the same N.
+  const budget = deps?.budget ?? resolveMineBudget(deps?.env ?? process.env);
   const d: MineDeps = {
     frontier,
     rev,
@@ -206,7 +211,7 @@ function withDefaults(repoPath: string, deps?: Partial<MineDeps>): ResolvedDeps 
     // no admission (REQ-CLI-4c) — it wires a gate it does not author, exactly as it wires the store above.
     gate: deps?.gate ?? composedGate(skeleton, repoPath, rev),
     handoffTo: deps?.handoffTo ?? ((): void => {}),
-    ...(deps?.budget !== undefined ? { budget: deps.budget } : {}),
+    ...(budget !== undefined ? { budget } : {}),
     ...(deps?.scope !== undefined ? { scope: deps.scope } : {}),
     ...(deps?.env !== undefined ? { env: deps.env } : {}),
   };

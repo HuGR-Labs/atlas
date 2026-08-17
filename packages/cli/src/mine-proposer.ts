@@ -27,7 +27,8 @@ import {
   shippedEnrichedTemplatePath,
 } from '@atlas/adapter-io';
 import type { ClaimParser, ModelCommand } from '@atlas/adapter-io';
-import type { SiteProposer } from '@atlas/genesis';
+import { cappedBudget } from '@atlas/genesis';
+import type { GenesisBudget, SiteProposer } from '@atlas/genesis';
 
 /** The sentinel `modelIdentity` for the fail-closed default: no model was wired, so nothing produced a
  *  fact. It is a STATE, honestly named — never a fabricated identity. */
@@ -93,6 +94,27 @@ export function resolveMineSlot(env: NodeJS.ProcessEnv): MineSlot {
 
 /** One resolved mining arm. */
 export type MineSlot = 'advisory' | 'dependency' | 'count';
+
+/** [MINE-BUDGET-CAP] The env that caps how many sites a metered `atlas mine` run visits. It is the CLI-
+ *  reachable knob onto the run-controller's already-existing `GenesisBudget.ceiling` seam — there is no
+ *  `--budget` FLAG (the surface types none), so a metered run's spend was uncapped below the 200 default
+ *  until this. An env, not a flag, to match `ATLAS_MINE_SLOT`/`ATLAS_ENRICH`. */
+export const MINE_BUDGET_ENV = 'ATLAS_MINE_BUDGET';
+
+/** Resolve the site-ceiling budget from `env`. Unset/'' ⇒ `undefined` — the controller's `defaultBudget`
+ *  applies and behaviour is BYTE-IDENTICAL to today (the cap is opt-in). A POSITIVE INTEGER string N ⇒
+ *  `cappedBudget(N)`. ANY other value (`0`, negative, `1.5`, `abc`, a non-empty non-integer) THROWS —
+ *  mirroring `resolveMineSlot`'s throw discipline: a bad budget is a misconfiguration and must NOT silently
+ *  fall back to the 200 default, mining far more than the operator asked (the fail-silent trap #167). */
+export function resolveMineBudget(env: NodeJS.ProcessEnv): GenesisBudget | undefined {
+  const raw = env[MINE_BUDGET_ENV];
+  if (raw === undefined || raw === '') return undefined;
+  const trimmed = raw.trim();
+  // A positive integer only — `Number.parseInt` would accept `1.5`/`3abc`, so match the whole string first.
+  if (!/^[1-9][0-9]*$/.test(trimmed))
+    throw new Error(`${MINE_BUDGET_ENV}=${JSON.stringify(raw)} is not a positive integer site cap — pass a whole number ≥ 1 (e.g. ${MINE_BUDGET_ENV}=25), or leave it unset for the default`);
+  return cappedBudget(Number(trimmed));
+}
 
 /** [SOUND-DEFAULT-MINE] The SET of arms a run mines. Unset/'' ⇒ the SOUND-by-default union — advisory PROSE
  *  AND the two sound arms (dependency + count) TOGETHER, so a DEFAULT `atlas mine` no longer hides the proven
