@@ -315,13 +315,17 @@ Re-measured on a fresh index, exhaustive pool (23,199 pairs):
 > `symbol-reverse` dropped, so the closed-world disjointness silently failed (a LIVE T0 door-unsoundness,
 > PRODUCTION-affected via `atlas verify-fact negation`). The "soundness preserved" claim was true only for the
 > dist-form index. The fix (#178, `opaqueRefSources` split-feed → abstain scope-open) restores a GENUINE
-> 0-false-admit on the fresh index, but recall collapses — on that same fresh local-form index — from
-> **95% (pre-fix) → 4.25% (post-fix)** (the 80.9% above is the separate dist-form record, not this index);
-> every cross-package import, incl. type-only, collapses to an opaque local; Approach-3 = rebuild to
-> dist-forms recovers it, deferred.
-> So this ADR's "0-FA / 80.9%" is retained as the dist-form record; the current sound-on-any-index story is
-> 0-false-admit with recall gated by index form. LESSON: a number measured once with the index gitignored
-> rots — committed artifacts must carry their own re-runnable checkability.
+> 0-false-admit that holds ACROSS index builds; recall is the number that swings with the build.
+> **Measured 2026-08-17, all 0-false-admit post-fix:** committed **dist-form** index (the OPERATING case) =
+> recall **32.5%** (gate-off teeth only 0.66% — cross-package resolves, so the opaque gate barely fires);
+> a **dist-ABSENT rebuild** (`scip-typescript index` without building declarations first) = recall **4.25%**
+> and is where the pre-fix 80.86% false-admit lived — a MISBUILD, not the operating recall; the 80.9% above
+> is a separate superseded dist-form snapshot. So **"Approach-3" is a BUILD RECIPE, not a code campaign**:
+> build declarations (`tsc -b`) before `scip-typescript index` so cross-package refs are dist-form and the
+> existing `canonicalizeSymbol` recovers recall. This ADR's "0-FA / 80.9%" is retained as a dist-form record;
+> the current story is 0-false-admit on ANY build, recall build-dependent (32.5% operating / 4.25% misbuild).
+> LESSON: a number measured once with the index gitignored rots — committed artifacts must carry their own
+> re-runnable checkability, and the index BUILD must be pinned or the recall number is not citable.
 
 The residual is now the honest one the design always named: escaping targets (~18%) abstain (they would need
 real points-to). The `scope-dynamic` leg stays live and sound — it just no longer fires on a parse artifact.
