@@ -211,7 +211,7 @@ describe.skipIf(!RUN)('#196b WP-1 — drives the SHIPPED admission over atlas-se
       console.log(`  ${arm.padEnd(11)} falseAdmit=${fmt(a.falseAdmit)}  recallTrue=${fmt(a.recallTrue)}  n=${a.n}`);
     }
     const teeth = score(sb.negTeeth.map((d) => d.row), sb.negTeeth.map((d) => d.outcome));
-    console.log(`  negation TEETH (closed-world refutation disabled): falseAdmit=${fmt(teeth.negation.falseAdmit)}  <= must be > 0`);
+    console.log(`  negation TEETH (opaque collapsed-local gate DISABLED): falseAdmit=${fmt(teeth.negation.falseAdmit)}  <= must be > 0 (pre-fix unsound regime; door was historically ~80.86%)`);
     console.log('==================================================================================\n');
     /* eslint-enable no-console */
     // dependency: the POSITIVE-dual gate ABSTAINS on a tsc-false claim unless the SOUND oracle PROVES a
@@ -237,38 +237,46 @@ describe.skipIf(!RUN)('#196b WP-1 — drives the SHIPPED admission over atlas-se
     // count: complete over its (naturally sub-cap) population — a boundary flip `atLeast = witnessed+1` on a
     // symbol with a REAL caller, which `verifyCount`'s sound lower-bound can never prove ⇒ genuinely 0 admits.
     expect(s.count.falseAdmit).toBe(0);
-    // TEETH (non-vacuity): the negation pool CONTAINS tsc-false negatives the closed-world door refutes; a door
-    // with that refutation DISABLED (refute→admit) is caught ⇒ falseAdmit strictly rises. Proves the 0-arms are
-    // not vacuously green (the instrument would bite a broken gate).
+    // TEETH (non-vacuity), re-anchored on the FIXED door's mechanism. The negation pool CONTAINS cross-package
+    // tsc-false negatives whose real caller scip-typescript collapsed onto an opaque `local` symbol. The fix
+    // (branch fix/negation-collapsed-local-soundness) EARNS negation.falseAdmit=0 by re-surfacing those refs via
+    // `opaqueRefSources()` and ABSTAINING (scope-open) at gate (b0) — governed-emit-negation.ts:259 — which fires
+    // BEFORE the refute step. The `negTeeth` re-drives the SAME pool through `judgeGateOff`: the byte-identical door
+    // with the opaque gate OFF (symbol-reverse rebuilt with the indexer identity absent ⇒ `opaqueRefSources()`
+    // empty). With (b0) defeated, those negatives fall through to the refute/admit path and are ADMITTED again
+    // (`reverseCallers` cannot see the collapsed caller), so the false-admit RETURNS to the pre-fix unsound regime
+    // (~74% over this capped pool; the door was historically adjudicated ~80.86%). That it rises STRICTLY off 0
+    // proves the 0 is earned by the opaque gate, not vacuously green — the exact number is printed by the console.
     expect(teeth.negation.falseAdmit).not.toBeNull();
     expect(s.negation.falseAdmit).not.toBeNull();
     expect(teeth.negation.falseAdmit!).toBeGreaterThan(s.negation.falseAdmit!);
-    // negation + relation: MEASURED (never asserted-0). The acceptance PREDICTED relation may be >0 (no direction
-    // oracle) and it is TOTAL here (admitRelation is a pure grounding gate). The acceptance ASSUMED negation==0;
-    // measurement FALSIFIES that on a @sourcegraph/scip-typescript index — the shipped closed-world door ADMITS
-    // cross-package negatives SCIP's reverseCallers cannot see but tsc can (the latent risk the negation-bench
-    // header itself flags). The sibling negation-bench's own 0-assertion FAILS identically on this substrate
-    // (131/162 tsc-false negatives admitted). A SOUND instrument REPORTS this; it does not assert the falsehood.
-    expect(s.negation.falseAdmit).not.toBeNull(); // MEASURED — the number is the finding, judged by a human
+    // negation + relation: MEASURED. The acceptance PREDICTED relation may be >0 (no direction oracle) and it is
+    // TOTAL here (admitRelation is a pure grounding gate). negation is now SOUND: the fix drives its false-admit to
+    // 0 on a @sourcegraph/scip-typescript index — the very cross-package unsoundness this arm ONCE measured is what
+    // the fix closed. The number is still REPORTED (never asserted-away); the teeth above is what proves it earned.
+    expect(s.negation.falseAdmit).not.toBeNull();
     expect(s.relation.falseAdmit).not.toBeNull();
-    // WHY negation is nonzero (~80.86%, a DOOR property — not an instrument bug; adjudicated REAL by a security
-    // seat): scip-typescript emits a cross-package reference as a SCIP `local` symbol, which `createSymbolReverse`
-    // DROPS at packages/index/src/symbol-reverse.ts:79 (`isLocalSymbol(occ.symbol) ⇒ continue`). So
-    // `reverseCallers(X)` cannot see those callers, and the disjointness completeness the door's soundness rests on
-    // (governed-emit-negation.ts:251-254 — `reverseCallers(X) ∩ S == ∅` "becomes a COMPLETE no-reference") FAILS on
-    // a scip-typescript-built index: the door admits "X not called in S" while tsc witnesses a cross-package call.
-    // The canon-completeness guard that would catch this is UN-WIRED (ADR-0016:102-104). The instrument REPORTS
-    // this measured door unsoundness; it never asserts the falsehood negation==0.
+    // WHY negation is now 0 (a DOOR property — the fix on branch fix/negation-collapsed-local-soundness): scip-
+    // typescript emits a cross-package reference as a SCIP `local` symbol. PRE-FIX `createSymbolReverse` simply
+    // dropped it, so `reverseCallers(X)` could not see those callers and the disjointness completeness the door's
+    // soundness rests on (governed-emit-negation.ts — `reverseCallers(X) ∩ S == ∅` "becomes a COMPLETE
+    // no-reference") FAILED on a scip-typescript index: the door admitted "X not called in S" (~80.86% of the
+    // tsc-FALSE negatives) while tsc witnessed a cross-package call. The fix ADDS `opaqueRefSources()` — the
+    // collapsed cross-package `local` refs with no matching local def — and the door ABSTAINS (scope-open) over any
+    // scope containing one (governed-emit-negation.ts:259, gate (b0)), so those negatives no longer false-admit ⇒
+    // negation.falseAdmit=0. NON-VACUITY: disabling the opaque gate (`judgeGateOff`) returns the large false-admit.
     // WHY relation is 100%: `admitRelation` (admit-harness.ts:220) is a PURE grounding gate — both endpoints
     // re-derive FRESH, and there is NO direction oracle, so a direction-reversed edge (B→A where only A→B holds)
     // grounds identically and is admitted. A door property too (no direction check), reported not asserted-away.
     // eslint-disable-next-line no-console
     console.log(
-      `FINDING: negation door false-admit = ${fmt(s.negation.falseAdmit)} (cross-package unsound — scip 'local' refs `
-      + `dropped at symbol-reverse.ts:79 break disjointness completeness), relation = ${fmt(s.relation.falseAdmit)} `
+      `FINDING: negation door false-admit = ${fmt(s.negation.falseAdmit)} (FIXED — collapsed cross-package scip `
+      + `'local' refs now re-surfaced via opaqueRefSources() ⇒ door abstains scope-open at governed-emit-negation.ts:259; `
+      + `gate-OFF teeth returns ${fmt(teeth.negation.falseAdmit)}), relation = ${fmt(s.relation.falseAdmit)} `
       + `(no direction oracle in admitRelation), dependency = ${fmt(s.dependency.falseAdmit)} residual (all `
       + `${depFalseAdmits.length} type/reference symbols — call-vs-reference oracle gap, no fabricated caller). `
-      + `AC-6 negation==0 FALSIFIED by measurement.`,
+      + `AC-6 negation false-admit CLOSED by branch fix/negation-collapsed-local-soundness (door was unsound, `
+      + `historically ~80.86%; gate-off teeth reproduces the regime; now 0).`,
     );
   });
 
