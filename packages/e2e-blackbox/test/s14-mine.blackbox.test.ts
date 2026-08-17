@@ -63,7 +63,9 @@ describe('S14 — atlas mine: a 0-fact pass reports the cause its own run produc
   it('1. a default `atlas mine <repo>` run seeds 0, explains the 0 by its OBSERVED cause, and exits 0', () => {
     repo = makeFixtureRepo({ files: { 'src/foo.ts': 'export const foo = 1;\n' } });
 
-    const r = runAtlas(repo.repoPath, ['mine', repo.repoPath]);
+    // ATLAS_MINE_SLOT pinned to the advisory arm: this story tests the 0-fact OBSERVED-CAUSE render, not the
+    // multi-arm default (which is proven in s-sound-default + the mine-arms unit suite).
+    const r = runAtlas(repo.repoPath, ['mine', repo.repoPath], { ATLAS_MINE_SLOT: 'advisory' });
 
     // exit 0 — an empty pass is a clean honest result, NOT an error (no `resumeToken` rides it).
     expect(r.exitCode).toBe(0);
@@ -91,7 +93,7 @@ describe('S14 — atlas mine: a 0-fact pass reports the cause its own run produc
   it('2. re-running `atlas mine` on the SAME repo stays stable — idempotent, no accumulation, no fabrication', () => {
     // A second independent pass over the same fixture: still 0 facts, still the same observed cause, still
     // exit 0 — the empty result is a structural property of the seam, not a one-shot fluke.
-    const r2 = runAtlas(repo.repoPath, ['mine', repo.repoPath]);
+    const r2 = runAtlas(repo.repoPath, ['mine', repo.repoPath], { ATLAS_MINE_SLOT: 'advisory' });
     expect(r2.exitCode).toBe(0);
     expect(r2.stdout).toContain('genesis: seeded 0 candidate fact(s); ratified 0');
     expectCauseMatchesCost(r2.stdout);

@@ -123,6 +123,10 @@ export function runMineOnce({ repo, cliBin, modelConfigPath, model, sidecarPath,
     ATLAS_MODEL_CONFIG: modelConfigPath,
     METERED_MODEL: model,
     ATLAS_COST_SIDECAR: sidecarPath,
+    // The bench measures ONE axis per run, and that axis is now EXPLICIT: the default `atlas mine` unions all
+    // arms (advisory + dependency + count), so a per-site manifest join needs the single-arm render. Advisory
+    // reproduces the prior single-axis measurement byte-for-byte; a future per-axis sweep parameterizes this.
+    ATLAS_MINE_SLOT: 'advisory',
     ...(claudeBin !== undefined ? { METERED_CLAUDE_BIN: claudeBin } : {}),
     ...extraEnv,
   };

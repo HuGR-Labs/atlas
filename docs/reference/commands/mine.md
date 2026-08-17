@@ -14,10 +14,23 @@ atlas mine <repo>
 ```
 
 - `<repo>` — required by the parser (arity 1), and **currently ignored**: the entrypoint calls
-  `runMine(process.cwd())` (`packages/cli/src/cli.ts`). Measured: `atlas mine /definitely/not/a/repo` run
+  `runMineArms(process.cwd())` (`packages/cli/src/cli.ts`). Measured: `atlas mine /definitely/not/a/repo` run
   from a demo repository mined that demo repository and exited `0`. Pass `.` and run it from the repo root.
 - No flags. The budget ceiling and scope seams exist in `MineDeps` but no CLI flag reaches them, so do not
   look for `--budget` or `--scope`.
+
+### Sound by default — the arms
+
+A default run mines **three arms** and unions their candidates: `advisory` (free-form grounded prose, no
+truth-seal), `dependency` and `count` (typed facts a **sound oracle** proves-or-drops, sealed `proven`). So
+out of the box `atlas mine` emits sound facts beside the advisory prose — it is not a single hidden arm. The
+default output carries a `mine: arms — advisory a · dependency d · count c` summary line, then each arm's own
+block under an `arm: <slot>` heading (its own why-empty explanation and coverage ledger — nothing an arm did
+is elided). The `s-sound-default` black-box proves the default runs all three.
+
+`ATLAS_MINE_SLOT=<arm>` **isolates a single arm** — `advisory`, `dependency`, or `count` (a typo throws, never
+a silent fallback). The worked examples below pin `ATLAS_MINE_SLOT=advisory` so one arm's mechanics read
+cleanly; the benchmark uses the same isolation to measure one axis at a time.
 
 The model is configured **outside the repository**, at `$ATLAS_MODEL_CONFIG`, else
 `$XDG_CONFIG_HOME/atlas/model.json`, else `~/.config/atlas/model.json`. That location is enforced, not just
@@ -26,7 +39,7 @@ recommended — see *What it refuses*.
 ## Worked example — the zero-config run
 
 ```
-$ atlas mine .
+$ ATLAS_MINE_SLOT=advisory atlas mine .
 genesis: seeded 0 candidate fact(s); ratified 0
 cost: llmCalls 0 · budgetSpent 0
 mine: 0 candidate facts — 0 sites visited: the structural pass (skeleton → ranked frontier) yielded no site, so no proposer was ever consulted; wiring a model would not change this 0. Run `atlas doctor index` to see whether this repository has the SCIP index the frontier is derived from
@@ -63,7 +76,7 @@ Measured on a repository with a real SCIP index and a two-site ranked frontier �
 binary printed them:
 
 ```
-$ atlas mine .
+$ ATLAS_MINE_SLOT=advisory atlas mine .
 genesis: seeded 0 candidate fact(s); ratified 0
 cost: llmCalls 2 · budgetSpent 2
 mine: 0 candidate facts — 2 site(s) visited and every one abstained: no proposer model is wired, so nothing could be proposed (facts are never fabricated)
@@ -102,7 +115,7 @@ that is reported as "not recorded" — never as "covered nothing", and never as 
 With a model configured, the run also prints its prompt provenance:
 
 ```
-$ atlas mine .
+$ ATLAS_MINE_SLOT=advisory atlas mine .
 genesis: seeded 0 candidate fact(s); ratified 0
 cost: llmCalls 0 · budgetSpent 0
 prompt: 170c27cd1ec1854cb7a5af59ea0186ea1c3ddf78e6f25554bd920eb2d1dcaf57 — the artifact every proposal on this run was built from

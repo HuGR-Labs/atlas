@@ -82,7 +82,9 @@ describe('S25 — a configured model is REACHED at every ranked site, and the ru
   it('CONTROL: with NO model configured the pass visits its sites and completes', () => {
     // The baseline the next case must not regress. It also proves the fixture really has a frontier — an
     // assertion about "with a model" is worth nothing if the repo has no site either way.
-    const run = runAtlas(indexedRepo().repoPath, ['mine', '.'], { ATLAS_MODEL_CONFIG: '' });
+    // ATLAS_MINE_SLOT pinned to the advisory arm: this story tests model REACHABILITY at every site, not the
+    // multi-arm default (which is proven in s-sound-default + the mine-arms unit suite).
+    const run = runAtlas(indexedRepo().repoPath, ['mine', '.'], { ATLAS_MODEL_CONFIG: '', ATLAS_MINE_SLOT: 'advisory' });
 
     expect(run.stdout).toContain('cost: llmCalls 2 · budgetSpent 2');
     expect(run.stdout).toContain('no proposer model is wired');
@@ -94,7 +96,7 @@ describe('S25 — a configured model is REACHED at every ranked site, and the ru
     // `<repo>/<64-hex>`, gets null at every site, the prompt factory refuses, GEN-8c swallows it — and this
     // run becomes `llmCalls 0 · budgetSpent 0`, exit 1, `partial: resume at rank -1`. Verified RED against
     // the unfixed producer before this file was committed.
-    const run = runAtlas(indexedRepo().repoPath, ['mine', '.'], { ATLAS_MODEL_CONFIG: operatorConfig(ECHOING) });
+    const run = runAtlas(indexedRepo().repoPath, ['mine', '.'], { ATLAS_MODEL_CONFIG: operatorConfig(ECHOING), ATLAS_MINE_SLOT: 'advisory' });
 
     expect(run.stdout).toContain('cost: llmCalls 2 · budgetSpent 2'); // llmCalls > 0: the model WAS called
     expect(run.stdout).not.toContain('partial: resume at rank'); //       a completed pass, not an interruption
@@ -113,7 +115,7 @@ describe('S25 — a configured model is REACHED at every ranked site, and the ru
     // ADR-0011:175 and by propose.md — which leans on it ("the refusal RATE is only readable as a quality
     // signal with this prompt held fixed") — and carried by nothing. teeth (breaks-on "the digest is
     // computed and dropped"): with no reader the line is absent and this fails.
-    const run = runAtlas(indexedRepo().repoPath, ['mine', '.'], { ATLAS_MODEL_CONFIG: operatorConfig(ECHOING) });
+    const run = runAtlas(indexedRepo().repoPath, ['mine', '.'], { ATLAS_MODEL_CONFIG: operatorConfig(ECHOING), ATLAS_MINE_SLOT: 'advisory' });
 
     expect(run.stdout).toMatch(/^prompt: [0-9a-f]{16,} — the artifact every proposal on this run was built from$/m);
   });
@@ -124,7 +126,7 @@ describe('S25 — a configured model is REACHED at every ranked site, and the ru
     // used to surface as `exit 1 · llmCalls 0 · resume at rank -1` and nothing else. teeth (breaks-on
     // "ModelCommandError is swallowed by the controller again").
     const missing = JSON.stringify({ roles: { propose: { cmd: 'atlas-no-such-model-binary', args: [] } } });
-    const run = runAtlas(indexedRepo().repoPath, ['mine', '.'], { ATLAS_MODEL_CONFIG: operatorConfig(missing) });
+    const run = runAtlas(indexedRepo().repoPath, ['mine', '.'], { ATLAS_MODEL_CONFIG: operatorConfig(missing), ATLAS_MINE_SLOT: 'advisory' });
 
     expect(run.exitCode).toBe(2); // a governed refusal, like every other misconfiguration — not a partial
     expect(run.stdout).toContain('the configured model command failed');

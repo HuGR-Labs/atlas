@@ -84,11 +84,26 @@ export const MINE_SLOT_ENV = 'ATLAS_MINE_SLOT';
  *  insensitive, trimmed) ⇒ that arm; ANY OTHER value THROWS — a misspelled arm is a misconfiguration, and
  *  silently falling back to advisory would mine the wrong family while reporting success (the fail-silent trap
  *  #167). `count` is the #196c cardinality dual of `dependency` — same throw-on-typo discipline. */
-export function resolveMineSlot(env: NodeJS.ProcessEnv): 'advisory' | 'dependency' | 'count' {
+export function resolveMineSlot(env: NodeJS.ProcessEnv): MineSlot {
   const v = env[MINE_SLOT_ENV]?.trim().toLowerCase();
   if (v === undefined || v === '') return 'advisory';
   if (v === 'advisory' || v === 'dependency' || v === 'count') return v;
   throw new Error(`${MINE_SLOT_ENV}=${JSON.stringify(env[MINE_SLOT_ENV])} is not a known mining arm — use 'advisory', 'dependency' or 'count'`);
+}
+
+/** One resolved mining arm. */
+export type MineSlot = 'advisory' | 'dependency' | 'count';
+
+/** [SOUND-DEFAULT-MINE] The SET of arms a run mines. Unset/'' ⇒ the SOUND-by-default union — advisory PROSE
+ *  AND the two sound arms (dependency + count) TOGETHER, so a DEFAULT `atlas mine` no longer hides the proven
+ *  facts behind an env var. An EXPLICIT valid arm ⇒ the SINGLETON of just that arm, which is what preserves the
+ *  benchmark's per-axis isolation (one arm measured per invocation). A typo THROWS — reusing `resolveMineSlot`'s
+ *  exact validation and message, so the fail-silent trap (#167) stays closed for the plural door too. `resolveMineSlot`
+ *  (singular) is UNCHANGED: it still answers unset⇒'advisory' for the frozen single-pass callers. */
+export function resolveMineSlots(env: NodeJS.ProcessEnv): readonly MineSlot[] {
+  const v = env[MINE_SLOT_ENV]?.trim();
+  if (v === undefined || v === '') return ['advisory', 'dependency', 'count'];
+  return [resolveMineSlot(env)]; // an explicit arm — validated (throws on typo) and isolated to itself
 }
 
 /** The honest fail-closed default proposer: no model is wired, so the model abstains at every site
@@ -139,13 +154,18 @@ export interface ResolvedProposer {
  *  candidate list and the gate-side per-unit resolver: `dependency` (#196a fan-out) and `count` (#196c fan-in).
  *  The advisory/ENRICH arms do not. Reading the index ONCE per arm keeps the closed list the model sees and the
  *  symbol the parser binds derived from the SAME projection the gate reads (they can never disagree). */
-export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = process.env): ResolvedProposer {
+export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = process.env, slotOverride?: MineSlot): ResolvedProposer {
   // [ADR-0017] VALIDATE THE ARM FIRST — a misspelled `ATLAS_MINE_SLOT` is a misconfiguration, and it must
   // throw BEFORE the no-model early return below, or a typo (`dependncy`) would be silently swallowed as a
   // clean zero-config abstention in the exact same fail-silent shape `resolveMineSlot`'s throw exists to
   // prevent (Luna cold-review F4). Config validation, like `loadModelConfig`'s own throw, precedes the
   // "is a model even wired" question. The resolved arm is read again below (byte-identically) for the wired path.
-  const slot = resolveMineSlot(env);
+  //
+  // [SOUND-DEFAULT-MINE] `slotOverride` — when the multi-arm DRIVER (`runMineArms`) drives a SPECIFIC arm, it
+  // passes the already-resolved slot here rather than mutating `process.env`, so a single binary serves every
+  // arm without a global. When ABSENT the behaviour is BYTE-IDENTICAL to before (`resolveMineSlot(env)`); the
+  // override is a pre-validated arm from `resolveMineSlots`, so it does not re-run the typo guard.
+  const slot = slotOverride ?? resolveMineSlot(env);
   const cfg = loadModelConfig(repoPath, env); // throws on malformed — never silently "no model"
   const propose = cfg?.roles.propose;
   if (cfg === null || propose === undefined)
