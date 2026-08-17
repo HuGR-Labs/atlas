@@ -53,6 +53,19 @@ Genesis emits a typed slot per fact under a **two-seal** classifier, mirroring t
    Totality ("every *newly* mined fact carries a slot + seal") is enforced behaviourally at the emit path and
    its goldens, not by a required type field.
 
+> **CORRECTION (2026-08-17 — the validated ensemble is SAME-family, per owner decision 2026-08-16).** Points 3
+> and the build path below say the validated ensemble is "a distinct model family" via "the gateway." The owner
+> subsequently ruled: **the ensemble is independent *sonnet* raters via the Agent tool — SAME family, not
+> cross-family, and NOT the gateway** ("no budget for other-provider quality models; the validation is not
+> complex enough to justify the extra complexity"). This changes what the `validated` seal's honesty rests on:
+> it is NOT a distinct-family jury's impartiality — it is **fresh, independent, adversarial sonnet raters +
+> majority, whose reliability is a MEASURED false-rate (#95), not a claim of family-independence.** Wherever
+> this ADR says "distinct model family" / "gateway ensemble," read "independent same-family sonnet ensemble,
+> reliability measured." The two-seal core (proven ≠ validated, never mixed, `validated` explicitly non-sound)
+> is unchanged. NOTE (owner-gated follow-up): the semantic/validated bench (#95 false-rate) is NOT YET RUN —
+> the #196b lens-2 audit found no sound mechanical way to plant semantic ground-truth, so the validated seal's
+> number awaits the owner's ratified methodology (option C: adjudication panel, explicitly labelled non-sound).
+
 ## Alternatives rejected
 
 - **Proven-only** (abstain on every semantic slot): sound, but leaves ~8/12 slot classes permanently
