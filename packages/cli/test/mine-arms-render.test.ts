@@ -58,6 +58,23 @@ describe('AC-B5 — merged render exposes per-arm counts; single-arm renders as 
     expect(whyLines.length).toBe(3); // one honesty line per arm — never dropped
   });
 
+  it('the [union] total is numerically correct — unionSeeded dedups identical cross-arm facts, no double-count, no loss', async () => {
+    // The injected proposer is arm-AGNOSTIC (it bypasses per-arm resolution, mine.ts), so all three arms emit
+    // the SAME seeds ⇒ the SAME nodeKeys. `unionSeeded` dedups by `Fact.id` (===nodeKey), so the [union] total
+    // must collapse the 3× identical facts back to ONE arm's worth. TEETH: a double-count (no dedup) would read
+    // 3×; a fact-loss would read below one arm's count. (In production the arms carry DISTINCT slots ⇒ distinct
+    // nodeKeys ⇒ union == sum; that per-arm-resolution path is the delegated e2e follow-up, not this unit.)
+    const v = await runMineArms('fix-repo', { env: {}, ...seams() });
+    const union = Number(/genesis: seeded (\d+) candidate fact\(s\) \[union\]/.exec(v.stdout)?.[1]);
+    const perArm = /mine: arms — advisory (\d+) · dependency (\d+) · count (\d+)/.exec(v.stdout);
+    expect(perArm).not.toBeNull();
+    const [a, d, c] = [Number(perArm![1]), Number(perArm![2]), Number(perArm![3])];
+    expect(a).toBeGreaterThan(0); // the seams actually seed — not a vacuous 0==0
+    expect(d).toBe(a);
+    expect(c).toBe(a); // arm-agnostic injected proposer ⇒ identical per-arm counts
+    expect(union).toBe(a); // dedup collapsed the identical cross-arm facts to one copy
+  });
+
   it('an EXPLICIT single-arm run is BYTE-IDENTICAL to the frozen single-pass fold', async () => {
     const deps = seams();
     const explicit = await runMineArms('fix-repo', { env: { [MINE_SLOT_ENV]: 'advisory' }, ...deps });

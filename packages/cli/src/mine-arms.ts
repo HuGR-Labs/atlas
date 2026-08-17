@@ -7,10 +7,11 @@
 // An EXPLICIT `ATLAS_MINE_SLOT` resolves to a SINGLETON, so the benchmark's per-axis measurement harness (one
 // arm per invocation) is preserved EXACTLY — a single-arm run renders byte-identical to the frozen fold.
 //
-// THE UNION IS THE DURABLE STORE'S, not this file's: each pass writes CANDIDATES to the SAME staging sidecar,
-// which unions on `nodeKey` across passes, so the sound facts and the advisory prose coexist. This file only
-// collects the per-arm `GenesisReport`s and renders a MERGED verdict whose totals are that union and whose
-// per-arm counts show the operator what EACH arm produced.
+// THE MERGED TOTAL MIRRORS THE DURABLE STORE'S UNION, it is not read back FROM it: each pass writes CANDIDATES
+// to the SAME staging sidecar, which unions on `nodeKey` across passes, so the sound facts and the advisory
+// prose coexist. This file recomputes that union in memory from the per-arm reports — the number agrees with
+// the store because the report's dedup key (`Fact.id`) IS `nodeKey` and distinct arms carry distinct slots, so
+// no cross-arm collision. It is a faithful parallel recompute of proposed candidates, not the store's own read.
 
 import type { GenesisReport, Fact } from '@atlas/genesis';
 import { driveMinePass, type MineDeps } from './mine.js';
@@ -62,8 +63,9 @@ export function foldArms(arms: readonly ArmPass[], ceiling?: number): CliVerdict
   const sum = (pick: (r: GenesisReport) => number): number => arms.reduce((n, a) => n + pick(a.pass.report), 0);
   const failed = arms.some((a) => a.pass.report.resumeToken !== undefined || a.pass.refusal !== undefined);
   const perArm = `mine: arms — ${arms.map((a) => `${a.slot} ${a.pass.report.seeded.length}`).join(' · ')}`;
+  const ratified = arms.reduce((n, a) => n + a.pass.report.ratified.length, 0); // sum, never hardcode 0 — mirrors single-arm foldVerdict so a ratifying pass would not go silent in the default (bobby note; today always 0, mine is candidate-only)
   const lines = [
-    `genesis: seeded ${seeded.length} candidate fact(s) [union]; ratified 0`,
+    `genesis: seeded ${seeded.length} candidate fact(s) [union]; ratified ${ratified}`,
     `cost: llmCalls ${sum((r) => r.llmCalls)} · budgetSpent ${sum((r) => r.budgetSpent)}`,
     perArm,
     ...arms.flatMap((a) => [`arm: ${a.slot}`, ...passBodyLines(a.pass, ceiling)]),
@@ -76,6 +78,10 @@ export function foldArms(arms: readonly ArmPass[], ceiling?: number): CliVerdict
  * This is the CLI entry `atlas mine` calls: unset env unions advisory prose + the two sound arms; an explicit
  * `ATLAS_MINE_SLOT` isolates a single arm (the bench harness). It THROWS the same one class `runMine` does — a
  * `ModelCommandError` a pass captured — which `cli.ts` renders as the governed refusal it is (try/catch unchanged).
+ *
+ * NOT ATOMIC across arms (bobby note): a later arm throwing after an earlier arm already staged candidates
+ * leaves those candidates durable while the verdict renders a refusal — the same partial-run semantics a
+ * single arm has, and an idempotent re-run reconciles (the store unions on nodeKey), so it is not corruption.
  */
 export async function runMineArms(repoPath: string, deps?: Partial<MineDeps>): Promise<CliVerdict> {
   const arms = driveMineArms(repoPath, deps);
