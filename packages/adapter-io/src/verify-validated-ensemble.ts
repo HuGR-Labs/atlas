@@ -7,6 +7,17 @@
 // posture): a fact is `validated` only on UNANIMOUS `GROUNDED_TRUE` across ≥3 raters with ZERO `HALLUCINATED`
 // vote — a single "this is false" vetoes, and too-few raters is not an ensemble. The benchmark SWEEPS the
 // policy to MEASURE the recall/false-rate tradeoff; the seal's honesty rides on that measured number.
+//
+// ── REFERENCE MODEL — NO PRODUCTION CALLERS (yet) ────────────────────────────────────────────────────
+// Nothing in `packages/*/src` calls `foldEnsembleVotes` / `makeEnsemblePort` today. This is the ADAPTER
+// half of the validated seal (ADR-0017 #196b): the shipped `verifyValidated` port + `admitValidated` arm
+// exist (Wave 1, admit-harness.ts), but the CALLER that materializes the rater vote map — the Wave-2
+// bench, orchestrator-driven, out-of-band — is not built yet, so this fold is reachable only from its own
+// tests + the AC-F8 `buildMineAdmission` integration. It is therefore a DECLARED reference model in the
+// LEDGER of `harness/gates/reference-model-guard.mjs` (`shipped: null`): a green suite here proves the fold
+// is SELF-CONSISTENT, NOT that any validated fact is produced in production. When the bench command lands
+// and injects `makeEnsemblePort` into the mine composition, this banner comes off and the ledger entry
+// gains its `shipped:` counterpart.
 
 import type { PredicateProposal } from '@atlas/genesis';
 
