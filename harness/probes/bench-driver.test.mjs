@@ -64,12 +64,16 @@ const FAKE_ENVELOPE = JSON.stringify({
   duration_api_ms: 250,
 });
 
-/** A STATEFUL fake `claude`: each call bumps a shared counter file and prices itself `0.01 * n` — a
- *  DISTINCT, monotonically increasing cost per call, in call order. `runCorpus` runs corpus units
- *  SEQUENTIALLY (`Array.prototype.map`, one unit's `runMineOnce` fully returns before the next starts), so
- *  every call this fake makes during pkg-a's run gets a STRICTLY LOWER price than every call during pkg-b's
- *  run — which is what makes "pkg-a's `src/index.ts` cost < every pkg-b cost" a reliable cross-unit-isolation
- *  witness, independent of any intra-unit pool race on the counter file itself. */
+/** A STATEFUL fake `claude`: each call bumps a shared counter file for an intra-unit DISTINCT call number,
+ *  and prices itself `(unitBase + n) * 0.01` where `unitBase` is derived from the UNIT (the cwd basename:
+ *  `mine .` runs with `cwd: <unit repo>`, see bench-driver.mjs:62). Cross-unit cost separation is therefore by
+ *  UNIT, NOT by the shared counter's cross-unit ordering — which is NOT safe to rely on: the counter's
+ *  read-modify-write is not atomic, so under the concurrent proposer pool two calls can lose-update to the
+ *  same `n` (even a pkg-b call can end up at `n = 1`), which made a bare `n * 0.01` scheme flake at the boundary
+ *  (`expected 0.01 to be less than 0.01`). With `unitBase` (pkg-b = 1000), every pkg-b cost is strictly greater
+ *  than every pkg-a cost BY CONSTRUCTION, independent of any counter race; the counter still supplies
+ *  intra-unit distinctness. This keeps "pkg-a's `src/index.ts` cost < every pkg-b cost" a robust cross-unit
+ *  isolation witness (the collision/join teeth below are unaffected — both units still write `src/index.ts`). */
 const FAKE_CLAUDE_COUNTER_SRC = `#!/usr/bin/env node
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 readFileSync(0);
@@ -77,10 +81,12 @@ const counterFile = process.env.FAKE_CLAUDE_COUNTER_FILE;
 let n = existsSync(counterFile) ? Number(readFileSync(counterFile, 'utf8')) || 0 : 0;
 n += 1;
 writeFileSync(counterFile, String(n));
+const unit = process.cwd().split('/').filter(Boolean).pop() || '';
+const unitBase = unit === 'pkg-b' ? 1000 : 0;
 process.stdout.write(JSON.stringify({
   result: 'free reasoning #' + n + '.\\n\`\`\`atlas-fact\\n{"claim":"a fake but well-formed claim #' + n + '"}\\n\`\`\`\\n',
   usage: { input_tokens: 100 + n, output_tokens: 20 + n, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
-  total_cost_usd: n * 0.01,
+  total_cost_usd: (unitBase + n) * 0.01,
   is_error: false,
   duration_api_ms: 100,
 }));
