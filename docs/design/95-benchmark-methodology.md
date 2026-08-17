@@ -83,12 +83,23 @@ The honest #95 story splits by seal, and the strong claim needs no LLM at all:
   scip-typescript emits cross-package refs as collapsed `local` symbols that `symbol-reverse` dropped, so the
   door's closed-world disjointness silently failed (a LIVE T0 door-unsoundness, PRODUCTION-affected via
   `atlas verify-fact negation`). The fix (#178, `opaqueRefSources` split-feed → abstain scope-open) restores a
-  GENUINE **0-false-admit** on the fresh index — but recall collapses, on that SAME fresh local-form index,
-  from **95% (pre-fix) → 4.25% (post-fix)** (the 80.9% above is the SEPARATE dist-form record, not the same
-  index), because every cross-package import (incl. type-only) collapses to an opaque local on the local-form
-  index and the door now honestly abstains over it. Approach-3 (rebuild the index to dist-forms so cross-package resolves) recovers
-  the recall and is a deferred follow-up. So the defensible headline is: negation is **sound (0-false-admit)**;
-  its **recall is index-form-dependent** and currently low on a fresh local-form index until Approach-3 lands.
+  GENUINE **0-false-admit**, and the sound property holds ACROSS index builds; **recall is the only number
+  that swings, and it is index-BUILD-dependent.** Three measured points, all 0-false-admit post-fix:
+    - **committed dist-form index** (the OPERATING case — `.atlas/index.scip` built with the packages'
+      `dist/*.d.ts` declarations present): **0-FA, recall 32.5%** (n=1352; measured 2026-08-17). Cross-package
+      refs resolve to `dist/*.d.ts` descriptors that `canonicalizeSymbol` (#189) bridges to their source defs,
+      so the opaque-local gate rarely fires — the gate-off teeth here is only **0.66%**, not 80%.
+    - **degenerate dist-ABSENT rebuild** (`scip-typescript index` run WITHOUT building declarations first):
+      **0-FA, recall 4.25%** — every cross-package import collapses to an opaque `local` the door honestly
+      abstains over. This is a MISBUILD, not the operating recall; it is where the pre-fix door false-admitted
+      80.86% (dist-form was already near-sound).
+    - **historical 2026-08-12 dist-form index (#232)**: 0-FA, recall 80.9% — a different, superseded snapshot,
+      kept only as the record.
+  So **"Approach-3" is not a code campaign but a BUILD RECIPE**: build the packages' declarations (`tsc -b`)
+  before `scip-typescript index`, so cross-package refs are dist-form and the existing `canonicalizeSymbol`
+  recovers recall. Recall is not a single citable number until the index build is pinned/frozen. Defensible
+  headline: negation is **sound (0-false-admit) on any build**; recall is build-dependent (32.5% operating,
+  4.25% on a dist-absent misbuild).
 - **`validated`** (advisory / semantic) — no sound oracle exists (field-level limit), so it is measured by the
   planted subject-test above and reported as **false-admit-rate + n (+ optional Wilson CI)**, never as
   "accuracy," never overclaimed.

@@ -147,6 +147,13 @@ Read that output as four separate statements:
   second command overwrites the first. `mergeScip` exists in the adapter and no shipped path calls it.
 - **`--output` is relative to the working directory** in both binaries, so run them from the repository root
   or the dump lands where nothing reads it.
+- **Build declarations FIRST (`tsc -b`) before `scip-typescript index`.** In a monorepo, `scip-typescript`
+  resolves a cross-package reference to a `dist/*.d.ts` descriptor only when the target package's built
+  declarations exist; index a repo whose `dist/` is absent and every cross-package ref collapses to an opaque
+  `local` symbol the index cannot resolve. This does not affect SOUNDNESS — the negation door abstains over an
+  opaque local (0-false-admit either way, #178) — but it CRATERS recall: negation recall measured **32.5% on a
+  dist-form index vs 4.25% on a dist-absent rebuild** (2026-08-17). Cross-package dependency/count edges likewise
+  vanish. So the recipe is `tsc -b` (or `npm run build`) then `scip-typescript index --output .atlas/index.scip`.
 
 ### Atlas does not run the indexer, on purpose
 
