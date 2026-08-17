@@ -94,12 +94,17 @@ export const CEILING_CAP = 200 as const;
 /** All-off deepening (GEN-13/14 single-pass baseline) — this facet never opens a deepening loop (EPIC-31). */
 const LOOPS_OFF = { enabled: false, maxDepth: 0, epsilon: 0 } as const;
 
+/** A cost policy at a CALLER-CHOSEN site ceiling, single-pass (all deepening loops off — the GEN-13/14
+ *  baseline). The SAME shape `defaultBudget` returns; only the ceiling is the caller's, which is why it is
+ *  the ONE source of that shape (`defaultBudget` is `cappedBudget(min(frontier, CEILING_CAP))`). The knob a
+ *  metered `atlas mine` run reaches through `ATLAS_MINE_BUDGET` to cap real spend below the 200 default. */
+export function cappedBudget(ceiling: number): GenesisBudget {
+  return { ceiling, deepening: { review: LOOPS_OFF, enrich: LOOPS_OFF, expand: LOOPS_OFF } };
+}
+
 /** The GEN-2 default cost policy when the caller passes no `--budget`: `min(frontier_size, 200)`, loops off. */
 export function defaultBudget(frontierSize: number): GenesisBudget {
-  return {
-    ceiling: Math.min(frontierSize, CEILING_CAP),
-    deepening: { review: LOOPS_OFF, enrich: LOOPS_OFF, expand: LOOPS_OFF },
-  };
+  return cappedBudget(Math.min(frontierSize, CEILING_CAP));
 }
 
 /**
