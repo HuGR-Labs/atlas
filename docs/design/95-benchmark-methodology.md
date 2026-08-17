@@ -74,8 +74,21 @@ The honest #95 story splits by seal, and the strong claim needs no LLM at all:
 
 - **`proven`** (dependency / count / negation) — a 0-FP **mechanical oracle** (`tsc`, export index, canon
   residual) on **real** atlas code. This is the Clover boundary (arXiv 2310.17807: 0-FP is reachable *only*
-  where a formal check exists). Negation already reports **0-false-admit over 18,654 admits vs the tsc oracle,
-  recall 80.9%** (#232). This is the defensible headline.
+  where a formal check exists). Dependency and count are 0-false-admit by a witnessed-existence oracle, sound
+  in any world.
+  **Negation's soundness is INDEX-FORM-DEPENDENT (corrected 2026-08-17, #178 — the earlier "0-false-admit over
+  18,654 admits, recall 80.9% (#232)" was measured on a 2026-08-12 DIST-form `.atlas/index.scip` and does NOT
+  transfer to a fresh index).** The #196b sound mutation-bench, on its first run over a fresh `scip-typescript`
+  LOCAL-form index, caught the shipped v2 negation door false-admitting **80.86%** of the tsc-FALSE negations:
+  scip-typescript emits cross-package refs as collapsed `local` symbols that `symbol-reverse` dropped, so the
+  door's closed-world disjointness silently failed (a LIVE T0 door-unsoundness, PRODUCTION-affected via
+  `atlas verify-fact negation`). The fix (#178, `opaqueRefSources` split-feed → abstain scope-open) restores a
+  GENUINE **0-false-admit** on the fresh index — but recall collapses, on that SAME fresh local-form index,
+  from **95% (pre-fix) → 4.25% (post-fix)** (the 80.9% above is the SEPARATE dist-form record, not the same
+  index), because every cross-package import (incl. type-only) collapses to an opaque local on the local-form
+  index and the door now honestly abstains over it. Approach-3 (rebuild the index to dist-forms so cross-package resolves) recovers
+  the recall and is a deferred follow-up. So the defensible headline is: negation is **sound (0-false-admit)**;
+  its **recall is index-form-dependent** and currently low on a fresh local-form index until Approach-3 lands.
 - **`validated`** (advisory / semantic) — no sound oracle exists (field-level limit), so it is measured by the
   planted subject-test above and reported as **false-admit-rate + n (+ optional Wilson CI)**, never as
   "accuracy," never overclaimed.

@@ -307,5 +307,21 @@ Re-measured on a fresh index, exhaustive pool (23,199 pairs):
   change, measured clean). `escape-ts-oracle-agree.mjs` still 100% / 0-unsound.
 - The proposer arm's realized yield rises with it (the barrel scopes that admitted 0 now admit).
 
+> **CORRECTION (2026-08-17, #178 — the numbers above are INDEX-FORM-DEPENDENT and did NOT transfer).** The
+> "0-FALSE-ADMITS over 18,654 admits, recall 80.9%" here was measured on a 2026-08-12 **DIST-form**
+> `.atlas/index.scip` whose `canonicalizeSymbol` bridged cross-package refs. On a fresh **LOCAL-form**
+> `scip-typescript` index the #196b sound mutation-bench caught the SAME door false-admitting **80.86%** of
+> the tsc-FALSE negations: scip-typescript emits cross-package refs as collapsed `local` symbols that
+> `symbol-reverse` dropped, so the closed-world disjointness silently failed (a LIVE T0 door-unsoundness,
+> PRODUCTION-affected via `atlas verify-fact negation`). The "soundness preserved" claim was true only for the
+> dist-form index. The fix (#178, `opaqueRefSources` split-feed → abstain scope-open) restores a GENUINE
+> 0-false-admit on the fresh index, but recall collapses — on that same fresh local-form index — from
+> **95% (pre-fix) → 4.25% (post-fix)** (the 80.9% above is the separate dist-form record, not this index);
+> every cross-package import, incl. type-only, collapses to an opaque local; Approach-3 = rebuild to
+> dist-forms recovers it, deferred.
+> So this ADR's "0-FA / 80.9%" is retained as the dist-form record; the current sound-on-any-index story is
+> 0-false-admit with recall gated by index form. LESSON: a number measured once with the index gitignored
+> rots — committed artifacts must carry their own re-runnable checkability.
+
 The residual is now the honest one the design always named: escaping targets (~18%) abstain (they would need
 real points-to). The `scope-dynamic` leg stays live and sound — it just no longer fires on a parse artifact.
