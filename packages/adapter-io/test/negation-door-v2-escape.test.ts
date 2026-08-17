@@ -50,6 +50,7 @@ function feed(callers: readonly string[], holes: readonly string[]): SymbolRever
   return {
     reverseCallers: (sym: string) => (sym === TARGET ? (callers as unknown as readonly Hash[]) : []),
     holeSources: () => holes as unknown as readonly Hash[],
+    opaqueRefSources: () => [],
     resolves: (sym: string) => sym === TARGET,
   };
 }

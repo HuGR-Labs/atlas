@@ -22,7 +22,7 @@ import type { FreshnessOracle } from './pack-shape.js';
 import { retrievalPack } from './retrieval-model.js';
 import type { CasPath } from './store.js';
 import { walkFileTree } from './fs.js';
-import { readScipOrEmpty, planIndexers } from './scip.js';
+import { readScipOrEmpty, readScipIndexerName, planIndexers } from './scip.js';
 import type { LangId } from './scip.js';
 import { createIndexAdapter } from './index-adapter.js';
 import { createProjectionQueryIndex, underScope } from './projection-query-index.js';
@@ -180,13 +180,17 @@ export function assembleHandler(config: WireConfig): WiredHandler {
   // files-only index, never a throw. `readScipOrEmpty` is the ONE shared missing-file guard (scip.ts) — the
   // twin of the one `compose.ts` applies for the Axes build (COMPOSE-B).
   const scipOutput = readScipOrEmpty(config.scipPath);
+  // #99 F1 — the indexer identity the collapsed-local gate trusts (raw dump `metadata.toolInfo.name`; the
+  // frozen projection drops it). `undefined` on a missing/foreign dump ⇒ heuristic OFF (fail-closed). Bound
+  // into the `createSymbolReverse` factory so the door's N0 feed carries `opaqueRefSources` under scip-typescript.
+  const indexerName = readScipIndexerName(config.scipPath);
   const index = createIndexAdapter({
     fileTree,
     scipOutput,
     build,
     createResolve,
     createDepgraph,
-    createSymbolReverse, // #99b N0 — the symbol-reverse view for the negation door (N2), off the same surface
+    createSymbolReverse: (scip) => createSymbolReverse(scip, { indexerName }), // #99b N0 + #99 collapsed-local gate
     nodeHashOfPath, // THE index's own minting, imported — never a local copy of `id({file:p})` (KERNEL-1)
   });
 

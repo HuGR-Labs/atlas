@@ -67,8 +67,13 @@ export interface VerifyFactData {
  * oracle's scope predicate treats as out-of-scope (fail-closed), so an unknown hash can only UNDER-count /
  * UNDER-witness, never forge a caller. Never throws.
  */
-export function createVerifyFactLeg(scip: ScipOutput): VerifyFactLeg {
-  const reverse: SymbolReverseApi = createSymbolReverse(scip);
+export function createVerifyFactLeg(
+  scip: ScipOutput,
+  opts?: { readonly indexerName?: string | undefined },
+): VerifyFactLeg {
+  // #99 F1 — thread the indexer identity into the symbol-reverse feed so the collapsed-local gate
+  // (`opaqueRefSources`) is trusted ONLY under the supported indexer. Absent ⇒ heuristic OFF (fail-closed).
+  const reverse: SymbolReverseApi = createSymbolReverse(scip, opts);
   // The minimal-but-complete hash→path table the oracles' headers specify: exactly the documents
   // `createSymbolReverse` mints a `nodeHashOfPath(relativePath)` for, keyed by the string form of that hash.
   const pathByHash = new Map<string, string>();

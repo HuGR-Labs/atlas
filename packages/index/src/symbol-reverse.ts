@@ -10,6 +10,12 @@ import type { Hash } from '@atlas/contracts';
 import { canonicalizeSymbol, isLocalSymbol, nodeHashOfPath } from './build.js';
 import type { ScipOutput } from './types.js';
 
+/** The ONE indexer whose `local ` scheme (and the `canonicalizeSymbol` dist→src regex, #189) is proven. The
+ *  collapsed-local heuristic in `createSymbolReverse` (`opaqueRefSources`) is trusted ONLY for this indexer —
+ *  a byte-identical MIRROR of the escape leg's gate (adapter-io/src/escape/target-escapes.ts `SUPPORTED_INDEXER`),
+ *  duplicated here because @atlas/index sits BELOW adapter-io and cannot import it. */
+const SUPPORTED_INDEXER = 'scip-typescript';
+
 /** The reverse-caller query for a GLOBAL symbol, one granularity below the doc-level `depgraph`. Pure + total. */
 export interface SymbolReverseApi {
   /** The units (docHash) that carry a `reference` occurrence of the GLOBAL symbol `symbol` — i.e. the files
@@ -21,6 +27,17 @@ export interface SymbolReverseApi {
    *  returned so a caller can intersect it with a declared scope S to decide `underApprox` for a negation over
    *  that scope. Deterministic, sorted, deduped. Mirrors `createDepgraph`'s `unresolvedSources`, one level down. */
   holeSources(): readonly Hash[];
+  /** The units (docHash) carrying a CLASS-2 COLLAPSED cross-package reference — a `reference`-role `local `
+   *  symbol with NO matching `local ` DEFINITION in that SAME document. SCIP document-scopes a `local N`, so a
+   *  local ref with no local def is NOT a genuine intra-doc local: it is a cross-package call the indexer
+   *  collapsed onto an opaque `local` (#189/#99), whose real target VANISHES from `reverseCallers`/`holeSources`
+   *  (both drop `local ` symbols). This set is DISTINCT from `holeSources()` (the CLASS-1 benign external
+   *  `unresolved` holes) on purpose: the negation door UNIONS it into the oracle/fallback holes AND intersects
+   *  it with S as a NEW v2 abstain, while v2 keeps IGNORING `holeSources()` (recall). Populated ONLY when the
+   *  index was built by the supported indexer (`scip-typescript`) — for an unknown indexer the `local ` scheme
+   *  is not proven, so this heuristic is OFF (fail-closed, empty). Per-document (a def in doc A never vouches
+   *  for doc B). Deterministic, sorted, deduped. TOTAL: never throws. */
+  opaqueRefSources(): readonly Hash[];
   /** Does the GLOBAL symbol `symbol` have an in-index DEFINITION — i.e. can Atlas SEE it defined at all?
    *  `true` iff `symbol` is non-`local` and appears as a `definition` occurrence somewhere in this index.
    *
@@ -59,7 +76,20 @@ const sortedDeduped = (hashes: Iterable<Hash>): readonly Hash[] => {
  *  data can witness is the `unresolved` case; the interface names both because a richer projection (or N-level
  *  extractor) would fold `dynamic` into the identical `else` branch. Deterministic, no I/O, no clock.
  */
-export function createSymbolReverse(scip: ScipOutput): SymbolReverseApi {
+export function createSymbolReverse(
+  scip: ScipOutput,
+  opts?: { readonly indexerName?: string | undefined },
+): SymbolReverseApi {
+  // INDEXER GATE (#99 F1 step 3) — the collapsed-local heuristic below is trusted ONLY when the index was
+  // built by the ONE indexer whose `local ` scheme is proven, MIRRORING the escape leg's `SUPPORTED_INDEXER`
+  // gate (adapter-io/src/escape/target-escapes.ts). For an unknown/unsupported indexer a `local ` ref with no
+  // local def is NOT reliably a collapsed cross-package call, so the heuristic is OFF and `opaqueRefSources`
+  // stays EMPTY (fail-closed to prior behavior — the oracle/fallback blanket holes still apply; v2 is never
+  // told these are safe). The identity is passed in by the composition root (which reads the raw dump's
+  // `metadata.toolInfo.name`); the frozen `ScipOutput` projection deliberately carries no metadata, so absent
+  // ⇒ untrusted (never a default that TRUSTS the heuristic).
+  const trustCollapsedLocal = opts?.indexerName === SUPPORTED_INDEXER;
+
   // defs: the SAME map `deriveEdges` builds — non-local `definition` occurrences, first-definition-wins.
   const defs = new Set<string>();
   for (const doc of scip.documents) {
@@ -73,10 +103,31 @@ export function createSymbolReverse(scip: ScipOutput): SymbolReverseApi {
   // (the `unresolved` branch). Both walk the SAME reference occurrences `deriveEdges`'s reference loop walks.
   const callersBySymbol = new Map<string, Hash[]>();
   const holeSourceSet = new Set<string>();
+  const opaqueRefSet = new Set<string>();
   for (const doc of scip.documents) {
     const from = nodeHashOfPath(doc.relativePath);
+    // F1 step 1 — PER-DOCUMENT pre-scan of this doc's `local ` DEFINITIONS. A `local N` string is meaningless
+    // ACROSS documents (SCIP document-scopes it), so a def in doc A must NOT vouch for doc B: `localDefs` is
+    // rebuilt per doc and read only for THIS doc's local refs. Skipped entirely on an untrusted indexer (the
+    // heuristic is off, so the set is never consulted).
+    const localDefs = new Set<string>();
+    if (trustCollapsedLocal) {
+      for (const occ of doc.occurrences) {
+        if (occ.role === 'definition' && isLocalSymbol(occ.symbol)) localDefs.add(occ.symbol);
+      }
+    }
     for (const occ of doc.occurrences) {
-      if (occ.role !== 'reference' || isLocalSymbol(occ.symbol)) continue;
+      if (occ.role !== 'reference') continue;
+      if (isLocalSymbol(occ.symbol)) {
+        // F1 step 2 — a `reference`-role `local ` symbol. Under the supported indexer, a local ref with NO
+        // matching `local ` DEFINITION in THIS doc is a CLASS-2 COLLAPSED cross-package ref (the real caller the
+        // indexer emitted as an opaque `local`): mark the DOCUMENT opaque so the negation door abstains over any
+        // scope containing it. A local ref WITH a local def is a genuine intra-doc local — UNCHANGED behavior
+        // (`continue`, contributes nothing). On an untrusted indexer `trustCollapsedLocal` is false, so every
+        // local ref is simply dropped exactly as before (`localDefs` empty, guard skipped).
+        if (trustCollapsedLocal && !localDefs.has(occ.symbol)) opaqueRefSet.add(String(from));
+        continue;
+      }
       // CANON-AND-VERIFY (#189): resolve a same-package hit as-is, else the src-form of a published-types
       // (`dist/…d.ts`) descriptor — but ONLY if it lands on a real in-index definition. The caller is then
       // bucketed under the SRC-form symbol (the form `reverseCallers`/`resolves` are queried with), so a
@@ -98,6 +149,7 @@ export function createSymbolReverse(scip: ScipOutput): SymbolReverseApi {
   }
 
   const holes = sortedDeduped([...holeSourceSet] as unknown as Hash[]);
+  const opaqueRefs = sortedDeduped([...opaqueRefSet] as unknown as Hash[]);
 
   return {
     reverseCallers(symbol: string): readonly Hash[] {
@@ -108,6 +160,9 @@ export function createSymbolReverse(scip: ScipOutput): SymbolReverseApi {
     },
     holeSources(): readonly Hash[] {
       return holes;
+    },
+    opaqueRefSources(): readonly Hash[] {
+      return opaqueRefs;
     },
     resolves(symbol: string): boolean {
       // The SAME predicate the two loops above use to admit a symbol at all: non-`local` AND carrying an

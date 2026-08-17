@@ -20,7 +20,7 @@ import type { DiskStore } from '../../src/store.js';
 import { createGovernedEmit } from '../../src/governed-emit.js';
 import { walkFileTree } from '../../src/fs.js';
 import { foldAstUnits, initAst } from '../../src/ast.js';
-import { readScipOrEmpty } from '../../src/scip.js';
+import { readScipOrEmpty, readScipIndexerName } from '../../src/scip.js';
 import { buildTargetEscapes } from '../../src/escape/target-escapes.js';
 import { buildDynamicReach } from '../../src/escape/dynamic-reach.js';
 import { underScope } from '../../src/anchor-scope.js';
@@ -154,6 +154,13 @@ export interface NegBench {
   scopes: string[];
   /** ADMIT/REFUTE/ABSTAIN of the SHIPPED v2 door for (target, scope), over a fresh empty projection. */
   judge(target: string, scope: string): Verdict;
+  /** The SAME shipped v2 door but with the #99 collapsed-local OPAQUE gate turned OFF — the symbol-reverse view
+   *  is rebuilt with the indexer identity ABSENT, so `opaqueRefSources()` is empty and the (b0) opaque abstain
+   *  (governed-emit-negation.ts:259) never fires. Used ONLY by the AC-6 non-vacuity TEETH: with the gate off the
+   *  cross-package tsc-false negatives (whose real caller scip-typescript collapsed onto an opaque `local`) fall
+   *  through to the refute/admit path — `reverseCallers` cannot see the collapsed caller — and are ADMITTED,
+   *  reproducing the pre-fix false-admit. That the number RISES off 0 proves the 0 is EARNED by the opaque gate. */
+  judgeGateOff(target: string, scope: string): Verdict;
   /** tsc ground truth: is X CALLED anywhere under S? (⇒ the negative "X not called in S" is FALSE). */
   calledInScope(t: Target, scope: string): boolean;
   /** tsc ground truth: is X REFERENCED (any position) anywhere under S? */
@@ -172,7 +179,9 @@ export async function setupNegBench(ROOT: string, SCIP: string): Promise<NegBenc
   const scipOutput = readScipOrEmpty(SCIP);
   const rawTree = walkFileTree(ROOT);
   const axes = build(foldAstUnits(rawTree), scipOutput);
-  const symbolReverse = createSymbolReverse(scipOutput);
+  // #99 — thread the real indexer identity so the collapsed-local gate (`opaqueRefSources`) engages on the
+  // scip-typescript index the bench runs over (the whole point of the F4 arm: the CLASS-2 false-admits abstain).
+  const symbolReverse = createSymbolReverse(scipOutput, { indexerName: readScipIndexerName(SCIP) });
   const te = buildTargetEscapes({ scipPath: SCIP, repoPath: ROOT });
   const dr = buildDynamicReach(rawTree);
   if (!te || !dr) throw new Error('v2 legs failed to build (astWarmed? scip-typescript indexer?)');
@@ -183,33 +192,48 @@ export async function setupNegBench(ROOT: string, SCIP: string): Promise<NegBenc
   for (const s of scopes) policyScopes[s] = [ACTOR];
   process.env.ATLAS_RATIFY_TOKEN = 'billy';
 
-  let proj: StoreProjection = { current: new Map(), cas: new Set() } as unknown as StoreProjection;
-  const store = {
-    commitProjection<T>(decide: (p: StoreProjection) => CommitDecision<T>): CommitResult<T> {
-      const d = decide(proj);
-      if (d.next !== undefined) proj = d.next;
-      return { settled: true, out: d.out };
-    },
-  } as unknown as DiskStore;
-  const emit = createGovernedEmit({
-    store,
-    gate: { gateHolds: () => 'HOLDS' } as never,
-    policy: { nearDup: { claimNormThreshold: 1 }, t0Heuristic: { keywords: [] }, authz: { scopes: policyScopes } },
-    actor: ACTOR, origin: 'promoted', ratifyToken: 'billy',
-    symbolReverse: () => symbolReverse, axes, nodeHashOfPath, edgeModel: edgeModelVersion(), targetEscapes: te, dynamicReach: dr,
-  }).emit;
-
   const negation = (target: string, scope: string): GroundedFact => ({
     kind: 'negation', id: 'ignored', tier: 'T2', relationKind: 'calls',
     target, scope, grounding: { entries: [] }, edgeModel: 'ignored', freshness: 'FRESH', claims: [], authoring: 'NEGATED',
   } as unknown as NegationNode as unknown as GroundedFact);
 
-  return {
-    axes, symbolReverse, targetEscapes: te, dynamicReach: dr, oracle, targets, scopes, underScope,
-    judge(target, scope) {
+  // A single-negation door over a fresh in-memory projection RESET per call (a DiskStore is O(n²) over thousands
+  // of admits). Factored so the AC-6 teeth's SECOND door shares byte-identical wiring — SAME store shape, policy,
+  // axes, escape/dynamic legs — differing ONLY in the symbol-reverse view it is handed (gate-ON vs gate-OFF).
+  const mkDoor = (sr: SymbolReverseApi): ((target: string, scope: string) => Verdict) => {
+    let proj: StoreProjection = { current: new Map(), cas: new Set() } as unknown as StoreProjection;
+    const store = {
+      commitProjection<T>(decide: (p: StoreProjection) => CommitDecision<T>): CommitResult<T> {
+        const d = decide(proj);
+        if (d.next !== undefined) proj = d.next;
+        return { settled: true, out: d.out };
+      },
+    } as unknown as DiskStore;
+    const emit = createGovernedEmit({
+      store,
+      gate: { gateHolds: () => 'HOLDS' } as never,
+      policy: { nearDup: { claimNormThreshold: 1 }, t0Heuristic: { keywords: [] }, authz: { scopes: policyScopes } },
+      actor: ACTOR, origin: 'promoted', ratifyToken: 'billy',
+      symbolReverse: () => sr, axes, nodeHashOfPath, edgeModel: edgeModelVersion(), targetEscapes: te, dynamicReach: dr,
+    }).emit;
+    return (target, scope) => {
       proj = { current: new Map(), cas: new Set() } as unknown as StoreProjection;
       return classify(emit(negation(target, scope), AT));
-    },
+    };
+  };
+
+  // GATE-ON: the shipped view, with the real indexer identity threaded so `opaqueRefSources()` engages (#99 F4).
+  const judge = mkDoor(symbolReverse);
+  // GATE-OFF: rebuild the symbol-reverse with the indexer identity ABSENT ⇒ the collapsed-local heuristic is off
+  // and `opaqueRefSources()` is empty (fail-closed to prior behavior). The (b0) opaque abstain never fires, so the
+  // cross-package tsc-false negatives return to the pre-fix false-admit — the AC-6 non-vacuity witness.
+  const symbolReverseGateOff = createSymbolReverse(scipOutput, {});
+  const judgeGateOff = mkDoor(symbolReverseGateOff);
+
+  return {
+    axes, symbolReverse, targetEscapes: te, dynamicReach: dr, oracle, targets, scopes, underScope,
+    judge,
+    judgeGateOff,
     calledInScope(t, scope) {
       for (const f of oracle.get(t.key)!.callFiles) if (underScope(f, scope)) return true;
       return false;

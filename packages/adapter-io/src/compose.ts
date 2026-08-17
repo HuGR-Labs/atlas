@@ -27,7 +27,7 @@ import type { GroundedFact } from '@atlas/knowledge';
 import type { DoctorSource, T0Heuristic, TruthGate } from '@atlas/tools';
 import { walkFileTree } from './fs.js';
 import { foldAstUnits } from './ast.js';
-import { readScipOrEmpty } from './scip.js';
+import { readScipOrEmpty, readScipIndexerName } from './scip.js';
 import { loadPolicy } from './policy.js';
 import type { AtlasPolicy } from './policy.js';
 import { createRevIndex } from './rev-index.js';
@@ -254,6 +254,10 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
   // composeRuntime); this keeps composeRuntime SYNC for its many direct callers while the production doors
   // (which spawn these bins) get real sub-file granularity.
   const scipOutput = readScipOrEmpty(scipPath);
+  // #99 F1 — the indexer identity the collapsed-local gate trusts, read from the raw dump's
+  // `metadata.toolInfo.name` (the frozen `ScipOutput` projection drops it). `undefined` on a missing/foreign
+  // dump ⇒ the heuristic stays OFF (fail-closed). Threaded into BOTH symbol-reverse feeds built below.
+  const indexerName = readScipIndexerName(scipPath);
   // Capture the RAW (unfolded) file tree so the sound-negation `dynamicReach` leg can scan file bytes off the
   // SAME walk `build` folds — no second FS traversal, no divergent view of what the repo contains.
   const rawTree = walkFileTree(repoPath);
@@ -261,7 +265,7 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
   // #96 F2 — the SAME N0 completeness view the emit leg rides (`() => index.symbolReverse()`, wire.ts:217),
   // built ONCE off the SAME `scipOutput` the axes above are built from, so the promote leg (below) reaches
   // `emitNegation` with its deps satisfied instead of fail-closing `scope-empty` for every promoted negation.
-  const symbolReverseView = createSymbolReverse(scipOutput);
+  const symbolReverseView = createSymbolReverse(scipOutput, { indexerName });
 
   // ADR-0016 M2b — the TWO v2 negation closure legs, built ONCE off the same `scipPath`/`repoPath`/`rawTree`
   // the other legs ride. `targetEscapes` = `escape(X)` (raw SCIP ranges ⋈ tree-sitter, canonicalized);
@@ -409,7 +413,7 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     negations: createNegationLeg(store, bindFreshnessOracle(axes, edgeModelVersion())),
     // THE SOUND-GENESIS PROVEN-FAMILY FEED (`atlas verify-fact`). Off the SAME `scipOutput` the axes ride — a
     // program oracle over the immutable code index, built once and closed over (see verify-fact-source.ts).
-    verifyFact: createVerifyFactLeg(scipOutput),
+    verifyFact: createVerifyFactLeg(scipOutput, { indexerName }),
     ...(readRefusal !== undefined ? { readRefusal } : {}),
   };
 }

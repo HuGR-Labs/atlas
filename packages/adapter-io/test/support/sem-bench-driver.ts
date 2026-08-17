@@ -117,12 +117,14 @@ export async function assembleSemBench(ROOT: string, SCIP: string): Promise<SemB
       const called = B.calledInScope(t, scope);
       // dependency: TRUE=called (base), FALSE=not-called (assert-absent)
       if (called ? under('dep-T') : under('dep-F')) push(mk('dependency', { arm: 'dependency', target: t.symbol, scope }, called ? 'base' : 'dependency-assert-absent'));
-      // negation: TRUE=not-called (base), FALSE=called (negation-flip). NOTE (lucy Fix 2): this arm MEASURES a
-      // real DOOR unsoundness, not an instrument bug — the shipped closed-world door admits a large fraction of
-      // the tsc-FALSE negatives (~80.86%) because scip-typescript emits cross-package refs as `local` symbols
-      // that `createSymbolReverse` drops (packages/index/src/symbol-reverse.ts:79), so `reverseCallers` misses
-      // those callers and the disjointness completeness at governed-emit-negation.ts:251-254 fails on a
-      // scip-typescript index (the canon-completeness guard is un-wired — ADR-0016:102-104). Reported, not hidden.
+      // negation: TRUE=not-called (base), FALSE=called (negation-flip). This arm once MEASURED a real DOOR
+      // unsoundness — pre-fix the shipped closed-world door false-admitted ~80.86% of the tsc-FALSE negatives,
+      // because scip-typescript emits cross-package refs as `local` symbols that `createSymbolReverse` drops
+      // (packages/index/src/symbol-reverse.ts), so `reverseCallers` missed those callers and the disjointness
+      // completeness failed on a scip-typescript index. The fix (branch fix/negation-collapsed-local-soundness)
+      // CLOSED it: `opaqueRefSources()` re-surfaces those collapsed `local` refs and the door ABSTAINS (scope-open,
+      // governed-emit-negation.ts:259) over any scope containing one ⇒ negation.falseAdmit is now 0. The AC-6 teeth
+      // (`judgeGateOff`, opaque gate off) reproduces the pre-fix unsound regime to prove the 0 is earned, not vacuous.
       if (!called ? under('neg-T') : under('neg-F')) push(mk('negation', { arm: 'negation', target: t.symbol, scope }, !called ? 'base' : 'negation-flip'));
       // count: TRUE=(atLeast 1, called), FALSE=(boundary flip: atLeast = witnessed+1)
       if (called && under('cnt-T')) push(mk('count', { arm: 'count', target: t.symbol, scope, atLeast: 1 }, 'base'));
@@ -156,10 +158,22 @@ export async function assembleSemBench(ROOT: string, SCIP: string): Promise<SemB
     arm0Reasons.push(a.outcome === 'dropped' ? a.reason : a.outcome === 'abstained' ? `abstained:${a.whyNot.reason}` : 'admitted');
   }
 
-  // ── AC-6 negation TEETH: the SAME pool under a permissive door (closed-world refutation DISABLED ⇒ refute→admit) ──
+  // ── AC-6 negation TEETH: the SAME pool re-driven with the #99 collapsed-local OPAQUE gate turned OFF ──
+  // The fix (branch fix/negation-collapsed-local-soundness) earns negation.falseAdmit=0 via the (b0) opaque-ref
+  // abstain (governed-emit-negation.ts:259), which fires BEFORE the refute step. The OLD teeth (flip
+  // negation-refute→admit) is DEFEATED by this: the cross-package tsc-false negatives now ABSTAIN (scope-open) at
+  // (b0) rather than reaching refute, so toggling refutation no longer moves the number ⇒ 0 > 0. The SOUND teeth
+  // re-drives the negation pool through `judgeGateOff` — the byte-identical door with `opaqueRefSources()` empty
+  // (indexer identity absent) — so those negatives fall through to the refute/admit path and are ADMITTED again
+  // (`reverseCallers` cannot see the collapsed caller), returning a large pre-fix false-admit. That the number
+  // RISES strictly off 0 proves the 0 is EARNED by the opaque gate, not vacuous.
   const negTeeth: DrivenRow[] = driven
     .filter((d) => d.row.arm === 'negation')
-    .map((d) => (d.reason === 'negation-refute' ? { row: d.row, outcome: { admitted: true } as Outcome, reason: 'TEETH:refute-disabled→admit' } : d));
+    .map((d) => {
+      const v = B.judgeGateOff(d.row.claim.target, d.row.claim.scope);
+      const { outcome, reason } = adaptJudge(v);
+      return { row: d.row, outcome, reason };
+    });
 
   // add a handful of dependency/count base→mutant pairs for AC-9m (edit-distance-1 over the real substrate)
   for (const t of B.targets) {

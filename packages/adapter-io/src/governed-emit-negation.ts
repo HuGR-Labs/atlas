@@ -248,6 +248,16 @@ export function emitNegation(deps: GovernedEmitDeps, raw: NegationNode): EmitOut
     //   (c0) TARGET RESOLVES? — #220. A phantom's negative is vacuous; abstain BEFORE the closure legs, whose
     //        escape/dynamic verdicts about a symbol Atlas cannot see defined would be meaningless.
     if (!symbolReverse.resolves(target)) return writeAbstention(deps, key, record('target-unresolvable', []));
+    //   (b0) COLLAPSED CROSS-PACKAGE REF (#99 — the wired production false-PROVEN). A doc in S carrying a
+    //        `reference`-role `local ` with NO local def is a cross-package call the indexer collapsed onto an
+    //        opaque `local` — its real target VANISHES from `reverseCallers`/`holeSources`/`targetEscapes` (all
+    //        drop `local ` symbols), so the occurrence-based closure (b1)/(b2) below cannot see it and (c)'s
+    //        `reverseCallers(X) ∩ S` is INCOMPLETE. v2 deliberately IGNORES the CLASS-1 benign external holes
+    //        (`holeSources()`) to keep recall, but this CLASS-2 opaque set could be the very hidden caller of X
+    //        ⇒ the target-relative gate is not closed over S ⇒ ABSTAIN scope-open (witness = the opaque docs).
+    //        This is the ONLY hole class that gates v2.
+    const opaqueInScope = inScope(symbolReverse.opaqueRefSources(), byHash, scope);
+    if (opaqueInScope.length > 0) return writeAbstention(deps, key, record('scope-open', opaqueInScope));
     //   (b1) DOES X ESCAPE? A non-safe reference position flows X into shared state the index under-sees ⇒
     //        "uncalled in S" is unprovable ⇒ ABSTAIN escape-open (witness = the sites). SOUNDNESS: with ¬escape,
     //        disjointness (symbol-reverse.ts) makes every reference of X a resolved caller OR a hole-that-is-not-X,
@@ -263,7 +273,13 @@ export function emitNegation(deps: GovernedEmitDeps, raw: NegationNode): EmitOut
     //   over-approximation: an unresolved/dynamic reference ANYWHERE in S under-approximates the graph ⇒ ABSTAIN
     //   scope-open, WITH the offending docHashes as the witness (durable + readable, NOT a silent refuse).
     //   ⚠ This is the SOUND condition — `holeSources() ∩ S`, NOT `reverseCallers(target) == []`.
-    const openSources = inScope(symbolReverse.holeSources(), byHash, scope);
+    //   The blanket is the UNION of CLASS-1 `holeSources()` AND CLASS-2 `opaqueRefSources()` (#99 — a collapsed
+    //   cross-package `local ` ref, invisible to `holeSources`): either inside S under-approximates the graph.
+    const openSources = inScope(
+      [...symbolReverse.holeSources(), ...symbolReverse.opaqueRefSources()],
+      byHash,
+      scope,
+    );
     if (openSources.length > 0) return writeAbstention(deps, key, record('scope-open', openSources));
     //   (c0) TARGET RESOLVES? #220 — `reverseCallers(target)` is `[]` for a global symbol with NO in-index
     //        definition BY CONSTRUCTION (symbol-reverse.ts), so without this gate the (d) admit below would

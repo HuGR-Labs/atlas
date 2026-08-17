@@ -105,6 +105,24 @@ export function readScipOrEmpty(scipPath: string): ScipOutput {
 }
 
 /**
+ * The indexer NAME that produced the dump (`metadata.toolInfo.name`), or `undefined` when the dump is
+ * missing / not a regular file / corrupt — the SAME degrade `readScipOrEmpty` applies. This is the identity
+ * the `@atlas/index createSymbolReverse` collapsed-local gate (and the escape leg) trust: only
+ * `scip-typescript`'s `local ` scheme is proven, so an unknown indexer must NOT be trusted (fail-closed to
+ * `undefined`, never a default). Read HERE from the raw dump — not from the frozen `ScipOutput` projection,
+ * which deliberately drops metadata — so the identity reaches the composition root without widening the
+ * projection. Mirrors the `scipBytes` regular-file guard so it never blocks on a device symlink.
+ */
+export function readScipIndexerName(scipPath: string): string | undefined {
+  try {
+    if (!existsSync(scipPath) || !statSync(scipPath).isFile()) return undefined;
+    return deserializeSCIP(readFileSync(scipPath)).metadata?.toolInfo?.name;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Where EVERY reader in the ring looks for the dump, repo-relative and POSIX-slashed
  * (`compose.ts` / `skeleton-source.ts` / `wire.ts` all resolve `join(repoPath, '.atlas', 'index.scip')`).
  * It is declared HERE because the planned `--output` argument below has to name the SAME path the reader
