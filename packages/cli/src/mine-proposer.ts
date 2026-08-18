@@ -26,9 +26,10 @@ import {
   shippedDependencyTemplatePath,
   shippedEnrichedTemplatePath,
 } from '@atlas/adapter-io';
-import type { ClaimParser, ModelCommand } from '@atlas/adapter-io';
+import type { CandidateReader, ClaimParser, ModelCommand } from '@atlas/adapter-io';
 import { cappedBudget } from '@atlas/genesis';
 import type { GenesisBudget, SiteProposer } from '@atlas/genesis';
+import type { StructRef } from '@atlas/contracts';
 
 /** The sentinel `modelIdentity` for the fail-closed default: no model was wired, so nothing produced a
  *  fact. It is a STATE, honestly named — never a fabricated identity. */
@@ -154,6 +155,13 @@ export interface ResolvedProposer {
   readonly wired: boolean; //           a real operator-configured model, not the abstaining default
   readonly promptDigest?: string; //    the digest of the prompt artifact (absent ⇒ no prompt was loaded)
   readonly modelIdentity: string; //    [#210] which CLI + version produced answers (NO_MODEL_IDENTITY if none)
+  /** [PROVABLE-FRONTIER] The faithful provability precondition for THIS arm's sound oracle — built from the
+   *  SAME `CandidateReader` that feeds the proposer's candidate list, so it is exact by construction: the
+   *  dependency oracle can prove a fact at a site IFF the unit has outgoing cross-unit deps (`candidates`
+   *  non-empty), and the count oracle IFF the unit defines externally-called exports. `mine.ts` threads it
+   *  into `FrontierOptions.provableFirst` so the frontier is reordered provable-first. Present ONLY for the
+   *  sound arms (`dependency`/`count`); the ADVISORY arm leaves it UNSET (no reorder — byte-identical). */
+  readonly provableFirst?: (site: StructRef) => boolean;
 }
 
 /**
@@ -209,11 +217,18 @@ export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = proce
   // the parser binds can never disagree. `dependency` is fan-OUT (`DEPENDS-ON:`); `count` is its fan-IN dual
   // (`COUNT:`) — the model SELECTS a name, the harness derives the number, the sound oracle re-proves.
   const slotScip = slot === 'dependency' || slot === 'count' ? readScipOrEmpty(join(repoPath, '.atlas', 'index.scip')) : undefined;
+  // [#196a/#196c + PROVABLE-FRONTIER] The candidate reader is built ONCE per sound arm and drives BOTH the
+  // prompt-side candidate list AND the frontier-side provability precondition — the SAME `CandidateReader`, so
+  // "the model has a name to pick" and "the oracle can prove a fact here" can never disagree. A site is provable
+  // IFF this reader lists at least one candidate for it (a dep-sink/barrel lists none ⇒ not provable ⇒ ranked
+  // after the provable sites). Undefined for the advisory arm ⇒ no reorder.
+  const candidateReader: CandidateReader | undefined =
+    slotScip === undefined ? undefined : slot === 'count' ? createUnitCountCandidates(slotScip) : createUnitDepCandidates(slotScip);
   const prompts =
-    slotScip !== undefined
+    slotScip !== undefined && candidateReader !== undefined
       ? createPromptFactory({
           source: createUnitSourceReader(repoPath),
-          candidates: slot === 'count' ? createUnitCountCandidates(slotScip) : createUnitDepCandidates(slotScip),
+          candidates: candidateReader,
           templatePath: slot === 'count' ? shippedCountTemplatePath() : shippedDependencyTemplatePath(),
         })
       : enrichEnabled(env)
@@ -240,5 +255,16 @@ export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = proce
     buildPrompt: prompts.build,
     ...(parseClaim !== undefined ? { parseClaim } : {}),
   });
-  return { proposer, wired: true, promptDigest: String(prompts.digest), modelIdentity: captureModelIdentity(propose) };
+  // [PROVABLE-FRONTIER] The provability precondition rides out on the SAME reader the candidate list uses — a
+  // site is provable IFF the reader lists ≥1 candidate for it. Sound arms only; the advisory arm has no reader
+  // and so leaves this UNSET, which is what keeps its frontier byte-identical (no reorder in `createMine`).
+  const provableFirst: ((site: StructRef) => boolean) | undefined =
+    candidateReader === undefined ? undefined : (site: StructRef): boolean => candidateReader.candidates(site).length > 0;
+  return {
+    proposer,
+    wired: true,
+    promptDigest: String(prompts.digest),
+    modelIdentity: captureModelIdentity(propose),
+    ...(provableFirst !== undefined ? { provableFirst } : {}),
+  };
 }

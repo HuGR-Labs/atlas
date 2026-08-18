@@ -159,6 +159,12 @@ export interface StructuralFrontier {
 export interface FrontierOptions {
   readonly subFile?: boolean; //      default FALSE: file sites only, exactly as master ships
   readonly prior?: UnitPriorSource; // absent ⇒ the within-file order degrades to `path asc` (honest, stated)
+  /** [PROVABLE-FRONTIER] A PURE provability predicate: `true` iff a sound oracle can admit a fact at this
+   *  site. When set, `createMine` STABLE-PARTITIONS the PPR-ranked frontier so provable sites come first
+   *  (relative PPR order preserved within each group), so a budget-capped run spends its sites where the
+   *  oracle can actually admit. ABSENT ⇒ the ranking is untouched, byte-identical to master. Genesis holds
+   *  no SCIP: the CLI supplies this from the SAME `CandidateReader` that feeds the sound arm's proposer. */
+  readonly provableFirst?: (site: StructRef) => boolean;
 }
 
 

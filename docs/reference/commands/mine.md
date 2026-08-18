@@ -37,6 +37,15 @@ is elided). The `s-sound-default` black-box proves the default runs all three.
 a silent fallback). The worked examples below pin `ATLAS_MINE_SLOT=advisory` so one arm's mechanics read
 cleanly; the benchmark uses the same isolation to measure one axis at a time.
 
+**The sound arms reorder the frontier provable-first.** For `dependency` and `count` the ranked frontier is
+not pure PPR: after ranking, the sites are **stable-partitioned** so the ones a sound oracle can actually
+admit come first, the PPR order preserved within each group and the rank renumbered `1..N`. The predicate is
+the arm's own `CandidateReader` — a site is provable iff it has at least one candidate (a dependency site with
+an outgoing cross-unit dep; a count site whose export has external callers), so a dependency **sink** (imports
+nothing) or a re-export **barrel** ranks after the provable sites. This makes a budget-capped run spend its
+sites where the oracle can admit rather than on the top-PPR sinks. The **advisory** arm is unaffected — it
+carries no such predicate, so its frontier is pure PPR, byte-identical to before.
+
 The model is configured **outside the repository**, at `$ATLAS_MODEL_CONFIG`, else
 `$XDG_CONFIG_HOME/atlas/model.json`, else `~/.config/atlas/model.json`. That location is enforced, not just
 recommended — see *What it refuses*.

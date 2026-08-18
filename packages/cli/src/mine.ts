@@ -186,7 +186,15 @@ function withDefaults(repoPath: string, deps?: Partial<MineDeps>): ResolvedDeps 
   const skeleton = deps?.skeleton ?? defaultSkeleton(repoPath);
   // #182 — the frontier arm, resolved ONCE from the threaded env and this pass's own skeleton source, so
   // the seam that enumerates units and the seam that orders them are the same object (one fold, one truth).
-  const frontier: FrontierOptions = deps?.frontier ?? resolveFrontier(deps?.env ?? process.env, skeleton);
+  // [PROVABLE-FRONTIER] The resolved sound arm's provability predicate is MERGED IN on top: an INJECTED
+  // `deps.frontier` still wins for its OWN fields (subFile/prior), but the provability precondition — which
+  // only `resolveProposer` can build (it holds the SCIP reader) — is added so `createMine` reorders the
+  // ranked frontier provable-first. Absent for the advisory arm (`resolved.provableFirst` undefined) ⇒ no
+  // reorder, byte-identical. `runMineArms` re-resolves per slot, so EACH arm gets ITS OWN slot's predicate.
+  const frontier: FrontierOptions = {
+    ...(deps?.frontier ?? resolveFrontier(deps?.env ?? process.env, skeleton)),
+    ...(resolved?.provableFirst !== undefined ? { provableFirst: resolved.provableFirst } : {}),
+  };
   // [MINE-BUDGET-CAP] An INJECTED budget always wins (a test pins its own ceiling); only when none is injected
   // does the CLI path read `ATLAS_MINE_BUDGET`. Unset ⇒ `undefined`, so the controller's `defaultBudget`
   // applies and the run is byte-identical to today (the cap is opt-in). This rides `deps.budget` on through
