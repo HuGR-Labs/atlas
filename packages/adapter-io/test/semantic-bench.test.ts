@@ -211,7 +211,9 @@ describe.skipIf(!RUN)('#196b WP-1 — drives the SHIPPED admission over atlas-se
       console.log(`  ${arm.padEnd(11)} falseAdmit=${fmt(a.falseAdmit)}  recallTrue=${fmt(a.recallTrue)}  n=${a.n}`);
     }
     const teeth = score(sb.negTeeth.map((d) => d.row), sb.negTeeth.map((d) => d.outcome));
-    console.log(`  negation TEETH (opaque collapsed-local gate DISABLED): falseAdmit=${fmt(teeth.negation.falseAdmit)}  <= must be > 0 (pre-fix unsound regime; door was historically ~80.86%)`);
+    const gateOff = score(sb.negGateOff.map((d) => d.row), sb.negGateOff.map((d) => d.outcome));
+    console.log(`  negation TEETH (reverse-caller leg BLINDED): falseAdmit=${fmt(teeth.negation.falseAdmit)}  <= must be > 0 (asserted non-vacuity)`);
+    console.log(`  negation DIAGNOSTIC (#99 collapsed-local opaque gate OFF): falseAdmit=${fmt(gateOff.negation.falseAdmit)}  (REPORTED, not asserted — see AC-6 comment: this leg is NOT load-bearing on a dist-form index)`);
     console.log('==================================================================================\n');
     /* eslint-enable no-console */
     // dependency: the POSITIVE-dual gate ABSTAINS on a tsc-false claim unless the SOUND oracle PROVES a
@@ -224,29 +226,78 @@ describe.skipIf(!RUN)('#196b WP-1 — drives the SHIPPED admission over atlas-se
     // scope in type position. This is an ORACLE-DEFINITION gap, not a fabricated caller: the bench's tsc oracle
     // models "calls" as call-expression callees (`buildOracle`'s `isCallee`, neg-bench-lib.ts:81), while the
     // door's `verifyDependency` witnesses any SCIP reference edge. So the door proves a real DEPENDENCY edge for
-    // a symbol the call-only oracle labels un-called. The assertion below is the HONEST, COMPLETE positive-dual
-    // guarantee: over the whole population the door fabricates NO caller for a CALL-ELIGIBLE symbol — every
-    // residual admit is a globally-never-callee type/reference symbol. A future regression that admitted a
-    // tsc-false dependency for a genuinely callable symbol (callFiles>0) would make this go RED.
+    // a symbol the call-only oracle labels un-called.
+    //
+    // WHICH WITNESS (WP-C1 — the previous proxy was WRONG, and the obvious repair is VACUOUS):
+    //   · the old assertion read the GLOBAL `oracle.callFiles.size === 0` — "this symbol is never a callee
+    //     ANYWHERE". That is not the property the paragraph above states, and it FALSE-ALARMS on a symbol that
+    //     is called somewhere but only IMPORTED / used in type or `instanceof` position in the FLIPPED scope.
+    //     Measured, it tripped on exactly 2 of the 309 residual admits — `isGrounded` (witness: an `import` at
+    //     packages/adapter-io/src/compose.ts:24) and `DegenerateAnchorError` (an `import` + an `instanceof`
+    //     operand in packages/adapter-io/src/governed-promote.ts). Neither witness is a call.
+    //   · scoping that CALL count to the flipped scope would pass 309/309 but is TAUTOLOGICAL and must not be
+    //     used: the row's label IS `deriveLabel` over `calledInScope` (sem-bench-driver.ts:81), so `label==='FALSE'`
+    //     ALREADY means "tsc sees no call under this scope". Such an assertion can never fail — the vacuity class.
+    //   · the HONEST, non-vacuous witness is the other side of the same gap: every residual admit must be backed
+    //     by a REAL tsc-witnessed REFERENCE in the flipped scope. That is what "no fabricated edge" means when
+    //     the door witnesses references and the oracle counts only calls. It is DISCRIMINATING, not implied by
+    //     the label: only 309 of the 23702 exhaustive dep-F rows have an in-scope tsc reference — and those are
+    //     EXACTLY the 309 the door admits (measured; the two sets coincide row-for-row). A future regression that
+    //     admitted a tsc-false dependency for a scope where tsc sees NO reference at all — a genuinely fabricated
+    //     edge — makes this go RED. (Proven to bite by injecting such a row: WP-C1.)
     const bySymDep = new Map(sb.B.targets.map((t) => [t.symbol, t] as const));
     const depFalseAdmits = sb.driven.filter((d) => d.row.arm === 'dependency' && d.row.label === 'FALSE' && d.outcome.admitted);
     for (const d of depFalseAdmits) {
       const t = bySymDep.get(d.row.claim.target)!;
-      expect(sb.B.oracle.get(t.key)!.callFiles.size, `dependency false-admit on a CALL-ELIGIBLE symbol (${t.name}) — a fabricated caller, not an oracle-definition gap`).toBe(0);
+      expect(sb.B.refInScope(t, d.row.claim.scope), `dependency false-admit with NO tsc reference in the flipped scope (${t.name} @ ${d.row.claim.scope}) — a FABRICATED edge, not the call-vs-reference oracle gap`).toBe(true);
     }
     // count: complete over its (naturally sub-cap) population — a boundary flip `atLeast = witnessed+1` on a
-    // symbol with a REAL caller, which `verifyCount`'s sound lower-bound can never prove ⇒ genuinely 0 admits.
-    expect(s.count.falseAdmit).toBe(0);
-    // TEETH (non-vacuity), re-anchored on the FIXED door's mechanism. The negation pool CONTAINS cross-package
-    // tsc-false negatives whose real caller scip-typescript collapsed onto an opaque `local` symbol. The fix
-    // (branch fix/negation-collapsed-local-soundness) EARNS negation.falseAdmit=0 by re-surfacing those refs via
-    // `opaqueRefSources()` and ABSTAINING (scope-open) at gate (b0) — governed-emit-negation.ts:259 — which fires
-    // BEFORE the refute step. The `negTeeth` re-drives the SAME pool through `judgeGateOff`: the byte-identical door
-    // with the opaque gate OFF (symbol-reverse rebuilt with the indexer identity absent ⇒ `opaqueRefSources()`
-    // empty). With (b0) defeated, those negatives fall through to the refute/admit path and are ADMITTED again
-    // (`reverseCallers` cannot see the collapsed caller), so the false-admit RETURNS to the pre-fix unsound regime
-    // (~74% over this capped pool; the door was historically adjudicated ~80.86%). That it rises STRICTLY off 0
-    // proves the 0 is earned by the opaque gate, not vacuously green — the exact number is printed by the console.
+    // symbol with a REAL caller. The OLD assertion here was `s.count.falseAdmit === 0` ("`verifyCount`'s sound
+    // lower-bound can never prove the flip"), and it is FALSIFIED by the operating index — the header has been
+    // printing `count falseAdmit=5.52%` (9 of the 163 count-FALSE rows) the whole time; the assertion never
+    // surfaced because the dependency loop above threw first (WP-C1). It is the SAME call-vs-reference oracle
+    // gap the dependency paragraph describes, MEASURED row-by-row: for all 9, `atLeast` = (in-scope tsc CALL
+    // files)+1 by construction of the flip, while the in-scope tsc REFERENCE files number ≥ `atLeast` (3..5 vs
+    // atLeast 2..5) — the extra file references the symbol without calling it (an import / type position). So
+    // `verifyCount` proves a lower bound the door can genuinely witness on reference edges; the row is FALSE
+    // only under the oracle's call-expression reading. NOT a door unsoundness, and no product change is implied.
+    // The honest assertion is therefore the same positive-dual as dependency's: every count false-admit must be
+    // BACKED by at least `atLeast` in-scope tsc reference files. It goes RED if the door ever proves a count
+    // LARGER than any reference-based reading of the same scope can support — a genuinely fabricated count.
+    const inScopeRefFiles = (t: { key: string }, scope: string): number => {
+      let n = 0;
+      for (const f of sb.B.oracle.get(t.key)!.refFiles) if (sb.B.underScope(f, scope)) n += 1;
+      return n;
+    };
+    for (const d of sb.driven.filter((x) => x.row.arm === 'count' && x.row.label === 'FALSE' && x.outcome.admitted)) {
+      const t = bySymDep.get(d.row.claim.target)!;
+      expect(inScopeRefFiles(t, d.row.claim.scope), `count false-admit UNBACKED by in-scope tsc references (${t.name} @ ${d.row.claim.scope}, atLeast=${d.row.claim.atLeast}) — a fabricated count, not the call-vs-reference oracle gap`).toBeGreaterThanOrEqual(d.row.claim.atLeast ?? 1);
+    }
+    // TEETH (non-vacuity) — RE-ANCHORED by WP-C1 onto the leg that is actually LOAD-BEARING on the OPERATING
+    // (dist-form) index. Triage of the previous teeth, all numbers MEASURED on `npx tsc -b` + a fresh
+    // scip-typescript index (n=163 tsc-FALSE negatives):
+    //   · the previous teeth asserted `judgeGateOff > judge`, i.e. that disabling the #99 collapsed-local opaque
+    //     gate (`createSymbolReverse` with the indexer identity absent ⇒ `opaqueRefSources()` empty ⇒ the (b0)
+    //     scope-open abstain at governed-emit-negation.ts:259 never fires) returns the pre-fix false-admit.
+    //     On this index BOTH sides are 0.00% ⇒ `expect(0).toBeGreaterThan(0)` — a DEAD assertion, previously
+    //     masked because the AC-6 dependency loop above threw first.
+    //   · WHY it died: the pre-fix unsoundness needed cross-package refs COLLAPSED onto opaque `local` symbols,
+    //     which is what scip-typescript emits when the sibling packages have no built `dist/**/*.d.ts`. On a
+    //     dist-FORM index the same refs are emitted as real `dist/…d.ts` symbols and `canonicalizeSymbol`
+    //     (@atlas/index build.ts:195, applied in symbol-reverse.ts's canon-and-verify branch, #189) rewrites them
+    //     to the `src` form and buckets them as RESOLVED callers. So `reverseCallers(X) ∩ S` SEES the caller and
+    //     gate (c) REFUTES. The opaque gate is not carrying the soundness here: with it OFF, the 134 tsc-FALSE
+    //     negatives that abstained scope-open become 122 REFUTEs + 41 escape-opens (measured) — zero admits.
+    //     VERDICT: the mechanism is STALE on this index, not broken (it remains the load-bearing leg on a
+    //     dist-ABSENT index, which is what it was calibrated against). It is still MEASURED and PRINTED above.
+    //   · the REPLACEMENT teeth blinds the leg the door's soundness argument actually names: gate (c)'s
+    //     `reverseCallers(X) ∩ S == ∅`. `judgeCallersBlind` is the byte-identical shipped door handed a
+    //     symbol-reverse whose `reverseCallers` is ≡ `[]` — one leg, nothing else touched. It cannot refute, so
+    //     the tsc-FALSE negatives that survive (b0)/(b1)/(b2) are ADMITTED and the false-admit rises STRICTLY off
+    //     0. That is what makes the 0 EARNED rather than vacuously green.
+    //   · HONEST SCOPE of this teeth: it proves the 0 is earned for the rows the door decides by REFUTATION. The
+    //     rows that abstain (scope-open/escape-open) are non-admitted for conservative reasons this mutation does
+    //     not disturb; their contribution to the 0 is a refusal, not a proof. Both numbers are printed.
     expect(teeth.negation.falseAdmit).not.toBeNull();
     expect(s.negation.falseAdmit).not.toBeNull();
     expect(teeth.negation.falseAdmit!).toBeGreaterThan(s.negation.falseAdmit!);
@@ -264,19 +315,22 @@ describe.skipIf(!RUN)('#196b WP-1 — drives the SHIPPED admission over atlas-se
     // tsc-FALSE negatives) while tsc witnessed a cross-package call. The fix ADDS `opaqueRefSources()` — the
     // collapsed cross-package `local` refs with no matching local def — and the door ABSTAINS (scope-open) over any
     // scope containing one (governed-emit-negation.ts:259, gate (b0)), so those negatives no longer false-admit ⇒
-    // negation.falseAdmit=0. NON-VACUITY: disabling the opaque gate (`judgeGateOff`) returns the large false-admit.
+    // negation.falseAdmit=0. CAVEAT (WP-C1, measured): on the OPERATING dist-form index that is no longer the
+    // load-bearing leg — `canonicalizeSymbol` resolves those cross-package refs, so gate (c) REFUTES them and the
+    // opaque gate only converts refutes into (more conservative) scope-open abstains. NON-VACUITY is therefore
+    // witnessed by the callers-BLIND teeth above, not by `judgeGateOff` (which measures 0 here, and is printed).
     // WHY relation is 100%: `admitRelation` (admit-harness.ts:220) is a PURE grounding gate — both endpoints
     // re-derive FRESH, and there is NO direction oracle, so a direction-reversed edge (B→A where only A→B holds)
     // grounds identically and is admitted. A door property too (no direction check), reported not asserted-away.
     // eslint-disable-next-line no-console
     console.log(
-      `FINDING: negation door false-admit = ${fmt(s.negation.falseAdmit)} (FIXED — collapsed cross-package scip `
-      + `'local' refs now re-surfaced via opaqueRefSources() ⇒ door abstains scope-open at governed-emit-negation.ts:259; `
-      + `gate-OFF teeth returns ${fmt(teeth.negation.falseAdmit)}), relation = ${fmt(s.relation.falseAdmit)} `
-      + `(no direction oracle in admitRelation), dependency = ${fmt(s.dependency.falseAdmit)} residual (all `
-      + `${depFalseAdmits.length} type/reference symbols — call-vs-reference oracle gap, no fabricated caller). `
-      + `AC-6 negation false-admit CLOSED by branch fix/negation-collapsed-local-soundness (door was unsound, `
-      + `historically ~80.86%; gate-off teeth reproduces the regime; now 0).`,
+      `FINDING: negation door false-admit = ${fmt(s.negation.falseAdmit)}; non-vacuity witnessed by the `
+      + `callers-BLIND teeth = ${fmt(teeth.negation.falseAdmit)} (gate (c) reverseCallers is the load-bearing leg here), `
+      + `while the #99 opaque-gate-OFF diagnostic measures ${fmt(gateOff.negation.falseAdmit)} — that leg is STALE on a `
+      + `dist-form index (canonicalizeSymbol resolves the cross-package refs instead of collapsing them). `
+      + `relation = ${fmt(s.relation.falseAdmit)} (no direction oracle in admitRelation), `
+      + `dependency = ${fmt(s.dependency.falseAdmit)} residual (all ${depFalseAdmits.length} backed by a REAL in-scope `
+      + `tsc reference — call-vs-reference oracle gap, no fabricated edge).`,
     );
   });
 
