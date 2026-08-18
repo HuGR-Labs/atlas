@@ -61,11 +61,17 @@ export interface MineAdmission {
  * PLACEHOLDER WITH A VERDICT, not a measurement: it makes the stored score carry no information yet, and
  * inventing a keyword heuristic here would be inventing the oracle three documents refuse to invent.
  *
- * THE PREDICATE LEGS ARE STRUCTURALLY UNREACHABLE FROM THIS GATE and are supplied fail-closed anyway: the
- * `mine` gate proposes ADVISORIES only (`makeAdmitGate`, cli/src/mine-gate.ts), so `admit` never enters
- * `admitPredicate` and `predicate` / `typeOracle` / `refine` / `K` are never read. They are not omitted
- * (`AdmitDeps` is total) and not faked into something permissive — synthesize yields no check, the oracle
- * expresses nothing, the teeth never flip, `K` is 0. A predicate path wired later must supply real ones.
+ * `admitPredicate` IS REACHABLE FROM THIS GATE, and the DEPENDENCY/COUNT sound legs it consults are REAL
+ * (since #196a/#196c): `mine-gate.ts`'s `buildProposal` dispatches a `predicate`-kind seed to a
+ * `PredicateProposal`, which `admit` (genesis/src/admit-harness.ts) routes to `admitPredicate`, which reads
+ * `deps.verifyDependency` / `deps.verifyCount` for the fact's dependency/count slot — both wired above to
+ * `createVerifyFactLeg`'s sound symbol-reverse oracle over the real SCIP index, `proven`/`abstain` only. The
+ * `refine` / `K` slots and the SYNTHESIZED-CHECK predicate leg (`predicate.synthesize/verify/teeth`) and
+ * `typeOracle` remain FAIL-CLOSED PLACEHOLDERS: no dependency/count producer synthesizes an ad-hoc check for
+ * `admitPredicate` to run, so those slots are never exercised by anything `mine` currently emits, and they
+ * are supplied fail-closed rather than omitted (`AdmitDeps` is total) — synthesize yields no check, the
+ * oracle expresses nothing, the teeth never flip, `K` is 0. A predicate path that DOES synthesize a check
+ * (rather than reusing the dependency/count sound legs) must supply real ones.
  */
 export function buildMineAdmission(
   axes: Axes,
