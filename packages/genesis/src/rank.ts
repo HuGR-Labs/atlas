@@ -358,7 +358,26 @@ export function createMine(deps: MineDeps): MineApi {
     // The SAME `frontier` options the fallback was cut with are handed to `rank`: the seam that decides
     // which units exist and the seam that orders them must never be two different suppliers.
     const ranked = rank(sk, personalization, deps.frontier ?? {});
-    return ranked.map((c) => ({
+    // [PROVABLE-FRONTIER] STABLE-PARTITION the PPR-ranked frontier so provable sites come first — a metered
+    // sound-arm run's top-PPR sites are dependency SINKS/barrels the oracle cannot prove, so a budget-capped
+    // run spent its whole budget on unprovable sites. `provableFirst` is a PURE predicate (the CLI derives it
+    // from the SAME reader that feeds the sound arm's candidate list). ABSENT ⇒ `ranked` is UNTOUCHED, so the
+    // advisory arm and every existing caller stay byte-identical. It is a stable PARTITION, never a re-sort:
+    // the PPR/rank order is preserved WITHIN each group (a total, deterministic transform), then `rank` is
+    // re-numbered 1..N so the coverage ledger and the budget cap see the reordered frontier.
+    // COUPLING (bobby cold-review): this reorder is honored ONLY because whole-frontier ordering flows through
+    // `rank` here → `drive.ts` sorts by `rank` (rank-primary). `runExtract`/`extract.ts` sorts `byPprDescending`
+    // (ppr-primary) and WOULD undo this — it is inert only because the mine path calls it with a SINGLE-site
+    // array (`mine.ts` `runExtract([cand], …)`). Routing a multi-site array through `runExtract` would silently
+    // drop the provable-first order; re-establish it here (or at that call site) if that ever changes.
+    const provableFirst = deps.frontier?.provableFirst;
+    const ordered =
+      provableFirst === undefined
+        ? ranked
+        : [...ranked.filter((c) => provableFirst(c.site)), ...ranked.filter((c) => !provableFirst(c.site))].map(
+            (c, i) => ({ ...c, rank: i + 1 }),
+          );
+    return ordered.map((c) => ({
       ...c,
       signals: structural ? ZERO_SIGNALS : deps.history.signals(c.site),
     }));
