@@ -1,0 +1,86 @@
+{
+  "kind": "a4-planted-recall (196b sound mutation-bench)",
+  "method_doc": "docs/design/95-benchmark-methodology.md",
+  "wp": "WP-B2",
+  "instrument": {
+    "test_file": "packages/adapter-io/test/semantic-bench.test.ts",
+    "scorer": "packages/adapter-io/test/support/bench-scorer.ts",
+    "mutation_contract": "packages/adapter-io/test/support/mutation-contract.ts",
+    "driver": "packages/adapter-io/test/support/sem-bench-driver.ts",
+    "fixture_self_proof": "packages/adapter-io/test/support/semantic-bench-fixture.json",
+    "fixture_pin_md5": "daa42ed88403e13b8ab1197adab9f0d3",
+    "judge_in_correctness_loop": false,
+    "oracle": "ts.createProgram (independent tsc program), no LLM anywhere in the label or scoring path",
+    "arms_covered": ["count", "relation", "dependency", "negation"],
+    "arms_not_covered": ["advisory", "predicate (semantic slots — no sound oracle; see scopeLimit disclaimer)"]
+  },
+  "reproduction": {
+    "git_sha": "9eb4d7feaec5eada3df2f33f691c5fe3f8ca5350",
+    "worktree_branch": "bench/a4-planted",
+    "node": "v22.17.1",
+    "npm": "10.9.2",
+    "typescript": "5.9.3",
+    "vitest": "2.1.9",
+    "scip_typescript": "0.4.0",
+    "commands": [
+      "npm install",
+      "npx tsc -b",
+      "scip-typescript index --output .atlas/index.scip",
+      "ATLAS_SEM_BENCH=1 npx vitest run packages/adapter-io/test/semantic-bench.test.ts"
+    ],
+    "verified_by_second_independent_run": true,
+    "note": "run twice end-to-end (fresh `rm .atlas/index.scip` + re-index + re-test) for BOTH build states below; numbers were byte-for-byte identical (numerators/denominators) across both runs of each state. A third dist-form rebuild (done to extract raw numerator/denominator counts) produced a slightly different index.scip file size (16,994,791 vs 16,980,163 bytes — non-deterministic scip-typescript output, e.g. ordering/timestamps) but IDENTICAL bench numbers, so the metric is stable even though the artifact bytes are not."
+  },
+  "build_states_measured": {
+    "dist_absent": {
+      "label": "scip-typescript index run BEFORE `tsc -b` populates packages/*/dist — the literal recipe in the test file header. This is the MISBUILD state per docs/design/95-benchmark-methodology.md L92-95.",
+      "index_scip_bytes": 16306497,
+      "targets": 1333,
+      "scopes": 19,
+      "perArm": {
+        "count":      { "falseAdmit": { "num": 0,   "den": 163,   "rate": 0.0 },      "recallTrue": { "num": 7,   "den": 163,  "rate": 0.04294 }, "n": 326 },
+        "relation":   { "falseAdmit": { "num": 452, "den": 452,   "rate": 1.0 },      "recallTrue": { "num": 452, "den": 452,  "rate": 1.0 },     "n": 904 },
+        "dependency": { "falseAdmit": { "num": 18,  "den": 23702, "rate": 0.00076 },  "recallTrue": { "num": 7,   "den": 163,  "rate": 0.04294 }, "n": 23865 },
+        "negation":   { "falseAdmit": { "num": 0,   "den": 163,   "rate": 0.0 },      "recallTrue": { "num": 51,  "den": 1200, "rate": 0.0425 },  "n": 1363 }
+      },
+      "negation_teeth_gate_off": { "falseAdmit": { "num": 132, "den": 163, "rate": 0.8098 } },
+      "dependency_false_admits_call_eligible": "not separately re-checked in this state (the shipped assertion loop stops at first violation; the doc's committed comment for this regime cites 0.07% on an earlier, smaller population, all oracle-definition-gap type/reference symbols, no fabricated caller)",
+      "test_suite_result": "GREEN (all AC-6 assertions pass in this build state)"
+    },
+    "dist_form": {
+      "label": "scip-typescript index run AFTER `tsc -b` — the OPERATING/committed-form recipe the methodology doc names as intended (L88-91, L98-102).",
+      "index_scip_bytes_by_run": [16980163, 16980163, 16994791],
+      "targets": 1333,
+      "scopes": 19,
+      "perArm": {
+        "count":      { "falseAdmit": { "num": 9,   "den": 163,   "rate": 0.05521 }, "recallTrue": { "num": 163, "den": 163,  "rate": 1.0 },     "n": 326 },
+        "relation":   { "falseAdmit": { "num": 452, "den": 452,   "rate": 1.0 },     "recallTrue": { "num": 452, "den": 452,  "rate": 1.0 },     "n": 904 },
+        "dependency": { "falseAdmit": { "num": 309, "den": 23702, "rate": 0.01304 }, "recallTrue": { "num": 163, "den": 163,  "rate": 1.0 },     "n": 23865 },
+        "negation":   { "falseAdmit": { "num": 0,   "den": 163,   "rate": 0.0 },     "recallTrue": { "num": 428, "den": 1200, "rate": 0.35667 }, "n": 1363 }
+      },
+      "negation_teeth_gate_off": { "falseAdmit": { "num": 0, "den": 163, "rate": 0.0 } },
+      "dependency_false_admits_call_eligible": {
+        "total_dependency_false_admits": 309,
+        "call_eligible_count": 2,
+        "call_eligible_symbols": ["isGrounded (callFiles=1)", "DegenerateAnchorError (callFiles=1)"],
+        "reading": "2/309 (0.65%) of this build's dependency false-admits are on symbols tsc DOES witness as called somewhere — a residual real unsoundness on this index+rev, not the 'type/reference symbol, no fabricated caller' oracle-gap the shipped test comment claims is exhaustive. This CONTRADICTS the shipped AC-6 assertion, which now FAILS on this build state (see test_suite_result)."
+      },
+      "test_suite_result": "RED — AC-6 fails: 'dependency false-admit on a CALL-ELIGIBLE symbol (isGrounded) ... expected 1 to be +0'. Also count.falseAdmit=9/163 is nonzero (assertion for count sits after the failing dependency loop in the same `it`, so vitest never reaches it, but the printed number is real and nonzero, contradicting the methodology doc's 'count is 0-false-admit ... sound in any world' claim)."
+    }
+  },
+  "scope_limit_disclaimer": "SOUND HEADLINE = structural arms only (count / dependency / negation vs the independent tsc oracle). The relation arm is MEASURED, not guaranteed (no direction oracle: admitRelation has no way to reject a reversed edge, so both falseAdmit and recallTrue print 100% by construction). Semantic slots (invariant / sideeffect / advisory prose) tsc cannot witness are NOT covered here at all.",
+  "limits": [
+    "recall over PLANTED mutations on a synthetic-labelled fixture, not recall over arbitrary real-world facts",
+    "covers only the 4 oracle-bearing shapes (count, relation, dependency, negation); advisory/predicate prose has no sound oracle and is out of scope",
+    "recall is INDEX-BUILD-DEPENDENT by roughly an order of magnitude (count/dependency recall 4.29% dist-absent vs 100% dist-form; negation recall 4.25% vs 35.67%) — a bare percentage without the build recipe is not a citable number",
+    "on the dist-form (intended/operating) index at git sha 9eb4d7f, the shipped door is NOT 0-false-admit for dependency (309/23702=1.30%, 2 of them call-eligible) or count (9/163=5.52%) — this is a genuine measured finding, not a framing choice, and it contradicts the 0-FP claim in docs/design/95-benchmark-methodology.md for these two arms at this build+rev; negation remains 0-false-admit in both build states measured",
+    "relation's 100%/100% is a construction artifact of admitRelation having no direction oracle, not evidence of either soundness or unsoundness",
+    "this report measures ONE git sha (9eb4d7f) and TWO index builds; it does not sweep git history or other index tools"
+  ],
+  "what_the_brief_got_wrong": [
+    "the brief characterized bench-scorer's independence rule and per-arm two-co-primary output correctly; that part is accurate as described",
+    "the brief implied the test 'currently only console.log's these' numbers and asked for the smallest capture change — true; I did NOT edit the shipped test file. I added two throwaway, uncommitted test files under packages/adapter-io/test/_tmp-*.test.ts that reimplement the SAME accumulation bench-scorer.ts already does (to get raw numerators/denominators the console.log line omits), ran them, captured stdout, then deleted them before commit. Zero diff to the shipped instrument.",
+    "the brief's framing implied the dist-form vs dist-absent question was primarily about RECALL swinging (per the doc's L79-102 example). That is true, but this run surfaced a SECOND, more serious effect the brief did not anticipate: on the dist-form (operating) index at the CURRENT git sha, the door is no longer 0-false-admit for dependency and count — a genuine soundness regression/finding relative to the doc's claims, not just a recall swing. This is the most important single fact in this report and the brief's 'the trap is only about recall' framing undersold it.",
+    "the fixture pin's `substrate.rev` field says `e35dcce`, an OLDER commit than this worktree's HEAD (9eb4d7f). The pin's own comment clarifies the tsc oracle is 'a deterministic pure function of the checked-out src at this rev' (i.e. whatever is checked out, not the pinned annotation), and nothing in AC-7 enforces that the checked-out src matches `e35dcce` — only the SYNTHETIC self-proof fixture bytes (semantic-bench-fixture.json) are hash-pinned, not the substrate. So the numbers in this report are for 9eb4d7f, not e35dcce, and that drift is exactly why the doc's committed AC-6 comments (e.g. 'dependency = 0.08% residual...17/23577') no longer match this run (18/23702, 309/23702) — the population grew and, on dist-form, the dependency soundness invariant itself broke. This is worth flagging to the code owner, not something I fixed (out of scope for a measurement WP)."
+  ]
+}
