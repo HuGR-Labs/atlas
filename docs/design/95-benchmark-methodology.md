@@ -74,8 +74,10 @@ The honest #95 story splits by seal, and the strong claim needs no LLM at all:
 
 - **`proven`** (dependency / count / negation) — a 0-FP **mechanical oracle** (`tsc`, export index, canon
   residual) on **real** atlas code. This is the Clover boundary (arXiv 2310.17807: 0-FP is reachable *only*
-  where a formal check exists). Dependency and count are 0-false-admit by a witnessed-existence oracle, sound
-  in any world.
+  where a formal check exists). Dependency and count are 0-false-admit by a witnessed **reference**-existence
+  oracle (`reverseCallers`, `packages/index/src/symbol-reverse.ts`, counts any SCIP `reference` occurrence —
+  imports and type-only positions included, not only calls), sound in any world. This is NOT a call-graph
+  claim: the oracle proves "B is referenced from scope A," never "A calls B."
   **Negation's soundness is INDEX-FORM-DEPENDENT (corrected 2026-08-17, #178 — the earlier "0-false-admit over
   18,654 admits, recall 80.9% (#232)" was measured on a 2026-08-12 DIST-form `.atlas/index.scip` and does NOT
   transfer to a fresh index).** The #196b sound mutation-bench, on its first run over a fresh `scip-typescript`
