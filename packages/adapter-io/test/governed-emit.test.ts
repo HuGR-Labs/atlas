@@ -112,6 +112,52 @@ describe('COMPOSE-A — createGovernedEmit (truth-door · authz · upsert · dur
     expect(row.slot).toBe('invariant'); // control: `slot` is not a trust signal — it still rides, as before
   });
 
+  it('AC-1 (SEAL-PROMOTE-CARRY) — a PROMOTE (origin:promoted) of a seal-bearing fact keeps `seal:proven` on the durable ROW + CAS bytes', () => {
+    // `origin:'promoted'` is the DOOR-DERIVED trust key (never from the payload): a mined fact re-emitted from
+    // content-addressed staging written by the sound admit path. Its `seal` is trusted, so it must survive the
+    // staging→current promote (before this WP the #187 strip fired unconditionally ⇒ the durable row lost it).
+    const spy = makeStoreSpy();
+    const { emit } = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice', ratifyToken: 'billy', origin: 'promoted' });
+    const staged = { ...advisory('core'), seal: 'proven' as const };
+    const out = emit(staged, AT);
+    expect(out.emitted).toBe(true);
+    // the durable projection ROW carries the trusted seal.
+    const projection = spy.persists()[spy.persists().length - 1]!;
+    const row = [...projection.current.values()][0]!;
+    expect(row.seal).toBe('proven'); // ⚑ RED before SEAL-PROMOTE-CARRY: the promote stripped it here.
+    // and the CAS bytes ARE the fact (read-back invariant), so they carry it too.
+    const readBack = spy.store.get(out.id!) as { seal?: unknown } | undefined;
+    expect(readBack?.seal).toBe('proven');
+  });
+
+  it('AC-4 (SEAL-PROMOTE-CARRY, SECURITY) — an AUTHORED UPDATE over a promoted `proven` node DROPS the seal; a promote UPDATE re-stamps it', () => {
+    // The security surface: a `proven` seal is trust in the WRITE that carried it, not in the (anchor, slot)
+    // place. An authored operator UPDATE has its own forged seal stripped at the door AND must not INHERIT the
+    // incumbent's proven seal through the reducer's `...prior` — otherwise an operator could re-mint a node's
+    // body while silently keeping a proven seal it never earned.
+    const spy = makeStoreSpy();
+    const promoted = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice', ratifyToken: 'billy', origin: 'promoted' }).emit;
+    const authored = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice' }).emit;
+
+    // 1. a promote lands a proven node in current.
+    expect(promoted({ ...advisory('core'), seal: 'proven' as const }, AT).emitted).toBe(true);
+    let row = [...spy.persists()[spy.persists().length - 1]!.current.values()][0]!;
+    expect(row.seal).toBe('proven');
+
+    // 2. an AUTHORED operator UPDATE at the same (anchor, slot), even carrying a forged seal, DROPS it. Same
+    //    anchor `src/util.ts::greet` ⇒ same nodeKey ⇒ UPDATE; a different claim body ⇒ new bytes (not DEDUP).
+    const out = authored({ ...mkAdvisory({ id: 'nk-governed-1', anchor: 'src/util.ts::greet', claimNorm: 'a different governed claim body', scope: 'core' }), seal: 'proven' as const }, AT);
+    expect(out.emitted).toBe(true);
+    row = [...spy.persists()[spy.persists().length - 1]!.current.values()][0]!;
+    expect(row.seal).toBeUndefined(); // did NOT inherit the prior proven seal (no forgery by omission).
+    expect(Object.prototype.hasOwnProperty.call(row, 'seal')).toBe(false);
+
+    // 3. a PROMOTE UPDATE carrying its OWN trusted seal RE-STAMPS proven.
+    expect(promoted({ ...mkAdvisory({ id: 'nk-governed-1', anchor: 'src/util.ts::greet', claimNorm: 'yet another governed body', scope: 'core' }), seal: 'proven' as const }, AT).emitted).toBe(true);
+    row = [...spy.persists()[spy.persists().length - 1]!.current.values()][0]!;
+    expect(row.seal).toBe('proven');
+  });
+
   it('SCN-GE-4 — empty ATLAS_ACTOR ⇒ denied fail-closed (no actor is in any scope)', () => {
     const spy = makeStoreSpy();
     const { emit } = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: '' });
