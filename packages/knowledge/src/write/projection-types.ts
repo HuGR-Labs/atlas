@@ -10,7 +10,7 @@
 // answer-provenance carrier (`answerRef`, #195 b) added to both shapes below.
 
 import type { Tier } from '@atlas/contracts';
-import type { PredicateSlot } from '../types.js';
+import type { PredicateSlot, Seal } from '../types.js';
 import type { NodeFamily } from './router.js';
 
 /** One write, its identity VALUES supplied by the upstream identity facet (5.13-b) + the emitter. */
@@ -37,6 +37,12 @@ export interface WriteRequest {
   readonly endpointA?: string;
   readonly endpointB?: string;
   readonly relationKind?: string; // the closed-vocabulary RelationKind VALUE (string form at this seam)
+  // ── SEAL carrier (ADDITIVE, OPTIONAL — ADR-0017 two-seal provenance) — the seal (`proven`) the admit path
+  //    decided for this fact's TYPE, forwarded so `upsert` stamps it on the ROW and the durable store carries
+  //    it. PROVENANCE ONLY: it records HOW the fact's type was decided, is NOT an authority/governance leg,
+  //    never enters `nodeKey`/`RouteInputs`, and no gate reads it. Absent for advisory-prose facts. Mirrors
+  //    `slot`'s carrier discipline exactly (ADDITIVE, OPTIONAL, exactOptionalPropertyTypes-honest).
+  readonly seal?: Seal;
   // ── ANSWER-PROVENANCE carrier (ADDITIVE, OPTIONAL — #195 b) — binds a MINED fact to the exact bytes the model
   //    returned. `answerRef` is the CAS id of the answer bytes actually stored (scrubbed before `put`, KNOW-11).
   //    In a content-addressed store the CAS id IS the digest of the stored content, so `answerRef` is its OWN
@@ -137,6 +143,13 @@ export interface CurrentNode {
   readonly endpointA?: string;
   readonly endpointB?: string;
   readonly relationKind?: string;
+  // ── SEAL carrier (ADDITIVE, OPTIONAL — ADR-0017 two-seal provenance) — the seal (`proven`) stamped on the
+  //    ROW so the durable store carries HOW this fact's type was decided. PROVENANCE ONLY: NOT an
+  //    authority/governance leg, never enters `nodeKey`, no gate reads it; absent for advisory-prose facts.
+  //    ADDITIVE/OPTIONAL, back-compat, the `slot`/`answerRef` discipline: a row minted before this WP simply
+  //    has none (reads as "seal UNKNOWN", never "proven"), old sidecars round-trip unrewritten (the wire
+  //    serializes the whole CurrentNode — no format edit). Carried forward by `upsert` with the rest of the row.
+  readonly seal?: Seal;
   // ── ANSWER-PROVENANCE carrier (ADDITIVE, OPTIONAL — #195 b) — the mined fact's receipt for the exact bytes the
   //    model returned: `answerRef` = CAS id of the stored (scrubbed) answer. The CAS id is its own tamper-evidence
   //    (store.ts `get()` re-hashes on read), so no separate digest is kept. Present only on a MINED row (a model

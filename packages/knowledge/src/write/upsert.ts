@@ -253,6 +253,7 @@ export function upsert(
         // ADJACENCY carrier (additive) — spread keeps the field ABSENT when omitted (never explicit undefined).
         ...(req.primaryAnchor !== undefined ? { primaryAnchor: req.primaryAnchor } : {}),
         ...(req.slot !== undefined ? { slot: req.slot } : {}),
+        ...(req.seal !== undefined ? { seal: req.seal } : {}), // SEAL carrier (ADR-0017) — provenance only, never a gate/identity leg; absent for advisory-prose
         ...governanceOf(req), // GOVERNANCE carrier (ADR-0007) — absent when the caller declares neither half
         ...relationOf(req), // RELATION carrier (ADR-0015 D2) — the endpoint pair + kind on a family:'relation' write
         ...answerProvenanceOf(req), // ANSWER-PROVENANCE carrier (#195 b) — the mined answer receipt, mine path only
@@ -290,6 +291,7 @@ export function upsert(
         claims, // in place, no supersededBy
         ...(req.primaryAnchor !== undefined ? { primaryAnchor: req.primaryAnchor } : {}),
         ...(req.slot !== undefined ? { slot: req.slot } : {}),
+        ...(req.seal !== undefined ? { seal: req.seal } : {}), // SEAL carrier (ADR-0017) — req re-states; omitted ⇒ `...prior`'s seal survives (never dropped on update)
         ...governanceOf(req), // re-states scope / re-states-or-RAISES tier; omitted ⇒ `...prior` stands
         ...relationOf(req), // RELATION carrier (ADR-0015 D2) — re-evidencing a relation re-states its endpoints
         ...answerProvenanceOf(req), // ANSWER-PROVENANCE carrier (#195 b) — re-mining re-states the receipt; else `...prior`
@@ -318,6 +320,7 @@ export function upsert(
         supersededBy: prior.contentHash,
         ...(req.primaryAnchor !== undefined ? { primaryAnchor: req.primaryAnchor } : {}), // req wins, else `...prior`
         ...(req.slot !== undefined ? { slot: req.slot } : {}),
+        ...(req.seal !== undefined ? { seal: req.seal } : {}), // SEAL carrier (ADR-0017) — a new version re-states its seal; omitted ⇒ `...prior`'s survives
         ...governanceOf(req), // a new VERSION of a node keeps the node's governance — never a re-classification
         // DELIBERATE OMISSION (#195, contract §5 scopes the stamp to CREATE/UPDATE): `answerProvenanceOf`
         // and `relationOf` are NOT re-stamped here, so a superseded version keeps `...prior`'s `answerRef` —

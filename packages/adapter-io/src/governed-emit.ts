@@ -193,7 +193,13 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
     if (!isScope(scope)) {
       return { emitted: false, rejected: REJECTED_MALFORMED_SCOPE };
     }
-    const node: GroundedFact = { ...raw, tier, scope };
+    // SEAL IS STRIPPED HERE (billy T0) — `seal` (`proven`) is a TRUST SIGNAL write-gated to the sound admit
+    // path (`mine-decide.ts`, from `buildSound`'s oracle verdict). This operator door's `raw` is an UNTRUSTED
+    // payload (`atlas emit <json>`/an in-process embedder), so a hand-written `seal` must NOT survive onto
+    // `node` — which is what the WriteRequest AND the CAS bytes are both built from. Destructured off before
+    // the snapshot so no operator-supplied seal reaches the durable row or the stored bytes.
+    const { seal: _rejectedOperatorSeal, ...rawNoSeal } = raw;
+    const node: GroundedFact = { ...rawNoSeal, tier, scope };
 
     //    THE FAMILY — `kind` cross-checked against `check`, on the SNAPSHOT (a spread reads each accessor
     //    once, so every gate below sees the same bytes `put` will). Read `familyOf` for why presence is the
@@ -348,6 +354,10 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
           //    `predicateSlot` is R3-optional; conditional spread keeps `slot` ABSENT (exactOptionalPropertyTypes).
           primaryAnchor, // the SAME value gate 2.1 bound the declared scope against — computed once
           ...(node.kind !== 'relation' && node.predicateSlot !== undefined ? { slot: node.predicateSlot } : {}),
+          // ── NO SEAL CARRIER HERE (billy T0) — a `seal` (`proven`) is a TRUST SIGNAL write-gated to the sound
+          //    admit path (`mine-decide.ts`, from `buildSound`'s oracle verdict). This is the OPERATOR emit door
+          //    (`atlas emit <json>`), whose payload is UNTRUSTED and carries no oracle verdict — so it never sets
+          //    a seal, and any payload-supplied seal was already stripped at the `node` snapshot below (§ gate 0).
           // ── RELATION carrier (ADDITIVE — ADR-0015 D2) — a `family:'relation'` write stamps its endpoint pair
           //    + kind on the ROW so the read-side `relationsOf` fold indexes it by both endpoints. Empty for a
           //    non-relation. `primaryAnchor` above is `endpointA` for a relation (the subject), by construction.

@@ -195,6 +195,12 @@ export function decideStaging(
       //    scan (WP-B). NOT routed; `slot` stays ABSENT when omitted (exactOptionalPropertyTypes).
       primaryAnchor,
       ...(fSlot !== undefined ? { slot: fSlot } : {}),
+      // ── SEAL carrier (ADR-0017 two-seal provenance) — the TRUSTED write-gate for `proven`. `f.seal` is set
+      //    ONLY by the sound admit path (`buildSound`, admit-harness.ts) after the oracle verdict; THIS is the
+      //    one door allowed to stamp it onto the durable row. The operator emit door (governed-emit.ts) STRIPS
+      //    any payload-supplied seal — a seal is a forgeable trust signal if it can ride an untrusted JSON fact
+      //    (billy T0). NOT routed (`RouteInputs` reads none); provenance only, never an identity/authority leg.
+      ...(f.seal !== undefined ? { seal: f.seal } : {}),
       // ── GOVERNANCE carrier (ADR-0007) — from the MINED constants, never forwarded from the fact. Neither
       //    half is routed (`RouteInputs` reads neither), so no hash and no route moves; what changes is that
       //    the row now DECLARES what it is — what the ARCH-10 guard derives authority from. F3 (WP-96-N): a

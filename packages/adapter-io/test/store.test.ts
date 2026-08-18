@@ -306,6 +306,42 @@ describe('rehydrateProjection — ADAPT-STORE-3 cross-process rehydrate, minting
     expect(rehydrated.slot).toBe('invariant');
   });
 
+  it('AC-3 — SEAL-CARRY: a mined `seal:proven` fact lands in the DURABLE store and rehydrates with the seal', () => {
+    const dir = freshCasDir();
+    // A genuine projection built through the REAL knowledge `upsert`, carrying the ADDITIVE seal (+ slot),
+    // then persisted+rehydrated through the REAL createDiskStore — NOT a fakeStore (the pre-existing union
+    // test used a fakeStore and MISSED this gap).
+    const req: WriteRequest = {
+      nodeKey: 'claim:fix-cov',
+      contentHash: id({ claim: 'fix-cov', v: 1 }),
+      family: 'advisory',
+      claimNorm: 'coverage on the fix path',
+      slot: 'invariant',
+      seal: 'proven',
+    };
+    const { store: projection } = upsert(emptyStore(), req);
+    const s = createDiskStore(dir);
+    s.persistProjection(projection);
+
+    // a FRESH process reconstructs the current-node map from the durable sidecar.
+    const rehydrated = rehydrateProjection(createDiskStore(dir)).current.get('claim:fix-cov')!;
+    // teeth: without the CREATE `seal` projection carrier, the durable row never carries it ⇒ undefined.
+    expect(rehydrated.seal).toBe('proven');
+    expect(rehydrated.slot).toBe('invariant'); // control: the sibling `slot` carrier still round-trips
+  });
+
+  it('AC-4 — SEAL-CARRY back-compat: an advisory-prose fact (no seal) rehydrates with NO seal (absent)', () => {
+    const dir = freshCasDir();
+    // a projection minted with NO seal (every stored fact today) — via the REAL upsert.
+    const { store: projection } = upsert(emptyStore(), reqF());
+    const s = createDiskStore(dir);
+    s.persistProjection(projection);
+    const node = rehydrateProjection(createDiskStore(dir)).current.get('claim:fix-cov')!;
+    // the absent optional stays absent — no explicit undefined injected by the round-trip.
+    expect(node.seal).toBeUndefined();
+    expect(Object.prototype.hasOwnProperty.call(node, 'seal')).toBe(false);
+  });
+
   it('ADJACENCY-A — an OLD sidecar without the fields rehydrates with them ABSENT (forward/back compat)', () => {
     const dir = freshCasDir();
     // a projection minted with NO adjacency fields (the pre-ADJACENCY-A shape).
