@@ -300,8 +300,15 @@ export function emitNegation(deps: GovernedEmitDeps, raw: NegationNode): EmitOut
   const grounding: Grounding = {
     entries: [{ anchor: { kind: 'directory', qualifiedPath: scope, subtreeHash }, path: scope }],
   };
+  // SEAL IS TRUSTED IFF THE WRITE IS PROMOTE-ORIGIN (billy #96-wave → SEAL-PROMOTE-CARRY). Same law as the
+  // main door: `seal` (`proven`) is a forgeable trust signal, and `origin` is DOOR-DERIVED (never from the
+  // payload). A `promoted` negation is a mined fact re-emitted from content-addressed staging (the trusted
+  // admit path), so its `seal` survives onto `node` (which is `put` into CAS); an AUTHORED negation (`atlas
+  // emit {kind:'negation', seal:'proven'}`) carries an UNTRUSTED payload, so its `seal` is stripped off `node`
+  // before it can reach the CAS bytes — closing the dormant leak the main door had already closed at gate 0.
+  const { seal: _rejectedOperatorSeal, ...rawNoSeal } = raw;
   const node: NegationNode = {
-    ...raw,
+    ...(deps.origin === 'promoted' ? raw : rawNoSeal),
     id: key, // MINTED, never trusted from the payload
     tier,
     scope,

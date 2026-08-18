@@ -45,14 +45,19 @@ describe('upsert CREATE — SEAL-CARRY: the admit-path seal lands on the durable
   });
 });
 
-describe('upsert UPDATE — SEAL-CARRY: a re-write preserves / re-states the seal (never dropped)', () => {
-  it('AC-5 — re-writing a node that had `seal:proven` PRESERVES the seal when the re-mine omits it (carry-forward)', () => {
+describe('upsert UPDATE — SEAL-CARRY: the seal comes from THIS write only, NEVER carried forward (SEAL-PROMOTE-CARRY)', () => {
+  it('AC-4 — re-writing a node that had `seal:proven` DROPS the seal when the re-mine omits it (no carry-forward)', () => {
+    // SEAL-PROMOTE-CARRY (billy T0): a `proven` seal is trust in the WRITE that carried it, not in the
+    // (anchor, slot) place. An authored operator UPDATE has its own seal stripped at the door ⇒ `req.seal`
+    // absent ⇒ the node must NOT inherit the prior `proven` seal (that would be a forgery by omission).
     let s = upsert(emptyStore(), create('proven')).store;
     expect(s.current.get('nk-adv')!.seal).toBe('proven');
-    s = upsert(s, update(undefined)).store; // a re-mine with no seal ⇒ `...prior` stands
-    // ⚑ RED if UPDATE dropped `...prior`'s seal: this would read undefined.
-    expect(s.current.get('nk-adv')!.seal).toBe('proven');
-    expect(s.current.get('nk-adv')!.contentHash).toBe('ch-v1'); // control: the UPDATE really happened
+    s = upsert(s, update(undefined)).store; // a re-write with no seal ⇒ prior's seal is DROPPED, not carried
+    // ⚑ RED if UPDATE carried `...prior`'s seal forward: this would read 'proven'.
+    const row = s.current.get('nk-adv')!;
+    expect(row.seal).toBeUndefined();
+    expect(Object.prototype.hasOwnProperty.call(row, 'seal')).toBe(false); // truly ABSENT, not undefined-property
+    expect(row.contentHash).toBe('ch-v1'); // control: the UPDATE really happened
   });
 
   it('AC-5 — a re-mine carrying a fresh seal RE-STATES it on UPDATE (present wins, like slot)', () => {
@@ -60,5 +65,36 @@ describe('upsert UPDATE — SEAL-CARRY: a re-write preserves / re-states the sea
     expect(s.current.get('nk-adv')!.seal).toBeUndefined();
     s = upsert(s, update('proven')).store; // absent → present is not blocked
     expect(s.current.get('nk-adv')!.seal).toBe('proven');
+  });
+});
+
+// A predicate CREATE then a same-nodeKey re-evidence (new bytes, checkSame ⇒ SUPERSEDE — router.ts:139).
+const predCreate = (seal?: 'proven'): WriteRequest => ({
+  nodeKey: 'nk-pred', contentHash: 'pch-v0', family: 'predicate', claimNorm: 'pcn-v0',
+  ...(seal !== undefined ? { seal } : {}),
+});
+const predSupersede = (seal?: 'proven'): WriteRequest => ({
+  nodeKey: 'nk-pred', contentHash: 'pch-v1', family: 'predicate', claimNorm: 'pcn-v1', // new bytes ⇒ not DEDUP
+  ...(seal !== undefined ? { seal } : {}),
+});
+
+describe('upsert SUPERSEDE — SEAL-CARRY: a new version takes its seal from THIS write only, never from prior', () => {
+  it('AC-4 — superseding a `seal:proven` predicate node DROPS the seal when the new version omits it (no carry-forward)', () => {
+    let s = upsert(emptyStore(), predCreate('proven')).store;
+    expect(s.current.get('nk-pred')!.seal).toBe('proven');
+    const r = upsert(s, predSupersede(undefined));
+    expect(r.decision).toBe('SUPERSEDE'); // control: routed SUPERSEDE, not UPDATE
+    s = r.store;
+    const row = s.current.get('nk-pred')!;
+    // ⚑ RED if SUPERSEDE carried `...prior`'s seal forward: this would read 'proven'.
+    expect(row.seal).toBeUndefined();
+    expect(Object.prototype.hasOwnProperty.call(row, 'seal')).toBe(false);
+    expect(row.supersededBy).toBe('pch-v0'); // control: the SUPERSEDE really happened (lineage pointer)
+  });
+
+  it('AC-4 — a SUPERSEDE carrying its OWN `seal:proven` re-stamps it (a promote re-version keeps proven)', () => {
+    let s = upsert(emptyStore(), predCreate(undefined)).store;
+    s = upsert(s, predSupersede('proven')).store;
+    expect(s.current.get('nk-pred')!.seal).toBe('proven');
   });
 });

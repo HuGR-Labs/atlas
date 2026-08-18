@@ -193,13 +193,18 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
     if (!isScope(scope)) {
       return { emitted: false, rejected: REJECTED_MALFORMED_SCOPE };
     }
-    // SEAL IS STRIPPED HERE (billy T0) — `seal` (`proven`) is a TRUST SIGNAL write-gated to the sound admit
-    // path (`mine-decide.ts`, from `buildSound`'s oracle verdict). This operator door's `raw` is an UNTRUSTED
-    // payload (`atlas emit <json>`/an in-process embedder), so a hand-written `seal` must NOT survive onto
-    // `node` — which is what the WriteRequest AND the CAS bytes are both built from. Destructured off before
-    // the snapshot so no operator-supplied seal reaches the durable row or the stored bytes.
+    // SEAL IS TRUSTED IFF THE WRITE IS PROMOTE-ORIGIN (billy T0, #187 → SEAL-PROMOTE-CARRY). `seal` (`proven`)
+    // is a TRUST SIGNAL write-gated to the sound admit path (`mine-decide.ts`, from `buildSound`'s oracle
+    // verdict). `origin` is DOOR-DERIVED, never from the payload (`RatifyContext.origin` — an operator cannot
+    // set it): a `promoted` write is a MINED fact re-emitted from the content-addressed staging CAS the
+    // trusted admit path wrote, so its `seal` is trusted; an AUTHORED write (`atlas emit <json>` / an
+    // in-process embedder) carries an UNTRUSTED payload, so a hand-written `seal` is a forgeable trust signal
+    // and must NOT survive onto `node` — which is what the WriteRequest AND the CAS bytes are both built from.
+    // So: keep `raw.seal` on `node` ONLY for `origin==='promoted'`; strip it for authored/undefined. Both
+    // branches then flow to the seal carrier at gate 3 (present ⇒ reaches the durable current row + bytes).
     const { seal: _rejectedOperatorSeal, ...rawNoSeal } = raw;
-    const node: GroundedFact = { ...rawNoSeal, tier, scope };
+    const node: GroundedFact =
+      deps.origin === 'promoted' ? { ...raw, tier, scope } : { ...rawNoSeal, tier, scope };
 
     //    THE FAMILY — `kind` cross-checked against `check`, on the SNAPSHOT (a spread reads each accessor
     //    once, so every gate below sees the same bytes `put` will). Read `familyOf` for why presence is the
@@ -354,10 +359,14 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
           //    `predicateSlot` is R3-optional; conditional spread keeps `slot` ABSENT (exactOptionalPropertyTypes).
           primaryAnchor, // the SAME value gate 2.1 bound the declared scope against — computed once
           ...(node.kind !== 'relation' && node.predicateSlot !== undefined ? { slot: node.predicateSlot } : {}),
-          // ── NO SEAL CARRIER HERE (billy T0) — a `seal` (`proven`) is a TRUST SIGNAL write-gated to the sound
-          //    admit path (`mine-decide.ts`, from `buildSound`'s oracle verdict). This is the OPERATOR emit door
-          //    (`atlas emit <json>`), whose payload is UNTRUSTED and carries no oracle verdict — so it never sets
-          //    a seal, and any payload-supplied seal was already stripped at the `node` snapshot below (§ gate 0).
+          // ── SEAL carrier (billy T0, #187 → SEAL-PROMOTE-CARRY) — the seal is trusted IFF the write is
+          //    promote-origin (a mined fact re-emitted from content-addressed staging written by the sound
+          //    admit path), never from an authored operator payload. `node.seal` is present here ONLY when the
+          //    gate-0 snapshot above KEPT it (i.e. `origin==='promoted'`); an authored seal was already stripped
+          //    there. Carry it onto the WriteRequest so it reaches the durable current row (and the CAS bytes,
+          //    which are `node` itself). Excludes relation — same discipline as the `slot` carrier above; the
+          //    seal is provenance only, never a `nodeKey`/route/authz leg (`upsert.ts`).
+          ...(node.kind !== 'relation' && node.seal !== undefined ? { seal: node.seal } : {}),
           // ── RELATION carrier (ADDITIVE — ADR-0015 D2) — a `family:'relation'` write stamps its endpoint pair
           //    + kind on the ROW so the read-side `relationsOf` fold indexes it by both endpoints. Empty for a
           //    non-relation. `primaryAnchor` above is `endpointA` for a relation (the subject), by construction.

@@ -285,13 +285,21 @@ export function upsert(
           ? prior.claims // set-union: dedup by claimNorm (idempotent)
           : [...prior.claims, req.claimNorm];
       cas.add(req.contentHash);
+      // SEAL IS NEVER CARRIED FORWARD (SEAL-PROMOTE-CARRY, billy T0). `seal` (`proven`) is a TRUST SIGNAL, and
+      // trust attaches to the WRITE that carried it (proven only iff the governed door derived `origin:'promoted'`
+      // and let the seal survive), NOT to the (anchor, slot) place. So it must come SOLELY from `req.seal`: drop
+      // `prior.seal` off the spread and re-add only when THIS write carries one. Otherwise an authored operator
+      // UPDATE over an existing `proven` node (its own seal already stripped at the door ⇒ `req.seal` absent) would
+      // INHERIT the proven seal through `...prior` — a forgery by omission. `priorNoSeal` is `prior` with `seal`
+      // removed; every other field still carries forward (ADR-0009). A promote UPDATE re-stamps its own trusted seal.
+      const { seal: _priorSeal, ...priorNoSeal } = prior;
       current.set(req.nodeKey, {
-        ...prior, // ADJACENCY: `...prior` carries prior anchor/slot; the req's WIN below when present
+        ...priorNoSeal, // ADJACENCY: carries prior anchor/slot; the req's WIN below when present. SEAL dropped — see above.
         contentHash: req.contentHash,
         claims, // in place, no supersededBy
         ...(req.primaryAnchor !== undefined ? { primaryAnchor: req.primaryAnchor } : {}),
         ...(req.slot !== undefined ? { slot: req.slot } : {}),
-        ...(req.seal !== undefined ? { seal: req.seal } : {}), // SEAL carrier (ADR-0017) — req re-states; omitted ⇒ `...prior`'s seal survives (never dropped on update)
+        ...(req.seal !== undefined ? { seal: req.seal } : {}), // SEAL carrier — from THIS write ONLY; omitted ⇒ seal DROPS (never inherited from prior)
         ...governanceOf(req), // re-states scope / re-states-or-RAISES tier; omitted ⇒ `...prior` stands
         ...relationOf(req), // RELATION carrier (ADR-0015 D2) — re-evidencing a relation re-states its endpoints
         ...answerProvenanceOf(req), // ANSWER-PROVENANCE carrier (#195 b) — re-mining re-states the receipt; else `...prior`
@@ -311,8 +319,14 @@ export function upsert(
     case 'SUPERSEDE': {
       const prior = current.get(req.nodeKey)!; // nodeKeyHit ⇒ present
       cas.add(req.contentHash); // prior.contentHash stays in `cas` (append-only) — old bytes addressable
+      // SEAL IS NEVER CARRIED FORWARD (SEAL-PROMOTE-CARRY, billy T0) — the same law as UPDATE above: a `proven`
+      // seal is trust in the WRITE that carried it, not in the (anchor, slot) place, so a new version's seal
+      // must come SOLELY from `req.seal` and never ride `...prior`. Drop `prior.seal`; re-add only when THIS
+      // write carries one. A promote SUPERSEDE re-stamps its own trusted seal; an authored one (seal stripped at
+      // the door) drops to seal-absent, so a version cannot silently inherit a proven seal it did not earn.
+      const { seal: _priorSeal, ...priorNoSeal } = prior;
       current.set(req.nodeKey, {
-        ...prior, // CARRY-FORWARD (ADR-0009, see above): `sameAs` + every future field survive; only ↓ is re-minted
+        ...priorNoSeal, // CARRY-FORWARD (ADR-0009, see above): `sameAs` + every future field survive; only ↓ (incl. SEAL) is re-minted
         nodeKey: req.nodeKey,
         family: req.family,
         contentHash: req.contentHash,
@@ -320,7 +334,7 @@ export function upsert(
         supersededBy: prior.contentHash,
         ...(req.primaryAnchor !== undefined ? { primaryAnchor: req.primaryAnchor } : {}), // req wins, else `...prior`
         ...(req.slot !== undefined ? { slot: req.slot } : {}),
-        ...(req.seal !== undefined ? { seal: req.seal } : {}), // SEAL carrier (ADR-0017) — a new version re-states its seal; omitted ⇒ `...prior`'s survives
+        ...(req.seal !== undefined ? { seal: req.seal } : {}), // SEAL carrier — from THIS write ONLY; omitted ⇒ seal DROPS (never inherited from prior)
         ...governanceOf(req), // a new VERSION of a node keeps the node's governance — never a re-classification
         // DELIBERATE OMISSION (#195, contract §5 scopes the stamp to CREATE/UPDATE): `answerProvenanceOf`
         // and `relationOf` are NOT re-stamped here, so a superseded version keeps `...prior`'s `answerRef` —
