@@ -63,21 +63,23 @@ describe('COMPOSE-A — createGovernedEmit (truth-door · authz · upsert · dur
     expect(spy.store.get(contentHash)).toEqual(node);
   });
 
-  it('SCN-GE-3-seal — a `seal` value (ADR-0017, WP-196a) round-trips through the SAME CAS read-back path', () => {
-    // `seal` rides on the whole GroundedFact node exactly as `obviousness` does: no special-cased fold
-    // in the door, no separate projection-row carrier (CurrentNode carries neither field) — it is
-    // persisted and re-read because the door persists/reads the WHOLE node object (invariant 6). This
-    // WP does not decide WHEN a seal is set; the fixture below sets it only to prove the CARRIER works.
+  it('SCN-GE-3-seal — the OPERATOR emit door STRIPS a payload-supplied `seal` from the CAS bytes (billy T0, forgery closed)', () => {
+    // A `seal` (`proven`) is a TRUST SIGNAL write-gated to the sound admit path (mine-decide, from buildSound's
+    // oracle verdict). This is the operator door (`atlas emit <json>`) whose payload is UNTRUSTED — a hand-
+    // written `seal:'proven'` must NOT survive onto the stored node. The seal is destructured off at the `node`
+    // snapshot (gate 0), so it reaches neither the CAS bytes nor the WriteRequest/row.
     const spy = makeStoreSpy();
     const { emit } = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice' });
-    const node = { ...advisory('core'), seal: 'proven' as const };
-    const out = emit(node, AT);
+    const forged = { ...advisory('core'), seal: 'proven' as const };
+    const out = emit(forged, AT);
 
     expect(out.emitted).toBe(true);
     const contentHash = out.id!;
-    const readBack = spy.store.get(contentHash) as typeof node | undefined;
-    expect(readBack?.seal).toBe('proven'); // TEETH: a door that dropped `seal` on the spread would read undefined
-    expect(readBack).toEqual(node);
+    const readBack = spy.store.get(contentHash) as { seal?: unknown } | undefined;
+    // TEETH: without the strip, the operator's forged `seal:'proven'` would round-trip through CAS here.
+    expect(readBack?.seal).toBeUndefined();
+    // and the stripped bytes are the seal-less node (content id differs from the forged object's id).
+    expect(contentHash).not.toBe(id(forged as CasObject));
   });
 
   it('SCN-GE-3-seal-absent — a seal-less (legacy) fact still emits + reads back clean (back-compat)', () => {
@@ -89,6 +91,25 @@ describe('COMPOSE-A — createGovernedEmit (truth-door · authz · upsert · dur
     expect(out.emitted).toBe(true);
     const readBack = spy.store.get(out.id!) as (typeof node & { seal?: unknown }) | undefined;
     expect(readBack?.seal).toBeUndefined(); // absent-tolerant: no crash, nothing fabricated
+  });
+
+  it('AC-2 (INVERTED, billy T0) — the OPERATOR emit door does NOT stamp a payload-supplied `seal` onto the PROJECTION ROW', () => {
+    // A seal is a forgeable trust signal if an untrusted `atlas emit <json>` payload can stamp it. The
+    // operator door strips it, so a forged `seal:'proven'` reaches neither the WriteRequest nor the durable
+    // row. `slot` (a routing/identity leg, not a trust signal) still rides — it is not stripped.
+    const spy = makeStoreSpy();
+    const { emit } = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice' });
+    const forged = { ...advisory('core'), predicateSlot: 'invariant' as const, seal: 'proven' as const };
+    const out = emit(forged, AT);
+    expect(out.emitted).toBe(true);
+
+    const projection = spy.persists()[spy.persists().length - 1]!;
+    expect(projection.current.size).toBe(1); // the sole node — read it directly (the door mints its own key from predicateSlot)
+    const row = [...projection.current.values()][0]!;
+    // TEETH: without the operator-door strip, the forged `seal:'proven'` would land on the durable row here.
+    expect(row.seal).toBeUndefined();
+    expect(Object.prototype.hasOwnProperty.call(row, 'seal')).toBe(false);
+    expect(row.slot).toBe('invariant'); // control: `slot` is not a trust signal — it still rides, as before
   });
 
   it('SCN-GE-4 — empty ATLAS_ACTOR ⇒ denied fail-closed (no actor is in any scope)', () => {
