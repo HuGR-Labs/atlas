@@ -272,7 +272,11 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
   // Capture the RAW (unfolded) file tree so the sound-negation `dynamicReach` leg can scan file bytes off the
   // SAME walk `build` folds — no second FS traversal, no divergent view of what the repo contains.
   const rawTree = walkFileTree(repoPath);
-  const axes = build(foldAstUnits(rawTree), scipOutput);
+  // DEDUP-COMPOSITION (#241) — captured as its own binding (not inlined into the `build` call) so it can be
+  // threaded onto `WireConfig` below and `assembleHandler` (wire.ts) does not re-run `foldAstUnits` on a
+  // second `walkFileTree` of this same repo — see the `WireConfig` doc block for the coherence obligation.
+  const fileTree = foldAstUnits(rawTree);
+  const axes = build(fileTree, scipOutput);
   // #96 F2 — the SAME N0 completeness view the emit leg rides (`() => index.symbolReverse()`, wire.ts:217),
   // built ONCE off the SAME `scipOutput` the axes above are built from, so the promote leg (below) reaches
   // `emitNegation` with its deps satisfied instead of fail-closing `scope-empty` for every promoted negation.
@@ -358,6 +362,26 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     trusted,
     // Conditional spread keeps `ratifyToken` ABSENT (not `undefined`) when unset — exactOptionalPropertyTypes.
     ...(ratifyToken !== undefined ? { ratifyToken } : {}),
+    // DEDUP-COMPOSITION (#241) — the artifacts THIS FUNCTION already built above, off the SAME `repoPath`/
+    // `scipPath`/`rawTree`, threaded so `assembleHandler` (wire.ts) consumes them instead of independently
+    // rebuilding every one — the walk, the SCIP decode+projection, the AST fold, the axes `build`, the
+    // symbol-reverse view and the two v2 escape legs (measured ~7s of an ~8s single pass, PAID TWICE per
+    // command before this). See the `WireConfig` doc block (wire.ts) for the coherence obligation this
+    // places on this call site: every field below MUST come from this SAME pass, and it does — none of
+    // them is rebuilt or re-derived between here and its own construction above.
+    rawTree,
+    fileTree,
+    scipOutput,
+    symbolReverse: symbolReverseView,
+    // `indexerName` may be a real `undefined` (no/foreign indexer) — conditional spread keeps it ABSENT
+    // rather than `undefined` (exactOptionalPropertyTypes), matching `ratifyToken`'s discipline above.
+    ...(indexerName !== undefined ? { indexerName } : {}),
+    // `targetEscapes`/`dynamicReach` are threaded INDIVIDUALLY (not `escapeLegs`, the both-or-neither pair
+    // `governedEmit`'s negation deps need): `assembleHandler` re-derives its OWN both-or-neither gate from
+    // whichever of these it ends up with (config-supplied or, when a caller omits one, rebuilt here) — so
+    // threading them individually cannot desync the two doors' half-gate discipline from each other.
+    ...(targetEscapes !== undefined ? { targetEscapes } : {}),
+    ...(dynamicReach !== undefined ? { dynamicReach } : {}),
   };
 
   // The real read-only diagnostic port — built over the SAME durable store + revIndex the governed emit
