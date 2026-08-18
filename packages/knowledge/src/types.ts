@@ -147,6 +147,24 @@ export type ObviousnessRank = 'obvious' | 'non-obvious';
 export type Seal = 'proven';
 
 /**
+ * The `seal:'proven'` fact's own DERIVATION — the oracle call that discharged it, carried alongside the
+ * verdict so a `proven` seal is a re-checkable claim rather than a bare assertion of trust (task
+ * SEAL-CARRIES-ITS-WITNESS). A single NESTED object, not sibling fields: `AdvisoryNode.scope` (KNOW-11a) is
+ * the fact's AUTHZ scope (e.g. `'atlas:mined'`) — a completely different thing from `witness.scope`, the
+ * VERIFY-SCOPE directory the oracle's witness ranges over (e.g. `'src/pay'`). Nesting makes the two
+ * unreadable as each other: `node.scope` and `node.witness.scope` are different paths, so a reader recovering
+ * the oracle's arguments cannot silently pick up the authz scope by name collision. ADDITIVE + absent-
+ * tolerant, exactly like `obviousness`/`seal` — carried ONLY where `buildSound` (genesis/src/admit-harness.ts)
+ * mints the seal; an advisory/predicate/relation/negation fact with no seal carries no witness either.
+ */
+export interface PredicateWitness {
+  readonly slot: PredicateSlot; // the oracle FAMILY the witness answers ('dependency' | 'count' | a type-expressible slot)
+  readonly target: string; // the global symbol the oracle proved against (verifyDependency/verifyCount's `target`)
+  readonly scope: string; // the VERIFY-SCOPE directory the witness ranges over — NOT the authz `scope` above
+  readonly atLeast?: number; // the witnessed lower bound N — present for the 'count' slot only
+}
+
+/**
  * The STORED, AUDITABLE obviousness score (GEN-4 / GROUND-7, ADR-0012 — owner-ratified 2026-08-02).
  *
  * Obviousness never rejects. It is measured at mine time — the one moment the source bytes and the model
@@ -216,6 +234,7 @@ export interface AdvisoryNode {
    *  `GroundedFact` literals predate the field and a required field would make them unreadable. */
   readonly obviousness?: ObviousnessScore;
   readonly seal?: Seal; // ADR-0017 — two-seal provenance. ADDITIVE + absent-tolerant, same discipline as `obviousness`.
+  readonly witness?: PredicateWitness; // SEAL-CARRIES-ITS-WITNESS — the `proven` seal's own derivation (see above). ADDITIVE + absent-tolerant.
 }
 
 /**
