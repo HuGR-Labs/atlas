@@ -14,7 +14,7 @@
 // consumed as injected ports, never defined here.
 
 import type { Status, StructRef } from '@atlas/contracts';
-import type { AdvisoryNode, Check, GroundedFact, ObviousnessScore, PredicateNode, PredicateSlot } from '@atlas/knowledge';
+import type { AdvisoryNode, Check, GroundedFact, ObviousnessScore, PredicateNode, PredicateSlot, PredicateWitness } from '@atlas/knowledge';
 import type { IndexNode } from '@atlas/index';
 // WP-96-R — the relation admission's PURE legs (identity mint, set-union text, gate-0 check, drop reasons),
 // extracted to the sibling at the 400-LOC ceiling. The truth-door call + obviousness scoring stay HERE, in
@@ -363,6 +363,7 @@ function attest(check: Check, verdict: Status, teeth: () => boolean): Attested {
  * really is a machine that really did check. What it never claimed, and still does not, is a proof.
  */
 function buildSound(p: PredicateProposal, obviousness: ObviousnessScore): AdvisoryNode {
+  const witness = witnessOf(p);
   return {
     kind: 'advisory',
     obviousness,
@@ -375,6 +376,25 @@ function buildSound(p: PredicateProposal, obviousness: ObviousnessScore): Adviso
     authoring: 'ADVISORY',
     predicateSlot: p.slot,
     seal: "proven",
+    ...(witness !== undefined ? { witness } : {}),
+  };
+}
+
+/**
+ * SEAL-CARRIES-ITS-WITNESS — the `proven` seal's own derivation, read off the RESOLVED proposal legs
+ * `admitPredicate` already checked `verifyDependency`/`verifyCount` against (never re-parsed from
+ * `p.claimNorm`, which is the model's PRE-RESOLUTION prose). `undefined` for the type-expressible-slot arm
+ * (GEN-12k): that branch's oracle is the type checker, not `verifyDependency`/`verifyCount`, and `p.target`/
+ * `p.scope` are the dependency-slot legs, absent there — carrying them would misattribute a witness the
+ * type oracle never produced.
+ */
+function witnessOf(p: PredicateProposal): PredicateWitness | undefined {
+  if (typeof p.target !== 'string' || typeof p.scope !== 'string') return undefined;
+  return {
+    slot: p.slot,
+    target: p.target,
+    scope: p.scope,
+    ...(typeof p.atLeast === 'number' ? { atLeast: p.atLeast } : {}),
   };
 }
 
