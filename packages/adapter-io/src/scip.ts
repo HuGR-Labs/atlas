@@ -37,9 +37,22 @@ export interface IndexerPlan {
  *
  * KEYED ON PATH + mtime + size, NOT path alone. `statSync` runs on EVERY call (one cheap syscall, no read);
  * a changed mtime OR size busts the entry and forces a fresh decode, so a dump mutated mid-process — e.g. a
- * concurrent build racing a long-running command — is never served stale bytes. This is the exact property
- * `test/scip-raw-cache.test.ts`'s TEETH case pins: dropping mtime/size from the key (path-only) is the
- * mutant that serves stale bytes after a rewrite, and that test goes RED under it.
+ * concurrent build racing a long-running command — takes a fresh decode in every case the key can see.
+ * `test/scip-raw-cache.test.ts`'s TEETH case pins exactly that: dropping mtime/size from the key (path-alone)
+ * is the mutant that serves stale bytes after a rewrite, and that test goes RED under it.
+ *
+ * WHAT THE KEY CANNOT SEE, stated rather than left for someone to discover the hard way: (mtime, size) is a
+ * PROXY for content, not content itself. A rewrite that lands on the SAME mtime tick AND the same byte length
+ * serves the OLD decode. REPRODUCED in cold review by forcing the collision with `utimesSync` plus an
+ * equal-length rewrite — not a thought experiment. It is not reachable today, for a reason that is about the
+ * CALLERS and not about this key: `composeRuntime` runs exactly once per process (the CLI is one-shot; the
+ * MCP server builds its handler at startup), so nothing re-reads a dump it has already decoded. It also does
+ * not arise naturally on APFS, whose `mtimeMs` carries sub-millisecond precision. Both of those are
+ * circumstances, not guarantees — a coarse-mtime filesystem (some NFS/container layers), or a future
+ * watch-and-rebuild-without-restart caller, removes them. Whoever adds a mid-process re-read owns this: hash
+ * the bytes, or drop the memo for that path first. This repo has the scar already — task #211, a rev-index
+ * cache that returned WRONG subtreeHashes after ~24 builds in one process, always in the false-DRIFTED
+ * direction.
  *
  * A THROW (missing file / non-regular-file / corrupt protobuf) is NEVER cached — only a successful decode is
  * stored, so a transient failure (e.g. a dump mid-write) does not poison a later, valid read at a new stat.
