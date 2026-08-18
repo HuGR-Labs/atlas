@@ -48,9 +48,13 @@ const ARITY: Record<Command, number> = {
   // `verify-fact <kind> <target> --scope <s> [--world <w>] [--min <n>] [--exact]` — the class and the target
   // symbol are BOTH required positionals (the scope + count bounds ride valued flags), so arity is 2.
   'verify-fact': 2,
+  // `verify-store` takes NO positional — same reasoning as `promote`: it re-verifies the WHOLE durable store
+  // at `process.cwd()`, the same root the entrypoint composes the runtime over, so a path argument would let
+  // the store re-verified diverge from the one every other command reads.
+  'verify-store': 0,
 };
 
-const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine|node|link|promote|own|relations|negations|verify-fact';
+const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine|node|link|promote|own|relations|negations|verify-fact|verify-store';
 
 function isCommand(s: string): s is Command {
   return Object.prototype.hasOwnProperty.call(COMMAND_LEG, s);

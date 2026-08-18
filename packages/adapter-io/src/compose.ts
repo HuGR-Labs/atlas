@@ -46,6 +46,8 @@ import type { RelationLeg } from './relation-source.js';
 import type { NegationLeg } from './negation-source.js';
 import { createVerifyFactLeg } from './verify-fact-source.js';
 import type { VerifyFactLeg } from './verify-fact-source.js';
+import { reverifyStore } from './reverify-store.js';
+import type { ReverifyReport } from './reverify-store.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
 import { gitSidecarTrust } from './store-provenance.js';
 import { readProvenanceRefusal } from './read-provenance.js';
@@ -127,6 +129,15 @@ export interface ComposedRuntime {
    * `verify{Dependency,Count,Negation}` (@atlas/genesis) running code — see `verify-fact-source.ts`.
    */
   readonly verifyFact: VerifyFactLeg;
+  /**
+   * The REVERIFY-GATE pass (`atlas verify-store`) — re-proves every `seal:'proven'` fact in the durable
+   * store against the LIVE index and buckets it `re-proven` / `broken` / `unverifiable` (see
+   * `reverify-store.ts` for the full narrative). It rides the SAME `verifyFact` leg above (no second oracle)
+   * and the SAME `driftFacts` readback the reconcile seams use (no second store read) — a THUNK, not eager
+   * data, so a command that never asks for it never pays the per-fact loop. A READ door: not a `Tool`, opens
+   * no new governed surface, `GOVERNANCE_SURFACE` stays 5, `WRITE_PATHS` is untouched.
+   */
+  readonly reverify: () => ReverifyReport;
   /**
    * The PROVENANCE refusal for this repo's durable store, or `undefined` when it is trustworthy
    * (`read-provenance.ts`). PRESENT means `.atlas/` arrived by COMMIT rather than through a door, so every
@@ -294,6 +305,10 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
   const driftFacts = currentNodes(rehydrateProjection(store))
     .map((n) => store.get(n.contentHash as Hash))
     .filter((o): o is GroundedFact => o !== undefined);
+  // THE SOUND-GENESIS PROVEN-FAMILY ORACLE, built ONCE and shared by BOTH `verifyFact` (the CLI's
+  // `atlas verify-fact`) and `reverify` (`atlas verify-store`) below — the ONE production oracle, never a
+  // duplicate that could drift from it.
+  const verifyFactLeg = createVerifyFactLeg(scipOutput, { indexerName });
 
   const seams: WireSeams = {
     heuristic: buildHeuristic(policy),
@@ -413,7 +428,10 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     negations: createNegationLeg(store, bindFreshnessOracle(axes, edgeModelVersion())),
     // THE SOUND-GENESIS PROVEN-FAMILY FEED (`atlas verify-fact`). Off the SAME `scipOutput` the axes ride — a
     // program oracle over the immutable code index, built once and closed over (see verify-fact-source.ts).
-    verifyFact: createVerifyFactLeg(scipOutput, { indexerName }),
+    verifyFact: verifyFactLeg,
+    // THE REVERIFY-GATE PASS (`atlas verify-store`). A thunk over the SAME `verifyFactLeg` and the SAME
+    // `driftFacts` readback built above — no second oracle, no second store read (see `reverify-store.ts`).
+    reverify: () => reverifyStore(driftFacts, verifyFactLeg),
     ...(readRefusal !== undefined ? { readRefusal } : {}),
   };
 }

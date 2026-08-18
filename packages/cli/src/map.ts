@@ -6,7 +6,7 @@
 import { WRITE_PATHS } from '@atlas/tools';
 import type { Tool, Verdict } from '@atlas/tools';
 
-/** The finite command surface — EXACTLY these thirteen, no more (CLI-1a). Order fixed; membership load-bearing.
+/** The finite command surface — EXACTLY these fourteen, no more (CLI-1a). Order fixed; membership load-bearing.
  *  [EXTENDED — WP-SAMEAS] `link` joins as the CLI door of the governed sameAs write (routes to `atlas-link`).
  *  [EXTENDED — WP-PROMOTE] `promote` joins as the CLI door of the governed promotion of staged candidates. It
  *  binds `atlas-emit`, the door it actually publishes through (ADR-0008: a curator door is an ordinary USE of
@@ -16,8 +16,12 @@ import type { Tool, Verdict } from '@atlas/tools';
  *  `WRITE_PATHS` is untouched. `authorityOf` DERIVES that from `WRITE_PATHS`; it is not asserted here.
  *  [EXTENDED — #99a] `relations` joins as the CLI door of the grounded-relation read fold (`relationsOf`,
  *  ADR-0015 D2). Like `own` it binds `atlas-query` — a READ authority oracle — so `GOVERNANCE_SURFACE` stays 5
- *  and `WRITE_PATHS` is untouched; `authorityOf` DERIVES that from `WRITE_PATHS`, it is not asserted here. */
-export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'verify-fact'] as const;
+ *  and `WRITE_PATHS` is untouched; `authorityOf` DERIVES that from `WRITE_PATHS`, it is not asserted here.
+ *  [EXTENDED — REVERIFY-GATE] `verify-store` joins as the CLI door of the whole-store re-verification pass —
+ *  re-proves every `seal:'proven'` fact's OWN witness against the live index (`re-proven`/`broken`/
+ *  `unverifiable`, `reverify-store.ts`). Like `verify-fact` it binds `atlas-query` — a READ authority oracle —
+ *  so `GOVERNANCE_SURFACE` stays 5 and `WRITE_PATHS` is untouched. */
+export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'verify-fact', 'verify-store'] as const;
 export type Command = (typeof COMMANDS)[number];
 
 /** The leg a command routes to — a governance `Tool`, or the genesis entry (data-only; NOT executed here —
@@ -72,6 +76,11 @@ export const COMMAND_LEG: Record<Command, Leg> = {
   //                     briefing is composed by index reads alone and no store-mutating method is reachable
   //                     from it. Bound to `atlas-query` rather than a leg of its own because that is the
   //                     door whose READ it is a second projection of, exactly as `node` and `doctor` are.
+  'verify-store': 'atlas-query', // READ authority oracle (REVERIFY-GATE whole-store pass); intercepted before
+  //                                the handler (cli.ts) and driven over the composition root's `reverify`
+  //                                thunk, which re-proves every stored witness through the SAME `verifyFact`
+  //                                oracle. Carries NO write authority — it opens no governed token,
+  //                                GOVERNANCE_SURFACE stays 5, WRITE_PATHS untouched.
 };
 
 export type Authority = 'read' | 'write';
