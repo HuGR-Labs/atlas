@@ -9,7 +9,7 @@ import type { Hash } from '@atlas/contracts';
 import { asHash } from '@atlas/kernel';
 import { headSha } from '@atlas/adapter-io';
 import { reportIndexPlan, relationsVerdict, negationsVerdict, verifyFactVerdict } from '@atlas/adapter-io';
-import type { IndexPlanReport, NegationLeg, OwnLeg, PromoteOut, RelationLeg, VerifyFactLeg, WiredHandler } from '@atlas/adapter-io';
+import type { IndexPlanReport, NegationLeg, OwnLeg, PromoteOut, RelationLeg, ReverifyReport, VerifyFactLeg, WiredHandler } from '@atlas/adapter-io';
 import type { DoctorSource, Guidance, Tool, Verdict } from '@atlas/tools';
 import { runDoctor } from './doctor.js';
 import { ensureAtlasIgnored } from './gitignore.js';
@@ -18,6 +18,7 @@ import { marshalArgs } from './marshal.js';
 import { runMineArms } from './mine.js';
 import { runOwn } from './own.js';
 import { runPromote } from './promote.js';
+import { runReverify } from './reverify.js';
 import { parse } from './parse.js';
 import { renderRefusal, renderVerdict } from './render.js';
 import type { CliVerdict } from './render.js';
@@ -113,6 +114,18 @@ export interface CliDeps {
    * command gives, never a silent proof over nothing.
    */
   readonly verifyFact?: VerifyFactLeg;
+  /**
+   * The composition root's REVERIFY-GATE thunk (`ComposedRuntime.reverify`) — re-proves every `seal:'proven'`
+   * fact's OWN witness against the live index (`re-proven`/`broken`/`unverifiable`). Injected on the SAME
+   * seam as `verifyFact`, and for the same reason: the CLI must never stand up a second runtime, or the index
+   * it re-proves over stops being the one the composed handler reads.
+   *
+   * It is NOT reached through `handler.handle`: it is not a `Tool`, opens no governed surface
+   * (`GOVERNANCE_SURFACE` stays 5), and writes nothing — a program oracle over the durable store's own
+   * witnesses. ABSENT ⇒ `atlas verify-store` fails closed with the same "runtime is not composed yet"
+   * guidance every other routed command gives, never a silent pass over nothing.
+   */
+  readonly reverify?: () => ReverifyReport;
 }
 
 /** A structured error verdict for a CLI-layer failure (parse / unwired command) — guidance always present. */
@@ -338,6 +351,21 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
         exact: flags.exact === 'true',
       }),
     );
+  }
+
+  if (command === 'verify-store') {
+    // REVERIFY-GATE: `atlas verify-store` — re-proves EVERY `seal:'proven'` fact in the durable store
+    // against the live index, via the fact's OWN recorded witness. It drives the composition root's
+    // `reverify` thunk — the SAME `verifyFact` oracle `atlas verify-fact` rides, no second oracle — and
+    // renders the three-bucket report (`re-proven`/`broken`/`unverifiable`). Like `promote` it is a WRITE-
+    // shaped command in NEITHER sense: it writes nothing (a READ door, `GOVERNANCE_SURFACE` stays 5) but its
+    // exit code IS a governance signal (2 on any `broken`/`unverifiable` row) — see `reverify.ts`'s header.
+    if (!deps.reverify) {
+      return emit(
+        errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'),
+      );
+    }
+    return emitCli(runReverify(deps.reverify));
   }
 
   // The remaining five governance commands each route to a `Tool` through the one wired handler.

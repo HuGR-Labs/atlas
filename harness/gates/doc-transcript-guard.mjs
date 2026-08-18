@@ -152,6 +152,14 @@ const UNVERIFIABLE = {
   ...each('an illustrative worked example needing a witnessed caller edge in the index (a clean checkout has none, so it reproduces to the ABSTAIN form of verify-fact.md#1); the PROVEN/REFUTED behaviour is pinned by s32-verify-fact.blackbox.test.ts over a controlled index.scip, not reproducible from a clean checkout',
     'reference/commands/verify-fact.md#3', 'reference/commands/verify-fact.md#4'
   ),
+  // REVERIFY-GATE — the `broken`/`unverifiable` transcripts need a POPULATED durable store carrying a
+  // sealed-proven fact (a clean checkout has none, so it reproduces to the empty form of verify-store.md#1,
+  // which IS diffed). Both buckets are mechanically pinned end to end by
+  // reverify-gate-compose.test.ts (@atlas/adapter-io, a real composed runtime + real oracle) and
+  // s34-reverify-store.blackbox.test.ts (the shipped binary), not reproducible from a clean checkout.
+  ...each('needs a populated durable store carrying a seal:\'proven\' fact (a clean checkout has none, so it reproduces to the empty form of verify-store.md#1); the broken/unverifiable behaviour is pinned by reverify-gate-compose.test.ts + s34-reverify-store.blackbox.test.ts, not reproducible from a clean checkout',
+    'reference/commands/verify-store.md#2', 'reference/commands/verify-store.md#3'
+  ),
 };
 
 // ── enumeration ─────────────────────────────────────────────────────────────────────────────────────────
