@@ -29,22 +29,37 @@ export interface IndexerPlan {
 }
 
 /**
- * The bytes of a SCIP dump, read ONLY when the path is a REGULAR FILE.
+ * DEDUP-COMPOSITION (#241) — the raw `deserializeSCIP` decode, memoized per (path, mtime, size) triple, and
+ * shared by every raw reader in this ring: `readScip`, `readScipIndexerName`, and
+ * `escape/target-escapes.ts`'s own raw read. Without this, `composeRuntime` (compose.ts) and
+ * `assembleHandler` (wire.ts) each independently decode the SAME 17MB dump 2-3 times for ONE command
+ * (measured ~450-500ms per decode on this repo's dump) — 4-6 decodes of one process input.
  *
- * WHY THE TYPE CHECK IS THE GUARD, and why the existing try/catch was not one. `readFileSync` on a
- * character device reads until EOF, and `/dev/zero` has none: the call never returns, never throws, and
- * never allocates enough to be killed — measured at 3 minutes still spinning, and 60s of the real `atlas`
- * bin producing no stdout, no stderr and no exit. `readScipOrEmpty` absorbs THROWS (a missing dump, a
- * corrupt one); a read that does not return is outside what any `catch` can see.
+ * KEYED ON PATH + mtime + size, NOT path alone. `statSync` runs on EVERY call (one cheap syscall, no read);
+ * a changed mtime OR size busts the entry and forces a fresh decode, so a dump mutated mid-process — e.g. a
+ * concurrent build racing a long-running command — is never served stale bytes. This is the exact property
+ * `test/scip-raw-cache.test.ts`'s TEETH case pins: dropping mtime/size from the key (path-only) is the
+ * mutant that serves stale bytes after a rewrite, and that test goes RED under it.
+ *
+ * A THROW (missing file / non-regular-file / corrupt protobuf) is NEVER cached — only a successful decode is
+ * stored, so a transient failure (e.g. a dump mid-write) does not poison a later, valid read at a new stat.
+ *
+ * Scoped to raw-decode reuse only: `createRevIndex` (rev-index.ts) never reaches this function — it always
+ * builds with a hardcoded `{ documents: [] }` for the SCIP half (see that file's header), so it cannot
+ * observe — or be made stale by — this cache (task #211's scar: verified NOT reachable here).
+ *
+ * WHY THE TYPE CHECK IS THE GUARD, and why a bare try/catch is not one (subsumes the former `scipBytes`
+ * doc). `readFileSync` on a character device reads until EOF, and `/dev/zero` has none: the call never
+ * returns, never throws, and never allocates enough to be killed — measured at 3 minutes still spinning,
+ * and 60s of the real `atlas` bin producing no stdout, no stderr and no exit. `readScipOrEmpty` absorbs
+ * THROWS (a missing dump, a corrupt one); a read that does not return is outside what any `catch` can see.
  *
  * That is reachable from a COMMITTED artifact, which is the whole reason it matters. `.atlas/index.scip`
  * is deliberately EXEMPT from the durable-store provenance refusal (`store-provenance.ts`
  * `isDurableStorePath`) because it is a build input, and `atlas init`'s ignore rule un-ignores it by name.
  * Git tracks symlinks (mode `120000`), so "ship a dump" and "ship a symlink named like a dump" are one
  * act — and BOTH entrypoints read this path at STARTUP (`composeRuntime`, `assembleHandler`), so the CLI
- * and the MCP server are bricked before any door opens, silently. `wire.ts` already names this exact
- * hazard one door over ("an unbounded file like /dev/zero … can never hang/OOM") and guards the `atlas
- * node` content address against it; the guard was never applied to the dump.
+ * and the MCP server are bricked before any door opens, silently.
  *
  * `statSync` FOLLOWS the link deliberately — a symlink pointing at a real `.scip` is a legitimate build
  * layout and stays supported. What is refused is the TARGET not being a regular file: a character/block
@@ -56,20 +71,31 @@ export interface IndexerPlan {
  * REGULAR file is still read whole. That case is self-limiting and visible — the bytes have to exist in
  * the repository — whereas the device symlink costs 9 bytes and is unbounded.
  */
-function scipBytes(scipPath: string): Uint8Array {
-  const stat = statSync(scipPath); // throws on a dangling link ⇒ absorbed by the degrade, like any ENOENT
+const scipRawMemo = new Map<string, { readonly mtimeMs: number; readonly size: number; readonly raw: ReturnType<typeof deserializeSCIP> }>();
+
+/** Exported ONLY so `escape/target-escapes.ts` can ride the SAME memo instead of its own independent
+ *  `deserializeSCIP(readFileSync(...))` — see the doc block above. Not a general-purpose export: every
+ *  other reader in the ring goes through `readScip`/`readScipOrEmpty`/`readScipIndexerName` below. */
+export function decodeScipCached(scipPath: string): ReturnType<typeof deserializeSCIP> {
+  const stat = statSync(scipPath); // throws ENOENT etc — mirrors `scipBytes`, callers absorb via catch
   if (!stat.isFile()) {
     throw new Error(
       `scip: '${scipPath}' is not a regular file — a device, FIFO, socket or directory is not an indexer ` +
         'dump, and reading one can block forever (a git-tracked symlink to /dev/zero bricks both bins at boot)',
     );
   }
-  return readFileSync(scipPath);
+  const cached = scipRawMemo.get(scipPath);
+  if (cached !== undefined && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+    return cached.raw;
+  }
+  const raw = deserializeSCIP(readFileSync(scipPath));
+  scipRawMemo.set(scipPath, { mtimeMs: stat.mtimeMs, size: stat.size, raw });
+  return raw;
 }
 
 /** Read a per-language SCIP indexer dump into the minimal frozen `ScipOutput` projection (ADAPT-SCIP-1). */
 export function readScip(scipPath: string): ScipOutput {
-  const index = deserializeSCIP(scipBytes(scipPath));
+  const index = decodeScipCached(scipPath);
   return {
     documents: index.documents.map((doc) => ({
       relativePath: doc.relativePath,
@@ -86,8 +112,8 @@ export function readScip(scipPath: string): ScipOutput {
  * the dump cannot be projected — NEVER a throw. Both failure modes fold to the SAME files-only structural
  * view:
  *   • MISSING file      — a fresh repo with no `.atlas/index.scip` yet (`readScip` → `statSync` ENOENT).
- *   • NOT-A-REGULAR-FILE — a git-tracked symlink to a device/FIFO (see `scipBytes`): the read would never
- *     return, so the path is refused BEFORE any byte is read rather than absorbed after the fact.
+ *   • NOT-A-REGULAR-FILE — a git-tracked symlink to a device/FIFO (see `decodeScipCached`): the read would
+ *     never return, so the path is refused BEFORE any byte is read rather than absorbed after the fact.
  *   • PRESENT-but-corrupt — garbage bytes, a truncated protobuf, or a foreign/stale schema that makes
  *     `deserializeSCIP` THROW. Fail CLOSED here rather than at boot: `wire.ts` (`assembleHandler`) and
  *     `compose.ts` (`composeRuntime`) BOTH read the `.scip` at startup through this ONE shared guard, so an
@@ -111,12 +137,13 @@ export function readScipOrEmpty(scipPath: string): ScipOutput {
  * `scip-typescript`'s `local ` scheme is proven, so an unknown indexer must NOT be trusted (fail-closed to
  * `undefined`, never a default). Read HERE from the raw dump — not from the frozen `ScipOutput` projection,
  * which deliberately drops metadata — so the identity reaches the composition root without widening the
- * projection. Mirrors the `scipBytes` regular-file guard so it never blocks on a device symlink.
+ * projection. Rides the SAME memoized decode `readScip` does (`decodeScipCached`, DEDUP-COMPOSITION #241)
+ * — `composeRuntime` calls this AND `readScipOrEmpty` on the same dump, so this used to be a second full
+ * decode; it never blocks on a device symlink for the same reason `decodeScipCached` doesn't.
  */
 export function readScipIndexerName(scipPath: string): string | undefined {
   try {
-    if (!existsSync(scipPath) || !statSync(scipPath).isFile()) return undefined;
-    return deserializeSCIP(readFileSync(scipPath)).metadata?.toolInfo?.name;
+    return decodeScipCached(scipPath).metadata?.toolInfo?.name;
   } catch {
     return undefined;
   }

@@ -26,11 +26,12 @@
 //   · Symbols NOT in the returned map are non-escaping ⇒ `[]` — an honest "scanned, found every reference of
 //     X in a safe position (or X has no reference at all)".
 
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { deserializeSCIP } from '@c4312/scip';
+import type { deserializeSCIP } from '@c4312/scip';
 import { canonicalizeSymbol, isLocalSymbol } from '@atlas/index';
 import { astWarmed, isTsPath, parseTsDoc } from '../ast.js';
+import { decodeScipCached } from '../scip.js';
 import { tsEscapeClassifier } from './classifier.js';
 
 /** The SCIP `symbolRoles` bit for a DEFINITION occurrence (`@c4312/scip` `SymbolRole.Definition`, mirrored
@@ -67,12 +68,17 @@ export interface TargetEscapesConfig {
 }
 
 /** Read the raw SCIP index at `scipPath`, or `undefined` when it is missing / not a regular file / corrupt —
- *  the SAME degrade `readScipOrEmpty` applies, but keeping the RANGES the frozen reader throws away. A
- *  device-symlink `statSync().isFile()` guard mirrors `scip.ts` (reading `/dev/zero` never returns). */
+ *  the SAME degrade `readScipOrEmpty` applies, but keeping the RANGES the frozen reader throws away.
+ *
+ *  DEDUP-COMPOSITION (#241): rides `scip.ts`'s `decodeScipCached` — the SAME memoized (path, mtime, size)
+ *  decode `readScip`/`readScipIndexerName` share — instead of its own independent `deserializeSCIP` call.
+ *  This leg used to be a THIRD full decode of the same dump every `composeRuntime`/`assembleHandler` pass
+ *  (measured ~2.8s on this repo's dump, the largest single phase); the device-symlink `.isFile()` guard and
+ *  the missing/corrupt degrade are unchanged — `decodeScipCached` throws in exactly the same three cases
+ *  this function used to catch. */
 function readRawScip(scipPath: string): ReturnType<typeof deserializeSCIP> | undefined {
   try {
-    if (!existsSync(scipPath) || !statSync(scipPath).isFile()) return undefined;
-    return deserializeSCIP(readFileSync(scipPath));
+    return decodeScipCached(scipPath);
   } catch {
     return undefined;
   }

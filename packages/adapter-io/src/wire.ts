@@ -12,7 +12,7 @@
 import { createHandler, createInit, createQuery, createReconcile } from '@atlas/tools';
 import type { ToolLegs, ToolLeg, NodeSource } from '@atlas/tools';
 import { build, createResolve, createDepgraph, createSymbolReverse, nodeHashOfPath } from '@atlas/index';
-import type { Axes } from '@atlas/index';
+import type { Axes, FileTree, ScipOutput, SymbolReverseApi } from '@atlas/index';
 // The GROUND-1 per-fact drift oracle — the SAME import the composition root's truth-gate uses (compose.ts).
 import { driftDetect } from '@atlas/grounding';
 import { currentNodes, deriveSameAs, deriveSubsumes } from '@atlas/knowledge';
@@ -149,6 +149,51 @@ export interface WireConfig {
    *  the store both user-facing doors ride, and a seam applied only to compose's drift/doctor store would
    *  leave `atlas query` serving a committed projection while every test of the seam passed. */
   readonly trusted?: SidecarTrust;
+
+  // ── DEDUP-COMPOSITION (#241) — OPTIONAL PRECOMPUTED ARTIFACTS ──────────────────────────────────────────
+  // `composeRuntime` (compose.ts) builds `rawTree`/`fileTree`/`scipOutput`/`indexerName`/`axes`/
+  // `symbolReverse`/`targetEscapes`/`dynamicReach` from `repoPath`/`scipPath` BEFORE calling this assembler,
+  // and this assembler used to independently rebuild every one of them from the SAME raw inputs — the walk,
+  // the SCIP decode+projection, the AST fold, the axes `build`, the symbol-reverse view and the two v2
+  // escape legs, all TWICE per command (measured ~7s of an ~8s single pass, on this repo's dump, PAID
+  // ROUGHLY TWICE). Each field below is OPTIONAL and used ONLY WHEN PRESENT — a bare WIRE assembly (no
+  // composition root; see the "bare WIRE fake assembly" tests) omits all of them and gets the EXACT prior
+  // behavior: every artifact rebuilt here, from `repoPath`/`scipPath` alone.
+  //
+  // COHERENCE IS THE CALLER'S OBLIGATION, NOT THIS MODULE'S: every field a caller supplies MUST be derived
+  // from the SAME `repoPath`/`scipPath`/`rawTree` as every other field it supplies (exactly how
+  // `composeRuntime` builds them, in one pass, before calling `assembleHandler`) — this assembler cannot
+  // detect a caller that hands it `axes` built from a DIFFERENT tree than `fileTree`. This is why `axes`,
+  // `symbolReverse`, `targetEscapes` and `dynamicReach` all key off the derived `fileTree`/`scipOutput`
+  // /`rawTree` ABOVE them in the fallback chain below, never off `config.repoPath`/`config.scipPath`
+  // directly — a caller that overrides `fileTree` but not `axes` gets an axes REBUILT from that overridden
+  // `fileTree` (never a silently mismatched precomputed one). `test/wire-precomputed-parity.test.ts` pins
+  // that a handler built with EVERY field precomputed (compose.ts's own recipe) answers every governance
+  // leg + query mode IDENTICALLY to one built with none of them — the two paths are byte-for-byte the same
+  // observable behavior, only the WORK differs. If you change how any of these are DERIVED here, update
+  // `composeRuntime`'s construction to match, or that test goes red.
+
+  /** The unfolded `walkFileTree(repoPath)` result. ABSENT ⇒ walked here. */
+  readonly rawTree?: FileTree;
+  /** `foldAstUnits(rawTree)` — the index adapter's spatial input. ABSENT ⇒ folded from `rawTree` here
+   *  (which is itself `config.rawTree` when present, else walked here). */
+  readonly fileTree?: FileTree;
+  /** `readScipOrEmpty(scipPath)`. ABSENT ⇒ read here. */
+  readonly scipOutput?: ScipOutput;
+  /** `readScipIndexerName(scipPath)` — may be a real `undefined` (no/foreign indexer), which is why this
+   *  is safe to re-derive when absent rather than needing a tri-state "not supplied" sentinel: re-deriving
+   *  from the SAME `scipPath` is deterministic and yields the SAME value either way. */
+  readonly indexerName?: string;
+  /** `createSymbolReverse(scipOutput, {indexerName})` — the #99b N0 completeness view. ABSENT ⇒ built here
+   *  from `scipOutput`/`indexerName` (each themselves possibly precomputed above). */
+  readonly symbolReverse?: SymbolReverseApi;
+  /** `buildTargetEscapes({scipPath, repoPath})` — ADR-0016 M2b v2 negation leg. ABSENT ⇒ built here; the
+   *  rebuild is CHEAP when it would come back `undefined` again (an un-warmed AST grammar or unsupported
+   *  indexer short-circuits before any parse), so omitting this on a repo where it cannot be built soundly
+   *  costs nothing extra. */
+  readonly targetEscapes?: (target: string) => readonly string[];
+  /** `buildDynamicReach(rawTree)` — the sibling v2 leg. Same ABSENT behavior as `targetEscapes`. */
+  readonly dynamicReach?: (scope: string) => readonly string[];
 }
 
 /**
@@ -174,23 +219,37 @@ export function assembleHandler(config: WireConfig): WiredHandler {
   // warm up keep their exact prior behavior.
   // Capture the RAW (unfolded) tree so the sound-negation `dynamicReach` leg scans file bytes off the SAME
   // walk `build` folds (no second FS traversal, no divergent view). `fileTree` is the folded index input.
-  const rawTree = walkFileTree(config.repoPath);
-  const fileTree = foldAstUnits(rawTree);
+  //
+  // DEDUP-COMPOSITION (#241) — every one of these ALREADY EXISTS on `config` when `composeRuntime` is the
+  // caller (compose.ts builds all of them from this SAME `repoPath`/`scipPath` before calling this
+  // function); `?? <rebuild>` is exercised ONLY by a bare WIRE assembly (no composition root — see the
+  // "bare WIRE fake assembly" tests), which gets the exact prior behavior. See the `WireConfig` doc block
+  // for the coherence obligation this places on callers, and `test/wire-precomputed-parity.test.ts` for the
+  // guard that the two paths answer identically.
+  const rawTree = config.rawTree ?? walkFileTree(config.repoPath);
+  const fileTree = config.fileTree ?? foldAstUnits(rawTree);
   // DEGRADE gracefully on a fresh repo: a MISSING `.scip` dump (no `.atlas/index.scip` yet) is an empty
   // files-only index, never a throw. `readScipOrEmpty` is the ONE shared missing-file guard (scip.ts) — the
   // twin of the one `compose.ts` applies for the Axes build (COMPOSE-B).
-  const scipOutput = readScipOrEmpty(config.scipPath);
+  const scipOutput = config.scipOutput ?? readScipOrEmpty(config.scipPath);
   // #99 F1 — the indexer identity the collapsed-local gate trusts (raw dump `metadata.toolInfo.name`; the
   // frozen projection drops it). `undefined` on a missing/foreign dump ⇒ heuristic OFF (fail-closed). Bound
   // into the `createSymbolReverse` factory so the door's N0 feed carries `opaqueRefSources` under scip-typescript.
-  const indexerName = readScipIndexerName(config.scipPath);
+  const indexerName = config.indexerName ?? readScipIndexerName(config.scipPath);
+  // `buildAxes`/`symbolReverseFor` key off the `fileTree`/`scipOutput` RESOLVED above (which may themselves
+  // be a caller override), never off `config.repoPath`/`config.scipPath` directly — the coherence rule the
+  // `WireConfig` doc block states: an overridden `fileTree` with no overridden `axes` REBUILDS `axes` from
+  // that overridden `fileTree`, never silently serves a precomputed `axes` from a different tree.
+  const buildAxes = (t: FileTree, s: ScipOutput): Axes => config.axes ?? build(t, s);
+  const symbolReverseFor = (s: ScipOutput): SymbolReverseApi =>
+    config.symbolReverse ?? createSymbolReverse(s, { indexerName });
   const index = createIndexAdapter({
     fileTree,
     scipOutput,
-    build,
+    build: buildAxes,
     createResolve,
     createDepgraph,
-    createSymbolReverse: (scip) => createSymbolReverse(scip, { indexerName }), // #99b N0 + #99 collapsed-local gate
+    createSymbolReverse: symbolReverseFor, // #99b N0 + #99 collapsed-local gate
     nodeHashOfPath, // THE index's own minting, imported — never a local copy of `id({file:p})` (KERNEL-1)
   });
 
@@ -214,8 +273,11 @@ export function assembleHandler(config: WireConfig): WiredHandler {
   // as the other emit-leg deps. Both-or-neither (a half-gate is never run): if either cannot be built SOUNDLY
   // (AST grammars not warmed — `assembleHandler` is sync and a wire-only fake never calls `initAst()` — or the
   // dump is unreadable) the door falls back to the sound `holeSources() ∩ S` blanket, exactly as #99b shipped.
-  const negTargetEscapes = buildTargetEscapes({ scipPath: config.scipPath, repoPath: config.repoPath });
-  const negDynamicReach = buildDynamicReach(rawTree);
+  // DEDUP-COMPOSITION (#241): `compose.ts` already built these (off the SAME `scipPath`/`repoPath`/
+  // `rawTree`) for its own promote leg — reuse them when supplied; a bare WIRE assembly still builds here.
+  const negTargetEscapes =
+    config.targetEscapes ?? buildTargetEscapes({ scipPath: config.scipPath, repoPath: config.repoPath });
+  const negDynamicReach = config.dynamicReach ?? buildDynamicReach(rawTree);
   const escapeLegs =
     negTargetEscapes !== undefined && negDynamicReach !== undefined
       ? { targetEscapes: negTargetEscapes, dynamicReach: negDynamicReach }
