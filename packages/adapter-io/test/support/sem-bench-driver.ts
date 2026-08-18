@@ -17,6 +17,7 @@ import type { Grounding } from '@atlas/grounding';
 import { readScipOrEmpty } from '../../src/scip.js';
 import { buildMineAdmission } from '../../src/compose-mine-admission.js';
 import { setupNegBench, type NegBench, type Target, type Verdict } from './neg-bench-lib.js';
+// (Verdict is used by both `driveClaim`'s return type and the AC-6 teeth re-drive below.)
 import { deriveLabel, mutate, type Arm, type Claim, type Row } from './mutation-contract.js';
 
 export interface DrivenRow { readonly row: Row; readonly outcome: Outcome; readonly reason: string }
@@ -28,7 +29,8 @@ export interface SemBench {
   readonly driven: readonly DrivenRow[]; //   count + relation + dependency + negation planted pool
   readonly arm0Reasons: readonly string[]; // Arm-0 semantic pool drop reasons (all DROP_NO_CHECK)
   readonly mutateSamples: ReadonlyArray<{ base: Row; mutant: Row }>; // real-substrate base→mutant pairs (AC-9m)
-  readonly negTeeth: readonly DrivenRow[]; // AC-6 teeth: the negation pool under a permissive (refute-off) door
+  readonly negTeeth: readonly DrivenRow[]; //   AC-6 teeth (ASSERTED): the negation pool under a callers-BLIND door
+  readonly negGateOff: readonly DrivenRow[]; // AC-6 diagnostic (REPORTED, not asserted): the #99 opaque gate OFF
   readonly counts: { targets: number; scopes: number };
   readonly driveClaim: (row: Row) => { outcome: Outcome; reason: string; admission: Admission | { verdict: Verdict } };
 }
@@ -158,22 +160,20 @@ export async function assembleSemBench(ROOT: string, SCIP: string): Promise<SemB
     arm0Reasons.push(a.outcome === 'dropped' ? a.reason : a.outcome === 'abstained' ? `abstained:${a.whyNot.reason}` : 'admitted');
   }
 
-  // ── AC-6 negation TEETH: the SAME pool re-driven with the #99 collapsed-local OPAQUE gate turned OFF ──
-  // The fix (branch fix/negation-collapsed-local-soundness) earns negation.falseAdmit=0 via the (b0) opaque-ref
-  // abstain (governed-emit-negation.ts:259), which fires BEFORE the refute step. The OLD teeth (flip
-  // negation-refute→admit) is DEFEATED by this: the cross-package tsc-false negatives now ABSTAIN (scope-open) at
-  // (b0) rather than reaching refute, so toggling refutation no longer moves the number ⇒ 0 > 0. The SOUND teeth
-  // re-drives the negation pool through `judgeGateOff` — the byte-identical door with `opaqueRefSources()` empty
-  // (indexer identity absent) — so those negatives fall through to the refute/admit path and are ADMITTED again
-  // (`reverseCallers` cannot see the collapsed caller), returning a large pre-fix false-admit. That the number
-  // RISES strictly off 0 proves the 0 is EARNED by the opaque gate, not vacuous.
-  const negTeeth: DrivenRow[] = driven
-    .filter((d) => d.row.arm === 'negation')
-    .map((d) => {
-      const v = B.judgeGateOff(d.row.claim.target, d.row.claim.scope);
-      const { outcome, reason } = adaptJudge(v);
-      return { row: d.row, outcome, reason };
-    });
+  // ── AC-6 negation TEETH + the gate-OFF diagnostic ── (WP-C1; see the AC-6 comment for the full triage)
+  // `negTeeth` (ASSERTED) re-drives the negation pool through `judgeCallersBlind` — the byte-identical shipped
+  // door with ONLY gate (c)'s `reverseCallers` leg blinded. On the operating (dist-form) index that IS the
+  // load-bearing leg, so blinding it turns the REFUTEd tsc-false negatives into ADMITs ⇒ false-admit rises off 0.
+  // `negGateOff` (REPORTED only) re-drives the SAME pool through `judgeGateOff` (the #99 collapsed-local opaque
+  // gate off). It is kept as EVIDENCE that on a dist-form index that leg is NOT load-bearing: the cross-package
+  // refs resolve via `canonicalizeSymbol` instead of collapsing onto opaque `local`s, so disabling the opaque
+  // gate merely converts scope-open ABSTAINs into (correct) REFUTEs and the false-admit stays 0. It is printed,
+  // never asserted — asserting `> 0` on it was the DEAD teeth this WP triaged.
+  const negDriven = driven.filter((d) => d.row.arm === 'negation');
+  const redrive = (judgeFn: (t: string, s: string) => Verdict): DrivenRow[] =>
+    negDriven.map((d) => ({ row: d.row, ...adaptJudge(judgeFn(d.row.claim.target, d.row.claim.scope)) }));
+  const negTeeth: DrivenRow[] = redrive((t, s) => B.judgeCallersBlind(t, s));
+  const negGateOff: DrivenRow[] = redrive((t, s) => B.judgeGateOff(t, s));
 
   // add a handful of dependency/count base→mutant pairs for AC-9m (edit-distance-1 over the real substrate)
   for (const t of B.targets) {
@@ -196,5 +196,5 @@ export async function assembleSemBench(ROOT: string, SCIP: string): Promise<SemB
   console.log(`[sem-bench] dep-F EXHAUSTIVE (uncapped): ${capd['dep-F'] ?? 0} rows — dependency.falseAdmit is a COMPLETE measurement, not a capped prefix`);
   /* eslint-enable no-console */
 
-  return { B, driven, arm0Reasons, mutateSamples, negTeeth, counts: { targets: B.targets.length, scopes: B.scopes.length }, driveClaim };
+  return { B, driven, arm0Reasons, mutateSamples, negTeeth, negGateOff, counts: { targets: B.targets.length, scopes: B.scopes.length }, driveClaim };
 }

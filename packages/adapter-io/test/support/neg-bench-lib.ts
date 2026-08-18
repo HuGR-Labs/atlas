@@ -161,6 +161,12 @@ export interface NegBench {
    *  through to the refute/admit path — `reverseCallers` cannot see the collapsed caller — and are ADMITTED,
    *  reproducing the pre-fix false-admit. That the number RISES off 0 proves the 0 is EARNED by the opaque gate. */
   judgeGateOff(target: string, scope: string): Verdict;
+  /** The SAME shipped v2 door with its REVERSE-CALLER leg BLINDED (`reverseCallers` ≡ `[]`), everything else
+   *  byte-identical. This is the AC-6 non-vacuity TEETH that BITES on the operating (dist-form) index: gate (c)
+   *  — `reverseCallers(X) ∩ S == ∅ ⇒ the negative stands` (governed-emit-negation.ts) — is the leg the door's
+   *  soundness actually rests on here, so defeating it turns every REFUTE into an ADMIT and the tsc-FALSE
+   *  negatives false-admit. `judgeGateOff` no longer bites on this index (see the AC-6 comment). */
+  judgeCallersBlind(target: string, scope: string): Verdict;
   /** tsc ground truth: is X CALLED anywhere under S? (⇒ the negative "X not called in S" is FALSE). */
   calledInScope(t: Target, scope: string): boolean;
   /** tsc ground truth: is X REFERENCED (any position) anywhere under S? */
@@ -229,11 +235,16 @@ export async function setupNegBench(ROOT: string, SCIP: string): Promise<NegBenc
   // cross-package tsc-false negatives return to the pre-fix false-admit — the AC-6 non-vacuity witness.
   const symbolReverseGateOff = createSymbolReverse(scipOutput, {});
   const judgeGateOff = mkDoor(symbolReverseGateOff);
+  // CALLERS-BLIND: the shipped view with ONLY the reverse-caller leg defeated — the single-leg mutation that is
+  // load-bearing on a dist-form index (gate (c) refute). Everything else (opaque gate, escape, dynamic, resolves)
+  // is the byte-identical shipped view.
+  const judgeCallersBlind = mkDoor({ ...symbolReverse, reverseCallers: () => [] });
 
   return {
     axes, symbolReverse, targetEscapes: te, dynamicReach: dr, oracle, targets, scopes, underScope,
     judge,
     judgeGateOff,
+    judgeCallersBlind,
     calledInScope(t, scope) {
       for (const f of oracle.get(t.key)!.callFiles) if (underScope(f, scope)) return true;
       return false;
