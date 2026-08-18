@@ -140,6 +140,35 @@ describe('SEAL-CARRIES-ITS-WITNESS — buildSound carries the oracle derivation,
     expect((a.fact as { witness?: unknown }).witness).toBeUndefined();
   });
 
+  it('CLAIM-DERIVED-FROM-WITNESS — dependency arm: the stored claimNorm is the HARNESS sentence, never the model prose, even when the prose CONTRADICTS the witness', () => {
+    // The model's own prose says the OPPOSITE of what the harness resolved (`target`/`scope` are the TRUE,
+    // oracle-checked legs; `claimNorm` below is a lie a compromised/hallucinating model could return).
+    const lying = depProposal({ claimNorm: 'DEPENDS-ON: nothing — src/pay.ts#charge has NO dependency on ledger at all' });
+    const a = admit(lying, makeDeps({ verifyDependency: () => 'proven' }));
+    expect(a.outcome).toBe('admitted');
+    if (a.outcome !== 'admitted') throw new Error('unreachable');
+    const fact = a.fact as { claimNorm: string; witness?: { target: string; scope: string } };
+    expect(fact.claimNorm).not.toContain('nothing');
+    expect(fact.claimNorm).not.toContain('NO dependency');
+    expect(fact.claimNorm).toBe('src references src/pay.ts#charge (witnessed cross-unit reference, sound oracle)');
+    expect(fact.claimNorm).toContain(fact.witness!.target);
+    expect(fact.claimNorm).toContain(fact.witness!.scope);
+    expect(fact.claimNorm).not.toContain('calls'); // the oracle proves a REFERENCE, never a CALL
+  });
+
+  it('CLAIM-DERIVED-FROM-WITNESS — count arm: the stored claimNorm names a LOWER BOUND, never an equality, and ignores contradicting prose', () => {
+    const lying = countProposal({ claimNorm: 'COUNT: charge is never called by anyone, zero callers' });
+    const a = admit(lying, makeDeps({ verifyCount: () => 'proven' }));
+    expect(a.outcome).toBe('admitted');
+    if (a.outcome !== 'admitted') throw new Error('unreachable');
+    const fact = a.fact as { claimNorm: string };
+    expect(fact.claimNorm).not.toContain('never called');
+    expect(fact.claimNorm).not.toContain('zero');
+    expect(fact.claimNorm).toBe('src/pay.ts#charge is referenced by at least 3 distinct unit(s) under src (witnessed lower bound, sound oracle)');
+    expect(fact.claimNorm).toContain('at least');
+    expect(fact.claimNorm).not.toMatch(/\bcalls\b|\bcallers\b/);
+  });
+
   it('the stored AUTHZ `scope` and the nested `witness.scope` are DIFFERENT legs — the trap this WP names', () => {
     // `admit()` alone never stamps the authz `scope` (that is `governed-emit.ts`'s job, downstream of this
     // module) — asserted here as the negative: `buildSound` never confuses the two, so nothing here sets a
