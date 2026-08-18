@@ -369,7 +369,7 @@ function buildSound(p: PredicateProposal, obviousness: ObviousnessScore): Adviso
     obviousness,
     id: p.nodeKey,
     tier: p.tier,
-    claimNorm: p.claimNorm,
+    claimNorm: claimNormFor(p, witness),
     grounding: p.grounding,
     freshness: 'FRESH',
     claims: [],
@@ -378,6 +378,35 @@ function buildSound(p: PredicateProposal, obviousness: ObviousnessScore): Adviso
     seal: "proven",
     ...(witness !== undefined ? { witness } : {}),
   };
+}
+
+/**
+ * CLAIM-DERIVED-FROM-WITNESS — the stored SENTENCE, generated from the same RESOLVED legs `witnessOf` reads,
+ * never from `p.claimNorm` (the model's own answer prose). A `proven` seal used to authenticate only the
+ * DERIVATION (the witness re-proves) while the STATEMENT rode over untouched, model-authored bytes — so a
+ * fact could carry a witness that re-proves and a sentence that lies, and nothing would notice. Making the
+ * text a PURE, TOTAL function of the witness closes that gap structurally: same witness ⇒ same sentence,
+ * always, so the two can no longer diverge.
+ *
+ * Wording is deliberately conservative, mirroring the oracle it reports (`verify-fact.ts` / `verifyDependency`
+ * `/verifyCount`, `@atlas/genesis`):
+ *   - "references", never "calls" — the oracle's `reverseCallers` witnesses a cross-unit SCIP REFERENCE
+ *     (imports and type positions count, `symbol-reverse.ts` `occ.role === 'reference'`); `reverseCallers`/
+ *     `callers` are known-lying names for what they return, and this sentence must not repeat the lie.
+ *   - "at least N" for the count arm, never "= N" — `verifyCount` proves a WITNESSED LOWER BOUND
+ *     (`witnessed >= atLeast`), not an exact cardinality; an equality reading would overclaim completeness
+ *     the SCIP feed does not give (see `verify-fact.ts`'s header on why REFUTE is not emitted at all).
+ *
+ * `undefined` witness (the GEN-12k type-expressible arm) has no re-provable derivation to build FROM — that
+ * arm's sound oracle is the type checker, not `verifyDependency`/`verifyCount`, and carries no `target`/
+ * `scope` legs at all (see `witnessOf`). Its claim text is left as the model's `p.claimNorm`, UNCHANGED and
+ * OUT OF SCOPE for this fix — flagged, not silently "fixed" by fabricating a derivation that does not exist.
+ */
+function claimNormFor(p: PredicateProposal, witness: PredicateWitness | undefined): string {
+  if (witness === undefined) return p.claimNorm; // GEN-12k arm — no witness; model prose stands (out of scope)
+  return witness.slot === 'count' && typeof witness.atLeast === 'number'
+    ? `${witness.target} is referenced by at least ${witness.atLeast} distinct unit(s) under ${witness.scope} (witnessed lower bound, sound oracle)`
+    : `${witness.scope} references ${witness.target} (witnessed cross-unit reference, sound oracle)`;
 }
 
 /**
