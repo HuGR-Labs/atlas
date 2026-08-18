@@ -92,7 +92,13 @@ verify-store: 1 sealed-proven fact(s) — 0 re-proven, 0 broken, 1 unverifiable
 > witness: `re-proven` / `broken` / `unverifiable`, three buckets that never merge; a witness-less `proven`
 > seal is `unverifiable`, never a pass.
 
-The index is built ONCE per invocation and reused for every fact (the binding cost is the index build, not
-the per-fact check — measured ~600ms for the build vs single-digit microseconds per fact, at 500 sealed facts
-in a controlled fixture); this door rides the SAME `verifyFact` oracle and the SAME durable-store readback
-`atlas doctor`/`atlas reconcile` use, never a second index build or a second oracle.
+The index is built ONCE per invocation and reused for every fact, so the binding cost is the index build and
+NOT the per-fact check: `reverifyStore` is a filter plus a loop over an in-memory array with no IO of its own,
+while the build parses the whole SCIP dump and folds the repo. That is a claim about SHAPE, which the code
+carries and a reader can re-derive; a wall-clock number is deliberately NOT quoted here, because a figure
+committed to prose cannot be re-run and rots silently against the machine, the repo size and the index form
+that produced it. To get the number for YOUR repo, time the command — that measurement is reproducible and
+this sentence never will be.
+
+This door rides the SAME `verifyFact` oracle and the SAME durable-store readback `atlas doctor` /
+`atlas reconcile` use, never a second index build or a second oracle.
