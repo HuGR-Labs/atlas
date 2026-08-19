@@ -139,6 +139,32 @@ function defaultSkeleton(repoPath: string): SkeletonSource {
   return createSkeletonSource(repoPath);
 }
 
+/**
+ * [COLD-GRAMMAR FOOTGUN, #243 — EXPLAINED, not gated here] `createSkeletonSource`'s AST refinement
+ * (`foldAstUnits`, adapter-io) is a SILENT no-op until `initAst()` resolves (module-level grammar
+ * singletons still null) — a deliberate, documented degrade so importing the barrel never forces a WASM
+ * load. Cold, the spatial tree carries file-level nodes only; warm, it also carries item/block children.
+ * `subtreeHash` is a hash of the SUBTREE, so a `file` node's own hash differs between the two states.
+ *
+ * A caller that stages citations cold and only LATER reads them back through a WARM re-derivation (the
+ * shape `atlas promote` takes — every promote path goes through `bin.ts`, which awaits `initAst()` before
+ * composing anything) gets a mismatch on every citation: `ungrounded: citation does not re-derive FRESH at
+ * source (TOOLS-7b/GROUND-6)`, with nothing on the mine side saying why. A previous seat burned a full
+ * diagnostic round on exactly this (#237 lineage).
+ *
+ * NOT gated with a throw here, on purpose, after measuring the blast radius: a mechanical `!astWarmed()`
+ * guard in `withDefaults` cannot distinguish that caller from the many HERMETIC callers in this suite that
+ * drive the real skeleton cold and never intend to re-derive against a warm one (they stage and read back
+ * within the SAME cold pass, or assert on ranking/coverage/gate-wiring, never on cross-process promotion) —
+ * a guard here made six real, correct test files fail closed for a risk they do not carry. `mine.ts` cannot
+ * see the caller's future intent (whether the citations it mints will ever meet a warm re-derivation), so
+ * this is not cheaply detectable AT THIS SEAM. `astWarmed()` is exported publicly (adapter-io) so any
+ * caller who DOES intend to promote what it stages can assert it themselves before driving `mine`; the
+ * actual guarantee against this footgun in PRODUCTION is structural, not a runtime check: `bin.ts` awaits
+ * `initAst()` before EVERY command (mine and promote both), so the two can never disagree on the shipped
+ * binary — pinned by `test/mine-cold-grammar.test.ts`, which asserts that ordering in `bin.ts`'s own source.
+ */
+
 /** The admission seam resolution (mine-gate.ts) — RE-EXPORTED so the module surface is unchanged by the
  *  file split. `makeAdmitGate` now HAS a production caller: `composedGate`, the REQ-CLI-4d supply this
  *  driver falls back to below. */

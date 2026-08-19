@@ -12,7 +12,7 @@ export type { LangId, IndexerPlan } from './scip.js';
 // the per-language SCIP index and prints the command; the OPERATOR runs it. Nothing here spawns a process.
 export { reportIndexPlan } from './indexer-report.js';
 export type { IndexPlanReport, PlannedLang, ScipState } from './indexer-report.js';
-export { foldAstUnits, foldAstUnitsWithPriors, initAst } from './ast.js';
+export { foldAstUnits, foldAstUnitsWithPriors, initAst, astWarmed } from './ast.js';
 export { createDiskStore, rehydrateProjection } from './store.js';
 export type { CasPath, DiskStore } from './store.js';
 // The durable-sidecar seam the two governed doors commit through. Exported because `DiskStore.commitProjection`
