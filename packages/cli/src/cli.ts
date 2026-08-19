@@ -5,6 +5,8 @@
 // handler is assembled LAZILY (only after a successful, non-`mine` parse) so `main([])` — the `bin.ts`
 // smoke path — returns a structured error WITHOUT touching the (WIRE-deferred) assembler.
 
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Hash } from '@atlas/contracts';
 import { asHash } from '@atlas/kernel';
 import { headSha, createHistorySource } from '@atlas/adapter-io';
@@ -382,6 +384,32 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
     // renders the three-bucket report (`re-proven`/`broken`/`unverifiable`). Like `promote` it is a WRITE-
     // shaped command in NEITHER sense: it writes nothing (a READ door, `GOVERNANCE_SURFACE` stays 5) but its
     // exit code IS a governance signal (2 on any `broken`/`unverifiable` row) — see `reverify.ts`'s header.
+    //
+    // WRONG-DIR REFUSAL (task #244), checked BEFORE `deps.reverify` is even consulted so an injected/fake
+    // thunk can never mask it. `composeRuntime` (bin.ts) always composes against `process.cwd()` — never a
+    // repo path this command was actually told about — so running `atlas verify-store` without `cd`-ing into
+    // the target repo composes over a DIFFERENT directory entirely and, because `reverify-store.ts` has no
+    // sealed facts to loop over there, renders the SAME "0 sealed-proven fact(s) — nothing to re-verify (an
+    // honest zero, not a skip)" line a genuinely empty, real store would print. That wording is honest about
+    // the WRONG subject: it answers "how many sealed facts does THIS directory hold" when the operator meant
+    // a different directory. `verify-store`'s entire domain is `seal:'proven'` facts recorded under a repo's
+    // OWN `.atlas/` — there is no legitimate way for it to have anything to say about a directory that does
+    // not even have one, so refusing (rather than serving the indistinguishable zero) costs no real case:
+    // unlike `query`/`doctor`/etc., which are useful structural tools even before a repo's first governed
+    // write, `verify-store` before any write has ever happened has nothing to check either way.
+    const atlasDir = join(process.cwd(), '.atlas');
+    if (!existsSync(atlasDir)) {
+      return emitCli(
+        renderRefusal(
+          refusalVerdict(
+            `no '.atlas/' directory at '${atlasDir}' — 'atlas verify-store' has nothing to re-verify here. ` +
+              `Either this is not an Atlas repository, you have not run 'atlas init' / made any governed emit ` +
+              `here yet, or you ran this command from the wrong directory. Refusing rather than printing the ` +
+              `SAME "0 sealed-proven fact(s)" bytes a genuinely empty, real '.atlas/' store would print.`,
+          ),
+        ),
+      );
+    }
     if (!deps.reverify) {
       return emit(
         errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'),
