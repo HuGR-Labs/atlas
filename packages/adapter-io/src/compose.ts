@@ -47,7 +47,7 @@ import type { NegationLeg } from './negation-source.js';
 import { createVerifyFactLeg } from './verify-fact-source.js';
 import type { VerifyFactLeg } from './verify-fact-source.js';
 import { reverifyStore } from './reverify-store.js';
-import type { NodeFactPair, ReverifyReport } from './reverify-store.js';
+import type { DocExists, NodeFactPair, ReverifyReport } from './reverify-store.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
 import { gitStoreProvenance } from './store-provenance.js';
 import type { SidecarTrust } from './store-provenance.js';
@@ -340,6 +340,13 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
   // `atlas verify-fact`) and `reverify` (`atlas verify-store`) below — the ONE production oracle, never a
   // duplicate that could drift from it.
   const verifyFactLeg = createVerifyFactLeg(scipOutput, { indexerName });
+  // THE ANCHOR-EXISTENCE CHECK (#199 fix-round round 3, tamper binding (d)) — reverifyFact's PROOF that a
+  // fact's own anchor names a document the live index actually has, not merely that it stands in the right
+  // RELATION to the witness's scope. Built from the SAME `scipOutput.documents` list `createVerifyFactLeg`
+  // already iterates for its own `pathByHash` table (`verify-fact-source.ts`) — NO second index build, no
+  // new seam, one `Set` over data already in memory.
+  const docPaths = new Set(scipOutput.documents.map((d) => d.relativePath));
+  const docExists: DocExists = (p) => docPaths.has(p);
   // THE READ-SIDE ANSWER (TRAVEL-BY-REPROOF, `read-access.ts`): what every read leg below is allowed to see.
   // `trusted` ⇒ `store` verbatim, no new cost. `tracked-staging` ⇒ a refusal, unchanged in kind. `tracked-
   // provable` ⇒ a raw re-read filtered to the facts that replay `re-proven` against `verifyFactLeg` — the
@@ -350,6 +357,7 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     headSha: () => headSha(repoPath),
     gatedStore: store,
     verifyFactLeg,
+    docExists,
   });
 
   const seams: WireSeams = {
@@ -527,7 +535,7 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     // BOTH of those this falls back to the pre-existing `reverifyStore(driftPairs, verifyFactLeg)` pass over
     // the WRITE-gated store, byte-identical to the prior behaviour (for `trusted`, that store is not
     // blanked; for `tracked-staging`, it blanks to `[]`, matching that leg's own refusal).
-    reverify: () => readAccess.reverified ?? reverifyStore(driftPairs, verifyFactLeg),
+    reverify: () => readAccess.reverified ?? reverifyStore(driftPairs, verifyFactLeg, docExists),
     ...(readRefusal !== undefined ? { readRefusal } : {}),
     ...(readAdvisory !== undefined ? { readAdvisory } : {}),
   };

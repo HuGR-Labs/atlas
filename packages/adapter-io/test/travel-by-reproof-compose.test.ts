@@ -289,3 +289,75 @@ describe('THE PoC IS A REGRESSION TEST — forged tier + forged anchor + forged 
     }
   });
 });
+
+// ── ROUND 3: ANCHOR EXISTENCE — the relation between scope and anchor is airtight (round 2); the EXISTENCE
+// of the anchor itself was not checked at all. Security seat measured, against the REAL production index
+// copied into a scratch repo: an HONEST fact — correct tier, correctly-DERIVED prose, a genuinely true
+// witness — anchored at a fabricated filename (or a bare directory) still served `ok:true`, because
+// `unitScopeOf` on a NONEXISTENT path can still equal the witness's own scope. Misattribution, not a truth
+// bypass, but closed here: `docExists` (compose.ts, built from the SAME `scipOutput.documents` the oracle
+// itself reads) must resolve the anchor's FILE half to a real document.
+function misanchoredHonestRepo(primaryAnchor: string): { readonly repoPath: string; cleanup(): void } {
+  const repo = makeFixRepo();
+  const scip = makeFixScip();
+  const atlasDir = join(repo.repoPath, '.atlas');
+  mkdirSync(atlasDir, { recursive: true });
+  writeFileSync(join(atlasDir, 'policy.json'), POLICY_JSON);
+  copyFileSync(scip.scipPath, join(atlasDir, 'index.scip'));
+
+  const trueWitness = { slot: 'dependency' as const, target: SYM_GREET, scope: 'src' }; // a REAL, re-provable edge
+  const honestButMisanchored = sealedAdvisory('honest-misanchored', {
+    witness: trueWitness,
+    tier: 'T2', // the CORRECT mined tier — (a)/(c) both hold
+    claimNorm: claimNormFromWitness(trueWitness), // the CORRECTLY-DERIVED sentence — (a) holds
+  });
+  const store = createDiskStore(join(atlasDir, 'cas'), () => asHash('seed'));
+  const stored = store.put(honestButMisanchored as unknown as never);
+  const nodeKey = hashOf(String(honestButMisanchored.id));
+  store.persistProjection({
+    current: new Map([[
+      nodeKey,
+      {
+        nodeKey,
+        family: 'advisory' as const,
+        contentHash: String(stored),
+        claims: [(honestButMisanchored as unknown as { claimNorm: string }).claimNorm],
+        primaryAnchor, // the ONLY forged field — (b) unitScopeOf(primaryAnchor) === 'src' MAY still hold
+      },
+    ]]),
+    cas: new Set([String(stored)]),
+  });
+  return { repoPath: repo.repoPath, cleanup: () => { scip.cleanup(); repo.cleanup(); } };
+}
+
+describe('ROUND 3 — ANCHOR EXISTENCE: an otherwise-HONEST fact anchored at something that is not really there', () => {
+  it('FAKE FILENAME — unitScopeOf-correct, but the SCIP index has never heard of this file — refused, not served', () => {
+    const attack = misanchoredHonestRepo('src/TOTALLY-FAKE-FILE-DOES-NOT-EXIST.ts');
+    try {
+      git(attack.repoPath, 'add', '-f', '.atlas/projection.json', '.atlas/cas', '.atlas/policy.json', '.atlas/index.scip');
+      git(attack.repoPath, 'commit', '-q', '-m', 'attacker: plant an honest claim at a fabricated filename');
+      const v = composeRuntime(attack.repoPath).handler.handle('atlas-query', { scope: 'src', by: 'scope' });
+      expect(v.ok).toBe(true);
+      expect(nodeIdsOf(v)).toEqual([]); // NOT served, despite tier/prose/scope all being genuinely correct
+      const runtime = composeRuntime(attack.repoPath) as unknown as { readAdvisory?: string };
+      expect(runtime.readAdvisory).toContain('0 of 1');
+    } finally {
+      attack.cleanup();
+    }
+  });
+
+  it("BARE DIRECTORY ('src/', no filename at all) — unitScopeOf('src/') === 'src' trivially, but names no document — refused, not served", () => {
+    const attack = misanchoredHonestRepo('src/');
+    try {
+      git(attack.repoPath, 'add', '-f', '.atlas/projection.json', '.atlas/cas', '.atlas/policy.json', '.atlas/index.scip');
+      git(attack.repoPath, 'commit', '-q', '-m', 'attacker: plant an honest claim at a bare directory anchor');
+      const v = composeRuntime(attack.repoPath).handler.handle('atlas-query', { scope: 'src', by: 'scope' });
+      expect(v.ok).toBe(true);
+      expect(nodeIdsOf(v)).toEqual([]);
+      const runtime = composeRuntime(attack.repoPath) as unknown as { readAdvisory?: string };
+      expect(runtime.readAdvisory).toContain('0 of 1');
+    } finally {
+      attack.cleanup();
+    }
+  });
+});

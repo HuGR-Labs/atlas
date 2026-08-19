@@ -36,7 +36,7 @@ import type { CurrentNode, GroundedFact } from '@atlas/knowledge';
 import { currentNodes } from '@atlas/knowledge';
 import { REJECTED_UNTRUSTED_STORE } from './read-provenance.js';
 import { reverifyFact } from './reverify-store.js';
-import type { ReverifyReport } from './reverify-store.js';
+import type { DocExists, ReverifyReport } from './reverify-store.js';
 import type { CasPath, DiskStore } from './store.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
 import type { StoreProvenance } from './store-provenance.js';
@@ -96,6 +96,7 @@ function buildProvable(
   headSha: () => string | undefined,
   gatedStore: DiskStore,
   verifyFactLeg: VerifyFactLeg,
+  docExists: DocExists,
 ): { readonly store: DiskStore; readonly report: ReverifyReport } | undefined {
   try {
     // NO trust seam ⇒ never consulted ⇒ reads the raw file regardless of git status (`store.ts`'s own
@@ -111,7 +112,7 @@ function buildProvable(
       const fact = raw.get(node.contentHash as Hash) as GroundedFact | undefined;
       if (fact !== undefined) pairs.push({ node, fact });
     }
-    const rows = pairs.map((p) => reverifyFact(p.node, p.fact, verifyFactLeg));
+    const rows = pairs.map((p) => reverifyFact(p.node, p.fact, verifyFactLeg, docExists));
     const sealedProven = rows.filter((r): r is NonNullable<typeof r> => r !== undefined);
     const report: ReverifyReport = {
       sealedProven: sealedProven.length,
@@ -155,6 +156,7 @@ export function buildReadAccess(opts: {
   readonly headSha: () => string | undefined;
   readonly gatedStore: DiskStore;
   readonly verifyFactLeg: VerifyFactLeg;
+  readonly docExists: DocExists;
 }): ReadAccess {
   const kind = opts.provenance();
   if (kind === 'trusted') {
@@ -166,7 +168,7 @@ export function buildReadAccess(opts: {
     return { store: opts.gatedStore, refusal: REJECTED_UNTRUSTED_STORE, reverified: undefined };
   }
   // CASE 2 — tracked-provable: served, filtered to what re-proves; fail-closed if re-verification cannot run.
-  const built = buildProvable(opts.casPath, opts.headSha, opts.gatedStore, opts.verifyFactLeg);
+  const built = buildProvable(opts.casPath, opts.headSha, opts.gatedStore, opts.verifyFactLeg, opts.docExists);
   if (built === undefined) {
     return { store: opts.gatedStore, refusal: REJECTED_UNTRUSTED_STORE, reverified: undefined };
   }

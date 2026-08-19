@@ -44,6 +44,10 @@ const scip: ScipOutput = {
   ],
 };
 
+/** (d) ANCHOR EXISTS (#199 fix-round round 3) — built from the SAME `scip.documents` list, mirroring
+ *  exactly how `compose.ts` builds it in production: one `Set` over data already in memory. */
+const docExists = (p: string): boolean => scip.documents.some((d) => d.relativePath === p);
+
 const REPROVEN_WITNESS = { slot: 'dependency' as const, target: GREET, scope: 'src' };
 
 function advisory(id: string, extra: Partial<GroundedFact>): GroundedFact {
@@ -98,7 +102,7 @@ function seededStore(): { readonly store: DiskStore; readonly casPath: string } 
             family: 'advisory' as const,
             contentHash: String(hash),
             claims: [(fact as unknown as { claimNorm: string }).claimNorm],
-            primaryAnchor: 'src/x.ts',
+            primaryAnchor: 'src/a.ts', // a REAL document in `scip.documents` above (round 3 — the anchor must exist)
           },
         ] as const;
       }),
@@ -127,6 +131,7 @@ describe('buildReadAccess — CASE 1 (trusted): no new cost, byte-identical to `
       verifyFactLeg: () => {
         throw new Error('TEETH: case 1 must never call the oracle');
       },
+      docExists,
     });
     expect(access.refusal).toBeUndefined();
     expect(access.reverified).toBeUndefined(); // no reverify pass was run — nothing to report
@@ -147,6 +152,7 @@ describe('buildReadAccess — CASE 3 (tracked-staging): flat refusal, the store 
       verifyFactLeg: () => {
         throw new Error('TEETH: case 3 must never call the oracle either');
       },
+      docExists,
     });
     expect(access.refusal).toBe(REJECTED_UNTRUSTED_STORE);
     expect(access.reverified).toBeUndefined();
@@ -162,6 +168,7 @@ describe('buildReadAccess — CASE 2 (tracked-provable): filtered to what RE-PRO
       headSha: () => asHash('seed') as unknown as string,
       gatedStore: store,
       verifyFactLeg: leg,
+      docExists,
     });
     expect(access.refusal).toBeUndefined();
     expect(access.reverified).toEqual({
@@ -190,6 +197,7 @@ describe('buildReadAccess — CASE 2 (tracked-provable): filtered to what RE-PRO
       headSha: () => asHash('seed') as unknown as string,
       gatedStore: store,
       verifyFactLeg: leg,
+      docExists,
     });
     expect(access.reverified).toBeDefined();
     const text = trackedProvableAdvisory(access.reverified!);
@@ -210,6 +218,7 @@ describe('buildReadAccess — FAIL-CLOSED: `tracked-provable` degrades to a refu
       verifyFactLeg: () => {
         throw new Error('oracle unavailable');
       },
+      docExists,
     });
     expect(access.refusal).toBe(REJECTED_UNTRUSTED_STORE);
     expect(access.reverified).toBeUndefined();
@@ -227,6 +236,7 @@ describe('buildReadAccess — FAIL-CLOSED: `tracked-provable` degrades to a refu
       headSha: () => undefined,
       gatedStore: createDiskStore(casPath),
       verifyFactLeg: leg,
+      docExists,
     });
     expect(access.refusal).toBeUndefined();
     expect(access.reverified).toEqual({ sealedProven: 0, reProven: 0, broken: 0, unverifiable: 0, rows: [] });

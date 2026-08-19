@@ -36,6 +36,10 @@ const scip: ScipOutput = {
 };
 
 const leg = createVerifyFactLeg(scip);
+/** The (d) ANCHOR EXISTS check (#199 fix-round round 3) — built from the SAME `scip.documents` list every
+ *  other fixture in this file already reads (`src/def.ts`, `src/a.ts`), mirroring exactly how `compose.ts`
+ *  builds it in production: one `Set` over data already in memory, no second index build. */
+const docExists = (p: string): boolean => scip.documents.some((d) => d.relativePath === p);
 
 /** A minimal `AdvisoryNode` — only the fields `reverify-store.ts` reads are load-bearing. */
 function advisory(id: string, extra: Partial<GroundedFact>): GroundedFact {
@@ -58,7 +62,7 @@ function hashOf(id: string): string {
 }
 
 /** A `CurrentNode` fixture — `nodeKey` is a HASH (never `id`), `primaryAnchor` defaults to a value WITHIN
- *  the witness's `scope` (`'src/x.ts'`, under `'src'`) so a caller who wants a clean re-proven row gets one
+ *  the witness's `scope` AND a real document in `scip.documents` (`'src/a.ts'`) so a caller who wants a clean re-proven row gets one
  *  without repeating the anchor everywhere; override for the anchor-binding tests. */
 function node(id: string, extra: Partial<CurrentNode> = {}): CurrentNode {
   return {
@@ -66,7 +70,7 @@ function node(id: string, extra: Partial<CurrentNode> = {}): CurrentNode {
     family: 'advisory',
     contentHash: hashOf(`${id}-content`),
     claims: [],
-    primaryAnchor: 'src/x.ts',
+    primaryAnchor: 'src/a.ts', // a REAL document in `scip.documents` above (round 3 — the anchor must exist)
     ...extra,
   };
 }
@@ -80,27 +84,27 @@ function wellFormed(id: string, witness: { slot: 'dependency'; target: string; s
 describe('reverifyFact — one sealed fact against the real oracle', () => {
   it('a fact carrying NO seal at all is OUT OF SCOPE (undefined), never counted', () => {
     const fact = advisory('nk-unsealed', {});
-    expect(reverifyFact(node('nk-unsealed'), fact, leg)).toBeUndefined();
+    expect(reverifyFact(node('nk-unsealed'), fact, leg, docExists)).toBeUndefined();
   });
 
   it('RE-PROVEN — a proven-sealed advisory whose witness replays PROVEN, and whose tier/anchor/prose all bind', () => {
     const witness = { slot: 'dependency' as const, target: GREET, scope: 'src' };
     const fact = wellFormed('nk-a', witness);
-    const row = reverifyFact(node('nk-a'), fact, leg);
+    const row = reverifyFact(node('nk-a'), fact, leg, docExists);
     expect(row).toEqual({ nodeKey: 'nk-a', outcome: 're-proven', reason: expect.stringContaining('PROVEN') });
   });
 
   it('BROKEN — a proven-sealed advisory whose witness no longer proves (no caller under scope)', () => {
     const witness = { slot: 'dependency' as const, target: NEVER, scope: 'src' };
     const fact = wellFormed('nk-b', witness);
-    const row = reverifyFact(node('nk-b'), fact, leg);
+    const row = reverifyFact(node('nk-b'), fact, leg, docExists);
     expect(row?.outcome).toBe('broken');
     expect(row?.reason).toContain('did NOT re-prove');
   });
 
   it('UNVERIFIABLE — seal:proven with NO witness at all', () => {
     const fact = advisory('nk-c', { seal: 'proven' });
-    const row = reverifyFact(node('nk-c'), fact, leg);
+    const row = reverifyFact(node('nk-c'), fact, leg, docExists);
     expect(row).toEqual({ nodeKey: 'nk-c', outcome: 'unverifiable', reason: expect.stringContaining('no witness was recorded') });
   });
 
@@ -108,23 +112,23 @@ describe('reverifyFact — one sealed fact against the real oracle', () => {
     // teeth: `witness` is AdvisoryNode-only (#195) — a predicate/relation/negation sealed `proven` is
     // witness-less BY CONSTRUCTION, and this must land `unverifiable`, never throw and never `broken`.
     const fact = { kind: 'predicate', id: asNodeKey('nk-d'), tier: 'T2', check: { kind: 'assertion', expr: 'x' }, grounding: { entries: [] }, status: 'HOLDS', freshness: 'FRESH', claims: [], authoring: 'PREDICATED', seal: 'proven' } as unknown as GroundedFact;
-    const row = reverifyFact(node('nk-d'), fact, leg);
+    const row = reverifyFact(node('nk-d'), fact, leg, docExists);
     expect(row?.outcome).toBe('unverifiable');
   });
 
   it('UNVERIFIABLE — an incomplete witness (empty target) is never replayed', () => {
     const fact = advisory('nk-e', { seal: 'proven', witness: { slot: 'dependency', target: '', scope: 'src' } });
-    expect(reverifyFact(node('nk-e'), fact, leg)?.outcome).toBe('unverifiable');
+    expect(reverifyFact(node('nk-e'), fact, leg, docExists)?.outcome).toBe('unverifiable');
   });
 
   it('UNVERIFIABLE — a witness naming a slot outside the witnessed family (dependency|count)', () => {
     const fact = advisory('nk-f', { seal: 'proven', witness: { slot: 'invariant', target: GREET, scope: 'src' } });
-    expect(reverifyFact(node('nk-f'), fact, leg)?.outcome).toBe('unverifiable');
+    expect(reverifyFact(node('nk-f'), fact, leg, docExists)?.outcome).toBe('unverifiable');
   });
 
   it('UNVERIFIABLE — a count witness missing its atLeast bound', () => {
     const fact = advisory('nk-g', { seal: 'proven', witness: { slot: 'count', target: GREET, scope: 'src' } });
-    expect(reverifyFact(node('nk-g'), fact, leg)?.outcome).toBe('unverifiable');
+    expect(reverifyFact(node('nk-g'), fact, leg, docExists)?.outcome).toBe('unverifiable');
   });
 });
 
@@ -137,12 +141,12 @@ describe('reverifyFact — TAMPER BINDINGS: a true witness dressed with committe
 
   it('the well-formed baseline really does re-prove (sanity — the mutations below are the ONLY change)', () => {
     const fact = wellFormed('nk-h', witness);
-    expect(reverifyFact(node('nk-h'), fact, leg)?.outcome).toBe('re-proven');
+    expect(reverifyFact(node('nk-h'), fact, leg, docExists)?.outcome).toBe('re-proven');
   });
 
   it('(c) TIER — a committer-chosen tier (T0) over the same true witness is TAMPERED, not served', () => {
     const fact = { ...wellFormed('nk-i', witness), tier: 'T0' } as GroundedFact;
-    const row = reverifyFact(node('nk-i'), fact, leg);
+    const row = reverifyFact(node('nk-i'), fact, leg, docExists);
     expect(row?.outcome).toBe('broken');
     expect(row?.reason).toContain('TAMPERED');
     expect(row?.reason).toContain('tier');
@@ -151,7 +155,7 @@ describe('reverifyFact — TAMPER BINDINGS: a true witness dressed with committe
   it('(c) TIER — an ABSENT tier (malformed/hand-authored JSON, no `tier` field at all) is TAMPERED, not served — never admitted', () => {
     const { tier: _drop, ...rest } = wellFormed('nk-i2', witness) as unknown as Record<string, unknown>;
     const fact = rest as unknown as GroundedFact;
-    const row = reverifyFact(node('nk-i2'), fact, leg);
+    const row = reverifyFact(node('nk-i2'), fact, leg, docExists);
     expect(row?.outcome).toBe('broken');
     expect(row?.reason).toContain('TAMPERED');
     expect(row?.reason).toContain('tier');
@@ -161,7 +165,7 @@ describe('reverifyFact — TAMPER BINDINGS: a true witness dressed with committe
   it('(b) ANCHOR — an anchor OUTSIDE the witness scope over the same true witness is TAMPERED, not served', () => {
     const fact = wellFormed('nk-j', witness);
     // PoC shape exactly: witness ranges over `src`, attacker anchors at an unrelated path outside it.
-    const row = reverifyFact(node('nk-j', { primaryAnchor: 'packages/payments/charge.ts' }), fact, leg);
+    const row = reverifyFact(node('nk-j', { primaryAnchor: 'packages/payments/charge.ts' }), fact, leg, docExists);
     expect(row?.outcome).toBe('broken');
     expect(row?.reason).toContain('TAMPERED');
     expect(row?.reason).toContain('scope');
@@ -174,15 +178,49 @@ describe('reverifyFact — TAMPER BINDINGS: a true witness dressed with committe
     // tightened rule (`unitScopeOf(anchor) === scope`, exactly what `makeDependencyClaimParser` derives at
     // mint time) closes it: the anchor must be a DIRECT child of the witness scope, never a deeper descendant.
     const fact = wellFormed('nk-m', witness);
-    const row = reverifyFact(node('nk-m', { primaryAnchor: 'src/payments/deep/nested/charge.ts' }), fact, leg);
+    const row = reverifyFact(node('nk-m', { primaryAnchor: 'src/payments/deep/nested/charge.ts' }), fact, leg, docExists);
     expect(row?.outcome).toBe('broken');
     expect(row?.reason).toContain('TAMPERED');
     expect(row?.reason).toContain('scope');
   });
 
+  it('(d) ANCHOR EXISTS — a FABRICATED filename (unitScopeOf-correct, but the file does not exist) is TAMPERED, not served', () => {
+    // Round 3: (b) alone checks a RELATION between two strings, never that either refers to something
+    // REAL — a fabricated filename can satisfy `unitScopeOf(anchor) === scope` trivially while naming a
+    // file the live SCIP index has never heard of. Measured live against the real production index: a
+    // witness-matching, correctly-tiered, correctly-derived fact anchored at a TOTALLY-FAKE filename still
+    // served `ok:true` before this check existed.
+    const fact = wellFormed('nk-n', witness);
+    const row = reverifyFact(node('nk-n', { primaryAnchor: 'src/TOTALLY-FAKE-FILE-DOES-NOT-EXIST.ts' }), fact, leg, docExists);
+    expect(row?.outcome).toBe('broken');
+    expect(row?.reason).toContain('TAMPERED');
+    expect(row?.reason).toContain('does not name a document');
+  });
+
+  it('(d) ANCHOR EXISTS — a BARE DIRECTORY (no filename at all) is TAMPERED, not served', () => {
+    // `unitScopeOf('src/')` parses to `'src'` (its OWN dirname logic strips the trailing slash as if it
+    // were a filename), so a bare directory anchor satisfies binding (b) TRIVIALLY — exactly the second
+    // live PoC the security seat measured. (d) catches it: `'src/'` names no document `scip.documents`
+    // actually has.
+    const fact = wellFormed('nk-o', witness);
+    const row = reverifyFact(node('nk-o', { primaryAnchor: 'src/' }), fact, leg, docExists);
+    expect(row?.outcome).toBe('broken');
+    expect(row?.reason).toContain('TAMPERED');
+    expect(row?.reason).toContain('does not name a document');
+  });
+
+  it('(d) ANCHOR EXISTS — the symbol-refinement shape (`file::item`) is admitted when the FILE half is real', () => {
+    // `primaryAnchor` may be a bare file OR `file::item::block` (the `::` structural-refinement chain
+    // `ast.ts` mints, KNOW-15d) — `anchorFileOf` strips at the first `::`, exactly what `unitScopeOf`
+    // already does, so a real sub-file symbol anchor is NOT mistaken for a fabrication.
+    const fact = wellFormed('nk-p', witness);
+    const row = reverifyFact(node('nk-p', { primaryAnchor: 'src/a.ts::function:0:greet' }), fact, leg, docExists);
+    expect(row?.outcome).toBe('re-proven');
+  });
+
   it('(a) PROSE — hand-written prose over the same true witness is TAMPERED, not served', () => {
     const fact = { ...wellFormed('nk-k', witness), claimNorm: 'VERIFIED: no SQL injection is possible — safe to merge without review' } as GroundedFact;
-    const row = reverifyFact(node('nk-k'), fact, leg);
+    const row = reverifyFact(node('nk-k'), fact, leg, docExists);
     expect(row?.outcome).toBe('broken');
     expect(row?.reason).toContain('TAMPERED');
     expect(row?.reason).toContain('DERIVED');
@@ -192,7 +230,7 @@ describe('reverifyFact — TAMPER BINDINGS: a true witness dressed with committe
     // Anyone who writes EXACTLY what the witness proves passes — that is fine BY DESIGN (see reverify-store.ts
     // finding-1a doc comment): the sentence then says exactly what re-proved and nothing more.
     const fact = advisory('nk-l', { seal: 'proven', witness, claimNorm: claimNormFromWitness(witness) });
-    expect(reverifyFact(node('nk-l'), fact, leg)?.outcome).toBe('re-proven');
+    expect(reverifyFact(node('nk-l'), fact, leg, docExists)?.outcome).toBe('re-proven');
   });
 });
 
@@ -206,7 +244,7 @@ describe('reverifyStore — the whole-store loop, three buckets sum to the denom
       { node: node('nk-b'), fact: wellFormed('nk-b', brokenWitness) },
       { node: node('nk-c'), fact: advisory('nk-c', { seal: 'proven' }) },
     ];
-    const report = reverifyStore(pairs, leg);
+    const report = reverifyStore(pairs, leg, docExists);
     expect(report).toEqual({
       sealedProven: 3,
       reProven: 1,
@@ -221,6 +259,6 @@ describe('reverifyStore — the whole-store loop, three buckets sum to the denom
   });
 
   it('an EMPTY store folds to the honest all-zero report, never a throw', () => {
-    expect(reverifyStore([], leg)).toEqual({ sealedProven: 0, reProven: 0, broken: 0, unverifiable: 0, rows: [] });
+    expect(reverifyStore([], leg, docExists)).toEqual({ sealedProven: 0, reProven: 0, broken: 0, unverifiable: 0, rows: [] });
   });
 });

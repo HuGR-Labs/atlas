@@ -131,33 +131,58 @@ function anchorMatchesWitnessScope(primaryAnchor: string, scope: string): boolea
   return unitScopeOf(primaryAnchor) === scope;
 }
 
+/** Whether the live SCIP index has a document at `path` — INJECTED (never a second index build here; see
+ *  `reverifyFact`'s doc comment on binding (d) and `compose.ts`, which builds this from the SAME
+ *  `scipOutput.documents` list `createVerifyFactLeg`'s own `pathByHash` already iterates). */
+export type DocExists = (path: string) => boolean;
+
+/** The FILE half of a `primaryAnchor` — anchors are either a bare file path or `file::item::block` (the
+ *  sub-file structural-refinement chain `ast.ts`'s `::` join mints, KNOW-15d) — strip everything from the
+ *  first `::` onward, exactly the split `unitScopeOf` (above) already performs on the same string, so the
+ *  two functions can never disagree about which FILE an anchor names. */
+function anchorFileOf(primaryAnchor: string): string {
+  const at = primaryAnchor.indexOf('::');
+  return at === -1 ? primaryAnchor : primaryAnchor.slice(0, at);
+}
+
 /** Re-verify ONE sealed fact against the live oracle. `node` is the fact's OWN `CurrentNode` row — the
  *  source of `primaryAnchor`, which `GroundedFact` itself does not carry (KNOW-15d: the anchor is a
  *  projection-row carrier, `projection-types.ts`, not part of the CAS-stored fact). `undefined` iff the
  *  fact is not `seal:'proven'` at all (out of scope for this pass — see the module header).
  *
- * ── THE THREE TAMPER BINDINGS (security seat finding 1, #199 fix-round) ────────────────────────────────
+ * ── THE FOUR TAMPER BINDINGS (security seat findings, #199 fix-round, three rounds) ─────────────────────
  * A witness that replays PROVEN authenticates only a fact SHAPE — "this scope references this target" —
- * never THIS fact's tier, anchor, or prose, all three of which a committer can otherwise choose freely and
- * bolt onto an unrelated true edge (measured live: a T0 "no SQL injection" claim at `charge.ts`, riding a
- * `greet()` reference witness, served `ok:true`). These three checks close exactly that gap and run BEFORE
- * the (comparatively expensive) oracle replay — a tampered fact never needs the oracle to be dropped:
+ * never THIS fact's tier, anchor, prose, or even that the anchor NAMES ANYTHING REAL, all four of which a
+ * committer can otherwise choose freely and bolt onto an unrelated true edge (round 1, measured live: a T0
+ * "no SQL injection" claim at `charge.ts`, riding a `greet()` reference witness, served `ok:true`; round 3,
+ * measured live against the real production index: a witness-matching, correctly-derived, correctly-tiered
+ * fact anchored at `…/TOTALLY-FAKE-FILE-DOES-NOT-EXIST.ts` — a file the SCIP index has never heard of —
+ * still served `ok:true`, and a bare directory `'src/'` did too). These four checks close exactly that gap
+ * and run BEFORE the (comparatively expensive) oracle replay — a tampered fact never needs the oracle to be
+ * dropped:
  *   (a) TIER    — `fact.tier` must be the mined tier (see `MINED_TIER` above); a `proven` seal is minted
  *                 ONLY by the mine pipeline, so any other tier is a committer's own invention.
- *   (b) ANCHOR  — `unitScopeOf(node.primaryAnchor)` must EQUAL `w.scope` (`anchorMatchesWitnessScope`) — the
- *                 anchor's own containing directory, never a broader ancestor (containment alone is
- *                 widening-monotone and was found still open after the first fix round).
+ *   (b) ANCHOR SCOPE — `unitScopeOf(node.primaryAnchor)` must EQUAL `w.scope` (`anchorMatchesWitnessScope`)
+ *                 — the anchor's own containing directory, never a broader ancestor (round 2: containment
+ *                 alone is widening-monotone and was found still open after round 1).
  *   (c) PROSE   — `fact.claimNorm` must be BYTE-EQUAL to `claimNormFromWitness(w)`, the same pure function
  *                 `admit-harness.ts` mints the sentence with (#197 CLAIM-DERIVED-FROM-WITNESS) — re-derived
  *                 HERE from the stored witness, never trusted from the stored sentence itself. Hand-written
  *                 prose cannot match; the correctly-derived sentence CAN, and that is fine — it says exactly
  *                 what the witness proves and nothing more.
- * All three failures are reported as `broken` (the fact is not served, same bucket a drifted witness lands
+ *   (d) ANCHOR EXISTS — `docExists(anchorFileOf(node.primaryAnchor))` must be `true` — the anchor's FILE
+ *                 half must name a document the LIVE SCIP index actually contains (round 3: (b) alone
+ *                 checks the RELATION between two strings, never that either one refers to something real —
+ *                 a fabricated filename, or a bare directory with no filename at all, satisfied `unitScopeOf
+ *                 = scope` trivially and was served). `docExists` is INJECTED, built from the SAME
+ *                 `scipOutput.documents` the oracle's own `pathByHash` iterates (`verify-fact-source.ts`) —
+ *                 no second index build, no new seam.
+ * All four failures are reported as `broken` (the fact is not served, same bucket a drifted witness lands
  * in) with a `TAMPERED:` reason — DISTINCT wording from a drift `broken` ("did NOT re-prove"), so an
  * operator can tell "the code moved under this fact" from "this fact was altered after the oracle proved
  * something else". Dropped, never clamped: silently rewriting a tampered tier/anchor/prose back to the
  * derived value would hide that a tamper was attempted at all. */
-export function reverifyFact(node: CurrentNode, fact: GroundedFact, leg: VerifyFactLeg): ReverifyRow | undefined {
+export function reverifyFact(node: CurrentNode, fact: GroundedFact, leg: VerifyFactLeg, docExists: DocExists): ReverifyRow | undefined {
   if (fact.seal !== 'proven') return undefined;
   const nodeKey = String(fact.id);
   // `witness` is carried ONLY on `AdvisoryNode` (#195 `buildSound` mints the sound-oracle arm as an
@@ -190,6 +215,13 @@ export function reverifyFact(node: CurrentNode, fact: GroundedFact, leg: VerifyF
       nodeKey,
       outcome: 'broken',
       reason: `TAMPERED: primary anchor '${anchor ?? '(none)'}' does not sit directly under the witness's own scope '${w.scope}' (unitScopeOf(anchor) must equal scope, never a broader ancestor) — the fact is not about what its witness proves`,
+    };
+  }
+  if (!docExists(anchorFileOf(anchor))) {
+    return {
+      nodeKey,
+      outcome: 'broken',
+      reason: `TAMPERED: primary anchor '${anchor}' does not name a document the live SCIP index actually contains — the anchor is fabricated or a bare directory, not a real file the witness's edge is about`,
     };
   }
   const expectedClaim = claimNormFromWitness(w);
@@ -226,10 +258,10 @@ export interface NodeFactPair {
  * `CurrentNode` alongside it) — reading the STORE, never a command's own summary, per the chapter's honesty
  * requirement.
  */
-export function reverifyStore(pairs: readonly NodeFactPair[], leg: VerifyFactLeg): ReverifyReport {
+export function reverifyStore(pairs: readonly NodeFactPair[], leg: VerifyFactLeg, docExists: DocExists): ReverifyReport {
   const rows: ReverifyRow[] = [];
   for (const { node, fact } of pairs) {
-    const row = reverifyFact(node, fact, leg);
+    const row = reverifyFact(node, fact, leg, docExists);
     if (row !== undefined) rows.push(row);
   }
   return {
