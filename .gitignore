@@ -24,10 +24,16 @@ dist/
 # `.atlas/` itself is deliberately NOT ignored: git cannot re-include a path under an excluded directory, so
 # ignoring the directory would make the negations below unreachable.
 .atlas/*
-# `projection*.json` + `cas/**` — the re-provable half of the durable store (see above). `staging*.json` is
-# NOT re-admitted here and stays denied by the blanket rule above — it is the one population this amendment
-# deliberately leaves refused.
-!.atlas/projection*.json
+# `projection.json` + `cas/**` — the re-provable half of the durable store (see above). ADMIT vs RECOGNIZE
+# are deliberately different widths: only the CURRENT projection (`projection.json`) is admitted to travel —
+# reads rehydrate from it alone (`knowledge/read/sameas.ts`). The numbered generations `projection.<N>.json`
+# are local sidecar backups for recovery (`governed-emit-reasons.ts`: "Restore `.atlas/projection.*.json`
+# from a backup"), redundant with the current one and NOT admitted, so a bare `git add .atlas/` cannot drag a
+# stack of growing snapshots into history. Provenance still RECOGNIZES `projection.<N>.json` as a provable
+# store member (`store-provenance.ts` regex) so a force-committed generation is classified correctly, not
+# misdiagnosed — recognition stays broad on purpose; only admission narrows. `staging*.json` is NOT
+# re-admitted and stays denied by the blanket rule above — the one population this amendment leaves refused.
+!.atlas/projection.json
 !.atlas/cas/
 # …and the admin-owned policy, as before: the ratified config the doors READ, reviewable in the same place
 # as the code.
