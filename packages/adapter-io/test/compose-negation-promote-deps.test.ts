@@ -127,7 +127,7 @@ describe('#96 F2 — the `atlas promote` leg reaches emitNegation WITH its compl
       emit: createGovernedEmit({
         store: fx.store,
         gate: { gateHolds: () => 'HOLDS' } as never,
-        policy: { nearDup: { claimNormThreshold: 1 }, t0Heuristic: { keywords: [] }, authz: { scopes: { src: ['alice'] } } },
+        policy: { t0Heuristic: { keywords: [] }, authz: { scopes: { src: ['alice'] } } },
         actor: 'alice',
         origin: 'promoted',
         // NO negation deps — the pre-F2 shape.

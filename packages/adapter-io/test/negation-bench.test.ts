@@ -145,7 +145,7 @@ describe.skipIf(!RUN)('#95/#99 M3 — sound-negation benchmark (0-false-admit + 
     emitCeiling = createGovernedEmit({
       store: storeC,
       gate: { gateHolds: () => 'HOLDS' } as never,
-      policy: { nearDup: { claimNormThreshold: 1 }, t0Heuristic: { keywords: [] }, authz: { scopes: policyScopes } },
+      policy: { t0Heuristic: { keywords: [] }, authz: { scopes: policyScopes } },
       actor: ACTOR, origin: 'promoted', ratifyToken: 'billy',
       symbolReverse: () => B.symbolReverse, axes: B.axes, nodeHashOfPath, edgeModel: edgeModelVersion(),
       targetEscapes: B.targetEscapes, dynamicReach: dynamicReachCeiling,

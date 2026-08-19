@@ -109,7 +109,6 @@ export function blindTo(store: DiskStore, ...pruned: readonly string[]): DiskSto
 
 /** alice owns `core`; mallory owns `other`. */
 export const POLICY: AtlasPolicy = {
-  nearDup: { claimNormThreshold: 1 },
   t0Heuristic: { keywords: [] },
   authz: { scopes: { core: ['alice'], other: ['mallory'] } },
 };

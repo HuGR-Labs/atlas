@@ -167,5 +167,5 @@ export type { SidecarTrust } from './store-provenance.js';
 
 // The versioned governance policy (WP-POLICY): declarative `.atlas/policy.json` + fail-closed loader. The
 // WP name says "admin-locked"; the file is NOT locked by any live mechanism (see policy.ts) — the loader is.
-export { loadPolicy, defaultPolicy, actorInScope, nearDupConfig } from './policy.js';
-export type { AtlasPolicy, NearDupPolicy, T0HeuristicPolicy, AuthzPolicy } from './policy.js';
+export { loadPolicy, defaultPolicy, actorInScope } from './policy.js';
+export type { AtlasPolicy, T0HeuristicPolicy, AuthzPolicy } from './policy.js';

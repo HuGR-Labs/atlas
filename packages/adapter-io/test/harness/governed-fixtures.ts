@@ -68,7 +68,6 @@ export const NA_GATE: TruthGate = { gateHolds: () => 'NA' };
 
 /** A policy granting actor `alice` write access to scope `core` — everyone else / every other scope denies. */
 export const POLICY: AtlasPolicy = {
-  nearDup: { claimNormThreshold: 1 },
   t0Heuristic: { keywords: [] },
   authz: { scopes: { core: ['alice'] } },
 };

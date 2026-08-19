@@ -218,7 +218,7 @@ export async function setupNegBench(ROOT: string, SCIP: string): Promise<NegBenc
     const emit = createGovernedEmit({
       store,
       gate: { gateHolds: () => 'HOLDS' } as never,
-      policy: { nearDup: { claimNormThreshold: 1 }, t0Heuristic: { keywords: [] }, authz: { scopes: policyScopes } },
+      policy: { t0Heuristic: { keywords: [] }, authz: { scopes: policyScopes } },
       actor: ACTOR, origin: 'promoted', ratifyToken: 'billy',
       symbolReverse: () => sr, axes, nodeHashOfPath, edgeModel: edgeModelVersion(), targetEscapes: te, dynamicReach: dr,
     }).emit;

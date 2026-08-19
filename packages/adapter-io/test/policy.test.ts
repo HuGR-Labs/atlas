@@ -13,13 +13,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  loadPolicy,
-  defaultPolicy,
-  actorInScope,
-  nearDupConfig,
-  type AtlasPolicy,
-} from '../src/policy.js';
+import { loadPolicy, defaultPolicy, actorInScope, type AtlasPolicy } from '../src/policy.js';
 
 // A throwaway repo dir with an optional `.atlas/policy.json` body (raw string ⇒ can be malformed).
 let repoPath: string | undefined;
@@ -40,18 +34,29 @@ afterEach(() => {
 describe('loadPolicy — fail-closed load of .atlas/policy.json', () => {
   it('POLICY-load-1 — a valid policy loads with exact fields (happy)', () => {
     const body = JSON.stringify({
-      nearDup: { claimNormThreshold: 0.9 },
       t0Heuristic: { keywords: ['invariant', 'security'] },
       authz: { scopes: { 'core/knowledge': ['seat:lucy', 'seat:billy'] } },
     });
     const p = loadPolicy(makeRepo(body));
-    expect(p.nearDup).toStrictEqual({ claimNormThreshold: 0.9 });
     expect(p.t0Heuristic).toStrictEqual({ keywords: ['invariant', 'security'] });
     // scopes is a null-proto map (proto-pollution-safe) ⇒ compare by content, not by prototype
     expect(p.authz.scopes).toEqual({ 'core/knowledge': ['seat:lucy', 'seat:billy'] });
     expect(Object.getPrototypeOf(p.authz.scopes)).toBeNull();
-    // the τ feeds NearDupConfig EXACTLY
-    expect(nearDupConfig(p)).toStrictEqual({ claimNormThreshold: 0.9 });
+  });
+
+  // #242 — a `nearDup` key in a committed `.atlas/policy.json` is now an UNVALIDATED, IGNORED extra field
+  // (the knob it fed was deleted end-to-end, never read by the router). TEETH: a policy carrying it still
+  // loads normally — an old committed policy is never suddenly treated as malformed by this deletion.
+  it('POLICY-load-1b — a policy carrying a leftover `nearDup` key still loads fine (#242: ignored, not rejected)', () => {
+    const body = JSON.stringify({
+      nearDup: { claimNormThreshold: 0.9 },
+      t0Heuristic: { keywords: ['invariant'] },
+      authz: { scopes: { core: ['seat:lucy'] } },
+    });
+    const p = loadPolicy(makeRepo(body));
+    expect(p.t0Heuristic).toStrictEqual({ keywords: ['invariant'] });
+    expect(p.authz.scopes).toEqual({ core: ['seat:lucy'] });
+    expect('nearDup' in p).toBe(false); // never carried forward onto the parsed AtlasPolicy
   });
 
   it('POLICY-load-2 — a MISSING policy file → defaultPolicy(), no throw (fail-closed)', () => {
@@ -67,7 +72,7 @@ describe('loadPolicy — fail-closed load of .atlas/policy.json', () => {
   });
 
   it('POLICY-load-4 — structurally-invalid policy → defaultPolicy() (wrong types fail closed)', () => {
-    const dir = makeRepo(JSON.stringify({ nearDup: { claimNormThreshold: 'high' }, t0Heuristic: {}, authz: {} }));
+    const dir = makeRepo(JSON.stringify({ t0Heuristic: {}, authz: {} }));
     expect(loadPolicy(dir)).toStrictEqual(defaultPolicy());
   });
 
@@ -75,7 +80,6 @@ describe('loadPolicy — fail-closed load of .atlas/policy.json', () => {
     const def = defaultPolicy();
     expect(Object.keys(def.authz.scopes)).toStrictEqual([]); // no actor in any scope
     expect(Object.getPrototypeOf(def.authz.scopes)).toBeNull(); // null-proto ⇒ proto-pollution-safe
-    expect(def.nearDup.claimNormThreshold).toBe(1); // exact-match only
     expect(def.t0Heuristic.keywords).toStrictEqual([]);
     // no actor can write ANY scope under the default
     expect(actorInScope(def, 'seat:anyone', 'any/scope')).toBe(false);
@@ -84,7 +88,6 @@ describe('loadPolicy — fail-closed load of .atlas/policy.json', () => {
 
 describe('actorInScope — fail-closed authz, THE KNOW-11a gate (#186: no longer a mirror of a dead one)', () => {
   const policy: AtlasPolicy = {
-    nearDup: { claimNormThreshold: 1 },
     t0Heuristic: { keywords: [] },
     authz: { scopes: { 'core/knowledge': ['seat:lucy'] } },
   };
@@ -118,7 +121,6 @@ describe('actorInScope — fail-closed authz, THE KNOW-11a gate (#186: no longer
     // a policy carrying a PLAIN {} scopes map — the original defect surface (inherited prototype functions
     // are reachable via bracket access). Without the own-property guard, `.includes` on the inherited fn throws.
     const plainMapPolicy: AtlasPolicy = {
-      nearDup: { claimNormThreshold: 1 },
       t0Heuristic: { keywords: [] },
       authz: { scopes: {} }, // plain {} — Object.prototype members are inherited
     };

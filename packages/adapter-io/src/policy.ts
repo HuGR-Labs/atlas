@@ -1,9 +1,8 @@
 // @atlas/adapter-io — src/policy.ts  (WP-POLICY: the versioned governance policy + its fail-closed loader)
 //
-// THE governance tunables, externalized as DATA. The engine's governance seams (near-dup τ, the T0
-// heuristic keyword set, the KNOW-11 owner-scoped write gate) are RULES admins own — so they live in a
-// declarative `<repoPath>/.atlas/policy.json` an admin edits, while the runtime reads them here as plain
-// config.
+// THE governance tunables, externalized as DATA. The engine's governance seams (the T0 heuristic keyword
+// set, the KNOW-11 owner-scoped write gate) are RULES admins own — so they live in a declarative
+// `<repoPath>/.atlas/policy.json` an admin edits, while the runtime reads them here as plain config.
 //
 // THE WP NAME AND THIS HEADER BOTH USED TO SAY THE FILE WAS LOCKED. It is NOT, and the distinction that
 // matters is that the lock is UNAVAILABLE rather than merely un-configured: the CODEOWNERS line names a
@@ -15,35 +14,37 @@
 // is. This module is the FAIL-CLOSED loader: it never throws and never silently permits a write.
 //
 // FAIL-CLOSED is the whole point. A missing OR malformed policy resolves to `defaultPolicy()` — the
-// CONSERVATIVE default: exact-match-only near-dup (`claimNormThreshold: 1`), an EMPTY T0 keyword set, and
-// EMPTY authz scopes. Empty scopes ⇒ no actor is in ANY scope ⇒ NO write is authorized until an admin
-// declares scopes (reads stay universal per KNOW-11b). An absent/broken policy can therefore never open a
-// write path — the default denies. `actorInScope` IS the KNOW-11a gate (#186 deleted the second, NOMINAL
-// implementation that used to live in @atlas/knowledge `authz.ts` and that nothing called — this comment
-// said `actorInScope` "mirrors" it): fail-closed on an absent/empty scope or an unlisted actor.
+// CONSERVATIVE default: an EMPTY T0 keyword set and EMPTY authz scopes. Empty scopes ⇒ no actor is in ANY
+// scope ⇒ NO write is authorized until an admin declares scopes (reads stay universal per KNOW-11b). An
+// absent/broken policy can therefore never open a write path — the default denies. `actorInScope` IS the
+// KNOW-11a gate (#186 deleted the second, NOMINAL implementation that used to live in @atlas/knowledge
+// `authz.ts` and that nothing called — this comment said `actorInScope` "mirrors" it): fail-closed on an
+// absent/empty scope or an unlisted actor.
 //
 // AND THE POLICY IS NOT AN AUTHENTICATED INPUT EITHER. `authz.scopes` names WHO may write WHAT, but the
 // "who" is a self-asserted string (`actorInScope` below says why), and this file is world-readable and
 // world-writable to anyone who can run the tool. Both halves are advisory. That is a legitimate posture for
 // a local developer tool and it is stated here so no reader has to infer it from the absence of a check.
 //
-// One-way DAG leaf (adapter ring): the core never imports this. The `claimNormThreshold` here feeds the
-// frozen `NearDupConfig` (@atlas/knowledge) EXACTLY — same field name, same meaning (the OPEN-DEFINE τ the
-// near-dup matcher takes as a parameter, never a baked-in constant).
+// One-way DAG leaf (adapter ring): the core never imports this.
+//
+// [#242 — `nearDup.claimNormThreshold` DELETED, not wired] this policy used to also carry a `nearDup`
+// leg — parsed and validated here, projected by a `nearDupConfig()` helper, into the frozen `NearDupConfig`
+// (@atlas/knowledge). MEASURED: `nearDupConfig()` had ZERO callers anywhere in this repo, and the
+// `@atlas/knowledge` router it fed never read the value even when a caller passed one explicitly (see that
+// package's `router.ts`/`upsert.ts` for the #242 removal on that side). An admin could set the knob, watch
+// it validate, and it guarded nothing — the same class of defect as #152/#186/#178. Deleted end-to-end
+// rather than wired: post-#197 the sound arm's `claimNorm` is harness-generated and deterministic, so a
+// text-similarity τ over it would compare generated sentences to generated sentences, a different and
+// probably useless question from the one this knob was invented to answer. `.atlas/policy.json` files that
+// still carry a `nearDup` key are UNCHANGED by this — an extra, unvalidated JSON key is simply ignored, the
+// same fail-open-on-extra-data posture every other unrecognised key in this file already had.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { NearDupConfig } from '@atlas/knowledge';
 import { underScope } from './anchor-scope.js';
 
 // ── the policy shape ─────────────────────────────────────────────────────────────────────────────────
-
-/** The near-dup governance tunable. `claimNormThreshold` feeds the frozen `NearDupConfig` (@atlas/knowledge
- *  router) EXACTLY — the write-decision near-duplicate probe's τ. `1` ⇒ exact-match only (the airtight,
- *  conservative floor: only byte-identical claims collide). */
-export interface NearDupPolicy {
-  readonly claimNormThreshold: number;
-}
 
 /** The T0-candidate heuristic tunable — the keyword set that flags a fact as a T0 (human-ratification)
  *  candidate, feeding the T0 heuristic seam. Empty ⇒ the heuristic proposes nothing on its own. */
@@ -90,7 +91,6 @@ export interface AuthzPolicy {
  *  no judgement. Sourced from `<repoPath>/.atlas/policy.json`; resolves to {@link defaultPolicy} when absent
  *  or malformed (fail-closed). */
 export interface AtlasPolicy {
-  readonly nearDup: NearDupPolicy;
   readonly t0Heuristic: T0HeuristicPolicy;
   readonly authz: AuthzPolicy;
 }
@@ -100,8 +100,6 @@ export interface AtlasPolicy {
 /**
  * The CONSERVATIVE fail-closed default (KNOW-11a / KNOW-15h floor). An absent or broken policy resolves
  * here and must NEVER silently permit a write:
- *   • `nearDup.claimNormThreshold: 1` — exact-match only (the airtight leg; only τ ≤ 1 fires, i.e. byte-
- *     identical claims collide). No near-synonym merges are asserted without an admin declaring the τ.
  *   • `t0Heuristic.keywords: []` — the heuristic flags nothing on its own until an admin declares the set.
  *   • `authz.scopes: {}` — NO actor is in ANY scope ⇒ NO write is authorized. Reads stay universal
  *     (KNOW-11b), but a write requires an admin to have declared the scope membership first.
@@ -112,7 +110,6 @@ export interface AtlasPolicy {
  */
 export function defaultPolicy(): AtlasPolicy {
   return {
-    nearDup: { claimNormThreshold: 1 },
     t0Heuristic: { keywords: [] },
     authz: { scopes: emptyScopes() },
   };
@@ -148,19 +145,10 @@ export function loadPolicy(repoPath: string): AtlasPolicy {
  *  Total — returns a policy for ANY input, never throws. */
 function parsePolicy(raw: unknown): AtlasPolicy {
   if (!isRecord(raw)) return defaultPolicy();
-  const nearDup = parseNearDup(raw.nearDup);
   const t0Heuristic = parseT0(raw.t0Heuristic);
   const authz = parseAuthz(raw.authz);
-  if (nearDup === undefined || t0Heuristic === undefined || authz === undefined) return defaultPolicy();
-  return { nearDup, t0Heuristic, authz };
-}
-
-/** Validate `nearDup` — requires a finite `claimNormThreshold` number. Fail-closed ⇒ `undefined`. */
-function parseNearDup(v: unknown): NearDupPolicy | undefined {
-  if (!isRecord(v)) return undefined;
-  const t = v.claimNormThreshold;
-  if (typeof t !== 'number' || !Number.isFinite(t)) return undefined;
-  return { claimNormThreshold: t };
+  if (t0Heuristic === undefined || authz === undefined) return defaultPolicy();
+  return { t0Heuristic, authz };
 }
 
 /** Validate `t0Heuristic` — requires a `keywords` array of strings. Fail-closed ⇒ `undefined`. */
@@ -203,14 +191,6 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 // ── pure helpers the wiring consumes ──────────────────────────────────────────────────────────────────
-
-/**
- * The near-dup config the @atlas/knowledge router takes — the policy's `claimNormThreshold` surfaced as the
- * frozen `NearDupConfig` EXACTLY (same field, same τ meaning). Pure projection, no IO.
- */
-export function nearDupConfig(policy: AtlasPolicy): NearDupConfig {
-  return { claimNormThreshold: policy.nearDup.claimNormThreshold };
-}
 
 /**
  * Is `actor` authorized to write `scope`?

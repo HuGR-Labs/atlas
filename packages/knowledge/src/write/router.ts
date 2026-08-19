@@ -54,17 +54,6 @@ import type { StoreProjection } from './upsert.js';
  */
 export type WriteDecision = 'DEDUP' | 'CREATE' | 'UPDATE' | 'SUPERSEDE' | 'REJECT';
 
-/**
- * [OPEN DEFINE — parametric, threshold UNPINNED] The KNOW-15 move-aware near-duplicate matcher's
- * `claimNorm`-collision threshold (method-tags-knw:122; atlas-knowledge:128-132). `subtreeHash` equality
- * catches move/rename but NOT move+edit, so a similarity matcher is needed and its threshold value is NOT
- * frozen. Per the task directive the threshold MUST be a PARAMETER, never a baked-in constant — surfaced
- * here as an explicit config the matcher takes; DEFINE pins the value later. Flagged.
- */
-export interface NearDupConfig {
-  readonly claimNormThreshold: number;
-}
-
 /** The frozen write-decision API (KNOW-4/15) — its impl is the pure functions below (no separate
  *  anchor.ts: the identity legs live HERE per the LEAD-RATIFIED decision). */
 export interface RouterApi {
@@ -76,13 +65,19 @@ export interface RouterApi {
    *  adjacent anchor stays a CREATE (its own node, own grounding — A2). Adjacency is now a derived-on-read
    *  `subsumes` relation (WP-DEDUP-2), never a write-time merge.
    *
-   *  [PARAMETRIC — see `NearDupConfig`] the near-dup matcher threshold is an EXPLICIT parameter, not a
-   *  constant (the threshold is an OPEN DEFINE, method-tags-knw:122).
+   *  [#242 — DELETED, not wired] a `NearDupConfig`/`cfg` PARAMETER used to ride here for a claimNorm-
+   *  similarity matcher this router never implemented — `routeWrite` below routes on the four
+   *  ALREADY-RESOLVED `RouteInputs` booleans alone; no near-dup threshold has ever entered this decision.
+   *  MEASURED: `cfg` was accepted, threaded from `packages/adapter-io/src/policy.ts` through
+   *  `nearDupConfig()`, and read by NOTHING (`nearDupConfig` itself had zero callers). Deleted rather than
+   *  wired — see the #242 PR body for the full reasoning (the sound arm's `claimNorm` is now
+   *  harness-generated/deterministic post-#197, so a text-similarity τ over it would answer a different,
+   *  probably useless question from the one this knob was invented for).
    *
    *  [WIDENED — owner-RATIFIED un-park] the composed store is passed as DATA (`StoreProjection`), matching
    *  the `upsert(store, req)` idiom + the caller-side/session-internal projection documented in the facet
    *  header — NOT an invented frozen `StoreApi` field. See the `writeDecision` impl below. */
-  writeDecision(candidate: Candidate, store: StoreProjection, cfg: NearDupConfig): WriteDecision;
+  writeDecision(candidate: Candidate, store: StoreProjection): WriteDecision;
 
   /** The node identity leg. `nodeKey(advisory) = hash(primaryAnchorId ‖ predicateSlot)`;
    *  `nodeKey(predicate) = hash(primaryAnchorId ‖ predicateSlot ‖ normalize(check))` — so a distinct
@@ -379,9 +374,14 @@ export * from './negation-key.js';
  * [UN-MERGED — WP-DEDUP-1] the ADJACENCY-B door-2 always-merge is REMOVED. `writeDecision` no longer runs an
  * adjacency probe over the route: a routed CREATE at an adjacent anchor stays a CREATE and mints its own node
  * (each keeps its own grounding — A2). Adjacency is now a DERIVED-ON-READ `subsumes` relation (WP-DEDUP-2,
- * `deriveSubsumes`), never a write-time merge. `cfg` is retained in the signature for the DP-2 successor.
+ * `deriveSubsumes`), never a write-time merge.
+ *
+ * [#242] the `cfg: NearDupConfig` parameter this signature used to carry is DELETED, not "retained for a
+ * DP-2 successor" — that successor never arrived, `cfg` was never read here, and the type it validated a
+ * value into was threaded from `.atlas/policy.json` through `nearDupConfig()` to exactly zero callers
+ * outside this file's own former signature. See the interface doc above and the #242 PR body.
  */
-export function writeDecision(candidate: Candidate, store: StoreProjection, cfg: NearDupConfig): WriteDecision {
+export function writeDecision(candidate: Candidate, store: StoreProjection): WriteDecision {
   const contentHashHit = store.cas.has(id(candidate) as string); // leg 1 — WHAT (sealed seam)
   if (contentHashHit) return 'DEDUP'; // dedup precedence: identical bytes short-circuit (KNOW-4b)
 

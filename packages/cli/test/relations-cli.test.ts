@@ -49,7 +49,7 @@ function relationFact(kind: RelationKind = 'depends-on' as RelationKind): Ground
 function composedWithRelation(): { relations: RelationLeg; dispose: () => void } {
   const root = mkdtempSync(join(tmpdir(), 'atlas-relations-cli-'));
   const store = createDiskStore(join(root, 'cas'));
-  const door = createGovernedEmit({ store, gate: HOLDS, policy: { nearDup: { claimNormThreshold: 1 }, t0Heuristic: { keywords: [] }, authz: { scopes: { core: ['bob'] } } }, actor: 'bob', ratifyToken: 'billy' });
+  const door = createGovernedEmit({ store, gate: HOLDS, policy: { t0Heuristic: { keywords: [] }, authz: { scopes: { core: ['bob'] } } }, actor: 'bob', ratifyToken: 'billy' });
   const out = door.emit(relationFact(), AT);
   if (!out.emitted) throw new Error(`fixture relation did not emit: ${out.rejected}`);
   return { relations: createRelationLeg(store), dispose: () => rmSync(root, { recursive: true, force: true }) };

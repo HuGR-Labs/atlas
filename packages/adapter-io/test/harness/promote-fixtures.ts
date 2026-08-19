@@ -29,7 +29,6 @@ export const CURATOR = 'seat:orchestrator';
  *  scope every emit fixture uses). Two scopes, no overlap — so "authorized here" never means "authorized
  *  there", which is the whole point of the target-authority gate. */
 export const CURATOR_POLICY: AtlasPolicy = {
-  nearDup: { claimNormThreshold: 1 },
   t0Heuristic: { keywords: [] },
   authz: { scopes: { 'atlas:mined': [CURATOR], core: ['alice'] } },
 };
@@ -37,7 +36,6 @@ export const CURATOR_POLICY: AtlasPolicy = {
 /** The SAME policy with `atlas:mined` UNGRANTED — the state `.atlas/policy.json` is in until an admin
  *  appoints a curator. `actorInScope` is fail-closed on an undeclared scope, so every promotion refuses. */
 export const NO_CURATOR_POLICY: AtlasPolicy = {
-  nearDup: { claimNormThreshold: 1 },
   t0Heuristic: { keywords: [] },
   authz: { scopes: { core: ['alice'] } },
 };

@@ -114,7 +114,7 @@ function makeRepo(): Repo {
   mkdirSync(atlasDir, { recursive: true });
   writeFileSync(
     join(atlasDir, 'policy.json'),
-    JSON.stringify({ nearDup: { claimNormThreshold: 1 }, t0Heuristic: { keywords: [] }, authz: { scopes: { [S]: [ACTOR] } } }),
+    JSON.stringify({ t0Heuristic: { keywords: [] }, authz: { scopes: { [S]: [ACTOR] } } }),
   );
   const scipPath = join(atlasDir, 'index.scip');
   writeFileSync(scipPath, serializeSCIP(index));
@@ -175,7 +175,7 @@ describe('ADR-0016 M2b — the recall win end-to-end (v2 admits where the shippe
       emit: createGovernedEmit({
         store,
         gate: { gateHolds: () => 'HOLDS' } as never,
-        policy: { nearDup: { claimNormThreshold: 1 }, t0Heuristic: { keywords: [] }, authz: { scopes: { [S]: [ACTOR] } } },
+        policy: { t0Heuristic: { keywords: [] }, authz: { scopes: { [S]: [ACTOR] } } },
         actor: ACTOR,
         origin: 'promoted',
         ratifyToken: 'billy',

@@ -130,7 +130,7 @@ describe('WP-96-R — a MINED relation stages, promotes, and is queryable end-to
     const store = createDiskStore(join(root, 'cas'));
     const door = createGovernedEmit({
       store, gate: HOLDS,
-      policy: { nearDup: { claimNormThreshold: 1 }, t0Heuristic: { keywords: [] }, authz: { scopes: { core: ['bob'] } } },
+      policy: { t0Heuristic: { keywords: [] }, authz: { scopes: { core: ['bob'] } } },
       actor: 'bob', ratifyToken: 'billy',
     });
     const out = door.emit(admitted.fact, AT);

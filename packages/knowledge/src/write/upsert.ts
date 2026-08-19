@@ -16,7 +16,7 @@ import type { PredicateSlot } from '../types.js';
 // ADR-0015 D3 / #99b — the honest-abstention record (NOT a GroundedFact; it asserts nothing). Type-only,
 // same package. Carried on the projection as a sibling to `current` (see StoreProjection.abstained below).
 import type { AbstainedRecord } from '../negation-types.js';
-import type { NearDupConfig, NodeFamily, RouteInputs, WriteDecision } from './router.js';
+import type { NodeFamily, RouteInputs, WriteDecision } from './router.js';
 import { isKnownSlot, routeWrite } from './router.js';
 // The KNOW-10/KNOW-15i closed-slot REFUSAL (#152) — extracted at the LOC ceiling. Read that file's header
 // before changing the gate below: it carries the measurement, the harm, and the ABSENT-slot decision.
@@ -194,7 +194,14 @@ function answerProvenanceOf(req: WriteRequest): { answerRef?: string } {
  * adjacent anchor now mints its OWN node (each keeps its own grounding — A2), never folding into a neighbor.
  * Adjacency is no longer a merge; it is a derived-on-read `subsumes` relation (WP-DEDUP-2, `deriveSubsumes`),
  * so the destructive fold is gone. The `primaryAnchor`/`slot` carriers on `CurrentNode` STAY — DP-2 reads
- * them off the projection. `cfg` remains in the signature (default τ=1) for callers + the forthcoming DP-2 use.
+ * them off the projection.
+ *
+ * [#242] this signature used to also take a `cfg: NearDupConfig = { claimNormThreshold: 1 }` "for the
+ * forthcoming DP-2 use" — DELETED, not kept: DP-2 (`deriveSubsumes`) never materialized a claimNorm-
+ * similarity matcher, `routeWrite` below has never read a threshold, and the config it would have carried
+ * was validated end-to-end (`.atlas/policy.json` → `nearDupConfig()`) and consumed by NOTHING. A future
+ * near-dup matcher gets its own explicit parameter when it is actually built, not a placeholder threaded
+ * through every caller on the strength of a comment.
  *
  * CARRY-FORWARD IS THE DEFAULT (ADR-0009): UPDATE and SUPERSEDE both SPREAD the prior node and re-mint only the
  * fields named inline, so a field added to `CurrentNode` later is carried with no edit here and DROPPING one has
@@ -207,11 +214,7 @@ function answerProvenanceOf(req: WriteRequest): { answerRef?: string } {
  * (`...prior`) rather than erasing it: this reducer is also reachable from ungoverned callers, and a carrier
  * that could be CLEARED by omission would be a way to demote a node to "unconfirmable" and brick it.
  */
-export function upsert(
-  store: StoreProjection,
-  req: WriteRequest,
-  cfg: NearDupConfig = { claimNormThreshold: 1 },
-): UpsertResult {
+export function upsert(store: StoreProjection, req: WriteRequest): UpsertResult {
   // KNOW-10 / KNOW-15i — THE CLOSED-SLOT GATE (#152). FIRST, before the route is even computed: the slot is
   // an ingredient of the identity this reducer routes on, so a value outside the closed 13 has already
   // corrupted the question by the time `routeWrite` answers it. ABSENT stands aside — a deliberate
