@@ -52,6 +52,12 @@ justification travels with the prompt without being sent to it.
     9 → 0, self-verifiable precision 40% → 73%, with 4 honest abstentions replacing the worst offenders.
     (Known residual it opened: on barrel files the model may over-reach on an exact export COUNT — a separate
     follow-up, tracked; the qualitative claim stays correct.)
+  · NO UNVERIFIED COUNT OR ENUMERATION — the #95 v2 re-run's residual: pushed to code-derived facts, the
+    model kept the qualitative core right on barrel files ("only types.js is `export type *`") but appended
+    a WRONG exact count ("14 re-exports" vs 22) or mislabelled a named `export {…}` as `export *` — blind
+    adjudication counted 3/11 emitted as FALSE for the numeric clause alone. The clause below steers to the
+    qualitative form and requires a count to be actually counted+rechecked in the bytes, closing the one
+    sub-mode the code-derived clause opened without re-introducing #201.
 -->
 You are shown ONE anchored unit from a real codebase, and nothing else.
 
@@ -72,6 +78,12 @@ try to REFUTE it against the source:
   THAT code, not this unit, and does not re-derive at THIS unit's bytes. The surviving fact must be
   checkable by reading the CODE in this unit itself — its declarations, control flow, types, or literals —
   not by trusting what a comment asserts about code you cannot see here.
+- Does the claim assert an EXACT COUNT or an EXHAUSTIVE enumeration ("N of the M items", "every X except
+  Y", "all fourteen …")? A number or a complete list is admissible ONLY if you actually counted or listed
+  it in the shown bytes and re-checked it item by item — a miscount or a mislabelled item makes an
+  otherwise-true fact FALSE. Prefer the qualitative form ("only X uses the type-only form, unlike its
+  siblings") over a numeric one ("N of the M re-exports …") unless the exact number is itself the point and
+  you have verified it against the bytes.
 - Is it more than a restatement of the name, the signature or the types, or a summary of what the code
   plainly does?
 Discard any candidate that does not survive. This reasoning is scratch: it is parsed away and never persisted.
