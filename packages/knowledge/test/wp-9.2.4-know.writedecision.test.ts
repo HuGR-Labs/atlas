@@ -1,6 +1,6 @@
 // @atlas/knowledge — test/wp-9.2.4-know.writedecision.test.ts  (WP-9.2.4.KNOWLEDGE)
 //
-// The un-parked composed write-decision FRONT DOOR `writeDecision(candidate, store, cfg)`: the
+// The un-parked composed write-decision FRONT DOOR `writeDecision(candidate, store)`: the
 // owner-RATIFIED reversal of the s05 PARK. This drives the COMPOSED front door across a store
 // projection to hit each route — DEDUP / CREATE / UPDATE / SUPERSEDE — proving it COMPOSES the sealed
 // legs (contentHash via the kernel `id` seam · nodeKey · routeWrite — write-time dedup is D0 contentHash /
@@ -16,7 +16,7 @@ import {
   nodeKey,
   emptyStore,
 } from '../src/write/router.js';
-import type { CurrentNode, StoreProjection, NearDupConfig } from '../src/write/router.js';
+import type { CurrentNode, StoreProjection } from '../src/write/router.js';
 import type { Candidate, Check, PredicateSlot } from '@atlas/knowledge';
 import type { StructRef } from '@atlas/contracts';
 import { asSubtreeHash, id } from '@atlas/kernel';
@@ -42,7 +42,6 @@ function cand(o: CandOpts = {}): Candidate {
   };
   return o.check ? { ...base, check: o.check } : base;
 }
-const CFG: NearDupConfig = { claimNormThreshold: 1 }; // exact-match leg fires at τ ≤ 1
 
 /** Seed one current node at `key` (a real computed nodeKey), family + claims as given, with an OPTIONAL
  *  `primaryAnchor` so the anchor-scoped `claimNorm`-collision report has a structural neighbor to reference
@@ -69,7 +68,7 @@ describe('WP-9.2.4.KNOWLEDGE — writeDecision composed front door (un-parked)',
     const key = nodeKey(c) as string;
     // cas contains id(c); ALSO seed the nodeKey present (advisory) — DEDUP must win over UPDATE.
     const store = projection([nodeAt(key, 'advisory', ['cn-prior'])], [id(c) as string]);
-    expect(writeDecision(c, store, CFG)).toBe('DEDUP');
+    expect(writeDecision(c, store)).toBe('DEDUP');
     // teeth (MUTANT: drop the `if (contentHashHit) return 'DEDUP'` short-circuit) → would fall through
     // to routeWrite with a nodeKey hit + advisory ⇒ UPDATE, flipping this golden off DEDUP.
   });
@@ -78,7 +77,7 @@ describe('WP-9.2.4.KNOWLEDGE — writeDecision composed front door (un-parked)',
     const c = cand({ claimNorm: 'cn-fresh' });
     // an unrelated node with a DIFFERENT claim body — no collision, no shared nodeKey/contentHash.
     const store = projection([nodeAt('other-key', 'advisory', ['cn-unrelated'])], ['ch-unrelated']);
-    expect(writeDecision(c, store, CFG)).toBe('CREATE');
+    expect(writeDecision(c, store)).toBe('CREATE');
     // teeth (MUTANT: near-dup probe over-fires — e.g. drop the `route === 'CREATE'` no-collision
     // guard and always override) → this clean CREATE would flip to UPDATE.
   });
@@ -90,7 +89,7 @@ describe('WP-9.2.4.KNOWLEDGE — writeDecision composed front door (un-parked)',
     // routed CREATE stays a CREATE — the adjacent fact keeps its own grounding (A2). Adjacency is now a
     // derived-on-read `subsumes` relation (WP-DEDUP-2), not a write-time merge.
     const store = projection([nodeAt('sibling-key', 'advisory', ['cn-dup'], 'pkg/mod')], []);
-    expect(writeDecision(c, store, CFG)).toBe('CREATE');
+    expect(writeDecision(c, store)).toBe('CREATE');
     // teeth (MUTANT: re-introduce a door-2 near-dup override) → this would flip back to UPDATE.
   });
 
@@ -98,7 +97,7 @@ describe('WP-9.2.4.KNOWLEDGE — writeDecision composed front door (un-parked)',
     const c = cand({ claimNorm: 'cn-adv' });
     const key = nodeKey(c) as string; // its OWN nodeKey is seeded present (advisory)
     const store = projection([nodeAt(key, 'advisory', ['cn-prior'])], []); // cas miss ⇒ no DEDUP
-    expect(writeDecision(c, store, CFG)).toBe('UPDATE');
+    expect(writeDecision(c, store)).toBe('UPDATE');
     // teeth (MUTANT: swap the family derivation to `'predicate'`) → checkSame becomes true ⇒ SUPERSEDE,
     // flipping UPDATE↔SUPERSEDE.
   });
@@ -108,7 +107,7 @@ describe('WP-9.2.4.KNOWLEDGE — writeDecision composed front door (un-parked)',
     const c = cand({ claimNorm: 'cn-prd', check });
     const key = nodeKey(c) as string; // predicate nodeKey folds normalize(check) ⇒ hit ⟺ same check
     const store = projection([nodeAt(key, 'predicate', ['cn-prior'])], []); // cas miss ⇒ no DEDUP
-    expect(writeDecision(c, store, CFG)).toBe('SUPERSEDE');
+    expect(writeDecision(c, store)).toBe('SUPERSEDE');
     // teeth (MUTANT: swap the family derivation to `'advisory'`) → the nodeKey hit routes UPDATE,
     // flipping SUPERSEDE↔UPDATE.
   });
@@ -120,7 +119,7 @@ describe('WP-9.2.4.KNOWLEDGE — writeDecision composed front door (un-parked)',
     // a DIFFERENT check on the same anchor/slot ⇒ a different nodeKey ⇒ not present ⇒ CREATE.
     const different = cand({ claimNorm: 'cn-prd2', check: { kind: 'assertion', expr: 'x == 2' } });
     expect(nodeKey(different) as string).not.toBe(priorKey); // distinct identity by construction
-    expect(writeDecision(different, store, CFG)).toBe('CREATE');
+    expect(writeDecision(different, store)).toBe('CREATE');
     // teeth (MUTANT: drop normalize(check) from the nodeKey preimage) → the two checks would collide
     // on one nodeKey ⇒ a hit ⇒ SUPERSEDE, retiring a still-valid sibling. (Guards the 5.13-b leg reuse.)
   });
@@ -130,7 +129,7 @@ describe('WP-9.2.4.KNOWLEDGE — writeDecision composed front door (un-parked)',
     const key = nodeKey(c) as string;
     const store = projection([nodeAt(key, 'advisory', ['cn-prior'])], []);
     const before = store.current.size;
-    expect(writeDecision(c, store, CFG)).toBe(writeDecision(c, store, CFG)); // deterministic
+    expect(writeDecision(c, store)).toBe(writeDecision(c, store)); // deterministic
     expect(store.current.size).toBe(before); // no mutation of the input projection
   });
 
@@ -147,7 +146,7 @@ describe('WP-9.2.4.KNOWLEDGE — writeDecision composed front door (un-parked)',
             ? new Map([[key, nodeAt(key, withCheck ? 'predicate' : 'advisory', ['cn-p'])]])
             : store.current;
           const cas = seedCas ? new Set([id(c) as string]) : store.cas;
-          expect(valid.has(writeDecision(c, { current, cas }, CFG))).toBe(true);
+          expect(valid.has(writeDecision(c, { current, cas }))).toBe(true);
         }
   });
 });

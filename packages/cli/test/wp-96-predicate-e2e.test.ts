@@ -112,7 +112,7 @@ describe('WP-96 — a MINED predicate stages, promotes, and is queryable end-to-
     const store = createDiskStore(join(root, 'cas'));
     const door = createGovernedEmit({
       store, gate: HOLDS,
-      policy: { nearDup: { claimNormThreshold: 1 }, t0Heuristic: { keywords: [] }, authz: { scopes: { core: ['bob'] } } },
+      policy: { t0Heuristic: { keywords: [] }, authz: { scopes: { core: ['bob'] } } },
       actor: 'bob', ratifyToken: 'billy',
     });
     // PROMOTE: the same admitted predicate, scoped for authz (the promote path rehydrates the scope-stamped fact).

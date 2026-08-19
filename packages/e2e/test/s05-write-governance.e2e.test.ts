@@ -14,7 +14,7 @@
 //     and a predicate supersede is a dedup POINTER into CAS (0 byte-copy, 0 delete).
 //
 // UN-PARK BOUNDARY (owner-RATIFIED, WP-9.2.4.KNOWLEDGE — govern writes now). The composed-store FRONT
-// DOOR `RouterApi.writeDecision(candidate, store, cfg)` — formerly PARKED — is now WIRED. It is COMPOSED,
+// DOOR `RouterApi.writeDecision(candidate, store)` — formerly PARKED — is now WIRED. It is COMPOSED,
 // not invented: it mints the contentHash through the SEALED kernel `id` seam (atlas-knowledge:110), reuses
 // WP-5.13-b's `nodeKey` VALUE + the pure `routeWrite` (write-time dedup is D0 contentHash / D1 nodeKey only;
 // a `claimNorm` collision is reported, not merged), and takes the
@@ -42,7 +42,7 @@ import {
 import type {
   Candidate, AdvisoryNode, PredicateNode, TerritoryView, Check,
 } from '@atlas/knowledge';
-import type { RouteInputs, WriteRequest, StoreProjection, NodeFamily, NearDupConfig } from '@atlas/knowledge';
+import type { RouteInputs, WriteRequest, StoreProjection, NodeFamily } from '@atlas/knowledge';
 import { asNodeKey, asSubtreeHash, createStore, id as kid } from '@atlas/kernel';
 import type { Tier } from '@atlas/contracts';
 import type { Grounding } from '@atlas/grounding';
@@ -288,7 +288,6 @@ describe('S5 · write governance — authorization + the human-in-the-loop T0 ba
 
     // It governs a candidate over a projection CONSISTENT with the routed-around routeWrite/upsert above:
     // the projection is seeded from the SAME sealed `nodeKey`/`id` the front door computes (real hit/miss).
-    const cfg: NearDupConfig = { claimNormThreshold: 1 };
     const adv = candidate({ claimNorm: 'cn-gov' }); // advisory (no check)
     const prd = candidate({ claimNorm: 'cn-gov-p', check: predicateCheck }); // predicate
     const advKey = knowledge.nodeKey(adv) as string;
@@ -304,11 +303,11 @@ describe('S5 · write governance — authorization + the human-in-the-loop T0 ba
       cas: new Set<string>(),
     };
 
-    expect(knowledge.writeDecision(adv, empty, cfg)).toBe('CREATE'); // fresh subject
-    expect(knowledge.writeDecision(adv, seeded, cfg)).toBe('UPDATE'); // advisory nodeKey hit ⇒ set-union
-    expect(knowledge.writeDecision(prd, seeded, cfg)).toBe('SUPERSEDE'); // predicate hit, same check
+    expect(knowledge.writeDecision(adv, empty)).toBe('CREATE'); // fresh subject
+    expect(knowledge.writeDecision(adv, seeded)).toBe('UPDATE'); // advisory nodeKey hit ⇒ set-union
+    expect(knowledge.writeDecision(prd, seeded)).toBe('SUPERSEDE'); // predicate hit, same check
     // dedup precedence: the same bytes already retained short-circuits regardless of the nodeKey leg.
     const withBytes: StoreProjection = { current: seeded.current, cas: new Set<string>([advHash]) };
-    expect(knowledge.writeDecision(adv, withBytes, cfg)).toBe('DEDUP');
+    expect(knowledge.writeDecision(adv, withBytes)).toBe('DEDUP');
   });
 });

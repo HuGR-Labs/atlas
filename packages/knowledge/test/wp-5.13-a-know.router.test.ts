@@ -11,7 +11,7 @@
 // product is TOTAL · DETERMINISTIC · MUTUALLY-EXCLUSIVE (no LLM / clock / seq in the route).
 //
 // MODELING NOTE (disciplined judgment, flagged — cf. index/src/fold.ts precedent): the frozen
-// `RouterApi.writeDecision(candidate,cfg)` FRONT DOOR consumes a `Candidate` + a store lookup,
+// `RouterApi.writeDecision(candidate, store)` FRONT DOOR consumes a `Candidate` + a store lookup,
 // but the identity hashes (nodeKey VALUE = WP-5.13-b's excluded facet) and the CAS/store lookup
 // (the OWNER-DEFINE composed store — StoreApi in types.ts: "NO concrete signature frozen") are UPSTREAM.
 // Per the interface_contract (method-tags-knw INV-KNOW-4 down-model + INV-KNOW-5 note) this facet

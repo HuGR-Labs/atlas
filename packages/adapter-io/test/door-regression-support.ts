@@ -51,7 +51,7 @@ export function freshWorkspace(): Workspace {
 
 /** An admin policy over an explicit scope-to-actors map (the KNOW-11 authz source of truth). */
 export function policyOf(scopes: Record<string, readonly string[]>): AtlasPolicy {
-  return { nearDup: { claimNormThreshold: 1 }, t0Heuristic: { keywords: [] }, authz: { scopes } };
+  return { t0Heuristic: { keywords: [] }, authz: { scopes } };
 }
 
 /**
