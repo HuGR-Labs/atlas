@@ -311,12 +311,11 @@ function admitPredicate(p: PredicateProposal, deps: AdmitDeps): Admission {
   }
 
   // synthesized-check path (CodeQL/Semgrep, KNOW-16). A slot a real check can synthesize mints the mechanical
-  // predicate below; a slot with NO mechanical check is honestly DROPPED (DROP_NO_CHECK) — genesis mints no
-  // fact it cannot mechanically discharge.
-  // "no synthesized check exists for this slot" is an ABSTAIN (no mechanical check available), NOT a refutation —
-  // it does not prove the claim false. So it admits as a JUSTIFIED advisory if grounded, exactly like the two
-  // oracle-abstain arms above. A check that DOES exist but does not compile-∧-HOLDS, or is vacuous (TEETH did not
-  // flip), IS a refutation and still DROPS below via `attest`.
+  // predicate below. A slot with NO synthesized check is an ABSTAIN (no mechanical check available), NOT a
+  // refutation — it does not prove the claim false, so (post-WP-CUT-MINE, ADR-0017 CORRECTION 4 /
+  // genesis-epistemic-contract.md) it admits as a JUSTIFIED advisory if grounded, exactly like the two
+  // oracle-abstain arms above; the retired `DROP_NO_CHECK` no longer exists. A check that DOES exist but does
+  // not compile-∧-HOLDS, or is vacuous (TEETH did not flip), IS a refutation and still DROPS below via `attest`.
   let check = deps.predicate.synthesize(p.site);
   if (check === null) return admitAbstainedAsJustified(p, deps);
 
