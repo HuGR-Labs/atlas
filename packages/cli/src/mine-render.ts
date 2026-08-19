@@ -57,10 +57,45 @@ export interface MineOutcome {
   readonly ceiling?: number; //     the caller's explicit budget ceiling, when one was given
 }
 
+/**
+ * #237 — the honest "how many candidate facts did this pass admit" count.
+ *
+ * `report.seeded` is the store-write view: `mine.ts`'s `upsert` closure folds in only what `commitStaging`
+ * actually MINTED this call, and `mine-decide.ts`'s "never re-author an already-staged key" guard (belt-
+ * and-braces since ADR-0008) skips minting a site whose candidate key is already present in `staged.current`
+ * from an EARLIER pass — it does not write, so it does not add to `grounded`, so it does not reach
+ * `report.seeded`. A rerun over an unchanged repo (or a second arm re-visiting the same sites) is therefore
+ * a real 0-NEW-WRITE pass, but every one of its sites still passed the S2 gate and admitted a candidate —
+ * exactly what the per-site LEDGER (`RunCoverage`, GEN-12g) already records independently, one layer
+ * upstream of the write-dedup, in the `outcome: 'seeded'` rows `coverageLines` prints below this header.
+ *
+ * MEASURED 2026-08-18: pinning `ATLAS_MINE_SLOT=advisory` against a repo whose sites were already staged
+ * (a plain rerun) printed `genesis: seeded 0 candidate fact(s)` and `mine: 0 candidate facts — every one
+ * abstained`, directly above a ledger showing all N sites `"outcome":"seeded"` with real fact ids, and
+ * `.atlas/staging.json` durably holding all N rows. The two counts disagree because they are read off two
+ * different layers of the SAME pass; this reads the ledger FIRST (the gate's own admission, the honest
+ * "did this pass produce a candidate" question) and falls back to `r.seeded.length` only when a report
+ * predates the ledger (`r.coverage` absent — the pre-#… reading, additive/absent-tolerant as the ledger
+ * itself is).
+ */
+export function ledgerSeededIds(r: GenesisReport): ReadonlySet<string> | undefined {
+  if (r.coverage === undefined) return undefined;
+  const ids = new Set<string>();
+  for (const s of r.coverage.sites) if (s.outcome === 'seeded') for (const factId of s.facts) ids.add(factId);
+  return ids;
+}
+
+/** The count `mineOutcome`/`foldVerdict` print — ledger-derived when the ledger exists (#237), the
+ *  pre-ledger `r.seeded.length` reading otherwise. Exported so `mine-arms.ts`'s per-arm and union renders
+ *  read the SAME count `mineWhyEmpty` reasons from — the two disagreeing is exactly the #237 defect. */
+export function seededCount(r: GenesisReport): number {
+  return ledgerSeededIds(r)?.size ?? r.seeded.length;
+}
+
 /** Project the run's own report to the observed outcome — the ONLY input the explanation below reads. */
 export function mineOutcome(r: GenesisReport, modelWired: boolean, ceiling?: number): MineOutcome {
   return {
-    facts: r.seeded.length,
+    facts: seededCount(r),
     sitesVisited: r.budgetSpent,
     complete: r.resumeToken === undefined,
     modelWired,
@@ -200,7 +235,7 @@ export function passBodyLines(pass: MinePass, ceiling?: number): readonly string
 export function foldVerdict(pass: MinePass, ceiling?: number): CliVerdict {
   const r = pass.report;
   const lines = [
-    `genesis: seeded ${r.seeded.length} candidate fact(s); ratified ${r.ratified.length}`,
+    `genesis: seeded ${seededCount(r)} candidate fact(s); ratified ${r.ratified.length}`,
     `cost: llmCalls ${r.llmCalls} · budgetSpent ${r.budgetSpent}`,
     ...passBodyLines(pass, ceiling),
   ];
