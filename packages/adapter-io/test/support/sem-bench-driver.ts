@@ -20,19 +20,23 @@ import { setupNegBench, type NegBench, type Target, type Verdict } from './neg-b
 // (Verdict is used by both `driveClaim`'s return type and the AC-6 teeth re-drive below.)
 import { deriveLabel, mutate, type Arm, type Claim, type Row } from './mutation-contract.js';
 
-export interface DrivenRow { readonly row: Row; readonly outcome: Outcome; readonly reason: string }
+// `proven` marks an admit that carries the `proven` SEAL (the sound-oracle arm). After the abstain⇒justified
+// inversion (genesis-epistemic-contract.md), a grounded tsc-FALSE dep/count row is ADMITTED as an unsealed
+// JUSTIFIED advisory rather than dropped — that is BY DESIGN and is NOT a soundness violation. The SOUND
+// false-admit teeth therefore range over `admitted && proven` only; the justified layer makes no soundness claim.
+export interface DrivenRow { readonly row: Row; readonly outcome: Outcome; readonly reason: string; readonly proven: boolean }
 // Local mirror of the scorer's Outcome — the driver never imports the scorer (one-way seam).
 export type Outcome = { readonly admitted: true } | { readonly admitted: false; readonly anchorFailed: boolean };
 
 export interface SemBench {
   readonly B: NegBench;
   readonly driven: readonly DrivenRow[]; //   count + relation + dependency + negation planted pool
-  readonly arm0Reasons: readonly string[]; // Arm-0 semantic pool drop reasons (all DROP_NO_CHECK)
+  readonly arm0Reasons: readonly string[]; // Arm-0 semantic pool outcomes (abstain ⇒ justified advisory: 'admitted' | DROP_UNGROUNDED)
   readonly mutateSamples: ReadonlyArray<{ base: Row; mutant: Row }>; // real-substrate base→mutant pairs (AC-9m)
   readonly negTeeth: readonly DrivenRow[]; //   AC-6 teeth (ASSERTED): the negation pool under a callers-BLIND door
   readonly negGateOff: readonly DrivenRow[]; // AC-6 diagnostic (REPORTED, not asserted): the #99 opaque gate OFF
   readonly counts: { targets: number; scopes: number };
-  readonly driveClaim: (row: Row) => { outcome: Outcome; reason: string; admission: Admission | { verdict: Verdict } };
+  readonly driveClaim: (row: Row) => { outcome: Outcome; reason: string; proven: boolean; admission: Admission | { verdict: Verdict } };
 }
 
 const STUB_SITE: StructRef = { kind: 'directory', qualifiedPath: '.', subtreeHash: asSubtreeHash('stub') };
@@ -42,22 +46,22 @@ const CAP = Number(process.env.SEM_BENCH_CAP ?? '1200'); // per (arm,label) cap 
 
 const dirOf = (p: string): string => p.split('/').slice(0, -1).join('/');
 
-/** Adapt the mechanical `Admission` to the scorer's plain Outcome + a reason string (no admission type leaks). */
-function adapt(a: Admission): { outcome: Outcome; reason: string } {
-  if (a.outcome === 'admitted') return { outcome: { admitted: true }, reason: 'admitted' };
+/** Adapt the mechanical `Admission` to the scorer's plain Outcome + a reason string + the proven-seal flag. */
+function adapt(a: Admission): { outcome: Outcome; reason: string; proven: boolean } {
+  if (a.outcome === 'admitted') return { outcome: { admitted: true }, reason: 'admitted', proven: (a.fact as { seal?: string }).seal === 'proven' };
   if (a.outcome === 'dropped') {
     const anchorFailed = /ungrounded|unresolvable|malformed/i.test(a.reason);
-    return { outcome: { admitted: false, anchorFailed }, reason: a.reason };
+    return { outcome: { admitted: false, anchorFailed }, reason: a.reason, proven: false };
   }
-  return { outcome: { admitted: false, anchorFailed: false }, reason: `abstained: ${a.whyNot.reason}` };
+  return { outcome: { admitted: false, anchorFailed: false }, reason: `abstained: ${a.whyNot.reason}`, proven: false };
 }
 
 /** Adapt the negation door's verdict (the governed closed-world door) to the same Outcome shape. */
-function adaptJudge(v: Verdict): { outcome: Outcome; reason: string } {
-  if (v === 'admit') return { outcome: { admitted: true }, reason: 'admitted' };
-  if (v === 'refute') return { outcome: { admitted: false, anchorFailed: false }, reason: 'negation-refute' };
+function adaptJudge(v: Verdict): { outcome: Outcome; reason: string; proven: boolean } {
+  if (v === 'admit') return { outcome: { admitted: true }, reason: 'admitted', proven: true }; // the negation door is a SOUND closed-world proof
+  if (v === 'refute') return { outcome: { admitted: false, anchorFailed: false }, reason: 'negation-refute', proven: false };
   const anchorFailed = v.includes('unresolvable') || v.includes('not-global') || v.includes('scope-empty');
-  return { outcome: { admitted: false, anchorFailed }, reason: v };
+  return { outcome: { admitted: false, anchorFailed }, reason: v, proven: false };
 }
 
 export async function assembleSemBench(ROOT: string, SCIP: string): Promise<SemBench> {
@@ -91,7 +95,7 @@ export async function assembleSemBench(ROOT: string, SCIP: string): Promise<SemB
   const relProp = (a: string, b: string, g: Grounding): RelationProposal =>
     ({ kind: 'relation', site: STUB_CAND, relationKind: 'calls', endpointA: a, endpointB: b, grounding: g, tier: TIER });
 
-  const driveClaim = (row: Row): { outcome: Outcome; reason: string; admission: Admission | { verdict: Verdict } } => {
+  const driveClaim = (row: Row): { outcome: Outcome; reason: string; proven: boolean; admission: Admission | { verdict: Verdict } } => {
     const c = row.claim;
     if (c.arm === 'dependency') { const a = admit(depProp(c.target, c.scope, gtruth(c.scope)), deps); return { ...adapt(a), admission: a }; }
     if (c.arm === 'count') { const a = admit(countProp(c.target, c.scope, c.atLeast ?? 1, gtruth(c.scope)), deps); return { ...adapt(a), admission: a }; }
@@ -101,7 +105,7 @@ export async function assembleSemBench(ROOT: string, SCIP: string): Promise<SemB
 
   const driven: DrivenRow[] = [];
   const mk = (arm: Arm, claim: Claim, kind: Row['kind']): Row => ({ claim, label: deriveLabel(claim, tsc), kind, arm });
-  const push = (row: Row): void => { const { outcome, reason } = driveClaim(row); driven.push({ row, outcome, reason }); };
+  const push = (row: Row): void => { const { outcome, reason, proven } = driveClaim(row); driven.push({ row, outcome, reason, proven }); };
   const capd: Record<string, number> = {};
   // dep-F (dependency tsc-FALSE) is EXHAUSTIVE — never capped (lucy Fix 1). A capped prefix orders by
   // deterministic iteration, so a dependency false-admit beyond the cap would be SYSTEMATICALLY invisible and
@@ -151,7 +155,8 @@ export async function assembleSemBench(ROOT: string, SCIP: string): Promise<SemB
     }
   }
 
-  // ── Arm-0 semantic pool: predicate proposals on a slot tsc cannot witness — the unwired DROP_NO_CHECK floor ──
+  // ── Arm-0 semantic pool: predicate proposals on a slot tsc cannot witness. The oracle ABSTAINS (no synthesized
+  //    check for `invariant`) → now ADMITS a grounded JUSTIFIED advisory (abstain ⇒ justified), never DROP_NO_CHECK. ──
   const arm0Reasons: string[] = [];
   const semScopes = B.scopes.slice(0, 60);
   for (const scope of semScopes) {

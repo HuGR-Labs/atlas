@@ -197,9 +197,17 @@ describe.skipIf(!RUN)('#196b WP-1 — drives the SHIPPED admission over atlas-se
     expect(['admitted', 'dropped', 'abstained']).toContain(a.outcome);
   });
 
-  it('AC-5 — Arm-0 semantic floor is EXACTLY 0 coverage and EVERY drop is DROP_NO_CHECK (the unwired stub)', () => {
+  it('AC-5 — Arm-0 semantic slot (tsc cannot witness) ADMITS as a JUSTIFIED advisory when grounded — abstain ⇒ justified, NEVER DROP_NO_CHECK', () => {
     expect(sb.arm0Reasons.length).toBeGreaterThan(0);
-    expect(sb.arm0Reasons.every((r) => r === DROP_NO_CHECK)).toBe(true); // characterizes the unwired floor, not discrimination
+    // INVERSION (genesis-epistemic-contract.md): "no synthesized check for this slot" is an ABSTAIN, not a
+    // refutation, so it no longer DROPS a grounded fact — it admits the existing unsealed advisory. The dead
+    // abstain-drop reason is GONE: no Arm-0 outcome is DROP_NO_CHECK anymore.
+    expect(sb.arm0Reasons.some((r) => r === DROP_NO_CHECK)).toBe(false);
+    // every Arm-0 outcome is now either an ADMIT (grounded ⇒ justified advisory) or the truth-door drop
+    // (DROP_UNGROUNDED) — the only gate that survives on this arm.
+    expect(sb.arm0Reasons.every((r) => r === 'admitted' || /does not ground/.test(r))).toBe(true);
+    // the grounded semantic pool is now COVERED as advisories rather than a hard 0-floor.
+    expect(sb.arm0Reasons.some((r) => r === 'admitted')).toBe(true);
   });
 
   it('AC-6 — SOUND per-arm false-admit vs the INDEPENDENT tsc oracle; relation is MEASURED', () => {
@@ -216,9 +224,12 @@ describe.skipIf(!RUN)('#196b WP-1 — drives the SHIPPED admission over atlas-se
     console.log(`  negation DIAGNOSTIC (#99 collapsed-local opaque gate OFF): falseAdmit=${fmt(gateOff.negation.falseAdmit)}  (REPORTED, not asserted — see AC-6 comment: this leg is NOT load-bearing on a dist-form index)`);
     console.log('==================================================================================\n');
     /* eslint-enable no-console */
-    // dependency: the POSITIVE-dual gate ABSTAINS on a tsc-false claim unless the SOUND oracle PROVES a
-    // witnessed caller edge (admit-harness.ts:259 — `verifyDependency(t,s) !== 'proven' ⇒ DROP_DEP_ABSTAIN`);
-    // a witnessed existence never fabricates a caller. dep-F is now EXHAUSTIVE (uncapped — lucy Fix 1), so this
+    // dependency: after the abstain⇒justified inversion (genesis-epistemic-contract.md) a tsc-false claim the
+    // oracle cannot prove is now ADMITTED as an unsealed JUSTIFIED advisory (BY DESIGN, no soundness claim), so the
+    // SOUND false-admit teeth range over PROVEN-SEALED admits only (`d.proven`) — the arm where `verifyDependency`
+    // returned "proven" and buildSound stamped `seal:'proven'`. That proven subset is EXACTLY the old population
+    // this teeth measured: the door only seals `proven` when it WITNESSES a real SCIP reference edge, never on an
+    // abstain. a witnessed existence never fabricates a caller. dep-F is now EXHAUSTIVE (uncapped — lucy Fix 1), so this
     // is a COMPLETE measurement, not a capped prefix that could hide a false-admit past the cap. And exhausting
     // it FALSIFIED the old vacuous `toBe(0)`: the shipped door admits a small residual (17/23577 = 0.07%) of
     // tsc-FALSE dependency rows. EVERY one of them is a symbol tsc NEVER sees as a callee anywhere (callFiles==0
@@ -246,11 +257,15 @@ describe.skipIf(!RUN)('#196b WP-1 — drives the SHIPPED admission over atlas-se
     //     admitted a tsc-false dependency for a scope where tsc sees NO reference at all — a genuinely fabricated
     //     edge — makes this go RED. (Proven to bite by injecting such a row: WP-C1.)
     const bySymDep = new Map(sb.B.targets.map((t) => [t.symbol, t] as const));
-    const depFalseAdmits = sb.driven.filter((d) => d.row.arm === 'dependency' && d.row.label === 'FALSE' && d.outcome.admitted);
+    // PROVEN-SEALED admits only: a justified advisory admitting a tsc-false-but-grounded dep row is deliberate, not
+    // a soundness violation. The soundness teeth bite the `proven` arm — the layer that still claims soundness.
+    const depFalseAdmits = sb.driven.filter((d) => d.row.arm === 'dependency' && d.row.label === 'FALSE' && d.outcome.admitted && d.proven);
     for (const d of depFalseAdmits) {
       const t = bySymDep.get(d.row.claim.target)!;
       expect(sb.B.refInScope(t, d.row.claim.scope), `dependency false-admit with NO tsc reference in the flipped scope (${t.name} @ ${d.row.claim.scope}) — a FABRICATED edge, not the call-vs-reference oracle gap`).toBe(true);
     }
+    // count (PROVEN-SEALED subset — `d.proven`, same rationale as the dependency arm above): the justified-advisory
+    // admits of tsc-false count rows are BY DESIGN and excluded; only `verifyCount`-proven admits carry the teeth.
     // count: complete over its (naturally sub-cap) population — a boundary flip `atLeast = witnessed+1` on a
     // symbol with a REAL caller. The OLD assertion here was `s.count.falseAdmit === 0` ("`verifyCount`'s sound
     // lower-bound can never prove the flip"), and it is FALSIFIED by the operating index — the header has been
@@ -269,7 +284,7 @@ describe.skipIf(!RUN)('#196b WP-1 — drives the SHIPPED admission over atlas-se
       for (const f of sb.B.oracle.get(t.key)!.refFiles) if (sb.B.underScope(f, scope)) n += 1;
       return n;
     };
-    for (const d of sb.driven.filter((x) => x.row.arm === 'count' && x.row.label === 'FALSE' && x.outcome.admitted)) {
+    for (const d of sb.driven.filter((x) => x.row.arm === 'count' && x.row.label === 'FALSE' && x.outcome.admitted && x.proven)) {
       const t = bySymDep.get(d.row.claim.target)!;
       expect(inScopeRefFiles(t, d.row.claim.scope), `count false-admit UNBACKED by in-scope tsc references (${t.name} @ ${d.row.claim.scope}, atLeast=${d.row.claim.atLeast}) — a fabricated count, not the call-vs-reference oracle gap`).toBeGreaterThanOrEqual(d.row.claim.atLeast ?? 1);
     }
@@ -335,12 +350,16 @@ describe.skipIf(!RUN)('#196b WP-1 — drives the SHIPPED admission over atlas-se
   });
 
   it('AC-12 — every planted-FALSE the gate rejects drops for the TRUTH reason, never malformed/ungrounded', () => {
+    // After the abstain⇒justified inversion, a grounded tsc-FALSE dep/count row is ADMITTED as a justified advisory
+    // rather than dropped, so the rejected-FALSE population is now the negation arm's REFUTEs (the governed
+    // closed-world door still refutes) plus any door abstains. The dead abstain-drop reasons
+    // ("did not witness the edge/callers") are GONE from the regex — those rows no longer reject.
     const rejectedFalse = sb.driven.filter((d) => d.row.label === 'FALSE' && !d.outcome.admitted);
     expect(rejectedFalse.length).toBeGreaterThan(0);
     for (const d of rejectedFalse) {
       if (d.outcome.admitted) continue; // narrows to the rejected variant (anchorFailed present)
       expect(d.outcome.anchorFailed, `FALSE rejected for an anchoring reason (vacuous 0): ${d.reason}`).toBe(false);
-      expect(d.reason).toMatch(/did not witness the edge|did not witness .*callers|negation-refute|scope-|escape-|no-caller/i);
+      expect(d.reason).toMatch(/negation-refute|scope-|escape-|no-caller/i);
     }
   });
 

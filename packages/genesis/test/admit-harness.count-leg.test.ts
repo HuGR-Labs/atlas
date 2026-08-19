@@ -3,12 +3,16 @@
 // NEW count-slot leg of `admitPredicate`, the CARDINALITY dual of the dependency leg. The branch (in order):
 //   DROP_COUNT_UNWIRED   — `verifyCount` is undefined
 //   DROP_COUNT_MALFORMED — target/scope empty OR atLeast not a positive integer (the gate RE-CHECKS the number)
-//   DROP_COUNT_ABSTAIN   — verifyCount !== "proven"
-//   DROP_UNGROUNDED      — doors.grounded === false
-//   else ADMIT via `buildSound` with seal:"proven".
+//   ABSTAIN (verifyCount !== "proven") ⇒ JUSTIFIED advisory if grounded, else DROP_UNGROUNDED
+//     (genesis-epistemic-contract.md: could-not-witness ≥ atLeast is NOT proved-fewer-exist; the abstaining oracle
+//      must not drop a grounded model-proposed fact — it admits the existing unsealed advisory node)
+//   DROP_UNGROUNDED      — doors.grounded === false (on both the proven AND the abstain arm)
+//   PROVEN + grounded    — ADMIT via `buildSound` with seal:"proven".
 //
 // CRITICAL TEETH: a count seed must NEVER reach the synthesized-check path (`predicate.synthesize`) — otherwise
 // an unrelated check could admit a count fact `verifyCount` never proved. We spy `synthesize` and assert 0 calls.
+// This teeth SURVIVES the abstain-⇒-justified inversion: the abstain fallback admits an ADVISORY (no synthesized
+// check), it does NOT fall through to `predicate.synthesize`, so the count claim is never blessed by a stray check.
 
 import { describe, it, expect } from 'vitest';
 import { asNodeKey, asSubtreeHash } from '@atlas/kernel';
@@ -106,14 +110,29 @@ describe('#196c count-slot leg — admit(deps)', () => {
     expect(synth.n).toBe(0);
   });
 
-  it('verifyCount returns "abstain" ⇒ dropped (abstained), and synthesize is STILL never called', () => {
+  it('verifyCount returns "abstain" + grounded ⇒ admitted as a JUSTIFIED advisory, and synthesize is STILL never called', () => {
     const synth = { n: 0 };
     const a = admit(countProposal(), makeDeps({ verifyCount: () => 'abstain' }, synth));
+    expect(a.outcome).toBe('admitted');
+    if (a.outcome !== 'admitted') throw new Error('unreachable');
+    // abstain ⇒ the existing unsealed advisory node (no `proven` seal, not LIKELY_INVARIANT).
+    expect(a.fact.kind).toBe('advisory');
+    expect((a.fact as { seal?: string }).seal).toBeUndefined();
+    expect(a.label).toBeUndefined();
+    // TEETH survives the inversion: the abstain fallback admits an advisory, it NEVER falls through to synthesize.
+    expect(synth.n).toBe(0);
+  });
+
+  it('verifyCount "abstain" but doors.grounded false ⇒ dropped (ungrounded); synthesize STILL never called', () => {
+    const synth = { n: 0 };
+    const a = admit(
+      countProposal(),
+      makeDeps({ verifyCount: () => 'abstain', doors: { grounded: () => false, nonObvious: () => true } as TwoDoorBar }, synth),
+    );
     expect(a.outcome).toBe('dropped');
     if (a.outcome !== 'dropped') throw new Error('unreachable');
-    expect(a.reason).toContain('abstained');
-    expect(a.reason).toContain('GEN-12-count');
-    expect(synth.n).toBe(0); // an abstained count drops HERE, never falls through to synthesize
+    expect(a.reason).toContain('does not ground');
+    expect(synth.n).toBe(0);
   });
 
   it('verifyCount undefined ⇒ dropped (unwired), never a silent admit', () => {
