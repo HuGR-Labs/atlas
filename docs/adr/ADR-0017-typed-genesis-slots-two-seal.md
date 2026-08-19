@@ -1,6 +1,6 @@
 # ADR-0017 — Genesis emits typed facts via a two-seal slot classifier
 
-**Status:** ACCEPTED — owner-ratified 2026-08-13; AMENDED to one-seal (proven-only) — owner-ratified 2026-08-16 (see CORRECTION 3).
+**Status:** ACCEPTED — owner-ratified 2026-08-13; AMENDED to one-seal (proven-only) — owner-ratified 2026-08-16 (see CORRECTION 3); AMENDED again — the oracle AWARDS `proven`, never gates admission; oracle-abstain admits `justified`, never drops — owner-ratified 2026-08-19 (see CORRECTION 4).
 **Supersedes/relates:** #196 (the measured gap), #152 (KNOW-10 closed-slot gate with no producer), #99 /
 ADR-0016 (the negation sound-gate pattern this reuses), ADR-0012 (the additive/absent-tolerant field
 precedent), #226 (the independent adjudication panel). Full reasoning:
@@ -27,6 +27,29 @@ precedent), #226 (the independent adjudication panel). Full reasoning:
 > - Supersedes CORRECTION (2026-08-17, same-family ensemble), now moot: there is no ensemble. The `proven`
 >   core of this ADR (sound oracle, 0-false-proven, never mixed) is unchanged and is the entire seal
 >   vocabulary now.
+
+> **CORRECTION 4 (owner-ratified 2026-08-19 — the sound oracle AWARDS `proven`, it never GATES admission;
+> `genesis-epistemic-contract.md`).** The epistemic contract cut the deterministic oracle as the *truth-gate*
+> for model-proposed facts: a fact that NEEDS a model to be found is, by the complementarity argument, exactly
+> a fact no deterministic checker is sound for, so an oracle used to admit/reject it can only bless the trivial
+> band and reject the semantic facts that are the point. The mine-path admission is therefore INVERTED
+> (WP-CUT-MINE, `packages/genesis/src/admit-harness.ts`), superseding the CORRECTION 3 bullet that said an
+> abstaining slot **drops** (`DROP_NO_CHECK`):
+> - The sound oracle (`verifyDependency` / `verifyCount`, symbol-reverse / cardinality) is now a **proof
+>   AWARDER, never an admit gate**. When it **proves** the slot the fact is sealed **`proven`** (carrying its
+>   re-runnable witness, `buildSound`); when it **abstains** the candidate is **NOT dropped** — a grounded
+>   candidate is admitted as **`justified`** (an unsealed advisory, `admitAbstainedAsJustified`), contestable
+>   and honestly not labeled proven. Oracle abstention is not a failing check.
+> - `DROP_NO_CHECK` / `DROP_DEP_ABSTAIN` / `DROP_COUNT_ABSTAIN` are **retired** (deleted, not commented). The
+>   only remaining drops on this path are: ungrounded (fails the truth door), a synthesized `check` that does
+>   not compile ∧ HOLDS (GEN-12c/d), a vacuous/toothless check (GEN-12j), malformed, and unwired.
+> - `Seal` still narrows to **`proven`** only (`packages/knowledge/src/types.ts`) — `justified` is the
+>   **absence** of a seal on a grounded advisory, not a new seal value. The one-seal vocabulary of CORRECTION 3
+>   is unchanged; what changed is that oracle-abstain now DOWNGRADES to unsealed-advisory instead of dropping.
+> - Scope: this is the MINE path (dependency / count typed slots). The **negation** closed-world door
+>   (`governed-emit-negation.ts`, ADR-0016) is **unchanged** — it is a soundness gate on a human `atlas emit`
+>   assertion, not a truth-gate on a model-proposed fact, so it is out of the contract's scope (owner-ratified
+>   2026-08-19: negation has no production model-proposer; keep the sound door).
 
 ## Context
 

@@ -239,8 +239,8 @@ normative-clause: "a synthesized `check` MUST be admitted only if it returns `HO
 
 ### REQ-GEN-12k — sound oracle first
 source: INV-GEN-12 @ reference/atlas-genesis.md#gen-12
-While a slot is type-expressible, genesis shall prefer the language's type-checker or LSP diagnostics over a synthesized CodeQL or Semgrep query.
-normative-clause: "for a type-expressible slot (`contract`, `ownership`, visibility/`dependency` order) the check MUST prefer the language's **type-checker / LSP diagnostics** (sound, `$0` — the compiler already ran) over a synthesized CodeQL/Semgrep query"
+While a slot is type-expressible, genesis shall prefer the language's type-checker or LSP diagnostics over a synthesized CodeQL or Semgrep query; when the sound dependency/count oracle proves the slot genesis shall seal the fact `proven`, and when it abstains genesis shall not drop a grounded candidate but shall admit it as a justified (unsealed advisory) fact.
+normative-clause: "for a type-expressible slot (`contract`, `ownership`, visibility/`dependency` order) the check MUST prefer the language's **type-checker / LSP diagnostics** (sound, `$0` — the compiler already ran) over a synthesized CodeQL/Semgrep query — and the sound dependency/count oracle (symbol-reverse / cardinality) only **awards** the `proven` seal, it MUST NOT gate admission: when it proves the slot the fact is sealed `proven` (carrying its re-runnable witness), and on **abstention** a grounded candidate MUST NOT be dropped but admitted as **`justified`** (an unsealed advisory, contestable) — oracle abstention is not a failing check (genesis-epistemic-contract.md)"
 
 ### REQ-GEN-13a — extra mechanisms off at base tier
 source: INV-GEN-13 @ reference/atlas-genesis.md#gen-13

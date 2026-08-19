@@ -157,7 +157,12 @@ unratified), `constitution` from the **ratified T0 manifest** the S3 interview p
   counterfactual** of the anchored subtree — a check no mutant can break is vacuous (a tautology / matches
   nothing) and MUST be dropped. **Sound oracle first:** for a type-expressible slot (`contract`,
   `ownership`, visibility/`dependency` order) the check MUST prefer the language's **type-checker / LSP
-  diagnostics** (sound, `$0` — the compiler already ran) over a synthesized CodeQL/Semgrep query.
+  diagnostics** (sound, `$0` — the compiler already ran) over a synthesized CodeQL/Semgrep query — and the
+  sound dependency/count oracle (symbol-reverse / cardinality) only **awards** the `proven` seal, it MUST
+  NOT gate admission: when it proves the slot the fact is sealed `proven` (carrying its re-runnable
+  witness), and on **abstention** a grounded candidate MUST NOT be dropped but admitted as **`justified`**
+  (an unsealed advisory, contestable) — oracle abstention is not a failing check
+  (genesis-epistemic-contract.md).
 - **GEN-13 Cost discipline — cheap by default, escalate by value.** Every S2 mechanism beyond a single
   grounded proposal MUST be **off at the base tier** and switch on only when a cheap signal shows the
   candidate is high-value (tier/blast) **and** uncertain. Defaults MUST be: one sample (no self-consistency),
