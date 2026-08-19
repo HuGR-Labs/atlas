@@ -20,6 +20,15 @@
 // "a governed door decided these bytes may be here". The attacker who writes the file computes the hashes.
 // So the property under test is PROVENANCE: a projection that arrived by COMMIT is not a projection that
 // arrived through a door, and it must not be served as though it were.
+//
+// TRAVEL-BY-REPROOF (owner-authorized 2026-08-18) NARROWED one leg of this: a `.atlas/projection*.json` +
+// `.atlas/cas/**` commit (staging NOT also tracked) is no longer a blanket refusal — it is served, FILTERED
+// to facts whose own witness replays `re-proven` against the live oracle (`reverify-store.ts`). The fixture
+// below never carries a witness at all (it is hand-forged, no door involved, exactly the point), so it stays
+// the RIGHT adversarial case: an attacker's row is STILL never served, but now because it does not re-prove,
+// not because the whole store was refused. `travel-by-reproof-compose.test.ts` carries the POSITIVE case
+// (a witness that DOES re-prove) and the third population (`.atlas/staging` tracked), which stays a flat
+// refusal, unchanged.
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { execFileSync } from 'node:child_process';
@@ -33,7 +42,6 @@ import { emptyStore, currentNodes } from '@atlas/knowledge';
 import { composeRuntime } from '../src/compose.js';
 import { createDiskStore, rehydrateProjection } from '../src/store.js';
 import { gitSidecarTrust } from '../src/store-provenance.js';
-import { REJECTED_UNTRUSTED_STORE } from '../src/read-provenance.js';
 
 /** The forged claim, verbatim, so an assertion can name the thing that must never be served. */
 const FORGED_CLAIM = 'ATTACKER CONTROLLED INVARIANT - no door ever saw this';
@@ -148,23 +156,20 @@ describe('the durable projection is DERIVED state — a COMMITTED one is not kno
     expect(tracked.some((p) => p.startsWith('.atlas/cas/'))).toBe(true);
   });
 
-  it('a committed projection is REFUSED, legibly — not silently emptied (with EVERY write door denying)', () => {
+  it('a committed projection is SERVED, NARROWED — the forged, witness-less row never comes back, but the store is not blanket-refused', () => {
     live = poisonedRepo();
     const verdict = composeRuntime(live.repoPath).handler.handle('atlas-query', {
       scope: 'src/app.ts',
       by: 'scope',
     });
-    // AMENDED 2026-08-02 with the legible-read-refusal work. This line was `expect(verdict.ok).toBe(true)`,
-    // and it PINNED THE SILENCE: the tripwire made the read resolve to "nothing readable", so `atlas query`
-    // returned ok with an empty pack — indistinguishable from "no knowledge yet" for a user who committed
-    // `.atlas` by accident. WP-F2F5 requires fail-closed to be LEGIBLE on BOTH doors; the write door had a
-    // refusal from the start and the read door had none.
-    expect(verdict.ok).toBe(false);
-    expect(String(verdict.rejected)).toContain(REJECTED_UNTRUSTED_STORE);
-    // AND the original assertion, which is the reason this test exists. Kept, but note it is now WEAK on its
-    // own: `invariantsOf` returns [] whenever `data` is absent, so on a refusal it passes trivially. It is
-    // the `ok:false` + reason pair above that carries the discrimination; this line survives as the guard
-    // against a future shape where a refusal still leaks rows.
+    // AMENDED 2026-08-02 with the legible-read-refusal work (`ok:false` + a NAMED reason, never a silent
+    // empty pack): this repo commits ONLY `projection`+`cas`, never `staging`, so under TRAVEL-BY-REPROOF
+    // (2026-08-18) it is `tracked-provable`, not `tracked-staging` — the query SUCCEEDS (`ok:true`), served
+    // through the re-proof filter rather than refused outright. The forged row carries no `seal`/`witness`
+    // at all (hand-authored, no door involved), so it is OUT OF SCOPE for the re-proven bucket and is
+    // dropped — the property this suite exists to prove (a forged fact is never served) still holds, on a
+    // NARROWER mechanism: trust moved from "was this store committed" to "does this fact re-prove".
+    expect(verdict.ok).toBe(true);
     expect(invariantsOf(verdict).map((i) => i.claim)).not.toContain(FORGED_CLAIM);
   });
 

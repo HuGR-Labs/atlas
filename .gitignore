@@ -7,19 +7,30 @@ dist/
 # agent worktrees (ephemeral, created by the Agent tool isolation)
 .claude/worktrees/
 
-# ── the durable store is DATA, never source (task #90) ─────────────────────────────────────────────
-# `.atlas/projection.json` IS the governed knowledge and `.atlas/cas/**` are its bytes. Committing them
-# ships rows with any `nodeKey`, any `scope`, any `contentHash` and blobs with any `tier` — past every
-# governed door, because no door is involved in a `git add`. `.atlas/staging.json` (ADR-0008) is worse in
-# kind, not better: unratified LLM-proposed candidates.
-# Deny-by-default, then re-include: `.atlas/*` ignores EVERY child (so a sidecar added later is ignored
-# the day it appears, not the day someone remembers), and the negation below re-admits the one file that
-# is genuinely source. Order matters — the negation must come AFTER the pattern it overrides. Note that
-# `.atlas/` itself is deliberately NOT ignored: git cannot re-include a path under an excluded directory,
-# so ignoring the directory would make the negation unreachable and silently drop `policy.json`.
+# ── `.atlas/staging` is DATA that must never travel — `projection`/`cas` now MAY (TRAVEL-BY-REPROOF, task
+#    #90 amended, owner-authorized 2026-08-18) ─────────────────────────────────────────────────────────────
+# THIS RULE USED TO DENY `projection`/`cas` TOO, and the amendment is deliberate, not a relaxation of the
+# guard it replaces: a `seal:'proven'` fact now carries its OWN derivation (`witness`, #195) and
+# `atlas verify-store` replays it through the sound oracle (#196), so a committed `projection`/`cas` no
+# longer has to be TRUSTED — every fact it serves is RE-PROVED against the live index on every read
+# (`read-access.ts`); trust moved from the committer to the oracle. `.atlas/staging.json` (ADR-0008) is
+# different IN KIND, not degree: unratified LLM-proposed candidate material that never passed a door and
+# carries no witness to replay, so there is nothing to re-prove it against — committing it is still
+# committing raw, unauthenticated trust, and if it is committed anyway (`git add -f`) it is STILL flatly
+# refused at read time, unchanged (`store-provenance.ts`).
+# Deny-by-default, then re-include: `.atlas/*` ignores EVERY child (so a sidecar added later is ignored the
+# day it appears, not the day someone remembers), and the negations below re-admit the files that are now
+# trackable-by-design. Order matters — a negation must come AFTER the pattern it overrides. Note that
+# `.atlas/` itself is deliberately NOT ignored: git cannot re-include a path under an excluded directory, so
+# ignoring the directory would make the negations below unreachable.
 .atlas/*
-# …except the admin-owned policy: it is the ratified config the doors READ, and it must stay in git so a
-# change to who may write what is reviewable in the same place as the code.
+# `projection*.json` + `cas/**` — the re-provable half of the durable store (see above). `staging*.json` is
+# NOT re-admitted here and stays denied by the blanket rule above — it is the one population this amendment
+# deliberately leaves refused.
+!.atlas/projection*.json
+!.atlas/cas/
+# …and the admin-owned policy, as before: the ratified config the doors READ, reviewable in the same place
+# as the code.
 !.atlas/policy.json
 
 # runtime telemetry from the orchestrator harness — not product source
