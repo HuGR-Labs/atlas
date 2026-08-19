@@ -4,6 +4,9 @@
 // root's `reverify` thunk, or is the module a reference model nothing calls) and the
 // `ReverifyReport → CliVerdict` projection — in particular that `unverifiable` is NEVER folded into a pass.
 
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReverifyReport } from '@atlas/adapter-io';
 import { main } from '../src/cli.js';
@@ -58,6 +61,57 @@ describe('CLI-11 — `atlas verify-store` is a real command that reaches a real 
     const code = await main(['verify-store'], {});
     expect(code).toBe(1); // a wiring error, not a governance refusal
     expect(writes.join('')).toContain('atlas runtime is not composed yet');
+  });
+});
+
+describe('CLI-11 — WRONG-DIR REFUSAL (task #244): running outside a repo with no `.atlas/`', () => {
+  let cwdBefore: string;
+  let tmp: string;
+  beforeEach(() => {
+    cwdBefore = process.cwd();
+    // A directory that structurally CANNOT hold `.atlas/` — a fresh temp dir, never `atlas init`-ed nor
+    // written into. The stand-in for "forgot to `cd` into the target repo".
+    tmp = mkdtempSync(join(tmpdir(), 'atlas-verify-store-wrongdir-'));
+    process.chdir(tmp);
+  });
+  afterEach(() => {
+    process.chdir(cwdBefore);
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it('REFUSES — never reaches the injected reverify thunk, exits non-zero, names the resolved path', async () => {
+    // TEETH — THE DISCRIMINANT, not a substring of prose (this repo's documented vacuous-assertion class:
+    // refusal texts quoting each other by name make substring assertions one-directionally blind). The
+    // discriminant asserted here is BEHAVIORAL: the injected thunk is never invoked at all, and the exit
+    // code is the governance-refusal code (2), not the "honest zero" pass code (0) a byte-identical-looking
+    // "0 sealed-proven fact(s)" line would otherwise carry. Revert the guard (drop the `existsSync` check in
+    // `cli.ts`) and `calls` goes to 1 and `code` goes to 0 — this test goes RED.
+    let calls = 0;
+    const reverify = (): ReverifyReport => {
+      calls++;
+      return { sealedProven: 0, reProven: 0, broken: 0, unverifiable: 0, rows: [] };
+    };
+    const code = await main(['verify-store'], { reverify });
+    expect(calls).toBe(0);
+    expect(code).not.toBe(0);
+    expect(code).toBe(2);
+    expect(writes.join('')).toContain(tmp);
+  });
+
+  it('the genuinely-empty-but-REAL store case stays byte-distinguishable — an existing `.atlas/` with 0 sealed facts still reaches the thunk and exits 0', async () => {
+    // Same tmp dir, but WITH a `.atlas/` directory present (no init/emit machinery needed — the guard only
+    // checks for the directory's existence, exactly what a repo that has made at least one governed write
+    // looks like on disk). This is the case the guard must NEVER refuse.
+    mkdirSync(join(tmp, '.atlas'));
+    let calls = 0;
+    const reverify = (): ReverifyReport => {
+      calls++;
+      return { sealedProven: 0, reProven: 0, broken: 0, unverifiable: 0, rows: [] };
+    };
+    const code = await main(['verify-store'], { reverify });
+    expect(calls).toBe(1);
+    expect(code).toBe(0);
+    expect(writes.join('')).toContain('an honest zero, not a skip');
   });
 });
 
