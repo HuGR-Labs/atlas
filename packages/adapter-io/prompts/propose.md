@@ -41,6 +41,17 @@ justification travels with the prompt without being sent to it.
   · MINED SIGNALS ARE ABSENT ON PURPOSE — `Candidate.signals` (churn, SZZ, owners, commit messages) is NOT
     passed. GEN-6 forbids a signal from minting a fact; withholding the signals makes that violation
     structurally impossible instead of merely instructed against. They already did their work in ranking.
+  · CODE-DERIVABLE, NOT A COMMENT ABOUT ELSEWHERE — the #95 pilot (2026-08-19, right-way apparatus: model =
+    sub-agents, no oracle) measured the residual #201 mode on the comment-heavy top-frontier: even with
+    "distrust stale comments", the model surfaced ACCURATE comments' claims about OTHER files / task numbers /
+    past-state / codebase-wide absences and the grounding gate admitted them as justified — because the
+    comment IS in the bytes (aboutness), but such a fact does NOT re-derive at THIS unit@sha (it is anchored
+    where it will silently rot). Blind adjudication: 9/15 facts were this mode (self-verifiable precision 40%).
+    This clause makes the refutation explicit — the fact must be checkable by reading the CODE of this unit,
+    not by trusting a comment about code not shown. Re-measured on the same 15 sites: comment-restatement
+    9 → 0, self-verifiable precision 40% → 73%, with 4 honest abstentions replacing the worst offenders.
+    (Known residual it opened: on barrel files the model may over-reach on an exact export COUNT — a separate
+    follow-up, tracked; the qualitative claim stays correct.)
 -->
 You are shown ONE anchored unit from a real codebase, and nothing else.
 
@@ -55,12 +66,19 @@ STEP 1 — REASON FREELY (scratch, never stored). Read the bytes closely. Draft 
 try to REFUTE it against the source:
 - Is it derivable from THESE bytes, or are you leaning on what you know about a library, framework or
   convention that is not visible here — or on a stale/past-tense COMMENT the current code may contradict?
+- Does the fact's truth rest on a COMMENT'S CLAIM about something NOT in these bytes — another file or
+  module, a task/PR/issue number (like #123), what the code "used to" do, or the absence of something
+  elsewhere in the codebase? If so, discard it: even an ACCURATE comment about elsewhere is a fact about
+  THAT code, not this unit, and does not re-derive at THIS unit's bytes. The surviving fact must be
+  checkable by reading the CODE in this unit itself — its declarations, control flow, types, or literals —
+  not by trusting what a comment asserts about code you cannot see here.
 - Is it more than a restatement of the name, the signature or the types, or a summary of what the code
   plainly does?
 Discard any candidate that does not survive. This reasoning is scratch: it is parsed away and never persisted.
 
 STEP 2 — EMIT THE RESULT. If a fact survived, emit it as EXACTLY ONE fenced block tagged `atlas-fact`, holding
-a JSON object with a single `claim` field — one sentence of plain prose, derivable from the bytes above:
+a JSON object with a single `claim` field — one sentence of plain prose, derivable from the CODE bytes above
+(checkable by reading this unit itself, not from a comment's claim about code you cannot see here):
 
 ```atlas-fact
 {"claim": "<the one surviving fact>"}
