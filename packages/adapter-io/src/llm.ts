@@ -120,7 +120,7 @@ export const DEP_UNPARSEABLE_REASON = 'dependency-answer-unparseable';
  *  repo-relative). A top-level file (no `/`) yields `''`, which the scope predicate matches NOTHING against
  *  (`underScope` splits `''` to `['']`, never length 0) — so a rootless unit's dependency ALWAYS abstains. That
  *  is fail-closed, not a hole: an over-wide "whole repo" scope is exactly what we must not grant. */
-function unitScopeOf(qualifiedPath: string): string {
+export function unitScopeOf(qualifiedPath: string): string {
   const at = qualifiedPath.indexOf('::');
   const file = at === -1 ? qualifiedPath : qualifiedPath.slice(0, at);
   const slash = file.lastIndexOf('/');

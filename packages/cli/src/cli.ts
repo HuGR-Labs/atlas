@@ -46,6 +46,16 @@ export interface CliDeps {
    */
   readonly readRefusal?: string;
   /**
+   * The ADVISORY MESSAGE for a `tracked-provable` durable store (TRAVEL-BY-REPROOF, `ComposedRuntime.
+   * readAdvisory`) — present ONLY when the store is being served NARROWED (a committed `projection`/`cas`,
+   * filtered to facts that replay `re-proven`), so it is APPENDED as a trailing line on every routed
+   * command's normal output, the SAME `withNote` mechanism `init`'s gitignore note uses — never a refusal
+   * (the command still runs and its exit code is untouched), just legibility about why a committed store
+   * might be serving fewer facts than it holds. ABSENT for every other case (nothing narrowed, or
+   * `readRefusal` present instead and the command never reaches here).
+   */
+  readonly readAdvisory?: string;
+  /**
    * The composition root's governed PROMOTION leg (`ComposedRuntime.promote`) — KNOW-8's route out of
    * staging. Injected on the SAME seam as `handler` and for the same reason: the CLI must never stand up a
    * second runtime, or the store it promotes INTO stops being the store `atlas query` reads back.
@@ -400,10 +410,10 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
     return emit(errorVerdict(marshalled.error));
   }
   const verdict = deps.handler.handle(tool, marshalled.args);
-  // The gitignore outcome rides the SAME single process-outcome path as everything else (uniform bytes) —
-  // one appended line, never a second write to stdout, and never a changed exit code: failing to install an
-  // ignore rule does not make a structural move-in wrong, it makes it INCOMPLETE, and the line says so.
-  return emitCli(withNote(renderVerdict(verdict), ignoreNote));
+  // The gitignore outcome AND the TRAVEL-BY-REPROOF advisory ride the SAME single process-outcome path as
+  // everything else (uniform bytes) — appended lines, never a second write to stdout, and never a changed
+  // exit code: neither one makes the command's own outcome wrong, both are legibility ADDED to it.
+  return emitCli(withNote(withNote(renderVerdict(verdict), ignoreNote), deps.readAdvisory));
 }
 
 /** Append one advisory line to a rendered outcome, or return it unchanged. Pure. */

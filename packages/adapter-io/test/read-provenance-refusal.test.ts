@@ -14,6 +14,13 @@
 // match cannot say WHICH gate refused (`door-regression-support.ts` `reasonOf` has the measurement). Every
 // assertion below is either an EQUALITY on the discriminant (`reasonOf` / `err.reason`) or an `endsWith` on
 // the WHOLE exported constant — never a loose fragment of prose.
+//
+// TRAVEL-BY-REPROOF (owner-authorized 2026-08-18): `poisonedRepo()` commits ONLY `projection`+`cas`, never
+// `staging` — that population NARROWED from a blanket refusal to a filtered serve (`read-access.ts`), so the
+// query-leg tests below now pin `ok:true` + the forged row dropped, not `ok:false`. The flat refusal this
+// suite's title describes is still real; it now lives on the ONE population that still triggers it
+// (`.atlas/staging` tracked) — pinned explicitly below — and on doctor/node/emit exactly as before (none of
+// those fixtures ever depended on which of the two tracked populations they were).
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { execFileSync } from 'node:child_process';
@@ -132,17 +139,30 @@ describe('the provenance tripwire refuses LEGIBLY on the read doors, not silentl
     expect(reasonOf(REJECTED_UNTRUSTED_STORE)).toBe('untrusted-store');
   });
 
-  it('RED: `atlas query --by scope` over a COMMITTED store refuses with a reason, never an empty ok pack', () => {
+  it('`atlas query --by scope` over a COMMITTED (projection+cas, no staging) store is SERVED, narrowed — the forged row never comes back', () => {
+    // TRAVEL-BY-REPROOF (2026-08-18): this fixture commits ONLY `projection`+`cas` (see `poisonedRepo`
+    // below), never `staging`, so it is `tracked-provable` — no longer a blanket refusal. The forged row
+    // carries no `seal`/`witness` (hand-authored, no door), so it never lands in the re-proven bucket and is
+    // dropped — legible SERVING, not a silent empty-pack "no knowledge yet" AND not the FORGED_CLAIM either.
     live = poisonedRepo();
     const v = composeRuntime(live.repoPath).handler.handle('atlas-query', { scope: 'src/app.ts', by: 'scope' });
-    // The defect: `ok:true` + `invariants: []` — indistinguishable from an empty repo.
-    expect(v.ok).toBe(false);
-    expect(String(v.rejected).endsWith(REJECTED_UNTRUSTED_STORE)).toBe(true);
+    expect(v.ok).toBe(true);
+    const invs = (v.data as { pack?: { invariants?: { claim: string }[] } } | undefined)?.pack?.invariants ?? [];
+    expect(invs.map((i) => i.claim)).not.toContain(FORGED_CLAIM);
   });
 
-  it('RED: the OTHER read mode (`--by dependency`) refuses too — one tripwire, every mode', () => {
+  it('the OTHER read mode (`--by dependency`) narrows the SAME way — one filter, every mode', () => {
     live = poisonedRepo();
     const v = composeRuntime(live.repoPath).handler.handle('atlas-query', { scope: 'src/app.ts', by: 'dependency' });
+    expect(v.ok).toBe(true);
+  });
+
+  it('RED: `.atlas/staging` COMMITTED (alone, or alongside projection+cas) is the ONE population that still flatly refuses', () => {
+    live = poisonedRepo();
+    writeFileSync(join(live.repoPath, '.atlas', 'staging.json'), JSON.stringify({ current: [], cas: [] }));
+    execFileSync('git', ['-C', live.repoPath, 'add', '-f', '.atlas/staging.json'], { encoding: 'utf8' });
+    execFileSync('git', ['-C', live.repoPath, 'commit', '-q', '-m', 'ship staging too'], { encoding: 'utf8' });
+    const v = composeRuntime(live.repoPath).handler.handle('atlas-query', { scope: 'src/app.ts', by: 'scope' });
     expect(v.ok).toBe(false);
     expect(String(v.rejected).endsWith(REJECTED_UNTRUSTED_STORE)).toBe(true);
   });

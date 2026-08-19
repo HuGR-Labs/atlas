@@ -47,10 +47,11 @@ import type { NegationLeg } from './negation-source.js';
 import { createVerifyFactLeg } from './verify-fact-source.js';
 import type { VerifyFactLeg } from './verify-fact-source.js';
 import { reverifyStore } from './reverify-store.js';
-import type { ReverifyReport } from './reverify-store.js';
+import type { DocExists, NodeFactPair, ReverifyReport } from './reverify-store.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
-import { gitSidecarTrust } from './store-provenance.js';
-import { readProvenanceRefusal } from './read-provenance.js';
+import { gitStoreProvenance } from './store-provenance.js';
+import type { SidecarTrust } from './store-provenance.js';
+import { buildReadAccess, trackedProvableAdvisory } from './read-access.js';
 import { assembleHandler, bindFreshnessOracle, edgeModelVersion } from './wire.js';
 import type { WireConfig, WireSeams, WiredHandler } from './wire.js';
 
@@ -139,9 +140,12 @@ export interface ComposedRuntime {
    */
   readonly reverify: () => ReverifyReport;
   /**
-   * The PROVENANCE refusal for this repo's durable store, or `undefined` when it is trustworthy
-   * (`read-provenance.ts`). PRESENT means `.atlas/` arrived by COMMIT rather than through a door, so every
-   * read serves nothing and every write refuses.
+   * The PROVENANCE refusal for this repo's durable store, or `undefined` when reads may proceed
+   * (`read-provenance.ts` / TRAVEL-BY-REPROOF `read-access.ts`). PRESENT means every read serves nothing and
+   * every write refuses — TODAY that is `tracked-staging` (ADR-0008 candidates, no replayable witness) or
+   * the fail-closed leg of `tracked-provable` (re-verification could not run). ABSENT no longer means
+   * "nothing is tracked" — see `readAdvisory` below for the narrowed middle case, where reads DO proceed but
+   * only over what re-proves.
    *
    * It is surfaced HERE, on the composed runtime, because the refusal has to be legible on doors that the
    * handler does not own: `atlas doctor` sub-dispatches to `DoctorApi` without touching the handler, and
@@ -150,6 +154,14 @@ export interface ComposedRuntime {
    * rediscovering the condition — and the leg-level guards stay as the backstop for every other caller.
    */
   readonly readRefusal?: string;
+  /**
+   * The ADVISORY MESSAGE for a `tracked-provable` store (TRAVEL-BY-REPROOF) — present ONLY when the durable
+   * store is being served NARROWED (filtered to facts that replay `re-proven`), so a user whose committed
+   * store serves fewer facts than it holds is told WHY in the product's own voice rather than left to notice
+   * a shrunk count. ABSENT for every other case: nothing narrowed (`trusted`), or nothing served at all
+   * (`readRefusal` present instead).
+   */
+  readonly readAdvisory?: string;
 }
 
 /** Where `composeRuntime` looks for the optional SCIP dump under a repo (empty axes if absent, per §7). */
@@ -304,15 +316,49 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
   // PROVENANCE (the root the doors hang from): git is owned HERE, so the tripwire that asks whether the
   // durable store is TRACKED — i.e. arrived by commit rather than through a door — is built here and
   // injected, exactly as the N11 watermark is. One `git ls-files`, memoized for the life of the runtime.
-  const trusted = gitSidecarTrust(repoPath);
+  //
+  // TRAVEL-BY-REPROOF (owner-authorized 2026-08-18): the question is now THREE-WAY, not two
+  // (`store-provenance.ts` `StoreProvenance`) — `trusted` below stays the BOOLEAN write-gate every existing
+  // caller (`store` itself, for writes) rides, byte-identical to before (`true` iff `provenance()` is
+  // `'trusted'`); the RICHER answer — what a READ may see for `tracked-staging` vs `tracked-provable` — is
+  // `readAccess`, built below once `verifyFactLeg` (its oracle) exists.
+  const provenance = gitStoreProvenance(repoPath);
+  const trusted: SidecarTrust = () => provenance() === 'trusted';
   const store = createDiskStore(join(repoPath, CAS_REL), () => headSha(repoPath), trusted);
-  const driftFacts = currentNodes(rehydrateProjection(store))
-    .map((n) => store.get(n.contentHash as Hash))
-    .filter((o): o is GroundedFact => o !== undefined);
+  // `driftPairs` carries each fact ALONGSIDE its own `CurrentNode` — `reverify` (`reverify-store.ts`
+  // finding 1b, #199 fix-round) needs `node.primaryAnchor` for the anchor-binding check, which
+  // `GroundedFact` itself never carries. `driftFacts` (the reconcile seams' input, unchanged shape) is
+  // just this same pairing's `.fact` projection — ONE store read, ONE map, no second pass.
+  const driftPairs: readonly NodeFactPair[] = currentNodes(rehydrateProjection(store))
+    .map((node) => {
+      const fact = store.get(node.contentHash as Hash);
+      return fact === undefined ? undefined : { node, fact };
+    })
+    .filter((p): p is NodeFactPair => p !== undefined);
+  const driftFacts = driftPairs.map((p) => p.fact);
   // THE SOUND-GENESIS PROVEN-FAMILY ORACLE, built ONCE and shared by BOTH `verifyFact` (the CLI's
   // `atlas verify-fact`) and `reverify` (`atlas verify-store`) below — the ONE production oracle, never a
   // duplicate that could drift from it.
   const verifyFactLeg = createVerifyFactLeg(scipOutput, { indexerName });
+  // THE ANCHOR-EXISTENCE CHECK (#199 fix-round round 3, tamper binding (d)) — reverifyFact's PROOF that a
+  // fact's own anchor names a document the live index actually has, not merely that it stands in the right
+  // RELATION to the witness's scope. Built from the SAME `scipOutput.documents` list `createVerifyFactLeg`
+  // already iterates for its own `pathByHash` table (`verify-fact-source.ts`) — NO second index build, no
+  // new seam, one `Set` over data already in memory.
+  const docPaths = new Set(scipOutput.documents.map((d) => d.relativePath));
+  const docExists: DocExists = (p) => docPaths.has(p);
+  // THE READ-SIDE ANSWER (TRAVEL-BY-REPROOF, `read-access.ts`): what every read leg below is allowed to see.
+  // `trusted` ⇒ `store` verbatim, no new cost. `tracked-staging` ⇒ a refusal, unchanged in kind. `tracked-
+  // provable` ⇒ a raw re-read filtered to the facts that replay `re-proven` against `verifyFactLeg` — the
+  // SAME oracle `atlas verify-fact`/`atlas verify-store` already ride, never a second one built here.
+  const readAccess = buildReadAccess({
+    provenance,
+    casPath: join(repoPath, CAS_REL),
+    headSha: () => headSha(repoPath),
+    gatedStore: store,
+    verifyFactLeg,
+    docExists,
+  });
 
   const seams: WireSeams = {
     heuristic: buildHeuristic(policy),
@@ -360,6 +406,12 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     // actually read and write. Threading it only onto the store built above would guard doctor/reconcile
     // and leave both user-facing doors open.
     trusted,
+    // TRAVEL-BY-REPROOF — the read-side answer, THREADED so `wire.ts`'s query/node legs read the SAME
+    // (possibly filtered) store `own`/`relations`/`negations`/`doctorSource` below read, never a second
+    // independent decision. `readRefusal` ABSENT ⇒ `wire.ts` falls back to `trusted`-gated behaviour
+    // (`trusted`/case 1) — see `read-access.ts` for the three-way split this collapses.
+    readStore: readAccess.store,
+    ...(readAccess.refusal !== undefined ? { readRefusal: readAccess.refusal } : {}),
     // Conditional spread keeps `ratifyToken` ABSENT (not `undefined`) when unset — exactOptionalPropertyTypes.
     ...(ratifyToken !== undefined ? { ratifyToken } : {}),
     // DEDUP-COMPOSITION (#241) — the artifacts THIS FUNCTION already built above, off the SAME `repoPath`/
@@ -384,14 +436,25 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     ...(dynamicReach !== undefined ? { dynamicReach } : {}),
   };
 
-  // The real read-only diagnostic port — built over the SAME durable store + revIndex the governed emit
-  // leg rides, so `atlas doctor` reads the very facts the write door persists (never a fresh oracle).
-  const doctorSource = createDoctorSource(store, revIndex, trusted);
+  // The real read-only diagnostic port — built over `readAccess.store` (TRAVEL-BY-REPROOF: the durable
+  // store `atlas doctor` reads is the SAME possibly-filtered one every other read leg reads, never a second
+  // decision) + revIndex the governed emit leg rides. The trust seam passed here now answers "may this leg
+  // read at all" (`true` for `trusted`/`tracked-provable`, `false` for `tracked-staging`/fail-closed) —
+  // `readAccess.store` itself already carries the FILTER for `tracked-provable`, so the boolean only needs
+  // to gate the flat-refusal case, exactly as `doctor-source.ts`'s `refuseUntrustedRead` expects.
+  const doctorSource = createDoctorSource(readAccess.store, revIndex, () => readAccess.refusal === undefined);
 
-  // The provenance verdict, resolved ONCE (the seam memoizes its `git ls-files` for the life of the runtime)
-  // and handed to the entrypoint. Conditional spread keeps it ABSENT (not `undefined`) on a healthy repo —
-  // `exactOptionalPropertyTypes`, and the same discipline `ratifyToken` uses above.
-  const readRefusal = readProvenanceRefusal(trusted);
+  // The provenance verdict, resolved ONCE by `buildReadAccess` above and handed to the entrypoint.
+  // Conditional spread keeps it ABSENT (not `undefined`) on a healthy repo — `exactOptionalPropertyTypes`,
+  // and the same discipline `ratifyToken` uses above. `tracked-provable` success is NOT a refusal (case 2
+  // narrows, it does not refuse) — `readAccess.refusal` is only present for `tracked-staging` or the
+  // fail-closed leg, which is exactly the population this used to name.
+  const readRefusal = readAccess.refusal;
+  // The ADVISORY MESSAGE (TRAVEL-BY-REPROOF): present ONLY for a successful `tracked-provable` serve —
+  // legible, in the product's own voice, about WHY a committed store might be serving fewer facts than it
+  // holds. `undefined` for `trusted` (nothing to explain) and for a refusal (the refusal text already says
+  // why nothing is served).
+  const readAdvisory = readAccess.reverified !== undefined ? trackedProvableAdvisory(readAccess.reverified) : undefined;
 
   // THE GOVERNED PROMOTION LEG (KNOW-8). It is composed from the SAME parts the `atlas-emit` leg above is —
   // this store, this policy, this truth-gate, this actor, this ratify token — and differs in EXACTLY one
@@ -433,29 +496,47 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     handler: assembleHandler(config),
     doctorSource,
     promote: promoteLeg.promote,
-    // THE `own_<scope>` READ LEG. `store` and `axes` here are the very objects the handler's query leg reads
-    // — passed, not rebuilt — so `atlas own <scope>` and `atlas query <scope>` are two projections of ONE
-    // store, and `policy` is the same loaded `.atlas/policy.json` the write door gates on (it supplies the
-    // terrain OWNER, which is the declared scope membership, not a second notion of ownership).
-    own: createOwnLeg({ axes, store, policy }),
-    // THE GROUNDED-RELATION READ LEG (#99a). `store` is the very object the handler's query leg reads —
-    // passed, not rebuilt — so `atlas relations <unit>` and `atlas query <unit>` are two projections of ONE
-    // store, and a relation emitted through the emit door is visible to the very next `relations` call.
-    relations: createRelationLeg(store),
-    // THE GROUNDED-NEGATION + ABSTENTION READ LEG (#99b). Same `store` the query leg reads — passed, not
-    // rebuilt — so `atlas negations <scope>` reads the SAME projection `atlas query` reads back, and a fired
-    // abstention is observable off it (#202). Read-only; no governed token, GOVERNANCE_SURFACE stays 5.
-    // N4 (billy F1): threaded the SAME family-aware freshness oracle the query readback rides — `driftDetect`
-    // over the `axes` built once above PLUS the §3 clause-4 `edgeModel === edgeModelVersion()` conjunct for a
-    // negation — so `atlas negations` surfaces a per-row FRESH/DRIFTED verdict (a re-opened scope OR an
-    // extractor bump reads DRIFTED). `currentEdgeModel` is `edgeModelVersion()`, the SAME value the door stamps.
-    negations: createNegationLeg(store, bindFreshnessOracle(axes, edgeModelVersion())),
+    // THE `own_<scope>` READ LEG. `readAccess.store` (TRAVEL-BY-REPROOF) and `axes` here are the very
+    // objects the handler's query leg reads — passed, not rebuilt — so `atlas own <scope>` and
+    // `atlas query <scope>` are two projections of ONE (possibly filtered) store, and `policy` is the same
+    // loaded `.atlas/policy.json` the write door gates on (it supplies the terrain OWNER, which is the
+    // declared scope membership, not a second notion of ownership).
+    own: createOwnLeg({ axes, store: readAccess.store, policy }),
+    // THE GROUNDED-RELATION READ LEG (#99a). `readAccess.store` is the very object the handler's query leg
+    // reads — passed, not rebuilt — so `atlas relations <unit>` and `atlas query <unit>` are two projections
+    // of ONE store, and a relation emitted through the emit door is visible to the very next `relations` call.
+    relations: createRelationLeg(readAccess.store),
+    // THE GROUNDED-NEGATION + ABSTENTION READ LEG (#99b). Same `readAccess.store` the query leg reads —
+    // passed, not rebuilt — so `atlas negations <scope>` reads the SAME projection `atlas query` reads back,
+    // and a fired abstention is observable off it (#202). Read-only; no governed token, GOVERNANCE_SURFACE
+    // stays 5. N4 (billy F1): threaded the SAME family-aware freshness oracle the query readback rides —
+    // `driftDetect` over the `axes` built once above PLUS the §3 clause-4 `edgeModel === edgeModelVersion()`
+    // conjunct for a negation — so `atlas negations` surfaces a per-row FRESH/DRIFTED verdict (a re-opened
+    // scope OR an extractor bump reads DRIFTED). `currentEdgeModel` is `edgeModelVersion()`, the SAME value
+    // the door stamps.
+    negations: createNegationLeg(readAccess.store, bindFreshnessOracle(axes, edgeModelVersion())),
     // THE SOUND-GENESIS PROVEN-FAMILY FEED (`atlas verify-fact`). Off the SAME `scipOutput` the axes ride — a
     // program oracle over the immutable code index, built once and closed over (see verify-fact-source.ts).
     verifyFact: verifyFactLeg,
-    // THE REVERIFY-GATE PASS (`atlas verify-store`). A thunk over the SAME `verifyFactLeg` and the SAME
-    // `driftFacts` readback built above — no second oracle, no second store read (see `reverify-store.ts`).
-    reverify: () => reverifyStore(driftFacts, verifyFactLeg),
+    // THE REVERIFY-GATE PASS (`atlas verify-store`). MUST see the SAME population `readAdvisory`
+    // (`trackedProvableAdvisory`, above) describes — #199 fix-round finding 3 caught this NOT holding: on a
+    // `tracked-provable` store `driftFacts` is built off the WRITE-gated `store`, whose `loadProjection()`
+    // BLANKS to `undefined` whenever `trusted()` reads `false` (always true for a tracked store — see
+    // `store-provenance.ts`), so the old `reverifyStore(driftFacts, …)` here always reported the all-zero
+    // "nothing to re-verify" report on the SAME runtime where the read leg's advisory said "N of N re-proven
+    // and served" — a live, user-visible contradiction (measured on this repo's own `.atlas/`: advisory said
+    // 17/17, `reverify()` said 0/0).
+    //
+    // FIX: reuse `readAccess.reverified` — the FULL row-by-row report `buildReadAccess`/`buildProvable`
+    // already computed off the RAW (un-gated) store for `tracked-provable`, the exact pass
+    // `trackedProvableAdvisory` summarizes — so both surfaces read the identical rows, no second oracle
+    // replay, no second raw store read. `readAccess.reverified` is `undefined` for `trusted` (case 1, the
+    // read leg pays NO new cost there, by design) and for `tracked-staging` (case 3, flat refusal) — for
+    // BOTH of those this falls back to the pre-existing `reverifyStore(driftPairs, verifyFactLeg)` pass over
+    // the WRITE-gated store, byte-identical to the prior behaviour (for `trusted`, that store is not
+    // blanked; for `tracked-staging`, it blanks to `[]`, matching that leg's own refusal).
+    reverify: () => readAccess.reverified ?? reverifyStore(driftPairs, verifyFactLeg, docExists),
     ...(readRefusal !== undefined ? { readRefusal } : {}),
+    ...(readAdvisory !== undefined ? { readAdvisory } : {}),
   };
 }

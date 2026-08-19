@@ -20,7 +20,7 @@ import type { GroundedFact } from '@atlas/knowledge';
 import type { Freshness, Hash } from '@atlas/contracts';
 import type { FreshnessOracle } from './pack-shape.js';
 import { retrievalPack } from './retrieval-model.js';
-import type { CasPath } from './store.js';
+import type { CasPath, DiskStore } from './store.js';
 import { walkFileTree } from './fs.js';
 import { readScipOrEmpty, readScipIndexerName, planIndexers } from './scip.js';
 import type { LangId } from './scip.js';
@@ -35,7 +35,7 @@ import { createGovernedLink } from './governed-link.js';
 import { loadPolicy } from './policy.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
 import type { SidecarTrust } from './store-provenance.js';
-import { refuseUntrustedRead } from './read-provenance.js';
+import { UntrustedStoreError } from './read-provenance.js';
 // DAG-pin imports — referenced (not wired as legs) to keep the frozen skeleton's dependency edges real.
 import { foldAstUnits } from './ast.js';
 import { createForge } from './git-forge.js';
@@ -149,6 +149,20 @@ export interface WireConfig {
    *  the store both user-facing doors ride, and a seam applied only to compose's drift/doctor store would
    *  leave `atlas query` serving a committed projection while every test of the seam passed. */
   readonly trusted?: SidecarTrust;
+  /** TRAVEL-BY-REPROOF (`read-access.ts`) — the store every READ leg (`atlas query`, `atlas node`) uses.
+   *  ABSENT ⇒ falls back to the write-gated `store` built from `trusted` above, the EXACT prior behaviour
+   *  every wire-only fake test relies on. The composition root supplies this for a `tracked-provable` repo
+   *  (a raw re-read filtered to facts that replay `re-proven`) and for `trusted`/`tracked-staging` (verbatim
+   *  `store`, or irrelevant because `readRefusal` short-circuits first). Writes NEVER read this — `store`
+   *  (built from `trusted`) is the only store `governedEmit`/`governedLink` ever touch. */
+  readonly readStore?: DiskStore;
+  /** TRAVEL-BY-REPROOF — present ⇒ every read leg refuses BEFORE touching `readStore` (case 3
+   *  `tracked-staging`, or the fail-closed leg of `tracked-provable`). ABSENT ⇒ no flat refusal: either
+   *  `trusted` (case 1) or a successful `tracked-provable` filtered serve (case 2) — `readStore` alone
+   *  decides what is visible in that case. Replaces the OLD blanket `refuseUntrustedRead(config.trusted)`
+   *  call at each read leg, which could not tell case 2 apart from case 3 (both read `trusted() === false`).
+   *  ABSENT on a bare WIRE fake assembly ⇒ never consulted ⇒ unchanged behaviour. */
+  readonly readRefusal?: string;
 
   // ── DEDUP-COMPOSITION (#241) — OPTIONAL PRECOMPUTED ARTIFACTS ──────────────────────────────────────────
   // `composeRuntime` (compose.ts) builds `rawTree`/`fileTree`/`scipOutput`/`indexerName`/`axes`/
@@ -268,6 +282,13 @@ export function assembleHandler(config: WireConfig): WiredHandler {
   const currentHead = (): string | undefined => headSha(config.repoPath);
   // PROVENANCE: threaded from the composition root onto the ONE store both doors ride (see `WireConfig`).
   const store = createDiskStore(config.casPath, currentHead, config.trusted);
+  // TRAVEL-BY-REPROOF — the store every READ leg below uses. `config.readStore`, when supplied (the
+  // composition root's `read-access.ts` decision), may be `store` verbatim (`trusted`) or a raw re-read
+  // FILTERED to facts that replay `re-proven` (`tracked-provable`) — either way it is built ONCE, upstream,
+  // never re-decided here. ABSENT (a bare WIRE fake assembly, no composition root) ⇒ falls back to `store`,
+  // the EXACT prior behaviour every wire-only test relies on. WRITES always ride `store` — this split never
+  // touches the write path.
+  const readStore = config.readStore ?? store;
 
   // ADR-0016 M2b — the TWO v2 negation closure legs, built ONCE off the SAME `scipPath`/`repoPath`/`rawTree`
   // as the other emit-leg deps. Both-or-neither (a half-gate is never run): if either cannot be built SOUNDLY
@@ -332,7 +353,9 @@ export function assembleHandler(config: WireConfig): WiredHandler {
 
   // Seam-1: wrap the pure structural index-adapter with the durable projection readback, so a scope resolves
   // to its covering territory skeleton (from @atlas/index) FOLDED with the emitted facts under it (from CAS).
-  const queryIndex = createProjectionQueryIndex(index, store, currentHead, freshnessOracle);
+  // TRAVEL-BY-REPROOF: rides `readStore`, not `store` — for a `tracked-provable` repo this is the raw,
+  // re-proof-filtered store (`read-access.ts`); for everything else it IS `store` (see `readStore` above).
+  const queryIndex = createProjectionQueryIndex(index, readStore, currentHead, freshnessOracle);
 
   const legs: ToolLegs = {
     'atlas-init': ((args) =>
@@ -341,14 +364,15 @@ export function assembleHandler(config: WireConfig): WiredHandler {
     // is `deriveSubsumes` (its FIRST production call site — DP-2 resolution-at-read) filtered to the edges
     // whose BOTH endpoints are current nodes UNDER the covering scope, already deterministically sorted.
     'atlas-query': ((args) => {
-      // PROVENANCE, BEFORE ANY MODE SPLIT. The tripwire already made a committed store read as EMPTY; what it
-      // did not do was SAY SO, and `ok:true` + an empty pack is indistinguishable from "no knowledge yet" —
-      // the silent-disappearance failure this product treats as the worst one available. Refusing here (a
-      // throw the frozen handler converts into a structured rejected `Verdict`, TOOLS-2) covers EVERY read
+      // PROVENANCE, BEFORE ANY MODE SPLIT (TRAVEL-BY-REPROOF: now `config.readRefusal`, not a blanket
+      // `trusted` check — a `tracked-provable` repo has NO refusal here and falls through to a query over the
+      // already-filtered `readStore`). `ok:true` + an empty pack is indistinguishable from "no knowledge
+      // yet" — the silent-disappearance failure this product treats as the worst one available. Refusing here
+      // (a throw the frozen handler converts into a structured rejected `Verdict`, TOOLS-2) covers EVERY read
       // mode from one line: putting it inside the `--by scope` branch would have left `--by dependency`
-      // serving the same committed rows with no refusal, which is exactly how the seam was missed the first
-      // time (`WireConfig.trusted` records the twin of this mistake for the store instance itself).
-      refuseUntrustedRead(config.trusted);
+      // serving the same refused rows with no refusal, which is exactly how the seam was missed the first
+      // time (`WireConfig.readRefusal` records the twin of this mistake for the store instance itself).
+      if (config.readRefusal !== undefined) throw new UntrustedStoreError();
       const a = args as { scope: string; by?: string };
       // N2: `--by dependency|trigger` routes THROUGH the designed three-mode `createRetrieval` surface (INDEX-6),
       // NOT re-implemented here. `scope` (the default, and every MCP/wire-fake call) stays the byte-identical
@@ -364,11 +388,11 @@ export function assembleHandler(config: WireConfig): WiredHandler {
           throw new Error('atlas query --by dependency|trigger needs the composition-root axes');
         }
         // retrievalPack rebuilds the read model FRESH from the live store each call — freshness parity w/ scope.
-        return retrievalPack(axes, by, a.scope, store, freshnessOracle);
+        return retrievalPack(axes, by, a.scope, readStore, freshnessOracle);
       }
       const scope = a.scope;
       const pack = createQuery(queryIndex).query(scope);
-      const proj = rehydrateProjection(store);
+      const proj = rehydrateProjection(readStore);
       const underKeys = new Set(
         currentNodes(proj)
           .filter((n) => n.primaryAnchor !== undefined && underScope(n.primaryAnchor, scope))
@@ -441,14 +465,20 @@ export function assembleHandler(config: WireConfig): WiredHandler {
       // fault.ts), so the refusal can travel the channel `ToolLeg` already uses and reach EVERY transport
       // with its own discriminant instead of being flattened into "no grounded node at <addr>". The CLI
       // still refuses one frame up with the same reason; this is the backstop for every other caller.
-      refuseUntrustedRead(config.trusted);
+      // TRAVEL-BY-REPROOF: `config.readRefusal` (case 3 / fail-closed), not a blanket `trusted` check. AND —
+      // this leg goes AROUND `loadProjection` (see above), which is exactly why `readStore.get` (not plain
+      // `store.get`) matters here for `tracked-provable`: `read-access.ts` builds `readStore.get` to answer
+      // `undefined` for any content hash that is NOT among the re-proven current nodes' `contentHash`es, so
+      // an attacker-committed CAS blob that never re-proves — reachable ONLY through this address-direct
+      // leg, never through the filtered projection — is refused here too, not just in `loadProjection`.
+      if (config.readRefusal !== undefined) throw new UntrustedStoreError();
       // SECURITY (billy PoC): `nodeAddr` is attacker-controllable over MCP/poke. A CAS content address is
       // EXACTLY 64 lowercase hex; anything else (a `../` traversal to an unbounded file like /dev/zero) is a
       // MISS — rejected BEFORE any filesystem read, so it can never hang/OOM. Defense-in-depth: `store.get`
       // re-applies the same charset + sandbox guard (store.ts). READ-ONLY: no write path (TOOLS-1).
       const addr = String(nodeAddr);
       if (!/^[0-9a-f]{64}$/.test(addr)) return undefined;
-      return store.get(addr as unknown as Hash) as GroundedFact | undefined;
+      return readStore.get(addr as unknown as Hash) as GroundedFact | undefined;
     },
   };
 
