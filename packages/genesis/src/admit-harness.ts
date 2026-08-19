@@ -153,16 +153,18 @@ export type Admission =
   | { readonly outcome: 'abstained'; readonly whyNot: WhyNot };
 
 // the structured drop reasons — honest, never a forced fact.
-const DROP_NO_CHECK = 'no admissible synthesized check for a checkable candidate (GEN-12)';
+// NOTE: there is deliberately NO abstain drop reason. An oracle ABSTAINING (verifyDependency/verifyCount ≠ proven,
+// or no synthesized check exists) does NOT drop a model-proposed fact — it admits as a JUSTIFIED advisory if
+// grounded (see `admitAbstainedAsJustified`, genesis-epistemic-contract.md). The retired `DROP_DEP_ABSTAIN` /
+// `DROP_COUNT_ABSTAIN` / `DROP_NO_CHECK` are GONE (deleted, not commented) so a resurrected gate cannot reach a
+// ready-made abstain-drop string. Only REFUTE / vacuous / malformed / type-broken / ungrounded still drop.
 const DROP_NOT_HOLDS = 'synthesized check does not compile ∧ HOLDS on current code, after refine ≤K (GEN-12c/12d)';
 const DROP_VACUOUS = 'synthesized check survives every mutant — vacuous / toothless (GEN-12j)';
 const DROP_TYPE_BROKEN = 'sound type-checker / LSP verdict is not HOLDS on the type-expressible slot (GEN-12k)';
 const DROP_DEP_UNWIRED = "dependency slot but no verifyDependency leg supplied (GEN-12-dep)";
 const DROP_DEP_MALFORMED = "dependency proposal missing target/scope (GEN-12-dep)";
-const DROP_DEP_ABSTAIN = "the sound dependency oracle did not witness the edge — abstained, not proven (GEN-12-dep)";
 const DROP_COUNT_UNWIRED = "count slot but no verifyCount leg supplied (GEN-12-count)";
 const DROP_COUNT_MALFORMED = "count proposal missing target/scope or atLeast not a positive integer (GEN-12-count)";
-const DROP_COUNT_ABSTAIN = "the sound count oracle did not witness ≥ atLeast callers — abstained, not proven (GEN-12-count)";
 const DROP_UNGROUNDED = 'advisory fails the truth door — the citation does not ground (GEN-12e)';
 // RELATION drops (ADR-0015 D2, WP-96-R). The relation family is now ADMITTED — its two honest refusals
 // (`DROP_RELATION_MALFORMED` / `DROP_RELATION_UNGROUNDED`) live beside its builders in `admit-relation.ts`
@@ -245,6 +247,27 @@ function admitAdvisory(p: AdvisoryProposal, deps: AdmitDeps): Admission {
 }
 
 /**
+ * ABSTAIN ⇒ JUSTIFIED (genesis-epistemic-contract.md, proven-vs-justified.md). When a sound oracle ABSTAINS
+ * on a model-proposed predicate — could-not-prove, never proved-false — the fact is not dropped: it is admitted
+ * as the EXISTING unsealed advisory node (the "justified" ground), gated ONLY by the truth door. There is no new
+ * node kind and no new seal value: `buildAdvisory` mints the same unsealed shape `admitAdvisory` produces, so
+ * `verify-store` (seal-absent ⇒ skip) routes it correctly with zero ripple. Only UNGROUNDED still drops here;
+ * REFUTE / vacuous / malformed / type-broken are handled by their own branches and are unaffected.
+ */
+function admitAbstainedAsJustified(p: PredicateProposal, deps: AdmitDeps): Admission {
+  if (!deps.doors.grounded(p.grounding, deps.indexState)) return { outcome: 'dropped', reason: DROP_UNGROUNDED };
+  const advisory: AdvisoryProposal = {
+    kind: 'advisory',
+    site: p.site,
+    nodeKey: p.nodeKey,
+    claimNorm: p.claimNorm,
+    grounding: p.grounding,
+    tier: p.tier,
+  };
+  return { outcome: 'admitted', fact: buildAdvisory(advisory, scoreObviousness(deps.doors, p.claimNorm)) };
+}
+
+/**
  * GEN-12 — mechanical predicate admission. SOUND ORACLE FIRST for a type-expressible slot; otherwise the
  * synthesized-check path: compile ∧ HOLDS (refine ≤K, else drop) ∧ TEETH (flip on ≥1 mutant, else vacuous).
  */
@@ -253,7 +276,11 @@ function admitPredicate(p: PredicateProposal, deps: AdmitDeps): Admission {
     if (deps.verifyDependency === undefined) return { outcome: "dropped", reason: DROP_DEP_UNWIRED };
     const t = p.target, s = p.scope;
     if (typeof t !== "string" || !t || typeof s !== "string" || !s) return { outcome: "dropped", reason: DROP_DEP_MALFORMED };
-    if (deps.verifyDependency(t, s) !== "proven") return { outcome: "dropped", reason: DROP_DEP_ABSTAIN };
+    // ABSTAIN ≠ REFUTE (genesis-epistemic-contract.md): `verifyDependency` only ever returns proven|abstain, so
+    // `!== "proven"` is ALWAYS an abstain — "could not prove the edge", never "proved the edge absent". The sound
+    // oracle abstaining must NOT drop a model-proposed fact; it admits as a JUSTIFIED advisory if grounded. The
+    // ONLY thing the oracle earns on the positive verdict is the `proven` seal (buildSound) below.
+    if (deps.verifyDependency(t, s) !== "proven") return admitAbstainedAsJustified(p, deps);
     if (!deps.doors.grounded(p.grounding, deps.indexState)) return { outcome: "dropped", reason: DROP_UNGROUNDED };
     return { outcome: "admitted", fact: buildSound(p, scoreObviousness(deps.doors, p.claimNorm)), label: LIKELY_INVARIANT };
   }
@@ -268,7 +295,10 @@ function admitPredicate(p: PredicateProposal, deps: AdmitDeps): Admission {
     const t = p.target, s = p.scope, n = p.atLeast;
     if (typeof t !== "string" || !t || typeof s !== "string" || !s || typeof n !== "number" || !Number.isInteger(n) || n < 1)
       return { outcome: "dropped", reason: DROP_COUNT_MALFORMED };
-    if (deps.verifyCount(t, s, n) !== "proven") return { outcome: "dropped", reason: DROP_COUNT_ABSTAIN };
+    // ABSTAIN ≠ REFUTE — same law as the dependency arm. `verifyCount` returns proven|abstain only; `!== "proven"`
+    // is "could not witness ≥ atLeast callers", never "proved fewer exist" (the SCIP feed gives no completeness).
+    // So the count oracle abstaining admits a JUSTIFIED advisory if grounded; the `proven` seal is earned below only.
+    if (deps.verifyCount(t, s, n) !== "proven") return admitAbstainedAsJustified(p, deps);
     if (!deps.doors.grounded(p.grounding, deps.indexState)) return { outcome: "dropped", reason: DROP_UNGROUNDED };
     return { outcome: "admitted", fact: buildSound(p, scoreObviousness(deps.doors, p.claimNorm)), label: LIKELY_INVARIANT };
   }
@@ -283,8 +313,12 @@ function admitPredicate(p: PredicateProposal, deps: AdmitDeps): Admission {
   // synthesized-check path (CodeQL/Semgrep, KNOW-16). A slot a real check can synthesize mints the mechanical
   // predicate below; a slot with NO mechanical check is honestly DROPPED (DROP_NO_CHECK) — genesis mints no
   // fact it cannot mechanically discharge.
+  // "no synthesized check exists for this slot" is an ABSTAIN (no mechanical check available), NOT a refutation —
+  // it does not prove the claim false. So it admits as a JUSTIFIED advisory if grounded, exactly like the two
+  // oracle-abstain arms above. A check that DOES exist but does not compile-∧-HOLDS, or is vacuous (TEETH did not
+  // flip), IS a refutation and still DROPS below via `attest`.
   let check = deps.predicate.synthesize(p.site);
-  if (check === null) return { outcome: 'dropped', reason: DROP_NO_CHECK };
+  if (check === null) return admitAbstainedAsJustified(p, deps);
 
   // GEN-12c VERIFY — require HOLDS on current code; GEN-12d — a failing check is refined ≤K, then dropped.
   let verdict = deps.predicate.verify(check, deps.indexState);

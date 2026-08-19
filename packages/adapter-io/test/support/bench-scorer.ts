@@ -92,8 +92,8 @@ export interface BenchReport {
 export const SCOPE_LIMIT_DISCLAIMER =
   'SOUND HEADLINE = structural arms only (count / dependency / negation vs the independent tsc oracle). The ' +
   'relation arm is MEASURED, not guaranteed (no direction oracle). Semantic slots (invariant / sideeffect / …) ' +
-  'tsc cannot witness are NOT sound-labeled and are routed to the labeled spot-audit (Arm-0 characterizes the ' +
-  'unwired DROP_NO_CHECK floor), never the sound headline.';
+  'tsc cannot witness are NOT sound-labeled and are routed to the labeled spot-audit (Arm-0 now ADMITS these ' +
+  'as grounded JUSTIFIED advisories — abstain ⇒ justified, unsealed), never the sound headline.';
 
 /** Build the report and VALIDATE its shape (AC-8): a per-arm entry missing either co-primary is rejected. */
 export function buildReport(perArm: Score): BenchReport {

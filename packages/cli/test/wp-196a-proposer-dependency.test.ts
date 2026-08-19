@@ -58,8 +58,20 @@ describe('#196a PROPOSER — a mined dependency seed forwards (target, scope) to
     expect((facts[0] as { seal?: string }).seal).toBe('proven'); // the two-seal `proven` mark (ADR-0017)
   });
 
-  it('abstain ⇒ the oracle drops it — no fabricated dependency survives', () => {
+  it('abstain + grounded ⇒ admitted as a JUSTIFIED advisory (unsealed) — no fabricated PROVEN survives', () => {
+    // The epistemic-contract inversion: the oracle abstaining (could-not-prove) NO LONGER drops the fact.
+    // It admits as a grounded advisory carrying NO `proven` seal — the model asserts, nothing claims proof.
     const gate = makeAdmitGate(depDeps(() => 'abstain'));
+    const { facts } = runExtract([cand], budget, { proposer: depProposer(), gate });
+    expect(facts).toHaveLength(1);
+    expect((facts[0] as { kind?: string }).kind).toBe('advisory');
+    expect((facts[0] as { seal?: string }).seal).toBeUndefined(); // NEVER proven on abstain
+    expect((facts[0] as { predicateSlot?: string }).predicateSlot).toBeUndefined();
+  });
+
+  it('abstain + ungrounded ⇒ dropped — the abstain fallback still requires grounding', () => {
+    const deps = depDeps(() => 'abstain');
+    const gate = makeAdmitGate({ ...deps, doors: { ...deps.doors, grounded: () => false } });
     const { facts } = runExtract([cand], budget, { proposer: depProposer(), gate });
     expect(facts).toHaveLength(0);
   });

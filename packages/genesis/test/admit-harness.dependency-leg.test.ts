@@ -3,9 +3,11 @@
 // NEW dependency-slot leg of `admitPredicate`. The branch (in order):
 //   DROP_DEP_UNWIRED   — `verifyDependency` is undefined
 //   DROP_DEP_MALFORMED — target/scope empty
-//   DROP_DEP_ABSTAIN   — verifyDependency !== "proven"
-//   DROP_UNGROUNDED    — doors.grounded === false
-//   else ADMIT via `buildSound` with seal:"proven".
+//   ABSTAIN (verifyDependency !== "proven") ⇒ JUSTIFIED advisory if grounded, else DROP_UNGROUNDED
+//     (genesis-epistemic-contract.md: the oracle abstaining is "could-not-prove", NOT a refutation, so it must
+//      not drop a grounded model-proposed fact — it admits as the existing unsealed advisory node)
+//   DROP_UNGROUNDED    — doors.grounded === false (on both the proven AND the abstain arm)
+//   PROVEN + grounded  — ADMIT via `buildSound` with seal:"proven".
 //
 // Fixture shape mirrors the existing `wp-8.28-b-gen.test.ts` / `admit-harness.no-fabricated-check.test.ts`.
 
@@ -97,11 +99,27 @@ describe('ADR-0017 dependency-slot leg — admit(deps)', () => {
     expect((a.fact as { predicateSlot?: string }).predicateSlot).toBe('dependency');
   });
 
-  it('verifyDependency returns "abstain" ⇒ dropped with the abstained reason', () => {
+  it('verifyDependency returns "abstain" + grounded ⇒ admitted as a JUSTIFIED advisory (unsealed, no seal)', () => {
     const a = admit(depProposal(), makeDeps({ verifyDependency: () => 'abstain' }));
+    expect(a.outcome).toBe('admitted');
+    if (a.outcome !== 'admitted') throw new Error('unreachable');
+    // the abstain fallback admits the EXISTING advisory node — unsealed (no `proven` seal) and NOT LIKELY_INVARIANT.
+    expect(a.fact.kind).toBe('advisory');
+    expect((a.fact as { seal?: string }).seal).toBeUndefined();
+    expect(a.label).toBeUndefined();
+    // the claim + grounding ride onto the advisory unchanged.
+    expect((a.fact as { claimNorm?: string }).claimNorm).toBe('charge() depends on the ledger module');
+  });
+
+  it('verifyDependency "abstain" but doors.grounded false ⇒ dropped (ungrounded) — the truth door still gates', () => {
+    const a = admit(
+      depProposal(),
+      makeDeps({ verifyDependency: () => 'abstain', doors: { grounded: () => false, nonObvious: () => true } }),
+    );
     expect(a.outcome).toBe('dropped');
     if (a.outcome !== 'dropped') throw new Error('unreachable');
-    expect(a.reason).toContain('abstained');
+    expect(a.reason).toContain('does not ground');
+    expect('fact' in a).toBe(false);
   });
 
   it('empty target OR empty scope ⇒ dropped (malformed)', () => {
