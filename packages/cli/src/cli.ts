@@ -7,7 +7,7 @@
 
 import type { Hash } from '@atlas/contracts';
 import { asHash } from '@atlas/kernel';
-import { headSha } from '@atlas/adapter-io';
+import { headSha, createHistorySource } from '@atlas/adapter-io';
 import { reportIndexPlan, relationsVerdict, negationsVerdict, verifyFactVerdict } from '@atlas/adapter-io';
 import type { IndexPlanReport, NegationLeg, OwnLeg, PromoteOut, RelationLeg, ReverifyReport, VerifyFactLeg, WiredHandler } from '@atlas/adapter-io';
 import type { DoctorSource, Guidance, Tool, Verdict } from '@atlas/tools';
@@ -225,8 +225,20 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
     // is FAIL-CLOSED-VISIBLE on both transports". The store's own message already carries the
     // `unaddressable-cas-object` discriminant verbatim (matching `governed-emit-address.ts`'s `commitRefusalOf`
     // re-file of the SAME error on the `emit` door), so it travels unchanged onto the `reason:` line.
+    //
+    // [WIRE-MINE-HISTORY, #243] The ONLY production caller of `runMineArms` — so THIS is the composition point
+    // that decides whether the shipped ranking ever sees a real signal. Left uninjected, `mine.ts`'s
+    // `history: deps?.history ?? defaultHistory()` always took the honest-empty fallback (zero commits, zero
+    // frontier), and every mined signal — hotspot, coupling, blame — was built, tested in isolation, and dead
+    // on this path (measured: `frontier()`/`signals()` never called with a real repo/rev outside a unit test).
+    // `createHistorySource(repoPath, 'HEAD')` is injected ONCE here and threaded through `deps` to EVERY arm
+    // `driveMineArms` drives (`{...deps, slot}`, mine-arms.ts) — one instance, still `probeHistory`'d fresh
+    // per arm (measured cost below; no cache added — see the WP's anti-overengineering bound). `defaultHistory()`
+    // stays the library-level fallback for every OTHER caller of `runMine`/`runMineArms` (tests, a non-git
+    // tree, `@atlas/cli`'s public surface) — this injection touches only the CLI's own composition, not the
+    // fallback's honesty.
     try {
-      return emitCli(await runMineArms(process.cwd()));
+      return emitCli(await runMineArms(process.cwd(), { history: createHistorySource(process.cwd(), 'HEAD') }));
     } catch (e) {
       const name = (e as { name?: unknown } | null)?.name;
       if (
