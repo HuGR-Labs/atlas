@@ -148,10 +148,33 @@ describe('reverifyFact — TAMPER BINDINGS: a true witness dressed with committe
     expect(row?.reason).toContain('tier');
   });
 
+  it('(c) TIER — an ABSENT tier (malformed/hand-authored JSON, no `tier` field at all) is TAMPERED, not served — never admitted', () => {
+    const { tier: _drop, ...rest } = wellFormed('nk-i2', witness) as unknown as Record<string, unknown>;
+    const fact = rest as unknown as GroundedFact;
+    const row = reverifyFact(node('nk-i2'), fact, leg);
+    expect(row?.outcome).toBe('broken');
+    expect(row?.reason).toContain('TAMPERED');
+    expect(row?.reason).toContain('tier');
+    expect(row?.reason).toContain('undefined');
+  });
+
   it('(b) ANCHOR — an anchor OUTSIDE the witness scope over the same true witness is TAMPERED, not served', () => {
     const fact = wellFormed('nk-j', witness);
     // PoC shape exactly: witness ranges over `src`, attacker anchors at an unrelated path outside it.
     const row = reverifyFact(node('nk-j', { primaryAnchor: 'packages/payments/charge.ts' }), fact, leg);
+    expect(row?.outcome).toBe('broken');
+    expect(row?.reason).toContain('TAMPERED');
+    expect(row?.reason).toContain('scope');
+  });
+
+  it('(b) ANCHOR — the WIDENING attack: a BROAD-ANCESTOR anchor over the same true witness is STILL TAMPERED (round 2)', () => {
+    // Round-1 fix (containment: anchor at-or-under scope) was found STILL OPEN by re-attack: containment is
+    // monotone in the widening direction, so ANY real reference under `src` also sits "under" `src` from a
+    // deeper anchor — a committer was never forced to write the narrow scope the mine pipeline emits. The
+    // tightened rule (`unitScopeOf(anchor) === scope`, exactly what `makeDependencyClaimParser` derives at
+    // mint time) closes it: the anchor must be a DIRECT child of the witness scope, never a deeper descendant.
+    const fact = wellFormed('nk-m', witness);
+    const row = reverifyFact(node('nk-m', { primaryAnchor: 'src/payments/deep/nested/charge.ts' }), fact, leg);
     expect(row?.outcome).toBe('broken');
     expect(row?.reason).toContain('TAMPERED');
     expect(row?.reason).toContain('scope');

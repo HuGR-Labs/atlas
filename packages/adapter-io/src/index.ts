@@ -125,8 +125,8 @@ export type { VerifyFactLeg, VerifyFactData, VerifyFactOpts, VerifyKind, VerifyR
 // REVERIFY-GATE (versioned-store chapter, step 3): re-prove every `seal:'proven'` fact's OWN witness against
 // the live index — `re-proven` / `broken` / `unverifiable`, never folded together. The pure fold; `atlas
 // verify-store` (CLI) drives it over `ComposedRuntime.reverify`.
-export { reverifyFact, reverifyStore } from './reverify-store.js';
-export type { ReverifyOutcome, ReverifyRow, ReverifyReport } from './reverify-store.js';
+export { reverifyFact, reverifyStore, MINED_TIER } from './reverify-store.js';
+export type { ReverifyOutcome, ReverifyRow, ReverifyReport, NodeFactPair } from './reverify-store.js';
 
 // Sound-negation escape analysis (#99): a target that never escapes into shared state is
 // groundable as a negative from the static index alone. Engine is language-blind; only the

@@ -33,12 +33,9 @@ import { nodeKey, primaryAnchorId, upsert } from '@atlas/knowledge';
 import type { Candidate, GroundedFact, WriteRequest } from '@atlas/knowledge';
 // The governance scope `mine` stamps on every candidate — imported, never retyped: the promotion door
 // authorizes against this exact string, and two copies of it is the drift the constant exists to stop.
-import { MINED_SCOPE } from '@atlas/cli';
+import { MINED_SCOPE, MINED_TIER } from '@atlas/cli';
 
-export { MINED_SCOPE };
-
-/** The class a mined row lives under — `T2`, the candidate class, always (`mine.ts` `MINED_TIER`). */
-const MINED_TIER = 'T2' as const;
+export { MINED_SCOPE, MINED_TIER };
 
 /** What was staged: the minted identity and the CAS address of the fact's bytes. */
 export interface StagedRow {

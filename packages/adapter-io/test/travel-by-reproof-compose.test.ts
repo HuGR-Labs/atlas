@@ -220,7 +220,7 @@ describe('TRAVEL-BY-REPROOF — CASE 2 (projection+cas tracked, staging is NOT):
 // `pack.invariants` and the advisory line reported "1 of 1 sealed 'proven' fact(s) … re-proven and are
 // served" — anyone who can land a commit could bolt arbitrary prose, at an arbitrary anchor, with arbitrary
 // authority, onto any true edge in the repo, and Atlas served it as trustworthy.
-function forgeAttackRepo(): { readonly repoPath: string; cleanup(): void } {
+function forgeAttackRepo(opts: { readonly primaryAnchor: string }): { readonly repoPath: string; cleanup(): void } {
   const repo = makeFixRepo();
   const scip = makeFixScip();
   const atlasDir = join(repo.repoPath, '.atlas');
@@ -245,7 +245,7 @@ function forgeAttackRepo(): { readonly repoPath: string; cleanup(): void } {
         family: 'advisory' as const,
         contentHash: String(stored),
         claims: [(forged as unknown as { claimNorm: string }).claimNorm],
-        primaryAnchor: 'packages/payments/charge.ts', // (b) anchor OUTSIDE the witness's own scope ('src')
+        primaryAnchor: opts.primaryAnchor, // (b) anchor NOT the witness scope's own direct child
       },
     ]]),
     cas: new Set([String(stored)]),
@@ -255,7 +255,7 @@ function forgeAttackRepo(): { readonly repoPath: string; cleanup(): void } {
 
 describe('THE PoC IS A REGRESSION TEST — forged tier + forged anchor + forged prose over a TRUE witness is NEVER served', () => {
   it('committed and queried: the forged fact is dropped, not served — never `ok:true` over it', () => {
-    const attack = forgeAttackRepo();
+    const attack = forgeAttackRepo({ primaryAnchor: 'packages/payments/charge.ts' }); // anchor OUTSIDE the witness's own scope ('src')
     try {
       git(attack.repoPath, 'add', '-f', '.atlas/projection.json', '.atlas/cas', '.atlas/policy.json', '.atlas/index.scip');
       git(attack.repoPath, 'commit', '-q', '-m', 'attacker: bolt a T0 security claim onto a trivial true edge');
@@ -264,6 +264,26 @@ describe('THE PoC IS A REGRESSION TEST — forged tier + forged anchor + forged 
       expect(nodeIdsOf(v)).toEqual([]); // the forged fact is NOT among what is served
       const runtime = composeRuntime(attack.repoPath) as unknown as { readAdvisory?: string };
       expect(runtime.readAdvisory).toContain('0 of 1'); // sealedProven:1, reProven:0 — the shape is proven, THIS fact is not
+    } finally {
+      attack.cleanup();
+    }
+  });
+
+  it('THE WIDENING ATTACK (round 2): a broad-ancestor anchor over the same true witness is STILL refused, not served', () => {
+    // Round-1's containment rule ("anchor at-or-under scope") was found STILL OPEN by re-attack: it is
+    // monotone in the widening direction, so an honest reference under `src` also sits "under" `src` from
+    // ANY deeper anchor — planting a T2 sound-oracle badge at an arbitrary file by citing a true reference
+    // in a broad ancestor directory, no forged tier/prose required. Tightened to `unitScopeOf(anchor) ===
+    // scope` (round 2); this is the regression pin for exactly that widening shape.
+    const attack = forgeAttackRepo({ primaryAnchor: 'src/payments/deep/nested/charge.ts' }); // deep descendant of 'src', not its direct child
+    try {
+      git(attack.repoPath, 'add', '-f', '.atlas/projection.json', '.atlas/cas', '.atlas/policy.json', '.atlas/index.scip');
+      git(attack.repoPath, 'commit', '-q', '-m', 'attacker: plant a badge deep under a broad true scope');
+      const v = composeRuntime(attack.repoPath).handler.handle('atlas-query', { scope: 'src', by: 'scope' });
+      expect(v.ok).toBe(true);
+      expect(nodeIdsOf(v)).toEqual([]);
+      const runtime = composeRuntime(attack.repoPath) as unknown as { readAdvisory?: string };
+      expect(runtime.readAdvisory).toContain('0 of 1');
     } finally {
       attack.cleanup();
     }

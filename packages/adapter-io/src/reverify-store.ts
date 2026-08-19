@@ -40,18 +40,27 @@
 
 import type { CurrentNode, GroundedFact, PredicateSlot } from '@atlas/knowledge';
 import { claimNormFromWitness } from '@atlas/genesis';
+import { unitScopeOf } from './llm.js';
 import type { VerifyFactLeg, VerifyReq } from './verify-fact-source.js';
 
 // MIRRORS `packages/cli/src/mine-staging.ts` `MINED_TIER`. `adapter-io` cannot import `@atlas/cli` — `cli`
 // depends on `adapter-io`, so the reverse would be a layer cycle (the ARCH constitution's `adapter-io` →
-// `tools` direction, never the other way) — so this is a LITERAL MIRROR, the same shape
-// `e2e-blackbox/test/stage.ts`'s own `MINED_TIER` mirror already uses in this repo. It is not a duplicated
-// SOURCE OF TRUTH so much as a duplicated CONSEQUENCE of one: every `seal:'proven'` fact is minted
-// EXCLUSIVELY by the mine pipeline's sound-oracle arm (`buildSound`, `@atlas/genesis` `admit-harness.ts`),
-// and every proposer that can reach that arm hardcodes `tier: 'T2'` (`mine-gate.ts`) — so "a `proven` fact's
-// tier is the mined tier" is a structural invariant of the shipped mint path, true for EVERY store, not a
-// tracked-store-only rule.
-const MINED_TIER = 'T2' as const;
+// `tools` direction, never the other way) — so this is a LITERAL MIRROR. It is not a duplicated SOURCE OF
+// TRUTH so much as a duplicated CONSEQUENCE of one: every `seal:'proven'` fact is minted EXCLUSIVELY by the
+// mine pipeline's sound-oracle arm (`buildSound`, `@atlas/genesis` `admit-harness.ts`), and every proposer
+// that can reach that arm hardcodes `tier: 'T2'` (`mine-gate.ts`) — so "a `proven` fact's tier is the mined
+// tier" is a structural invariant of the shipped mint path, true for EVERY store, not a tracked-store-only
+// rule.
+//
+// STALENESS (#199 fix-round round 2): a mirror with no shared import can silently start enforcing a STALE
+// tier if `MINED_TIER` is ever bumped without updating this copy. EXPORTED (not module-private) so
+// `packages/cli/test/mined-tier-mirror-pin.test.ts` — which CAN import both `@atlas/cli`'s own
+// `MINED_TIER` and this one, `cli` depending on `adapter-io` — pins byte-equality between them; that test
+// fails LOUDLY the moment either literal changes without the other. `e2e-blackbox/test/stage.ts`'s former
+// third copy is GONE — it now imports `MINED_TIER` from `@atlas/cli` directly (the same `MINED_SCOPE`
+// discipline that file already used), so only TWO literals remain: the true source (`mine-staging.ts`) and
+// this one unavoidable cross-layer mirror.
+export const MINED_TIER = 'T2' as const;
 
 /** The three re-verification outcomes — see the module header. Closed vocabulary. */
 export type ReverifyOutcome = 're-proven' | 'broken' | 'unverifiable';
@@ -100,15 +109,26 @@ function reqOf(slot: 'dependency' | 'count', target: string, scope: string, atLe
 
 /** `primaryAnchor` is the fact's OWN anchor (the tightest structural unit its grounding names,
  *  `primaryAnchorId`/KNOW-15d); `scope` is the verify-scope the witness was minted over (`witness.scope`,
- *  the directory the oracle actually ranged over when it proved the claim). A fact is "about" its witness
- *  only when the anchor lives AT or UNDER that scope — a fact anchored at `src/payments/charge.ts` whose
- *  witness ranges over `src` is not a fact about `charge.ts`, it is a true-but-unrelated edge wearing that
- *  anchor. MEASURED against the 17 REAL `seal:'proven'` facts in this repo's own `.atlas/` (#199 fix-round):
- *  every one has `primaryAnchor` either EQUAL to `witness.scope` or a path strictly UNDER it (e.g. scope
- *  `packages/knowledge/src/write`, anchor `packages/knowledge/src/write/router.ts`) — never the reverse,
- *  never a sibling, never unrelated. This predicate is exactly that relation, no looser. */
-function anchorWithinWitnessScope(primaryAnchor: string, scope: string): boolean {
-  return primaryAnchor === scope || primaryAnchor.startsWith(`${scope}/`);
+ *  the directory the oracle actually ranged over when it proved the claim).
+ *
+ * TIGHTENED (#199 fix-round, security seat re-attack): a CONTAINMENT rule ("anchor is at or under scope")
+ * is monotone in the WIDENING direction — any real reference under a narrow scope is trivially also under
+ * every ancestor of it, so a committer was never forced to write the NARROW scope the mine pipeline
+ * actually emits (proved live against the real production index: a fact re-anchored to `src/payments/deep/
+ * nested/charge.ts` still bound against `witness.scope: 'src'`, an honestly-worded, oracle-backed T2 badge
+ * planted at an arbitrary file by citing any true cross-package reference in a broad ancestor directory).
+ *
+ * The actual relation the mine pipeline PRODUCES — and the only one this check now ADMITS — is `scope IS
+ * the anchor's own containing directory`, exactly `unitScopeOf` (`llm.ts`, the SAME function
+ * `makeDependencyClaimParser` calls to derive `scope` from `cand.site.qualifiedPath` at mint time). REUSED
+ * here, never reimplemented, so the read-side check cannot drift from the write-side relation it is
+ * checking (this repo's recurring failure class — #186/N10 — one layer removed: a second COPY of a path
+ * relation, not a second oracle). MEASURED against the 17 REAL `seal:'proven'` facts in the main repo's own
+ * `.atlas/`: `unitScopeOf(primaryAnchor) === witness.scope` holds for all 17 (e.g. anchor
+ * `packages/knowledge/src/write/router.ts`, scope `packages/knowledge/src/write` — the anchor's OWN parent
+ * directory, never a grandparent, never a sibling). */
+function anchorMatchesWitnessScope(primaryAnchor: string, scope: string): boolean {
+  return unitScopeOf(primaryAnchor) === scope;
 }
 
 /** Re-verify ONE sealed fact against the live oracle. `node` is the fact's OWN `CurrentNode` row — the
@@ -124,7 +144,9 @@ function anchorWithinWitnessScope(primaryAnchor: string, scope: string): boolean
  * the (comparatively expensive) oracle replay — a tampered fact never needs the oracle to be dropped:
  *   (a) TIER    — `fact.tier` must be the mined tier (see `MINED_TIER` above); a `proven` seal is minted
  *                 ONLY by the mine pipeline, so any other tier is a committer's own invention.
- *   (b) ANCHOR  — `node.primaryAnchor` must be within `w.scope` (`anchorWithinWitnessScope`).
+ *   (b) ANCHOR  — `unitScopeOf(node.primaryAnchor)` must EQUAL `w.scope` (`anchorMatchesWitnessScope`) — the
+ *                 anchor's own containing directory, never a broader ancestor (containment alone is
+ *                 widening-monotone and was found still open after the first fix round).
  *   (c) PROSE   — `fact.claimNorm` must be BYTE-EQUAL to `claimNormFromWitness(w)`, the same pure function
  *                 `admit-harness.ts` mints the sentence with (#197 CLAIM-DERIVED-FROM-WITNESS) — re-derived
  *                 HERE from the stored witness, never trusted from the stored sentence itself. Hand-written
@@ -163,11 +185,11 @@ export function reverifyFact(node: CurrentNode, fact: GroundedFact, leg: VerifyF
     };
   }
   const anchor = node.primaryAnchor;
-  if (typeof anchor !== 'string' || anchor.length === 0 || !anchorWithinWitnessScope(anchor, w.scope)) {
+  if (typeof anchor !== 'string' || anchor.length === 0 || !anchorMatchesWitnessScope(anchor, w.scope)) {
     return {
       nodeKey,
       outcome: 'broken',
-      reason: `TAMPERED: primary anchor '${anchor ?? '(none)'}' is not within the witness's own scope '${w.scope}' — the fact is not about what its witness proves`,
+      reason: `TAMPERED: primary anchor '${anchor ?? '(none)'}' does not sit directly under the witness's own scope '${w.scope}' (unitScopeOf(anchor) must equal scope, never a broader ancestor) — the fact is not about what its witness proves`,
     };
   }
   const expectedClaim = claimNormFromWitness(w);
