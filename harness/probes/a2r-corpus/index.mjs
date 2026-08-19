@@ -40,7 +40,9 @@
 //                           teeth mutant provably gets WRONG (it reads 'broken' off the vanished word) while
 //                           the real scip oracle reads 're-proven' off the surviving reference edge — added
 //                           because the first 8 entries were, measured, all tied by that dumb heuristic
-//                           (a2r-reproof-teeth.mjs). See PR-W4b.
+//                           (a2r-reproof-teeth.mjs). TWO independent instances on DIFFERENT witnesses/packages
+//                           (PR-W4b: Mechanism @atlas/genesis; PR-W3b: isWeakerTier @atlas/knowledge) so the
+//                           not-string-solvable property does not rest on a single-entry margin (lucy #204).
 //
 // Every `edits` entry is a LITERAL, unique find/replace pair (never a regex) — reviewable by eye, and the
 // runner throws if `find` is not found EXACTLY once (a corpus entry that stops matching the real file is a
@@ -249,6 +251,29 @@ export const CORPUS = [
         find: "import { isTier, isWeakerTier } from '../ratify/tier.js';",
         replace:
           "import { isTier, isWeakerTier } from '../ratify/tier.js';\n// A2r PR-W3 mutation marker: a comment added near the import, both call sites below untouched.",
+      },
+    ],
+    expected: 're-proven',
+  },
+  {
+    id: 'PR-W3b-comment-only-mention-isWeakerTier',
+    class: 'preserving',
+    real: true,
+    technique: 'comment-only-mention',
+    description:
+      "upsert.ts's JSDoc names `isWeakerTier` while explaining the class-comparison totality; the bare word is " +
+      'dropped from that COMMENT while the real import (line 24) and BOTH call sites (lines 151, 284) in the ' +
+      'same file are left untouched — the witness edge survives (re-proven), but the string-only `name-vanish` ' +
+      'mutant false-alarms broken off the vanished word. A SECOND independent discriminator on a DIFFERENT ' +
+      'witness/package than PR-W4b (isWeakerTier @atlas/knowledge, vs Mechanism @atlas/genesis), so the ' +
+      "corpus's not-string-solvable property no longer rests on a single-entry margin (lucy cold-review, PR #204).",
+    witness: { slot: 'dependency', target: W3_TARGET, scope: 'packages/knowledge/src/write' },
+    anchor: 'packages/knowledge/src/write/upsert.ts',
+    edits: [
+      {
+        file: 'packages/knowledge/src/write/upsert.ts',
+        find: 'the write must match it: `isWeakerTier` is total over `unknown`',
+        replace: 'the write must match it: the weaker-tier lattice check is total over `unknown`',
       },
     ],
     expected: 're-proven',
