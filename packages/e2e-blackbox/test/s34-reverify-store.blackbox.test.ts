@@ -11,6 +11,7 @@
 // would ever produce it.
 
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -101,6 +102,55 @@ describe('S34 — `atlas verify-store` re-proves a promoted witness, then catche
     expect(verify.stdout).toContain('verify-store: 1 sealed-proven fact(s) — 0 re-proven, 1 broken, 0 unverifiable');
     expect(verify.stdout).toMatch(/ {2}broken /);
     expect(verify.stdout).toContain('no longer re-prove against the live index');
+  });
+});
+
+// ── S34b — `atlas verify-store` against a TRACKED store (#199 fix-round finding 3) ─────────────────────────
+// The prior S34 stories above never construct a TRACKED store — `provenance()` stays `'trusted'` throughout,
+// so `reverify`'s old wiring (`reverifyStore(driftFacts, …)` off the WRITE-gated store) happened to see the
+// same population the read leg did, by accident of never exercising the OTHER branch. Cold review measured
+// the divergence live: on a `tracked-provable` store, `atlas query`'s trailing advisory said "1 of 1 re-
+// proven", while `atlas verify-store` — driven by the SAME composed runtime, SAME durable store — said
+// "0 sealed-proven fact(s) … nothing to re-verify". This story is the missing end-to-end coverage: mine +
+// promote as usual (untracked), COMMIT the durable store (making it `tracked-provable`), then assert
+// `atlas query` and `atlas verify-store` name the SAME count — never a live contradiction between the two
+// surfaces reading the one store.
+const git = (repoPath: string, ...args: string[]): void => {
+  execFileSync('git', ['-C', repoPath, ...args], { stdio: 'pipe' });
+};
+
+describe('S34b — `atlas verify-store` sees the SAME population `atlas query`s advisory names, on a TRACKED store', () => {
+  it('mine + promote (untracked), then commit `.atlas/` — verify-store reports 1 re-proven, matching the read leg', () => {
+    const trackedRepo = makeFixtureRepo({ files: FILES, index: INDEX_WITH_CALLER, policy: CURATOR_POLICY });
+    try {
+      const mine = runAtlas(trackedRepo.repoPath, ['mine', '.'], {
+        ATLAS_MODEL_CONFIG: modelConfigPath,
+        ATLAS_MINE_SLOT: 'dependency',
+      });
+      expect(mine.exitCode).toBe(0);
+      const promote = runAtlas(trackedRepo.repoPath, ['promote'], CURATOR_ENV);
+      expect(promote.exitCode).toBe(0);
+
+      // Make the durable store TRACKED — `provenance()` flips to `tracked-provable` (staging is NOT
+      // committed, so this is case 2, not the flat case-3 refusal).
+      git(trackedRepo.repoPath, 'add', '-f', '.atlas/projection.json', '.atlas/cas', '.atlas/policy.json', '.atlas/index.scip');
+      git(trackedRepo.repoPath, 'commit', '-q', '-m', 'ship the durable store (accidental, but re-provable)');
+
+      // The READ leg's own advisory (riding `atlas query`'s trailing note) names "1 of 1 … re-proven".
+      const query = runAtlas(trackedRepo.repoPath, ['query', 'src', '--by', 'scope']);
+      expect(query.exitCode).toBe(0);
+      expect(query.stdout).toContain('1 of 1');
+      expect(query.stdout).toContain('re-proven and are served');
+
+      // `atlas verify-store` — the SAME composed runtime, SAME store — must name the SAME count, not the
+      // all-zero "nothing to re-verify" the write-gated-store regression reported.
+      const verify = runAtlas(trackedRepo.repoPath, ['verify-store']);
+      expect(verify.exitCode).toBe(0);
+      expect(verify.stdout).toContain('verify-store: 1 sealed-proven fact(s) — 1 re-proven, 0 broken, 0 unverifiable');
+      expect(verify.stdout).not.toContain('0 sealed-proven fact(s)');
+    } finally {
+      trackedRepo.cleanup();
+    }
   });
 });
 

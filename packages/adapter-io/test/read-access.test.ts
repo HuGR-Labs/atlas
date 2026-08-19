@@ -8,18 +8,28 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { asHash, asNodeKey } from '@atlas/kernel';
 import type { ScipOutput } from '@atlas/index';
 import type { GroundedFact } from '@atlas/knowledge';
 import { currentNodes } from '@atlas/knowledge';
+import { claimNormFromWitness } from '@atlas/genesis';
 import { createVerifyFactLeg } from '../src/verify-fact-source.js';
 import type { VerifyFactLeg } from '../src/verify-fact-source.js';
 import { createDiskStore, rehydrateProjection } from '../src/store.js';
 import type { DiskStore } from '../src/store.js';
 import { buildReadAccess, trackedProvableAdvisory } from '../src/read-access.js';
 import { REJECTED_UNTRUSTED_STORE } from '../src/read-provenance.js';
+
+// FIXTURE DISCIPLINE (#199 fix-round, finding 2): on REAL mined data `CurrentNode.nodeKey` is a content
+// hash, DISJOINT from `GroundedFact.id` (a human-readable path) — `hashOf` mints a nodeKey that is never
+// equal to the id it is derived from, so a join keyed off the wrong field is something this suite can
+// actually catch (see the "disjoint nodeKey" test at the bottom).
+function hashOf(id: string): string {
+  return createHash('sha256').update(id).digest('hex');
+}
 
 const GREET = 'scip-ts npm fixture 1.0.0 `greet`().';
 const NEVER = 'scip-ts npm fixture 1.0.0 `never`().';
@@ -33,6 +43,8 @@ const scip: ScipOutput = {
     { relativePath: 'src/a.ts', occurrences: [{ symbol: GREET, role: 'reference' }] },
   ],
 };
+
+const REPROVEN_WITNESS = { slot: 'dependency' as const, target: GREET, scope: 'src' };
 
 function advisory(id: string, extra: Partial<GroundedFact>): GroundedFact {
   return {
@@ -56,22 +68,40 @@ afterEach(() => {
 
 /** A bare, ungated store (no `trusted` seam) seeded with the four-fact mix `reverify-store.test.ts` uses —
  *  one of each outcome, PLUS an unsealed fact, so the filter is exercised on every population it must tell
- *  apart. Returns the store and the seeded rows keyed by their intent. */
+ *  apart. Returns the store and the seeded rows keyed by their intent.
+ *
+ * `nodeKey` is `hashOf(fact.id)` — deliberately DISJOINT from `fact.id`, mirroring REAL mined data (#199
+ * fix-round finding 2). `primaryAnchor` is set within the witness's own `scope` ('src') for every row so
+ * the three-way outcome (re-proven/broken/unverifiable) is decided by the SAME thing it names, not by an
+ * anchor-binding failure the row was never meant to exercise; `nk-re-proven`'s `claimNorm` is the sentence
+ * `claimNormFromWitness` derives from its OWN witness, so it clears the prose binding too. */
 function seededStore(): { readonly store: DiskStore; readonly casPath: string } {
   const dir = mktemp();
   const casPath = join(dir, 'cas');
   const store = createDiskStore(casPath, () => asHash('seed'));
-  const reProven = advisory('nk-re-proven', { seal: 'proven', witness: { slot: 'dependency', target: GREET, scope: 'src' } });
+  const reProven = advisory('nk-re-proven', { seal: 'proven', witness: REPROVEN_WITNESS, claimNorm: claimNormFromWitness(REPROVEN_WITNESS) });
   const broken = advisory('nk-broken', { seal: 'proven', witness: { slot: 'dependency', target: NEVER, scope: 'src' } });
   const unverifiable = advisory('nk-unverifiable', { seal: 'proven' });
   const unsealed = advisory('nk-unsealed', {});
   const rows = [reProven, broken, unverifiable, unsealed].map((fact) => ({ fact, hash: store.put(fact as unknown as never) }));
+  // NOTE: `sidecar.ts`'s well-formedness check requires the Map KEY to equal the row's OWN `nodeKey`
+  // (KNOW-4g's representation invariant — a row whose key is not its own `nodeKey` round-trips as DROPPED,
+  // not merely mis-joined) — so the hash-shaped key goes on BOTH sides; `fact.id` stays the disjoint path.
   store.persistProjection({
     current: new Map(
-      rows.map(({ fact, hash }) => [
-        String(fact.id),
-        { nodeKey: String(fact.id), family: 'advisory' as const, contentHash: String(hash), claims: [(fact as unknown as { claimNorm: string }).claimNorm] },
-      ]),
+      rows.map(({ fact, hash }) => {
+        const nodeKey = hashOf(String(fact.id));
+        return [
+          nodeKey,
+          {
+            nodeKey,
+            family: 'advisory' as const,
+            contentHash: String(hash),
+            claims: [(fact as unknown as { claimNorm: string }).claimNorm],
+            primaryAnchor: 'src/x.ts',
+          },
+        ] as const;
+      }),
     ),
     cas: new Set(rows.map(({ hash }) => String(hash))),
   });
@@ -142,12 +172,12 @@ describe('buildReadAccess — CASE 2 (tracked-provable): filtered to what RE-PRO
       rows: expect.any(Array),
     });
     const served = currentNodes(rehydrateProjection(access.store));
-    expect(served.map((n) => n.nodeKey).sort()).toEqual(['nk-re-proven']);
+    expect(served.map((n) => n.nodeKey).sort()).toEqual([hashOf('nk-re-proven')]);
     // TEETH (c)/(d): `get` is filtered too, not just `loadProjection` — the address-direct bypass
     // (`atlas node <hash>`) must not serve a broken/unverifiable row's bytes either.
     const projRaw = rehydrateProjection(createDiskStore(casPath));
     for (const n of currentNodes(projRaw)) {
-      const isReProven = n.nodeKey === 'nk-re-proven';
+      const isReProven = n.nodeKey === hashOf('nk-re-proven');
       expect(access.store.get(n.contentHash as never) !== undefined).toBe(isReProven);
     }
   });

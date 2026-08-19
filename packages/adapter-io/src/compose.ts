@@ -47,7 +47,7 @@ import type { NegationLeg } from './negation-source.js';
 import { createVerifyFactLeg } from './verify-fact-source.js';
 import type { VerifyFactLeg } from './verify-fact-source.js';
 import { reverifyStore } from './reverify-store.js';
-import type { ReverifyReport } from './reverify-store.js';
+import type { NodeFactPair, ReverifyReport } from './reverify-store.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
 import { gitStoreProvenance } from './store-provenance.js';
 import type { SidecarTrust } from './store-provenance.js';
@@ -325,9 +325,17 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
   const provenance = gitStoreProvenance(repoPath);
   const trusted: SidecarTrust = () => provenance() === 'trusted';
   const store = createDiskStore(join(repoPath, CAS_REL), () => headSha(repoPath), trusted);
-  const driftFacts = currentNodes(rehydrateProjection(store))
-    .map((n) => store.get(n.contentHash as Hash))
-    .filter((o): o is GroundedFact => o !== undefined);
+  // `driftPairs` carries each fact ALONGSIDE its own `CurrentNode` — `reverify` (`reverify-store.ts`
+  // finding 1b, #199 fix-round) needs `node.primaryAnchor` for the anchor-binding check, which
+  // `GroundedFact` itself never carries. `driftFacts` (the reconcile seams' input, unchanged shape) is
+  // just this same pairing's `.fact` projection — ONE store read, ONE map, no second pass.
+  const driftPairs: readonly NodeFactPair[] = currentNodes(rehydrateProjection(store))
+    .map((node) => {
+      const fact = store.get(node.contentHash as Hash);
+      return fact === undefined ? undefined : { node, fact };
+    })
+    .filter((p): p is NodeFactPair => p !== undefined);
+  const driftFacts = driftPairs.map((p) => p.fact);
   // THE SOUND-GENESIS PROVEN-FAMILY ORACLE, built ONCE and shared by BOTH `verifyFact` (the CLI's
   // `atlas verify-fact`) and `reverify` (`atlas verify-store`) below — the ONE production oracle, never a
   // duplicate that could drift from it.
@@ -502,11 +510,24 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     // THE SOUND-GENESIS PROVEN-FAMILY FEED (`atlas verify-fact`). Off the SAME `scipOutput` the axes ride — a
     // program oracle over the immutable code index, built once and closed over (see verify-fact-source.ts).
     verifyFact: verifyFactLeg,
-    // THE REVERIFY-GATE PASS (`atlas verify-store`). A thunk over the SAME `verifyFactLeg` and the SAME
-    // `driftFacts` readback built above (off the WRITE-gated `store` — unchanged: this command answers "what
-    // would re-prove", independent of whether `readAccess` is currently serving anything) — no second
-    // oracle, no second store read (see `reverify-store.ts`).
-    reverify: () => reverifyStore(driftFacts, verifyFactLeg),
+    // THE REVERIFY-GATE PASS (`atlas verify-store`). MUST see the SAME population `readAdvisory`
+    // (`trackedProvableAdvisory`, above) describes — #199 fix-round finding 3 caught this NOT holding: on a
+    // `tracked-provable` store `driftFacts` is built off the WRITE-gated `store`, whose `loadProjection()`
+    // BLANKS to `undefined` whenever `trusted()` reads `false` (always true for a tracked store — see
+    // `store-provenance.ts`), so the old `reverifyStore(driftFacts, …)` here always reported the all-zero
+    // "nothing to re-verify" report on the SAME runtime where the read leg's advisory said "N of N re-proven
+    // and served" — a live, user-visible contradiction (measured on this repo's own `.atlas/`: advisory said
+    // 17/17, `reverify()` said 0/0).
+    //
+    // FIX: reuse `readAccess.reverified` — the FULL row-by-row report `buildReadAccess`/`buildProvable`
+    // already computed off the RAW (un-gated) store for `tracked-provable`, the exact pass
+    // `trackedProvableAdvisory` summarizes — so both surfaces read the identical rows, no second oracle
+    // replay, no second raw store read. `readAccess.reverified` is `undefined` for `trusted` (case 1, the
+    // read leg pays NO new cost there, by design) and for `tracked-staging` (case 3, flat refusal) — for
+    // BOTH of those this falls back to the pre-existing `reverifyStore(driftPairs, verifyFactLeg)` pass over
+    // the WRITE-gated store, byte-identical to the prior behaviour (for `trusted`, that store is not
+    // blanked; for `tracked-staging`, it blanks to `[]`, matching that leg's own refusal).
+    reverify: () => readAccess.reverified ?? reverifyStore(driftPairs, verifyFactLeg),
     ...(readRefusal !== undefined ? { readRefusal } : {}),
     ...(readAdvisory !== undefined ? { readAdvisory } : {}),
   };

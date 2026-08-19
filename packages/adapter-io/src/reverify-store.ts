@@ -25,19 +25,33 @@
 // `proven` and is simply not in scope for this pass — it is neither re-proven nor broken nor unverifiable,
 // it is UNSEALED, and this module never counts it.
 //
-// ── WHY THIS TAKES `driftFacts`-SHAPED INPUT, NOT A STORE PATH ───────────────────────────────────────────
-// `compose.ts` already builds `driftFacts` — the FULL hydrated `GroundedFact[]` read back off the durable
-// CAS via `currentNodes(rehydrateProjection(store)).map(n => store.get(n.contentHash))` — for the reconcile
-// seams. This module reuses exactly that list rather than re-reading the store a second time: ONE store
-// read, ONE index build, shared by reconcile AND reverify (the sizing note's binding constraint — ~800ms to
-// build the index once — is paid ONCE per `composeRuntime` call regardless of how many read doors ride it).
+// ── WHY THIS TAKES `NodeFactPair[]`, NOT A STORE PATH ────────────────────────────────────────────────────
+// `compose.ts` already builds the projection readback — `currentNodes(rehydrateProjection(store)).map(n =>
+// ({ node: n, fact: store.get(n.contentHash) }))` — for the reconcile seams (`driftFacts` is that same
+// readback's `.fact` projection). This module reuses exactly that pairing rather than re-reading the store a
+// second time: ONE store read, ONE index build, shared by reconcile AND reverify (the sizing note's binding
+// constraint — ~800ms to build the index once — is paid ONCE per `composeRuntime` call regardless of how
+// many read doors ride it). `CurrentNode` rides alongside each fact because `reverifyFact`'s anchor binding
+// (finding 1b, #199 fix-round) needs `node.primaryAnchor`, which `GroundedFact` itself never carries.
 //
 // PURE + TOTAL: no IO, no clock. `leg` is the ONLY effectful thing touched, and it is INJECTED — never a
 // second oracle constructed here (a duplicated oracle that drifts from the shipped one is a known failure
 // class in this repo, see `verify-fact-source.ts`'s header).
 
-import type { GroundedFact, PredicateSlot } from '@atlas/knowledge';
+import type { CurrentNode, GroundedFact, PredicateSlot } from '@atlas/knowledge';
+import { claimNormFromWitness } from '@atlas/genesis';
 import type { VerifyFactLeg, VerifyReq } from './verify-fact-source.js';
+
+// MIRRORS `packages/cli/src/mine-staging.ts` `MINED_TIER`. `adapter-io` cannot import `@atlas/cli` — `cli`
+// depends on `adapter-io`, so the reverse would be a layer cycle (the ARCH constitution's `adapter-io` →
+// `tools` direction, never the other way) — so this is a LITERAL MIRROR, the same shape
+// `e2e-blackbox/test/stage.ts`'s own `MINED_TIER` mirror already uses in this repo. It is not a duplicated
+// SOURCE OF TRUTH so much as a duplicated CONSEQUENCE of one: every `seal:'proven'` fact is minted
+// EXCLUSIVELY by the mine pipeline's sound-oracle arm (`buildSound`, `@atlas/genesis` `admit-harness.ts`),
+// and every proposer that can reach that arm hardcodes `tier: 'T2'` (`mine-gate.ts`) — so "a `proven` fact's
+// tier is the mined tier" is a structural invariant of the shipped mint path, true for EVERY store, not a
+// tracked-store-only rule.
+const MINED_TIER = 'T2' as const;
 
 /** The three re-verification outcomes — see the module header. Closed vocabulary. */
 export type ReverifyOutcome = 're-proven' | 'broken' | 'unverifiable';
@@ -84,9 +98,44 @@ function reqOf(slot: 'dependency' | 'count', target: string, scope: string, atLe
   return { kind: 'count', claim: { sourceScope: scope, target, worldScope: scope, atLeast: atLeast ?? 0, exact: false } };
 }
 
-/** Re-verify ONE sealed fact against the live oracle. `undefined` iff the fact is not `seal:'proven'` at all
- *  (out of scope for this pass — see the module header). */
-export function reverifyFact(fact: GroundedFact, leg: VerifyFactLeg): ReverifyRow | undefined {
+/** `primaryAnchor` is the fact's OWN anchor (the tightest structural unit its grounding names,
+ *  `primaryAnchorId`/KNOW-15d); `scope` is the verify-scope the witness was minted over (`witness.scope`,
+ *  the directory the oracle actually ranged over when it proved the claim). A fact is "about" its witness
+ *  only when the anchor lives AT or UNDER that scope — a fact anchored at `src/payments/charge.ts` whose
+ *  witness ranges over `src` is not a fact about `charge.ts`, it is a true-but-unrelated edge wearing that
+ *  anchor. MEASURED against the 17 REAL `seal:'proven'` facts in this repo's own `.atlas/` (#199 fix-round):
+ *  every one has `primaryAnchor` either EQUAL to `witness.scope` or a path strictly UNDER it (e.g. scope
+ *  `packages/knowledge/src/write`, anchor `packages/knowledge/src/write/router.ts`) — never the reverse,
+ *  never a sibling, never unrelated. This predicate is exactly that relation, no looser. */
+function anchorWithinWitnessScope(primaryAnchor: string, scope: string): boolean {
+  return primaryAnchor === scope || primaryAnchor.startsWith(`${scope}/`);
+}
+
+/** Re-verify ONE sealed fact against the live oracle. `node` is the fact's OWN `CurrentNode` row — the
+ *  source of `primaryAnchor`, which `GroundedFact` itself does not carry (KNOW-15d: the anchor is a
+ *  projection-row carrier, `projection-types.ts`, not part of the CAS-stored fact). `undefined` iff the
+ *  fact is not `seal:'proven'` at all (out of scope for this pass — see the module header).
+ *
+ * ── THE THREE TAMPER BINDINGS (security seat finding 1, #199 fix-round) ────────────────────────────────
+ * A witness that replays PROVEN authenticates only a fact SHAPE — "this scope references this target" —
+ * never THIS fact's tier, anchor, or prose, all three of which a committer can otherwise choose freely and
+ * bolt onto an unrelated true edge (measured live: a T0 "no SQL injection" claim at `charge.ts`, riding a
+ * `greet()` reference witness, served `ok:true`). These three checks close exactly that gap and run BEFORE
+ * the (comparatively expensive) oracle replay — a tampered fact never needs the oracle to be dropped:
+ *   (a) TIER    — `fact.tier` must be the mined tier (see `MINED_TIER` above); a `proven` seal is minted
+ *                 ONLY by the mine pipeline, so any other tier is a committer's own invention.
+ *   (b) ANCHOR  — `node.primaryAnchor` must be within `w.scope` (`anchorWithinWitnessScope`).
+ *   (c) PROSE   — `fact.claimNorm` must be BYTE-EQUAL to `claimNormFromWitness(w)`, the same pure function
+ *                 `admit-harness.ts` mints the sentence with (#197 CLAIM-DERIVED-FROM-WITNESS) — re-derived
+ *                 HERE from the stored witness, never trusted from the stored sentence itself. Hand-written
+ *                 prose cannot match; the correctly-derived sentence CAN, and that is fine — it says exactly
+ *                 what the witness proves and nothing more.
+ * All three failures are reported as `broken` (the fact is not served, same bucket a drifted witness lands
+ * in) with a `TAMPERED:` reason — DISTINCT wording from a drift `broken` ("did NOT re-prove"), so an
+ * operator can tell "the code moved under this fact" from "this fact was altered after the oracle proved
+ * something else". Dropped, never clamped: silently rewriting a tampered tier/anchor/prose back to the
+ * derived value would hide that a tamper was attempted at all. */
+export function reverifyFact(node: CurrentNode, fact: GroundedFact, leg: VerifyFactLeg): ReverifyRow | undefined {
   if (fact.seal !== 'proven') return undefined;
   const nodeKey = String(fact.id);
   // `witness` is carried ONLY on `AdvisoryNode` (#195 `buildSound` mints the sound-oracle arm as an
@@ -105,6 +154,30 @@ export function reverifyFact(fact: GroundedFact, leg: VerifyFactLeg): ReverifyRo
   if (w.slot === 'count' && typeof w.atLeast !== 'number') {
     return { nodeKey, outcome: 'unverifiable', reason: "witness slot 'count' carries no atLeast bound — nothing to replay" };
   }
+  // ── TAMPER BINDINGS (a)/(b)/(c) — see the doc comment above. Checked BEFORE the oracle replay. ──────────
+  if (fact.tier !== MINED_TIER) {
+    return {
+      nodeKey,
+      outcome: 'broken',
+      reason: `TAMPERED: tier '${String(fact.tier)}' is not the mined tier '${MINED_TIER}' — every seal:'proven' fact is minted by the mine pipeline, so a different tier was chosen by whoever committed it, not proven by anything`,
+    };
+  }
+  const anchor = node.primaryAnchor;
+  if (typeof anchor !== 'string' || anchor.length === 0 || !anchorWithinWitnessScope(anchor, w.scope)) {
+    return {
+      nodeKey,
+      outcome: 'broken',
+      reason: `TAMPERED: primary anchor '${anchor ?? '(none)'}' is not within the witness's own scope '${w.scope}' — the fact is not about what its witness proves`,
+    };
+  }
+  const expectedClaim = claimNormFromWitness(w);
+  if (fact.kind !== 'advisory' || fact.claimNorm !== expectedClaim) {
+    return {
+      nodeKey,
+      outcome: 'broken',
+      reason: `TAMPERED: claim text does not match the sentence DERIVED from the witness ('${expectedClaim}') — hand-written prose over a witness that proves something narrower`,
+    };
+  }
   const verdict = leg(reqOf(w.slot as 'dependency' | 'count', w.target, w.scope, w.atLeast));
   if (verdict.verdict === 'proven') {
     return { nodeKey, outcome: 're-proven', reason: `replayed PROVEN over (${w.slot}, ${w.target}, ${w.scope})` };
@@ -116,16 +189,25 @@ export function reverifyFact(fact: GroundedFact, leg: VerifyFactLeg): ReverifyRo
   };
 }
 
+/** One projection row paired with the `GroundedFact` its `contentHash` resolves to — the shape
+ *  `reverifyFact` needs (`node.primaryAnchor` for the anchor binding) and the shape every caller already
+ *  has lying around from `currentNodes(rehydrateProjection(store)).map(n => ({ node: n, fact: store.get(n.contentHash) }))`. */
+export interface NodeFactPair {
+  readonly node: CurrentNode;
+  readonly fact: GroundedFact;
+}
+
 /**
- * Re-verify EVERY `proven`-sealed fact in `facts` against `leg` — build the index ONCE (the caller's job,
+ * Re-verify EVERY `proven`-sealed fact in `pairs` against `leg` — build the index ONCE (the caller's job,
  * `compose.ts`), loop, count three buckets. Anti-overengineering by construction: no cache, no worker pool, no
- * config. `facts` is the FULL durable-store readback (`driftFacts`-shaped) — reading the STORE, never a
- * command's own summary, per the chapter's honesty requirement.
+ * config. `pairs` is the FULL durable-store readback (`driftFacts`-shaped, now carrying each fact's own
+ * `CurrentNode` alongside it) — reading the STORE, never a command's own summary, per the chapter's honesty
+ * requirement.
  */
-export function reverifyStore(facts: readonly GroundedFact[], leg: VerifyFactLeg): ReverifyReport {
+export function reverifyStore(pairs: readonly NodeFactPair[], leg: VerifyFactLeg): ReverifyReport {
   const rows: ReverifyRow[] = [];
-  for (const fact of facts) {
-    const row = reverifyFact(fact, leg);
+  for (const { node, fact } of pairs) {
+    const row = reverifyFact(node, fact, leg);
     if (row !== undefined) rows.push(row);
   }
   return {

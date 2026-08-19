@@ -20,6 +20,7 @@ import { mkdirSync, writeFileSync, copyFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { asHash, asNodeKey } from '@atlas/kernel';
 import type { GroundedFact } from '@atlas/knowledge';
+import { claimNormFromWitness } from '@atlas/genesis';
 import { composeRuntime } from '../src/compose.js';
 import { createDiskStore } from '../src/store.js';
 import { makeFixRepo } from './harness/fix-repo.js';
@@ -74,15 +75,28 @@ describe('REVERIFY-GATE — composeRuntime(repoPath).reverify() over the REAL du
       // Seed the CAS directly — reads the durable store the SAME `composeRuntime` will re-read, never a
       // second store. `store.put` returns the REAL content-addressed hash (re-verified on every `get`).
       const store = createDiskStore(join(repoPath, '.atlas', 'cas'), () => asHash('seed'));
-      const reProven = sealedAdvisory('nk-re-proven', { witness: { slot: 'dependency', target: SYM_GREET, scope: 'src' } });
-      const broken = sealedAdvisory('nk-broken', { witness: { slot: 'dependency', target: SYM_MISSING, scope: 'src' } });
+      const reProvenWitness = { slot: 'dependency' as const, target: SYM_GREET, scope: 'src' };
+      const brokenWitness = { slot: 'dependency' as const, target: SYM_MISSING, scope: 'src' };
+      const reProven = sealedAdvisory('nk-re-proven', { witness: reProvenWitness, claimNorm: claimNormFromWitness(reProvenWitness) });
+      // `broken`'s claimNorm/tier/anchor STILL bind (only its WITNESS fails to replay) — the reason this
+      // test wants is the DRIFT reason ("did NOT re-prove", oracle abstains `target-unresolvable`), never
+      // the TAMPER reason a mismatched binding would produce first (#199 fix-round: tamper checks run
+      // BEFORE the oracle replay, so a fixture that fails a binding never reaches the oracle at all).
+      const broken = sealedAdvisory('nk-broken', { witness: brokenWitness, claimNorm: claimNormFromWitness(brokenWitness) });
       const unverifiable = sealedAdvisory('nk-unverifiable', {});
       const rows = [reProven, broken, unverifiable].map((fact) => ({ fact, hash: store.put(fact as unknown as never) }));
+      // `primaryAnchor` is what the anchor-binding check (#199 fix-round finding 1b) reads — every seeded
+      // row lives under `src`, matching the witnesses' own scope, so the outcome is decided by what this
+      // test is actually about (re-proven/broken/unverifiable), not by an anchor mismatch it never meant
+      // to exercise. NOTE: the Map KEY must equal the row's own `nodeKey` (KNOW-4g well-formedness); this
+      // fixture keeps `nodeKey === fact.id` (unlike the disjoint-hash fixtures elsewhere) because nothing
+      // here tests the anchor-vs-nodeKey join — `reverify()` reads `ReverifyRow.nodeKey` (== `fact.id`) by
+      // DESIGN, never `CurrentNode.nodeKey`.
       store.persistProjection({
         current: new Map(
           rows.map(({ fact, hash }) => [
             String(fact.id),
-            { nodeKey: String(fact.id), family: 'advisory', contentHash: String(hash), claims: [], seal: 'proven' },
+            { nodeKey: String(fact.id), family: 'advisory', contentHash: String(hash), claims: [], seal: 'proven', primaryAnchor: 'src/app.ts' },
           ]),
         ),
         cas: new Set(rows.map(({ hash }) => String(hash))),

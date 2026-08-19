@@ -111,7 +111,7 @@ function buildProvable(
       const fact = raw.get(node.contentHash as Hash) as GroundedFact | undefined;
       if (fact !== undefined) pairs.push({ node, fact });
     }
-    const rows = pairs.map((p) => reverifyFact(p.fact, verifyFactLeg));
+    const rows = pairs.map((p) => reverifyFact(p.node, p.fact, verifyFactLeg));
     const sealedProven = rows.filter((r): r is NonNullable<typeof r> => r !== undefined);
     const report: ReverifyReport = {
       sealedProven: sealedProven.length,

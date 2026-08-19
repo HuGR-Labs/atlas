@@ -404,6 +404,17 @@ function buildSound(p: PredicateProposal, obviousness: ObviousnessScore): Adviso
  */
 function claimNormFor(p: PredicateProposal, witness: PredicateWitness | undefined): string {
   if (witness === undefined) return p.claimNorm; // GEN-12k arm — no witness; model prose stands (out of scope)
+  return claimNormFromWitness(witness);
+}
+
+/**
+ * The witness-only half of `claimNormFor`, EXPORTED (TRAVEL-BY-REPROOF, #199 fix-round finding 1a) so a
+ * re-verifier holding nothing but a STORED witness — never a `PredicateProposal`, which only exists inside
+ * one mine run — can RE-DERIVE the sentence a `proven` seal is required to carry and demand byte equality.
+ * Pure, total, identical to the branch `claimNormFor` already took when `witness !== undefined`; extracting
+ * it changes no behaviour of `claimNormFor` itself.
+ */
+export function claimNormFromWitness(witness: PredicateWitness): string {
   return witness.slot === 'count' && typeof witness.atLeast === 'number'
     ? `${witness.target} is referenced by at least ${witness.atLeast} distinct unit(s) under ${witness.scope} (witnessed lower bound, sound oracle)`
     : `${witness.scope} references ${witness.target} (witnessed cross-unit reference, sound oracle)`;
