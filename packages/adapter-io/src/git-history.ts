@@ -131,12 +131,38 @@ function commitBaskets(repo: string, rev: string): CommitBasket[] {
   return commits;
 }
 
+/** A trivial per-key memo — `fn` runs at most once per distinct `key`, cached for the LIFETIME of the
+ *  enclosing `createHistorySource` instance. Sufficient because every cached read here (`commitCount`,
+ *  `shallow`, `blameConcentration`, `frontier`, `signals`) is a PURE function of `(repo, rev[, path])`: this
+ *  process never commits/rewrites the repo mid-`atlas mine`, so a given rev's blame/log output cannot change
+ *  between the first caller (arm 1) and the third (arm 3). The scar this is deliberately UNLIKE (#211, a
+ *  cache that went wrong after ~24 builds in one process) keyed on something narrower than its inputs; here
+ *  the key is exactly the arguments the memoized call depends on — never the closed-over `repoPath`/`rev`
+ *  alone — so a caller that ever passed a different `(repo, rev)` through the SAME instance would miss the
+ *  cache rather than read a stale answer for the wrong rev. */
+function memo<K, V>(fn: (k: K) => V): (k: K) => V {
+  const cache = new Map<K, V>();
+  return (k: K): V => {
+    const hit = cache.get(k);
+    if (hit !== undefined) return hit;
+    const v = fn(k);
+    cache.set(k, v);
+    return v;
+  };
+}
+
 /**
  * Construct the S1 mining `HistorySource` at a git revision (ADAPT-GIT-1).
  *
  * Widened from `(rev)` → `(repoPath, rev)`: the factory closes over both so `signals(site)` — whose frozen
  * signature carries NEITHER repo nor rev — can shell git at the pinned rev. The `(repo, rev)`-carrying
  * methods use their own params; `signals` uses the closure.
+ *
+ * MEMOIZED per instance (CACHE-HISTORY-SOURCE): `atlas mine` builds ONE `HistorySource` (cli.ts) and threads
+ * it through EVERY arm (mine-arms.ts `{ ...deps, slot }`), but the arms are independent `driveMinePass`
+ * calls, each of which invokes `probeHistory` → `blameConcentration` (one `git blame` PER TRACKED FILE, no
+ * memo) and `frontier` (a full `git log` walk) FRESH — so a shared instance still shelled git 3× before this
+ * fix. Every method here is cached on its own inputs so a 3-arm default run pays the git cost ONCE.
  */
 export function createHistorySource(repoPath: string, rev: string): HistorySource {
   /** SHAs of commits touching `qp` at `rev`, reverse-chronological (git-log order). */
@@ -147,41 +173,101 @@ export function createHistorySource(repoPath: string, rev: string): HistorySourc
   const trackedAt = (repo: string, r: string): string[] =>
     nulPaths(git(repo, ['ls-tree', '-r', '--name-only', '-z', r]));
 
+  // Keyed on the ACTUAL call args (`repo\0rev`), not the closed-over `repoPath`/`rev` — see the `memo` note.
+  const rk = (repo: string, r: string): string => `${repo}\0${r}`;
+
+  const commitCountMemo = memo((k: string): number => {
+    const [repo, r] = k.split('\0') as [string, string];
+    const n = Number(git(repo, ['rev-list', '--count', r]).trim());
+    return Number.isFinite(n) ? n : 0;
+  });
+  const shallowMemo = memo((repo: string): boolean => git(repo, ['rev-parse', '--is-shallow-repository'], 'true').trim() === 'true');
+  const blameMemo = memo((k: string): number => {
+    const [repo, r] = k.split('\0') as [string, string];
+    const files = trackedAt(repo, r);
+    const perCommit = new Map<string, number>();
+    let total = 0;
+    const header = /^([0-9a-f]{40}) \d+ \d+/; // porcelain line-block header = <sha> <orig> <final> [n]
+    for (const f of files) {
+      const blame = git(repo, ['blame', '--line-porcelain', r, '--', f]);
+      for (const line of blame.split('\n')) {
+        const sha = header.exec(line)?.[1];
+        if (sha !== undefined) {
+          perCommit.set(sha, (perCommit.get(sha) ?? 0) + 1);
+          total += 1;
+        }
+      }
+    }
+    if (total === 0) return 0;
+    const top = Math.max(...perCommit.values());
+    return top / total;
+  });
+  const frontierMemo = memo((k: string): readonly StructRef[] => {
+    const [repo, r] = k.split('\0') as [string, string];
+    const tracked = new Set(trackedAt(repo, r));
+    if (tracked.size === 0) return [];
+    const churn = new Map<string, number>();
+    const coupling = new Map<string, number>();
+    const bump = (m: Map<string, number>, f: string): void => {
+      m.set(f, (m.get(f) ?? 0) + 1);
+    };
+    for (const commit of commitBaskets(repo, r)) {
+      const basket = commit.files.filter((f) => tracked.has(f));
+      for (const f of basket) {
+        bump(churn, f);
+        if (basket.length >= 2) bump(coupling, f);
+      }
+    }
+    const inFrontier = (f: string): boolean =>
+      (churn.get(f) ?? 0) >= HOTSPOT_MIN_CHURN || (coupling.get(f) ?? 0) >= COUPLING_MIN_SUPPORT;
+    return [...tracked]
+      .filter(inFrontier)
+      .sort((a, b) => (churn.get(b) ?? 0) - (churn.get(a) ?? 0) || byPath(a, b))
+      .map(fileRef);
+  });
+  const signalsMemo = memo((qp: string): MinedSignals => {
+    // messages — commit subjects touching qp, in git-log order (deterministic at a fixed rev; NOT sorted).
+    const messages = nonEmpty(git(repoPath, ['log', '--format=%s', rev, '--', qp]));
+
+    // szzBugCommits — message-based SZZ: subjects matching /^fix/i (deterministic).
+    const szzBugCommits = messages.filter((s) => FIX_SUBJECT.test(s)).length;
+
+    // hotspot — change-frequency (churn count, complexity factor deferred to v0), --follow across renames.
+    const hotspot = nonEmpty(git(repoPath, ['log', '--format=%H', '--follow', rev, '--', qp])).length;
+
+    // owners — distinct authors of commits touching qp, sorted.
+    const owners = [...new Set(nonEmpty(git(repoPath, ['log', '--format=%an', rev, '--', qp])))].sort(byPath);
+
+    // coChanged — distinct OTHER files that appeared in the same commits as qp, sorted by path.
+    const co = new Set<string>();
+    for (const sha of commitsTouching(qp)) {
+      for (const f of nulPaths(git(repoPath, ['show', '--format=', '--name-only', '-z', sha]))) {
+        if (f !== qp) co.add(f);
+      }
+    }
+    const coChanged = [...co].sort(byPath).map(fileRef);
+
+    return { hotspot, szzBugCommits, coChanged, owners, messages };
+  });
+
   return {
     // rev-list count of commits reachable from rev. TOTAL: an unreadable/absent history counts 0, which
     // trips GEN-15's `low-commit-count` ⇒ thin ⇒ structural centrality (the honest fail-closed verdict).
     commitCount(repo, r) {
-      const n = Number(git(repo, ['rev-list', '--count', r]).trim());
-      return Number.isFinite(n) ? n : 0;
+      return commitCountMemo(rk(repo, r));
     },
 
     // shallow-clone probe (repository-wide; rev unused — the frozen (repo,rev) shape is honoured).
     // TOTAL: an unreadable repo falls back to `true` — the CONSERVATIVE verdict (assume degenerate).
     shallow(repo, _r) {
       void _r;
-      return git(repo, ['rev-parse', '--is-shallow-repository'], 'true').trim() === 'true';
+      return shallowMemo(repo);
     },
 
     // Over ALL tracked files at rev, aggregate per-commit blame attributions; return the single
     // most-attributed commit's share of total lines (0 when there are no lines). Deterministic.
     blameConcentration(repo, r) {
-      const files = trackedAt(repo, r);
-      const perCommit = new Map<string, number>();
-      let total = 0;
-      const header = /^([0-9a-f]{40}) \d+ \d+/; // porcelain line-block header = <sha> <orig> <final> [n]
-      for (const f of files) {
-        const blame = git(repo, ['blame', '--line-porcelain', r, '--', f]);
-        for (const line of blame.split('\n')) {
-          const sha = header.exec(line)?.[1];
-          if (sha !== undefined) {
-            perCommit.set(sha, (perCommit.get(sha) ?? 0) + 1);
-            total += 1;
-          }
-        }
-      }
-      if (total === 0) return 0;
-      const top = Math.max(...perCommit.values());
-      return top / total;
+      return blameMemo(rk(repo, r));
     },
 
     // The GEN-11 personalization vector: the UNION of the hotspot / coupling frontiers (no SZZ leg — see
@@ -191,57 +277,12 @@ export function createHistorySource(repoPath: string, rev: string): HistorySourc
     // raise LLM spend"), since `frontierBudget` is the ranked-site count. Ordered churn-desc then
     // path-asc; both legs are computed from ONE log pass so a fixed rev is byte-identical.
     frontier(repo, r) {
-      const tracked = new Set(trackedAt(repo, r));
-      if (tracked.size === 0) return [];
-      const churn = new Map<string, number>();
-      const coupling = new Map<string, number>();
-      const bump = (m: Map<string, number>, f: string): void => {
-        m.set(f, (m.get(f) ?? 0) + 1);
-      };
-      for (const commit of commitBaskets(repo, r)) {
-        const basket = commit.files.filter((f) => tracked.has(f));
-        for (const f of basket) {
-          bump(churn, f);
-          if (basket.length >= 2) bump(coupling, f);
-        }
-      }
-      const inFrontier = (f: string): boolean =>
-        (churn.get(f) ?? 0) >= HOTSPOT_MIN_CHURN || (coupling.get(f) ?? 0) >= COUPLING_MIN_SUPPORT;
-      return [...tracked]
-        .filter(inFrontier)
-        .sort((a, b) => (churn.get(b) ?? 0) - (churn.get(a) ?? 0) || byPath(a, b))
-        .map(fileRef);
+      return frontierMemo(rk(repo, r));
     },
 
     // The mined ranking heuristics for a site (GEN-6), scoped to the closed-over rev.
     signals(site): MinedSignals {
-      const qp = site.qualifiedPath;
-
-      // messages — commit subjects touching qp, in git-log order (deterministic at a fixed rev; NOT sorted).
-      const messages = nonEmpty(git(repoPath, ['log', '--format=%s', rev, '--', qp]));
-
-      // szzBugCommits — message-based SZZ: subjects matching /^fix/i (deterministic).
-      const szzBugCommits = messages.filter((s) => FIX_SUBJECT.test(s)).length;
-
-      // hotspot — change-frequency (churn count, complexity factor deferred to v0), --follow across renames.
-      const hotspot = nonEmpty(git(repoPath, ['log', '--format=%H', '--follow', rev, '--', qp])).length;
-
-      // owners — distinct authors of commits touching qp, sorted.
-      const owners = [...new Set(nonEmpty(git(repoPath, ['log', '--format=%an', rev, '--', qp])))].sort(byPath);
-
-      // coChanged — distinct OTHER files that appeared in the same commits as qp, sorted by path.
-      // NB: `git log --name-only -- <qp>` FILTERS the file list to the pathspec (git behaviour), so the
-      // co-change basket is gathered per touching-commit (full changed-file set), honouring the semantics.
-      // `-z` keeps every partner path RAW, so each emitted `fileRef` resolves against the index.
-      const co = new Set<string>();
-      for (const sha of commitsTouching(qp)) {
-        for (const f of nulPaths(git(repoPath, ['show', '--format=', '--name-only', '-z', sha]))) {
-          if (f !== qp) co.add(f);
-        }
-      }
-      const coChanged = [...co].sort(byPath).map(fileRef);
-
-      return { hotspot, szzBugCommits, coChanged, owners, messages };
+      return signalsMemo(site.qualifiedPath);
     },
   };
 }
