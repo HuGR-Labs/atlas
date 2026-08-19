@@ -4,10 +4,11 @@
 // so it could never be re-proved. This story drives the REAL chain end to end on a real SCIP index, with a
 // deterministic OFFLINE stand-in model (`echo`, ZERO metered spend — the same idiom S26's symbol-arm story
 // uses): `atlas mine` (dependency arm) stages a proven dependency candidate, `atlas promote` writes it to
-// the DURABLE CAS, the raw stored bytes are read straight off disk (never through the `atlas node` renderer,
-// which this WP deliberately does not extend), and the stored `witness` is fed back into `atlas verify-fact`
-// — the payoff: the SAME (target, scope) proves AGAIN, from bytes that travelled through staging → CAS and
-// back, with no model in the loop the second time.
+// the DURABLE CAS, the raw stored bytes are read straight off disk (this story stays a RAW-CAS read
+// deliberately, to pin the durable shape byte-for-byte — the READ-SIDE `atlas node` renderer over this same
+// witness is now pinned separately, #239, s239-node-witness.blackbox.test.ts), and the stored `witness` is
+// fed back into `atlas verify-fact` — the payoff: the SAME (target, scope) proves AGAIN, from bytes that
+// travelled through staging → CAS and back, with no model in the loop the second time.
 //
 // THE TRAP THIS WP NAMES, pinned as its own assertion: the stored fact ALSO carries a top-level `scope`
 // (the KNOW-11a AUTHZ scope, `'atlas:mined'`) — a completely different thing from `witness.scope` (the

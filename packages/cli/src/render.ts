@@ -164,7 +164,24 @@ function renderData(data: unknown): string {
         : Array.isArray(d.claims)
           ? (d.claims as readonly string[]).join('; ')
           : '';
-    return `data:\n  node: ${String(d.id)}\n  tier: ${String(d.tier)}\n  kind: ${d.kind}\n  claim: ${claim}\n`;
+    let out = `data:\n  node: ${String(d.id)}\n  tier: ${String(d.tier)}\n  kind: ${d.kind}\n  claim: ${claim}\n`;
+    // #239 — a `seal:'proven'` fact's own re-check derivation (SEAL-CARRIES-ITS-WITNESS, PR #195), the ONE
+    // leg the original WP deliberately left un-rendered. Printed ONLY when present (additive/absent-
+    // tolerant, matching `seal`/`obviousness`'s own discipline above) — an un-sealed node renders byte-
+    // identically to before this change.
+    if (typeof d.seal === 'string') out += `  seal: ${d.seal}\n`;
+    if (typeof d.witness === 'object' && d.witness !== null) {
+      const w = d.witness as Record<string, unknown>;
+      // NESTED, deliberately, mirroring the stored shape: `d.scope` (the KNOW-11a AUTHZ scope, e.g.
+      // 'atlas:mined') and `d.witness.scope` (the VERIFY-SCOPE directory the oracle ranged over, e.g.
+      // 'src/pay') are DIFFERENT things — PR #195 nested them precisely so a reader could not misread one
+      // for the other. Indenting `witness:`'s own `scope:` one level under it (rather than a flat
+      // `witnessScope:` sibling of a top-level `scope:`) keeps that distinction visible in this render too:
+      // the path to each field on the page matches the path to each field on the stored object.
+      out += `  witness:\n    slot: ${String(w.slot)}\n    target: ${String(w.target)}\n    scope: ${String(w.scope)}\n`;
+      if (typeof w.atLeast === 'number') out += `    atLeast: ${w.atLeast}\n`;
+    }
+    return out;
   }
 
   // emit { id } — the CAS id of the persisted fact.
