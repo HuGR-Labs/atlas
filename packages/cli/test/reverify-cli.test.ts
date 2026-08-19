@@ -34,6 +34,24 @@ const REPORT = (o: Partial<ReverifyReport>): ReverifyReport => ({
 });
 
 describe('CLI-11 — `atlas verify-store` is a real command that reaches a real leg', () => {
+  // AMBIENT-CWD INDEPENDENCE (task #244 follow-up): the two dispatch cases below drive `main(['verify-store'])`,
+  // which since #244 refuses BEFORE the injected thunk when `process.cwd()` holds no `.atlas/`. Left on the
+  // ambient cwd they would pass only because a checkout happens to carry `.atlas/policy.json` as a TRACKED
+  // file — a real but INVISIBLE coupling: the day that file stops being tracked, these two tests break with a
+  // message about the wrong subject. So they own their directory: a temp dir with an explicit `.atlas/`.
+  let cwdBefore: string;
+  let home: string;
+  beforeEach(() => {
+    cwdBefore = process.cwd();
+    home = mkdtempSync(join(tmpdir(), 'atlas-verify-store-dispatch-'));
+    mkdirSync(join(home, '.atlas'));
+    process.chdir(home);
+  });
+  afterEach(() => {
+    process.chdir(cwdBefore);
+    rmSync(home, { recursive: true, force: true });
+  });
+
   it('parses with NO positional and routes to the `atlas-query` READ door', () => {
     const p = parse(['verify-store']);
     expect(p.ok).toBe(true);
