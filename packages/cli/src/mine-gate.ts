@@ -99,6 +99,7 @@ function buildProposal(seed: SeedProposal, cand: Candidate, groundingFor: (c: Ca
         ...(seed.target !== undefined ? { target: seed.target } : {}),
         ...(seed.scope !== undefined ? { scope: seed.scope } : {}),
         ...(seed.atLeast !== undefined ? { atLeast: seed.atLeast } : {}),
+        ...(seed.derivation !== undefined ? { derivation: seed.derivation } : {}), // 196b — forward the justified-slot grounds onto the proposal
       };
       return p;
     }
