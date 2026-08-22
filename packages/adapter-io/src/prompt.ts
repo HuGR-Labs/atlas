@@ -93,6 +93,16 @@ export function shippedCountTemplatePath(): string {
   return join(packageRoot(dirname(fileURLToPath(import.meta.url))), 'prompts', 'propose-count.md');
 }
 
+/** The GOTCHA proposal template (196b justified vertical slice, opt-in `ATLAS_MINE_SLOT=gotcha` arm) — resolved
+ *  the same package-root way as `shippedTemplatePath`. A SEMANTIC slot: no oracle, no candidate list. Asks the
+ *  model to reason freely then emit ONE `atlas-fact` block carrying `{claim, derivation}` (the derivation is the
+ *  `justified` seal's persisted, contestable grounds); paired with `gotchaClaimParser` (llm.ts). Uses only
+ *  `{{PATH}}`/`{{UNIT}}`/`{{SOURCE}}` — no `{{CANDIDATES}}`, no `{{RELATED}}` — so it loads with just a source
+ *  reader injected (like the bare `propose.md`, reason-freely `block` contract). */
+export function shippedGotchaTemplatePath(): string {
+  return join(packageRoot(dirname(fileURLToPath(import.meta.url))), 'prompts', 'propose-gotcha.md');
+}
+
 /** Walk up to the nearest directory containing `package.json`. Bounded by the filesystem root, so a module
  *  outside any package yields its own directory rather than looping. */
 function packageRoot(from: string): string {

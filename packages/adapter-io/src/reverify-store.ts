@@ -25,6 +25,18 @@
 // `proven` and is simply not in scope for this pass — it is neither re-proven nor broken nor unverifiable,
 // it is UNSEALED, and this module never counts it.
 //
+// ── `seal:'justified'` IS ALSO OUT OF SCOPE — BY DESIGN, NOT BY OVERSIGHT (196b, A5) ────────────────────
+// A `justified` fact (ADR-0017's second seal) has NO mechanical witness: its grounds are a contestable
+// `derivation` prose plus a grounding span into the cited bytes, NOT a re-provable `PredicateWitness`
+// (`genesis-epistemic-contract.md` §JUSTIFIED — "the justification travels with the fact", contestable, not
+// oracle-backed). There is nothing to REPLAY, so this pass treats it EXACTLY like a seal-less advisory: not
+// re-proven, not broken, and — the load-bearing distinction — NOT `unverifiable`. `unverifiable` is reserved
+// for a `seal:'proven'` fact whose witness is missing or incomplete (the trust-me-it-was-proved shape this
+// chapter exists to catch); a `justified` fact has no witness BY CONSTRUCTION and carrying no witness is its
+// CORRECT shape, never a defect. Counting it `unverifiable` would slander an honestly-sealed justified fact
+// as a broken proven one. So the seal gate below admits ONLY `seal:'proven'` (`justified` and unsealed both
+// fall out to `undefined`, uncounted) — the seal's proof-strength, not merely its presence, decides scope.
+//
 // ── WHY THIS TAKES `NodeFactPair[]`, NOT A STORE PATH ────────────────────────────────────────────────────
 // `compose.ts` already builds the projection readback — `currentNodes(rehydrateProjection(store)).map(n =>
 // ({ node: n, fact: store.get(n.contentHash) }))` — for the reconcile seams (`driftFacts` is that same
@@ -148,7 +160,8 @@ function anchorFileOf(primaryAnchor: string): string {
 /** Re-verify ONE sealed fact against the live oracle. `node` is the fact's OWN `CurrentNode` row — the
  *  source of `primaryAnchor`, which `GroundedFact` itself does not carry (KNOW-15d: the anchor is a
  *  projection-row carrier, `projection-types.ts`, not part of the CAS-stored fact). `undefined` iff the
- *  fact is not `seal:'proven'` at all (out of scope for this pass — see the module header).
+ *  fact is not `seal:'proven'` at all — an unsealed fact OR a `seal:'justified'` one, BOTH out of scope for
+ *  this pass (a justified fact has no re-provable witness by design; see the module header's §justified).
  *
  * ── THE FOUR TAMPER BINDINGS (security seat findings, #199 fix-round, three rounds) ─────────────────────
  * A witness that replays PROVEN authenticates only a fact SHAPE — "this scope references this target" —
@@ -183,6 +196,9 @@ function anchorFileOf(primaryAnchor: string): string {
  * something else". Dropped, never clamped: silently rewriting a tampered tier/anchor/prose back to the
  * derived value would hide that a tamper was attempted at all. */
 export function reverifyFact(node: CurrentNode, fact: GroundedFact, leg: VerifyFactLeg, docExists: DocExists): ReverifyRow | undefined {
+  // SEAL GATE — admit ONLY `seal:'proven'` into the re-proof. `seal:'justified'` (contestable derivation, no
+  // mechanical witness) and unsealed facts BOTH return `undefined` here: out of scope, never counted in any
+  // bucket — and crucially NEVER `unverifiable`, which is a `proven`-only diagnosis (see module header §justified).
   if (fact.seal !== 'proven') return undefined;
   const nodeKey = String(fact.id);
   // `witness` is carried ONLY on `AdvisoryNode` (#195 `buildSound` mints the sound-oracle arm as an

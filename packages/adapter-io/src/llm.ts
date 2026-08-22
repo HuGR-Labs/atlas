@@ -216,6 +216,59 @@ export function makeCountClaimParser(resolveCount: CountResolver): ClaimParser {
   };
 }
 
+/** The reason a gotcha-arm answer whose one `atlas-fact` block carries no non-empty `derivation` abstains
+ *  under — fail-closed to a grounded abstention rather than a fabricated advisory, exactly as the sound arms'
+ *  `*-unparseable` reasons. A `justified` gotcha whose grounds do not travel is malformed: the derivation IS
+ *  the seal's witness-analog (196b), persisted onto `node.derivation`, so its absence is not a fact about a
+ *  different family — it is a botched gotcha, and admitting it as a bare advisory would drop the grounds. */
+export const GOTCHA_NO_DERIVATION_REASON = 'gotcha-answer-no-derivation';
+
+/** Lift the `derivation` field from the single `atlas-fact` block in a validated `'block'`-format envelope
+ *  (`rawAnswer`). The block gate (`admitFactBlock`) already parsed the block and validated its `claim`; the
+ *  DERIVATION rides in the SAME JSON object and is read here — never re-derived, never the model's scratch.
+ *  Returns the trimmed derivation, or `undefined` when the envelope has no single block, no parseable JSON, or
+ *  no non-empty string `derivation` — each of which the gotcha parser turns into a grounded abstention. */
+function gotchaDerivationOf(rawAnswer: string): string | undefined {
+  const blocks = factBlocks(rawAnswer);
+  if (blocks.length !== 1) return undefined; // exactly one block reached admission; ≠1 ⇒ not a well-formed gotcha
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(blocks[0]!);
+  } catch {
+    return undefined;
+  }
+  const field = (parsed as { derivation?: unknown } | null)?.derivation;
+  return typeof field === 'string' && field.trim() !== '' ? field.trim() : undefined;
+}
+
+/**
+ * The GOTCHA arm parser (196b justified vertical slice). UNLIKE the sound arms, gotcha is a SEMANTIC slot —
+ * no oracle, no candidate list, no injected resolver — so it is a plain `ClaimParser` const like the advisory
+ * default. The reason-freely `atlas-fact` block carries TWO fields for this slot: `{claim, derivation}`. The
+ * adapter's block gate (`admitFactBlock`) already lifted+validated `claim`; this parser lifts the `derivation`
+ * — the compact, CONTESTABLE chain from the cited bytes that leads a reader to the same conclusion — from the
+ * raw envelope and shapes a typed `PredicateSeed{ slot:'gotcha', claim, derivation }`. That derivation is the
+ * `justified` seal's witness-analog: PERSISTED onto `node.derivation` (ADR-0017 CORRECTION 5), unlike the
+ * discarded scratch reasoning (GEN-12). A block with no non-empty `derivation` ABSTAINS
+ * (`GOTCHA_NO_DERIVATION_REASON`) — fail-closed, never a fabricated advisory: a gotcha whose grounds do not
+ * travel is malformed, not a fact about a different family. `claim` keeps the extracted human sentence;
+ * `rawAnswer` rides through (#195c). COUPLED to `prompts/propose-gotcha.md`; `llm-gotcha-parser.test.ts` pins
+ * the pair. NOT sound-by-default — opt-in via `ATLAS_MINE_SLOT=gotcha` (the admission door is grounding, the
+ * seal reflects proof-strength: this slot lands `justified`, never `proven`).
+ */
+export const gotchaClaimParser: ClaimParser = (claim, cand, rawAnswer) => {
+  const derivation = rawAnswer === undefined ? undefined : gotchaDerivationOf(rawAnswer);
+  if (derivation === undefined) return { abstain: GOTCHA_NO_DERIVATION_REASON };
+  return {
+    kind: 'predicate',
+    slot: 'gotcha',
+    derivation, // the persisted, contestable grounds — the justified seal's witness-analog (never the scratch)
+    cand,
+    claim,
+    ...(rawAnswer !== undefined ? { rawAnswer } : {}),
+  };
+};
+
 /** Construct the S2 `SiteProposer` — ONE bounded model call per site, abstention allowed (ADAPT-LLM-1).
  *  The `SiteProposer` return type is frozen; the model client, budget, and prompt-builder are INJECTED so
  *  this seam hardcodes no model and no prompt (D5). `propose` makes exactly one `client.complete` call —
