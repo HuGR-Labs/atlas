@@ -37,6 +37,7 @@ export interface PredicateProposal {
   readonly grounding: FactGrounding;
   readonly tier: Tier;
   readonly scratch?: string; // chain-of-thought — discarded, never a fact (GEN-12f)
+  readonly derivation?: string; // 196b justified-slot leg — the contestable grounds carried onto `node.derivation` (ADR-0017 CORRECTION 5). PERSISTED, unlike `scratch`. Absent for oracle slots.
 }
 
 /** An advisory candidate the LLM proposes (GEN-12e) — a grounded claim with no verdict. */

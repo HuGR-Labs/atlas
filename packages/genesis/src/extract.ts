@@ -70,6 +70,7 @@ export interface PredicateSeed extends SeedBase {
   readonly target?: string; // ADR-0017 dependency-slot leg — the global symbol X the fact depends on (absent for non-oracle slots)
   readonly scope?: string; //  ADR-0017 dependency-slot leg — the directory key S the dependency witness ranges over
   readonly atLeast?: number; // #196c count-slot leg — the WITNESSED lower bound N the harness derived (absent for non-count slots)
+  readonly derivation?: string; // 196b justified-slot leg — the contestable grounds a semantic slot carries onto `node.derivation`. UNLIKE `scratch` (discarded chain-of-thought), this is PERSISTED as the `justified` seal's own witness-analog (ADR-0017 CORRECTION 5). Absent for oracle slots (their witness is the proof).
 }
 
 /**
