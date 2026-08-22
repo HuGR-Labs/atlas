@@ -268,6 +268,21 @@ function admitAbstainedAsJustified(p: PredicateProposal, deps: AdmitDeps): Admis
 }
 
 /**
+ * 196b (ADR-0017 CORRECTION 5) — a grounded SEMANTIC-slot predicate (a slot no mechanical oracle decides —
+ * `gotcha` and its kin; reached only after dependency/count/type-expressible and the synthesized-check path
+ * have all been ruled out) is admitted as a FIRST-CLASS `justified` fact, not the degenerate bare-advisory
+ * downgrade `admitAbstainedAsJustified` mints for the oracle-abstain arms. It carries `predicateSlot` (the
+ * type survives), `seal:'justified'` (the ground is named — distinct from a bare unsealed advisory and from
+ * `proven`) and the contestable `derivation` (the chain that leads a reader to the same conclusion, per
+ * genesis-epistemic-contract.md §JUSTIFIED). Gated ONLY by the truth door (grounding) — the seal reflects
+ * proof-strength, never admission (proven-vs-justified.md). Only UNGROUNDED still drops here.
+ */
+function admitSemanticJustified(p: PredicateProposal, deps: AdmitDeps): Admission {
+  if (!deps.doors.grounded(p.grounding, deps.indexState)) return { outcome: 'dropped', reason: DROP_UNGROUNDED };
+  return { outcome: 'admitted', fact: buildJustified(p, scoreObviousness(deps.doors, p.claimNorm)) };
+}
+
+/**
  * GEN-12 — mechanical predicate admission. SOUND ORACLE FIRST for a type-expressible slot; otherwise the
  * synthesized-check path: compile ∧ HOLDS (refine ≤K, else drop) ∧ TEETH (flip on ≥1 mutant, else vacuous).
  */
@@ -311,13 +326,15 @@ function admitPredicate(p: PredicateProposal, deps: AdmitDeps): Admission {
   }
 
   // synthesized-check path (CodeQL/Semgrep, KNOW-16). A slot a real check can synthesize mints the mechanical
-  // predicate below. A slot with NO synthesized check is an ABSTAIN (no mechanical check available), NOT a
-  // refutation — it does not prove the claim false, so (post-WP-CUT-MINE, ADR-0017 CORRECTION 4 /
-  // genesis-epistemic-contract.md) it admits as a JUSTIFIED advisory if grounded, exactly like the two
-  // oracle-abstain arms above; the retired `DROP_NO_CHECK` no longer exists. A check that DOES exist but does
-  // not compile-∧-HOLDS, or is vacuous (TEETH did not flip), IS a refutation and still DROPS below via `attest`.
+  // predicate below. A slot with NO synthesized check is a genuinely SEMANTIC slot (`gotcha` and its kin — no
+  // mechanical oracle decides it), NOT a refutation: it does not prove the claim false, so (196b, ADR-0017
+  // CORRECTION 5 / genesis-epistemic-contract.md §JUSTIFIED) it admits as a FIRST-CLASS `justified` fact if
+  // grounded — carrying its `predicateSlot` + `seal:'justified'` + the contestable `derivation` (see
+  // `admitSemanticJustified`), NOT the degenerate bare-advisory downgrade the oracle-abstain arms take. The
+  // retired `DROP_NO_CHECK` no longer exists. A check that DOES exist but does not compile-∧-HOLDS, or is
+  // vacuous (TEETH did not flip), IS a refutation and still DROPS below via `attest`.
   let check = deps.predicate.synthesize(p.site);
-  if (check === null) return admitAbstainedAsJustified(p, deps);
+  if (check === null) return admitSemanticJustified(p, deps);
 
   // GEN-12c VERIFY — require HOLDS on current code; GEN-12d — a failing check is refined ≤K, then dropped.
   let verdict = deps.predicate.verify(check, deps.indexState);
@@ -516,5 +533,33 @@ function buildAdvisory(p: AdvisoryProposal, obviousness: ObviousnessScore): Advi
     freshness: 'FRESH',
     claims: [],
     authoring: 'ADVISORY',
+  };
+}
+
+/**
+ * The node a grounded SEMANTIC slot emits (196b) — an ADVISORY carrying its slot, the `justified` seal, and
+ * its contestable derivation. Chosen over `PredicateNode` deliberately: `AdvisoryNode` is the ONLY node kind
+ * that already carries all three additive legs (`predicateSlot?`, `seal?`, `derivation?`), needs no `check`/
+ * `status` a semantic slot cannot honestly supply, mints its identity off the same upstream `nodeKey` (no new
+ * identity leg), and round-trips through governed-emit unchanged. It differs from `buildSound` in exactly the
+ * two fields that name the ground: `seal:'justified'` (not `'proven'`) and `derivation` (not `witness`) —
+ * the seal names its grounds, and the two provenance carriers never blur (types.ts §PredicateWitness /
+ * §derivation). The derivation is PERSISTED here, unlike `scratch` (GEN-12f), and is carried absent-tolerant:
+ * a proposal that names no grounds simply omits it, never fabricates one.
+ */
+function buildJustified(p: PredicateProposal, obviousness: ObviousnessScore): AdvisoryNode {
+  return {
+    kind: 'advisory',
+    obviousness,
+    id: p.nodeKey,
+    tier: p.tier,
+    claimNorm: p.claimNorm,
+    grounding: p.grounding,
+    freshness: 'FRESH',
+    claims: [],
+    authoring: 'ADVISORY',
+    predicateSlot: p.slot,
+    seal: 'justified',
+    ...(typeof p.derivation === 'string' && p.derivation.length > 0 ? { derivation: p.derivation } : {}),
   };
 }
