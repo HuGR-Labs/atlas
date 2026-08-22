@@ -19,9 +19,9 @@ named.
 | **A1 — advisory precision** (planted subject-test, no judge in the correctness loop) | false-admit **1/10**, catch **9/10**, false-alarm **0/10**; n=20 fixtures; Wilson95% on false-admit **[0.018, 0.404]** | `harness/probes/adjudicate/calibration-report.a1-subject.md` |
 | **A2 — staleness** (TWO numbers, never blended) | non-touching precision **4/4** (0 false-drift, real and discriminating) · semantic cross-file staleness **NOT SUPPORTED** (named limitation) | `docs/design/95b-staleness-a2-methodology.md` §6.2/§6.3 |
 | **A3 — cost** | **$0.964233 / 10 sites = $0.0964 per site**; 0 errors, 1 abstention, all 10 rows `claude-sonnet-5` | `harness/probes/a3-cost-sidecar.jsonl` (10 records; sum re-derived 2026-08-18) |
-| **A4 — recall, judge-free** (4 oracle-bearing shapes, planted mutations, `tsc` oracle) | dist-form index: count **163/163**, dependency **163/163**, negation **428/1200 = 35.67%**; dist-absent misbuild: count **7/163**, dependency **7/163**, negation **51/1200 = 4.25%** | `harness/probes/adjudicate/calibration-report.a4-planted.md` (branch `bench/a4-planted`, **not yet merged**) |
+| **A4 — recall, judge-free** (4 oracle-bearing shapes, planted mutations, `tsc` oracle) | dist-form index: count **163/163**, dependency **163/163**, negation **428/1200 = 35.67%**; dist-absent misbuild: count **7/163**, dependency **7/163**, negation **51/1200 = 4.25%** | `harness/probes/adjudicate/calibration-report.a4-planted.md` (`master`, merged in #193; numbers re-verified on `master` 2026-08-22) |
 | **A4 — agreement@pool (NOT recall)** | atlas **10/64** · ungated raw-LLM lister **63/64** · comment-extractor **2/64**, where the denominator 64 is 100% same-family-LLM-judge `GROUNDED_TRUE` verdicts | `harness/probes/a4-agreement-pool-pilot.json` |
-| **Sound-gate false-admit** (the strong claim) | Definition A (gate's own witnessed-reference predicate): dependency **0/23702**, count **0/163**, negation **0/163** | `calibration-report.a4-planted.md` Table 2 (branch `bench/a4-planted`) |
+| **Sound-gate false-admit** (the strong claim) | Definition A (gate's own witnessed-reference predicate): dependency **0/23702**, count **0/163**, negation **0/163** | `calibration-report.a4-planted.md` Table 2 (`master`) |
 
 There is no cross-vendor SOTA column. The only comparator this program has ever run is the ungated raw-LLM
 lister inside the agreement pool, and its figures are the same uncalibrated judge's opinion as everything else
@@ -98,12 +98,13 @@ Caveat, load-bearing: **cost is operator-config-dependent.** $0.0964/site is the
 cheaper. The price is the CLI's own reported cost, not an assumed rate card. An earlier hand estimate of
 ~$0.003/site was wrong-low by ~32×, which is why this axis is measured rather than estimated.
 
-### A4 — recall, the judge-free number (branch `bench/a4-planted`, not yet merged)
+### A4 — recall, the judge-free number (`master`, merged in #193)
 
 The citable recall figures are the planted ones: ground truth planted by **edit-distance-1 mutation** and
 labelled by an **independent `tsc` oracle** (`ts.createProgram`), with zero LLM in the label or scoring path.
-Read from `harness/probes/adjudicate/calibration-report.a4-planted.md` (branch `bench/a4-planted`, git sha
-`9eb4d7f`; node v22.17.1, TypeScript 5.9.3, `@sourcegraph/scip-typescript` 0.4.0):
+Read from `harness/probes/adjudicate/calibration-report.a4-planted.md` (on `master`; measured at git sha
+`9eb4d7f`; node v22.17.1, TypeScript 5.9.3, `@sourcegraph/scip-typescript` 0.4.0; recall rates re-verified
+identical on `master` 2026-08-22):
 
 | arm | recall (dist-FORM index, the operating state) | recall (dist-ABSENT index, a misbuild) | false-admit, Definition A | false-admit, Definition B |
 | --- | --- | --- | --- | --- |
@@ -201,13 +202,14 @@ has. Its `kind`, `NOT_RECALL`, `AUDITABILITY_LIMIT` and `PRODUCER` fields say al
 the number cannot be picked up as recall by someone who never reads this document. The deleted code remains in
 git history at commit `b531755`.
 
-## Sound-gate teeth: what proves the 0-false-admit is earned (branch `bench/semantic-teeth`, not yet merged)
+## Sound-gate teeth: what proves the 0-false-admit is earned (`master`, merged via #192)
 
 A 0 is only worth reporting if something could have made it non-zero. Per #192
 (`packages/adapter-io/test/semantic-bench.test.ts`), three assertions guarding these headlines could not fail
 and were replaced with teeth proven to bite:
 
-- **Negation non-vacuity is now `judgeCallersBlind` = 14.72%** — the byte-identical shipped door handed a
+- **Negation non-vacuity is now `judgeCallersBlind` = 14.72%** (re-verified `14.46%` on `master` 2026-08-22;
+  the small drift is the negation-FALSE population growing with the codebase, the teeth still bite `> 0`) — the byte-identical shipped door handed a
   `symbol-reverse` whose `reverseCallers` is `[]`, blinding the exact leg the door's soundness argument names.
   It is **asserted**. The denominator is the 163 tsc-FALSE negation rows (`bench-scorer.ts`:
   `falseAdmit = |admitted∧FALSE| / |FALSE|`); the branch prints the percentage, not the raw numerator, so
@@ -230,11 +232,11 @@ and were replaced with teeth proven to bite:
 - A3: `harness/probes/a3-cost-sidecar.jsonl` (10 records, one per site, `total_cost_usd` from the CLI);
   `harness/probes/cost-sum.mjs`. `master`.
 - A4 recall + sound-gate false-admit: `harness/probes/adjudicate/calibration-report.a4-planted.{md,json}` —
-  branch `bench/a4-planted`, **not merged as of 2026-08-18**; read from that branch's worktree. Instrument:
+  `master` (merged in #193); recall rates re-verified identical on `master` 2026-08-22. Instrument:
   `packages/adapter-io/test/semantic-bench.test.ts` + `test/support/bench-scorer.ts`.
 - A4 agreement: `harness/probes/a4-agreement-pool-pilot.json`. This branch.
-- Teeth: `packages/adapter-io/test/semantic-bench.test.ts` — branch `bench/semantic-teeth`, **not merged as
-  of 2026-08-18**.
+- Teeth: `packages/adapter-io/test/semantic-bench.test.ts` — `master` (merged via #192); the
+  `judgeCallersBlind` teeth assertion is live and passes (`14.46% > 0`, re-verified on `master` 2026-08-22).
 - Method: `docs/design/95-benchmark-methodology.md` (`proven` = witnessed reference existence),
   `docs/design/95a-recall-a4-methodology.md` (pooling design sketch — the pooling *instrument* it sketches no
   longer exists in the tree).
