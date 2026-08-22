@@ -81,10 +81,37 @@ function wellFormed(id: string, witness: { slot: 'dependency'; target: string; s
   return advisory(id, { seal: 'proven', tier: 'T2', witness, claimNorm: claimNormFromWitness(witness) });
 }
 
+/** A `seal:'justified'` fact — ADR-0017's second seal (196b). It carries a contestable `derivation` and its
+ *  grounding span, but NO mechanical `witness` (a justified fact is grounded, not oracle-proved — there is
+ *  nothing to replay). This is its CORRECT, honest shape, not a malformed proven fact. */
+function justified(id: string, derivation: string): GroundedFact {
+  return advisory(id, { seal: 'justified', predicateSlot: 'gotcha', derivation });
+}
+
 describe('reverifyFact — one sealed fact against the real oracle', () => {
   it('a fact carrying NO seal at all is OUT OF SCOPE (undefined), never counted', () => {
     const fact = advisory('nk-unsealed', {});
     expect(reverifyFact(node('nk-unsealed'), fact, leg, docExists)).toBeUndefined();
+  });
+
+  // ── A5 (196b): a `seal:'justified'` fact is OUT OF SCOPE for the re-proof, EXACTLY like an unsealed fact.
+  // A justified fact's grounds are a contestable derivation + a grounding span, NOT a re-provable witness —
+  // so this pass must not replay it, must not crash, and (A5c teeth) must NOT count it `unverifiable`, which
+  // is a `proven`-only diagnosis for a missing/incomplete witness (reverify-store.ts §justified).
+  it('A5a — a seal:justified fact (carrying a derivation) is OUT OF SCOPE (undefined), never re-proven/broken/unverifiable, never crashes', () => {
+    const fact = justified('nk-just', 'greet() throws on empty input — the caller at src/a.ts never guards it');
+    expect(reverifyFact(node('nk-just'), fact, leg, docExists)).toBeUndefined();
+  });
+
+  it('A5c — a justified fact is NEVER counted unverifiable: it has no witness BY DESIGN, distinct from a proven seal missing its witness', () => {
+    // teeth: `unverifiable` is reserved for `seal:'proven'` with a missing/incomplete witness (the
+    // trust-me-it-was-proved shape). A justified fact ALSO carries no witness — but that is its correct
+    // shape, not a broken proven one. The seal gate (`fact.seal !== 'proven'`) drops it to `undefined`
+    // BEFORE the witness-presence check ever runs, so it can never reach the `unverifiable` branch.
+    const withoutWitness = justified('nk-just2', 'a contestable reading, no oracle');
+    const row = reverifyFact(node('nk-just2'), withoutWitness, leg, docExists);
+    expect(row).toBeUndefined();
+    expect(row?.outcome).not.toBe('unverifiable'); // the exact class it must NOT be slandered into
   });
 
   it('RE-PROVEN — a proven-sealed advisory whose witness replays PROVEN, and whose tier/anchor/prose all bind', () => {
@@ -260,5 +287,24 @@ describe('reverifyStore — the whole-store loop, three buckets sum to the denom
 
   it('an EMPTY store folds to the honest all-zero report, never a throw', () => {
     expect(reverifyStore([], leg, docExists)).toEqual({ sealedProven: 0, reProven: 0, broken: 0, unverifiable: 0, rows: [] });
+  });
+
+  it('A5b — a MIXED store (one proven + one justified): the proven fact re-proves as today, the justified fact is SKIPPED, counts stay honest', () => {
+    // The justified fact must NOT inflate any bucket — `sealedProven` (the denominator) counts only the
+    // proven fact, and the three outcome counts still sum to it. A justified fact is out of scope exactly
+    // like an unsealed one: present in the store, absent from this pass.
+    const reProvenWitness = { slot: 'dependency' as const, target: GREET, scope: 'src' };
+    const pairs: NodeFactPair[] = [
+      { node: node('nk-a'), fact: wellFormed('nk-a', reProvenWitness) },
+      { node: node('nk-just'), fact: justified('nk-just', 'greet() throws on empty input — no caller-side guard') },
+    ];
+    const report = reverifyStore(pairs, leg, docExists);
+    expect(report).toEqual({
+      sealedProven: 1, // ONLY the proven fact — the justified one is not in the re-proof set
+      reProven: 1,
+      broken: 0,
+      unverifiable: 0, // the justified fact must NOT land here (A5c teeth, at the store level)
+      rows: [{ nodeKey: 'nk-a', outcome: 're-proven', reason: expect.stringContaining('PROVEN') }],
+    });
   });
 });
