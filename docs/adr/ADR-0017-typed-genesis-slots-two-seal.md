@@ -1,6 +1,6 @@
 # ADR-0017 — Genesis emits typed facts via a two-seal slot classifier
 
-**Status:** ACCEPTED — owner-ratified 2026-08-13; AMENDED to one-seal (proven-only) — owner-ratified 2026-08-16 (see CORRECTION 3); AMENDED again — the oracle AWARDS `proven`, never gates admission; oracle-abstain admits `justified`, never drops — owner-ratified 2026-08-19 (see CORRECTION 4).
+**Status:** ACCEPTED — owner-ratified 2026-08-13; AMENDED to one-seal (proven-only) — owner-ratified 2026-08-16 (see CORRECTION 3); AMENDED again — the oracle AWARDS `proven`, never gates admission; oracle-abstain admits `justified`, never drops — owner-ratified 2026-08-19 (see CORRECTION 4); AMENDED again — `justified` becomes a FIRST-CLASS seal value carrying its `derivation` — owner-ratified 2026-08-22 (see CORRECTION 5, 196b).
 **Supersedes/relates:** #196 (the measured gap), #152 (KNOW-10 closed-slot gate with no producer), #99 /
 ADR-0016 (the negation sound-gate pattern this reuses), ADR-0012 (the additive/absent-tolerant field
 precedent), #226 (the independent adjudication panel). Full reasoning:
@@ -50,6 +50,30 @@ precedent), #226 (the independent adjudication panel). Full reasoning:
 >   (`governed-emit-negation.ts`, ADR-0016) is **unchanged** — it is a soundness gate on a human `atlas emit`
 >   assertion, not a truth-gate on a model-proposed fact, so it is out of the contract's scope (owner-ratified
 >   2026-08-19: negation has no production model-proposer; keep the sound door).
+
+> **CORRECTION 5 (owner-ratified 2026-08-22 — `justified` becomes a FIRST-CLASS seal value that carries its
+> derivation; 196b vertical slice, `docs/design/196b-justified-vertical-slice.md`).** This REVERSES CORRECTION
+> 4's bullet that made `justified` the mere **absence** of a seal. Reason: a grounded semantic fact must be
+> *distinguishable* from a bare advisory, and — per the owner's governing principle — where there is no
+> mechanical proof, **the "proof" is the reasoning and the grounds that lead a reader to the same conclusion**,
+> and that justification must **travel with the fact**. Absence-of-seal carries neither the distinction nor the
+> derivation, so it cannot express the contract. The amendment:
+> - `Seal = 'proven' | 'justified'` (`packages/knowledge/src/types.ts`). ADDITIVE + absent-tolerant, same
+>   discipline as `obviousness`/`witness` — a pre-existing seal-less fact still reads `seal:undefined`, no
+>   migration. This is the two-seal vocabulary the design (`genesis-epistemic-contract.md`,
+>   `proven-vs-justified.md`) always named; CORRECTION 3 cut only the *non-sound `validated` ensemble seal*,
+>   never the `justified` ground.
+> - The node gains an additive `derivation?: string` — the `justified` seal's own carried grounds (the
+>   contestable chain from the cited bytes), the exact parallel of the `proven` seal's `witness`. It is the
+>   model's grounds, NOT its free scratch reasoning (that stays parsed-away, `epistemic-contract` §"keep
+>   reasoning scratch").
+> - Admit: a grounded semantic-slot candidate with no witness is admitted carrying `predicateSlot` +
+>   `seal:'justified'` + `derivation` (superseding the CORRECTION 4 downgrade-to-bare-advisory for the
+>   semantic-slot case). `proven` (dependency/count) and the drop set are unchanged; ungrounded still drops.
+> - Distinct from the CUT `validated` seal (CORRECTION 3): `validated` was a non-sound *truth-grade* claimed by
+>   an LLM ensemble (impractical, non-assertive). `justified` claims NO proof — it is honestly "a grounded,
+>   contestable reading, here are the grounds"; its confidence is raised only by model-independent means and
+>   NEVER converted to `proven`. Adding `justified` does not reopen the `validated` cut.
 
 ## Context
 

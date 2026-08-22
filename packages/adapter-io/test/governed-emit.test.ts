@@ -158,6 +158,41 @@ describe('COMPOSE-A — createGovernedEmit (truth-door · authz · upsert · dur
     expect(row.seal).toBe('proven');
   });
 
+  it('A1 (196b, SEAL += justified) — a PROMOTE of a `seal:justified` fact carrying a `derivation` round-trips both onto the durable ROW + CAS bytes', () => {
+    // 196b CORRECTION 5: `justified` is a first-class seal value (not the absence of one), and its own grounds
+    // travel as `derivation` (the contestable chain that leads a reader to the same conclusion — the exact
+    // parallel of the `proven` seal's `witness`). A promoted (trusted admit-path) justified fact must keep both.
+    const spy = makeStoreSpy();
+    const { emit } = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice', ratifyToken: 'billy', origin: 'promoted' });
+    const derivation = 'isScope rejects {} by a typeof-first check, so a non-string never reaches the branch';
+    const staged = { ...advisory('core'), seal: 'justified' as const, derivation };
+    const out = emit(staged, AT);
+    expect(out.emitted).toBe(true);
+
+    // the durable projection ROW carries the trusted `justified` seal (the seal carrier is seal-value-agnostic).
+    const row = [...spy.persists()[spy.persists().length - 1]!.current.values()][0]!;
+    expect(row.seal).toBe('justified'); // ⚑ RED before Seal += 'justified' (type would not admit the value)
+    // the CAS bytes ARE the fact, so they carry BOTH the seal and its derivation (surfaced by `atlas node`).
+    const readBack = spy.store.get(out.id!) as { seal?: unknown; derivation?: unknown } | undefined;
+    expect(readBack?.seal).toBe('justified');
+    expect(readBack?.derivation).toBe(derivation);
+  });
+
+  it('A1-forgery (196b) — an AUTHORED emit CANNOT forge `seal:justified` onto the row (the seal strip is value-agnostic)', () => {
+    // The forgery surface is identical for `justified` as for `proven`: an untrusted `atlas emit <json>` payload
+    // must not stamp ANY seal onto the durable row. The existing gate-0 strip is seal-value-agnostic, so adding
+    // `justified` to the vocabulary opens no new forgery. (The `derivation` prose is harmless content, not a
+    // trust/authz leg, so it rides with the CAS bytes like `claimNorm` — the seal is what's guarded.)
+    const spy = makeStoreSpy();
+    const { emit } = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice' });
+    const forged = { ...advisory('core'), seal: 'justified' as const, derivation: 'forged grounds' };
+    const out = emit(forged, AT);
+    expect(out.emitted).toBe(true);
+    const row = [...spy.persists()[spy.persists().length - 1]!.current.values()][0]!;
+    expect(row.seal).toBeUndefined(); // stripped: an authored payload cannot mint a justified seal on the row
+    expect(Object.prototype.hasOwnProperty.call(row, 'seal')).toBe(false);
+  });
+
   it('SCN-GE-4 — empty ATLAS_ACTOR ⇒ denied fail-closed (no actor is in any scope)', () => {
     const spy = makeStoreSpy();
     const { emit } = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: '' });

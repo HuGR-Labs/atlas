@@ -140,11 +140,19 @@ export type { NegationNode, AbstainedRecord };
 export type ObviousnessRank = 'obvious' | 'non-obvious';
 
 /**
- * The seal provenance vocabulary. Records HOW a mined fact's type/slot was decided: `proven` — a mechanical
- * oracle discharged it. ADDITIVE + absent-tolerant, exactly like `obviousness` (ADR-0012) below — this
- * type only makes the field EXIST; it never decides WHEN a seal is set (that is the admit path's job).
+ * The seal provenance vocabulary. Records HOW a mined fact's grounds were established, and the two never blur
+ * (genesis-epistemic-contract.md §"the seal names its grounds"):
+ *   - `proven`    — a mechanical, re-runnable witness discharged the claim (a symbol index resolved a
+ *                   dependency, tsc confirmed a type). The narrow band a machine could also have derived.
+ *   - `justified` — no deterministic checker decides the claim (it is semantic / about intent), but the model
+ *                   grounded it in the cited bytes, self-refuted it, and carries a contestable derivation that
+ *                   leads a reader to the same conclusion (proven-vs-justified.md). NOT a truth claim — its
+ *                   confidence is raised only by model-independent means, never converted to `proven`.
+ * ADDITIVE + absent-tolerant, exactly like `obviousness` (ADR-0012) below — this type only makes the field
+ * EXIST; it never decides WHEN a seal is set (that is the admit path's job). ADR-0017 CORRECTION 5 added
+ * `justified` (196b) — the ratified two-seal vocabulary the design always named.
  */
-export type Seal = 'proven';
+export type Seal = 'proven' | 'justified';
 
 /**
  * The `seal:'proven'` fact's own DERIVATION — the oracle call that discharged it, carried alongside the
@@ -235,6 +243,12 @@ export interface AdvisoryNode {
   readonly obviousness?: ObviousnessScore;
   readonly seal?: Seal; // ADR-0017 — two-seal provenance. ADDITIVE + absent-tolerant, same discipline as `obviousness`.
   readonly witness?: PredicateWitness; // SEAL-CARRIES-ITS-WITNESS — the `proven` seal's own derivation (see above). ADDITIVE + absent-tolerant.
+  /** ADR-0017 CORRECTION 5 (196b) — the `justified` seal's own carried derivation: the compact, contestable
+   *  chain from the cited bytes that leads a reader to the SAME conclusion (genesis-epistemic-contract.md
+   *  §JUSTIFIED). It is the model's grounds, NOT its free scratch reasoning (that stays parsed-away). Prose,
+   *  provenance only — never a `nodeKey`/route/authz leg. ADDITIVE + absent-tolerant, same discipline as
+   *  `witness`; a `proven` fact carries `witness`, a `justified` fact carries `derivation`. */
+  readonly derivation?: string;
 }
 
 /**
