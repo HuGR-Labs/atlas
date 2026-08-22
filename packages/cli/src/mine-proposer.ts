@@ -18,6 +18,7 @@ import {
   createUnitDepCandidates,
   createUnitSiblingReader,
   createUnitSourceReader,
+  gotchaClaimParser,
   loadModelConfig,
   makeCountClaimParser,
   makeDependencyClaimParser,
@@ -25,6 +26,7 @@ import {
   shippedCountTemplatePath,
   shippedDependencyTemplatePath,
   shippedEnrichedTemplatePath,
+  shippedGotchaTemplatePath,
 } from '@atlas/adapter-io';
 import type { CandidateReader, ClaimParser, ModelCommand } from '@atlas/adapter-io';
 import { cappedBudget } from '@atlas/genesis';
@@ -89,12 +91,14 @@ export const MINE_SLOT_ENV = 'ATLAS_MINE_SLOT';
 export function resolveMineSlot(env: NodeJS.ProcessEnv): MineSlot {
   const v = env[MINE_SLOT_ENV]?.trim().toLowerCase();
   if (v === undefined || v === '') return 'advisory';
-  if (v === 'advisory' || v === 'dependency' || v === 'count') return v;
-  throw new Error(`${MINE_SLOT_ENV}=${JSON.stringify(env[MINE_SLOT_ENV])} is not a known mining arm — use 'advisory', 'dependency' or 'count'`);
+  if (v === 'advisory' || v === 'dependency' || v === 'count' || v === 'gotcha') return v;
+  throw new Error(`${MINE_SLOT_ENV}=${JSON.stringify(env[MINE_SLOT_ENV])} is not a known mining arm — use 'advisory', 'dependency', 'count' or 'gotcha'`);
 }
 
-/** One resolved mining arm. */
-export type MineSlot = 'advisory' | 'dependency' | 'count';
+/** One resolved mining arm. `gotcha` is the 196b justified vertical slice's opt-in SEMANTIC arm — it is a valid
+ *  single arm (`resolveMineSlot`/`resolveProposer`) but is DELIBERATELY absent from the sound-by-default SET
+ *  (`resolveMineSlots`), because it is not sound: it lands `justified`, not `proven`. */
+export type MineSlot = 'advisory' | 'dependency' | 'count' | 'gotcha';
 
 /** [MINE-BUDGET-CAP] The env that caps how many sites a metered `atlas mine` run visits. It is the CLI-
  *  reachable knob onto the run-controller's already-existing `GenesisBudget.ceiling` seam — there is no
@@ -224,6 +228,9 @@ export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = proce
   // after the provable sites). Undefined for the advisory arm ⇒ no reorder.
   const candidateReader: CandidateReader | undefined =
     slotScip === undefined ? undefined : slot === 'count' ? createUnitCountCandidates(slotScip) : createUnitDepCandidates(slotScip);
+  // [196b gotcha] The SEMANTIC gotcha arm reads no index (no candidates) — it takes the SAME anchored-unit-only
+  // source view as the bare advisory prompt, only the TEMPLATE differs (it asks for a `{claim, derivation}`
+  // block). Selected before the ENRICH/bare branches so `ATLAS_MINE_SLOT=gotcha` loads `propose-gotcha.md`.
   const prompts =
     slotScip !== undefined && candidateReader !== undefined
       ? createPromptFactory({
@@ -231,26 +238,34 @@ export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = proce
           candidates: candidateReader,
           templatePath: slot === 'count' ? shippedCountTemplatePath() : shippedDependencyTemplatePath(),
         })
-      : enrichEnabled(env)
-        ? createPromptFactory({
-            source: createUnitSourceReader(repoPath),
-            related: createUnitSiblingReader(repoPath),
-            templatePath: shippedEnrichedTemplatePath(),
-          })
-        : createPromptFactory({ source: createUnitSourceReader(repoPath) });
+      : slot === 'gotcha'
+        ? createPromptFactory({ source: createUnitSourceReader(repoPath), templatePath: shippedGotchaTemplatePath() })
+        : enrichEnabled(env)
+          ? createPromptFactory({
+              source: createUnitSourceReader(repoPath),
+              related: createUnitSiblingReader(repoPath),
+              templatePath: shippedEnrichedTemplatePath(),
+            })
+          : createPromptFactory({ source: createUnitSourceReader(repoPath) });
   // The predicate parser resolves the picked NAME to the unit's own SYMBOL (per-unit — the #196a lucy BLOCKER)
   // and puts that symbol on the seed's `target`. The count parser ALSO puts the harness-derived `atLeast`/`scope`
   // on the seed (the model never supplies the number), so the fact is bound to the unit's specific export.
+  // [196b gotcha] The gotcha arm reads no index (`slotScip` undefined) but is NOT advisory-default: it injects
+  // `gotchaClaimParser`, which lifts the `{claim, derivation}` pair out of the reason-freely block. The sound
+  // arms bind their per-unit resolver (name → symbol); the semantic gotcha arm needs no resolver.
   const parseClaim: ClaimParser | undefined =
     slotScip === undefined
-      ? undefined
+      ? slot === 'gotcha'
+        ? gotchaClaimParser
+        : undefined
       : slot === 'count'
         ? makeCountClaimParser(createCountResolver(slotScip))
         : makeDependencyClaimParser(createDepResolver(slotScip));
   const proposer = createSiteProposer({
-    // [ADR-0020] The sound-gated slots (dependency/count) keep the ONE-LINE answer contract; the advisory slot
-    // uses the reason-freely fenced-`atlas-fact` BLOCK contract (measured 100%/0-halluc vs the one-line 77.5%).
-    client: createCommandClient(propose, slot === 'advisory' ? 'block' : 'line'),
+    // [ADR-0020] The sound-gated slots (dependency/count) keep the ONE-LINE answer contract; the advisory AND the
+    // semantic gotcha slot use the reason-freely fenced-`atlas-fact` BLOCK contract (measured 100%/0-halluc vs the
+    // one-line 77.5%) — gotcha carries a second field (`derivation`) in that same block.
+    client: createCommandClient(propose, slot === 'advisory' || slot === 'gotcha' ? 'block' : 'line'),
     budget: { costCap: cfg.costCap, timeoutMs: cfg.timeoutMs },
     buildPrompt: prompts.build,
     ...(parseClaim !== undefined ? { parseClaim } : {}),
