@@ -87,6 +87,18 @@
 | hits ledger / decay / door-2 | `[unit-owned]` | store/threshold-derived, not observable at a user door; unit-asserted |
 | provenance/dossier via `doctor why` | `[BB]` s12/s8 | `doctor why` classifies mechanical/semantic drift (blame-grained provenance) — exercised black-box in s12 + s8 |
 
+### WAVE-COV-6 — sound relation proven family (#99, ADR-0021) — CLOSED (WP-R8)
+| cell | now | note |
+|---|---|---|
+| `atlas derive-relations` → proven `depends-on` (mechanical projection, no LLM) | `[BB]` s37 | an authorized actor projects every resolved cross-unit edge into a `proven depends-on` relation through the governed emit door; exhaustive (5126 edges over the real 677-doc Atlas index, cold-verified exact), 0-false by construction (derivation IS the proof) |
+| `atlas relations <unit>` surfaces the proven seal, both directions | `[BB]` s37 + s30 | outbound from the subject + inbound to the object, each `[proven]`; directed (util→app finds nothing) |
+| `atlas node <addr>` renders relation seal + `RelationWitness` | `[BB]` s37 | `seal: proven` + `witness:` (relationKind/target/sourceScope — a `RelationWitness`, not a `PredicateWitness`) |
+| `atlas verify-store` re-proves / drift → `broken` (A2 staleness) | `[BB]` s37 | a proven relation re-derives from the live index → `re-proven`; when the witnessed reference disappears it reads `broken` ("did NOT re-prove"), never falsely served — contrasted live against a still-fresh edge |
+| **`calls` NOT provable** (documented non-behavior, F3) | `[DOC + BB]` AR-5 / ADR-0021 | the frozen `ScipSymbolRole` is `definition\|reference` — SCIP has NO call-role, so a `calls` relation can never obtain a `proven` seal (it abstains; a later LLM arm may ship it advisory/justified). Pinned by AR-5 + the honesty boundary in ADR-0021 |
+| **dynamic-dispatch / reflection / cross-language / FFI edges NOT provable** (documented non-behavior) | `[DOC]` ADR-0021 §honest boundary | these resolve to `unresolved`/`dynamic` edges (`to: null`), so the projection ABSTAINS — never a proven relation. Documented non-behavior, not a silent gap |
+| **`depends-on` proven ONLY at document granularity** (D-e) | `[DOC + BB]` AR-16 / ADR-0021 | the relation unit is the document (`docHash = nodeHashOfPath`); two symbols in one file share a docHash ⇒ intra-unit ⇒ no proven edge (AR-16). A finer symbol-level relation is a separate future family, not this one |
+| **no refute** — an absent edge is abstained, never "these do not depend" | `[DOC]` ADR-0021 | abstain ≠ refute; closeable-world absence is the separate #99b negation family |
+
 ## Closure predicates (functional-surface gate) — status
 - [~] Actor×Goal matrix — actors: human-CLI, agent-MCP, orchestrator-poke, time/git-event (drift). human-CLI + agent-MCP full; **orchestrator-poke column is EMPTY at the user surface (N6 unreachable)** → not [x].
 - [x] doctor `hotset <budget>` (size/budget/over) — `[BB]` covered (s4 + harness.smoke); listed for the ledger.

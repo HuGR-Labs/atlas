@@ -1,9 +1,8 @@
 # ADR-0021 — Sound relation: a `proven` `depends-on` edge, derived mechanically from the index
 
-**Status:** DRAFT — owner-ratified in principle 2026-08-22 (forks F1–F3 + decisions D-a…D-e); the
-implementation lands over the #99 sound-relation wave (WP-R0…R8) and this ADR is finalised to ACCEPTED
-by WP-R8 with the measured results. Full reasoning:
-`docs/design/99-sound-relation-design.md` + `docs/design/99-sound-relation-wave.md`.
+**Status:** ACCEPTED — owner-ratified 2026-08-22 (forks F1–F3 + decisions D-a…D-e), implemented over the
+#99 sound-relation wave (WP-R0…R8) and finalised here by WP-R8 with the measured results (§Measured results).
+Full reasoning: `docs/design/99-sound-relation-design.md` + `docs/design/99-sound-relation-wave.md`.
 
 **Supersedes/relates:** ADR-0015 D2 (the relation family this makes SOUND — it was admitted through the
 advisory truth door, `deps.doors.grounded`, never proven); ADR-0017 (the two-seal `proven`/`justified`
@@ -59,3 +58,47 @@ for the relation family).
 The 30-item acceptance suite (3 cold-critic rounds) in `docs/design/99-sound-relation-wave.md` §1. This
 ADR is finalised to ACCEPTED by WP-R8 once every item is red→green and the honesty-ledger non-behaviors
 (`calls`/dynamic/reflection/cross-language) are pinned.
+
+## Measured results (WP-R8, 2026-08-22)
+
+The wave shipped **`atlas derive-relations`** (arity 0, repo = cwd): it enumerates the index's resolved
+cross-unit references, proves + seals each `depends-on` edge through the sound oracle, and persists every
+proven relation through the governed emit door. `atlas relations <unit>` reads them back both directions
+(seal surfaced), `atlas node <addr>` shows seal + witness, `atlas verify-store` re-proves them.
+
+- **Exhaustive projection over the real Atlas index.** Run against the main repo's own SCIP index
+  (**677 documents**), the projection derives **5126 distinct intra-repo `depends-on` edges** — one per
+  distinct directed cross-unit document pair, deduped (D-b) and cross-unit-only (D-c/D-e). This edge count
+  is **VERIFIED EXACT by cold review**. F2 (exhaustive) holds: no resolved intra-repo edge is dropped and
+  over-budget **fails loud** (AR-30), never a partial set labelled complete.
+- **Timing is NOT a claimed measurement.** A self-report of ~412ms was **not independently reproduced**; a
+  cold run measured ~2.9s including the symbol-reverse index build. The cost is dominated by the one-time
+  index build and varies with it — treat any single figure as *unverified*. The soundness/exactness claims
+  above stand on their own; timing does not gate them.
+- **Two-layer D-d (write-door strip + read-side re-derivation).** The governed write door strips a
+  SHAPE-forged proven relation (witness missing / malformed / non-provable `calls` kind) at admission; a
+  shape-valid-but-false witness (the door has no oracle) is caught at read-side reverify (`reverify-store.ts`,
+  #240), which re-runs the oracle. Neither layer alone is D-d; the two together guarantee no forged proven
+  survives end-to-end.
+- **The cold-review-caught soundness fix (2026-08-22, `1984590`).** The oracle now binds **BOTH endpoints
+  at file granularity**: `endpointA ∈ reverseCallers(target)` AND `endpointB === definesAt(target)`. Before
+  the fix, a well-formed witness bolted onto an unrelated true edge could survive replay; after it, a forged
+  endpoint pair reads `broken`, not `re-proven` (the read-side D-d teeth).
+- **Acceptance: all 30 items green** (`AR-1..AR-30`), none vacuous — `AR-18` is the explicit anti-vacuous
+  teeth (a specific expected proven pair must be present, so "exhaustive" cannot pass by proving nothing).
+  The e2e black-box story (AR-14, `e2e-blackbox/test/s37-sound-relation.blackbox.test.ts`) drives the
+  shipped binaries as a subprocess through the full flow incl. the drift → `broken` contrast.
+
+### The honest boundary (F3 — documented, tested, not a silent gap)
+
+`depends-on` is proven **only at document granularity** and **only** for a witnessed cross-unit reference.
+The index cannot prove — so the projection abstains on (never a proven seal), each pinned in the honesty
+ledger (`docs/design/e2e-coverage-matrix.md`) and tested:
+
+- **`calls` is NOT provable.** The frozen `ScipSymbolRole` projection is `'definition' | 'reference'` — no
+  call-role. A "reference" (import / type position / use) is all SCIP gives; `calls` (A's body *invokes* B)
+  cannot be distinguished from it. `calls` ships advisory/justified via a later LLM arm, never `proven`.
+- **Dynamic dispatch / reflection / cross-language / FFI** resolve to `unresolved`/`dynamic` edges
+  (`to: null`) — they abstain, never a proven relation.
+- **No refute.** An absent edge is abstained, never a "these do not depend" fact (negation is the separate
+  #99b family for closeable-world absence).
