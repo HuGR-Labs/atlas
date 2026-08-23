@@ -120,6 +120,11 @@ export type { RelationLeg, RelationsData } from './relation-source.js';
 // plus the SHARED verdict builder both transports drive. Read-only, opens no governed surface; the #202 close.
 export { createNegationLeg, negationsVerdict } from './negation-source.js';
 export type { NegationLeg, NegationsData, NegationsRead } from './negation-source.js';
+
+// #234 — the 2-rev transition family: the grounded-transition READ leg (`transitionsOf` fold) + the reachable
+// PRODUCER (real 2-rev git input → justified transition → atomic persist). ADR-0015 D4.
+export { createTransitionLeg, createTransitionProducer, transitionsVerdict } from './transition-source.js';
+export type { TransitionLeg, TransitionProducer, TransitionRun, TransitionsData } from './transition-source.js';
 // The sound-genesis PROVEN family's production feed + shared verdict — the ONE caller that makes
 // verify{Dependency,Count,Negation} (@atlas/genesis) running code rather than ledgered reference models.
 export { createVerifyFactLeg, verifyFactVerdict } from './verify-fact-source.js';

@@ -50,7 +50,7 @@ const GOTCHA_SLOTS = new Set<PredicateSlot>(['gotcha', 'rationale']);
 function slotOf(row: Row): PredicateSlot | undefined {
   // A RelationNode (ADR-0015 D2) and a NegationNode (ADR-0015 D3) carry no `predicateSlot`; narrow it away
   // (neither is a slotted fact).
-  const factSlot = row.fact.kind === 'relation' || row.fact.kind === 'negation' ? undefined : row.fact.predicateSlot;
+  const factSlot = row.fact.kind === 'advisory' || row.fact.kind === 'predicate' ? row.fact.predicateSlot : undefined;
   return row.node.slot ?? factSlot;
 }
 

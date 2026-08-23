@@ -14,6 +14,10 @@ import type { IndexNode } from '@atlas/index';
 // The #99b scoped-negative shapes are declared in a cohesive sibling (extracted at the godfile ceiling) and
 // IMPORTED here so `GroundedFact` can reference `NegationNode`, then RE-EXPORTED below for a byte-identical surface.
 import type { NegationNode, AbstainedRecord } from './negation-types.js';
+// The #234 transition shape (ADR-0015 D4) is declared in its own cohesive sibling (same godfile-ceiling
+// extraction as negation-types.ts) and IMPORTED here so `GroundedFact` can reference `TransitionNode`, then
+// RE-EXPORTED below for a byte-identical surface.
+import type { TransitionNode } from './transition-types.js';
 
 /**
  * The Knowledge freshness vocabulary. Transcribed from atlas-knowledge:29 — `Freshness = 'FRESH' |
@@ -73,8 +77,14 @@ export type Check =
  * of `RelationNode` (advisory-CLASS, no `check`). `AbstainedRecord` (below) is its honest-abstention
  * sibling and is deliberately NOT in this union — it asserts nothing about the world. See
  * docs/design/99b-negation-fact-contract.md.
+ *
+ * [ADR-0015 D4 — #234] WIDENED to a FIFTH variant, `TransitionNode` — a 2-rev IMMUTABLE ADVISORY HISTORICAL
+ * record ("unit returned A, now returns B"), the OTHER advisory-class sibling (no `check`). Unlike the four
+ * live-predicate/oracle shapes it is NEVER re-checked at HEAD (a closed valid-time interval) and is SEALED
+ * `justified`, never `proven` (D-T1); it is SUPERSEDED, not falsified, by a later transition on the same unit
+ * lineage (D-T3). See docs/design/234-transition-design.md.
  */
-export type GroundedFact = AdvisoryNode | PredicateNode | RelationNode | NegationNode;
+export type GroundedFact = AdvisoryNode | PredicateNode | RelationNode | NegationNode | TransitionNode;
 
 /**
  * The closed relation vocabulary (NORMATIVE, additive-only — a new kind is a `cv` bump, exactly like the
@@ -129,6 +139,12 @@ export interface RelationNode {
 // They were extracted at the 400-LOC godfile ceiling along a cohesive boundary, exactly as `relation-key.ts`
 // split from `router.ts` on the sibling #99a leg. `RelationKind`/`ObviousnessScore` stay owned HERE.
 export type { NegationNode, AbstainedRecord };
+
+// The #234 transition shape (ADR-0015 D4) — `TransitionNode` (the FIFTH `GroundedFact` variant) — is DECLARED
+// in `transition-types.ts` (imported above) and RE-EXPORTED here so the package surface is byte-identical to an
+// inline declaration, exactly as `negation-types.ts` is on the sibling #99b leg. `Seal`/`ObviousnessScore`
+// stay owned HERE and are imported by that module (a type-only cycle, erased at runtime).
+export type { TransitionNode };
 
 /**
  * The ORDINAL leg of the obviousness score (ADR-0012). Two-point on purpose, and the honesty matters:

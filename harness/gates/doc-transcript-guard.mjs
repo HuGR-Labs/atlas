@@ -168,6 +168,15 @@ const UNVERIFIABLE = {
   ...each('an illustrative output-shape template over placeholders needing a SCIP-indexed repo + a witnessed cross-unit edge + an authorized actor (a clean checkout has none); the behaviour is pinned by relation-derive-reachability.test.ts + derive-relations-cli.test.ts, not reproducible from a clean checkout',
     'reference/commands/derive-relations.md#1'
   ),
+  // #234 D4 — the `atlas transitions`/`atlas transition` POPULATED examples show a unit lineage
+  // (`src/pay.ts::charge`) with a produced transition across two revs where its content changed. The clean
+  // fixture (README + src/{greet,math}.ts, one commit) holds no such unit and no two-rev change, so it
+  // reproduces to the EMPTY/rejected form, not the populated success shown. The behaviour is pinned by the
+  // #234 acceptance suite (transition-family.test.ts / cli/test/transitions-cli.test.ts + the blackbox e2e over
+  // a real 2-rev fixture), not reproducible from a clean checkout.
+  ...each('an illustrative worked example over a produced 2-rev transition (a clean fixture holds no such unit lineage nor two-rev change, so it reproduces to the empty/rejected form); the behaviour is pinned by the #234 acceptance suite + the blackbox e2e over a real 2-rev fixture, not reproducible from a clean checkout',
+    'reference/commands/transitions.md#1', 'reference/commands/transition.md#1'
+  ),
 };
 
 // ── enumeration ─────────────────────────────────────────────────────────────────────────────────────────

@@ -50,9 +50,9 @@ afterEach(() => vi.restoreAllMocks());
 // ── REQ-CLI-1 — total command surface ─────────────────────────────────────────────────────────────
 
 describe('SCN-CLI-1a — every command maps to exactly one leg', () => {
-  it('is total (15 keys) and mutually-exclusive over the ratified table', () => {
+  it('is total (17 keys) and mutually-exclusive over the ratified table', () => {
     // totality: every command in the finite surface has exactly one leg.
-    expect(COMMANDS).toEqual(['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'verify-fact', 'verify-store', 'derive-relations']);
+    expect(COMMANDS).toEqual(['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'transitions', 'transition', 'verify-fact', 'verify-store', 'derive-relations']);
     expect(Object.keys(COMMAND_LEG).sort()).toEqual([...COMMANDS].sort());
     expect(COMMAND_LEG).toEqual({
       init: 'atlas-init',
@@ -70,6 +70,11 @@ describe('SCN-CLI-1a — every command maps to exactly one leg', () => {
       //                           handler, a projection of the same durable store; carries no write authority
       negations: 'atlas-query', // READ authority oracle (#99b grounded-negation + abstention folds) — intercepted
       //                           before the handler, a projection of the same durable store; no write authority
+      transitions: 'atlas-query', // READ authority oracle (#234 grounded-transition fold) — intercepted before the
+      //                             handler, a projection of the same durable store; carries no write authority
+      transition: 'genesis run-controller', // the #234 2-rev transition PRODUCER — the genesis production entry
+      //                                        `mine` also binds; opens no governed WRITE token (persists via
+      //                                        commitProjection, the flagged limit), so it is not a WRITE_PATHS door
       'verify-fact': 'atlas-query', // READ authority oracle (sound-genesis PROVEN family) — intercepted before the
       //                               handler, a program oracle over the code index; carries no write authority
       'verify-store': 'atlas-query', // READ authority oracle (REVERIFY-GATE whole-store pass) — intercepted

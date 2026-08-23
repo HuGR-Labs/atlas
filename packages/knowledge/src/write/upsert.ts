@@ -170,6 +170,17 @@ function relationOf(req: WriteRequest): { endpointA?: string; endpointB?: string
   };
 }
 
+/** The ADDITIVE transition carrier a write contributes to the row (ADR-0015 D4 / #234). Conditional spread,
+ *  same discipline as {@link relationOf}: an omitted leg stays ABSENT, never an explicit `undefined`, keeping
+ *  `exactOptionalPropertyTypes` and the JSON round-trip honest. Present only on a `family:'transition'` write. */
+function transitionOf(req: WriteRequest): { unitKey?: string; shaBefore?: string; shaAfter?: string } {
+  return {
+    ...(req.unitKey !== undefined ? { unitKey: req.unitKey } : {}),
+    ...(req.shaBefore !== undefined ? { shaBefore: req.shaBefore } : {}),
+    ...(req.shaAfter !== undefined ? { shaAfter: req.shaAfter } : {}),
+  };
+}
+
 /** The ADDITIVE answer-provenance carrier a MINED write contributes to the row (#195 b). Conditional spread,
  *  same discipline as {@link governanceOf}/{@link relationOf}: an omitted `answerRef` stays ABSENT (never an
  *  explicit `undefined`), keeping `exactOptionalPropertyTypes` and the JSON round-trip honest. Present ONLY on
@@ -259,6 +270,7 @@ export function upsert(store: StoreProjection, req: WriteRequest): UpsertResult 
         ...(req.seal !== undefined ? { seal: req.seal } : {}), // SEAL carrier (ADR-0017) — provenance only, never a gate/identity leg; absent for advisory-prose
         ...governanceOf(req), // GOVERNANCE carrier (ADR-0007) — absent when the caller declares neither half
         ...relationOf(req), // RELATION carrier (ADR-0015 D2) — the endpoint pair + kind on a family:'relation' write
+        ...transitionOf(req), // TRANSITION carrier (ADR-0015 D4) — the unit lineage + rev-pair on a family:'transition' write
         ...answerProvenanceOf(req), // ANSWER-PROVENANCE carrier (#195 b) — the mined answer receipt, mine path only
       });
       break;
@@ -305,6 +317,7 @@ export function upsert(store: StoreProjection, req: WriteRequest): UpsertResult 
         ...(req.seal !== undefined ? { seal: req.seal } : {}), // SEAL carrier — from THIS write ONLY; omitted ⇒ seal DROPS (never inherited from prior)
         ...governanceOf(req), // re-states scope / re-states-or-RAISES tier; omitted ⇒ `...prior` stands
         ...relationOf(req), // RELATION carrier (ADR-0015 D2) — re-evidencing a relation re-states its endpoints
+        ...transitionOf(req), // TRANSITION carrier (ADR-0015 D4) — re-evidencing the SAME sha-pair re-states its lineage
         ...answerProvenanceOf(req), // ANSWER-PROVENANCE carrier (#195 b) — re-mining re-states the receipt; else `...prior`
         // CARRY-FORWARD ON A RAISE IS DELIBERATE for `answerRef` and `sameAs` — the anti-laundering severance
         // above is scoped to `claims` ON PURPOSE, and dropping either here would be WRONG, not safer:

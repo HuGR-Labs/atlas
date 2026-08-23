@@ -31,6 +31,7 @@ import {
 // to the sibling at the 400-LOC ceiling exactly as the relation legs were. The candidate is built HERE; the
 // scope-directory grounding + the abstention law stay the DOOR's (contract F4), so no truth-door call lives here.
 import { buildNegation, negationTripleResolves, DROP_NEGATION_MALFORMED } from './admit-negation.js';
+import { buildTransition, transitionWellFormed, DROP_TRANSITION_MALFORMED } from './admit-transition.js'; // #234 D4 — justified, NO oracle
 import type { Candidate, WhyNot } from './types.js';
 
 /**
@@ -74,6 +75,7 @@ export type {
   AdvisoryProposal,
   RelationProposal,
   NegationProposal,
+  TransitionProposal,
   Abstention,
   Proposal,
 } from './admit-proposals.js';
@@ -171,14 +173,11 @@ const DROP_COUNT_MALFORMED = "count proposal missing target/scope or atLeast not
 const DROP_DEF_UNWIRED = "definition slot but no verifyDefinition leg supplied (GEN-12-def)";
 const DROP_DEF_MALFORMED = "definition proposal missing target/scope (GEN-12-def)";
 const DROP_UNGROUNDED = 'advisory fails the truth door — the citation does not ground (GEN-12e)';
-// RELATION drops (ADR-0015 D2, WP-96-R). The relation family is now ADMITTED — its two honest refusals
-// (`DROP_RELATION_MALFORMED` / `DROP_RELATION_UNGROUNDED`) live beside its builders in `admit-relation.ts`
-// and are imported above. The `shape-not-yet-emitted` stub reason is GONE (deleted, not commented) so a
-// resurrected stub cannot reach a ready-made string.
-// The negation family is now ADMITTED (ADR-0015 D3, WP-96-N) — its one honest refusal (`DROP_NEGATION_MALFORMED`)
-// lives beside its builders in `admit-negation.ts` and is imported above. The `shape-not-yet-emitted` stub reason
-// is GONE (deleted, not commented) so a resurrected stub cannot reach a ready-made string. The second failure
-// mode — an undecidable well-formed negative — is the DOOR's ABSTENTION (contract F4), not a genesis drop.
+// RELATION/NEGATION/TRANSITION drops. All three greenfield families are ADMITTED; their honest refusals live
+// beside their builders (`DROP_RELATION_MALFORMED`/`DROP_RELATION_UNGROUNDED`, `DROP_NEGATION_MALFORMED`,
+// `DROP_TRANSITION_MALFORMED`), imported above; the `shape-not-yet-emitted` stub reason is GONE for each. A
+// negation's second failure mode (undecidable well-formed negative) is the DOOR's ABSTENTION (F4); a transition
+// has NO second mode (no HEAD oracle to abstain, D-T1) — a malformed identity is its only drop.
 // There is deliberately NO obviousness drop reason. ADR-0012: nothing is ever rejected for being obvious —
 // an obvious claim is emitted carrying `obviousness.rank === 'obvious'` and loses at ranking, where the
 // decision is recoverable. The retired `DROP_OBVIOUS` is not commented out anywhere; it is gone, so a
@@ -208,6 +207,8 @@ export function admit(p: Proposal, deps: AdmitDeps): Admission {
       return admitRelation(p, deps);
     case 'negation':
       return admitNegation(p, deps);
+    case 'transition': // #234 (ADR-0015 D4) — JUSTIFIED, NO oracle (D-T1): gate-0 well-formed else DROP; mint+ground+seal in `buildTransition`
+      return transitionWellFormed(p) ? { outcome: 'admitted', fact: buildTransition(p) } : { outcome: 'dropped', reason: DROP_TRANSITION_MALFORMED };
   }
 }
 

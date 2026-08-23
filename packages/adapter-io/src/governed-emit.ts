@@ -266,7 +266,7 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
     // its `tier`/`grounding` — it ratifies on the advisory path (no `check`); its IDENTITY is not this nodeKey.
     const candidateView = {
       ...node,
-      slot: node.kind === 'relation' ? undefined : node.predicateSlot,
+      slot: node.kind === 'advisory' || node.kind === 'predicate' ? node.predicateSlot : undefined,
     } as unknown as Candidate;
 
     // 2.1 ANCHOR BINDING (ARCH-9 for `scope` — ADR-0010 open item 3). Gate 2 asked whether the actor is in
@@ -369,7 +369,7 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
           //    the node so a later sibling-adjacency scan reads them off the projection (WP-B); NOT read here.
           //    `predicateSlot` is R3-optional; conditional spread keeps `slot` ABSENT (exactOptionalPropertyTypes).
           primaryAnchor, // the SAME value gate 2.1 bound the declared scope against — computed once
-          ...(node.kind !== 'relation' && node.predicateSlot !== undefined ? { slot: node.predicateSlot } : {}),
+          ...((node.kind === 'advisory' || node.kind === 'predicate') && node.predicateSlot !== undefined ? { slot: node.predicateSlot } : {}),
           // ── SEAL carrier (billy T0, #187 → SEAL-PROMOTE-CARRY; RELATION added #99 ADR-0018) — the seal is
           //    trusted IFF the write is promote-origin (a mined fact re-emitted from content-addressed staging
           //    written by the sound admit path), never from an authored operator payload. `node.seal` is present

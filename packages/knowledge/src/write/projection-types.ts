@@ -37,6 +37,15 @@ export interface WriteRequest {
   readonly endpointA?: string;
   readonly endpointB?: string;
   readonly relationKind?: string; // the closed-vocabulary RelationKind VALUE (string form at this seam)
+  // ── TRANSITION carrier (ADDITIVE, OPTIONAL — ADR-0015 D4 / #234) — the unit lineage + the rev-pair of a
+  //    2-rev historical record, forwarded so `upsert` stamps them on the ROW and the read-side `transitionsOf`
+  //    fold can index a transition by its `unitKey` LINEAGE (and chain shaBefore→shaAfter for the derive-on-read
+  //    supersession verdict) without re-reading CAS. NOT ROUTED: none enters `RouteInputs`; a transition's
+  //    identity is `transitionKey` (transition-key.ts), computed upstream into `nodeKey` here. Present only on a
+  //    `family:'transition'` write; absent for the other families. Direction preserved (before→after).
+  readonly unitKey?: string;
+  readonly shaBefore?: string;
+  readonly shaAfter?: string;
   // ── SEAL carrier (ADDITIVE, OPTIONAL — ADR-0017 two-seal provenance) — the seal (`proven`) the admit path
   //    decided for this fact's TYPE, forwarded so `upsert` stamps it on the ROW and the durable store carries
   //    it. PROVENANCE ONLY: it records HOW the fact's type was decided, is NOT an authority/governance leg,
@@ -143,6 +152,16 @@ export interface CurrentNode {
   readonly endpointA?: string;
   readonly endpointB?: string;
   readonly relationKind?: string;
+  // ── TRANSITION carrier (ADDITIVE, OPTIONAL — ADR-0015 D4 / #234) — the unit lineage + rev-pair of a 2-rev
+  //    historical record, stamped on the row so the read-side `transitionsOf` fold indexes a transition by its
+  //    `unitKey` lineage and chains shaBefore→shaAfter for the derive-on-read supersession verdict (D-T3),
+  //    without an O(repo) scan or a CAS re-read. Present only on a `family:'transition'` row; absent otherwise.
+  //    NONE enters `nodeKey` (identity is `transitionKey`, already the row's `nodeKey`). ADDITIVE/OPTIONAL,
+  //    back-compat, the `endpointA`/`scope` discipline: a row minted before this WP has none, old sidecars
+  //    round-trip unrewritten (the wire serializes the whole CurrentNode). Carried forward by `upsert`.
+  readonly unitKey?: string;
+  readonly shaBefore?: string;
+  readonly shaAfter?: string;
   // ── SEAL carrier (ADDITIVE, OPTIONAL — ADR-0017 two-seal provenance) — the seal (`proven`) stamped on the
   //    ROW so the durable store carries HOW this fact's type was decided. PROVENANCE ONLY: NOT an
   //    authority/governance leg, never enters `nodeKey`, no gate reads it; absent for advisory-prose facts.

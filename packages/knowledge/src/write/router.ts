@@ -99,8 +99,12 @@ export interface RouterApi {
  *  WIDENED by ADR-0015 D2 (#99a) with `relation` — a 2-ended fact that, having NO `check`, routes like an
  *  advisory (UPDATE/union on a nodeKey hit), never SUPERSEDE. WIDENED again by ADR-0015 D3 (#99b) with
  *  `negation` — a scoped negative that likewise carries NO `check`, so it joins advisory/relation on the
- *  UPDATE branch below (never SUPERSEDE by routing). */
-export type NodeFamily = 'advisory' | 'predicate' | 'relation' | 'negation';
+ *  UPDATE branch below (never SUPERSEDE by routing). WIDENED AGAIN by ADR-0015 D4 (#234) with `transition` —
+ *  a 2-rev historical record that ALSO carries NO `check`, so it joins advisory/relation/negation on the
+ *  UPDATE branch (re-admitting the SAME sha-pair is an in-place UPDATE, never a dup). Its LINEAGE supersession
+ *  (a later transition on the same unitKey, a DIFFERENT sha-pair ⇒ a DISTINCT transitionKey ⇒ its own CREATE)
+ *  is a DERIVE-ON-READ verdict over the lineage (read/transitions.ts), never a write-time route (D-T3). */
+export type NodeFamily = 'advisory' | 'predicate' | 'relation' | 'negation' | 'transition';
 
 /**
  * The enumerated routing product — the four orthogonal, already-RESOLVED oracle inputs the
@@ -125,11 +129,14 @@ export interface RouteInputs {
 export function routeWrite(inputs: RouteInputs): WriteDecision {
   if (inputs.contentHashHit) return 'DEDUP'; // 4b — byte-identical fact, idempotent no-op
   if (!inputs.nodeKeyHit) return 'CREATE'; // 4f — new (anchor, slot[, check]) OR a different check
-  // 4c/4d — claim set-union, edited in place. A `relation` (ADR-0015 D2) AND a `negation` (ADR-0015 D3) each
-  // have NO `check`, so re-evidencing an existing relationKey/negationKey is an UPDATE (append the
-  // claim/provenance), never a SUPERSEDE — both join advisory on this `family !== 'predicate'` branch. An
-  // `AbstainedRecord`→negation transition is an EXPLICIT supersede on the shared negationKey address, handled
-  // at the door (N2), NOT by this routing function.
+  // 4c/4d — claim set-union, edited in place. A `relation` (ADR-0015 D2), a `negation` (ADR-0015 D3) AND a
+  // `transition` (ADR-0015 D4) each have NO `check`, so re-evidencing an existing relationKey/negationKey/
+  // transitionKey is an UPDATE (append the claim/provenance), never a SUPERSEDE — all three join advisory on
+  // this `family !== 'predicate'` branch. An `AbstainedRecord`→negation transition is an EXPLICIT supersede on
+  // the shared negationKey address, handled at the door (N2), NOT by this routing function. A transition's
+  // LINEAGE supersession (D-T3) is likewise NOT a route here: a later transition on the same unitKey has a
+  // DIFFERENT sha-pair ⇒ a DIFFERENT transitionKey ⇒ its own CREATE, and which one is the lineage HEAD is a
+  // DERIVE-ON-READ verdict (read/transitions.ts), never a write-time mutation of the incumbent.
   if (inputs.family !== 'predicate') return 'UPDATE';
   return inputs.checkSame ? 'SUPERSEDE' : 'CREATE'; // 4e — same-check re-evidence supersedes
 }
@@ -356,6 +363,11 @@ export * from './relation-key.js';
 // NEGATION IDENTITY (ADR-0015 D3 · #99b) — the scoped-negative's identity leg, the 3-legged sibling of
 // `relation-key.js` (reuses its closed `RelationKind` vocabulary). Re-exported here beside it, same pattern.
 export * from './negation-key.js';
+
+// TRANSITION IDENTITY (ADR-0015 D4 · #234) — the 2-rev historical record's identity leg, the directed 3-legged
+// sibling of `negation-key.js`/`relation-key.js` (the (unitKey, shaBefore, shaAfter) triple). Re-exported here
+// beside them, same pattern — so the package surface is unchanged.
+export * from './transition-key.js';
 
 
 /**

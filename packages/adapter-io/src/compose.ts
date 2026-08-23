@@ -45,6 +45,7 @@ import { createRelationLeg } from './relation-source.js';
 import { runDeriveRelations } from './relation-derive-run.js';
 import type { DeriveRelationsRun } from './relation-derive-run.js';
 import { createNegationLeg } from './negation-source.js';
+import { createTransitionLeg, createTransitionProducer, type TransitionLeg, type TransitionProducer } from './transition-source.js';
 import type { RelationLeg } from './relation-source.js';
 import type { NegationLeg } from './negation-source.js';
 import { createVerifyFactLeg } from './verify-fact-source.js';
@@ -126,21 +127,21 @@ export interface ComposedRuntime {
    * makes a fired abstention observable (closes #202).
    */
   readonly negations: NegationLeg;
-  /**
-   * The sound-genesis PROVEN-family feed (`atlas verify-fact`) — PROVES / REFUTES / ABSTAINS on a typed
-   * dependency/count/negation claim over the live symbol-reverse view (built off the SAME `scipOutput` the
-   * `axes` are). A READ door (not a `Tool`, writes nothing) and the ONE production caller that makes
-   * `verify{Dependency,Count,Negation}` (@atlas/genesis) running code — see `verify-fact-source.ts`.
-   */
+  /** The grounded-transition READ leg + reachable 2-rev PRODUCER (#234 / ADR-0015 D4) — `transitions(unit)`
+   *  reads the lineage's 2-rev records (head TRANSITIONED + predecessors SUPERSEDED, D-T3); `transition(unit,
+   *  before, after)` reads REAL content at two revs and persists a JUSTIFIED transition (D-T1). Flagged limits
+   *  in `transition-source.ts` (direct `commitProjection` persist, mechanical `derivation`). */
+  readonly transitions: TransitionLeg;
+  readonly transition: TransitionProducer;
+  /** The sound-genesis PROVEN-family feed (`atlas verify-fact`) — PROVES/REFUTES/ABSTAINS on a typed
+   *  dependency/count/negation claim over the live symbol-reverse view (off the SAME `scipOutput` the `axes`
+   *  are). A READ door, and the ONE production caller that makes `verify{Dependency,Count,Negation}`
+   *  (@atlas/genesis) running code — see `verify-fact-source.ts`. */
   readonly verifyFact: VerifyFactLeg;
-  /**
-   * The REVERIFY-GATE pass (`atlas verify-store`) — re-proves every `seal:'proven'` fact in the durable
-   * store against the LIVE index and buckets it `re-proven` / `broken` / `unverifiable` (see
-   * `reverify-store.ts` for the full narrative). It rides the SAME `verifyFact` leg above (no second oracle)
-   * and the SAME `driftFacts` readback the reconcile seams use (no second store read) — a THUNK, not eager
-   * data, so a command that never asks for it never pays the per-fact loop. A READ door: not a `Tool`, opens
-   * no new governed surface, `GOVERNANCE_SURFACE` stays 5, `WRITE_PATHS` is untouched.
-   */
+  /** The REVERIFY-GATE pass (`atlas verify-store`) — re-proves every `seal:'proven'` fact against the LIVE
+   *  index into `re-proven`/`broken`/`unverifiable` (see `reverify-store.ts`). Rides the SAME `verifyFact` leg
+   *  (no second oracle) + the SAME `driftFacts` readback (no second store read) — a THUNK. A READ door,
+   *  GOVERNANCE_SURFACE stays 5. */
   readonly reverify: () => ReverifyReport;
   /**
    * The #99 SOUND-RELATION derive-and-persist pass (`atlas derive-relations`, WP-R7) — the mechanical projection
@@ -150,9 +151,7 @@ export interface ComposedRuntime {
    * emits every proven relation through the SAME `origin:'promoted'` governed emit door promote publishes through
    * (`relationEmit` below), so the seal + re-derivable witness reach the durable row + CAS bytes. Rides beside
    * the handler like `promote`: a WRITE leg opening no NEW governed surface (`GOVERNANCE_SURFACE` stays 5 — an
-   * ordinary USE of the emit door, ADR-0008), so it is not a `Tool`. A THUNK (paid only on demand); NO LLM
-   * anywhere (AR-23 — deterministic index data + the sound oracle program).
-   */
+   * ordinary USE of the emit door, ADR-0008). A THUNK (paid only on demand); NO LLM anywhere (AR-23). */
   readonly deriveRelations: () => DeriveRelationsRun;
   /**
    * The PROVENANCE refusal for this repo's durable store, or `undefined` when reads may proceed
@@ -572,6 +571,9 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     // scope OR an extractor bump reads DRIFTED). `currentEdgeModel` is `edgeModelVersion()`, the SAME value
     // the door stamps.
     negations: createNegationLeg(readAccess.store, bindFreshnessOracle(axes, edgeModelVersion())),
+    // #234 — READ leg off the SAME `readAccess.store` the query leg reads; PRODUCER writes the WRITE `store` via `revIndex`.
+    transitions: createTransitionLeg(readAccess.store),
+    transition: createTransitionProducer(store, revIndex),
     // THE SOUND-GENESIS PROVEN-FAMILY FEED (`atlas verify-fact`). Off the SAME `scipOutput` the axes ride — a
     // program oracle over the immutable code index, built once and closed over (see verify-fact-source.ts).
     verifyFact: verifyFactLeg,

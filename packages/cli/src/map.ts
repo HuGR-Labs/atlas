@@ -6,7 +6,7 @@
 import { WRITE_PATHS } from '@atlas/tools';
 import type { Tool, Verdict } from '@atlas/tools';
 
-/** The finite command surface — EXACTLY these fifteen, no more (CLI-1a). Order fixed; membership load-bearing.
+/** The finite command surface — EXACTLY these seventeen, no more (CLI-1a). Order fixed; membership load-bearing.
  *  [EXTENDED — WP-SAMEAS] `link` joins as the CLI door of the governed sameAs write (routes to `atlas-link`).
  *  [EXTENDED — WP-PROMOTE] `promote` joins as the CLI door of the governed promotion of staged candidates. It
  *  binds `atlas-emit`, the door it actually publishes through (ADR-0008: a curator door is an ordinary USE of
@@ -25,8 +25,15 @@ import type { Tool, Verdict } from '@atlas/tools';
  *  it derives PROVEN `depends-on` relations from the index and PERSISTS them through the governed emit door. Like
  *  `promote` it is a WRITE command that binds `atlas-emit` (the door it publishes through, ADR-0008: a projection
  *  pass is an ordinary USE of the existing emit door), so it is not a new tool, `GOVERNANCE_SURFACE` stays 5 and
- *  `WRITE_PATHS` does not move. `authorityOf` DERIVES its WRITE class from `WRITE_PATHS`; it is not asserted here. */
-export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'verify-fact', 'verify-store', 'derive-relations'] as const;
+ *  `WRITE_PATHS` does not move. `authorityOf` DERIVES its WRITE class from `WRITE_PATHS`; it is not asserted here.
+ *  [EXTENDED — #234] `transitions` joins as the CLI door of the grounded-transition read fold (`transitionsOf`,
+ *  ADR-0015 D4). Like `relations`/`negations` it binds `atlas-query` — a READ authority oracle — so
+ *  `GOVERNANCE_SURFACE` stays 5 and `WRITE_PATHS` is untouched. `transition` joins as the reachable 2-rev
+ *  transition PRODUCER (`atlas transition <unit> <revBefore> <revAfter>`); it binds `genesis run-controller`
+ *  (the genesis production entry `mine` also binds) — it opens NO governed WRITE token (its flagged limit:
+ *  it persists an advisory-class justified transition directly through `commitProjection`, not the governed
+ *  authz door), so it carries no WRITE_PATHS door and `authorityOf` reads it as a genesis entry, exactly as `mine`. */
+export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'transitions', 'transition', 'verify-fact', 'verify-store', 'derive-relations'] as const;
 export type Command = (typeof COMMANDS)[number];
 
 /** The leg a command routes to — a governance `Tool`, or the genesis entry (data-only; NOT executed here —
@@ -71,6 +78,15 @@ export const COMMAND_LEG: Record<Command, Leg> = {
   //                           before the handler (cli.ts) and driven over the composition root's `negations`
   //                           leg, which reads the SAME durable projection. Carries NO write authority — it
   //                           opens no governed token, GOVERNANCE_SURFACE stays 5, WRITE_PATHS untouched.
+  transitions: 'atlas-query', // READ authority oracle (#234 grounded-transition fold); intercepted before the
+  //                             handler (cli.ts) and driven over the composition root's `transitions` leg, which
+  //                             reads the SAME durable projection. Carries NO write authority — GOVERNANCE_SURFACE
+  //                             stays 5, WRITE_PATHS untouched.
+  transition: 'genesis run-controller', // the 2-rev transition PRODUCER (#234); the genesis production entry
+  //                                        `mine` also binds, driven over the composition root's `transition` leg.
+  //                                        Opens NO governed WRITE token (flagged limit: persists a justified
+  //                                        transition directly via commitProjection, not the governed authz door),
+  //                                        so it is not a WRITE_PATHS door — `authorityOf` reads it a genesis entry.
   'verify-fact': 'atlas-query', // READ authority oracle (sound-genesis PROVEN family); intercepted before the
   //                               handler (cli.ts) and driven over the composition root's `verifyFact` leg, a
   //                               program oracle over the code index. Carries NO write authority — it opens no
