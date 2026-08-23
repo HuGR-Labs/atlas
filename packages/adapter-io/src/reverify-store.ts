@@ -103,15 +103,21 @@ export interface ReverifyReport {
  *  witness naming any OTHER slot is, BY CONSTRUCTION of the shipped mint path, unreachable — but this module
  *  does not trust that absence: an out-of-family slot fails closed to `unverifiable`, not a throw and not a
  *  silent `broken`. */
-const WITNESSED_SLOTS: ReadonlySet<PredicateSlot> = new Set(['dependency', 'count']);
+const WITNESSED_SLOTS: ReadonlySet<PredicateSlot> = new Set(['dependency', 'count', 'definition']);
 
 /** Build the typed `VerifyReq` a witness replays as — the SAME shape `verifyFactVerdict` builds off CLI argv
  *  (`--scope` = `witness.scope`, `--world` defaults to `--scope`), so a re-verified claim is decided by
  *  EXACTLY the invocation `atlas verify-fact` would run if handed the witness back (as `s33-seal-witness`
  *  already demonstrates one row of, by hand, over the CLI). */
-function reqOf(slot: 'dependency' | 'count', target: string, scope: string, atLeast: number | undefined): VerifyReq {
+function reqOf(slot: 'dependency' | 'count' | 'definition', target: string, scope: string, atLeast: number | undefined): VerifyReq {
   if (slot === 'dependency') {
     return { kind: 'dependency', claim: { sourceScope: scope, target, worldScope: scope } };
+  }
+  // slot === 'definition' (196d) — the SAME shape the CLI leg builds (`verify-fact-source.ts`): a positive
+  // witnessed existence, no `worldScope` and no `atLeast` (definition carries neither — it proves the def
+  // occurrence lies UNDER `scope`, no cardinality, no closed-world).
+  if (slot === 'definition') {
+    return { kind: 'definition', claim: { sourceScope: scope, target } };
   }
   // slot === 'count' — `atLeast` is REQUIRED by the witness contract (#195 `witnessOf`, present only for the
   // count slot); absent here means the stored witness itself is malformed, not something this fold invents —
@@ -212,7 +218,7 @@ export function reverifyFact(node: CurrentNode, fact: GroundedFact, leg: VerifyF
     return { nodeKey, outcome: 'unverifiable', reason: 'witness is incomplete (missing target/scope) — nothing to replay' };
   }
   if (!WITNESSED_SLOTS.has(w.slot)) {
-    return { nodeKey, outcome: 'unverifiable', reason: `witness names slot '${w.slot}', outside the witnessed family (dependency|count) — nothing to replay` };
+    return { nodeKey, outcome: 'unverifiable', reason: `witness names slot '${w.slot}', outside the witnessed family (dependency|count|definition) — nothing to replay` };
   }
   if (w.slot === 'count' && typeof w.atLeast !== 'number') {
     return { nodeKey, outcome: 'unverifiable', reason: "witness slot 'count' carries no atLeast bound — nothing to replay" };
@@ -248,7 +254,7 @@ export function reverifyFact(node: CurrentNode, fact: GroundedFact, leg: VerifyF
       reason: `TAMPERED: claim text does not match the sentence DERIVED from the witness ('${expectedClaim}') — hand-written prose over a witness that proves something narrower`,
     };
   }
-  const verdict = leg(reqOf(w.slot as 'dependency' | 'count', w.target, w.scope, w.atLeast));
+  const verdict = leg(reqOf(w.slot as 'dependency' | 'count' | 'definition', w.target, w.scope, w.atLeast));
   if (verdict.verdict === 'proven') {
     return { nodeKey, outcome: 're-proven', reason: `replayed PROVEN over (${w.slot}, ${w.target}, ${w.scope})` };
   }

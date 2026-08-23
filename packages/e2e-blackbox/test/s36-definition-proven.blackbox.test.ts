@@ -95,6 +95,16 @@ describe('S36 — a mined definition fact is sealed `proven`, carries its witnes
     expect(node.stdout).toContain('util/greet(). is defined under src (witnessed definition occurrence, sound oracle)');
   });
 
+  it('RE-PROVEN (196d, #240) — `atlas verify-store` replays the promoted definition witness, re-proven not unverifiable, exit 0', () => {
+    // The read-side reverify gate (`reverify-store.ts` WITNESSED_SLOTS) must include `definition`, else this
+    // proven fact is `unverifiable` and DROPPED from tracked-provable reads — the #240 trap. This is the e2e
+    // teeth that the mint-side and read-side verification seams AGREE for the definition slot.
+    const verify = runAtlas(repo.repoPath, ['verify-store']);
+    expect(verify.exitCode).toBe(0);
+    expect(verify.stdout).toContain('status: ok');
+    expect(verify.stdout).toContain('verify-store: 1 sealed-proven fact(s) — 1 re-proven, 0 broken, 0 unverifiable');
+  });
+
   it('TEETH — the sound door PROVES greet under `src`, ABSTAINS out-of-scope and on a phantom (never false-proven)', () => {
     const proven = runAtlas(repo.repoPath, ['verify-fact', 'definition', 'util/greet().', '--scope', 'src']);
     expect(proven.exitCode).toBe(0);
