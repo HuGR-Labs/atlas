@@ -36,7 +36,7 @@ import type { CurrentNode, GroundedFact } from '@atlas/knowledge';
 import { currentNodes } from '@atlas/knowledge';
 import { REJECTED_UNTRUSTED_STORE } from './read-provenance.js';
 import { reverifyFact } from './reverify-store.js';
-import type { DocExists, ReverifyReport } from './reverify-store.js';
+import type { DocExists, ReverifyReport, ScopeHasDocs } from './reverify-store.js';
 import type { CasPath, DiskStore } from './store.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
 import type { StoreProvenance } from './store-provenance.js';
@@ -97,6 +97,7 @@ function buildProvable(
   gatedStore: DiskStore,
   verifyFactLeg: VerifyFactLeg,
   docExists: DocExists,
+  scopeHasDocs: ScopeHasDocs,
 ): { readonly store: DiskStore; readonly report: ReverifyReport } | undefined {
   try {
     // NO trust seam ⇒ never consulted ⇒ reads the raw file regardless of git status (`store.ts`'s own
@@ -112,7 +113,7 @@ function buildProvable(
       const fact = raw.get(node.contentHash as Hash) as GroundedFact | undefined;
       if (fact !== undefined) pairs.push({ node, fact });
     }
-    const rows = pairs.map((p) => reverifyFact(p.node, p.fact, verifyFactLeg, docExists));
+    const rows = pairs.map((p) => reverifyFact(p.node, p.fact, verifyFactLeg, docExists, scopeHasDocs));
     const sealedProven = rows.filter((r): r is NonNullable<typeof r> => r !== undefined);
     const report: ReverifyReport = {
       sealedProven: sealedProven.length,
@@ -157,6 +158,7 @@ export function buildReadAccess(opts: {
   readonly gatedStore: DiskStore;
   readonly verifyFactLeg: VerifyFactLeg;
   readonly docExists: DocExists;
+  readonly scopeHasDocs: ScopeHasDocs;
 }): ReadAccess {
   const kind = opts.provenance();
   if (kind === 'trusted') {
@@ -168,7 +170,7 @@ export function buildReadAccess(opts: {
     return { store: opts.gatedStore, refusal: REJECTED_UNTRUSTED_STORE, reverified: undefined };
   }
   // CASE 2 — tracked-provable: served, filtered to what re-proves; fail-closed if re-verification cannot run.
-  const built = buildProvable(opts.casPath, opts.headSha, opts.gatedStore, opts.verifyFactLeg, opts.docExists);
+  const built = buildProvable(opts.casPath, opts.headSha, opts.gatedStore, opts.verifyFactLeg, opts.docExists, opts.scopeHasDocs);
   if (built === undefined) {
     return { store: opts.gatedStore, refusal: REJECTED_UNTRUSTED_STORE, reverified: undefined };
   }

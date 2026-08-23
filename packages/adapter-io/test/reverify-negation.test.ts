@@ -35,6 +35,9 @@ const scip: ScipOutput = {
 
 const leg = createVerifyFactLeg(scip);
 const docExists = (p: string): boolean => scip.documents.some((d) => d.relativePath === p);
+// #240 follow-up: does the live fixture index contain any document under directory `scope`? (segment-prefix)
+const scopeHasDocs = (scope: string): boolean =>
+  scip.documents.some((d) => { const a = d.relativePath.split('/'); const s = scope.split('/'); return s.every((seg, i) => a[i] === seg); });
 
 /** A `CurrentNode` fixture — `reverifyNegation` never reads `primaryAnchor` (a negation routes by
  *  `negationKey`, and its claim IS its identity), so `node` only satisfies `reverifyFact`'s signature. */
@@ -62,35 +65,43 @@ function negation(id: string, extra: Partial<NegationNode>): GroundedFact {
 
 describe('#240 — reverify a seal:proven NEGATION (close the unverifiable trap)', () => {
   it('re-proves a still-true negation — no caller of NEVER under src, scope hole-free', () => {
-    const row = reverifyFact(node('n1'), negation('n1', {}), leg, docExists);
+    const row = reverifyFact(node('n1'), negation('n1', {}), leg, docExists, scopeHasDocs);
     expect(row?.outcome).toBe('re-proven');
   });
 
   it('TEETH — the proven negation is NO LONGER dumped to `unverifiable` (the #240 trap)', () => {
     // Before the fix, ANY proven negation fell to the predicate path and returned `unverifiable` for want of
     // a witnessed slot. The re-proven verdict above (not `unverifiable`) is exactly what closes the trap.
-    const row = reverifyFact(node('n1'), negation('n1', {}), leg, docExists);
+    const row = reverifyFact(node('n1'), negation('n1', {}), leg, docExists, scopeHasDocs);
     expect(row?.outcome).not.toBe('unverifiable');
   });
 
+  it('broken — a scope with NO documents in the live index (deleted/fabricated) is NOT re-proven vacuously (#240 follow-up)', () => {
+    // `verifyNegation` over an empty scope proves vacuously (no callers, no holes ⇒ proven); the scope-exists
+    // gate refuses it as `broken` instead — mirroring the write door's `scope-empty` and the relation `docExists`.
+    const row = reverifyFact(node('ng'), negation('ng', { scope: 'gone' }), leg, docExists, scopeHasDocs);
+    expect(row?.outcome).toBe('broken');
+    expect(row?.reason).toMatch(/no longer names a directory/);
+  });
+
   it('broken — a counterexample caller APPEARED: GREET is referenced under src ⇒ refuted', () => {
-    const row = reverifyFact(node('n2'), negation('n2', { target: GREET }), leg, docExists);
+    const row = reverifyFact(node('n2'), negation('n2', { target: GREET }), leg, docExists, scopeHasDocs);
     expect(row?.outcome).toBe('broken');
     expect(row?.reason).toMatch(/did NOT re-prove/);
   });
 
   it('broken — a PHANTOM target (never defined in the index) abstains ⇒ not re-provable', () => {
-    const row = reverifyFact(node('n3'), negation('n3', { target: PHANTOM }), leg, docExists);
+    const row = reverifyFact(node('n3'), negation('n3', { target: PHANTOM }), leg, docExists, scopeHasDocs);
     expect(row?.outcome).toBe('broken');
   });
 
   it('unverifiable — an incomplete identity (empty target/scope) has nothing to replay', () => {
-    expect(reverifyFact(node('n4'), negation('n4', { target: '' }), leg, docExists)?.outcome).toBe('unverifiable');
-    expect(reverifyFact(node('n5'), negation('n5', { scope: '' }), leg, docExists)?.outcome).toBe('unverifiable');
+    expect(reverifyFact(node('n4'), negation('n4', { target: '' }), leg, docExists, scopeHasDocs)?.outcome).toBe('unverifiable');
+    expect(reverifyFact(node('n5'), negation('n5', { scope: '' }), leg, docExists, scopeHasDocs)?.outcome).toBe('unverifiable');
   });
 
   it('broken TAMPERED — a proven seal on a non-mined tier was chosen by a committer, not proven', () => {
-    const row = reverifyFact(node('n6'), negation('n6', { tier: 'T0' }), leg, docExists);
+    const row = reverifyFact(node('n6'), negation('n6', { tier: 'T0' }), leg, docExists, scopeHasDocs);
     expect(row?.outcome).toBe('broken');
     expect(row?.reason).toMatch(/TAMPERED/);
   });
@@ -98,7 +109,7 @@ describe('#240 — reverify a seal:proven NEGATION (close the unverifiable trap)
   it('seal gate — an UNSEALED or justified negation is out of scope (undefined, never a bucket)', () => {
     const proven = negation('n7', {}) as unknown as Record<string, unknown>;
     const { seal: _drop, ...unsealed } = proven; // omit `seal` entirely (exactOptionalPropertyTypes)
-    expect(reverifyFact(node('n7'), unsealed as unknown as GroundedFact, leg, docExists)).toBeUndefined();
-    expect(reverifyFact(node('n8'), negation('n8', { seal: 'justified' }), leg, docExists)).toBeUndefined();
+    expect(reverifyFact(node('n7'), unsealed as unknown as GroundedFact, leg, docExists, scopeHasDocs)).toBeUndefined();
+    expect(reverifyFact(node('n8'), negation('n8', { seal: 'justified' }), leg, docExists, scopeHasDocs)).toBeUndefined();
   });
 });

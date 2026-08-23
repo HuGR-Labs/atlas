@@ -53,6 +53,7 @@
 import type { CurrentNode, GroundedFact, NegationNode, PredicateSlot, RelationNode } from '@atlas/knowledge';
 import { claimNormFromWitness } from '@atlas/genesis';
 import { unitScopeOf } from './llm.js';
+import { underScope } from './anchor-scope.js';
 import type { VerifyFactLeg, VerifyReq } from './verify-fact-source.js';
 
 // MIRRORS `packages/cli/src/mine-staging.ts` `MINED_TIER`. `adapter-io` cannot import `@atlas/cli` — `cli`
@@ -153,6 +154,20 @@ function anchorMatchesWitnessScope(primaryAnchor: string, scope: string): boolea
  *  `reverifyFact`'s doc comment on binding (d) and `compose.ts`, which builds this from the SAME
  *  `scipOutput.documents` list `createVerifyFactLeg`'s own `pathByHash` already iterates). */
 export type DocExists = (path: string) => boolean;
+
+/** Does the LIVE index contain AT LEAST ONE document under directory `scope`? The negation-family analog of
+ *  `DocExists` (#240 follow-up): a negation is a claim ABOUT a directory `scope`, and `verifyNegation` has no
+ *  `scope-empty` gate (only the write door does), so a proven negation over a scope whose directory was later
+ *  deleted re-proves VACUOUSLY. `reverifyNegation` uses this to read such a stale negation as `broken` instead,
+ *  mirroring the write door's gate-1 `scope-empty` abstain and the relation family's `docExists` endpoint
+ *  teeth. Built from the SAME `scipOutput.documents` `docExists` is (`compose.ts`), via `underScope`. */
+export type ScopeHasDocs = (scope: string) => boolean;
+
+/** Build a {@link ScopeHasDocs} from the live index's document list — `∃ doc under directory scope`, via the
+ *  same segment-wise `underScope` the read projection scopes on. Kept HERE (beside its consumer) so the
+ *  composition root wires it in one line, not four. */
+export const makeScopeHasDocs = (documents: readonly { readonly relativePath: string }[]): ScopeHasDocs =>
+  (scope) => documents.some((d) => underScope(d.relativePath, scope));
 
 /** The FILE half of a `primaryAnchor` — anchors are either a bare file path or `file::item::block` (the
  *  sub-file structural-refinement chain `ast.ts`'s `::` join mints, KNOW-15d) — strip everything from the
@@ -263,7 +278,7 @@ export function reverifyRelation(nodeKey: string, fact: RelationNode, leg: Verif
  *      a scope that is no longer hole-free abstains (`scope-open`) → `broken`. This is STRONGER than the
  *      `edgeModel` version-stamp the door writes (billy F1) — it re-checks the actual holes, not a proxy.
  *  Only a fresh `proven` (still no caller, still hole-free) re-proves; anything else is `broken`. */
-export function reverifyNegation(nodeKey: string, fact: NegationNode, leg: VerifyFactLeg): ReverifyRow {
+export function reverifyNegation(nodeKey: string, fact: NegationNode, leg: VerifyFactLeg, scopeHasDocs: ScopeHasDocs): ReverifyRow {
   const { target, scope } = fact;
   if (typeof target !== 'string' || target.length === 0 || typeof scope !== 'string' || scope.length === 0) {
     return { nodeKey, outcome: 'unverifiable', reason: "seal:'proven' negation with an incomplete identity (missing target/scope) — nothing to replay" };
@@ -273,6 +288,17 @@ export function reverifyNegation(nodeKey: string, fact: NegationNode, leg: Verif
       nodeKey,
       outcome: 'broken',
       reason: `TAMPERED: tier '${String(fact.tier)}' is not the mined tier '${MINED_TIER}' — every seal:'proven' negation is minted by the mine pipeline, so a different tier was chosen by whoever committed it, not proven by anything`,
+    };
+  }
+  // ── SCOPE EXISTS (#240 follow-up) — a negation is a claim ABOUT a directory. `verifyNegation` re-proves a
+  //    scope with NO documents VACUOUSLY (no callers, no holes ⇒ proven), so a proven negation whose scope
+  //    directory was deleted would read `re-proven`. Refuse it as `broken` — mirroring the write door's gate-1
+  //    `scope-empty` and the relation family's `docExists` endpoint teeth. Checked BEFORE the replay. ──────────
+  if (!scopeHasDocs(scope)) {
+    return {
+      nodeKey,
+      outcome: 'broken',
+      reason: `the negation's scope '${scope}' no longer names a directory the live SCIP index contains any document under — the region it is a negative about is gone (a deleted/renamed/fabricated scope re-proves only vacuously)`,
     };
   }
   // ── REPLAY — the negation's own identity IS the claim; re-run the closed-world oracle over the LIVE index.
@@ -327,7 +353,7 @@ export function reverifyNegation(nodeKey: string, fact: NegationNode, leg: Verif
  * operator can tell "the code moved under this fact" from "this fact was altered after the oracle proved
  * something else". Dropped, never clamped: silently rewriting a tampered tier/anchor/prose back to the
  * derived value would hide that a tamper was attempted at all. */
-export function reverifyFact(node: CurrentNode, fact: GroundedFact, leg: VerifyFactLeg, docExists: DocExists): ReverifyRow | undefined {
+export function reverifyFact(node: CurrentNode, fact: GroundedFact, leg: VerifyFactLeg, docExists: DocExists, scopeHasDocs: ScopeHasDocs): ReverifyRow | undefined {
   // SEAL GATE — admit ONLY `seal:'proven'` into the re-proof. `seal:'justified'` (contestable derivation, no
   // mechanical witness) and unsealed facts BOTH return `undefined` here: out of scope, never counted in any
   // bucket — and crucially NEVER `unverifiable`, which is a `proven`-only diagnosis (see module header §justified).
@@ -343,7 +369,7 @@ export function reverifyFact(node: CurrentNode, fact: GroundedFact, leg: VerifyF
   //    `(target, scope)` ARE the whole claim, so it re-proves by re-running `verifyNegation` directly (no
   //    anchor binding — a negation routes by `negationKey`). Routing it here closes the #240 trap that used to
   //    dump a proven negation to `unverifiable`. ─────────────────────────────────────────────────────────────
-  if (fact.kind === 'negation') return reverifyNegation(nodeKey, fact, leg);
+  if (fact.kind === 'negation') return reverifyNegation(nodeKey, fact, leg, scopeHasDocs);
   // Past the relation/negation branches above, the PREDICATE witness is carried ONLY on `AdvisoryNode` (#195
   // `buildSound` mints the predicate sound-oracle arm as an advisory), so a `proven`-sealed PREDICATE is
   // STRUCTURALLY witness-less here: `unverifiable`, not a type-narrowing dodge.
@@ -417,10 +443,10 @@ export interface NodeFactPair {
  * `CurrentNode` alongside it) — reading the STORE, never a command's own summary, per the chapter's honesty
  * requirement.
  */
-export function reverifyStore(pairs: readonly NodeFactPair[], leg: VerifyFactLeg, docExists: DocExists): ReverifyReport {
+export function reverifyStore(pairs: readonly NodeFactPair[], leg: VerifyFactLeg, docExists: DocExists, scopeHasDocs: ScopeHasDocs): ReverifyReport {
   const rows: ReverifyRow[] = [];
   for (const { node, fact } of pairs) {
-    const row = reverifyFact(node, fact, leg, docExists);
+    const row = reverifyFact(node, fact, leg, docExists, scopeHasDocs);
     if (row !== undefined) rows.push(row);
   }
   return {

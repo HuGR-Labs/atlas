@@ -34,6 +34,7 @@ const scip: ScipOutput = {
 
 const leg = createVerifyFactLeg(scip);
 const docExists = (p: string): boolean => scip.documents.some((d) => d.relativePath === p);
+const scopeHasDocs = (): boolean => true; // #240 follow-up: relation/predicate tests never exercise negation scope
 
 /** A `CurrentNode` fixture — the relation reverify path does NOT read `primaryAnchor` (it binds on the fact's
  *  own `endpointA`/`endpointB`), so `node` is carried only to satisfy `reverifyFact`'s signature. */
@@ -71,7 +72,7 @@ describe('reverifyRelation — one proven depends-on relation against the real o
   // ── AR-8 — a stored proven `depends-on` relation re-derives from the CURRENT index → `re-proven`. ──────────
   it('AR-8 — a proven depends-on relation whose edge still exists replays PROVEN → re-proven', () => {
     const fact = wellFormed('rel-ar8', OK_WITNESS);
-    const row = reverifyFact(node('rel-ar8'), fact, leg, docExists);
+    const row = reverifyFact(node('rel-ar8'), fact, leg, docExists, scopeHasDocs);
     // TEETH: before WP-R5 a proven relation had no witnessed slot and landed `unverifiable` (#240 trap).
     expect(row).toEqual({ nodeKey: 'rel-ar8', outcome: 're-proven', reason: expect.stringContaining('PROVEN') });
   });
@@ -80,7 +81,7 @@ describe('reverifyRelation — one proven depends-on relation against the real o
   //    `broken`, NOT falsely re-proven. NEVER is defined but referenced nowhere ⇒ no caller in scope. ────────
   it('AR-9 — when the witnessed edge no longer proves (no caller under scope) → broken, never a false re-prove', () => {
     const fact = wellFormed('rel-ar9', { relationKind: 'depends-on', target: NEVER, sourceScope: 'src' });
-    const row = reverifyFact(node('rel-ar9'), fact, leg, docExists);
+    const row = reverifyFact(node('rel-ar9'), fact, leg, docExists, scopeHasDocs);
     expect(row?.outcome).toBe('broken'); // reached the oracle (endpoints exist) and the oracle abstained
     expect(row?.reason).toContain('did NOT re-prove');
     expect(row?.outcome).not.toBe('re-proven');
@@ -91,7 +92,7 @@ describe('reverifyRelation — one proven depends-on relation against the real o
   it('AR-25 — a dangling endpointB (its file removed from the index) → broken (TAMPERED), no crash', () => {
     const fact = relation('rel-ar25b', { seal: 'proven', tier: 'T2', witness: OK_WITNESS, endpointB: 'src/GONE.ts' });
     let row: ReturnType<typeof reverifyFact>;
-    expect(() => { row = reverifyFact(node('rel-ar25b'), fact, leg, docExists); }).not.toThrow();
+    expect(() => { row = reverifyFact(node('rel-ar25b'), fact, leg, docExists, scopeHasDocs); }).not.toThrow();
     expect(row!.outcome).toBe('broken'); // Finding 2 — a tamper is `broken` (predicate-path aligned), not `unverifiable`
     expect(row!.reason).toContain('TAMPERED');
     expect(row!.reason).toContain('does not name a document');
@@ -106,7 +107,7 @@ describe('reverifyRelation — one proven depends-on relation against the real o
       witness: { relationKind: 'depends-on', target: GREET, sourceScope: 'src/gone' },
     });
     let row: ReturnType<typeof reverifyFact>;
-    expect(() => { row = reverifyFact(node('rel-ar25a'), fact, leg, docExists); }).not.toThrow();
+    expect(() => { row = reverifyFact(node('rel-ar25a'), fact, leg, docExists, scopeHasDocs); }).not.toThrow();
     expect(row!.outcome).toBe('broken');
     expect(row!.reason).toContain('TAMPERED');
     expect(row!.reason).toContain('does not name a document');
@@ -119,28 +120,28 @@ describe('reverifyRelation — one proven depends-on relation against the real o
 //    oracle + the endpoint tamper bindings. Each test mutates the well-formed baseline by ONE field only. ─────
 describe('reverifyRelation — AR-10 TAMPER BINDINGS: forged witness / anchor / tier is unverifiable, never served', () => {
   it('the well-formed baseline really does re-prove (sanity — the mutations below are the ONLY change)', () => {
-    expect(reverifyFact(node('rel-base'), wellFormed('rel-base', OK_WITNESS), leg, docExists)?.outcome).toBe('re-proven');
+    expect(reverifyFact(node('rel-base'), wellFormed('rel-base', OK_WITNESS), leg, docExists, scopeHasDocs)?.outcome).toBe('re-proven');
   });
 
   it('MISSING WITNESS — seal:proven relation with NO witness recorded → unverifiable (the trust-me shape)', () => {
     const fact = relation('rel-nowit', { seal: 'proven' });
-    const row = reverifyFact(node('rel-nowit'), fact, leg, docExists);
+    const row = reverifyFact(node('rel-nowit'), fact, leg, docExists, scopeHasDocs);
     expect(row).toEqual({ nodeKey: 'rel-nowit', outcome: 'unverifiable', reason: expect.stringContaining('no witness was recorded') });
   });
 
   it('INCOMPLETE WITNESS — an empty target is never replayed → unverifiable', () => {
     const fact = relation('rel-empty', { seal: 'proven', witness: { relationKind: 'depends-on', target: '', sourceScope: 'src' } });
-    expect(reverifyFact(node('rel-empty'), fact, leg, docExists)?.outcome).toBe('unverifiable');
+    expect(reverifyFact(node('rel-empty'), fact, leg, docExists, scopeHasDocs)?.outcome).toBe('unverifiable');
   });
 
   it('INCOMPLETE WITNESS — an empty sourceScope is never replayed → unverifiable', () => {
     const fact = relation('rel-empscope', { seal: 'proven', witness: { relationKind: 'depends-on', target: GREET, sourceScope: '' } });
-    expect(reverifyFact(node('rel-empscope'), fact, leg, docExists)?.outcome).toBe('unverifiable');
+    expect(reverifyFact(node('rel-empscope'), fact, leg, docExists, scopeHasDocs)?.outcome).toBe('unverifiable');
   });
 
   it('WRONG TIER — a committer-chosen tier (T0) over the same true witness is TAMPERED → broken', () => {
     const fact = relation('rel-tier', { seal: 'proven', tier: 'T0', witness: OK_WITNESS });
-    const row = reverifyFact(node('rel-tier'), fact, leg, docExists);
+    const row = reverifyFact(node('rel-tier'), fact, leg, docExists, scopeHasDocs);
     expect(row?.outcome).toBe('broken'); // Finding 2 — tamper aligned to the predicate path's `broken`
     expect(row?.reason).toContain('TAMPERED');
     expect(row?.reason).toContain('tier');
@@ -151,7 +152,7 @@ describe('reverifyRelation — AR-10 TAMPER BINDINGS: forged witness / anchor / 
     // not about the edge its witness proves. (The widening attack: any real edge under `src` is trivially also
     // "under" a deeper anchor; the equality binding closes it.)
     const fact = relation('rel-anchor', { seal: 'proven', endpointA: 'src/deep/a.ts', witness: OK_WITNESS });
-    const row = reverifyFact(node('rel-anchor'), fact, leg, docExists);
+    const row = reverifyFact(node('rel-anchor'), fact, leg, docExists, scopeHasDocs);
     expect(row?.outcome).toBe('broken');
     expect(row?.reason).toContain('TAMPERED');
     expect(row?.reason).toContain('sourceScope');
@@ -165,7 +166,7 @@ describe('reverifyRelation — AR-10 TAMPER BINDINGS: forged witness / anchor / 
     // (that is `src/def.ts`). The old directory-scoped oracle re-proved (some file under `src` references GREET);
     // the endpointB definer bind refuses it.
     const fact = relation('rel-forgeB', { seal: 'proven', tier: 'T2', endpointA: 'src/a.ts', endpointB: 'src/a.ts', witness: OK_WITNESS });
-    const row = reverifyFact(node('rel-forgeB'), fact, leg, docExists);
+    const row = reverifyFact(node('rel-forgeB'), fact, leg, docExists, scopeHasDocs);
     expect(row?.outcome).toBe('broken');
     expect(row?.outcome).not.toBe('re-proven');
     expect(row?.reason).toContain('did NOT re-prove');
@@ -177,7 +178,7 @@ describe('reverifyRelation — AR-10 TAMPER BINDINGS: forged witness / anchor / 
     // NOTHING — only `src/a.ts` references GREET. The old oracle re-proved (SOME file under `src` references
     // GREET); the endpointA referrer bind refuses this forged pair. endpointB stays the true definer to isolate A.
     const fact = relation('rel-forgeA', { seal: 'proven', tier: 'T2', endpointA: 'src/def.ts', endpointB: 'src/def.ts', witness: OK_WITNESS });
-    const row = reverifyFact(node('rel-forgeA'), fact, leg, docExists);
+    const row = reverifyFact(node('rel-forgeA'), fact, leg, docExists, scopeHasDocs);
     expect(row?.outcome).toBe('broken');
     expect(row?.outcome).not.toBe('re-proven');
     expect(row?.reason).toContain('did NOT re-prove');
@@ -189,7 +190,7 @@ describe('reverifyRelation — AR-10 TAMPER BINDINGS: forged witness / anchor / 
     // Even riding a genuinely-referenced target, replaying the oracle refuses to re-prove it — so it is never
     // served as a proven relation.
     const fact = wellFormed('rel-calls', { relationKind: 'calls', target: GREET, sourceScope: 'src' });
-    const row = reverifyFact(node('rel-calls'), fact, leg, docExists);
+    const row = reverifyFact(node('rel-calls'), fact, leg, docExists, scopeHasDocs);
     expect(row?.outcome).toBe('broken');
     expect(row?.reason).toContain('did NOT re-prove');
   });
@@ -203,7 +204,7 @@ describe('reverifyStore — relations fold into the same three buckets alongside
       { node: node('r-nowit'), fact: relation('r-nowit', { seal: 'proven' }) },
       { node: node('r-unsealed'), fact: relation('r-unsealed', {}) }, // no seal ⇒ out of scope, never counted
     ];
-    const report = reverifyStore(pairs, leg, docExists);
+    const report = reverifyStore(pairs, leg, docExists, scopeHasDocs);
     expect(report).toEqual({
       sealedProven: 3,
       reProven: 1,
