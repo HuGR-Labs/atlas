@@ -50,7 +50,7 @@
 // second oracle constructed here (a duplicated oracle that drifts from the shipped one is a known failure
 // class in this repo, see `verify-fact-source.ts`'s header).
 
-import type { CurrentNode, GroundedFact, PredicateSlot } from '@atlas/knowledge';
+import type { CurrentNode, GroundedFact, PredicateSlot, RelationNode } from '@atlas/knowledge';
 import { claimNormFromWitness } from '@atlas/genesis';
 import { unitScopeOf } from './llm.js';
 import type { VerifyFactLeg, VerifyReq } from './verify-fact-source.js';
@@ -163,6 +163,84 @@ function anchorFileOf(primaryAnchor: string): string {
   return at === -1 ? primaryAnchor : primaryAnchor.slice(0, at);
 }
 
+/** Re-verify ONE `seal:'proven'` RELATION fact against the live oracle (#99 sound relation, ADR-0018, WP-R5).
+ *
+ * This is the READ-SIDE half of the D-d two-layer forgery defense. The write door (`governed-emit.ts`) strips
+ * SHAPE-forged proven relations (witness missing / malformed / a non-provable `calls` kind), but it has NO
+ * oracle — so a SHAPE-VALID-BUT-FALSE witness (a well-formed `depends-on` triple that names an edge the index
+ * does not actually witness, or one bolted onto an unrelated true edge) still persists proven there, exactly as
+ * a promoted predicate witness does. It is caught HERE by RE-RUNNING the oracle: no `proven` relation is served
+ * unless `verifyRelation` re-proves the edge against the CURRENT index. This CLOSES the #240 trap for the
+ * relation family — a `proven` relation is no longer dumped to `unverifiable` for want of a slot; it is replayed.
+ *
+ * A relation has NO `PredicateSlot`, so the witness is a `RelationWitness{relationKind, target, sourceScope}`
+ * and the replay routes through the leg's `kind:'relation'` arm (`verifyRelation`) — NOT `verifyDependency`.
+ * `verifyRelation` takes NO `worldScope` (a witnessed positive existence needs no closed-world guard), and the
+ * `RelationWitness` carries none, so there is nothing to reconstruct: the stored triple IS the exact oracle call.
+ *
+ * ── THE RELATION-SHAPED TAMPER BINDINGS (mirror the predicate ones, endpoint-shaped) ────────────────────────
+ * A witness that replays PROVEN authenticates only that SOME `sourceScope references target` edge exists — never
+ * that THIS relation's tier, endpoints, or that either endpoint names anything REAL. So BEFORE the replay:
+ *   (a) TIER      — `fact.tier` must be `MINED_TIER`; a `proven` seal is minted only by the mine pipeline.
+ *   (b) ENDPOINT SCOPE — `unitScopeOf(endpointA)` (endpointA is the subject anchor — a location-free unitKey /
+ *                 qualifiedPath, per R3) must EQUAL `witness.sourceScope`, the exact verify-scope the oracle
+ *                 ranged over — the anchor's own containing directory, never a broader ancestor (the same
+ *                 widening-monotone attack the predicate path's binding (b) closes).
+ *   (c) BOTH ENDPOINTS EXIST — the FILE half of endpointA AND of endpointB must each name a document the live
+ *                 SCIP index actually contains (`docExists`). A relation is a claim about TWO real units; a
+ *                 dangling endpoint (renamed/removed file, a fabricated unitKey) is not re-provable and never a
+ *                 silent pass — and reading `docExists` on a dangling endpoint must not crash (AR-25).
+ * ANY mismatch → `unverifiable` (the tamper is a defect in a `proven`-sealed relation, distinct from a drifted
+ * edge, which is `broken`): the fact is not served, and the reason says WHY. Dropped, never clamped. */
+export function reverifyRelation(nodeKey: string, fact: RelationNode, leg: VerifyFactLeg, docExists: DocExists): ReverifyRow {
+  const w = fact.witness;
+  if (w === undefined) {
+    return { nodeKey, outcome: 'unverifiable', reason: "seal:'proven' relation but no witness was recorded — nothing to replay (the trust-me-it-was-proved shape)" };
+  }
+  if (typeof w.target !== 'string' || w.target.length === 0 || typeof w.sourceScope !== 'string' || w.sourceScope.length === 0) {
+    return { nodeKey, outcome: 'unverifiable', reason: 'relation witness is incomplete (missing target/sourceScope) — nothing to replay' };
+  }
+  // ── TAMPER BINDINGS (a)/(b)/(c) — see the doc comment. Checked BEFORE the oracle replay; any failure is
+  //    `unverifiable` (a defect in a proven-sealed relation), never a silent pass and never a false re-prove. ──
+  if (fact.tier !== MINED_TIER) {
+    return {
+      nodeKey,
+      outcome: 'unverifiable',
+      reason: `TAMPERED: tier '${String(fact.tier)}' is not the mined tier '${MINED_TIER}' — every seal:'proven' relation is minted by the mine pipeline, so a different tier was chosen by whoever committed it, not proven by anything`,
+    };
+  }
+  const endpointA = fact.endpointA;
+  if (typeof endpointA !== 'string' || endpointA.length === 0 || unitScopeOf(endpointA) !== w.sourceScope) {
+    return {
+      nodeKey,
+      outcome: 'unverifiable',
+      reason: `TAMPERED: endpointA '${endpointA ?? '(none)'}' does not sit directly under the witness's own sourceScope '${w.sourceScope}' (unitScopeOf(endpointA) must equal sourceScope, never a broader ancestor) — the relation is not about the edge its witness proves`,
+    };
+  }
+  const endpointB = fact.endpointB;
+  if (typeof endpointB !== 'string' || endpointB.length === 0) {
+    return { nodeKey, outcome: 'unverifiable', reason: "TAMPERED: endpointB is missing — a relation is a claim about TWO units, so an absent object endpoint is not re-provable" };
+  }
+  if (!docExists(anchorFileOf(endpointA)) || !docExists(anchorFileOf(endpointB))) {
+    return {
+      nodeKey,
+      outcome: 'unverifiable',
+      reason: `TAMPERED: an endpoint of this relation ('${endpointA}' / '${endpointB}') does not name a document the live SCIP index actually contains — a dangling/renamed/fabricated endpoint, not a real unit the witnessed edge is about`,
+    };
+  }
+  // ── REPLAY — route the RELATION witness through the leg's `kind:'relation'` arm (verifyRelation). NOT
+  //    verifyDependency (which requires a worldScope the RelationWitness does not carry). One shared index build. ──
+  const verdict = leg({ kind: 'relation', claim: { relationKind: w.relationKind, target: w.target, sourceScope: w.sourceScope } });
+  if (verdict.verdict === 'proven') {
+    return { nodeKey, outcome: 're-proven', reason: `replayed PROVEN over (${w.relationKind}, ${w.target}, ${w.sourceScope})` };
+  }
+  return {
+    nodeKey,
+    outcome: 'broken',
+    reason: `replay did NOT re-prove — oracle returned '${verdict.verdict}'${verdict.reason !== undefined ? ` (${verdict.reason})` : ''}`,
+  };
+}
+
 /** Re-verify ONE sealed fact against the live oracle. `node` is the fact's OWN `CurrentNode` row — the
  *  source of `primaryAnchor`, which `GroundedFact` itself does not carry (KNOW-15d: the anchor is a
  *  projection-row carrier, `projection-types.ts`, not part of the CAS-stored fact). `undefined` iff the
@@ -207,9 +285,16 @@ export function reverifyFact(node: CurrentNode, fact: GroundedFact, leg: VerifyF
   // bucket — and crucially NEVER `unverifiable`, which is a `proven`-only diagnosis (see module header §justified).
   if (fact.seal !== 'proven') return undefined;
   const nodeKey = String(fact.id);
-  // `witness` is carried ONLY on `AdvisoryNode` (#195 `buildSound` mints the sound-oracle arm as an
-  // advisory, never a predicate/relation/negation — see `admit-harness.ts`), so a `proven`-sealed
-  // predicate/relation/negation is STRUCTURALLY witness-less: `unverifiable`, not a type-narrowing dodge.
+  // ── RELATION FAMILY (#99 sound relation, ADR-0018, WP-R5) — a `proven`-sealed relation carries a
+  //    `RelationWitness` (no slot), replays through `verifyRelation` (no worldScope), and binds on its
+  //    ENDPOINTS, not a `primaryAnchor`. This is a WHOLLY separate re-proof shape from the predicate family
+  //    below (which reads the slot-keyed `AdvisoryNode.witness`); routing it here closes the #240 trap that
+  //    used to dump every proven relation to `unverifiable` for want of a witnessed slot. ────────────────────
+  if (fact.kind === 'relation') return reverifyRelation(nodeKey, fact, leg, docExists);
+  // Past the relation branch above, the PREDICATE witness is carried ONLY on `AdvisoryNode` (#195 `buildSound`
+  // mints the predicate sound-oracle arm as an advisory, never a predicate/negation — see `admit-harness.ts`),
+  // so a `proven`-sealed predicate/negation is STRUCTURALLY witness-less here: `unverifiable`, not a
+  // type-narrowing dodge. (`relation` no longer falls through — it re-proves via `reverifyRelation` above.)
   const w = fact.kind === 'advisory' ? fact.witness : undefined;
   if (w === undefined) {
     return { nodeKey, outcome: 'unverifiable', reason: 'seal:proven but no witness was recorded — nothing to replay' };
