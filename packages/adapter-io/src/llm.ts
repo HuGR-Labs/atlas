@@ -14,6 +14,7 @@
 
 import { execFileSync } from 'node:child_process';
 
+import { isSemanticSlot } from '@atlas/knowledge';
 import type { StructRef } from '@atlas/contracts';
 import type { Candidate, SeedProposal, SiteProposer } from '@atlas/genesis';
 
@@ -216,52 +217,69 @@ export function makeCountClaimParser(resolveCount: CountResolver): ClaimParser {
   };
 }
 
-/** The reason a gotcha-arm answer whose one `atlas-fact` block carries no non-empty `derivation` abstains
+/** The reason a semantic-arm answer whose one `atlas-fact` block carries no non-empty `derivation` abstains
  *  under — fail-closed to a grounded abstention rather than a fabricated advisory, exactly as the sound arms'
- *  `*-unparseable` reasons. A `justified` gotcha whose grounds do not travel is malformed: the derivation IS
+ *  `*-unparseable` reasons. A `justified` fact whose grounds do not travel is malformed: the derivation IS
  *  the seal's witness-analog (196b), persisted onto `node.derivation`, so its absence is not a fact about a
- *  different family — it is a botched gotcha, and admitting it as a bare advisory would drop the grounds. */
-export const GOTCHA_NO_DERIVATION_REASON = 'gotcha-answer-no-derivation';
+ *  different family — it is a botched semantic fact, and admitting it as a bare advisory would drop the grounds. */
+export const SEMANTIC_NO_DERIVATION_REASON = 'semantic-answer-no-derivation';
 
-/** Lift the `derivation` field from the single `atlas-fact` block in a validated `'block'`-format envelope
- *  (`rawAnswer`). The block gate (`admitFactBlock`) already parsed the block and validated its `claim`; the
- *  DERIVATION rides in the SAME JSON object and is read here — never re-derived, never the model's scratch.
- *  Returns the trimmed derivation, or `undefined` when the envelope has no single block, no parseable JSON, or
- *  no non-empty string `derivation` — each of which the gotcha parser turns into a grounded abstention. */
-function gotchaDerivationOf(rawAnswer: string): string | undefined {
+/** The reason a semantic-arm answer whose block declares a `slot` OUTSIDE the eight-member `SemanticSlot`
+ *  vocabulary (196c) abstains under — the SAME fail-closed discipline as the missing-derivation abstain. The
+ *  model CLASSIFIES the fact into one of the eight justified-eligible slots; a slot the harness cannot honestly
+ *  seal `justified` (an oracle/structural slot like `dependency`/`count`/`definition`, or free text) is a
+ *  grounded refusal, never a fact minted at a slot outside the justified vocabulary. */
+export const SEMANTIC_SLOT_UNKNOWN_REASON = 'semantic-answer-slot-not-in-vocabulary';
+
+/** Lift the `slot` and `derivation` fields from the single `atlas-fact` block in a validated `'block'`-format
+ *  envelope (`rawAnswer`). The block gate (`admitFactBlock`) already parsed the block and validated its `claim`;
+ *  the SLOT + DERIVATION ride in the SAME JSON object and are read here — never re-derived, never the model's
+ *  scratch. Returns the RAW field values (untyped, untrimmed), or `undefined` when the envelope has no single
+ *  block or no parseable JSON — the parser turns each malformed shape into a grounded abstention with the right
+ *  reason (missing derivation vs slot-out-of-vocabulary). */
+function semanticBlockFields(rawAnswer: string): { slot: unknown; derivation: unknown } | undefined {
   const blocks = factBlocks(rawAnswer);
-  if (blocks.length !== 1) return undefined; // exactly one block reached admission; ≠1 ⇒ not a well-formed gotcha
+  if (blocks.length !== 1) return undefined; // exactly one block reached admission; ≠1 ⇒ not a well-formed fact
   let parsed: unknown;
   try {
     parsed = JSON.parse(blocks[0]!);
   } catch {
     return undefined;
   }
-  const field = (parsed as { derivation?: unknown } | null)?.derivation;
-  return typeof field === 'string' && field.trim() !== '' ? field.trim() : undefined;
+  const obj = parsed as { slot?: unknown; derivation?: unknown } | null;
+  if (obj === null) return undefined;
+  return { slot: obj.slot, derivation: obj.derivation };
 }
 
 /**
- * The GOTCHA arm parser (196b justified vertical slice). UNLIKE the sound arms, gotcha is a SEMANTIC slot —
- * no oracle, no candidate list, no injected resolver — so it is a plain `ClaimParser` const like the advisory
- * default. The reason-freely `atlas-fact` block carries TWO fields for this slot: `{claim, derivation}`. The
- * adapter's block gate (`admitFactBlock`) already lifted+validated `claim`; this parser lifts the `derivation`
- * — the compact, CONTESTABLE chain from the cited bytes that leads a reader to the same conclusion — from the
- * raw envelope and shapes a typed `PredicateSeed{ slot:'gotcha', claim, derivation }`. That derivation is the
- * `justified` seal's witness-analog: PERSISTED onto `node.derivation` (ADR-0017 CORRECTION 5), unlike the
- * discarded scratch reasoning (GEN-12). A block with no non-empty `derivation` ABSTAINS
- * (`GOTCHA_NO_DERIVATION_REASON`) — fail-closed, never a fabricated advisory: a gotcha whose grounds do not
- * travel is malformed, not a fact about a different family. `claim` keeps the extracted human sentence;
- * `rawAnswer` rides through (#195c). COUPLED to `prompts/propose-gotcha.md`; `llm-gotcha-parser.test.ts` pins
- * the pair. NOT sound-by-default — opt-in via `ATLAS_MINE_SLOT=gotcha` (the admission door is grounding, the
- * seal reflects proof-strength: this slot lands `justified`, never `proven`).
+ * The SEMANTIC arm parser (196c — the ONE general justified arm, anti-7-heads). UNLIKE the sound arms, a
+ * semantic slot has no oracle, no candidate list, no injected resolver — so it is a plain `ClaimParser` const
+ * like the advisory default. The reason-freely `atlas-fact` block carries THREE fields for this arm:
+ * `{slot, claim, derivation}` — the model CLASSIFIES the fact into one of the eight `SemanticSlot`s, states the
+ * claim, and supplies its contestable grounds. The adapter's block gate (`admitFactBlock`) already lifted+
+ * validated `claim`; this parser lifts the `slot` and `derivation` from the raw envelope and shapes a typed
+ * `PredicateSeed{ slot:<validated>, claim, derivation }`. That derivation is the `justified` seal's
+ * witness-analog: PERSISTED onto `node.derivation` (ADR-0017 CORRECTION 5), unlike the discarded scratch
+ * reasoning (GEN-12). Two fail-closed abstentions, never a fabricated advisory: a block with no non-empty
+ * `derivation` ABSTAINS (`SEMANTIC_NO_DERIVATION_REASON`) because a justified fact whose grounds do not travel
+ * is malformed; a block whose `slot` is OUTSIDE the eight (`isSemanticSlot` — an oracle/structural slot or free
+ * text) ABSTAINS (`SEMANTIC_SLOT_UNKNOWN_REASON`) because the harness cannot honestly seal it `justified`.
+ * `gotcha` is now just ONE of the eight the model may pick (the 196b special case), not its own arm. `claim`
+ * keeps the extracted human sentence; `rawAnswer` rides through (#195c). COUPLED to `prompts/propose-semantic.md`;
+ * `llm-semantic-parser.test.ts` pins the pair. NOT sound-by-default — opt-in via `ATLAS_MINE_SLOT=semantic`
+ * (the admission door is grounding, the seal reflects proof-strength: every semantic slot lands `justified`,
+ * never `proven`).
  */
-export const gotchaClaimParser: ClaimParser = (claim, cand, rawAnswer) => {
-  const derivation = rawAnswer === undefined ? undefined : gotchaDerivationOf(rawAnswer);
-  if (derivation === undefined) return { abstain: GOTCHA_NO_DERIVATION_REASON };
+export const semanticClaimParser: ClaimParser = (claim, cand, rawAnswer) => {
+  const fields = rawAnswer === undefined ? undefined : semanticBlockFields(rawAnswer);
+  const rawDeriv = fields?.derivation;
+  const derivation = typeof rawDeriv === 'string' && rawDeriv.trim() !== '' ? rawDeriv.trim() : undefined;
+  if (derivation === undefined) return { abstain: SEMANTIC_NO_DERIVATION_REASON };
+  const slot = fields?.slot;
+  if (!isSemanticSlot(slot)) return { abstain: SEMANTIC_SLOT_UNKNOWN_REASON }; // classified outside the eight ⇒ grounded refusal
   return {
     kind: 'predicate',
-    slot: 'gotcha',
+    slot, // the model's classification, VALIDATED against the eight-member justified vocabulary
     derivation, // the persisted, contestable grounds — the justified seal's witness-analog (never the scratch)
     cand,
     claim,

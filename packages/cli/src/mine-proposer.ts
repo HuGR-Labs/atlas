@@ -18,15 +18,15 @@ import {
   createUnitDepCandidates,
   createUnitSiblingReader,
   createUnitSourceReader,
-  gotchaClaimParser,
   loadModelConfig,
   makeCountClaimParser,
   makeDependencyClaimParser,
   readScipOrEmpty,
+  semanticClaimParser,
   shippedCountTemplatePath,
   shippedDependencyTemplatePath,
   shippedEnrichedTemplatePath,
-  shippedGotchaTemplatePath,
+  shippedSemanticTemplatePath,
 } from '@atlas/adapter-io';
 import type { CandidateReader, ClaimParser, ModelCommand } from '@atlas/adapter-io';
 import { cappedBudget } from '@atlas/genesis';
@@ -91,14 +91,15 @@ export const MINE_SLOT_ENV = 'ATLAS_MINE_SLOT';
 export function resolveMineSlot(env: NodeJS.ProcessEnv): MineSlot {
   const v = env[MINE_SLOT_ENV]?.trim().toLowerCase();
   if (v === undefined || v === '') return 'advisory';
-  if (v === 'advisory' || v === 'dependency' || v === 'count' || v === 'gotcha') return v;
-  throw new Error(`${MINE_SLOT_ENV}=${JSON.stringify(env[MINE_SLOT_ENV])} is not a known mining arm — use 'advisory', 'dependency', 'count' or 'gotcha'`);
+  if (v === 'advisory' || v === 'dependency' || v === 'count' || v === 'semantic') return v;
+  throw new Error(`${MINE_SLOT_ENV}=${JSON.stringify(env[MINE_SLOT_ENV])} is not a known mining arm — use 'advisory', 'dependency', 'count' or 'semantic'`);
 }
 
-/** One resolved mining arm. `gotcha` is the 196b justified vertical slice's opt-in SEMANTIC arm — it is a valid
- *  single arm (`resolveMineSlot`/`resolveProposer`) but is DELIBERATELY absent from the sound-by-default SET
- *  (`resolveMineSlots`), because it is not sound: it lands `justified`, not `proven`. */
-export type MineSlot = 'advisory' | 'dependency' | 'count' | 'gotcha';
+/** One resolved mining arm. `semantic` is the 196c justified arm — the ONE general arm where the model CLASSIFIES
+ *  each fact into one of the eight `SemanticSlot`s (gotcha is now just one slot value it can emit, not its own arm).
+ *  It is a valid single arm (`resolveMineSlot`/`resolveProposer`) but is DELIBERATELY absent from the sound-by-
+ *  default SET (`resolveMineSlots`), because it is not sound: every semantic slot lands `justified`, not `proven`. */
+export type MineSlot = 'advisory' | 'dependency' | 'count' | 'semantic';
 
 /** [MINE-BUDGET-CAP] The env that caps how many sites a metered `atlas mine` run visits. It is the CLI-
  *  reachable knob onto the run-controller's already-existing `GenesisBudget.ceiling` seam — there is no
@@ -228,9 +229,10 @@ export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = proce
   // after the provable sites). Undefined for the advisory arm ⇒ no reorder.
   const candidateReader: CandidateReader | undefined =
     slotScip === undefined ? undefined : slot === 'count' ? createUnitCountCandidates(slotScip) : createUnitDepCandidates(slotScip);
-  // [196b gotcha] The SEMANTIC gotcha arm reads no index (no candidates) — it takes the SAME anchored-unit-only
-  // source view as the bare advisory prompt, only the TEMPLATE differs (it asks for a `{claim, derivation}`
-  // block). Selected before the ENRICH/bare branches so `ATLAS_MINE_SLOT=gotcha` loads `propose-gotcha.md`.
+  // [196c semantic] The SEMANTIC arm reads no index (no candidates) — it takes the SAME anchored-unit-only
+  // source view as the bare advisory prompt, only the TEMPLATE differs (it asks for a `{slot, claim, derivation}`
+  // block, the model classifying into one of the eight). Selected before the ENRICH/bare branches so
+  // `ATLAS_MINE_SLOT=semantic` loads `propose-semantic.md`.
   const prompts =
     slotScip !== undefined && candidateReader !== undefined
       ? createPromptFactory({
@@ -238,8 +240,8 @@ export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = proce
           candidates: candidateReader,
           templatePath: slot === 'count' ? shippedCountTemplatePath() : shippedDependencyTemplatePath(),
         })
-      : slot === 'gotcha'
-        ? createPromptFactory({ source: createUnitSourceReader(repoPath), templatePath: shippedGotchaTemplatePath() })
+      : slot === 'semantic'
+        ? createPromptFactory({ source: createUnitSourceReader(repoPath), templatePath: shippedSemanticTemplatePath() })
         : enrichEnabled(env)
           ? createPromptFactory({
               source: createUnitSourceReader(repoPath),
@@ -250,22 +252,23 @@ export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = proce
   // The predicate parser resolves the picked NAME to the unit's own SYMBOL (per-unit — the #196a lucy BLOCKER)
   // and puts that symbol on the seed's `target`. The count parser ALSO puts the harness-derived `atLeast`/`scope`
   // on the seed (the model never supplies the number), so the fact is bound to the unit's specific export.
-  // [196b gotcha] The gotcha arm reads no index (`slotScip` undefined) but is NOT advisory-default: it injects
-  // `gotchaClaimParser`, which lifts the `{claim, derivation}` pair out of the reason-freely block. The sound
-  // arms bind their per-unit resolver (name → symbol); the semantic gotcha arm needs no resolver.
+  // [196c semantic] The semantic arm reads no index (`slotScip` undefined) but is NOT advisory-default: it injects
+  // `semanticClaimParser`, which lifts the `{slot, claim, derivation}` triple out of the reason-freely block (and
+  // ABSTAINS on a slot outside the eight). The sound arms bind their per-unit resolver (name → symbol); the
+  // semantic arm needs no resolver — the model supplies its own classification, validated in the parser.
   const parseClaim: ClaimParser | undefined =
     slotScip === undefined
-      ? slot === 'gotcha'
-        ? gotchaClaimParser
+      ? slot === 'semantic'
+        ? semanticClaimParser
         : undefined
       : slot === 'count'
         ? makeCountClaimParser(createCountResolver(slotScip))
         : makeDependencyClaimParser(createDepResolver(slotScip));
   const proposer = createSiteProposer({
     // [ADR-0020] The sound-gated slots (dependency/count) keep the ONE-LINE answer contract; the advisory AND the
-    // semantic gotcha slot use the reason-freely fenced-`atlas-fact` BLOCK contract (measured 100%/0-halluc vs the
-    // one-line 77.5%) — gotcha carries a second field (`derivation`) in that same block.
-    client: createCommandClient(propose, slot === 'advisory' || slot === 'gotcha' ? 'block' : 'line'),
+    // semantic slot use the reason-freely fenced-`atlas-fact` BLOCK contract (measured 100%/0-halluc vs the
+    // one-line 77.5%) — the semantic block carries two extra fields (`slot`, `derivation`) alongside the claim.
+    client: createCommandClient(propose, slot === 'advisory' || slot === 'semantic' ? 'block' : 'line'),
     budget: { costCap: cfg.costCap, timeoutMs: cfg.timeoutMs },
     buildPrompt: prompts.build,
     ...(parseClaim !== undefined ? { parseClaim } : {}),
