@@ -241,13 +241,64 @@ and were replaced with teeth proven to bite:
   `docs/design/95a-recall-a4-methodology.md` (pooling design sketch — the pooling *instrument* it sketches no
   longer exists in the tree).
 
+## The comparator ladder (2026-08-23): the no-tool floor, measured
+
+The gap this document names above ("There is no cross-vendor SOTA column… the only comparator this program has
+ever run is the ungated raw-LLM lister") is now partly closed: a proper **no-tool floor** — a raw LLM asked to
+state a fact about a file with **no Atlas discipline at all** (no refute step, no grounding instruction, no
+code-derived clause, no NO-FACT option) — has been run on the SAME sites as the Atlas-gated arms, adjudicated by
+the SAME rubric, across TWO models. It answers "what does a developer get today by asking the model directly
+(Cursor/Copilot-chat), and how much does each layer of Atlas add on top of that?"
+
+**What this is and is not.** The floor and advisory rungs are **3-judge blind-majority adjudication of
+self-verifiability** — is the claim TRUE and re-derivable from THIS unit's own bytes — against the ratified
+rubric (`atlas-benchmark-adjudication-rubric`), NOT an oracle. Same-family judge (`claude-sonnet` seats), same
+caveat this document applies to the agreement-pool row: a same-family LLM judge measures adjudicated agreement,
+not ground truth. It is a *stronger* adjudication than the 2026-08-16 agreement pool (blind, 3 independent
+judges, majority vote, adversarial-on-counts, one frozen rubric across all rungs) but it is still judge-based.
+Only the **sound rung** is oracle-backed (0-false-admit under Definition A, the same predicate as the A4 table).
+
+**Apparatus (2-pass capture/replay, model-in-loop = sub-agents / gateway, ZERO `claude -p`).** 15 top-frontier
+`atlas mine .` sites on Atlas-on-Atlas; frozen `packages/adapter-io/prompts/propose.md` (advisory v3) and the
+`DEPENDS-ON` dependency template captured verbatim; the naive floor prompt is the captured `<unit>` block wrapped
+in a bare "state one fact" ask. ox-alpha driven via the `hugr-router` gateway (`stealth/ox-alpha`, free, $0);
+Sonnet driven as `general-purpose` sub-agents. Scratchpad artifacts (session-local, not committed): the per-arm
+`<sha>.answer` sets, the `*-adj-items.json` judge inputs, the three per-rung verdict vectors, and `LADDER-RESULT.md`.
+
+| rung | what it is | ox-alpha (free) | Sonnet | source of the number |
+| --- | --- | --- | --- | --- |
+| **floor — no-tool LLM** | raw "state a fact", no Atlas discipline | self-verifiable **5/15 = 33%** | **6/15 = 40%** | 3-judge blind majority; 0 FALSE both; 9 NOT_GROUNDED each |
+| **Atlas advisory** | `propose.md` v3 (refute + grounding + code-derived) | **10/13 = 77%** | **9/10 = 90%** | 3-judge blind majority (ox-alpha 3/3 unanimous) |
+| **Atlas sound** | dependency slot, `verify-fact` oracle | **13/13 proven, 0-false** | 0-false (oracle, model-independent) | oracle admission (Definition A), not a judge |
+| **lift floor→advisory** | what Atlas's prompt+grounding adds | **+44 pts** | **+50 pts** | derivation |
+
+**The finding.** (1) The floor is low for BOTH models — even Sonnet: **~60% of a raw LLM's facts are NOT
+verifiable from the unit's own bytes** (they assert design INTENT, HISTORY, a task/PR number, or behavior in
+another file — "deliberately", "#186 deleted", "per INDEX-15"). The model, weak or strong, narrates *why*, not
+*what the code does*. (2) Atlas's prompt discipline lifts self-verifiability ~+44–50 pts on both, by driving the
+NOT_GROUNDED population to 0 (the #201 comment-restatement failure). (3) The oracle takes the sound arm to
+0-false, model-independently. (4) The stronger model scores higher at every rung (40>33, 90>77) but the ladder's
+SHAPE is identical — Atlas adds large value at every model tier; it is **not a crutch for weak models**.
+
+**A correction logged in-place (honesty).** From judge j3 alone (3/15) the floor read 20% and the first
+reading was "the strong model floors LOWER — Atlas is a bigger lever on the strong model." The 3-judge MAJORITY
+refuted that: Sonnet floor is 6/15 = 40%, *higher* than ox-alpha's 33%. Single-judge misled; majority corrected.
+The transferable lesson is the pilot's own (`atlas-95-pilot-rightway`): never publish a single judge's vector.
+
+**Caveats, load-bearing.** n=15, one slice (advisory + dependency + naive floor), one repo (Atlas-on-Atlas);
+same-family judge (the standing model-diverse-judge gap); the floor is a raw-LLM no-tool baseline, NOT a
+retrieval-augmented SOTA (Sourcegraph-class) — that comparator has still never been run. Tighter CI needs N≫15.
+
 ## What this is NOT
 
 - **Not an absolute-recall claim, and not any recall claim for advisory prose.** The judge-free recall figures
   cover four oracle-bearing shapes on planted mutations of a fixture, not arbitrary real facts. Advisory prose
   has no oracle and no judge-free recall number at all.
-- **Not a cross-vendor comparison.** No non-Atlas SOTA system has been run under a fixed model with a shared
-  denominator. The lister column is a same-corpus baseline scored by an uncalibrated judge.
+- **Not a cross-vendor / retrieval-SOTA comparison.** The comparator ladder above now runs a proper **no-tool
+  floor** (raw LLM, no Atlas discipline) under a fixed model with the same 3-judge-adjudicated denominator as
+  the advisory arm — the "what you get asking the model directly" baseline. It is NOT a retrieval-augmented
+  SOTA system (Sourcegraph-class); no such system has been run. The floor and advisory rungs are same-family
+  judge-adjudicated, not oracle-measured (only the sound rung is).
 - **Not a claim that Atlas detects staleness.** It detects byte drift inside a fact's own anchored extent with
   0 false-drift on 4/4 non-touching edits; semantic cross-file staleness is NOT SUPPORTED (§6.3).
 - **Not build-independent.** Recall swings ~8-23× with whether `packages/*/dist` declarations existed before
