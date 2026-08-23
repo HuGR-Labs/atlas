@@ -67,6 +67,13 @@ export interface RelationProposal {
   readonly endpointB: string; // location-free unitKey of B (object) — identity leg
   readonly grounding: FactGrounding; // EXACTLY two entries: [0] anchors A, [1] anchors B (AND-folded freshness)
   readonly tier: Tier;
+  // ── SOUND-ORACLE legs (#99 sound relation, ADR-0018 — WP-96-R2). Present iff the proposal is a PROVABLE
+  //    depends-on edge the mechanical projection (WP-R3) resolved: `target` is the global SCIP symbol under
+  //    endpointB and `sourceScope` is endpointA's verify-scope (the reverify args a `proven` seal re-runs).
+  //    ABSENT on an advisory/LLM relation (no oracle, no seal). Mirrors PredicateProposal's `target?`/`scope?`.
+  //    NEVER endpoint prose: derived from a `resolved DepEdge`, not the endpoints, and re-checked by `verifyRelation`.
+  readonly target?: string; // the global SCIP symbol under endpointB whose witnessed reference proves the edge
+  readonly sourceScope?: string; // endpointA's verify-scope the witnessed reference must lie under
   readonly scope?: string;
   readonly scratch?: string; // chain-of-thought — discarded, never a fact (GEN-12f)
 }

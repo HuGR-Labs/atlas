@@ -31,6 +31,7 @@
 // `indexPathsByHash`, not an approximation of it.
 
 import type { Hash } from '@atlas/contracts';
+import type { RelationKind } from '@atlas/knowledge';
 import type { SymbolReverseApi } from '@atlas/index';
 import { anyInScope, underScope } from './scope-predicate.js';
 
@@ -147,4 +148,56 @@ export function verifyDefinition(
   // Defined in the index, but not under this scope (or def-doc path unknown — fail-closed). A scoped
   // non-answer, NOT a refutation (the symbol is not proved undefined; it is proved defined ELSEWHERE).
   return abstain('def-out-of-scope');
+}
+
+/** One "unit A `relationKind` global symbol B" claim (#99 sound relation, ADR-0018). No `worldScope`: a proven
+ *  relation is a POSITIVE WITNESSED EXISTENCE (a resolved cross-unit reference to `target` lies under
+ *  `sourceScope`), sound in ANY world — there is no closed-world absence to guard, exactly as `DefClaim` carries
+ *  no completeness world. `sourceScope` is endpointA's VERIFY-SCOPE (the directory the witnessed reference must
+ *  lie under); `target` is the global SCIP symbol under endpointB. Only `'depends-on'` is mechanically provable
+ *  (F3, §2.3 — SCIP has no call-role occurrence, so `calls` cannot be proven distinct from a reference). */
+export type RelationClaim = {
+  readonly relationKind: RelationKind;
+  readonly target: string;
+  readonly sourceScope: string;
+};
+
+/**
+ * PROVE/ABSTAIN on `claim`, over the live `reverse` feed (`SymbolReverseApi`, @atlas/index) — the RELATION class
+ * of the PROVEN family (#99, ADR-0018). PURE + TOTAL: no IO, no clock, never throws. It is `verifyDependency`'s
+ * witnessed-existence logic on the directed pair, with ONE additional gate FIRST — the relation kind — because
+ * only `depends-on` is provable from the frozen SCIP projection (§2.3: `ScipSymbolRole` has no call-role, so a
+ * `calls` edge cannot be proven distinct from a reference). NEVER refutes (see `FactVerdict`): an absent edge is
+ * abstained, never a "these do not depend" fact.
+ *
+ *   0. malformed (`target`/`sourceScope` any empty) ⇒ abstain('malformed').
+ *   1. `relationKind !== 'depends-on'` (AR-5 — `calls`/any future kind is NOT mechanically provable) ⇒
+ *      abstain('relation-kind-not-provable').
+ *   2. `isLocal(target)` (a `local ` SCIP symbol — document-scoped, #189) ⇒ abstain('target-not-global').
+ *   3. `!reverse.resolves(target)` (#220 — no in-index DEFINITION: a PHANTOM target, and the honest boundary for
+ *      a reflection/dynamic-dispatch/cross-language edge whose `to` never resolves — AR-17) ⇒
+ *      abstain('target-unresolvable').
+ *   4. a real reference to `target` lies under `sourceScope` (`reverseCallers(target) ∩ sourceScope ≠ ∅`) ⇒
+ *      proven — a witnessed cross-unit reference, SOUND IN ANY WORLD (an incomplete index cannot fabricate a
+ *      referrer). This is the SAME resolved `DepEdge` `verifyDependency` witnesses (verify-fact.ts:96).
+ *   5. else ⇒ abstain('no-caller-in-scope') — no reference witnessed under `sourceScope`. NOT a refute.
+ */
+export function verifyRelation(
+  claim: RelationClaim,
+  reverse: SymbolReverseApi,
+  pathOfHash: (h: Hash) => string | undefined,
+  isLocal: (sym: string) => boolean,
+): FactVerdict {
+  const { relationKind, target, sourceScope } = claim;
+  if (target.length === 0 || sourceScope.length === 0) return abstain('malformed');
+  if (relationKind !== 'depends-on') return abstain('relation-kind-not-provable'); // AR-5 — calls is not provable
+  if (isLocal(target)) return abstain('target-not-global');
+  if (!reverse.resolves(target)) return abstain('target-unresolvable'); // AR-3/AR-17 — phantom/dynamic/cross-language
+
+  if (anyInScope(reverse.reverseCallers(target), pathOfHash, sourceScope)) {
+    return { verdict: 'proven', oracle: 'symbol-reverse' };
+  }
+  // No witnessed reference under sourceScope. NOT a refute (cross-package completeness is not guaranteed — see
+  // FactVerdict): abstain. No worldScope leg, so no 'scope-open' discriminant (a positive existence needs none).
+  return abstain('no-caller-in-scope');
 }
