@@ -358,8 +358,11 @@ export type SemanticSlot =
 /** The runtime copy of the eight-member semantic vocabulary (KNOW-10 closed-slot discipline — the erased
  *  `SemanticSlot` type enforces nothing at a value boundary, so the semantic mining arm validates the model's
  *  chosen slot against THIS list). Additive to the normative `PredicateSlot`/`PREDICATE_SLOTS` (router.ts):
- *  it names no member the 13-slot vocabulary does not, it only carves out the justified-eligible subset. */
-export const SEMANTIC_SLOTS: readonly SemanticSlot[] = [
+ *  it names no member the 13-slot vocabulary does not, it only carves out the justified-eligible subset.
+ *  MODULE-PRIVATE: the only consumer is `SEMANTIC_SLOT_SET`/`isSemanticSlot` below — the public value surface
+ *  is the `isSemanticSlot` guard, which is what the mining arm imports. Exporting the raw list would be dead
+ *  cross-package value surface (reference-model-guard). */
+const SEMANTIC_SLOTS: readonly SemanticSlot[] = [
   'invariant',
   'contract',
   'sideeffect',

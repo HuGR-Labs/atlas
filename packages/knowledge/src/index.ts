@@ -8,8 +8,12 @@
 
 // The frozen data model + the co-located EvaluatorApi / StoreApi interfaces consumed by ≥2 src files.
 // Every other frozen interface now lives beside its impl and is re-exported by `export *` below.
+// 196c — the runtime `isSemanticSlot` guard. MUST precede the `export type *` star below: reachability.mjs's
+// `declaringModule` returns on the FIRST matching re-export, and a `type *` star degrades any name it captures
+// to a TYPE binding — so if the star came first, this VALUE export would resolve type-only and read as an
+// uncalled reference model even though `adapter-io/src/llm.ts` calls it. Value re-export first ⇒ value binding.
+export { isSemanticSlot } from './types.js';
 export type * from './types.js';
-export { SEMANTIC_SLOTS, isSemanticSlot } from './types.js'; // 196c — the runtime eight-member semantic vocabulary + its narrowing guard (KNOW-10 closed-slot discipline; `export type *` above carries only the erased types)
 
 // ── Runtime surface ────────────────────────────────────────────────────────────────────────────────
 export * from './lifecycle/freshness.js';   // WP-4.10-a.KNOW — knowledge drift oracle binds to the grounding subtreeHash (Campaign-4)
