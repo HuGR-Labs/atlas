@@ -375,12 +375,16 @@ function commitLoop<T>(
     // — no such caller exists, and putting the loop before the skip keeps even that hypothetical fail-safe: the
     // bytes land, only the redundant projection re-publish is elided.
     //
-    // BEHAVIOR NOTE — on a FRESH store an abstaining first pass now settles WITHOUT publishing an empty
-    // generation (`read.projection` undefined ⇒ `snapshot` is a fresh `emptyStore()` ⇒ `next === snapshot`).
-    // Readers treat an absent sidecar and a present-empty one identically (both resolve to `emptyStore()` via
-    // `readSidecarSet`), and file-absence was already the pre-first-commit state — so nothing a reader can
-    // observe changes; it only stops minting an empty file nobody distinguishes from no file.
-    if (decision.next === snapshot) return { settled: true, out: decision.out };
+    // FIRST-COMMIT is NOT skipped, and the guard compares against `read.projection` (the DURABLE head) rather
+    // than `snapshot` (which falls back to a fresh `emptyStore()`) precisely to preserve it: on a fresh store
+    // `read.projection` is `undefined`, so a no-op decision that returns the `emptyStore()` fallback is
+    // `!== read.projection` and DOES publish the initial generation. This matters — callers (and tests) create
+    // the first sidecar with exactly the `(p) => ({ next: p })` idiom, and a store with no generation at all is
+    // a different state from one holding an empty generation for the "is there a durable head to compare
+    // against?" question the unreadable/corrupt-fallback paths ask. The churn win is unaffected: only the
+    // very first abstaining site of a fresh run still publishes (an empty generation); every later site reads a
+    // defined head and skips.
+    if (decision.next === read.projection) return { settled: true, out: decision.out };
     // `superseded` SETTLES. The decision's bytes are durable (see {@link PublishOutcome}), so the ONLY
     // honest answers are this call's own `out` — the one belonging to the attempt that actually published —
     // or a re-run that cannot see it wrote. Re-running is what produced a truthful `next` and a false `out`.

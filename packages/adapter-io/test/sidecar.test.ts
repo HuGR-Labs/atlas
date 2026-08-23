@@ -164,6 +164,20 @@ describe('SIDECAR — the generation-CAS commit protocol', () => {
     expect(durable()).toEqual(['first', 'second']);
   });
 
+  it('a NO-OP on a FRESH store STILL publishes the first generation (skip needs a durable head to compare)', () => {
+    // The fast path compares `next` to `read.projection` (the DURABLE head), NOT to `snapshot` (which falls
+    // back to a fresh `emptyStore()` when nothing is on disk). So a no-op on an EMPTY store — the very idiom
+    // `(p) => ({ next: p })` callers use to MINT the first sidecar — does NOT skip: there is no head to be
+    // byte-identical to, and a store with no generation at all is a different state from one holding an empty
+    // one (the unreadable/corrupt-fallback paths ask exactly this). MUTANT (compare to `snapshot` instead):
+    // no generation is created here, and `door-regression-commit-retry.ts`'s corrupt-sidecar cases go RED.
+    const gens = (): string[] => (existsSync(tmp!) ? readdirSync(tmp!) : []).filter((f) => /^projection\.\d+\.json$/.test(f)).sort();
+    const store = createDiskStore(casDir());
+    const r = store.commitProjection((p) => ({ out: 'first-noop', next: p })); // no-op, but on an EMPTY store
+    expect(r).toEqual({ settled: true, out: 'first-noop' });
+    expect(gens()).toEqual(['projection.1.json']); // the initial (empty) generation IS published
+  });
+
   it('CAS bytes are durable BEFORE the generation that references them (order is enforced by the protocol)', () => {
     // The invariant governed-emit relies on: a sidecar can never point at a contentHash whose bytes are gone.
     // A throwing `put` must therefore abort BEFORE any generation is published.
