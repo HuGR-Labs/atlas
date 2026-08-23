@@ -239,8 +239,15 @@ export function decideStaging(
     // receipt (a non-mine/human write, or #195 leg (b) not applicable) — fail-closed, never fabricated.
     minted.set(key, receipt !== undefined ? { ...f, answerRef: receipt.answerRef } : f);
   }
-  // `next` is published even when nothing was minted, keeping the write cadence identical to the
-  // `persistStaging`-per-site one it replaces — so a mutant seeding from `emptyStore()` still publishes that
-  // empty store and is caught (SCN-CLI-4d's first case).
-  return { out: minted, next: projection, put: puts };
+  // [PERF, waste-audit 2026-08-23] A TRUE no-op site (an abstention, or every incoming fact already grounded)
+  // never reassigned `projection`, so it is STILL the `staged` object by REFERENCE. Returning `next: undefined`
+  // for that case makes `commitLoop` SETTLE WITHOUT A WRITE (sidecar-commit.ts:322) — where the old code
+  // re-serialized the whole (growing) staging Map and fsync'd byte-identical bytes under a fresh generation on
+  // every one of the majority-abstaining sites (~minutes of pure I/O at 677 sites × 3 arms, O(N²) as the Map
+  // grows). It does NOT weaken SCN-CLI-4d: the mutant that reseeds from `emptyStore()` binds `projection` to a
+  // FRESH object, so `projection !== staged`, so it still publishes its wrong store and is still caught — only
+  // the genuine "nothing was written" case (reference-identical to the input) is skipped. Any site that MINTED
+  // reassigned `projection` via `knowledgeUpsert` and so publishes exactly as before.
+  const wrote = projection !== staged;
+  return { out: minted, put: puts, ...(wrote ? { next: projection } : {}) };
 }

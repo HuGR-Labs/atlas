@@ -54,8 +54,27 @@ export function symbolTerminalName(symbol: string): string {
  * ANOTHER document — exactly the sound cross-unit dependency set, keyed by terminal name. `candidatesFor` is
  * its key-set; `resolveDepFor` is its lookup. There is NO index-wide name→symbol map — resolution is per-unit,
  * so an admitted fact's symbol is provably referenced by the unit it is attributed to (lucy BLOCKER fix).
+ *
+ * [PERF, waste-audit 2026-08-23] `createUnitDeps` is MEMOIZED by `scip` OBJECT IDENTITY (a module-level
+ * `WeakMap`): the candidate-grounded arm builds it TWICE per pass — once for the prompt candidate list
+ * (`createUnitDepCandidates`), once for the gate resolver (`createDepResolver`) — off the SAME `slotScip`
+ * variable, so the `defDoc` O(all-occurrences) scan collapses 2→1 within an arm (6→3 across the default 3-arm
+ * run). NOTE the honest bound: `readScipOrEmpty` returns a FRESH `ScipOutput` per call (only the raw protobuf
+ * decode is memoized, not the object), so each arm gets its OWN `WeakMap` entry — this does NOT dedup across
+ * arms (that cross-arm collapse belongs to `canonicalizeSkeleton`, which is object-memoized at its source).
+ * Pure function of `scip` ⇒ the shared instance is byte-identical to a fresh build; the `WeakMap` releases with
+ * the `ScipOutput`, adding no lifetime.
  */
+const unitDepsCache = new WeakMap<ScipOutput, UnitDepsApi>();
 export function createUnitDeps(scip: ScipOutput): UnitDepsApi {
+  const memo = unitDepsCache.get(scip);
+  if (memo !== undefined) return memo;
+  const api = buildUnitDeps(scip);
+  unitDepsCache.set(scip, api);
+  return api;
+}
+
+function buildUnitDeps(scip: ScipOutput): UnitDepsApi {
   const defDoc = new Map<string, string>();
   for (const doc of scip.documents) {
     const h = String(nodeHashOfPath(doc.relativePath));

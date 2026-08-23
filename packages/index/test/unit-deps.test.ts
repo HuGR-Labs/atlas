@@ -69,3 +69,17 @@ describe('#196a createUnitDeps — the candidate-grounded recall source', () => 
     expect(symbolTerminalName('scip x 0 `f.ts`/Y.')).toBe('Y'); // term `.`
   });
 });
+
+describe('#196a createUnitDeps — MEMOIZED by scip identity (PERF waste-audit 2026-08-23)', () => {
+  // The candidate arm builds it TWICE per pass (prompt candidate list + gate resolver) off the SAME `slotScip`
+  // variable, so the memo collapses the O(occurrences) defDoc scan 2→1 within an arm (not across arms —
+  // `readScipOrEmpty` returns a fresh object per call). Mutation-verified: drop the `WeakMap` and the two calls
+  // return distinct instances.
+  it('two calls with the SAME scip object return the SAME api instance (the defDoc scan runs once)', () => {
+    expect(createUnitDeps(scip)).toBe(createUnitDeps(scip));
+  });
+  it('a DIFFERENT scip object gets its own instance (the memo keys on identity, not value)', () => {
+    const other: ScipOutput = { documents: [] } as unknown as ScipOutput;
+    expect(createUnitDeps(other)).not.toBe(createUnitDeps(scip));
+  });
+});
