@@ -81,8 +81,22 @@ function commonSegmentPrefix(paths: readonly string[]): string {
  * The per-unit candidate/resolve map (name → `ExportCount`) is memoized: one walk over the unit's own definitions
  * backs both `exportsWithCallersFor` (keys) and `resolveExportFor` (lookup). NO index-wide name→symbol map exists —
  * resolution is per-unit, so an admitted fact's symbol is provably DEFINED IN the unit it is attributed to.
+ *
+ * [PERF, waste-audit 2026-08-23] MEMOIZED by `scip` object identity (mirrors `createUnitDeps`): the count arm
+ * builds it twice per pass (candidate list + gate resolver) off the same `slotScip` variable, so the
+ * O(all-occurrences) defDoc+callers scan collapses 2→1 within an arm (`readScipOrEmpty` returns a fresh object
+ * per call, so no cross-arm dedup). Pure function of `scip` ⇒ shared instance is byte-identical to a fresh build.
  */
+const unitExportsCache = new WeakMap<ScipOutput, UnitExportsApi>();
 export function createUnitExports(scip: ScipOutput): UnitExportsApi {
+  const memo = unitExportsCache.get(scip);
+  if (memo !== undefined) return memo;
+  const api = buildUnitExports(scip);
+  unitExportsCache.set(scip, api);
+  return api;
+}
+
+function buildUnitExports(scip: ScipOutput): UnitExportsApi {
   const defDoc = new Map<string, string>();
   const pathByHash = new Map<string, string>();
   for (const doc of scip.documents) {

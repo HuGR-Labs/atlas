@@ -160,8 +160,23 @@ function canonNode(n: IndexNode): IndexNode {
 }
 
 /** Canonicalise the whole skeleton — sorted axes, sorted edges, sorted territories. Deterministic ⇒ two
- *  runs on the same rev are byte-identical (GEN-1). */
+ *  runs on the same rev are byte-identical (GEN-1).
+ *
+ *  [PERF, waste-audit 2026-08-23] MEMOIZED by INPUT-skeleton object identity: the controller's `plan` leg
+ *  canonicalises TWICE per pass — once in `createScan.scan`, once in `createMine`'s `mine()` — and
+ *  `createSkeletonSource` hands back the SAME raw `Skeleton` object per `(repo,rev)`, so the deep-sort collapses
+ *  from 6 walks/run (×3 arms) to one per raw skeleton. Pure ⇒ the shared result is byte-identical; the
+ *  `WeakMap` releases with the raw skeleton, adding no lifetime. */
+const canonCache = new WeakMap<Skeleton, Skeleton>();
 export function canonicalizeSkeleton(sk: Skeleton): Skeleton {
+  const memo = canonCache.get(sk);
+  if (memo !== undefined) return memo;
+  const canon = buildCanonicalSkeleton(sk);
+  canonCache.set(sk, canon);
+  return canon;
+}
+
+function buildCanonicalSkeleton(sk: Skeleton): Skeleton {
   const axes: Axes = {
     spatial: canonNode(sk.axes.spatial),
     territory: canonNode(sk.axes.territory),

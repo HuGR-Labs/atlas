@@ -39,8 +39,22 @@ export interface UnitDefsApi {
  * The per-unit candidate/resolve map (name → symbol) is memoized: one walk over the unit's own definitions
  * backs both `definitionsFor` (keys) and `resolveDefFor` (lookup). NO index-wide name→symbol map exists —
  * resolution is per-unit, so an admitted fact's symbol is provably DEFINED IN the unit it is attributed to.
+ *
+ * [PERF, waste-audit 2026-08-23] MEMOIZED by `scip` object identity (mirrors `createUnitDeps`): the definition
+ * arm builds it twice per pass (candidate list + gate resolver) off the same `slotScip` variable, so the
+ * O(all-occurrences) defDoc scan collapses 2→1 within an arm (`readScipOrEmpty` returns a fresh object per call,
+ * so no cross-arm dedup). Pure function of `scip` ⇒ shared instance is byte-identical to a fresh build.
  */
+const unitDefsCache = new WeakMap<ScipOutput, UnitDefsApi>();
 export function createUnitDefs(scip: ScipOutput): UnitDefsApi {
+  const memo = unitDefsCache.get(scip);
+  if (memo !== undefined) return memo;
+  const api = buildUnitDefs(scip);
+  unitDefsCache.set(scip, api);
+  return api;
+}
+
+function buildUnitDefs(scip: ScipOutput): UnitDefsApi {
   const defDoc = new Map<string, string>();
   for (const doc of scip.documents) {
     const h = String(nodeHashOfPath(doc.relativePath));

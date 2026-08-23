@@ -239,8 +239,12 @@ export function decideStaging(
     // receipt (a non-mine/human write, or #195 leg (b) not applicable) — fail-closed, never fabricated.
     minted.set(key, receipt !== undefined ? { ...f, answerRef: receipt.answerRef } : f);
   }
-  // `next` is published even when nothing was minted, keeping the write cadence identical to the
-  // `persistStaging`-per-site one it replaces — so a mutant seeding from `emptyStore()` still publishes that
-  // empty store and is caught (SCN-CLI-4d's first case).
-  return { out: minted, next: projection, put: puts };
+  // A pass ALWAYS publishes its rehydrated snapshot, even on a true no-op (abstain / every incoming already
+  // grounded). SCN-CLI-4d ("an already-staged candidate survives a mine pass that mines nothing") ratifies
+  // this republish-on-abstain: the rehydrated projection carries the earlier candidates, and re-committing it
+  // wholesale is how the concurrent commitLoop confirms current state. A no-op-skip optimization (return `next`
+  // omitted when `projection === staged`) was tried and REVERTED — it silently dropped that republish and turned
+  // the ratified abstain-preservation test RED. The fsync-churn it targeted is a separate concern; closing it
+  // must not touch the abstain contract (backlogged as its own card).
+  return { out: minted, put: puts, next: projection };
 }
