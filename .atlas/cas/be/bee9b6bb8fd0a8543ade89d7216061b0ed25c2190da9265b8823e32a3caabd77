@@ -1,1 +1,0 @@
-"```atlas-fact\n{\"claim\": \"Pack.stale is deliberately honest-conservative and trades a false-negative for a false-positive when signaling drift, which is a different question from each PackInvariant's own freshness field, so a consumer must check both rather than treating either as derivable from the other.\"}\n```\n"
