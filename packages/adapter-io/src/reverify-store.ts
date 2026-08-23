@@ -50,7 +50,7 @@
 // second oracle constructed here (a duplicated oracle that drifts from the shipped one is a known failure
 // class in this repo, see `verify-fact-source.ts`'s header).
 
-import type { CurrentNode, GroundedFact, PredicateSlot, RelationNode } from '@atlas/knowledge';
+import type { CurrentNode, GroundedFact, NegationNode, PredicateSlot, RelationNode } from '@atlas/knowledge';
 import { claimNormFromWitness } from '@atlas/genesis';
 import { unitScopeOf } from './llm.js';
 import type { VerifyFactLeg, VerifyReq } from './verify-fact-source.js';
@@ -248,6 +248,47 @@ export function reverifyRelation(nodeKey: string, fact: RelationNode, leg: Verif
   };
 }
 
+/** Re-verify ONE `seal:'proven'` NEGATION fact against the live oracle (#240 — close the trap that dumped a
+ *  proven negation to `unverifiable` for want of a witnessed slot; the analog of the relation fix WP-R5).
+ *
+ *  A negation is the ONE family where the re-proof needs NO separate witness and NO anchor binding: its
+ *  identity legs `(target, scope)` ARE the entire `NegationClaim` (`verify-negation.ts` — "no caller of
+ *  `target` under `scope`"), stored on the node itself, so there is no claim-vs-identity gap for a committer
+ *  to bolt a true edge onto (the exact hole the relation/predicate anchor bindings close). The negation
+ *  routes by `negationKey`, never a `primaryAnchorId` (governed-emit-negation.ts) — so there is no anchor to
+ *  bind. The two remaining tamper/staleness vectors are covered directly:
+ *    · TIER — a `proven` seal is minted only by the mine pipeline; any other tier is a committer's invention.
+ *    · TARGET/SCOPE REALITY + CLOSED-WORLD — re-running `verifyNegation` over the CURRENT index IS the check:
+ *      a phantom/`local` target abstains → `broken`; a counterexample caller that APPEARED refutes → `broken`;
+ *      a scope that is no longer hole-free abstains (`scope-open`) → `broken`. This is STRONGER than the
+ *      `edgeModel` version-stamp the door writes (billy F1) — it re-checks the actual holes, not a proxy.
+ *  Only a fresh `proven` (still no caller, still hole-free) re-proves; anything else is `broken`. */
+export function reverifyNegation(nodeKey: string, fact: NegationNode, leg: VerifyFactLeg): ReverifyRow {
+  const { target, scope } = fact;
+  if (typeof target !== 'string' || target.length === 0 || typeof scope !== 'string' || scope.length === 0) {
+    return { nodeKey, outcome: 'unverifiable', reason: "seal:'proven' negation with an incomplete identity (missing target/scope) — nothing to replay" };
+  }
+  if (fact.tier !== MINED_TIER) {
+    return {
+      nodeKey,
+      outcome: 'broken',
+      reason: `TAMPERED: tier '${String(fact.tier)}' is not the mined tier '${MINED_TIER}' — every seal:'proven' negation is minted by the mine pipeline, so a different tier was chosen by whoever committed it, not proven by anything`,
+    };
+  }
+  // ── REPLAY — the negation's own identity IS the claim; re-run the closed-world oracle over the LIVE index.
+  //    A counterexample caller (refuted) OR a scope no longer hole-free (abstain) both mean the proven negative
+  //    no longer holds → `broken`. Only a still-closed, still-empty scope re-proves. ────────────────────────
+  const verdict = leg({ kind: 'negation', claim: { scope, target } });
+  if (verdict.verdict === 'proven') {
+    return { nodeKey, outcome: 're-proven', reason: `replayed PROVEN — no caller of ${target} under ${scope} (closed-world, hole-free)` };
+  }
+  return {
+    nodeKey,
+    outcome: 'broken',
+    reason: `replay did NOT re-prove — oracle returned '${verdict.verdict}'${verdict.reason !== undefined ? ` (${verdict.reason})` : ''} (a counterexample caller appeared under scope, or the scope is no longer hole-free)`,
+  };
+}
+
 /** Re-verify ONE sealed fact against the live oracle. `node` is the fact's OWN `CurrentNode` row — the
  *  source of `primaryAnchor`, which `GroundedFact` itself does not carry (KNOW-15d: the anchor is a
  *  projection-row carrier, `projection-types.ts`, not part of the CAS-stored fact). `undefined` iff the
@@ -298,10 +339,14 @@ export function reverifyFact(node: CurrentNode, fact: GroundedFact, leg: VerifyF
   //    below (which reads the slot-keyed `AdvisoryNode.witness`); routing it here closes the #240 trap that
   //    used to dump every proven relation to `unverifiable` for want of a witnessed slot. ────────────────────
   if (fact.kind === 'relation') return reverifyRelation(nodeKey, fact, leg, docExists);
-  // Past the relation branch above, the PREDICATE witness is carried ONLY on `AdvisoryNode` (#195 `buildSound`
-  // mints the predicate sound-oracle arm as an advisory, never a predicate/negation — see `admit-harness.ts`),
-  // so a `proven`-sealed predicate/negation is STRUCTURALLY witness-less here: `unverifiable`, not a
-  // type-narrowing dodge. (`relation` no longer falls through — it re-proves via `reverifyRelation` above.)
+  // ── NEGATION FAMILY (#240) — a `proven`-sealed negation carries no witness slot, but its identity legs
+  //    `(target, scope)` ARE the whole claim, so it re-proves by re-running `verifyNegation` directly (no
+  //    anchor binding — a negation routes by `negationKey`). Routing it here closes the #240 trap that used to
+  //    dump a proven negation to `unverifiable`. ─────────────────────────────────────────────────────────────
+  if (fact.kind === 'negation') return reverifyNegation(nodeKey, fact, leg);
+  // Past the relation/negation branches above, the PREDICATE witness is carried ONLY on `AdvisoryNode` (#195
+  // `buildSound` mints the predicate sound-oracle arm as an advisory), so a `proven`-sealed PREDICATE is
+  // STRUCTURALLY witness-less here: `unverifiable`, not a type-narrowing dodge.
   const w = fact.kind === 'advisory' ? fact.witness : undefined;
   if (w === undefined) {
     return { nodeKey, outcome: 'unverifiable', reason: 'seal:proven but no witness was recorded — nothing to replay' };
