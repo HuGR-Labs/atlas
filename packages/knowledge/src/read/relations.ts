@@ -18,12 +18,20 @@ import type { StoreProjection } from '../write/router.js';
 export type RelationDirection = 'out' | 'in' | 'both';
 
 /** One grounded relation edge touching the queried unit. `nodeKey` is the relation's identity (`relationKey`,
- *  the row's key); the endpoints + kind are the carriers stamped at write time. */
+ *  the row's key); the endpoints + kind are the carriers stamped at write time. `seal` is the two-seal
+ *  provenance (ADR-0017) carried on the projection row — a sound-minted `proven` `depends-on` and an
+ *  advisory relation would be INDISTINGUISHABLE at this fold without it (#99 R6, AR-11). ADDITIVE +
+ *  absent-tolerant: an unsealed relation carries no `seal` (reads as "seal unknown", never "proven"), so a
+ *  pre-seal projection folds byte-identically. The seal rides BOTH directions — it is a field of the edge,
+ *  not of the query, so querying either endpoint surfaces the same seal (AR-26). Witness is NOT carried here:
+ *  the projection row (`CurrentNode`) has no witness carrier, so the re-runnable derivation is surfaced by the
+ *  single-fact `atlas node` door (which reads the durable `RelationNode.witness`), not by this list fold. */
 export interface RelationEdge {
   readonly nodeKey: string;
   readonly relationKind: string;
   readonly endpointA: string; // subject
   readonly endpointB: string; // object
+  readonly seal?: string; //     ADR-0017 two-seal provenance — 'proven' | 'justified' | absent (unsealed)
 }
 
 /** Lexicographic string comparator — total, no locale (the one the sibling read folds sort by). */
@@ -57,7 +65,16 @@ export function relationsOf(
     const isSubject = a === unitKey; // `out`: the unit points AT something
     const isObject = b === unitKey; //  `in`: something points AT the unit
     const keep = direction === 'out' ? isSubject : direction === 'in' ? isObject : isSubject || isObject;
-    if (keep) out.push({ nodeKey: node.nodeKey, relationKind: k, endpointA: a, endpointB: b });
+    if (keep)
+      out.push({
+        nodeKey: node.nodeKey,
+        relationKind: k,
+        endpointA: a,
+        endpointB: b,
+        // SEAL carrier — from the projection row's own `seal` (ADR-0017); omitted ⇒ absent (exactOptional),
+        // never a fabricated 'proven'. Rides whichever direction reaches this edge (AR-26).
+        ...(typeof node.seal === 'string' ? { seal: node.seal } : {}),
+      });
   }
   return out.sort(
     (x, y) =>
