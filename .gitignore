@@ -39,5 +39,11 @@ dist/
 # as the code.
 !.atlas/policy.json
 
+# staging must never travel at ANY depth. The root-anchored `.atlas/*` above only matches the repo-root
+# store; test runs create scratch `.atlas/` dirs under packages/*/ (e.g. packages/grounding/.atlas/) whose
+# staging*.json slips that anchor. This unanchored rule denies staging everywhere — same intent as above,
+# closing the nested-dir gap so `git add -A` after a test run cannot drag candidate material into history.
+**/.atlas/staging*.json
+
 # runtime telemetry from the orchestrator harness — not product source
 .maestro/
