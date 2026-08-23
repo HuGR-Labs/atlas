@@ -267,7 +267,7 @@ Sonnet driven as `general-purpose` sub-agents. Scratchpad artifacts (session-loc
 
 | rung | what it is | ox-alpha (free) | Sonnet | source of the number |
 | --- | --- | --- | --- | --- |
-| **floor — no-tool LLM** | raw "state a fact", no Atlas discipline | self-verifiable **5/15 = 33%** | **6/15 = 40%** | 3-judge blind majority; 0 FALSE both; 9 NOT_GROUNDED each |
+| **floor — no-tool LLM** | raw "state a fact", no Atlas discipline | self-verifiable **5/15 = 33%** | **6/15 = 40%** | 3-judge blind majority; **1 FALSE ox-alpha (id1), 0 FALSE Sonnet**; 9 NOT_GROUNDED each |
 | **Atlas advisory** | `propose.md` v3 (refute + grounding + code-derived) | **10/13 = 77%** | **9/10 = 90%** | 3-judge blind majority (ox-alpha 3/3 unanimous) |
 | **Atlas sound** | dependency slot, `verify-fact` oracle | **13/13 proven, 0-false** | 0-false (oracle, model-independent) | oracle admission (Definition A), not a judge |
 | **lift floor→advisory** | what Atlas's prompt+grounding adds | **+44 pts** | **+50 pts** | derivation |
@@ -275,10 +275,13 @@ Sonnet driven as `general-purpose` sub-agents. Scratchpad artifacts (session-loc
 **The finding.** (1) The floor is low for BOTH models — even Sonnet: **~60% of a raw LLM's facts are NOT
 verifiable from the unit's own bytes** (they assert design INTENT, HISTORY, a task/PR number, or behavior in
 another file — "deliberately", "#186 deleted", "per INDEX-15"). The model, weak or strong, narrates *why*, not
-*what the code does*. (2) Atlas's prompt discipline lifts self-verifiability ~+44–50 pts on both, by driving the
-NOT_GROUNDED population to 0 (the #201 comment-restatement failure). (3) The oracle takes the sound arm to
-0-false, model-independently. (4) The stronger model scores higher at every rung (40>33, 90>77) but the ladder's
-SHAPE is identical — Atlas adds large value at every model tier; it is **not a crutch for weak models**.
+*what the code does*. (2) Atlas's prompt discipline lifts **precision-per-emitted-fact** ~+44–50 pts on both, by
+driving the NOT_GROUNDED population to 0 (the #201 comment-restatement failure) — but see the denominator caveat
+below: the advisory arm can ABSTAIN and the floor cannot, so that lift blends the grounding gain with the value
+of abstaining on the hard sites. (3) The oracle takes the sound arm to 0-false, model-independently. (4) The
+stronger model scores higher at every rung (40>33, 90>77) but the ladder's SHAPE is identical — **on this n=15
+slice Atlas lifts both model tiers substantially, not merely the weak one** (the "crutch for weak models"
+reading is not supported: the strong model gains as much or more).
 
 **A correction logged in-place (honesty).** From judge j3 alone (3/15) the floor read 20% and the first
 reading was "the strong model floors LOWER — Atlas is a bigger lever on the strong model." The 3-judge MAJORITY
@@ -288,6 +291,15 @@ The transferable lesson is the pilot's own (`atlas-95-pilot-rightway`): never pu
 **Caveats, load-bearing.** n=15, one slice (advisory + dependency + naive floor), one repo (Atlas-on-Atlas);
 same-family judge (the standing model-diverse-judge gap); the floor is a raw-LLM no-tool baseline, NOT a
 retrieval-augmented SOTA (Sourcegraph-class) — that comparator has still never been run. Tighter CI needs N≫15.
+
+**Denominator caveat on the lift (read before quoting +44/+50).** The floor is scored over all **15** sites
+(the naive prompt has no NO-FACT option — it always emits); the advisory arm scores over the **survivors** of
+its own abstention (ox-alpha 10/**13**, 2 abstained; Sonnet 9/**10**, 5 abstained). So the +44/+50 pt figure is
+a **precision-per-emitted-fact** lift, and it credits abstaining-on-the-hard-site as well as the grounding
+discipline. The **same-denominator (per-site, /15) true-fact yield** — which scores a correct abstention
+neutrally rather than as a survivor win — is a smaller, also-honest number: TRUE-facts-delivered per 15 sites
+goes floor→advisory **5→10 (ox-alpha, +33 pts)** and **6→9 (Sonnet, +20 pts)**. Both lifts are real; the
+per-emitted one is larger because it excludes the sites the advisory arm declined to answer.
 
 ## What this is NOT
 
