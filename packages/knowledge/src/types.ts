@@ -120,6 +120,7 @@ export interface RelationNode {
   readonly scope?: string; // KNOW-11a — the write scope (authz); the 2.1 anchor gate binds on `endpointA`
   readonly obviousness?: ObviousnessScore; // ADR-0012 — additive, absent-tolerant (see AdvisoryNode)
   readonly seal?: Seal; // ADR-0017 — two-seal provenance, additive/absent-tolerant (see AdvisoryNode)
+  readonly witness?: RelationWitness; // #99 ADR-0018 — the `proven` relation's re-runnable derivation (see RelationWitness). ADDITIVE + absent-tolerant.
 }
 
 // The #99b scoped-negative shapes (ADR-0015 D3) — `NegationNode` (the FOURTH `GroundedFact` variant) and its
@@ -170,6 +171,27 @@ export interface PredicateWitness {
   readonly target: string; // the global symbol the oracle proved against (verifyDependency/verifyCount's `target`)
   readonly scope: string; // the VERIFY-SCOPE directory the witness ranges over — NOT the authz `scope` above
   readonly atLeast?: number; // the witnessed lower bound N — present for the 'count' slot only
+}
+
+/**
+ * The `seal:'proven'` RELATION fact's own DERIVATION (#99 sound relation, ADR-0018) — the sibling of
+ * `PredicateWitness` for the 2-ended family, carried on `RelationNode.witness` so a proven `depends-on`
+ * edge is a re-checkable claim, not a bare assertion. A relation has no `PredicateSlot`, so the witness
+ * encodes what the oracle RE-RUNS instead: the proven `relationKind` plus the exact `verifyDependency`
+ * arguments — the global symbol under `endpointB` whose reference from `endpointA`'s scope witnessed the
+ * resolved cross-unit edge. Read-side reverify (reverify-store.ts) re-runs `verifyDependency(sourceScope,
+ * target)` over the CURRENT index and re-proves iff the edge still exists (else `broken`); a `proven`
+ * relation with no witness is `unverifiable` (the #240 trap, closed for the relation family).
+ *
+ * `sourceScope` is the VERIFY-SCOPE (endpointA's containing scope the witnessed reference must lie in) —
+ * NOT the fact's authz `scope` (KNOW-11a, `RelationNode.scope`), exactly the `PredicateWitness.scope` vs
+ * `node.scope` distinction. Only `'depends-on'` is provable (F3, ADR-0018); `calls` never mints a witness.
+ * ADDITIVE + absent-tolerant, same discipline as `PredicateWitness`.
+ */
+export interface RelationWitness {
+  readonly relationKind: RelationKind; // the PROVEN kind — only 'depends-on' is mechanically provable (F3)
+  readonly target: string; // the global SCIP symbol under endpointB whose witnessed reference proves the edge
+  readonly sourceScope: string; // endpointA's verify-scope — reverify re-runs verifyDependency(sourceScope, target)
 }
 
 /**
