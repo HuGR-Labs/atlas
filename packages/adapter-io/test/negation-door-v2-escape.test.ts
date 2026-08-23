@@ -52,6 +52,7 @@ function feed(callers: readonly string[], holes: readonly string[]): SymbolRever
     holeSources: () => holes as unknown as readonly Hash[],
     opaqueRefSources: () => [],
     resolves: (sym: string) => sym === TARGET,
+    definesAt: (sym: string) => (sym === TARGET ? ('src/x.ts' as unknown as Hash) : undefined), // #196d — unused here; a def-site for the resolvable target
   };
 }
 

@@ -135,6 +135,7 @@ export interface AdmitDeps {
   readonly typeOracle: TypeOracle; // sound-oracle-first (GEN-12k)
   readonly verifyDependency?: (target: string, scope: string) => "proven" | "abstain"; // GEN-12-dep: sound symbol-reverse oracle (verify-fact positive dual)
   readonly verifyCount?: (target: string, scope: string, atLeast: number) => "proven" | "abstain"; // GEN-12-count: sound cardinality oracle (#196c — verifyCount lower-bound)
+  readonly verifyDefinition?: (target: string, scope: string) => "proven" | "abstain"; // GEN-12-def: sound definition oracle (#196d — verifyDefinition def-occurrence-under-scope)
   readonly refine: (check: Check, site: Candidate) => Check | null; // CEGIS refine; `null` = no change
   readonly indexState: IndexNode; // current code (KNOW-16 evaluate carrier)
   readonly K: number; // refine budget (GEN-13 default K≤1)
@@ -165,6 +166,8 @@ const DROP_DEP_UNWIRED = "dependency slot but no verifyDependency leg supplied (
 const DROP_DEP_MALFORMED = "dependency proposal missing target/scope (GEN-12-dep)";
 const DROP_COUNT_UNWIRED = "count slot but no verifyCount leg supplied (GEN-12-count)";
 const DROP_COUNT_MALFORMED = "count proposal missing target/scope or atLeast not a positive integer (GEN-12-count)";
+const DROP_DEF_UNWIRED = "definition slot but no verifyDefinition leg supplied (GEN-12-def)";
+const DROP_DEF_MALFORMED = "definition proposal missing target/scope (GEN-12-def)";
 const DROP_UNGROUNDED = 'advisory fails the truth door — the citation does not ground (GEN-12e)';
 // RELATION drops (ADR-0015 D2, WP-96-R). The relation family is now ADMITTED — its two honest refusals
 // (`DROP_RELATION_MALFORMED` / `DROP_RELATION_UNGROUNDED`) live beside its builders in `admit-relation.ts`
@@ -318,6 +321,23 @@ function admitPredicate(p: PredicateProposal, deps: AdmitDeps): Admission {
     return { outcome: "admitted", fact: buildSound(p, scoreObviousness(deps.doors, p.claimNorm)), label: LIKELY_INVARIANT };
   }
 
+  // GEN-12-def (#196d) — the DEFINITION dual of the dependency arm, BYTE-IDENTICAL to it (no cardinality leg),
+  // and it MUST precede the synthesized-check path below for the same reason as the count arm: without it a
+  // `definition` seed would fall through to `predicate.synthesize`, where an unrelated check could admit a
+  // definition fact `verifyDefinition` never proved. `definition` is `PredicateSlot`-structural (NOT one of the
+  // eight `SemanticSlot`s), so it is not a justified-slot either — it belongs HERE, on the sound gate.
+  if (p.slot === "definition") {
+    if (deps.verifyDefinition === undefined) return { outcome: "dropped", reason: DROP_DEF_UNWIRED };
+    const t = p.target, s = p.scope;
+    if (typeof t !== "string" || !t || typeof s !== "string" || !s) return { outcome: "dropped", reason: DROP_DEF_MALFORMED };
+    // ABSTAIN ≠ REFUTE — same law as the dependency/count arms. `verifyDefinition` returns proven|abstain only;
+    // `!== "proven"` is "could not witness the definition under scope", never "proved it undefined". So the
+    // definition oracle abstaining admits a JUSTIFIED advisory if grounded; the `proven` seal is earned below only.
+    if (deps.verifyDefinition(t, s) !== "proven") return admitAbstainedAsJustified(p, deps);
+    if (!deps.doors.grounded(p.grounding, deps.indexState)) return { outcome: "dropped", reason: DROP_UNGROUNDED };
+    return { outcome: "admitted", fact: buildSound(p, scoreObviousness(deps.doors, p.claimNorm)), label: LIKELY_INVARIANT };
+  }
+
   // GEN-12k — a type-expressible slot uses the SOUND `$0` type-checker / LSP, not a synthesized query.
   if (deps.typeOracle.expressible(p.slot)) {
     if (deps.typeOracle.diagnose(p.site, p.slot) !== 'HOLDS') return { outcome: 'dropped', reason: DROP_TYPE_BROKEN };
@@ -465,9 +485,13 @@ function claimNormFor(p: PredicateProposal, witness: PredicateWitness | undefine
  * it changes no behaviour of `claimNormFor` itself.
  */
 export function claimNormFromWitness(witness: PredicateWitness): string {
-  return witness.slot === 'count' && typeof witness.atLeast === 'number'
-    ? `${witness.target} is referenced by at least ${witness.atLeast} distinct unit(s) under ${witness.scope} (witnessed lower bound, sound oracle)`
-    : `${witness.scope} references ${witness.target} (witnessed cross-unit reference, sound oracle)`;
+  if (witness.slot === 'count' && typeof witness.atLeast === 'number')
+    return `${witness.target} is referenced by at least ${witness.atLeast} distinct unit(s) under ${witness.scope} (witnessed lower bound, sound oracle)`;
+  // #196d — a definition is a witnessed DEFINITION-occurrence under the scope, NOT a reference ("references"
+  // would be the dependency oracle's lie; `verifyDefinition` witnesses the def-site itself, `definesAt`).
+  if (witness.slot === 'definition')
+    return `${witness.target} is defined under ${witness.scope} (witnessed definition occurrence, sound oracle)`;
+  return `${witness.scope} references ${witness.target} (witnessed cross-unit reference, sound oracle)`;
 }
 
 /**

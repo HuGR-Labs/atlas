@@ -11,19 +11,23 @@ import { join } from 'node:path';
 import {
   createCommandClient,
   createCountResolver,
+  createDefResolver,
   createDepResolver,
   createPromptFactory,
   createSiteProposer,
   createUnitCountCandidates,
+  createUnitDefCandidates,
   createUnitDepCandidates,
   createUnitSiblingReader,
   createUnitSourceReader,
   loadModelConfig,
   makeCountClaimParser,
+  makeDefinitionClaimParser,
   makeDependencyClaimParser,
   readScipOrEmpty,
   semanticClaimParser,
   shippedCountTemplatePath,
+  shippedDefinitionTemplatePath,
   shippedDependencyTemplatePath,
   shippedEnrichedTemplatePath,
   shippedSemanticTemplatePath,
@@ -91,15 +95,15 @@ export const MINE_SLOT_ENV = 'ATLAS_MINE_SLOT';
 export function resolveMineSlot(env: NodeJS.ProcessEnv): MineSlot {
   const v = env[MINE_SLOT_ENV]?.trim().toLowerCase();
   if (v === undefined || v === '') return 'advisory';
-  if (v === 'advisory' || v === 'dependency' || v === 'count' || v === 'semantic') return v;
-  throw new Error(`${MINE_SLOT_ENV}=${JSON.stringify(env[MINE_SLOT_ENV])} is not a known mining arm — use 'advisory', 'dependency', 'count' or 'semantic'`);
+  if (v === 'advisory' || v === 'dependency' || v === 'count' || v === 'definition' || v === 'semantic') return v;
+  throw new Error(`${MINE_SLOT_ENV}=${JSON.stringify(env[MINE_SLOT_ENV])} is not a known mining arm — use 'advisory', 'dependency', 'count', 'definition' or 'semantic'`);
 }
 
 /** One resolved mining arm. `semantic` is the 196c justified arm — the ONE general arm where the model CLASSIFIES
  *  each fact into one of the eight `SemanticSlot`s (gotcha is now just one slot value it can emit, not its own arm).
  *  It is a valid single arm (`resolveMineSlot`/`resolveProposer`) but is DELIBERATELY absent from the sound-by-
  *  default SET (`resolveMineSlots`), because it is not sound: every semantic slot lands `justified`, not `proven`. */
-export type MineSlot = 'advisory' | 'dependency' | 'count' | 'semantic';
+export type MineSlot = 'advisory' | 'dependency' | 'count' | 'definition' | 'semantic';
 
 /** [MINE-BUDGET-CAP] The env that caps how many sites a metered `atlas mine` run visits. It is the CLI-
  *  reachable knob onto the run-controller's already-existing `GenesisBudget.ceiling` seam — there is no
@@ -186,9 +190,10 @@ export interface ResolvedProposer {
  * EXECUTE the operator's model binary.
  */
 /** The candidate-grounded arms that read the code index (`.atlas/index.scip`) to drive BOTH the prompt-side
- *  candidate list and the gate-side per-unit resolver: `dependency` (#196a fan-out) and `count` (#196c fan-in).
- *  The advisory/ENRICH arms do not. Reading the index ONCE per arm keeps the closed list the model sees and the
- *  symbol the parser binds derived from the SAME projection the gate reads (they can never disagree). */
+ *  candidate list and the gate-side per-unit resolver: `dependency` (#196a fan-out), `count` (#196c fan-in) and
+ *  `definition` (#196d a unit's own definitions). The advisory/ENRICH arms do not. Reading the index ONCE per
+ *  arm keeps the closed list the model sees and the symbol the parser binds derived from the SAME projection the
+ *  gate reads (they can never disagree). */
 export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = process.env, slotOverride?: MineSlot): ResolvedProposer {
   // [ADR-0017] VALIDATE THE ARM FIRST — a misspelled `ATLAS_MINE_SLOT` is a misconfiguration, and it must
   // throw BEFORE the no-model early return below, or a typo (`dependncy`) would be silently swallowed as a
@@ -221,14 +226,20 @@ export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = proce
   // derived from the SAME `.atlas/index.scip` the gate reads, so the closed list the model sees and the symbol
   // the parser binds can never disagree. `dependency` is fan-OUT (`DEPENDS-ON:`); `count` is its fan-IN dual
   // (`COUNT:`) — the model SELECTS a name, the harness derives the number, the sound oracle re-proves.
-  const slotScip = slot === 'dependency' || slot === 'count' ? readScipOrEmpty(join(repoPath, '.atlas', 'index.scip')) : undefined;
+  const slotScip = slot === 'dependency' || slot === 'count' || slot === 'definition' ? readScipOrEmpty(join(repoPath, '.atlas', 'index.scip')) : undefined;
   // [#196a/#196c + PROVABLE-FRONTIER] The candidate reader is built ONCE per sound arm and drives BOTH the
   // prompt-side candidate list AND the frontier-side provability precondition — the SAME `CandidateReader`, so
   // "the model has a name to pick" and "the oracle can prove a fact here" can never disagree. A site is provable
   // IFF this reader lists at least one candidate for it (a dep-sink/barrel lists none ⇒ not provable ⇒ ranked
   // after the provable sites). Undefined for the advisory arm ⇒ no reorder.
   const candidateReader: CandidateReader | undefined =
-    slotScip === undefined ? undefined : slot === 'count' ? createUnitCountCandidates(slotScip) : createUnitDepCandidates(slotScip);
+    slotScip === undefined
+      ? undefined
+      : slot === 'count'
+        ? createUnitCountCandidates(slotScip)
+        : slot === 'definition'
+          ? createUnitDefCandidates(slotScip)
+          : createUnitDepCandidates(slotScip);
   // [196c semantic] The SEMANTIC arm reads no index (no candidates) — it takes the SAME anchored-unit-only
   // source view as the bare advisory prompt, only the TEMPLATE differs (it asks for a `{slot, claim, derivation}`
   // block, the model classifying into one of the eight). Selected before the ENRICH/bare branches so
@@ -238,7 +249,8 @@ export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = proce
       ? createPromptFactory({
           source: createUnitSourceReader(repoPath),
           candidates: candidateReader,
-          templatePath: slot === 'count' ? shippedCountTemplatePath() : shippedDependencyTemplatePath(),
+          templatePath:
+            slot === 'count' ? shippedCountTemplatePath() : slot === 'definition' ? shippedDefinitionTemplatePath() : shippedDependencyTemplatePath(),
         })
       : slot === 'semantic'
         ? createPromptFactory({ source: createUnitSourceReader(repoPath), templatePath: shippedSemanticTemplatePath() })
@@ -263,7 +275,9 @@ export function resolveProposer(repoPath: string, env: NodeJS.ProcessEnv = proce
         : undefined
       : slot === 'count'
         ? makeCountClaimParser(createCountResolver(slotScip))
-        : makeDependencyClaimParser(createDepResolver(slotScip));
+        : slot === 'definition'
+          ? makeDefinitionClaimParser(createDefResolver(slotScip))
+          : makeDependencyClaimParser(createDepResolver(slotScip));
   const proposer = createSiteProposer({
     // [ADR-0020] The sound-gated slots (dependency/count) keep the ONE-LINE answer contract; the advisory AND the
     // semantic slot use the reason-freely fenced-`atlas-fact` BLOCK contract (measured 100%/0-halluc vs the

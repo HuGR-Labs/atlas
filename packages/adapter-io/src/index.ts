@@ -30,7 +30,7 @@ export { createForge } from './git-forge.js';
 // git seam (#74, `run-git.ts`) that crosses the package boundary (the mine driver injects it). `runGit` + the
 // error classifier/backoff primitives stay module-internal, consumed intra-package via relative import.
 export { headSha } from './run-git.js';
-export { createSiteProposer, advisoryClaimParser, makeDependencyClaimParser, DEP_UNPARSEABLE_REASON, makeCountClaimParser, COUNT_UNPARSEABLE_REASON, semanticClaimParser, SEMANTIC_NO_DERIVATION_REASON, SEMANTIC_SLOT_UNKNOWN_REASON } from './llm.js';
+export { createSiteProposer, advisoryClaimParser, makeDependencyClaimParser, DEP_UNPARSEABLE_REASON, makeCountClaimParser, COUNT_UNPARSEABLE_REASON, makeDefinitionClaimParser, DEF_UNPARSEABLE_REASON, semanticClaimParser, SEMANTIC_NO_DERIVATION_REASON, SEMANTIC_SLOT_UNKNOWN_REASON } from './llm.js';
 export type { ClaimParser, DepResolver, CountResolver } from './llm.js'; // ADR-0017 — the per-arm claim→seed parser seam + #196a/#196c resolvers
 // ADR-0011 D1 — the one concrete model adapter (an operator-supplied command). The port's own type name
 // is deliberately NOT written here: golden 11a audits it TEXTUALLY across `packages/*/src`, so keeping
@@ -50,6 +50,7 @@ export {
   shippedEnrichedTemplatePath, // ENRICH arm (A4-LEVER) — the {{RELATED}}-bearing template
   shippedDependencyTemplatePath, // ADR-0017 dependency arm — the DEPENDS-ON prompt
   shippedCountTemplatePath, // #196c count arm — the COUNT prompt
+  shippedDefinitionTemplatePath, // #196d definition arm — the DEFINES prompt
   shippedSemanticTemplatePath, // 196c semantic arm — the justified {slot, claim, derivation} prompt
   PromptError,
 } from './prompt.js'; // ADR-0011 D3
@@ -57,6 +58,7 @@ export type { PromptFactory, SourceReader, SiblingReader, RelatedUnit, Candidate
 export { createUnitSourceReader, createUnitSiblingReader } from './unit-source.js'; // #182 S2 — unit bytes + ENRICH siblings
 export { createUnitDepCandidates, createDepResolver } from './unit-candidates.js'; // #196a — candidate-grounded dep names (prompt) + per-unit name→symbol resolver (gate)
 export { createUnitCountCandidates, createCountResolver } from './unit-count-candidates.js'; // #196c — externally-called export names (prompt) + per-unit name→symbol+count resolver (gate)
+export { createUnitDefCandidates, createDefResolver } from './unit-def-candidates.js'; // #196d — a unit's own definition names (prompt) + per-unit name→symbol resolver (gate)
 export { createIndexAdapter } from './index-adapter.js';
 export type { IndexAdapterDeps, IndexAdapterSurface } from './index-adapter.js'; // IndexAdapterSurface: #99b N0 symbol-reverse seam for N2
 export { materializePoke, pokeFilePath, POKE_FILE_EXT } from './poke-file.js';

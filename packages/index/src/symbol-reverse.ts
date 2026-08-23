@@ -47,6 +47,15 @@ export interface SymbolReverseApi {
    *  the negation door would ground "phantom is not called in S" for a target that does not resolve at all.
    *  A `local ` symbol is document-scoped (#189) and never resolves here. Total: never throws. */
   resolves(symbol: string): boolean;
+  /** The unit (docHash) where the GLOBAL symbol `symbol` is DEFINED — the FIRST-definition-wins document
+   *  the `defs` map retained (byte-for-byte `deriveEdges`'s `defs`, build.ts). `undefined` for a `local `
+   *  symbol (document-scoped, #189) or a symbol with no in-index definition (a phantom). This is the POSITIVE
+   *  DUAL of `resolves`: `resolves(symbol)` iff `definesAt(symbol) !== undefined`, but it RETAINS the location
+   *  `resolves` throws away — the `definition` PROVEN slot (#196d) proves "symbol X is DEFINED under scope S"
+   *  by checking this def-doc's path lies under S (a witnessed existence, sound in any world). First-def-wins
+   *  under-witnesses overloads (a second def in another unit is not seen), which costs recall, never
+   *  soundness. Total: never throws. */
+  definesAt(symbol: string): Hash | undefined;
 }
 
 /** Deterministic, deduped, `String`-sorted `Hash[]` — the exact discipline `deriveEdges`/`dependencyAxis` use
@@ -90,11 +99,15 @@ export function createSymbolReverse(
   // ⇒ untrusted (never a default that TRUSTS the heuristic).
   const trustCollapsedLocal = opts?.indexerName === SUPPORTED_INDEXER;
 
-  // defs: the SAME map `deriveEdges` builds — non-local `definition` occurrences, first-definition-wins.
-  const defs = new Set<string>();
+  // defs: the SAME map `deriveEdges` builds — non-local `definition` occurrences, first-definition-wins,
+  // RETAINING the defining doc (build.ts:217 keeps `h` identically). The membership set `resolves` /
+  // `reverseCallers` / the reference-resolution loop read is exactly `defs.keys()`; retaining the value costs
+  // nothing there (a Map answers `.has` the same) and gives `definesAt` (#196d) the location a Set discarded.
+  const defs = new Map<string, Hash>();
   for (const doc of scip.documents) {
+    const h = nodeHashOfPath(doc.relativePath);
     for (const occ of doc.occurrences) {
-      if (occ.role === 'definition' && !isLocalSymbol(occ.symbol)) defs.add(occ.symbol);
+      if (occ.role === 'definition' && !isLocalSymbol(occ.symbol) && !defs.has(occ.symbol)) defs.set(occ.symbol, h);
     }
   }
 
@@ -169,6 +182,12 @@ export function createSymbolReverse(
       // in-index `definition`. `defs` is exactly that set, so a phantom (referenced-only, or absent) is `false`
       // and its `reverseCallers` is `[]` HONESTLY — the caller must abstain rather than ground a vacuous negative.
       return !isLocalSymbol(symbol) && defs.has(symbol);
+    },
+    definesAt(symbol: string): Hash | undefined {
+      // The location `resolves` throws away: the first-definition-wins def-doc of a NON-`local` symbol. A
+      // `local ` symbol is document-scoped (#189) and never resolves, so it has no global def-site here.
+      if (isLocalSymbol(symbol)) return undefined;
+      return defs.get(symbol);
     },
   };
 }

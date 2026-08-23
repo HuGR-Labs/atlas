@@ -93,6 +93,14 @@ export function shippedCountTemplatePath(): string {
   return join(packageRoot(dirname(fileURLToPath(import.meta.url))), 'prompts', 'propose-count.md');
 }
 
+/** The DEFINITION proposal template (#196d definition slot, opt-in `ATLAS_MINE_SLOT=definition` arm) — resolved
+ *  the same package-root way as `shippedTemplatePath`. Asks the model for one `DEFINES: <name>` line (or
+ *  `NO-FACT`), the name SELECTED from the closed `{{CANDIDATES}}` list of the unit's own definitions; paired with
+ *  `makeDefinitionClaimParser` (llm.ts). Uses `{{PATH}}`/`{{UNIT}}`/`{{SOURCE}}`/`{{CANDIDATES}}` — no `{{RELATED}}`. */
+export function shippedDefinitionTemplatePath(): string {
+  return join(packageRoot(dirname(fileURLToPath(import.meta.url))), 'prompts', 'propose-definition.md');
+}
+
 /** The SEMANTIC proposal template (196c — the ONE general justified arm, opt-in `ATLAS_MINE_SLOT=semantic`) —
  *  resolved the same package-root way as `shippedTemplatePath`. A SEMANTIC arm: no oracle, no candidate list.
  *  Asks the model to reason freely then emit ONE `atlas-fact` block carrying `{slot, claim, derivation}` — it

@@ -50,6 +50,7 @@ function feed(callers: readonly string[], holes: readonly string[]): SymbolRever
     holeSources: () => holes as unknown as readonly Hash[],
     opaqueRefSources: () => [],
     resolves: (sym: string) => sym === TARGET, // #220 — TARGET is the in-index-defined symbol under test
+    definesAt: (sym: string) => (sym === TARGET ? ('src/x.ts' as unknown as Hash) : undefined), // #196d — unused by the negation door; a def-site for the resolvable target
   };
 }
 
