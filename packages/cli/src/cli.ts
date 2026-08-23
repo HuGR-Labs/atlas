@@ -11,7 +11,7 @@ import type { Hash } from '@atlas/contracts';
 import { asHash } from '@atlas/kernel';
 import { headSha, createHistorySource } from '@atlas/adapter-io';
 import { reportIndexPlan, relationsVerdict, negationsVerdict, verifyFactVerdict } from '@atlas/adapter-io';
-import type { IndexPlanReport, NegationLeg, OwnLeg, PromoteOut, RelationLeg, ReverifyReport, VerifyFactLeg, WiredHandler } from '@atlas/adapter-io';
+import type { DeriveRelationsRun, IndexPlanReport, NegationLeg, OwnLeg, PromoteOut, RelationLeg, ReverifyReport, VerifyFactLeg, WiredHandler } from '@atlas/adapter-io';
 import type { DoctorSource, Guidance, Tool, Verdict } from '@atlas/tools';
 import { runDoctor } from './doctor.js';
 import { ensureAtlasIgnored } from './gitignore.js';
@@ -20,6 +20,7 @@ import { marshalArgs } from './marshal.js';
 import { runMineArms } from './mine.js';
 import { runOwn } from './own.js';
 import { runPromote } from './promote.js';
+import { runDeriveRelationsCli } from './derive-relations.js';
 import { runReverify } from './reverify.js';
 import { parse } from './parse.js';
 import { renderRefusal, renderVerdict } from './render.js';
@@ -138,6 +139,19 @@ export interface CliDeps {
    * guidance every other routed command gives, never a silent pass over nothing.
    */
   readonly reverify?: () => ReverifyReport;
+  /**
+   * The composition root's #99 SOUND-RELATION derive-and-persist leg (`ComposedRuntime.deriveRelations`, WP-R7)
+   * — the mechanical projection of the index's resolved cross-unit references to PROVEN `depends-on` relations,
+   * driven end to end and LANDED in the durable store. Injected on the SAME seam as `promote` (the other WRITE
+   * leg intercepted before the handler), and for the same reason: the CLI must never stand up a second runtime,
+   * or the store it persists into stops being the store `atlas relations`/`atlas query` read back.
+   *
+   * It is NOT reached through `handler.handle`: it opens no new governed surface (`GOVERNANCE_SURFACE` stays 5)
+   * and publishes through the EXISTING emit door (ADR-0008), so there is no `Tool` token to route. ABSENT ⇒
+   * `atlas derive-relations` fails closed with the same "runtime is not composed yet" guidance every other
+   * routed command gives, never a silent projection over nothing.
+   */
+  readonly deriveRelations?: () => DeriveRelationsRun;
 }
 
 /** A structured error verdict for a CLI-layer failure (parse / unwired command) — guidance always present. */
@@ -272,6 +286,23 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
     // re-derives freshness against the built `Axes`, not against a sha (compose.ts `buildGate`). It is still
     // the true HEAD rather than a placeholder, so a gate that later starts reading it gets a fact.
     return emitCli(runPromote(deps.promote, asHash(headSha(process.cwd()) ?? '')));
+  }
+
+  if (command === 'derive-relations') {
+    // #99 WP-R7: `atlas derive-relations` drives the composition root's SOUND-RELATION projection ONE pass over
+    // the repo at cwd — enumerate the index's resolved cross-unit references, prove + seal each `depends-on` edge
+    // through the sound oracle, and PERSIST every proven relation through the governed emit door. Like `promote`
+    // it does not route through `deps.handler` (there is no `Tool` token: it opens no new governed surface,
+    // ADR-0008 — it publishes through the existing emit door) but its rendered `CliVerdict` reaches the console
+    // over the SAME emit/exit path as every other command (uniform bytes).
+    //
+    // It is a WRITE command, so it fails closed on an uncomposed runtime exactly as `promote` does.
+    if (!deps.deriveRelations) {
+      return emit(
+        errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'),
+      );
+    }
+    return emitCli(runDeriveRelationsCli(deps.deriveRelations));
   }
 
   if (command === 'own') {

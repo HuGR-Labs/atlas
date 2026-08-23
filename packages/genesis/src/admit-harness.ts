@@ -14,7 +14,7 @@
 // consumed as injected ports, never defined here.
 
 import type { Status, StructRef } from '@atlas/contracts';
-import type { AdvisoryNode, Check, GroundedFact, ObviousnessScore, PredicateNode, PredicateSlot, PredicateWitness } from '@atlas/knowledge';
+import type { AdvisoryNode, Check, GroundedFact, ObviousnessScore, PredicateNode, PredicateSlot, PredicateWitness, RelationKind } from '@atlas/knowledge';
 import type { IndexNode } from '@atlas/index';
 // WP-96-R — the relation admission's PURE legs (identity mint, set-union text, gate-0 check, drop reasons),
 // extracted to the sibling at the 400-LOC ceiling. The truth-door call + obviousness scoring stay HERE, in
@@ -23,6 +23,7 @@ import {
   buildRelation,
   relationClaimNorm,
   relationEndpointsResolve,
+  trySoundRelation,
   DROP_RELATION_MALFORMED,
   DROP_RELATION_UNGROUNDED,
 } from './admit-relation.js';
@@ -136,6 +137,7 @@ export interface AdmitDeps {
   readonly verifyDependency?: (target: string, scope: string) => "proven" | "abstain"; // GEN-12-dep: sound symbol-reverse oracle (verify-fact positive dual)
   readonly verifyCount?: (target: string, scope: string, atLeast: number) => "proven" | "abstain"; // GEN-12-count: sound cardinality oracle (#196c — verifyCount lower-bound)
   readonly verifyDefinition?: (target: string, scope: string) => "proven" | "abstain"; // GEN-12-def: sound definition oracle (#196d — verifyDefinition def-occurrence-under-scope)
+  readonly verifyRelation?: (relationKind: RelationKind, target: string, sourceScope: string, endpointA: string, endpointB: string) => "proven" | "abstain"; // #99 sound relation (ADR-0018): the directed-edge oracle (verifyRelation — verify-fact.ts). Binds BOTH endpoint FILES to the witnessed edge (endpointA a real referrer, endpointB the definer). Only 'depends-on' can prove.
   readonly refine: (check: Check, site: Candidate) => Check | null; // CEGIS refine; `null` = no change
   readonly indexState: IndexNode; // current code (KNOW-16 evaluate carrier)
   readonly K: number; // refine budget (GEN-13 default K≤1)
@@ -222,6 +224,13 @@ export function admit(p: Proposal, deps: AdmitDeps): Admission {
 function admitRelation(p: RelationProposal, deps: AdmitDeps): Admission {
   if (!relationEndpointsResolve(p)) return { outcome: 'dropped', reason: DROP_RELATION_MALFORMED };
   if (!deps.doors.grounded(p.grounding, deps.indexState)) return { outcome: 'dropped', reason: DROP_RELATION_UNGROUNDED };
+  // SOUND-ORACLE-FIRST for a PROVABLE `depends-on` relation (#99, ADR-0018 — see `trySoundRelation`). A proven
+  // directed edge mints a `proven`-sealed relation carrying its re-runnable witness (obviousness scored off the
+  // WITNESS-derived text, AR-6); ABSTAIN ≠ REFUTE, so a non-proven verdict (a `calls` kind AR-5, a
+  // local/unresolvable target AR-3/AR-17, no reference in scope, or no leg wired) falls through to the EXISTING
+  // advisory build — abstain is NOT a drop, exactly as `admitAbstainedAsJustified` on the predicate arm.
+  const proven = trySoundRelation(p, deps.verifyRelation, (claimNorm) => scoreObviousness(deps.doors, claimNorm));
+  if (proven !== undefined) return { outcome: 'admitted', fact: proven };
   return { outcome: 'admitted', fact: buildRelation(p, scoreObviousness(deps.doors, relationClaimNorm(p))) };
 }
 

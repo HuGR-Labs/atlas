@@ -10,7 +10,7 @@
 // NO NEW TRUTH RULE lives here: the relation reuses `deps.doors.grounded` (the advisory truth door) in the
 // harness. This module only mints identity and shapes the node once the harness's door has said yes.
 
-import type { ObviousnessScore, RelationNode } from '@atlas/knowledge';
+import type { ObviousnessScore, RelationKind, RelationNode, RelationWitness } from '@atlas/knowledge';
 // The relation identity leg + its closed-vocabulary guard — the SEALED mint (`relationKey`) and the
 // value-boundary membership check (`isKnownRelationKind`), consumed EXACTLY as the governed door does
 // (governed-emit-identity.ts). Identity is minted from the proposal's endpoints, NEVER trusted off a payload.
@@ -74,4 +74,88 @@ export function buildRelation(p: RelationProposal, obviousness: ObviousnessScore
     authoring: 'RELATED',
     ...(p.scope !== undefined ? { scope: p.scope } : {}),
   };
+}
+
+/**
+ * The proven relation's WITNESS, read off the proposal's SOUND-ORACLE legs (`relationKind` + `target` +
+ * `sourceScope`) — the 2-ended sibling of `witnessOf` (admit-harness.ts). Present iff the proposal carries BOTH
+ * resolved legs; ABSENT for an advisory relation (no oracle legs → no seal). Pure + total. The legs are the ones
+ * the mechanical projection (WP-R3) derived from a `resolved DepEdge`, NOT the endpoint unitKeys, so the witness
+ * is never read off model/endpoint prose — it is exactly what reverify (WP-R5) re-runs `verifyRelation` against.
+ */
+export function relationWitnessOf(p: RelationProposal): RelationWitness | undefined {
+  if (typeof p.target !== 'string' || p.target.length === 0) return undefined;
+  if (typeof p.sourceScope !== 'string' || p.sourceScope.length === 0) return undefined;
+  return { relationKind: p.relationKind, target: p.target, sourceScope: p.sourceScope };
+}
+
+/**
+ * CLAIM-DERIVED-FROM-WITNESS for the relation family (AR-6) — the stored SENTENCE generated from the SAME
+ * resolved legs `relationWitnessOf` reads, never from the endpoint pair or model prose. EXPORTED (TRAVEL-BY-
+ * REPROOF) so a re-verifier holding only a stored `RelationWitness` re-derives the sentence a `proven` seal is
+ * required to carry and can demand byte equality. Mirrors `claimNormFromWitness` (admit-harness.ts) verbatim in
+ * discipline; wording is deliberately conservative — "references", never "calls": `verifyRelation` reuses
+ * `reverseCallers`, which witnesses a cross-unit SCIP REFERENCE (imports and type positions count), and this
+ * sentence must not repeat the known-lying `callers` name. Pure + total.
+ */
+export function relationClaimNormFromWitness(w: RelationWitness): string {
+  return `${w.sourceScope} ${w.relationKind} ${w.target} (witnessed cross-unit reference, sound oracle)`;
+}
+
+/**
+ * The PROVEN relation node (#99 sound relation, ADR-0018, WP-96-R2) — the sealed sibling of `buildRelation` and
+ * the 2-ended analogue of `buildSound` (admit-harness.ts). BYTE-IDENTICAL to `buildRelation` except for the two
+ * fields that name the proof: `seal:'proven'` and the re-runnable `witness`. Identity is STILL minted by
+ * `relationKey` (never trusted off the payload); the caller (`admitRelation`) has already cleared
+ * `relationEndpointsResolve`, so `relationKey` cannot throw here. Only reached for a `depends-on` edge whose
+ * `verifyRelation` verdict was `proven` (the oracle abstains on any other kind — AR-5 — so a `calls` relation can
+ * never carry this seal). Pure + total.
+ */
+export function buildSoundRelation(
+  p: RelationProposal,
+  witness: RelationWitness,
+  obviousness: ObviousnessScore,
+): RelationNode {
+  return {
+    kind: 'relation',
+    obviousness,
+    id: relationKey(p.endpointA, p.relationKind, p.endpointB),
+    tier: p.tier,
+    relationKind: p.relationKind,
+    endpointA: p.endpointA,
+    endpointB: p.endpointB,
+    grounding: p.grounding,
+    freshness: 'FRESH',
+    claims: [],
+    authoring: 'RELATED',
+    seal: 'proven',
+    witness,
+    ...(p.scope !== undefined ? { scope: p.scope } : {}),
+  };
+}
+
+/**
+ * The relation SOUND-ADMIT decision (#99, ADR-0018, WP-96-R2) — extracted from `admitRelation` so the harness
+ * keeps only the truth-door + dispatch and this module owns the whole relation node shape. Returns a
+ * `proven`-sealed `RelationNode` IFF the proposal carries the resolved oracle legs (`relationWitnessOf`) AND the
+ * injected sound `verifyRelation` PROVES the directed edge; otherwise `undefined` — the caller falls through to
+ * the advisory `buildRelation`. ABSTAIN ≠ REFUTE: a `calls` kind (AR-5), a local/unresolvable target
+ * (AR-3/AR-17), no witnessed reference in scope, or no leg wired all return `undefined` (advisory, never a
+ * drop). `score` is the harness's obviousness scorer bound to its private door predicate; the claim text it
+ * scores is DERIVED FROM THE WITNESS (AR-6), never endpoint/model prose. Pure + total.
+ */
+export function trySoundRelation(
+  p: RelationProposal,
+  verifyRelation:
+    | ((relationKind: RelationKind, target: string, sourceScope: string, endpointA: string, endpointB: string) => 'proven' | 'abstain')
+    | undefined,
+  score: (claimNorm: string) => ObviousnessScore,
+): RelationNode | undefined {
+  const witness = relationWitnessOf(p);
+  if (witness === undefined || verifyRelation === undefined) return undefined;
+  // A relation is a unit→unit edge (TWO anchors): the oracle binds BOTH endpoint FILES to the witnessed edge
+  // (endpointA a real referrer, endpointB the definer), so the proposal's endpoints are passed alongside the
+  // witness legs. The stored witness needs no endpoints — the RelationNode already carries them for reverify.
+  if (verifyRelation(witness.relationKind, witness.target, witness.sourceScope, p.endpointA, p.endpointB) !== 'proven') return undefined;
+  return buildSoundRelation(p, witness, score(relationClaimNormFromWitness(witness)));
 }

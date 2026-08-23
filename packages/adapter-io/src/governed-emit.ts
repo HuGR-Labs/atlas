@@ -99,7 +99,7 @@ import type { Candidate, CurrentNode, GroundedFact, NegationNode, NodeFamily, Wr
 import { emitNegation, type NegationEmitDeps } from './governed-emit-negation.js'; // #99b N2 — THE ABSTENTION DOOR
 // FAMILY + IDENTITY resolution (all three fact shapes) — extracted at the LOC ceiling; a relation (ADR-0015
 // D2) is addressed by `relationKey`, never the intrinsic `nodeKey`. See that file's header.
-import { familyOf, claimNormOf, relationWellFormed, relationCarriers, resolveWriteIdentity } from './governed-emit-identity.js';
+import { familyOf, claimNormOf, relationWellFormed, relationCarriers, resolveWriteIdentity, stripForgedRelationSeal } from './governed-emit-identity.js';
 import type { EmitOut, TruthGate } from '@atlas/tools';
 import { ratifyCtxFor } from './governed-emit-route.js';
 // The ADDRESSABILITY gate + the commit-leg re-file (#136) — that file carries the measurement + the decision.
@@ -203,8 +203,19 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
     // So: keep `raw.seal` on `node` ONLY for `origin==='promoted'`; strip it for authored/undefined. Both
     // branches then flow to the seal carrier at gate 3 (present ⇒ reaches the durable current row + bytes).
     const { seal: _rejectedOperatorSeal, ...rawNoSeal } = raw;
-    const node: GroundedFact =
+    const nodeWithSeal: GroundedFact =
       deps.origin === 'promoted' ? { ...raw, tier, scope } : { ...rawNoSeal, tier, scope };
+
+    // 0.05 FORGED RELATION SEAL (#99 ADR-0018, decision D-d) — the origin strip above trusts a PROMOTED
+    //    write's `seal` because a promote is a mined fact re-emitted from content-addressed staging the sound
+    //    admit path wrote. For a RELATION that trust is tightened by the witness itself: the sound relation
+    //    oracle (`admit-relation.ts`) is the ONLY minter of a proven `depends-on` edge and ALWAYS stamps a
+    //    re-derivable `RelationWitness` beside the seal, so a `seal:'proven'` relation with no valid witness
+    //    could not have come from it — a forgery (a hand-supplied proven seal, or a promote of one). Strip its
+    //    seal+witness HERE so the forgery is never persisted OR read back as proven — the WRITE-time rejection
+    //    D-d requires, not a mere `unverifiable` at read. A non-relation and a valid promoted proven relation
+    //    pass through byte-identical; the stripped relation still admits as an ordinary unsealed grounded edge.
+    const node: GroundedFact = stripForgedRelationSeal(nodeWithSeal);
 
     //    THE FAMILY — `kind` cross-checked against `check`, on the SNAPSHOT (a spread reads each accessor
     //    once, so every gate below sees the same bytes `put` will). Read `familyOf` for why presence is the
@@ -359,14 +370,18 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
           //    `predicateSlot` is R3-optional; conditional spread keeps `slot` ABSENT (exactOptionalPropertyTypes).
           primaryAnchor, // the SAME value gate 2.1 bound the declared scope against — computed once
           ...(node.kind !== 'relation' && node.predicateSlot !== undefined ? { slot: node.predicateSlot } : {}),
-          // ── SEAL carrier (billy T0, #187 → SEAL-PROMOTE-CARRY) — the seal is trusted IFF the write is
-          //    promote-origin (a mined fact re-emitted from content-addressed staging written by the sound
-          //    admit path), never from an authored operator payload. `node.seal` is present here ONLY when the
-          //    gate-0 snapshot above KEPT it (i.e. `origin==='promoted'`); an authored seal was already stripped
-          //    there. Carry it onto the WriteRequest so it reaches the durable current row (and the CAS bytes,
-          //    which are `node` itself). Excludes relation — same discipline as the `slot` carrier above; the
-          //    seal is provenance only, never a `nodeKey`/route/authz leg (`upsert.ts`).
-          ...(node.kind !== 'relation' && node.seal !== undefined ? { seal: node.seal } : {}),
+          // ── SEAL carrier (billy T0, #187 → SEAL-PROMOTE-CARRY; RELATION added #99 ADR-0018) — the seal is
+          //    trusted IFF the write is promote-origin (a mined fact re-emitted from content-addressed staging
+          //    written by the sound admit path), never from an authored operator payload. `node.seal` is present
+          //    here ONLY when the gate-0 snapshot above KEPT it: `origin==='promoted'` AND (for a relation) a
+          //    re-derivable witness survived the gate-0.05 forgery strip. An authored seal, and a witness-less
+          //    proven relation seal, were both already stripped there. Carry it onto the WriteRequest so a
+          //    PROVEN `depends-on` relation's seal reaches the durable current row — its witness rides the CAS
+          //    bytes (`node` itself, `put` below), exactly as a predicate witness does, so reverify re-derives
+          //    it. The `!== 'relation'` guard is LIFTED (a relation could formerly NEVER be persisted proven —
+          //    the #99 relation leg): all four sealed families now flow the same discipline. Provenance only,
+          //    never a `nodeKey`/route/authz leg (`upsert.ts`).
+          ...(node.seal !== undefined ? { seal: node.seal } : {}),
           // ── RELATION carrier (ADDITIVE — ADR-0015 D2) — a `family:'relation'` write stamps its endpoint pair
           //    + kind on the ROW so the read-side `relationsOf` fold indexes it by both endpoints. Empty for a
           //    non-relation. `primaryAnchor` above is `endpointA` for a relation (the subject), by construction.

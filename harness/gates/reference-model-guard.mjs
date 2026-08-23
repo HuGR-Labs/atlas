@@ -117,6 +117,13 @@ const LEDGER = {
 
   // ── @atlas/adapter-io — the outer ring, where a reader is most likely to assume "shipped". ────────────
   'packages/adapter-io/src/poke-file.ts': { values: 3, shipped: null, banner: true }, // the third transport; nothing constructs it (task #36)
+  // #99 WP-R3 sound-relation MECHANICAL PROJECTION (relation-derive.ts) is DELETED from this ledger, not set to
+  // zero: WP-R7 wired its shipped caller — `relation-derive-run.ts` value-imports `deriveRelations` /
+  // `RelationBudgetExceededError`, reached from the composition root (`compose.ts` → `ComposedRuntime.
+  // deriveRelations`) and the `atlas derive-relations` CLI verb — so the module moved dead → live, exactly the
+  // `own.ts` transition documented in the retrieval cluster below. Measured with this gate's own analyser:
+  // 53 → 52 entries, relation-derive.ts absent, dead-value-exports 223 → 220 (its three exports), every other
+  // adapter-io row unchanged.
 
   // ── @atlas/memory — a CLOSED PACKAGE. No module anywhere outside `packages/memory` value-imports it; ──
   //    the sole cross-package edge is one `import type` in genesis/src/seed.ts. Its internal modules make

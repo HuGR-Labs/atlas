@@ -99,12 +99,22 @@ function renderData(data: unknown): string {
       relationKind: string;
       endpointA: string;
       endpointB: string;
+      seal?: string;
     }[];
     const unit = typeof d.unit === 'string' ? d.unit : '';
     const direction = typeof d.direction === 'string' ? d.direction : 'both';
+    // #99 R6 (AR-12): each edge surfaces its two-seal provenance as a trailing `[<seal>]` — a sound-minted
+    // proven `depends-on` and an advisory relation would otherwise read IDENTICALLY at the CLI. Printed ONLY
+    // when the fold carried a seal (additive/absent-tolerant, the `seal`/`freshness` discipline elsewhere in
+    // this file): an unsealed edge renders byte-identically to its pre-R6 output (no `[...]` suffix), so a
+    // missing seal is never a silent `[proven]`.
     const lines = [
       `  relations: ${unit} ${direction} — ${edges.length} edge(s)`,
-      ...edges.map((e) => `  relation ${e.relationKind} ${e.endpointA} -> ${e.endpointB} (${e.nodeKey})`),
+      ...edges.map(
+        (e) =>
+          `  relation ${e.relationKind} ${e.endpointA} -> ${e.endpointB} (${e.nodeKey})` +
+          (typeof e.seal === 'string' ? ` [${e.seal}]` : ''),
+      ),
     ];
     return `data:\n${lines.join('\n')}\n`;
   }
@@ -152,6 +162,26 @@ function renderData(data: unknown): string {
     return d.retracted === true
       ? `data:\n  retracted: ${d.a} ≢ ${d.b}\n`
       : `data:\n  linked: ${d.a} ≡ ${d.b}\n`;
+  }
+
+  // node (RELATION) — a resolved `RelationNode` (the `atlas node <addr>` read door) for the 2-ended family
+  // (#99 R6, AR-12). Recognised by `kind:'relation'` + a `grounding` object; the emit `{ id }` shape below has
+  // NEITHER and the `relations` LIST shape above carries `relations` (not a bare `kind`), so no cross-shadowing.
+  // A relation has no `claimNorm` — its claim IS the directed triple `endpointA <relationKind> endpointB`, so
+  // that is what renders. Before R6 this door produced NO block for a relation (the branch below was gated to
+  // advisory|predicate), so a proven `depends-on` was invisible at the user surface. The seal + witness render
+  // ONLY when present (additive/absent-tolerant); the witness is a `RelationWitness` (relationKind/target/
+  // sourceScope), NOT a `PredicateWitness` (slot/target/scope/atLeast) — a relation has no `PredicateSlot`.
+  if (d.kind === 'relation' && typeof d.grounding === 'object' && d.grounding !== null) {
+    let out =
+      `data:\n  node: ${String(d.id)}\n  tier: ${String(d.tier)}\n  kind: relation\n` +
+      `  relation: ${String(d.endpointA)} ${String(d.relationKind)} ${String(d.endpointB)}\n`;
+    if (typeof d.seal === 'string') out += `  seal: ${d.seal}\n`;
+    if (typeof d.witness === 'object' && d.witness !== null) {
+      const w = d.witness as Record<string, unknown>;
+      out += `  witness:\n    relationKind: ${String(w.relationKind)}\n    target: ${String(w.target)}\n    sourceScope: ${String(w.sourceScope)}\n`;
+    }
+    return out;
   }
 
   // node — a resolved `GroundedFact` (the `atlas node <addr>` read door, N6). Recognised by its `kind`

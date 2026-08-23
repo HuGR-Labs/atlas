@@ -14,7 +14,7 @@ import { main } from './cli.js';
 // yet still index `::` sub-file symbol nodes, so a symbol grounding is groundable and `subsumes` fires.
 void (async () => {
   await initAst();
-  const { handler, doctorSource, promote, own, relations, negations, verifyFact, reverify, readRefusal, readAdvisory } = composeRuntime(process.cwd());
+  const { handler, doctorSource, promote, own, relations, negations, verifyFact, reverify, deriveRelations, readRefusal, readAdvisory } = composeRuntime(process.cwd());
   // The provenance refusal rides the same injected-deps seam as the handler (conditional spread keeps it
   // ABSENT on a healthy repo — exactOptionalPropertyTypes), so prod and tests share ONE surface. `promote`
   // (the KNOW-8 governed promotion leg) rides that same seam: it is not a `Tool`, so it cannot arrive through
@@ -46,6 +46,12 @@ void (async () => {
     // not a `Tool` (opens no governed surface, writes nothing), so it cannot arrive through the handler;
     // threading it here is what makes `atlas verify-store` running code.
     reverify,
+    // `deriveRelations` (the #99 WP-R7 sound-relation derive-and-persist leg) rides the same injected-deps seam
+    // as `promote` — the other WRITE leg intercepted before the handler. It publishes through the existing emit
+    // door (opens no new governed surface), so it cannot arrive through the handler; threading it here is the
+    // entire difference between the mechanical relation projection (`relation-derive.ts`) being running code
+    // reachable as `atlas derive-relations` and being a ledgered reference model.
+    deriveRelations,
     ...(readRefusal !== undefined ? { readRefusal } : {}),
     // TRAVEL-BY-REPROOF — the ADVISORY MESSAGE for a `tracked-provable` store, rides the same conditional-
     // spread discipline as `readRefusal` (ABSENT, not `undefined`, on a healthy repo — exactOptionalPropertyTypes).

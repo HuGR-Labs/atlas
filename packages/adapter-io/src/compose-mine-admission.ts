@@ -114,6 +114,20 @@ export function buildMineAdmission(
       verifyDep({ kind: 'definition', claim: { sourceScope: scope, target } }).verdict === 'proven'
         ? 'proven'
         : 'abstain',
+    // [#99 sound relation, ADR-0018 — WP-R7] The DIRECTED-EDGE dual, wired over the SAME `createVerifyFactLeg`
+    // sound oracle the three legs above ride (`verify-fact-source.ts`, `kind:'relation'` → `verifyRelation`).
+    // All five legs are forwarded verbatim into the `RelationClaim`: `verifyRelation` binds BOTH endpoint FILES
+    // to the witnessed edge (endpointA a real referrer of `target`, endpointB the definer) at file granularity —
+    // a forged endpoint PAIR cannot ride a different true edge in the same directory. Only `depends-on` can
+    // prove (the oracle abstains on any other kind — a `calls` relation can never obtain a proven seal, AR-5);
+    // `proven`/`abstain` only (never `refuted`, the negation-only closed-world verdict). This is the leg that
+    // makes the SHIPPED mechanical projection (`relation-derive.ts`, driven by `atlas derive-relations`) admit a
+    // `proven`-sealed relation rather than fall to advisory — without it a relation proposal admitted through
+    // this same `AdmitDeps` has no oracle and `trySoundRelation` returns undefined (advisory, no seal).
+    verifyRelation: (relationKind, target, sourceScope, endpointA, endpointB) =>
+      verifyDep({ kind: 'relation', claim: { relationKind, target, sourceScope, endpointA, endpointB } }).verdict === 'proven'
+        ? 'proven'
+        : 'abstain',
     refine: () => null,
     indexState: axes.spatial,
     K: 0,

@@ -131,6 +131,21 @@ export type { VerifyFactLeg, VerifyFactData, VerifyFactOpts, VerifyKind, VerifyR
 export { reverifyFact, reverifyStore, MINED_TIER } from './reverify-store.js';
 export type { ReverifyOutcome, ReverifyRow, ReverifyReport, NodeFactPair } from './reverify-store.js';
 
+// #99 sound relation (ADR-0018) — WP-R3: the MECHANICAL projection of resolved cross-unit references to
+// PROVEN `depends-on` relations (no LLM). Reuses `createSymbolReverse` (the R2 oracle's own data) and admits
+// through the frozen R2 `admit` path. `deriveRelationEdges` is the pure edge core; the error is the fail-loud
+// budget breach (AR-30). WP-R7 wires the shipped caller.
+export { deriveRelations, deriveRelationEdges, RelationBudgetExceededError } from './relation-derive.js';
+export type { DeriveRelationDeps, DeriveRelationsResult, DerivedRelationEdge } from './relation-derive.js';
+
+// WP-R7 (REACHABILITY): the shipped caller — composes the R2 admit path (with the sound `verifyRelation` leg) +
+// the 2-entry grounding seam over the built `Axes`, drives the projection, and PERSISTS every proven relation
+// through the governed emit door. Reached from the composition root (`ComposedRuntime.deriveRelations`) and the
+// `atlas derive-relations` CLI verb — the edge that turns `relation-derive.ts` from a reference model into
+// running code.
+export { runDeriveRelations } from './relation-derive-run.js';
+export type { DeriveRelationsRun, DeriveRelationRow, DeriveRelationsRunDeps } from './relation-derive-run.js';
+
 // Sound-negation escape analysis (#99): a target that never escapes into shared state is
 // groundable as a negative from the static index alone. Engine is language-blind; only the
 // classifier + grammar are per-language.

@@ -25,8 +25,8 @@
 // the oracles' headers name: `nodeHashOfPath(doc.relativePath)` for every document `createSymbolReverse` can
 // ever return a hash for, and no others (`symbol-reverse.ts` mints hashes for precisely those documents).
 
-import { verifyCount, verifyDefinition, verifyDependency, verifyNegation } from '@atlas/genesis';
-import type { CountClaim, DefClaim, DepClaim, FactVerdict, NegationClaim, NegationVerdict } from '@atlas/genesis';
+import { verifyCount, verifyDefinition, verifyDependency, verifyNegation, verifyRelation } from '@atlas/genesis';
+import type { CountClaim, DefClaim, DepClaim, FactVerdict, NegationClaim, NegationVerdict, RelationClaim } from '@atlas/genesis';
 import { createSymbolReverse, isLocalSymbol, nodeHashOfPath } from '@atlas/index';
 import type { ScipOutput, SymbolReverseApi } from '@atlas/index';
 import type { Hash } from '@atlas/contracts';
@@ -41,7 +41,8 @@ export type VerifyReq =
   | { readonly kind: 'dependency'; readonly claim: DepClaim }
   | { readonly kind: 'count'; readonly claim: CountClaim }
   | { readonly kind: 'definition'; readonly claim: DefClaim }
-  | { readonly kind: 'negation'; readonly claim: NegationClaim };
+  | { readonly kind: 'negation'; readonly claim: NegationClaim }
+  | { readonly kind: 'relation'; readonly claim: RelationClaim };
 
 /** The composition-root leg: a typed request → the oracle's verdict. TOTAL — every oracle is pure + total
  *  (a malformed claim ABSTAINS, never throws), and the built feed adds no failure path of its own. */
@@ -90,6 +91,11 @@ export function createVerifyFactLeg(
         return verifyDefinition(req.claim, reverse, pathOfHash, isLocalSymbol);
       case 'negation':
         return verifyNegation(req.claim, reverse, pathOfHash, isLocalSymbol);
+      case 'relation':
+        // #99 sound relation (ADR-0018) — the directed-edge oracle, dispatched on the SAME feed. Only
+        // 'depends-on' can prove (verifyRelation abstains on any other kind); a witnessed cross-unit reference
+        // under sourceScope is the proof. Reachable via the `atlas verify-fact` CLI verb once WP-R7 wires it.
+        return verifyRelation(req.claim, reverse, pathOfHash, isLocalSymbol);
     }
   };
 }
