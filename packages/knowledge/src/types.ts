@@ -339,6 +339,49 @@ export type PredicateSlot =
   | 'definition';
 
 /**
+ * The SEMANTIC subset of `PredicateSlot` (196c) — the eight slots NO mechanical oracle decides (now or
+ * planned), so they land `justified`, never `proven`: a grounded, contestable reading whose derivation
+ * travels with the fact (genesis-epistemic-contract.md §JUSTIFIED). DELIBERATELY EXCLUDES the oracle-backed
+ * slots (`dependency`/`count`, already `proven`) AND the structural-provable trio (`definition`/`precondition`/
+ * `postcondition`), which get a real oracle later and MUST NOT be laundered as `justified` here. A CLOSED
+ * subtype of `PredicateSlot` — every member is one, so `isSemanticSlot` NARROWS to it. */
+export type SemanticSlot =
+  | 'invariant'
+  | 'contract'
+  | 'sideeffect'
+  | 'ownership'
+  | 'perf-bound'
+  | 'security-property'
+  | 'gotcha'
+  | 'rationale';
+
+/** The runtime copy of the eight-member semantic vocabulary (KNOW-10 closed-slot discipline — the erased
+ *  `SemanticSlot` type enforces nothing at a value boundary, so the semantic mining arm validates the model's
+ *  chosen slot against THIS list). Additive to the normative `PredicateSlot`/`PREDICATE_SLOTS` (router.ts):
+ *  it names no member the 13-slot vocabulary does not, it only carves out the justified-eligible subset. */
+export const SEMANTIC_SLOTS: readonly SemanticSlot[] = [
+  'invariant',
+  'contract',
+  'sideeffect',
+  'ownership',
+  'perf-bound',
+  'security-property',
+  'gotcha',
+  'rationale',
+];
+
+const SEMANTIC_SLOT_SET: ReadonlySet<string> = new Set(SEMANTIC_SLOTS);
+
+/** Closed-vocabulary membership guard that NARROWS a `PredicateSlot` (or any `unknown`) to `SemanticSlot`.
+ *  TOTAL over `unknown`: `Set.has` never throws/coerces, so a non-string, an out-of-vocabulary slot, or an
+ *  oracle/structural slot (`dependency`/`count`/`definition`/…) all answer `false` — which is what lets the
+ *  semantic arm ABSTAIN (fail-closed) on a model that classified outside the eight, never mint a fact whose
+ *  slot the harness cannot honestly seal `justified`. */
+export function isSemanticSlot(x: unknown): x is SemanticSlot {
+  return typeof x === 'string' && SEMANTIC_SLOT_SET.has(x);
+}
+
+/**
  * A proposed, un-ratified fact in staging (from the explorer). Transcribed from atlas-knowledge:31.
  *
  * [SIG-TBD — record NOT frozen] atlas-knowledge:31 is a PROSE characterization ("a proposed, un-ratified

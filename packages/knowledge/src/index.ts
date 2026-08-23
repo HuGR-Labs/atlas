@@ -9,6 +9,7 @@
 // The frozen data model + the co-located EvaluatorApi / StoreApi interfaces consumed by ≥2 src files.
 // Every other frozen interface now lives beside its impl and is re-exported by `export *` below.
 export type * from './types.js';
+export { SEMANTIC_SLOTS, isSemanticSlot } from './types.js'; // 196c — the runtime eight-member semantic vocabulary + its narrowing guard (KNOW-10 closed-slot discipline; `export type *` above carries only the erased types)
 
 // ── Runtime surface ────────────────────────────────────────────────────────────────────────────────
 export * from './lifecycle/freshness.js';   // WP-4.10-a.KNOW — knowledge drift oracle binds to the grounding subtreeHash (Campaign-4)

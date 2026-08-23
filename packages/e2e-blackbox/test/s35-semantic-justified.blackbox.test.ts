@@ -1,18 +1,21 @@
-// @atlas/e2e-blackbox — test/s35-gotcha-justified.blackbox.test.ts  (196b — the `justified` slice, end to end)
+// @atlas/e2e-blackbox — test/s35-semantic-justified.blackbox.test.ts  (196c — the general `justified` arm, end to end)
 //
-// NARRATIVE. The 196b vertical slice (`docs/design/196b-justified-vertical-slice.md`) closes three holes so a
-// SEMANTIC slot survives `atlas mine` as a first-class fact: it is TYPED (`predicateSlot:'gotcha'`), SEALED
-// `justified` (a real seal, distinct from a bare advisory and from `proven`), and CARRIES ITS DERIVATION (the
-// contestable grounds that "lead a reader to the same conclusion"). The unit tests prove each leg in process;
-// this story proves the THREE LEGS COMPOSE over the real `atlas` binary — a mine drives the proposer, ADMIT
-// lands it `justified`, STORE keeps the seal through promotion, and the durable node reads it back carrying all
-// three. This is A6 (the whole chain emits ONE such fact) and A7 (the DERIVATION stored is the block's
-// contestable grounds, and the model's free SCRATCH reasoning above the block is parsed away, never persisted).
+// NARRATIVE. The 196b vertical slice proved the `justified` seal on ONE slot (`gotcha`); 196c generalizes it to
+// the ONE general SEMANTIC arm, where the model CLASSIFIES the fact into one of the eight `SemanticSlot`s. This
+// story drives the arm with a fact classified `invariant` — a DIFFERENT slot than gotcha — to prove the chain is
+// slot-general: a SEMANTIC slot survives `atlas mine` as a first-class fact that is TYPED
+// (`predicateSlot:'invariant'`), SEALED `justified` (a real seal, distinct from a bare advisory and from
+// `proven`), and CARRIES ITS DERIVATION (the contestable grounds that "lead a reader to the same conclusion").
+// The unit tests prove each leg in process; this story proves the THREE LEGS COMPOSE over the real `atlas`
+// binary — a mine drives the proposer, ADMIT lands it `justified`, STORE keeps the seal through promotion, and
+// the durable node reads it back carrying all three. This is A6 (the whole chain emits ONE such fact) and A7
+// (the DERIVATION stored is the block's contestable grounds, and the model's free SCRATCH reasoning above the
+// block is parsed away, never persisted).
 //
 // ZERO METERED MODEL SPEND. `echo` stands in for the model — the S33/S237/S239 idiom: `ATLAS_MODEL_CONFIG`
 // points OUTSIDE the repo (the arbitrary-code-execution guard `atlas mine` enforces against an in-repo config),
 // and the canned answer it echoes is what the model WOULD have said. What is under test is the harness's
-// behaviour GIVEN a gotcha answer, never a live model. The gotcha arm is selected by `ATLAS_MINE_SLOT=gotcha`.
+// behaviour GIVEN a semantic answer, never a live model. The semantic arm is selected by `ATLAS_MINE_SLOT=semantic`.
 //
 // WHY A SINGLE-SITE FIXTURE. The structural frontier is derived from the SCIP dep edges ALONE (empty index ⇒
 // 0 sites ⇒ the proposer is never reached — s14). One file with one outgoing cross-unit reference yields
@@ -42,6 +45,7 @@ const FILES = {
   'src/config.ts':
     "import { readEnv } from './env';\n\nexport function parseFlag(name: string): boolean {\n  return readEnv(name) === '1';\n}\n",
 };
+const SEMANTIC_SLOT = 'invariant'; // a DIFFERENT slot than 196b's gotcha — proves the arm is slot-general
 const INDEX = [{ path: 'src/config.ts', defines: ['config/parseFlag().'], references: ['env/readEnv().'] }];
 /** Appoints a curator over the mined scope so promote has a named ratifier (ADR-0008). */
 const POLICY = JSON.stringify({
@@ -50,22 +54,24 @@ const POLICY = JSON.stringify({
   authz: { scopes: { 'atlas:mined': [CURATOR] } },
 });
 
-/** The two fields of the gotcha `atlas-fact` block — the contestable claim and its grounds (propose-gotcha.md). */
+/** The three fields of the semantic `atlas-fact` block — the classified slot, the contestable claim and its
+ *  grounds (propose-semantic.md). The claim is an INVARIANT: a property that always holds for parseFlag. */
 const CLAIM =
   'parseFlag returns true ONLY for the exact string "1"; any other truthy env value like "true" or "yes" yields false';
 const DERIVATION =
   'the body compares readEnv(name) === "1" with strict equality, so every value other than the one-character string "1" returns false';
 
-/** A distinctive marker planted in the FREE SCRATCH region above the block (STEP 1 of propose-gotcha.md). It must
- *  NEVER appear in the persisted node — the whole point of GEN-12: reasoning is scratch, only the block survives. */
+/** A distinctive marker planted in the FREE SCRATCH region above the block (STEP 1 of propose-semantic.md). It
+ *  must NEVER appear in the persisted node — the whole point of GEN-12: reasoning is scratch, only the block survives. */
 const SCRATCH_SENTINEL = 'SCRATCH_SENTINEL_MUST_NOT_BE_PERSISTED';
 
-/** The full canned model answer: free reasoning (discarded) THEN exactly one fenced `atlas-fact` block. */
-const GOTCHA_ANSWER =
-  `${SCRATCH_SENTINEL}: let me reason freely. parseFlag reads an env var; I will try to refute a candidate gotcha ` +
+/** The full canned model answer: free reasoning (discarded) THEN exactly one fenced `atlas-fact` block carrying
+ *  the model's CLASSIFICATION (`slot:'invariant'`) alongside the claim and derivation. */
+const SEMANTIC_ANSWER =
+  `${SCRATCH_SENTINEL}: let me reason freely. parseFlag reads an env var; I will try to refute a candidate ` +
   `against the bytes before emitting.\n` +
   '```atlas-fact\n' +
-  JSON.stringify({ claim: CLAIM, derivation: DERIVATION }) +
+  JSON.stringify({ slot: SEMANTIC_SLOT, claim: CLAIM, derivation: DERIVATION }) +
   '\n```\n';
 
 /** The shape of the durable node the CAS holds (only the legs this story asserts). */
@@ -93,9 +99,9 @@ let stored: StoredNode;
 
 beforeAll(() => {
   repo = makeFixtureRepo({ files: FILES, index: INDEX, policy: POLICY });
-  op = operatorConfig(GOTCHA_ANSWER);
+  op = operatorConfig(SEMANTIC_ANSWER);
 
-  const mine = runAtlas(repo.repoPath, ['mine', '.'], { ATLAS_MODEL_CONFIG: op.path, ATLAS_MINE_SLOT: 'gotcha' });
+  const mine = runAtlas(repo.repoPath, ['mine', '.'], { ATLAS_MODEL_CONFIG: op.path, ATLAS_MINE_SLOT: 'semantic' });
   if (mine.exitCode !== 0) throw new Error(`S35 setup: mine failed:\n${mine.stdout}\n${mine.stderr}`);
   // ONE site, ONE fact — the gotcha answer drove exactly one emission.
   if (!mine.stdout.includes('genesis: seeded 1 candidate fact(s)'))
@@ -116,13 +122,13 @@ afterAll(() => {
   if (op?.dir) rmSync(op.dir, { recursive: true, force: true });
 });
 
-describe('S35 — `atlas mine` emits ONE typed+justified gotcha fact end to end (196b vertical slice)', () => {
+describe('S35 — `atlas mine` emits ONE typed+justified semantic fact end to end (196c general arm)', () => {
   it('A6: the promoted node is read back via `atlas node`, kind advisory + seal justified + the block claim', () => {
     expect(addr).toMatch(/^[0-9a-f]{64}$/);
     const node = runAtlas(repo.repoPath, ['node', addr]);
     expect(node.exitCode).toBe(0);
     expect(node.stdout).toContain('status: ok');
-    // The three legs the node door surfaces: it IS an advisory node (the 196b semantic-slot carrier), it is
+    // The three legs the node door surfaces: it IS an advisory node (the semantic-slot carrier), it is
     // sealed `justified` (NOT a bare unsealed advisory, NOT `proven`), and its claim is the block's claim.
     expect(node.stdout).toContain('kind: advisory');
     expect(node.stdout).toContain('seal: justified');
@@ -131,10 +137,12 @@ describe('S35 — `atlas mine` emits ONE typed+justified gotcha fact end to end 
     expect(node.stdout).not.toContain('seal: proven');
   });
 
-  it('A6: the DURABLE fact the node reads back carries predicateSlot:gotcha + seal:justified + a non-empty derivation', () => {
+  it('A6: the DURABLE fact carries predicateSlot:invariant (a NON-gotcha slot) + seal:justified + a non-empty derivation', () => {
     // The typed slot and the derivation live in the durable bytes the `atlas node` door serves (the render does
     // not print them today — S33's own `predicateSlot` is asserted off the CAS for the same reason). ONE store.
-    expect(stored.predicateSlot).toBe('gotcha');
+    // The slot is `invariant`, NOT `gotcha` — proving the general arm carries the model's OWN classification.
+    expect(stored.predicateSlot).toBe(SEMANTIC_SLOT);
+    expect(stored.predicateSlot).not.toBe('gotcha');
     expect(stored.seal).toBe('justified');
     expect(typeof stored.derivation).toBe('string');
     expect((stored.derivation ?? '').length).toBeGreaterThan(0);
@@ -154,7 +162,7 @@ describe('S35 — `atlas mine` emits ONE typed+justified gotcha fact end to end 
   });
 
   it('TEETH: with a NO-FACT proposer the SAME fixture emits ZERO facts — emission is driven by the answer, never fabricated', () => {
-    // The decisive control: swap the canned gotcha for the abstain token and NOTHING is emitted. This proves the
+    // The decisive control: swap the canned answer for the abstain token and NOTHING is emitted. This proves the
     // A6 emission above came FROM the proposer's answer, not from the mine path inventing a fact at a visited
     // site. Same fixture, same arm, same one site — only the model's answer changes.
     const teethRepo = makeFixtureRepo({ files: FILES, index: INDEX, policy: POLICY });
@@ -162,7 +170,7 @@ describe('S35 — `atlas mine` emits ONE typed+justified gotcha fact end to end 
     try {
       const mine = runAtlas(teethRepo.repoPath, ['mine', '.'], {
         ATLAS_MODEL_CONFIG: teethOp.path,
-        ATLAS_MINE_SLOT: 'gotcha',
+        ATLAS_MINE_SLOT: 'semantic',
       });
       expect(mine.exitCode).toBe(0);
       expect(mine.stdout).toContain('genesis: seeded 0 candidate fact(s)');
