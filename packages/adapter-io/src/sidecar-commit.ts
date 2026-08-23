@@ -366,6 +366,20 @@ function commitLoop<T>(
     // one layer up in the DECISION (`next` is still `projection`, never dropped); this only elides the
     // physical, redundant re-publication of an unchanged head. `persistSidecar`'s unconditional path passes its
     // OWN projection object (never the one just read), so `next !== snapshot` there and it is unaffected.
+    //
+    // WHY THE `put` LOOP RUNS FIRST — a CALLER INVARIANT, stated because the loop does not enforce it: `next` is
+    // reference-equal to `snapshot` ONLY when the decision minted nothing, and `knowledgeUpsert` couples minting
+    // with the CAS `put` (every product decision pushes its bytes in the SAME step it rebinds `projection`, so
+    // `put` is empty exactly when `next === snapshot`). A HAND-WRITTEN decision returning `{ next: <the snapshot>,
+    // put: [obj] }` would write `obj` to CAS and then skip publication, orphaning a (harmless) unreferenced blob
+    // — no such caller exists, and putting the loop before the skip keeps even that hypothetical fail-safe: the
+    // bytes land, only the redundant projection re-publish is elided.
+    //
+    // BEHAVIOR NOTE — on a FRESH store an abstaining first pass now settles WITHOUT publishing an empty
+    // generation (`read.projection` undefined ⇒ `snapshot` is a fresh `emptyStore()` ⇒ `next === snapshot`).
+    // Readers treat an absent sidecar and a present-empty one identically (both resolve to `emptyStore()` via
+    // `readSidecarSet`), and file-absence was already the pre-first-commit state — so nothing a reader can
+    // observe changes; it only stops minting an empty file nobody distinguishes from no file.
     if (decision.next === snapshot) return { settled: true, out: decision.out };
     // `superseded` SETTLES. The decision's bytes are durable (see {@link PublishOutcome}), so the ONLY
     // honest answers are this call's own `out` — the one belonging to the attempt that actually published —
