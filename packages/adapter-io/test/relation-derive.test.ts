@@ -83,8 +83,8 @@ const admitDeps: AdmitDeps = {
   doors: { grounded: () => true, nonObvious: () => false },
   predicate: { synthesize: () => null, verify: () => 'NA', teeth: () => false },
   typeOracle: { expressible: () => false, diagnose: () => 'NA' },
-  verifyRelation: (relationKind, target, sourceScope) =>
-    leg({ kind: 'relation', claim: { relationKind, target, sourceScope } }).verdict === 'proven'
+  verifyRelation: (relationKind, target, sourceScope, endpointA, endpointB) =>
+    leg({ kind: 'relation', claim: { relationKind, target, sourceScope, endpointA, endpointB } }).verdict === 'proven'
       ? 'proven'
       : 'abstain',
   refine: () => null,

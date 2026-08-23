@@ -150,37 +150,58 @@ export function verifyDefinition(
   return abstain('def-out-of-scope');
 }
 
-/** One "unit A `relationKind` global symbol B" claim (#99 sound relation, ADR-0018). No `worldScope`: a proven
- *  relation is a POSITIVE WITNESSED EXISTENCE (a resolved cross-unit reference to `target` lies under
- *  `sourceScope`), sound in ANY world — there is no closed-world absence to guard, exactly as `DefClaim` carries
- *  no completeness world. `sourceScope` is endpointA's VERIFY-SCOPE (the directory the witnessed reference must
- *  lie under); `target` is the global SCIP symbol under endpointB. Only `'depends-on'` is mechanically provable
- *  (F3, §2.3 — SCIP has no call-role occurrence, so `calls` cannot be proven distinct from a reference). */
+/** One "unit A `relationKind` unit B" claim (#99 sound relation, ADR-0018). No `worldScope`: a proven relation
+ *  is a POSITIVE WITNESSED EXISTENCE (a resolved cross-unit reference from endpointA to a definition of `target`
+ *  in endpointB), sound in ANY world — there is no closed-world absence to guard, exactly as `DefClaim` carries
+ *  no completeness world.
+ *
+ *  A relation is a unit→unit edge — it has TWO anchors, unlike the dependency oracle's unit→symbol claim (ONE
+ *  anchor). So the proof binds BOTH endpoints at FILE granularity, not merely a directory scope:
+ *   - `endpointA` is the qualifiedPath of the SUBJECT unit — it must be a REAL REFERRER of `target` (its file
+ *     appears in `reverseCallers(target)`), never just some file under `sourceScope` (a directory another file
+ *     happens to reference from is NOT this endpoint's edge).
+ *   - `endpointB` is the qualifiedPath of the OBJECT unit — its file must be the DEFINER of `target`
+ *     (`definesAt(target)`), never merely a wrong-but-existing file.
+ *  `sourceScope` remains endpointA's verify-scope leg (retained on the witness/reverify tamper binding); `target`
+ *  is the global SCIP symbol under endpointB. Only `'depends-on'` is mechanically provable (F3, §2.3 — SCIP has
+ *  no call-role occurrence, so `calls` cannot be proven distinct from a reference). */
 export type RelationClaim = {
   readonly relationKind: RelationKind;
   readonly target: string;
   readonly sourceScope: string;
+  readonly endpointA: string;
+  readonly endpointB: string;
 };
+
+/** The FILE portion of a unit key — endpoints are qualifiedPaths and may carry a `::symbol` structural
+ *  refinement (KNOW-15d's `::` join); `pathOfHash` yields the BARE doc path, so strip from the first `::` on so
+ *  the two can be compared for equality. (A bare file path — the mechanical projection's own endpoint form,
+ *  `relation-derive.ts` — passes through unchanged.) */
+const docOf = (x: string): string => x.split('::')[0] ?? x;
 
 /**
  * PROVE/ABSTAIN on `claim`, over the live `reverse` feed (`SymbolReverseApi`, @atlas/index) — the RELATION class
- * of the PROVEN family (#99, ADR-0018). PURE + TOTAL: no IO, no clock, never throws. It is `verifyDependency`'s
- * witnessed-existence logic on the directed pair, with ONE additional gate FIRST — the relation kind — because
- * only `depends-on` is provable from the frozen SCIP projection (§2.3: `ScipSymbolRole` has no call-role, so a
- * `calls` edge cannot be proven distinct from a reference). NEVER refutes (see `FactVerdict`): an absent edge is
- * abstained, never a "these do not depend" fact.
+ * of the PROVEN family (#99, ADR-0018). PURE + TOTAL: no IO, no clock, never throws. A relation is a unit→unit
+ * edge (TWO anchors), so — unlike `verifyDependency`'s directory-scoped unit→symbol existence — the proof BINDS
+ * BOTH endpoints to the witnessed edge at FILE granularity; a forged endpoint PAIR (a same-directory referrer, a
+ * wrong-but-existing definer) can therefore no longer ride a DIFFERENT true edge in the directory. It keeps the
+ * relation-kind gate FIRST because only `depends-on` is provable from the frozen SCIP projection (§2.3:
+ * `ScipSymbolRole` has no call-role). NEVER refutes (see `FactVerdict`): an absent/unbound edge is abstained,
+ * never a "these do not depend" fact.
  *
- *   0. malformed (`target`/`sourceScope` any empty) ⇒ abstain('malformed').
+ *   0. malformed (`target`/`sourceScope`/`endpointA`/`endpointB` any empty) ⇒ abstain('malformed').
  *   1. `relationKind !== 'depends-on'` (AR-5 — `calls`/any future kind is NOT mechanically provable) ⇒
  *      abstain('relation-kind-not-provable').
  *   2. `isLocal(target)` (a `local ` SCIP symbol — document-scoped, #189) ⇒ abstain('target-not-global').
  *   3. `!reverse.resolves(target)` (#220 — no in-index DEFINITION: a PHANTOM target, and the honest boundary for
  *      a reflection/dynamic-dispatch/cross-language edge whose `to` never resolves — AR-17) ⇒
  *      abstain('target-unresolvable').
- *   4. a real reference to `target` lies under `sourceScope` (`reverseCallers(target) ∩ sourceScope ≠ ∅`) ⇒
- *      proven — a witnessed cross-unit reference, SOUND IN ANY WORLD (an incomplete index cannot fabricate a
- *      referrer). This is the SAME resolved `DepEdge` `verifyDependency` witnesses (verify-fact.ts:96).
- *   5. else ⇒ abstain('no-caller-in-scope') — no reference witnessed under `sourceScope`. NOT a refute.
+ *   4. endpointA is a REAL REFERRER of `target` — its FILE appears in `reverseCallers(target)`. Else ⇒
+ *      abstain('endpointA-not-a-referrer'): a same-directory file that references nothing does not re-prove.
+ *   5. endpointB is the DEFINER of `target` — `definesAt(target)`'s file equals endpointB's file. Else ⇒
+ *      abstain('endpointB-not-the-definer'): a wrong-but-existing object file does not re-prove.
+ *   6. BOTH held ⇒ proven — a witnessed cross-unit reference from endpointA to endpointB's definition of
+ *      `target`, SOUND IN ANY WORLD (an incomplete index cannot fabricate a referrer or a definition).
  */
 export function verifyRelation(
   claim: RelationClaim,
@@ -188,16 +209,27 @@ export function verifyRelation(
   pathOfHash: (h: Hash) => string | undefined,
   isLocal: (sym: string) => boolean,
 ): FactVerdict {
-  const { relationKind, target, sourceScope } = claim;
-  if (target.length === 0 || sourceScope.length === 0) return abstain('malformed');
+  const { relationKind, target, sourceScope, endpointA, endpointB } = claim;
+  if (target.length === 0 || sourceScope.length === 0 || endpointA.length === 0 || endpointB.length === 0) {
+    return abstain('malformed');
+  }
   if (relationKind !== 'depends-on') return abstain('relation-kind-not-provable'); // AR-5 — calls is not provable
   if (isLocal(target)) return abstain('target-not-global');
   if (!reverse.resolves(target)) return abstain('target-unresolvable'); // AR-3/AR-17 — phantom/dynamic/cross-language
 
-  if (anyInScope(reverse.reverseCallers(target), pathOfHash, sourceScope)) {
-    return { verdict: 'proven', oracle: 'symbol-reverse' };
+  // BINDING 1 — endpointA must be a REAL referrer of `target` at FILE granularity (not merely a file under
+  // `sourceScope`; a DIFFERENT file in that directory referencing `target` is not THIS endpoint's edge).
+  const docA = docOf(endpointA);
+  if (!reverse.reverseCallers(target).some((h) => pathOfHash(h) === docA)) {
+    return abstain('endpointA-not-a-referrer');
   }
-  // No witnessed reference under sourceScope. NOT a refute (cross-package completeness is not guaranteed — see
-  // FactVerdict): abstain. No worldScope leg, so no 'scope-open' discriminant (a positive existence needs none).
-  return abstain('no-caller-in-scope');
+  // BINDING 2 — endpointB must be the DEFINER of `target` (an existing-but-wrong file is not this edge's object).
+  const defHash = reverse.definesAt(target);
+  const defPath = defHash === undefined ? undefined : pathOfHash(defHash);
+  if (defPath === undefined || defPath !== docOf(endpointB)) {
+    return abstain('endpointB-not-the-definer');
+  }
+  // BOTH endpoints bound to the witnessed edge — a proven cross-unit reference, SOUND IN ANY WORLD. NOT a refute
+  // (cross-package completeness is not guaranteed — see FactVerdict). No worldScope leg (a positive needs none).
+  return { verdict: 'proven', oracle: 'symbol-reverse' };
 }

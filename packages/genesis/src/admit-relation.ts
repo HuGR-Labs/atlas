@@ -146,11 +146,16 @@ export function buildSoundRelation(
  */
 export function trySoundRelation(
   p: RelationProposal,
-  verifyRelation: ((relationKind: RelationKind, target: string, sourceScope: string) => 'proven' | 'abstain') | undefined,
+  verifyRelation:
+    | ((relationKind: RelationKind, target: string, sourceScope: string, endpointA: string, endpointB: string) => 'proven' | 'abstain')
+    | undefined,
   score: (claimNorm: string) => ObviousnessScore,
 ): RelationNode | undefined {
   const witness = relationWitnessOf(p);
   if (witness === undefined || verifyRelation === undefined) return undefined;
-  if (verifyRelation(witness.relationKind, witness.target, witness.sourceScope) !== 'proven') return undefined;
+  // A relation is a unit→unit edge (TWO anchors): the oracle binds BOTH endpoint FILES to the witnessed edge
+  // (endpointA a real referrer, endpointB the definer), so the proposal's endpoints are passed alongside the
+  // witness legs. The stored witness needs no endpoints — the RelationNode already carries them for reverify.
+  if (verifyRelation(witness.relationKind, witness.target, witness.sourceScope, p.endpointA, p.endpointB) !== 'proven') return undefined;
   return buildSoundRelation(p, witness, score(relationClaimNormFromWitness(witness)));
 }

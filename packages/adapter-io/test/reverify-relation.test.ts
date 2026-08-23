@@ -88,15 +88,16 @@ describe('reverifyRelation — one proven depends-on relation against the real o
 
   // ── AR-25 — an endpoint's file/unit is removed (docExists false for endpointA OR endpointB) →
   //    broken/unverifiable, and NO crash on a dangling endpoint. ─────────────────────────────────────────────
-  it('AR-25 — a dangling endpointB (its file removed from the index) → unverifiable, no crash', () => {
+  it('AR-25 — a dangling endpointB (its file removed from the index) → broken (TAMPERED), no crash', () => {
     const fact = relation('rel-ar25b', { seal: 'proven', tier: 'T2', witness: OK_WITNESS, endpointB: 'src/GONE.ts' });
     let row: ReturnType<typeof reverifyFact>;
     expect(() => { row = reverifyFact(node('rel-ar25b'), fact, leg, docExists); }).not.toThrow();
-    expect(row!.outcome).toBe('unverifiable');
+    expect(row!.outcome).toBe('broken'); // Finding 2 — a tamper is `broken` (predicate-path aligned), not `unverifiable`
+    expect(row!.reason).toContain('TAMPERED');
     expect(row!.reason).toContain('does not name a document');
   });
 
-  it('AR-25 — a dangling endpointA (unitScopeOf still matches, but its file is gone) → unverifiable, no crash', () => {
+  it('AR-25 — a dangling endpointA (unitScopeOf still matches, but its file is gone) → broken (TAMPERED), no crash', () => {
     // endpointA `src/gone/a.ts` → unitScopeOf = `src/gone`, so we align sourceScope to it to isolate the
     // docExists failure from the (b) scope binding — the ONLY reason it drops must be the missing file.
     const fact = relation('rel-ar25a', {
@@ -106,7 +107,8 @@ describe('reverifyRelation — one proven depends-on relation against the real o
     });
     let row: ReturnType<typeof reverifyFact>;
     expect(() => { row = reverifyFact(node('rel-ar25a'), fact, leg, docExists); }).not.toThrow();
-    expect(row!.outcome).toBe('unverifiable');
+    expect(row!.outcome).toBe('broken');
+    expect(row!.reason).toContain('TAMPERED');
     expect(row!.reason).toContain('does not name a document');
   });
 });
@@ -136,23 +138,50 @@ describe('reverifyRelation — AR-10 TAMPER BINDINGS: forged witness / anchor / 
     expect(reverifyFact(node('rel-empscope'), fact, leg, docExists)?.outcome).toBe('unverifiable');
   });
 
-  it('WRONG TIER — a committer-chosen tier (T0) over the same true witness is TAMPERED → unverifiable', () => {
+  it('WRONG TIER — a committer-chosen tier (T0) over the same true witness is TAMPERED → broken', () => {
     const fact = relation('rel-tier', { seal: 'proven', tier: 'T0', witness: OK_WITNESS });
     const row = reverifyFact(node('rel-tier'), fact, leg, docExists);
-    expect(row?.outcome).toBe('unverifiable');
+    expect(row?.outcome).toBe('broken'); // Finding 2 — tamper aligned to the predicate path's `broken`
     expect(row?.reason).toContain('TAMPERED');
     expect(row?.reason).toContain('tier');
   });
 
-  it('MISMATCHED ANCHOR SCOPE — endpointA does NOT sit directly under the witness sourceScope → unverifiable', () => {
+  it('MISMATCHED ANCHOR SCOPE — endpointA does NOT sit directly under the witness sourceScope → broken (TAMPERED)', () => {
     // endpointA `src/deep/a.ts` → unitScopeOf = `src/deep`, but the witness ranges over `src` — the relation is
     // not about the edge its witness proves. (The widening attack: any real edge under `src` is trivially also
     // "under" a deeper anchor; the equality binding closes it.)
     const fact = relation('rel-anchor', { seal: 'proven', endpointA: 'src/deep/a.ts', witness: OK_WITNESS });
     const row = reverifyFact(node('rel-anchor'), fact, leg, docExists);
-    expect(row?.outcome).toBe('unverifiable');
+    expect(row?.outcome).toBe('broken');
     expect(row?.reason).toContain('TAMPERED');
     expect(row?.reason).toContain('sourceScope');
+  });
+
+  // ── SOUNDNESS TEETH (cold-review Finding 1) — a forged endpoint PAIR that survives the SHAPE checks above must
+  //    FAIL the oracle replay. Before the endpoint-binding fix these read `re-proven` (a wrong-but-existing
+  //    definer / a same-directory non-referrer rode a DIFFERENT true edge under `src`). Now → `broken`. ─────────
+  it('FORGED endpointB — a wrong-but-EXISTING file (not the definer of the target) → broken, never re-proven', () => {
+    // endpointA `src/a.ts` IS a real referrer of GREET; endpointB `src/a.ts` EXISTS but is NOT `definesAt(GREET)`
+    // (that is `src/def.ts`). The old directory-scoped oracle re-proved (some file under `src` references GREET);
+    // the endpointB definer bind refuses it.
+    const fact = relation('rel-forgeB', { seal: 'proven', tier: 'T2', endpointA: 'src/a.ts', endpointB: 'src/a.ts', witness: OK_WITNESS });
+    const row = reverifyFact(node('rel-forgeB'), fact, leg, docExists);
+    expect(row?.outcome).toBe('broken');
+    expect(row?.outcome).not.toBe('re-proven');
+    expect(row?.reason).toContain('did NOT re-prove');
+    expect(row?.reason).toContain('endpointB-not-the-definer');
+  });
+
+  it('FORGED endpointA — a same-directory file that references NOTHING → broken, never re-proven', () => {
+    // endpointA `src/def.ts` sits under `src` (so the scope tamper binding passes) and EXISTS, but it references
+    // NOTHING — only `src/a.ts` references GREET. The old oracle re-proved (SOME file under `src` references
+    // GREET); the endpointA referrer bind refuses this forged pair. endpointB stays the true definer to isolate A.
+    const fact = relation('rel-forgeA', { seal: 'proven', tier: 'T2', endpointA: 'src/def.ts', endpointB: 'src/def.ts', witness: OK_WITNESS });
+    const row = reverifyFact(node('rel-forgeA'), fact, leg, docExists);
+    expect(row?.outcome).toBe('broken');
+    expect(row?.outcome).not.toBe('re-proven');
+    expect(row?.reason).toContain('did NOT re-prove');
+    expect(row?.reason).toContain('endpointA-not-a-referrer');
   });
 
   it('FORGED calls WITNESS — a shape-valid depends-on triple relabeled calls does not re-prove (oracle abstains) → broken', () => {

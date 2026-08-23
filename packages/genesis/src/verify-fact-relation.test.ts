@@ -33,10 +33,17 @@ function feed(opts: { callers?: readonly string[]; resolvesTarget?: boolean }): 
   };
 }
 
+// endpointA (`src/a/uses-b.ts`) is the caller the feed witnesses referencing TARGET; endpointB (`src/b.ts`) is
+// the file the feed defines TARGET in (`definesAt`). Both bind to the witnessed edge at FILE granularity.
+const ENDPOINT_A = 'src/a/uses-b.ts';
+const ENDPOINT_B = 'src/b.ts';
+
 const claim = (over: Partial<RelationClaim> = {}): RelationClaim => ({
   relationKind: 'depends-on',
   target: TARGET,
   sourceScope: SOURCE,
+  endpointA: ENDPOINT_A,
+  endpointB: ENDPOINT_B,
   ...over,
 });
 
@@ -94,20 +101,34 @@ describe('verifyRelation — the directed-edge oracle of the PROVEN family (#99,
     );
   });
 
-  it("abstain('no-caller-in-scope'): a resolved reference exists but in a SIBLING dir that only STRING-prefixes sourceScope (#153 teeth)", () => {
-    // A referrer in `src/abc` must NOT count as under `src/a` (segment-wise, never substring). Kills the
-    // `underScope`→`.includes` drift mutant that would fabricate a proven edge.
-    const reverse = feed({ callers: ['src/abc/uses-b.ts'] });
-    expect(verifyRelation(claim(), reverse, pathOfHash, isLocal)).toEqual({
+  it("abstain('endpointA-not-a-referrer'): a FORGED endpointA that references nothing does NOT re-prove even though a DIFFERENT file in the same dir does (soundness teeth — the unit→unit bind, not a dir scope)", () => {
+    // The feed witnesses `src/a/uses-b.ts` referencing TARGET, but this claim's endpointA is `src/a/other.ts`,
+    // which references nothing. The OLD directory-scoped oracle proved (SOME file under `src/a` references
+    // TARGET); the FILE-granular endpoint bind refuses it — a forged same-directory endpointA is not this edge.
+    const reverse = feed({ callers: ['src/a/uses-b.ts'] });
+    expect(verifyRelation(claim({ endpointA: 'src/a/other.ts' }), reverse, pathOfHash, isLocal)).toEqual({
       verdict: 'abstain',
-      reason: 'no-caller-in-scope',
+      reason: 'endpointA-not-a-referrer',
       oracle: 'symbol-reverse',
     });
   });
 
-  it("abstain('malformed'): an empty target or sourceScope ⇒ abstain, never a throw", () => {
+  it("abstain('endpointB-not-the-definer'): a FORGED endpointB = a wrong-but-EXISTING file (not the definer) does NOT re-prove (soundness teeth)", () => {
+    // endpointA IS a real referrer (`src/a/uses-b.ts`), but endpointB is `src/wrong.ts` instead of the definer
+    // `src/b.ts`. The definer bind refuses it — a wrong-but-existing object file cannot ride a true edge.
+    const reverse = feed({ callers: ['src/a/uses-b.ts'] });
+    expect(verifyRelation(claim({ endpointB: 'src/wrong.ts' }), reverse, pathOfHash, isLocal)).toEqual({
+      verdict: 'abstain',
+      reason: 'endpointB-not-the-definer',
+      oracle: 'symbol-reverse',
+    });
+  });
+
+  it("abstain('malformed'): an empty target/sourceScope/endpointA/endpointB ⇒ abstain, never a throw", () => {
     const reverse = feed({ callers: ['src/a/uses-b.ts'] });
     expect(verifyRelation(claim({ target: '' }), reverse, pathOfHash, isLocal).reason).toBe('malformed');
     expect(verifyRelation(claim({ sourceScope: '' }), reverse, pathOfHash, isLocal).reason).toBe('malformed');
+    expect(verifyRelation(claim({ endpointA: '' }), reverse, pathOfHash, isLocal).reason).toBe('malformed');
+    expect(verifyRelation(claim({ endpointB: '' }), reverse, pathOfHash, isLocal).reason).toBe('malformed');
   });
 });

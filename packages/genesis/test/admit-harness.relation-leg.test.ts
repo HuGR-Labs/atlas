@@ -57,8 +57,10 @@ const relProposal = (over: Partial<RelationProposal> = {}): RelationProposal => 
   kind: 'relation',
   site: site(),
   relationKind: 'depends-on',
-  endpointA: 'src/a.ts#A',
-  endpointB: 'src/b.ts#B',
+  // endpointA is the caller the feed witnesses referencing TARGET; endpointB is the file the feed DEFINES TARGET
+  // in (`definesAt` → 'src/b.ts'). The oracle binds BOTH endpoint FILES to the witnessed edge.
+  endpointA: 'src/a/uses-b.ts',
+  endpointB: 'src/b.ts',
   target: TARGET,
   sourceScope: SOURCE,
   grounding,
@@ -90,9 +92,10 @@ function makeDeps(over: Partial<AdmitDeps> = {}, reverse: SymbolReverseApi = fee
     predicate: { synthesize: () => null, verify: () => 'NA', teeth: () => false },
     doors: { grounded: () => true, nonObvious: () => true },
     typeOracle,
-    // the REAL oracle, adapted to the leg signature — the sound gate decides, not the test.
-    verifyRelation: (kind: RelationKind, target: string, sourceScope: string) =>
-      verifyRelation({ relationKind: kind, target, sourceScope }, reverse, pathOfHash, isLocal).verdict,
+    // the REAL oracle, adapted to the leg signature — the sound gate decides, not the test. Carries the
+    // endpoints so the oracle binds BOTH endpoint FILES to the witnessed edge (endpointA referrer, endpointB definer).
+    verifyRelation: (kind: RelationKind, target: string, sourceScope: string, endpointA: string, endpointB: string) =>
+      verifyRelation({ relationKind: kind, target, sourceScope, endpointA, endpointB }, reverse, pathOfHash, isLocal).verdict,
     refine: () => null,
     indexState,
     K: 1,
@@ -120,11 +123,11 @@ describe('admitRelation — the sound relation admit leg (#99, ADR-0018)', () =>
     const witness = (a.fact as { witness?: RelationWitness }).witness;
     expect(witness).toEqual({ relationKind: 'depends-on', target: TARGET, sourceScope: SOURCE });
     // the derived sentence is a PURE function of the witness legs (sourceScope + kind + target), NOT the
-    // endpoint unitKeys (`src/a.ts#A` / `src/b.ts#B`) — so a re-verifier holding only the witness re-derives it.
+    // endpoint unitKeys (`src/a/uses-b.ts` / `src/b.ts`) — so a re-verifier holding only the witness re-derives it.
     const derived = relationClaimNormFromWitness(witness!);
     expect(derived).toContain(SOURCE);
     expect(derived).toContain(TARGET);
-    expect(derived).not.toContain('src/a.ts#A');
+    expect(derived).not.toContain('src/a/uses-b.ts');
     expect(derived).toBe(relationClaimNormFromWitness({ relationKind: 'depends-on', target: TARGET, sourceScope: SOURCE }));
   });
 

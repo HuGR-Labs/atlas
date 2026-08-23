@@ -190,8 +190,11 @@ function anchorFileOf(primaryAnchor: string): string {
  *                 SCIP index actually contains (`docExists`). A relation is a claim about TWO real units; a
  *                 dangling endpoint (renamed/removed file, a fabricated unitKey) is not re-provable and never a
  *                 silent pass — and reading `docExists` on a dangling endpoint must not crash (AR-25).
- * ANY mismatch → `unverifiable` (the tamper is a defect in a `proven`-sealed relation, distinct from a drifted
- * edge, which is `broken`): the fact is not served, and the reason says WHY. Dropped, never clamped. */
+ * ANY mismatch → `broken` with a `TAMPERED:` reason — ALIGNED with the predicate reverify path (which reports
+ * its four tamper bindings `broken`, `reverifyFact` §a–d): a tampered `proven`-sealed relation is not served, and
+ * the `TAMPERED:` wording distinguishes it from a drift `broken` ("did NOT re-prove"). `unverifiable` is reserved
+ * STRICTLY for the "nothing to replay" shape — a missing or incomplete witness — never a tamper. Dropped, never
+ * clamped: silently rewriting a tampered endpoint/tier back to a derived value would hide the tamper attempt. */
 export function reverifyRelation(nodeKey: string, fact: RelationNode, leg: VerifyFactLeg, docExists: DocExists): ReverifyRow {
   const w = fact.witness;
   if (w === undefined) {
@@ -205,7 +208,7 @@ export function reverifyRelation(nodeKey: string, fact: RelationNode, leg: Verif
   if (fact.tier !== MINED_TIER) {
     return {
       nodeKey,
-      outcome: 'unverifiable',
+      outcome: 'broken',
       reason: `TAMPERED: tier '${String(fact.tier)}' is not the mined tier '${MINED_TIER}' — every seal:'proven' relation is minted by the mine pipeline, so a different tier was chosen by whoever committed it, not proven by anything`,
     };
   }
@@ -213,24 +216,26 @@ export function reverifyRelation(nodeKey: string, fact: RelationNode, leg: Verif
   if (typeof endpointA !== 'string' || endpointA.length === 0 || unitScopeOf(endpointA) !== w.sourceScope) {
     return {
       nodeKey,
-      outcome: 'unverifiable',
+      outcome: 'broken',
       reason: `TAMPERED: endpointA '${endpointA ?? '(none)'}' does not sit directly under the witness's own sourceScope '${w.sourceScope}' (unitScopeOf(endpointA) must equal sourceScope, never a broader ancestor) — the relation is not about the edge its witness proves`,
     };
   }
   const endpointB = fact.endpointB;
   if (typeof endpointB !== 'string' || endpointB.length === 0) {
-    return { nodeKey, outcome: 'unverifiable', reason: "TAMPERED: endpointB is missing — a relation is a claim about TWO units, so an absent object endpoint is not re-provable" };
+    return { nodeKey, outcome: 'broken', reason: "TAMPERED: endpointB is missing — a relation is a claim about TWO units, so an absent object endpoint is not re-provable" };
   }
   if (!docExists(anchorFileOf(endpointA)) || !docExists(anchorFileOf(endpointB))) {
     return {
       nodeKey,
-      outcome: 'unverifiable',
+      outcome: 'broken',
       reason: `TAMPERED: an endpoint of this relation ('${endpointA}' / '${endpointB}') does not name a document the live SCIP index actually contains — a dangling/renamed/fabricated endpoint, not a real unit the witnessed edge is about`,
     };
   }
-  // ── REPLAY — route the RELATION witness through the leg's `kind:'relation'` arm (verifyRelation). NOT
-  //    verifyDependency (which requires a worldScope the RelationWitness does not carry). One shared index build. ──
-  const verdict = leg({ kind: 'relation', claim: { relationKind: w.relationKind, target: w.target, sourceScope: w.sourceScope } });
+  // ── REPLAY — route the RELATION witness THROUGH the leg's `kind:'relation'` arm (verifyRelation), carrying
+  //    the fact's OWN endpoints so the oracle re-binds BOTH endpoint FILES to the witnessed edge (endpointA a
+  //    real referrer, endpointB the definer). A forged endpoint PAIR that survived the shape checks above FAILS
+  //    the replay here → `broken`. NOT verifyDependency (no worldScope on the RelationWitness). One index build. ──
+  const verdict = leg({ kind: 'relation', claim: { relationKind: w.relationKind, target: w.target, sourceScope: w.sourceScope, endpointA, endpointB } });
   if (verdict.verdict === 'proven') {
     return { nodeKey, outcome: 're-proven', reason: `replayed PROVEN over (${w.relationKind}, ${w.target}, ${w.sourceScope})` };
   }

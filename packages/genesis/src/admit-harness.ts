@@ -137,7 +137,7 @@ export interface AdmitDeps {
   readonly verifyDependency?: (target: string, scope: string) => "proven" | "abstain"; // GEN-12-dep: sound symbol-reverse oracle (verify-fact positive dual)
   readonly verifyCount?: (target: string, scope: string, atLeast: number) => "proven" | "abstain"; // GEN-12-count: sound cardinality oracle (#196c — verifyCount lower-bound)
   readonly verifyDefinition?: (target: string, scope: string) => "proven" | "abstain"; // GEN-12-def: sound definition oracle (#196d — verifyDefinition def-occurrence-under-scope)
-  readonly verifyRelation?: (relationKind: RelationKind, target: string, sourceScope: string) => "proven" | "abstain"; // #99 sound relation (ADR-0018): the directed-edge oracle (verifyRelation — verify-fact.ts). Only 'depends-on' can prove.
+  readonly verifyRelation?: (relationKind: RelationKind, target: string, sourceScope: string, endpointA: string, endpointB: string) => "proven" | "abstain"; // #99 sound relation (ADR-0018): the directed-edge oracle (verifyRelation — verify-fact.ts). Binds BOTH endpoint FILES to the witnessed edge (endpointA a real referrer, endpointB the definer). Only 'depends-on' can prove.
   readonly refine: (check: Check, site: Candidate) => Check | null; // CEGIS refine; `null` = no change
   readonly indexState: IndexNode; // current code (KNOW-16 evaluate carrier)
   readonly K: number; // refine budget (GEN-13 default K≤1)
