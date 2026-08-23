@@ -18,8 +18,12 @@ was hardened by an independent cold suite-critic (2026-08-22); the +14 items it 
 - **D-b** — N resolved references A→B collapse to **exactly one** `depends-on A→B` relation (identity).
 - **D-c** — the projection emits an edge only when both endpoints are **distinct intra-repo units**
   (excludes external/`node_modules` resolved targets and intra-unit references).
-- **D-d** — the admission door **rejects at write time** a `proven`-sealed relation lacking a valid
-  re-derivable witness (forgery rejected, not merely flagged at read — mirrors the predicate seal guard).
+- **D-d** — forgery defense is **two layers** (refined by R4 cold-review 2026-08-22): the write door
+  strips a **shape**-forged proven relation (witness missing / malformed / non-provable `calls` kind) at
+  admission (mirrors the predicate seal guard); but the door has no oracle, so a shape-VALID-but-false
+  witness still persists proven there (exactly as a promoted predicate witness does) and is caught at
+  **read-side reverify** (WP-R5 / #240), which re-runs the oracle and reads a non-re-derivable witness as
+  `broken`/`unverifiable`, never `proven`. Neither layer alone is D-d; the two together are.
 - **D-e** — the relation **unit granularity is the document (`docHash = nodeHashOfPath`)**, per the
   `resolved DepEdge` endpoints (measured, seam B). The sound `depends-on` is file→file. Consequence:
   the round-3 "intra-file distinct-unit" case does **not** arise — two symbols in one file share a

@@ -40,8 +40,10 @@ Locked design decisions:
 - **D-b** N resolved references A→B collapse to exactly one `depends-on A→B` relation (identity).
 - **D-c** the projection emits an edge only for two **distinct intra-repo units** (excludes
   external/`node_modules` resolved targets and intra-unit references).
-- **D-d** the admission door **rejects at write time** a `proven`-sealed relation lacking a re-derivable
-  witness (forgery rejected, not merely flagged at read — mirrors the predicate seal guard).
+- **D-d** two-layer forgery defense (refined by R4 cold-review): the write door strips a SHAPE-forged
+  proven relation (witness missing/malformed/`calls`); a shape-valid-but-false witness (the door has no
+  oracle) is caught at read-side reverify (WP-R5/#240), which re-runs the oracle. The two layers together
+  guarantee no forged proven survives end-to-end.
 - **D-e** the relation **unit granularity is the document (`docHash = nodeHashOfPath`)**, per the resolved
   `DepEdge` endpoints. The sound `depends-on` is file→file; a finer symbol-level relation is a separate
   future family.

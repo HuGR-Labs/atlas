@@ -4,9 +4,12 @@
 // The #99a relation leg (relation-door.test.ts) proved a cross-file relation EMITS as an advisory-class edge.
 // This suite is the #99 SOUND leg at the WRITE DOOR: a `seal:'proven'` `depends-on` relation minted by the
 // sound-admit path must reach the durable row + CAS with its seal AND its re-derivable witness (AR-7); the
-// seal must NOT bypass the truth door (AR-22); a witness-LESS proven relation (a hand-supplied/promoted
-// forgery) must be stripped at WRITE, never persisted as proven (AR-24, D-d); and the seal (on the row) + the
-// witness (in the CAS bytes) are published in ONE atomic commit, so a lost race never tears them apart (AR-27).
+// seal must NOT bypass the truth door (AR-22); a SHAPE-forged proven relation — witness missing, malformed,
+// or naming a non-provable (`calls`) kind — is stripped at WRITE (AR-24, D-d, first layer). NOTE the honest
+// limit: the write door has no oracle, so a shape-VALID-but-false witness (real-looking target/scope that
+// does not re-derive) still persists proven here, exactly as a promoted predicate witness does; that CONTENT
+// forgery is caught at READ-SIDE reverify (WP-R5 / #240), not here. And the seal (on the row) + the witness
+// (in the CAS bytes) are published in ONE atomic commit, so a lost race never tears them apart (AR-27).
 //
 // A PROVEN RELATION FIXTURE is hand-built here (a literal RelationNode with seal + witness) — this WP is the
 // DOOR, testable without waiting on the genesis sound-admit path (R2). The witness shape is exactly what

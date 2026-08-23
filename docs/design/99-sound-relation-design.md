@@ -131,9 +131,12 @@ Six seams from §2.1 must gain a proven path (each is a WP candidate):
 - **D-b — multi-ref dedup**: N resolved references A→B collapse to exactly one `depends-on A→B` (identity).
 - **D-c — cross-unit intra-repo only**: the projection emits an edge only for two **distinct intra-repo
   units** — excludes external/`node_modules` resolved targets and intra-unit (same-unit) references.
-- **D-d — admission-time forgery rejection**: the door rejects a `proven`-sealed relation lacking a
-  re-derivable witness at write time (not merely `unverifiable` at read) — mirrors the predicate seal
-  guard; the sound-admit path is the ONLY minter of a proven relation seal.
+- **D-d — two-layer forgery defense** (refined by R4 cold-review): the write door strips a SHAPE-forged
+  proven relation (witness missing / malformed / non-provable `calls` kind) — mirrors the predicate seal
+  guard; but the door has NO oracle, so a shape-valid-but-false witness still persists proven there (as a
+  promoted predicate witness does) and is caught at READ-SIDE reverify (WP-R5 / #240), which re-runs the
+  oracle. The sound-admit path is the only LEGITIMATE minter; the write strip + read re-derivation together
+  guarantee no forged proven survives end-to-end.
 
 ## 4. Forks for owner ratification (before slicing)
 
