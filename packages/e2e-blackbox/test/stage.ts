@@ -56,7 +56,7 @@ export function stageCandidate(repoPath: string, fact: GroundedFact): StagedRow 
   // `predicateSlot → .slot` FIRST: the identity functions read `.slot`, so a view without the map computes a
   // slot-free key that diverges from stored identity (found by E2E, missed by four isolated reviews).
   // A RelationNode (ADR-0015 D2) carries no `predicateSlot`; narrow it away (this staging path emits intrinsic facts).
-  const fSlot = f.kind === 'relation' || f.kind === 'negation' ? undefined : f.predicateSlot;
+  const fSlot = f.kind === 'advisory' || f.kind === 'predicate' ? f.predicateSlot : undefined;
   const view = { ...f, slot: fSlot } as unknown as Candidate;
   const key = nodeKey(view) as unknown as string;
   const contentHash = id(f as unknown as CasObject) as unknown as string;

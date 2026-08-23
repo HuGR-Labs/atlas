@@ -18,6 +18,11 @@ import type { Candidate, WhyNot } from './types.js';
 /** The citations carrier of a grounded fact — reused from the frozen node shape, NEVER redefined. */
 export type FactGrounding = AdvisoryNode['grounding'];
 
+/** ONE grounding entry (an anchored citation) — projected off the frozen `FactGrounding` shape so genesis needs
+ *  no DIRECT @atlas/grounding import (the same layer discipline `FactGrounding` itself keeps for the relation
+ *  family). A transition proposal carries two of these — the unit at each rev. */
+export type FactGroundingEntry = FactGrounding['entries'][number];
+
 // ---- the LLM proposal: a TYPED candidate ONLY (GEN-12a) — no admission vote, no confidence field --------
 
 /**
@@ -102,6 +107,29 @@ export interface NegationProposal {
   readonly scratch?: string; // chain-of-thought — discarded, never a fact (GEN-12f)
 }
 
+/**
+ * A TRANSITION candidate the proposer emits (ADR-0015 D4, #234). Mirrors `TransitionNode`
+ * (packages/knowledge/src/transition-types.ts) MINUS the harness-minted legs (`transitionKey`/id, freshness,
+ * authoring, seal, obviousness): the proposer supplies the LOCATION-FREE `unitKey` lineage + the TWO rev-pair
+ * grounding entries (each a `GroundingEntry` anchored at the unit AT that rev, its `subtreeHash` the
+ * content hash) + the contestable `derivation` the `justified` seal will name. NO `check` — a transition is
+ * not a checkable predicate. NO oracle: unlike the negation door (which CONSTRUCTS the scope-Merkle grounding),
+ * `buildTransition` grounds DIRECTLY on the two rev entries the proposer already resolved from real revs, mints
+ * `seal:'justified'` + the `derivation`, and calls no truth door (D-T1). The identity (`transitionKey`) and the
+ * `shaBefore`/`shaAfter` legs are DERIVED downstream from the two entries' `subtreeHash`es — never trusted off
+ * a payload id leg (KNOW-15b parity). Admission is `admitTransition` → `buildTransition`.
+ */
+export interface TransitionProposal {
+  readonly kind: 'transition';
+  readonly unitKey: string; // the LOCATION-FREE unit lineage (qualifiedPath) both revs share — identity leg
+  readonly refBefore: FactGroundingEntry; // the unit anchored at the BEFORE rev (anchor.subtreeHash = the before content hash) — grounding entry[0] + identity
+  readonly refAfter: FactGroundingEntry; //  the unit anchored at the AFTER rev  (anchor.subtreeHash = the after content hash)  — grounding entry[1] + identity
+  readonly tier: Tier;
+  readonly scope?: string; // KNOW-11a — the AUTHZ/write scope the governed door authorizes against (the unit's own scope, `unitScopeOf(unitKey)`, stamped by the producer). Carried onto `node.scope` by `buildTransition`.
+  readonly derivation?: string; // the change the model read ACROSS the two rev bodies — the contestable ground the `justified` seal names (proven-vs-justified.md §JUSTIFIED)
+  readonly scratch?: string; // chain-of-thought — discarded, never a fact (GEN-12f)
+}
+
 /** A grounded abstention (GEN-12g) — a VALID outcome, never a manufactured fact. */
 export interface Abstention {
   readonly kind: 'abstain';
@@ -114,4 +142,5 @@ export type Proposal =
   | AdvisoryProposal
   | RelationProposal
   | NegationProposal
+  | TransitionProposal
   | Abstention;

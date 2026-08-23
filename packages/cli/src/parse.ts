@@ -45,6 +45,11 @@ const ARITY: Record<Command, number> = {
   // `negations <scope> [--abstained]` — the scope is the only REQUIRED positional; `--abstained` is an
   // OPTIONAL boolean flag (focuses the render on the honest abstentions), so arity is 1 (#99b).
   negations: 1,
+  // `transitions <unit>` — the unit lineage key is the only positional (#234, ADR-0015 D4 read door).
+  transitions: 1,
+  // `transition <unit> <revBefore> <revAfter>` — the unit lineage + the TWO revs it spans are all required
+  // positionals, so arity is 3 (#234, ADR-0015 D4 producer).
+  transition: 3,
   // `verify-fact <kind> <target> --scope <s> [--world <w>] [--min <n>] [--exact]` — the class and the target
   // symbol are BOTH required positionals (the scope + count bounds ride valued flags), so arity is 2.
   'verify-fact': 2,

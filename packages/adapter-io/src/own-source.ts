@@ -261,7 +261,7 @@ export function buildOwnSources(deps: OwnSourceDeps): OwnSources {
       // caller's own input. None is a sentence this module composed, and the last one exists because a
       // scope outside every territory resolves to nothing and an empty role line names nothing at all.
       const defs = scopeRows(unit)
-        .filter((r) => (r.node.slot ?? (r.fact.kind === 'relation' || r.fact.kind === 'negation' ? undefined : r.fact.predicateSlot)) === 'definition')
+        .filter((r) => (r.node.slot ?? (r.fact.kind === 'advisory' || r.fact.kind === 'predicate' ? r.fact.predicateSlot : undefined)) === 'definition')
         .sort((a, b) => (a.node.nodeKey < b.node.nodeKey ? -1 : 1));
       const def = defs[0];
       if (def !== undefined) return def.node.claims.join('; ');

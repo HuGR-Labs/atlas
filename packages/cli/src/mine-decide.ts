@@ -170,7 +170,7 @@ export function decideStaging(
     // (KNOW-15b), the SAME seam that mints contentHash/primaryAnchor; the payload's own `f.id` never routes, or
     // an author could spoof another node's identity (governed-emit.ts parity, WP-F3). Map `predicateSlot` →
     // `.slot` first: the cast is otherwise LOSSY (identity fns read `.slot`) and yields a slot-free key.
-    const fSlot = f.kind === 'relation' || f.kind === 'negation' ? undefined : f.predicateSlot; // relation (D2)/negation (D3) have no slot
+    const fSlot = f.kind === 'advisory' || f.kind === 'predicate' ? f.predicateSlot : undefined; // relation (D2)/negation (D3)/transition (D4) have no slot
     const view = { ...f, slot: fSlot } as unknown as KnowledgeCandidate;
     // FAMILY-AWARE mint (bobby F1): a relation/negation routes by relationKey/negationKey and NEVER touches
     // `primaryAnchorId` (which throws DegenerateAnchorError on their cross-file / directory grounding);

@@ -10,8 +10,8 @@ import { join } from 'node:path';
 import type { Hash } from '@atlas/contracts';
 import { asHash } from '@atlas/kernel';
 import { headSha, createHistorySource } from '@atlas/adapter-io';
-import { reportIndexPlan, relationsVerdict, negationsVerdict, verifyFactVerdict } from '@atlas/adapter-io';
-import type { DeriveRelationsRun, IndexPlanReport, NegationLeg, OwnLeg, PromoteOut, RelationLeg, ReverifyReport, VerifyFactLeg, WiredHandler } from '@atlas/adapter-io';
+import { reportIndexPlan, relationsVerdict, negationsVerdict, transitionsVerdict, verifyFactVerdict } from '@atlas/adapter-io';
+import type { DeriveRelationsRun, IndexPlanReport, NegationLeg, OwnLeg, PromoteOut, RelationLeg, ReverifyReport, TransitionLeg, TransitionProducer, VerifyFactLeg, WiredHandler } from '@atlas/adapter-io';
 import type { DoctorSource, Guidance, Tool, Verdict } from '@atlas/tools';
 import { runDoctor } from './doctor.js';
 import { ensureAtlasIgnored } from './gitignore.js';
@@ -21,6 +21,7 @@ import { runMineArms } from './mine.js';
 import { runOwn } from './own.js';
 import { runPromote } from './promote.js';
 import { runDeriveRelationsCli } from './derive-relations.js';
+import { runTransitionCli } from './transition.js';
 import { runReverify } from './reverify.js';
 import { parse } from './parse.js';
 import { renderRefusal, renderVerdict } from './render.js';
@@ -115,6 +116,23 @@ export interface CliDeps {
    * failure mode that matters most here, since a silent empty is exactly the invisible abstention #202 forbids.
    */
   readonly negations?: NegationLeg;
+  /**
+   * The composition root's grounded-transition READ leg (`ComposedRuntime.transitions`, #234) — the
+   * `transitionsOf` fold over the durable projection (with derive-on-read lineage supersession, D-T3). Injected
+   * on the SAME seam as `relations`/`negations`, and for the same reason: the CLI must never stand up a second
+   * runtime, or the transitions it reads stop being the ones off the store `atlas query` reads back. Not a
+   * `Tool`, opens no governed surface (`GOVERNANCE_SURFACE` stays 5), writes nothing. ABSENT ⇒ `atlas
+   * transitions` fails closed with the same "runtime is not composed yet" guidance.
+   */
+  readonly transitions?: TransitionLeg;
+  /**
+   * The composition root's reachable 2-rev transition PRODUCER (`ComposedRuntime.transition`, #234) — reads a
+   * unit's REAL content at two git revs and admits + persists a JUSTIFIED transition (D-T1). Injected on the
+   * SAME seam as `promote`/`deriveRelations` (a producer that WRITES), for the same reason: the CLI must not
+   * stand up a second runtime, or the store it persists into stops being the store `atlas transitions` reads.
+   * ABSENT ⇒ `atlas transition` fails closed with the same "runtime is not composed yet" guidance.
+   */
+  readonly transition?: TransitionProducer;
   /**
    * The composition root's sound-genesis PROVEN-family feed (`ComposedRuntime.verifyFact`) — the
    * `verify{Dependency,Count,Negation}` oracles (@atlas/genesis) over the live symbol-reverse view. Injected on
@@ -381,6 +399,38 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
       );
     }
     return emit(negationsVerdict(deps.negations, positionals[0] ?? '', flags.abstained === 'true'));
+  }
+
+  if (command === 'transitions') {
+    // #234/ADR-0015 D4: `atlas transitions <unit>` — the READ-ONLY grounded-transition door. It reads the
+    // `transitionsOf` fold (@atlas/knowledge) over the composition root's `transitions` leg — the SAME durable
+    // projection `atlas query` reads back, never a second runtime. Like `relations`/`negations` it is
+    // intercepted before the handler (not a `Tool`: opens no governed surface, GOVERNANCE_SURFACE stays 5,
+    // WRITE_PATHS untouched). Rendered through the SHARED `renderVerdict`/`emit` path (exit 0 with the
+    // transitions on `data`, the current head marked TRANSITIONED and predecessors SUPERSEDED by derive-on-read
+    // supersession; a structured error + exit 1 on an uncomposed runtime). Never a throw — total.
+    if (!deps.transitions) {
+      return emit(
+        errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'),
+      );
+    }
+    return emit(transitionsVerdict(deps.transitions, positionals[0] ?? ''));
+  }
+
+  if (command === 'transition') {
+    // #234/ADR-0015 D4: `atlas transition <unit> <revBefore> <revAfter>` — the reachable 2-rev transition
+    // PRODUCER. It drives the composition root's `transition` leg, which reads the unit's REAL content at each
+    // rev through the arbitrary-rev index, admits a JUSTIFIED transition (no oracle — D-T1) and PERSISTS it
+    // THROUGH the governed emit door (KNOW-11 actor-scope authz + ARCH-9 anchor apply — an unauthorized actor is
+    // REFUSED). Like `promote`/`derive-relations` it is a WRITE command intercepted before the handler that
+    // publishes through the existing emit door (opens no NEW governed surface). Its rendered `CliVerdict` reaches
+    // the console over the SAME emit/exit path. It fails closed on an uncomposed runtime exactly as `promote` does.
+    if (!deps.transition) {
+      return emit(
+        errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'),
+      );
+    }
+    return emitCli(runTransitionCli(deps.transition, positionals[0] ?? '', positionals[1] ?? '', positionals[2] ?? ''));
   }
 
   if (command === 'verify-fact') {

@@ -45,6 +45,7 @@ import { createRelationLeg } from './relation-source.js';
 import { runDeriveRelations } from './relation-derive-run.js';
 import type { DeriveRelationsRun } from './relation-derive-run.js';
 import { createNegationLeg } from './negation-source.js';
+import { createTransitionLeg, createTransitionProducer, type TransitionLeg, type TransitionProducer } from './transition-source.js';
 import type { RelationLeg } from './relation-source.js';
 import type { NegationLeg } from './negation-source.js';
 import { createVerifyFactLeg } from './verify-fact-source.js';
@@ -126,21 +127,21 @@ export interface ComposedRuntime {
    * makes a fired abstention observable (closes #202).
    */
   readonly negations: NegationLeg;
-  /**
-   * The sound-genesis PROVEN-family feed (`atlas verify-fact`) — PROVES / REFUTES / ABSTAINS on a typed
-   * dependency/count/negation claim over the live symbol-reverse view (built off the SAME `scipOutput` the
-   * `axes` are). A READ door (not a `Tool`, writes nothing) and the ONE production caller that makes
-   * `verify{Dependency,Count,Negation}` (@atlas/genesis) running code — see `verify-fact-source.ts`.
-   */
+  /** The grounded-transition READ leg + reachable 2-rev PRODUCER (#234 / ADR-0015 D4) — `transitions(unit)`
+   *  reads the lineage's 2-rev records (head TRANSITIONED + predecessors SUPERSEDED, D-T3); `transition(unit,
+   *  before, after)` reads REAL content at two revs and persists a JUSTIFIED transition (D-T1) THROUGH the
+   *  governed emit door (KNOW-11 authz + ARCH-9 anchor — `governed-emit-transition.ts`). */
+  readonly transitions: TransitionLeg;
+  readonly transition: TransitionProducer;
+  /** The sound-genesis PROVEN-family feed (`atlas verify-fact`) — PROVES/REFUTES/ABSTAINS on a typed
+   *  dependency/count/negation claim over the live symbol-reverse view (off the SAME `scipOutput` the `axes`
+   *  are). A READ door, and the ONE production caller that makes `verify{Dependency,Count,Negation}`
+   *  (@atlas/genesis) running code — see `verify-fact-source.ts`. */
   readonly verifyFact: VerifyFactLeg;
-  /**
-   * The REVERIFY-GATE pass (`atlas verify-store`) — re-proves every `seal:'proven'` fact in the durable
-   * store against the LIVE index and buckets it `re-proven` / `broken` / `unverifiable` (see
-   * `reverify-store.ts` for the full narrative). It rides the SAME `verifyFact` leg above (no second oracle)
-   * and the SAME `driftFacts` readback the reconcile seams use (no second store read) — a THUNK, not eager
-   * data, so a command that never asks for it never pays the per-fact loop. A READ door: not a `Tool`, opens
-   * no new governed surface, `GOVERNANCE_SURFACE` stays 5, `WRITE_PATHS` is untouched.
-   */
+  /** The REVERIFY-GATE pass (`atlas verify-store`) — re-proves every `seal:'proven'` fact against the LIVE
+   *  index into `re-proven`/`broken`/`unverifiable` (see `reverify-store.ts`). Rides the SAME `verifyFact` leg
+   *  (no second oracle) + the SAME `driftFacts` readback (no second store read) — a THUNK. A READ door,
+   *  GOVERNANCE_SURFACE stays 5. */
   readonly reverify: () => ReverifyReport;
   /**
    * The #99 SOUND-RELATION derive-and-persist pass (`atlas derive-relations`, WP-R7) — the mechanical projection
@@ -150,9 +151,7 @@ export interface ComposedRuntime {
    * emits every proven relation through the SAME `origin:'promoted'` governed emit door promote publishes through
    * (`relationEmit` below), so the seal + re-derivable witness reach the durable row + CAS bytes. Rides beside
    * the handler like `promote`: a WRITE leg opening no NEW governed surface (`GOVERNANCE_SURFACE` stays 5 — an
-   * ordinary USE of the emit door, ADR-0008), so it is not a `Tool`. A THUNK (paid only on demand); NO LLM
-   * anywhere (AR-23 — deterministic index data + the sound oracle program).
-   */
+   * ordinary USE of the emit door, ADR-0008). A THUNK (paid only on demand); NO LLM anywhere (AR-23). */
   readonly deriveRelations: () => DeriveRelationsRun;
   /**
    * The PROVENANCE refusal for this repo's durable store, or `undefined` when reads may proceed
@@ -478,61 +477,45 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
   // why nothing is served).
   const readAdvisory = readAccess.reverified !== undefined ? trackedProvableAdvisory(readAccess.reverified) : undefined;
 
-  // THE GOVERNED PROMOTION LEG (KNOW-8). It is composed from the SAME parts the `atlas-emit` leg above is —
-  // this store, this policy, this truth-gate, this actor, this ratify token — and differs in EXACTLY one
-  // field: `origin: 'promoted'`, which the door DERIVES from the fact that it read the row out of staging.
-  // Without it a staged candidate (T2 ∧ advisory ∧ grounded) fast-paths to `auto-accept` and the KNOW-8 token
-  // is never consulted, i.e. the one path built to run through the ratifier would be the one path that skips
-  // it. See `governed-emit-route.ts` for the measurement and `RatifyContext.origin` for why this is a new
-  // field rather than a forged `contested`/`lowRisk`.
+  // THE `origin:'promoted'` EMIT DOOR — the ONE builder BOTH the promote leg (KNOW-8) AND the sound-relation +
+  // transition producers ride. Composed from the SAME parts the `atlas-emit` leg is (this store, gate, policy,
+  // actor, ratify token) and differs in EXACTLY one field: `origin:'promoted'`. That origin is load-bearing two
+  // ways — the door DERIVES it from having read the row out of staging (without it a staged T2 ∧ advisory ∧
+  // grounded candidate fast-paths to `auto-accept` and the KNOW-8 token is never consulted, `governed-emit-
+  // route.ts`), AND it is the ONLY channel a sound-minted `proven` seal survives (an authored write strips every
+  // seal at gate 0). The `#96 F2` negation channels (`symbolReverse`/`axes`/`nodeHashOfPath`/`edgeModel`) are
+  // threaded IDENTICALLY to the emit leg (wire.ts:217-220): without them `emitNegation` fail-closes and ABSTAINS
+  // `scope-empty` for EVERY promoted negation (governed-emit-negation.ts:178). `...escapeLegs` = the ADR-0016 M2b
+  // v2 target-relative legs (both or neither; empty spread ⇒ the sound blanket fallback).
   //
-  // A SECOND `createGovernedEmit` INSTANCE IS NOT A SECOND DOOR: `createGovernedEmit` is a pure factory over
-  // its deps (no module state, no cache), and both instances publish through the SAME durable files by the
-  // SAME atomic `commitProjection` protocol — which is exactly the concurrency case that protocol was written
-  // for, since two `atlas emit` PROCESSES are already two instances. What would be a second door is a second
-  // gate ladder or a second write medium; neither exists here.
-  const promoteLeg = createGovernedPromote({
-    store,
-    emit: createGovernedEmit({
+  // FACTORED TO ONE BUILDER so the promote/relation/transition write legs cannot diverge in their door deps. A
+  // fresh `createGovernedEmit` per call is NOT a second door: it is a pure factory over its deps (no module
+  // state, no cache), and every instance publishes through the SAME durable files by the SAME atomic
+  // `commitProjection` protocol — exactly the concurrency case that protocol was written for, since two
+  // `atlas emit` PROCESSES are already two instances. A second door would be a second gate ladder or write
+  // medium; neither exists here.
+  const promotedEmit = () =>
+    createGovernedEmit({
       store,
       gate: seams.gate,
       policy,
       actor,
       origin: 'promoted',
       ...(ratifyToken !== undefined ? { ratifyToken } : {}),
-      // #96 F2 — THE NEGATION LEG's channels, threaded IDENTICALLY to the emit leg (wire.ts:217-220): the N0
-      // completeness feed, the live structural `axes`, the sealed path→docHash minting, and the pinned edge
-      // model. Without them `emitNegation` fail-closes and ABSTAINS `scope-empty` for EVERY promoted negation
-      // (governed-emit-negation.ts:178), so a mined negation could never be admitted through promote. The
-      // promote leg is composed from the SAME parts as emit (comment above), and these deps are part of that.
       symbolReverse: () => symbolReverseView,
       axes,
       nodeHashOfPath,
       edgeModel: edgeModelVersion(),
-      // ADR-0016 M2b — the v2 target-relative legs (both or neither; empty spread ⇒ the sound blanket fallback).
       ...escapeLegs,
-    }).emit,
-  });
+    }).emit;
+
+  const promoteLeg = createGovernedPromote({ store, emit: promotedEmit() });
 
   // THE #99 SOUND-RELATION DERIVE-AND-PERSIST LEG (`atlas derive-relations`, WP-R7). It publishes proven
-  // `depends-on` relations through an `origin:'promoted'` emit door built from the SAME parts as the promote
-  // leg's door above — `origin:'promoted'` because that is the ONLY channel a sound-minted proven seal survives
-  // (an authored write strips every seal at gate 0). A second `createGovernedEmit` instance is NOT a second door
-  // (the comment above says why). The leg is a THUNK; `runDeriveRelations` re-composes `buildMineAdmission` (now
-  // carrying the sound `verifyRelation` oracle) + `ground`-over-`axes` over the SAME index every other leg reads.
-  const relationEmit = createGovernedEmit({
-    store,
-    gate: seams.gate,
-    policy,
-    actor,
-    origin: 'promoted',
-    ...(ratifyToken !== undefined ? { ratifyToken } : {}),
-    symbolReverse: () => symbolReverseView,
-    axes,
-    nodeHashOfPath,
-    edgeModel: edgeModelVersion(),
-    ...escapeLegs,
-  }).emit;
+  // `depends-on` relations through the SAME `promotedEmit` door above (also the transition producer's door). The
+  // leg is a THUNK; `runDeriveRelations` re-composes `buildMineAdmission` (now carrying the sound `verifyRelation`
+  // oracle) + `ground`-over-`axes` over the SAME index every other leg reads.
+  const relationEmit = promotedEmit();
   const deriveRelationsLeg = (): DeriveRelationsRun =>
     runDeriveRelations({
       axes,
@@ -572,6 +555,9 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     // scope OR an extractor bump reads DRIFTED). `currentEdgeModel` is `edgeModelVersion()`, the SAME value
     // the door stamps.
     negations: createNegationLeg(readAccess.store, bindFreshnessOracle(axes, edgeModelVersion())),
+    // #234 — READ leg off the SAME store the query leg reads. The PRODUCER routes THROUGH the governed door (`relationEmit`; transition branch = `governed-emit-transition.ts`) so KNOW-11 authz + ARCH-9 anchor apply (billy #234 — no gate-less write).
+    transitions: createTransitionLeg(readAccess.store),
+    transition: createTransitionProducer(revIndex, relationEmit, asHash(headSha(repoPath) ?? '')),
     // THE SOUND-GENESIS PROVEN-FAMILY FEED (`atlas verify-fact`). Off the SAME `scipOutput` the axes ride — a
     // program oracle over the immutable code index, built once and closed over (see verify-fact-source.ts).
     verifyFact: verifyFactLeg,
