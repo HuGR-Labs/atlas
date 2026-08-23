@@ -318,7 +318,8 @@ function commitLoop<T>(
     // does not run, because this never reaches a return.
     refuseForeignIdentityWrite(read);
     if (guardUnreadable && read.unreadable) return { settled: false, refusal: 'unreadable' };
-    const decision = decide(read.projection ?? emptyStore());
+    const snapshot = read.projection ?? emptyStore();
+    const decision = decide(snapshot);
     if (decision.next === undefined) return { settled: true, out: decision.out }; // governed refusal: no write
     // CAS bytes FIRST, then the projection that references them. Idempotent by content address, so a retry
     // re-putting the same object writes nothing new; a failing `put` (disk-full/permission) throws BEFORE
@@ -347,6 +348,25 @@ function commitLoop<T>(
     for (const obj of decision.put ?? []) {
       if (ctx.put(obj) === CAS_EMPTY) throw new UnaddressableCasObjectError(ctx.base);
     }
+    // NO-OP FAST PATH — a decision that returns the VERY snapshot it read, unmodified (reference-identical),
+    // has minted nothing: the current head ALREADY holds these exact bytes. `mine`'s abstaining pass is the
+    // measured source — its `decideStaging` returns `staged` untouched when a site mints no fact (the majority
+    // of sites on a real repo), and on a full run of 677 sites × 3 arms that used to re-serialize the whole
+    // (growing) staging Map and pay two fsyncs (~44 ms) per site to publish a generation BYTE-IDENTICAL to the
+    // head — O(N²) I/O as the Map grows. Settle WITHOUT a physical publish and the redundant fsyncs are gone.
+    //
+    // SOUND under concurrency, and the reference check is what makes it safe rather than a content guess: this
+    // fires ONLY when `decide` handed back the exact object it was given, so nothing this attempt produced is
+    // absent from the head we read. If a rival published ABOVE us in the meantime, `read.top` is stale — but we
+    // are not asserting durability for any row we did not carry forward, so there is nothing of ours to lose
+    // (contrast `publish`'s head-verification, which exists precisely because a MINTING attempt DOES have new
+    // bytes that must land). It also cannot skip a real write: `decideStaging` (and every governed decision)
+    // rebinds `projection` to a FRESH object via `knowledgeUpsert` the instant it mints, so a minting pass has
+    // `next !== snapshot` and publishes exactly as before — the SCN-CLI-4d republish-on-abstain contract lives
+    // one layer up in the DECISION (`next` is still `projection`, never dropped); this only elides the
+    // physical, redundant re-publication of an unchanged head. `persistSidecar`'s unconditional path passes its
+    // OWN projection object (never the one just read), so `next !== snapshot` there and it is unaffected.
+    if (decision.next === snapshot) return { settled: true, out: decision.out };
     // `superseded` SETTLES. The decision's bytes are durable (see {@link PublishOutcome}), so the ONLY
     // honest answers are this call's own `out` — the one belonging to the attempt that actually published —
     // or a re-run that cannot see it wrote. Re-running is what produced a truthful `next` and a false `out`.
