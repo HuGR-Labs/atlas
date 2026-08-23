@@ -160,6 +160,14 @@ const UNVERIFIABLE = {
   ...each('needs a populated durable store carrying a seal:\'proven\' fact (a clean checkout has none, so it reproduces to the empty form of verify-store.md#1); the broken/unverifiable behaviour is pinned by reverify-gate-compose.test.ts + s34-reverify-store.blackbox.test.ts, not reproducible from a clean checkout',
     'reference/commands/verify-store.md#2', 'reference/commands/verify-store.md#3'
   ),
+  // #99 R7 — the `atlas derive-relations` OUTPUT-SHAPE block is an ILLUSTRATIVE template over placeholders
+  // (`<N>`/`<E>`/`<A>`/`<contentHash>`), not one run: a real pass needs a SCIP-indexed repo with a witnessed
+  // cross-unit edge AND an actor granted the subject scope (a clean checkout has neither). The behaviour is
+  // pinned end to end by relation-derive-reachability.test.ts (@atlas/adapter-io, a real composed runtime +
+  // real oracle, AR-13) and derive-relations-cli.test.ts (the CLI render), not reproducible from a clean checkout.
+  ...each('an illustrative output-shape template over placeholders needing a SCIP-indexed repo + a witnessed cross-unit edge + an authorized actor (a clean checkout has none); the behaviour is pinned by relation-derive-reachability.test.ts + derive-relations-cli.test.ts, not reproducible from a clean checkout',
+    'reference/commands/derive-relations.md#1'
+  ),
 };
 
 // ── enumeration ─────────────────────────────────────────────────────────────────────────────────────────

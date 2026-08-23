@@ -52,9 +52,14 @@ const ARITY: Record<Command, number> = {
   // at `process.cwd()`, the same root the entrypoint composes the runtime over, so a path argument would let
   // the store re-verified diverge from the one every other command reads.
   'verify-store': 0,
+  // `derive-relations` takes NO positional — same reasoning as `promote`/`verify-store`: it projects the WHOLE
+  // index at `process.cwd()` (the root the entrypoint composes the runtime over) to proven `depends-on`
+  // relations and persists them into THAT repo's store, so a path argument would let the index projected diverge
+  // from the store written and the one every other command reads (#99 WP-R7).
+  'derive-relations': 0,
 };
 
-const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine|node|link|promote|own|relations|negations|verify-fact|verify-store';
+const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine|node|link|promote|own|relations|negations|verify-fact|verify-store|derive-relations';
 
 function isCommand(s: string): s is Command {
   return Object.prototype.hasOwnProperty.call(COMMAND_LEG, s);

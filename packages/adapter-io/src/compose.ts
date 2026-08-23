@@ -19,6 +19,7 @@
 
 import { join } from 'node:path';
 import type { Hash } from '@atlas/contracts';
+import { asHash } from '@atlas/kernel';
 import { build, createSymbolReverse, nodeHashOfPath } from '@atlas/index';
 import type { Axes } from '@atlas/index';
 import { bindGate, isGrounded, driftDetect } from '@atlas/grounding';
@@ -41,6 +42,8 @@ import type { PromoteOut } from './governed-promote.js';
 import { createOwnLeg } from './own-source.js';
 import type { OwnLeg } from './own-source.js';
 import { createRelationLeg } from './relation-source.js';
+import { runDeriveRelations } from './relation-derive-run.js';
+import type { DeriveRelationsRun } from './relation-derive-run.js';
 import { createNegationLeg } from './negation-source.js';
 import type { RelationLeg } from './relation-source.js';
 import type { NegationLeg } from './negation-source.js';
@@ -140,6 +143,18 @@ export interface ComposedRuntime {
    */
   readonly reverify: () => ReverifyReport;
   /**
+   * The #99 SOUND-RELATION derive-and-persist pass (`atlas derive-relations`, WP-R7) — the mechanical projection
+   * of the index's resolved cross-unit references to PROVEN `depends-on` relations, driven end to end and LANDED
+   * in the durable store. It is the ONLY reachability seam that makes `relation-derive.ts` running code: it
+   * composes `buildMineAdmission` (now carrying the sound `verifyRelation` oracle) + `ground`-over-`Axes` and
+   * emits every proven relation through the SAME `origin:'promoted'` governed emit door promote publishes through
+   * (`relationEmit` below), so the seal + re-derivable witness reach the durable row + CAS bytes. Rides beside
+   * the handler like `promote`: a WRITE leg opening no NEW governed surface (`GOVERNANCE_SURFACE` stays 5 — an
+   * ordinary USE of the emit door, ADR-0008), so it is not a `Tool`. A THUNK (paid only on demand); NO LLM
+   * anywhere (AR-23 — deterministic index data + the sound oracle program).
+   */
+  readonly deriveRelations: () => DeriveRelationsRun;
+  /**
    * The PROVENANCE refusal for this repo's durable store, or `undefined` when reads may proceed
    * (`read-provenance.ts` / TRAVEL-BY-REPROOF `read-access.ts`). PRESENT means every read serves nothing and
    * every write refuses — TODAY that is `tracked-staging` (ADR-0008 candidates, no replayable witness) or
@@ -168,6 +183,11 @@ export interface ComposedRuntime {
 const SCIP_REL = join('.atlas', 'index.scip');
 /** The durable CAS root under a repo (D4). */
 const CAS_REL = join('.atlas', 'cas');
+
+/** The exhaustive-projection ROW-COUNT CEILING for `atlas derive-relations` (F2/AR-28/AR-30) — a resolved-edge
+ *  count above this makes the run FAIL LOUD (an `overBudget` refusal, never a partial set labelled complete).
+ *  Sized well above Atlas's own resolved intra-repo edge count (low thousands) with headroom; a DELIBERATE knob. */
+const DERIVE_RELATIONS_BUDGET = 50_000;
 
 /**
  * The T0-candidate keyword heuristic (TOOLS-5): a territory is a T0 candidate iff its name contains one of
@@ -492,10 +512,45 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     }).emit,
   });
 
+  // THE #99 SOUND-RELATION DERIVE-AND-PERSIST LEG (`atlas derive-relations`, WP-R7). It publishes proven
+  // `depends-on` relations through an `origin:'promoted'` emit door built from the SAME parts as the promote
+  // leg's door above — `origin:'promoted'` because that is the ONLY channel a sound-minted proven seal survives
+  // (an authored write strips every seal at gate 0). A second `createGovernedEmit` instance is NOT a second door
+  // (the comment above says why). The leg is a THUNK; `runDeriveRelations` re-composes `buildMineAdmission` (now
+  // carrying the sound `verifyRelation` oracle) + `ground`-over-`axes` over the SAME index every other leg reads.
+  const relationEmit = createGovernedEmit({
+    store,
+    gate: seams.gate,
+    policy,
+    actor,
+    origin: 'promoted',
+    ...(ratifyToken !== undefined ? { ratifyToken } : {}),
+    symbolReverse: () => symbolReverseView,
+    axes,
+    nodeHashOfPath,
+    edgeModel: edgeModelVersion(),
+    ...escapeLegs,
+  }).emit;
+  const deriveRelationsLeg = (): DeriveRelationsRun =>
+    runDeriveRelations({
+      axes,
+      scipOutput,
+      ...(indexerName !== undefined ? { indexerName } : {}),
+      emit: relationEmit,
+      // The anchor rev the write is stamped at (the repo's live HEAD, read through the shared no-shell git seam).
+      // The composed truth-gate ignores it (it re-derives freshness against the built `axes`), threaded honestly.
+      at: asHash(headSha(repoPath) ?? ''),
+      maxRelations: DERIVE_RELATIONS_BUDGET,
+    });
+
   return {
     handler: assembleHandler(config),
     doctorSource,
     promote: promoteLeg.promote,
+    // THE #99 SOUND-RELATION DERIVE LEG (`atlas derive-relations`). Rides beside the handler like `promote` — a
+    // WRITE leg that opens no new governed surface (publishes through the existing emit door). Thunked so the
+    // projection + store write are paid only on demand.
+    deriveRelations: deriveRelationsLeg,
     // THE `own_<scope>` READ LEG. `readAccess.store` (TRAVEL-BY-REPROOF) and `axes` here are the very
     // objects the handler's query leg reads — passed, not rebuilt — so `atlas own <scope>` and
     // `atlas query <scope>` are two projections of ONE (possibly filtered) store, and `policy` is the same

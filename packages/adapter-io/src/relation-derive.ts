@@ -14,17 +14,18 @@
 // SCOPE (what this leaf owns): the projection algorithm. What it does NOT own, and takes as injected seams
 // because they need the built `Axes` that live ABOVE this leaf: the 2-entry relation grounding receipt
 // (`groundFor`) and the R2 admit path itself (`admit`, closing over the truth door + the sound `verifyRelation`
-// leg). WP-R7 wires the production caller; a test wires the same seams over a fixture index. Pure + total: no
-// clock, no IO, no model — the ONLY throw is the fail-loud budget breach (AR-30), which is a REFUSAL, never a
-// partial set mislabelled complete.
+// leg). WP-R7 wired the production caller — `runDeriveRelations` (`relation-derive-run.ts`) composes these
+// seams over the built `Axes` and drives this projection from the shipped `atlas derive-relations` verb; a
+// test wires the same seams over a fixture index. Pure + total: no clock, no IO, no model — the ONLY throw is
+// the fail-loud budget breach (AR-30), which is a REFUSAL, never a partial set mislabelled complete.
 //
-// ── REFERENCE MODEL (declared in harness/gates/reference-model-guard.mjs) ──────────────────────────────────
-// The three exported VALUES (`deriveRelations`, `deriveRelationEdges`, `RelationBudgetExceededError`) have NO
-// production caller YET — WP-R7 (wave 3) wires the shipped entrypoint (`atlas relations --derive` / a mine
-// projection pass) + the compose leg. Until then this is a declared reference model. R7 MUST DELETE the ledger
-// row for this file the moment it adds that caller (the `own.ts` moved-dead→live precedent, or the guard fails
-// with STALE LEDGER ENTRY). Its acceptance suite (`test/relation-derive.test.ts`) exercises it against a
-// fixture index through the frozen R2 `admit` path — it is proven code, not dormant.
+// SHIPPED (no longer a reference model): the three exported VALUES (`deriveRelations`, `deriveRelationEdges`,
+// `RelationBudgetExceededError`) now have a production caller — `relation-derive-run.ts` value-imports
+// `deriveRelations` (and re-raises `RelationBudgetExceededError` as an AR-30 over-budget outcome), reached from
+// the composition root (`compose.ts` → `ComposedRuntime.deriveRelations`) and the `atlas derive-relations` CLI
+// verb. The `reference-model-guard.mjs` ledger row for this file was DELETED when that wiring landed (the
+// `own.ts` moved-dead→live precedent). Its acceptance suite (`test/relation-derive.test.ts`) drives it against
+// a fixture index through the frozen R2 `admit` path.
 
 import { relationKey } from '@atlas/knowledge';
 import type { RelationNode } from '@atlas/knowledge';
@@ -219,6 +220,13 @@ export function deriveRelations(deps: DeriveRelationDeps): DeriveRelationsResult
       tier: 'T2',
       target: edge.target, // R2 oracle leg — the global symbol whose witnessed reference proves the edge
       sourceScope: edge.sourceScope, // R2 oracle leg — endpointA's verify-scope
+      // The governed WRITE scope (KNOW-11) — the SUBJECT unit's directory (`endpointA`'s scope-unit, the same
+      // `unitScopeOf` the `sourceScope` leg above rides). A relation carries no scope of its own until it is
+      // PERSISTED: the sound-admit path (`admit`) never reads it, but the governed emit door (`governed-emit.ts`)
+      // rejects a scope-less write (`MALFORMED_SCOPE`) and binds authz on it — so WP-R7's shipped store write
+      // (`atlas derive-relations`) could never land the fact without it. Scoped to the directed fact's SUBJECT
+      // (contract §4a: the door binds the anchor gate on `endpointA`).
+      scope: edge.sourceScope,
     };
     const admission = deps.admit(proposal);
     if (admission.outcome !== 'admitted') continue; // ungrounded/malformed drop — no proven relation

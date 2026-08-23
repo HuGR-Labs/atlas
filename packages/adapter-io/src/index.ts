@@ -138,6 +138,14 @@ export type { ReverifyOutcome, ReverifyRow, ReverifyReport, NodeFactPair } from 
 export { deriveRelations, deriveRelationEdges, RelationBudgetExceededError } from './relation-derive.js';
 export type { DeriveRelationDeps, DeriveRelationsResult, DerivedRelationEdge } from './relation-derive.js';
 
+// WP-R7 (REACHABILITY): the shipped caller — composes the R2 admit path (with the sound `verifyRelation` leg) +
+// the 2-entry grounding seam over the built `Axes`, drives the projection, and PERSISTS every proven relation
+// through the governed emit door. Reached from the composition root (`ComposedRuntime.deriveRelations`) and the
+// `atlas derive-relations` CLI verb — the edge that turns `relation-derive.ts` from a reference model into
+// running code.
+export { runDeriveRelations } from './relation-derive-run.js';
+export type { DeriveRelationsRun, DeriveRelationRow, DeriveRelationsRunDeps } from './relation-derive-run.js';
+
 // Sound-negation escape analysis (#99): a target that never escapes into shared state is
 // groundable as a negative from the static index alone. Engine is language-blind; only the
 // classifier + grammar are per-language.
