@@ -66,7 +66,7 @@ function cmp(x: string, y: string): number {
 export function transitionsOf(projection: StoreProjection, unit?: string): readonly GroundedTransition[] {
   const filter = typeof unit === 'string' && unit.length > 0 ? unit : undefined;
 
-  // First pass — collect the well-formed transition rows (identity legs + stored freshness).
+  // First pass — collect the well-formed transition rows (identity legs + FRESH-by-construction, see freshnessOf).
   type Row = { nodeKey: string; unitKey: string; shaBefore: string; shaAfter: string; freshness: KnowledgeFreshness };
   const rows: Row[] = [];
   for (const node of projection.current.values()) {
@@ -103,12 +103,13 @@ export function transitionsOf(projection: StoreProjection, unit?: string): reado
   );
 }
 
-/** The STORED freshness the door stamped at emit (D-T2), recovered off the projection row's fact bytes is the
- *  adapter's job (a knowledge fold cannot reach CAS). The pure fold cannot read a fact body, so it reports the
- *  row-level truth it CAN see: a transition is an immutable historical record, so absent any live re-check the
- *  honest read is `'FRESH'` — the record is a true statement about the past regardless of HEAD. The `projection`
- *  and `nodeKey` params are kept for signature parity with the sibling folds' `freshnessOf` seam and so an
- *  adapter that wants to surface the STAMPED value off CAS can override this at its own leg. */
+/** `'FRESH'` BY CONSTRUCTION (D-T2), NOT a stored value read back. A transition is an immutable historical
+ *  record about two PAST revs that is NEVER re-checked at HEAD, so `buildTransition` ALWAYS stamps it `FRESH`
+ *  and nothing ever restamps it — the record is a true statement about the past regardless of HEAD. This fold
+ *  therefore returns the constant `'FRESH'` rather than recovering the stamped value off CAS (a pure knowledge
+ *  fold cannot reach a fact body anyway). This is not a lie by omission: for the transition family stored ==
+ *  returned by D-T2. The `projection`/`nodeKey` params are kept for signature parity with the sibling folds'
+ *  `freshnessOf` seam, so an adapter that ever needs the CAS-stamped value can override this at its own leg. */
 function freshnessOf(_projection: StoreProjection, _nodeKey: string): KnowledgeFreshness {
-  return 'FRESH';
+  return 'FRESH'; // by construction (D-T2) — see the doc above; a transition is never re-checked, so never non-FRESH
 }
