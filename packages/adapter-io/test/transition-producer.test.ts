@@ -181,7 +181,9 @@ describe('AT-4 (shipped) — reverify-store SKIPS a transition (justified is out
       seal: 'justified',
     };
     const node = { nodeKey: 'tk', family: 'transition', contentHash: 'ch', claims: [], primaryAnchor: UNIT } as unknown as CurrentNode;
-    const row = reverifyFact(node, transition, () => { throw new Error('oracle must NOT be called'); }, () => true);
+    // A justified transition is dropped by the seal gate BEFORE any leg/docExists/scopeHasDocs is consulted
+    // (D-T2) — the throwing oracle + both existence stubs must never be reached.
+    const row = reverifyFact(node, transition, () => { throw new Error('oracle must NOT be called'); }, () => true, () => true);
     expect(row).toBeUndefined();
   });
 });
