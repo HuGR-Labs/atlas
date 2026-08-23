@@ -318,7 +318,8 @@ function commitLoop<T>(
     // does not run, because this never reaches a return.
     refuseForeignIdentityWrite(read);
     if (guardUnreadable && read.unreadable) return { settled: false, refusal: 'unreadable' };
-    const decision = decide(read.projection ?? emptyStore());
+    const snapshot = read.projection ?? emptyStore();
+    const decision = decide(snapshot);
     if (decision.next === undefined) return { settled: true, out: decision.out }; // governed refusal: no write
     // CAS bytes FIRST, then the projection that references them. Idempotent by content address, so a retry
     // re-putting the same object writes nothing new; a failing `put` (disk-full/permission) throws BEFORE
@@ -347,6 +348,43 @@ function commitLoop<T>(
     for (const obj of decision.put ?? []) {
       if (ctx.put(obj) === CAS_EMPTY) throw new UnaddressableCasObjectError(ctx.base);
     }
+    // NO-OP FAST PATH — a decision that returns the VERY snapshot it read, unmodified (reference-identical),
+    // has minted nothing: the current head ALREADY holds these exact bytes. `mine`'s abstaining pass is the
+    // measured source — its `decideStaging` returns `staged` untouched when a site mints no fact (the majority
+    // of sites on a real repo), and on a full run of 677 sites × 3 arms that used to re-serialize the whole
+    // (growing) staging Map and pay two fsyncs (~44 ms) per site to publish a generation BYTE-IDENTICAL to the
+    // head — O(N²) I/O as the Map grows. Settle WITHOUT a physical publish and the redundant fsyncs are gone.
+    //
+    // SOUND under concurrency, and the reference check is what makes it safe rather than a content guess: this
+    // fires ONLY when `decide` handed back the exact object it was given, so nothing this attempt produced is
+    // absent from the head we read. If a rival published ABOVE us in the meantime, `read.top` is stale — but we
+    // are not asserting durability for any row we did not carry forward, so there is nothing of ours to lose
+    // (contrast `publish`'s head-verification, which exists precisely because a MINTING attempt DOES have new
+    // bytes that must land). It also cannot skip a real write: `decideStaging` (and every governed decision)
+    // rebinds `projection` to a FRESH object via `knowledgeUpsert` the instant it mints, so a minting pass has
+    // `next !== snapshot` and publishes exactly as before — the SCN-CLI-4d republish-on-abstain contract lives
+    // one layer up in the DECISION (`next` is still `projection`, never dropped); this only elides the
+    // physical, redundant re-publication of an unchanged head. `persistSidecar`'s unconditional path passes its
+    // OWN projection object (never the one just read), so `next !== snapshot` there and it is unaffected.
+    //
+    // WHY THE `put` LOOP RUNS FIRST — a CALLER INVARIANT, stated because the loop does not enforce it: `next` is
+    // reference-equal to `snapshot` ONLY when the decision minted nothing, and `knowledgeUpsert` couples minting
+    // with the CAS `put` (every product decision pushes its bytes in the SAME step it rebinds `projection`, so
+    // `put` is empty exactly when `next === snapshot`). A HAND-WRITTEN decision returning `{ next: <the snapshot>,
+    // put: [obj] }` would write `obj` to CAS and then skip publication, orphaning a (harmless) unreferenced blob
+    // — no such caller exists, and putting the loop before the skip keeps even that hypothetical fail-safe: the
+    // bytes land, only the redundant projection re-publish is elided.
+    //
+    // FIRST-COMMIT is NOT skipped, and the guard compares against `read.projection` (the DURABLE head) rather
+    // than `snapshot` (which falls back to a fresh `emptyStore()`) precisely to preserve it: on a fresh store
+    // `read.projection` is `undefined`, so a no-op decision that returns the `emptyStore()` fallback is
+    // `!== read.projection` and DOES publish the initial generation. This matters — callers (and tests) create
+    // the first sidecar with exactly the `(p) => ({ next: p })` idiom, and a store with no generation at all is
+    // a different state from one holding an empty generation for the "is there a durable head to compare
+    // against?" question the unreadable/corrupt-fallback paths ask. The churn win is unaffected: only the
+    // very first abstaining site of a fresh run still publishes (an empty generation); every later site reads a
+    // defined head and skips.
+    if (decision.next === read.projection) return { settled: true, out: decision.out };
     // `superseded` SETTLES. The decision's bytes are durable (see {@link PublishOutcome}), so the ONLY
     // honest answers are this call's own `out` — the one belonging to the attempt that actually published —
     // or a re-run that cannot see it wrote. Re-running is what produced a truthful `next` and a false `out`.

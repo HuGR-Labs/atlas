@@ -138,6 +138,46 @@ describe('SIDECAR — the generation-CAS commit protocol', () => {
     expect(existsSync(join(tmp!, 'projection.json'))).toBe(false);
   });
 
+  it('a NO-OP decision (returns the snapshot it read, unchanged) settles WITHOUT publishing a redundant generation', () => {
+    // PERF (mine abstain fsync-churn): `decideStaging` returns the rehydrated snapshot UNTOUCHED on an
+    // abstaining site — the majority on a real repo. Republishing it costs a whole serialize + two fsyncs to
+    // write bytes byte-identical to the head. The commit still SETTLES (the republish-on-abstain contract
+    // lives one layer up, in the decision's `next: projection`); only the physical, redundant publish is
+    // elided. Here the fake decision returns the exact object it was handed (`(p) => ({ next: p })`), which is
+    // the reference-identity signal the fast path keys on.
+    const gens = (): string[] => (existsSync(tmp!) ? readdirSync(tmp!) : []).filter((f) => /^projection\.\d+\.json$/.test(f)).sort();
+    const store = createDiskStore(casDir());
+    store.commitProjection((p) => ({ out: 0, next: withRow(p, 'first') })); // a real mint ⇒ generation 1
+    expect(gens()).toEqual(['projection.1.json']);
+    expect(durable()).toEqual(['first']);
+
+    const r = store.commitProjection((p) => ({ out: 'noop', next: p })); // NO-OP: snapshot returned unchanged
+    expect(r).toEqual({ settled: true, out: 'noop' }); // it SETTLES (the abstain succeeds)…
+    expect(gens()).toEqual(['projection.1.json']); //     …but NO generation 2 was published (the fast path)
+    expect(durable()).toEqual(['first']); //              the earlier candidate is untouched and still durable
+
+    // TEETH — the skip is scoped to a TRUE no-op, never a blanket "stop publishing": the very next MINT still
+    // lands its generation. MUTANT (fast path → `return` unconditionally): this assertion goes RED (gen 2 absent,
+    // 'second' not durable). MUTANT (fast path removed): the NO-OP assertions above go RED (gen 2 reappears).
+    store.commitProjection((p) => ({ out: 0, next: withRow(p, 'second') }));
+    expect(gens()).toEqual(['projection.1.json', 'projection.2.json']);
+    expect(durable()).toEqual(['first', 'second']);
+  });
+
+  it('a NO-OP on a FRESH store STILL publishes the first generation (skip needs a durable head to compare)', () => {
+    // The fast path compares `next` to `read.projection` (the DURABLE head), NOT to `snapshot` (which falls
+    // back to a fresh `emptyStore()` when nothing is on disk). So a no-op on an EMPTY store — the very idiom
+    // `(p) => ({ next: p })` callers use to MINT the first sidecar — does NOT skip: there is no head to be
+    // byte-identical to, and a store with no generation at all is a different state from one holding an empty
+    // one (the unreadable/corrupt-fallback paths ask exactly this). MUTANT (compare to `snapshot` instead):
+    // no generation is created here, and `door-regression-commit-retry.ts`'s corrupt-sidecar cases go RED.
+    const gens = (): string[] => (existsSync(tmp!) ? readdirSync(tmp!) : []).filter((f) => /^projection\.\d+\.json$/.test(f)).sort();
+    const store = createDiskStore(casDir());
+    const r = store.commitProjection((p) => ({ out: 'first-noop', next: p })); // no-op, but on an EMPTY store
+    expect(r).toEqual({ settled: true, out: 'first-noop' });
+    expect(gens()).toEqual(['projection.1.json']); // the initial (empty) generation IS published
+  });
+
   it('CAS bytes are durable BEFORE the generation that references them (order is enforced by the protocol)', () => {
     // The invariant governed-emit relies on: a sidecar can never point at a contentHash whose bytes are gone.
     // A throwing `put` must therefore abort BEFORE any generation is published.
