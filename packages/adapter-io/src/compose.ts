@@ -49,7 +49,7 @@ import type { RelationLeg } from './relation-source.js';
 import type { NegationLeg } from './negation-source.js';
 import { createVerifyFactLeg } from './verify-fact-source.js';
 import type { VerifyFactLeg } from './verify-fact-source.js';
-import { reverifyStore } from './reverify-store.js';
+import { reverifyStore, makeScopeHasDocs } from './reverify-store.js';
 import type { DocExists, NodeFactPair, ReverifyReport } from './reverify-store.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
 import { gitStoreProvenance } from './store-provenance.js';
@@ -367,6 +367,7 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
   // new seam, one `Set` over data already in memory.
   const docPaths = new Set(scipOutput.documents.map((d) => d.relativePath));
   const docExists: DocExists = (p) => docPaths.has(p);
+  const scopeHasDocs = makeScopeHasDocs(scipOutput.documents); // #240 follow-up — ∃ doc under a negation's scope
   // THE READ-SIDE ANSWER (TRAVEL-BY-REPROOF, `read-access.ts`): what every read leg below is allowed to see.
   // `trusted` ⇒ `store` verbatim, no new cost. `tracked-staging` ⇒ a refusal, unchanged in kind. `tracked-
   // provable` ⇒ a raw re-read filtered to the facts that replay `re-proven` against `verifyFactLeg` — the
@@ -378,6 +379,7 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     gatedStore: store,
     verifyFactLeg,
     docExists,
+    scopeHasDocs,
   });
 
   const seams: WireSeams = {
@@ -590,7 +592,7 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     // BOTH of those this falls back to the pre-existing `reverifyStore(driftPairs, verifyFactLeg)` pass over
     // the WRITE-gated store, byte-identical to the prior behaviour (for `trusted`, that store is not
     // blanked; for `tracked-staging`, it blanks to `[]`, matching that leg's own refusal).
-    reverify: () => readAccess.reverified ?? reverifyStore(driftPairs, verifyFactLeg, docExists),
+    reverify: () => readAccess.reverified ?? reverifyStore(driftPairs, verifyFactLeg, docExists, scopeHasDocs),
     ...(readRefusal !== undefined ? { readRefusal } : {}),
     ...(readAdvisory !== undefined ? { readAdvisory } : {}),
   };

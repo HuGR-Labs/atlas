@@ -47,6 +47,7 @@ const scip: ScipOutput = {
 /** (d) ANCHOR EXISTS (#199 fix-round round 3) — built from the SAME `scip.documents` list, mirroring
  *  exactly how `compose.ts` builds it in production: one `Set` over data already in memory. */
 const docExists = (p: string): boolean => scip.documents.some((d) => d.relativePath === p);
+const scopeHasDocs = (): boolean => true; // #240 follow-up: these provenance-path tests don't exercise negation scope
 
 const REPROVEN_WITNESS = { slot: 'dependency' as const, target: GREET, scope: 'src' };
 
@@ -132,6 +133,7 @@ describe('buildReadAccess — CASE 1 (trusted): no new cost, byte-identical to `
         throw new Error('TEETH: case 1 must never call the oracle');
       },
       docExists,
+      scopeHasDocs,
     });
     expect(access.refusal).toBeUndefined();
     expect(access.reverified).toBeUndefined(); // no reverify pass was run — nothing to report
@@ -153,6 +155,7 @@ describe('buildReadAccess — CASE 3 (tracked-staging): flat refusal, the store 
         throw new Error('TEETH: case 3 must never call the oracle either');
       },
       docExists,
+      scopeHasDocs,
     });
     expect(access.refusal).toBe(REJECTED_UNTRUSTED_STORE);
     expect(access.reverified).toBeUndefined();
@@ -169,6 +172,7 @@ describe('buildReadAccess — CASE 2 (tracked-provable): filtered to what RE-PRO
       gatedStore: store,
       verifyFactLeg: leg,
       docExists,
+      scopeHasDocs,
     });
     expect(access.refusal).toBeUndefined();
     expect(access.reverified).toEqual({
@@ -198,6 +202,7 @@ describe('buildReadAccess — CASE 2 (tracked-provable): filtered to what RE-PRO
       gatedStore: store,
       verifyFactLeg: leg,
       docExists,
+      scopeHasDocs,
     });
     expect(access.reverified).toBeDefined();
     const text = trackedProvableAdvisory(access.reverified!);
@@ -219,6 +224,7 @@ describe('buildReadAccess — FAIL-CLOSED: `tracked-provable` degrades to a refu
         throw new Error('oracle unavailable');
       },
       docExists,
+      scopeHasDocs,
     });
     expect(access.refusal).toBe(REJECTED_UNTRUSTED_STORE);
     expect(access.reverified).toBeUndefined();
@@ -237,6 +243,7 @@ describe('buildReadAccess — FAIL-CLOSED: `tracked-provable` degrades to a refu
       gatedStore: createDiskStore(casPath),
       verifyFactLeg: leg,
       docExists,
+      scopeHasDocs,
     });
     expect(access.refusal).toBeUndefined();
     expect(access.reverified).toEqual({ sealedProven: 0, reProven: 0, broken: 0, unverifiable: 0, rows: [] });
