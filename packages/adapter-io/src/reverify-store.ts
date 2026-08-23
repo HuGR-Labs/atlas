@@ -204,7 +204,9 @@ export function reverifyRelation(nodeKey: string, fact: RelationNode, leg: Verif
     return { nodeKey, outcome: 'unverifiable', reason: 'relation witness is incomplete (missing target/sourceScope) — nothing to replay' };
   }
   // ── TAMPER BINDINGS (a)/(b)/(c) — see the doc comment. Checked BEFORE the oracle replay; any failure is
-  //    `unverifiable` (a defect in a proven-sealed relation), never a silent pass and never a false re-prove. ──
+  //    `broken` + `TAMPERED:` (a defect in a proven-sealed relation, aligned with the predicate tamper path),
+  //    never a silent pass and never a false re-prove. (`unverifiable` is reserved for a missing/incomplete
+  //    witness above — nothing to replay.) ──
   if (fact.tier !== MINED_TIER) {
     return {
       nodeKey,
