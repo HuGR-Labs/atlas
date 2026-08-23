@@ -1,36 +1,44 @@
-// @atlas/adapter-io — test/transition-producer.test.ts  (#234 · ADR-0015 D4 — AT-8 reachability + AT-4 reverify-skip)
+// @atlas/adapter-io — test/transition-producer.test.ts  (#234 · ADR-0015 D4 — AT-8 reachability + governed-door authz + AT-4 reverify-skip)
 //
 // AT-8: the transition family is reachable through the SHIPPED producer (`createTransitionProducer`) over REAL
-// 2-rev git input — NOT a test injector. The producer reads a unit's real content at two commits through the
-// frozen arbitrary-rev index (`createRevIndex`), admits a JUSTIFIED transition (D-T1), persists it atomically,
-// and the SHIPPED read leg (`createTransitionLeg`) reads it back. Supersession contrast (D-T3) and the
-// reverify-store SKIP (AT-4/D-T2 — a justified transition is out of scope for the proven-only reverify gate)
-// are exercised here too, where the real store + oracle live.
+// 2-rev git input — NOT a test injector — AND it now writes THROUGH the governed emit door (billy security
+// review): KNOW-11 actor-scope authz + ARCH-9 anchor apply. So this pins BOTH directions, mirroring the
+// relation AR-13 reachability test: an AUTHORIZED actor lands the transition; an UNAUTHORIZED actor is REFUSED
+// and the row does NOT land (the guardrail the earlier direct-`commitProjection` persist silently dropped).
+// Supersession contrast (D-T3) and the reverify-store SKIP (AT-4/D-T2) are exercised here too.
 
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, afterEach } from 'vitest';
+import { asHash } from '@atlas/kernel';
 import type { CurrentNode, GroundedFact } from '@atlas/knowledge';
 import { initAst } from '../src/index.js';
 import { createRevIndex } from '../src/rev-index.js';
 import { createDiskStore } from '../src/store.js';
-import { createTransitionProducer, createTransitionLeg } from '../src/transition-source.js';
+import { createGovernedEmit } from '../src/governed-emit.js';
+import type { AtlasPolicy } from '../src/policy.js';
+import { createTransitionProducer, createTransitionLeg, type TransitionEmit } from '../src/transition-source.js';
 import { reverifyFact } from '../src/reverify-store.js';
 
 await initAst(); // warm the grammar so the arbitrary-rev index folds the SAME AST units production folds
 
-const UNIT = 'src/pay.ts'; // a whole-FILE unit lineage — resolves at each rev via resolveAnchorAt
+const UNIT = 'src/pay.ts'; // a whole-FILE unit lineage — resolves at each rev via resolveAnchorAt; scope = 'src'
+const ACTOR = 'seat:owner';
+const OTHER = 'seat:intruder'; // NOT a member of scope 'src'
+/** A policy authorizing ONLY `ACTOR` over scope `src` (no `anchors` declared ⇒ the anchor gate defers). */
+const POLICY: AtlasPolicy = { t0Heuristic: { keywords: [] }, authz: { scopes: { src: [ACTOR] } } };
+const STUB_GATE = { gateHolds: () => 'HOLDS' as const }; // the transition door never calls the truth gate (D-T2)
 
 const g = (repo: string, args: readonly string[]): string =>
   execFileSync('git', args as string[], { cwd: repo, encoding: 'utf8' }).trim();
 
 interface Sandbox {
   readonly repoPath: string;
-  readonly A: string; // rev before
-  readonly B: string; // rev after (unit changed)
-  readonly C: string; // a third rev (unit changed again) — for the supersession contrast
+  readonly A: string;
+  readonly B: string;
+  readonly C: string;
   cleanup(): void;
 }
 
@@ -54,39 +62,58 @@ function makeRepo(): Sandbox {
   return { repoPath, A, B, C, cleanup: () => rmSync(repoPath, { recursive: true, force: true }) };
 }
 
+/** Build the SHIPPED producer over a repo, writing through the GOVERNED door as `actor`. */
+function producerFor(sbx: Sandbox, actor: string) {
+  const store = createDiskStore(join(sbx.repoPath, '.atlas'));
+  const revIndex = createRevIndex(sbx.repoPath);
+  // The governed emit door — the SAME `createGovernedEmit` the compose root binds; promoted origin (so a
+  // justified transition's seal survives) + a non-empty ratify token (a T2 advisory commits with any ratifier).
+  const emit = createGovernedEmit({ store, gate: STUB_GATE, policy: POLICY, actor, origin: 'promoted', ratifyToken: 'seat:ratifier' }).emit as TransitionEmit;
+  const produce = createTransitionProducer(revIndex, emit, asHash(''));
+  const read = createTransitionLeg(store);
+  return { produce, read };
+}
+
 let sbx: Sandbox | undefined;
 afterEach(() => {
   sbx?.cleanup();
   sbx = undefined;
 });
 
-describe('AT-8 — reachable through the SHIPPED producer over REAL 2-rev git input (not an injector)', () => {
-  it('produces + persists a JUSTIFIED transition from two real revs, and reads it back through the shipped leg', () => {
+describe('AT-8 — reachable through the SHIPPED producer over REAL 2-rev git input, THROUGH the governed door', () => {
+  it('an AUTHORIZED actor produces + GOVERNED-emits a JUSTIFIED transition from two real revs, read back through the shipped leg', () => {
     sbx = makeRepo();
-    const store = createDiskStore(join(sbx.repoPath, '.atlas'));
-    const revIndex = createRevIndex(sbx.repoPath);
-    const produce = createTransitionProducer(store, revIndex); // THE SHIPPED PRODUCER
-    const read = createTransitionLeg(store); //                    THE SHIPPED READ LEG
+    const { produce, read } = producerFor(sbx, ACTOR);
 
     const run = produce(UNIT, sbx.A, sbx.B);
     expect(run.admitted).toBe(true);
-    expect(run.persisted).toBe(true);
-    expect(run.shaBefore).toBeTruthy();
-    expect(run.shaAfter).toBeTruthy();
+    expect(run.persisted).toBe(true); // the governed door COMMITTED (actor is in scope 'src')
     expect(run.shaBefore).not.toBe(run.shaAfter); // the unit really changed across the two revs
 
     const rows = read(UNIT);
     expect(rows).toHaveLength(1);
     expect(rows[0]!.unitKey).toBe(UNIT);
-    expect(rows[0]!.authoring).toBe('TRANSITIONED'); // the lineage head
-    expect(rows[0]!.freshness).toBe('FRESH'); // stamped at emit (D-T2)
+    expect(rows[0]!.authoring).toBe('TRANSITIONED');
+    expect(rows[0]!.freshness).toBe('FRESH');
+  });
+
+  it('SECURITY TEETH — an UNAUTHORIZED actor is REFUSED by the governed door; the row does NOT land', () => {
+    sbx = makeRepo();
+    const { produce, read } = producerFor(sbx, OTHER); // NOT a member of scope 'src'
+
+    const run = produce(UNIT, sbx.A, sbx.B);
+    // the fact is well-formed (admitted), but the GOVERNED DOOR refused the write (KNOW-11 authz) — persisted:false.
+    expect(run.admitted).toBe(true);
+    expect(run.persisted).toBe(false);
+    expect(run.reason).toBeTruthy();
+    expect(run.reason).toMatch(/authoriz|scope/i);
+    // the guardrail: NOTHING landed — a gate-less persist would have written it.
+    expect(read(UNIT)).toHaveLength(0);
   });
 
   it('ABSTAINS (never fabricates) when the unit did not change across the two revs — same content ⇒ no transition', () => {
     sbx = makeRepo();
-    const store = createDiskStore(join(sbx.repoPath, '.atlas'));
-    const produce = createTransitionProducer(store, createRevIndex(sbx.repoPath));
-    // A→A: identical rev ⇒ identical content hash ⇒ zero interval ⇒ refused (not admitted, nothing written).
+    const { produce } = producerFor(sbx, ACTOR);
     const run = produce(UNIT, sbx.A, sbx.A);
     expect(run.admitted).toBe(false);
     expect(run.reason).toBeTruthy();
@@ -94,23 +121,20 @@ describe('AT-8 — reachable through the SHIPPED producer over REAL 2-rev git in
 
   it('ABSTAINS when the unit does not resolve at a rev (no leg to ground the transition on)', () => {
     sbx = makeRepo();
-    const store = createDiskStore(join(sbx.repoPath, '.atlas'));
-    const produce = createTransitionProducer(store, createRevIndex(sbx.repoPath));
+    const { produce } = producerFor(sbx, ACTOR);
     const run = produce('src/does-not-exist.ts', sbx.A, sbx.B);
     expect(run.admitted).toBe(false);
   });
 });
 
-describe('AT-3 (shipped) — supersession contrast on the same lineage through the real store', () => {
+describe('AT-3 (shipped) — supersession contrast on the same lineage through the governed store', () => {
   it('A→B then B→C: the read leg marks A→B SUPERSEDED and B→C the current TRANSITIONED head, both retained', () => {
     sbx = makeRepo();
-    const store = createDiskStore(join(sbx.repoPath, '.atlas'));
+    const { produce, read } = producerFor(sbx, ACTOR);
     const revIndex = createRevIndex(sbx.repoPath);
-    const produce = createTransitionProducer(store, revIndex);
-    const read = createTransitionLeg(store);
 
-    expect(produce(UNIT, sbx.A, sbx.B).admitted).toBe(true);
-    expect(produce(UNIT, sbx.B, sbx.C).admitted).toBe(true);
+    expect(produce(UNIT, sbx.A, sbx.B).persisted).toBe(true);
+    expect(produce(UNIT, sbx.B, sbx.C).persisted).toBe(true);
 
     const rows = read(UNIT);
     expect(rows).toHaveLength(2); // both retained (superseded, not deleted)
@@ -140,7 +164,6 @@ describe('AT-4 (shipped) — reverify-store SKIPS a transition (justified is out
       seal: 'justified',
     };
     const node = { nodeKey: 'tk', family: 'transition', contentHash: 'ch', claims: [], primaryAnchor: UNIT } as unknown as CurrentNode;
-    // The seal gate admits ONLY `proven`; a justified transition falls out to `undefined` (D-T2 — never re-checked).
     const row = reverifyFact(node, transition, () => { throw new Error('oracle must NOT be called'); }, () => true);
     expect(row).toBeUndefined();
   });

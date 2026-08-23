@@ -95,8 +95,9 @@
 import type { CasObject } from '@atlas/kernel';
 import type { Hash, Tier } from '@atlas/contracts';
 import { upsert, route, stage, ratify, isTier, isScope } from '@atlas/knowledge';
-import type { Candidate, CurrentNode, GroundedFact, NegationNode, NodeFamily, WriteRequest, RatifyToken, WriteOrigin } from '@atlas/knowledge';
+import type { Candidate, CurrentNode, GroundedFact, NegationNode, TransitionNode, NodeFamily, WriteRequest, RatifyToken, WriteOrigin } from '@atlas/knowledge';
 import { emitNegation, type NegationEmitDeps } from './governed-emit-negation.js'; // #99b N2 — THE ABSTENTION DOOR
+import { emitTransition } from './governed-emit-transition.js'; // #234 D4 — THE TRANSITION DOOR
 // FAMILY + IDENTITY resolution (all three fact shapes) — extracted at the LOC ceiling; a relation (ADR-0015
 // D2) is addressed by `relationKey`, never the intrinsic `nodeKey`. See that file's header.
 import { familyOf, claimNormOf, relationWellFormed, relationCarriers, resolveWriteIdentity, stripForgedRelationSeal } from './governed-emit-identity.js';
@@ -152,6 +153,10 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
   const emit = (raw: GroundedFact, at: Hash): EmitOut => {
     // #99b N2 — a negation re-routes to `emitNegation` (its own gate ladder, §4), branched before gate 0; `at` unused.
     if (raw.kind === 'negation') return emitNegation(deps, raw as NegationNode);
+    // #234 D4 — a transition re-routes to `emitTransition` (its own gate ladder), branched before gate 0. It
+    // carries authz + anchor gates but NO HEAD truth gate: a transition grounds on PAST revs (D-T2), which the
+    // main gate-1 would always drift-reject. `at` unused (the transition's grounding is stamped, not re-checked).
+    if (raw.kind === 'transition') return emitTransition(deps, raw as TransitionNode);
 
     // 0. WELL-FORMED PAYLOAD — `tier`, `scope` and the `kind`/`check` pair: the three fields every LATER
     //    gate routes on, and the three the author supplies.

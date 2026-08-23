@@ -129,8 +129,8 @@ export interface ComposedRuntime {
   readonly negations: NegationLeg;
   /** The grounded-transition READ leg + reachable 2-rev PRODUCER (#234 / ADR-0015 D4) — `transitions(unit)`
    *  reads the lineage's 2-rev records (head TRANSITIONED + predecessors SUPERSEDED, D-T3); `transition(unit,
-   *  before, after)` reads REAL content at two revs and persists a JUSTIFIED transition (D-T1). Flagged limits
-   *  in `transition-source.ts` (direct `commitProjection` persist, mechanical `derivation`). */
+   *  before, after)` reads REAL content at two revs and persists a JUSTIFIED transition (D-T1) THROUGH the
+   *  governed emit door (KNOW-11 authz + ARCH-9 anchor — `governed-emit-transition.ts`). */
   readonly transitions: TransitionLeg;
   readonly transition: TransitionProducer;
   /** The sound-genesis PROVEN-family feed (`atlas verify-fact`) — PROVES/REFUTES/ABSTAINS on a typed
@@ -571,9 +571,9 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     // scope OR an extractor bump reads DRIFTED). `currentEdgeModel` is `edgeModelVersion()`, the SAME value
     // the door stamps.
     negations: createNegationLeg(readAccess.store, bindFreshnessOracle(axes, edgeModelVersion())),
-    // #234 — READ leg off the SAME `readAccess.store` the query leg reads; PRODUCER writes the WRITE `store` via `revIndex`.
+    // #234 — READ leg off the SAME store the query leg reads. The PRODUCER routes THROUGH the governed door (`relationEmit`; transition branch = `governed-emit-transition.ts`) so KNOW-11 authz + ARCH-9 anchor apply (billy #234 — no gate-less write).
     transitions: createTransitionLeg(readAccess.store),
-    transition: createTransitionProducer(store, revIndex),
+    transition: createTransitionProducer(revIndex, relationEmit, asHash(headSha(repoPath) ?? '')),
     // THE SOUND-GENESIS PROVEN-FAMILY FEED (`atlas verify-fact`). Off the SAME `scipOutput` the axes ride — a
     // program oracle over the immutable code index, built once and closed over (see verify-fact-source.ts).
     verifyFact: verifyFactLeg,

@@ -9,9 +9,10 @@
 // derivation prose).
 //
 // THE EXIT CODE IS THE WHOLE CONTRACT A SCRIPT HAS WITH THIS COMMAND, so it is derived, never chosen:
-//   0  a transition was admitted from the two revs and settled durably.
+//   0  a transition was admitted from the two revs and the GOVERNED door committed it durably.
 //   2  the producer ABSTAINED (the unit did not resolve at a rev, or its content did not change ⇒ no
-//      transition) OR the atomic persist did not settle (contended store). Nothing was fabricated.
+//      transition) OR the GOVERNED emit door REFUSED the write (KNOW-11 authz / ARCH-9 anchor / unratified).
+//      Nothing was fabricated, and on a governed refusal nothing was written.
 
 import type { TransitionRun } from '@atlas/adapter-io';
 import type { CliVerdict } from './render.js';
@@ -41,7 +42,7 @@ export function transitionVerdict(run: TransitionRun): CliVerdict {
       `status: ${settled ? 'ok' : 'rejected'}\n` +
       `next: ${settled
         ? `justified transition on '${run.unitKey}' is durable (${run.id ?? ''}) — read it back with \`atlas transitions ${run.unitKey}\`; a later transition on this lineage supersedes it (D-T3)`
-        : `the atomic persist did not settle (contended store) — nothing was written; retry \`atlas transition ${run.unitKey} ${run.revBefore} ${run.revAfter}\``}\n` +
+        : `the GOVERNED emit door REFUSED the write: ${run.reason ?? 'unknown'} — nothing was written. Check that ATLAS_ACTOR is a member of the unit's scope (KNOW-11 authz) and holds a ratify token`}\n` +
       `invariant: ${INVARIANT}\n` +
       `transition: ${run.unitKey} @ ${run.shaBefore?.slice(0, 12) ?? '?'} → ${run.shaAfter?.slice(0, 12) ?? '?'} (seal: justified)\n`,
   };

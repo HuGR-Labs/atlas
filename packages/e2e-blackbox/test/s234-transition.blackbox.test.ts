@@ -19,6 +19,11 @@ const V1 = 'export const rate = 1;\n';
 const V2 = 'export const rate = 2;\n';
 const V3 = 'export const rate = 3;\n';
 const INDEX = [{ path: 'src/pay.ts', defines: ['pay/rate.'] }];
+// The producer writes THROUGH the governed door (billy #234 security fix): the actor must be in the UNIT's
+// scope ('src'). This policy authorizes ONLY `OWNER` over `src`; `INTRUDER` is in no scope (the teeth below).
+const OWNER = 'seat:owner';
+const AUTH_ENV = { ATLAS_ACTOR: OWNER, ATLAS_RATIFY_TOKEN: OWNER };
+const POLICY = JSON.stringify({ t0Heuristic: { keywords: [] }, authz: { scopes: { src: [OWNER] } } });
 
 let repo: FixtureRepo;
 let revA = '';
@@ -26,16 +31,16 @@ let revB = '';
 let revC = '';
 
 beforeAll(() => {
-  repo = makeFixtureRepo({ files: { [UNIT]: V1 }, index: INDEX });
+  repo = makeFixtureRepo({ files: { [UNIT]: V1 }, index: INDEX, policy: POLICY });
   revA = repo.sha();
   revB = repo.commit({ [UNIT]: V2 });
   revC = repo.commit({ [UNIT]: V3 });
 });
 afterAll(() => repo?.cleanup());
 
-describe('S234 — a 2-rev transition is produced, read back justified, and superseded not falsified', () => {
-  it('`atlas transition <unit> A B` produces + persists a JUSTIFIED transition (exit 0)', () => {
-    const run = runAtlas(repo.repoPath, ['transition', UNIT, revA, revB]);
+describe('S234 — a 2-rev transition is produced through the GOVERNED door, read back justified, superseded not falsified', () => {
+  it('an AUTHORIZED `atlas transition <unit> A B` produces + persists a JUSTIFIED transition (exit 0)', () => {
+    const run = runAtlas(repo.repoPath, ['transition', UNIT, revA, revB], AUTH_ENV);
     expect(run.exitCode).toBe(0);
     expect(run.stdout).toContain('status: ok');
     expect(run.stdout).toContain('seal: justified');
@@ -51,7 +56,7 @@ describe('S234 — a 2-rev transition is produced, read back justified, and supe
   });
 
   it('a SECOND transition B→C supersedes the first on the same lineage — both retained (D-T3)', () => {
-    const second = runAtlas(repo.repoPath, ['transition', UNIT, revB, revC]);
+    const second = runAtlas(repo.repoPath, ['transition', UNIT, revB, revC], AUTH_ENV);
     expect(second.exitCode).toBe(0);
     expect(second.stdout).toContain('status: ok');
 
@@ -63,8 +68,25 @@ describe('S234 — a 2-rev transition is produced, read back justified, and supe
     expect(read.stdout).toContain('1 SUPERSEDED');
   });
 
+  it('SECURITY TEETH — an UNAUTHORIZED actor is REFUSED by the governed door; the row does NOT land', () => {
+    // A fresh repo so no prior transition exists; the intruder is in no scope.
+    const solo = makeFixtureRepo({ files: { [UNIT]: V1 }, index: INDEX, policy: POLICY });
+    try {
+      const a = solo.sha();
+      const b = solo.commit({ [UNIT]: V2 });
+      const refused = runAtlas(solo.repoPath, ['transition', UNIT, a, b], { ATLAS_ACTOR: 'seat:intruder', ATLAS_RATIFY_TOKEN: 'seat:intruder' });
+      expect(refused.exitCode).toBe(2);
+      expect(refused.stdout).toContain('status: rejected');
+      // and NOTHING landed — the read comes back empty (a gate-less persist would have written it).
+      const read = runAtlas(solo.repoPath, ['transitions', UNIT]);
+      expect(read.stdout).toContain('no grounded transition');
+    } finally {
+      solo.cleanup();
+    }
+  });
+
   it('TEETH — a transition over two revs where the unit did NOT change is REJECTED (no zero-interval fabrication)', () => {
-    const noop = runAtlas(repo.repoPath, ['transition', UNIT, revA, revA]);
+    const noop = runAtlas(repo.repoPath, ['transition', UNIT, revA, revA], AUTH_ENV);
     expect(noop.exitCode).toBe(2);
     expect(noop.stdout).toContain('status: rejected');
   });

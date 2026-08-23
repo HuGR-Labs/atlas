@@ -22,21 +22,23 @@
 //      LLM that read both bodies — a full model-authored producer is out of #234's scope. The transition FACT
 //      itself is fully admitted from real revs; only the richness of the justification prose is deferred.
 //
-// HONEST WRITE-PATH LIMIT (flagged): the producer persists through `commitProjection` (atomic, concurrency-safe)
-// directly, NOT through the governed authz door (`createGovernedEmit`) the other write commands ride. A
-// transition node is COMPLETE after `buildTransition` (it grounds on the rev-pair it carries and needs no door
-// to construct anything — unlike a negation), so this is a real, safe persist. Threading transitions through the
-// governed authz/ratify gate is a follow-up integration, deferred and named, not silently skipped.
+// WRITE PATH (billy security cold-review, #234 — the #87/ADR-0008 gate-less-write fix): the producer routes the
+// finished transition node THROUGH the governed emit door (`emit`, the `createGovernedEmit(...).emit` compose
+// binds — its `kind:'transition'` branch is `governed-emit-transition.ts`), NOT a direct `commitProjection`. An
+// earlier revision persisted directly and silently dropped KNOW-11 actor-scope authz + ARCH-9 anchor binding —
+// a second gate-less write path into the governed projection, exactly the ratified-invariant violation ADR-0008
+// closed. The door restores both gates: an actor not in the unit's scope is REFUSED, and a scope that does not
+// OWN the unit is REFUSED. The transition door runs NO HEAD truth gate (a transition grounds on PAST revs, D-T2,
+// which the main gate would always drift-reject) — see `governed-emit-transition.ts` for the full ladder.
 
-import { id } from '@atlas/kernel';
-import type { CasObject } from '@atlas/kernel';
-import { transitionsOf, upsert } from '@atlas/knowledge';
-import type { GroundedTransition, TransitionNode, WriteRequest } from '@atlas/knowledge';
+import { transitionsOf } from '@atlas/knowledge';
+import type { GroundedTransition, TransitionNode } from '@atlas/knowledge';
 import { buildTransition, transitionWellFormed } from '@atlas/genesis';
 import type { TransitionProposal } from '@atlas/genesis';
 import type { GroundingEntry } from '@atlas/grounding';
-import type { StructRef, Tier } from '@atlas/contracts';
-import type { Guidance, Verdict } from '@atlas/tools';
+import type { StructRef, Tier, Hash } from '@atlas/contracts';
+import type { EmitOut, Guidance, Verdict } from '@atlas/tools';
+import { unitScopeOf } from './llm.js';
 import { rehydrateProjection } from './store.js';
 import type { DiskStore } from './store.js';
 import type { RevIndex } from './rev-index.js';
@@ -52,21 +54,27 @@ export function createTransitionLeg(store: DiskStore): TransitionLeg {
   return (unit) => transitionsOf(rehydrateProjection(store), unit);
 }
 
-/** The outcome of one produce-and-persist pass — a MEASURED record, never a manufactured fact. `admitted:false`
- *  carries the honest reason (the unit was not present at a rev, or the content did not change ⇒ no transition). */
+/** The outcome of one produce-and-emit pass — a MEASURED record, never a manufactured fact. `admitted:false`
+ *  carries the honest reason: the unit was not present at a rev, the content did not change (no transition), OR
+ *  the GOVERNED DOOR REFUSED the write (unauthorized actor / anchor). `persisted:false` on a governed refusal is
+ *  the whole point of the security fix — a gate-less path would have landed it. */
 export interface TransitionRun {
   readonly admitted: boolean;
   readonly unitKey: string;
   readonly revBefore: string;
   readonly revAfter: string;
-  readonly id?: string; // the minted transitionKey, present iff admitted
+  readonly id?: string; // the durable content address the door returned, present iff persisted
   readonly shaBefore?: string; // the unit's content hash at revBefore, present iff both revs resolved
   readonly shaAfter?: string; //  the unit's content hash at revAfter,  present iff both revs resolved
-  readonly persisted?: boolean; // whether the atomic commit settled (present iff admitted)
-  readonly reason?: string; // the honest why-not, present iff NOT admitted
+  readonly persisted?: boolean; // whether the governed door COMMITTED (false ⇒ authz/anchor/ratify refusal — see reason)
+  readonly reason?: string; // the honest why-not / the governed door's refusal text, present iff NOT admitted-and-persisted
 }
 
-/** The composition-root PRODUCER leg: `(unit, revBefore, revAfter)` → produce + persist a justified transition. */
+/** The governed emit door leg the producer writes THROUGH — `createGovernedEmit(...).emit` (compose binds it).
+ *  Its `kind:'transition'` branch (`governed-emit-transition.ts`) applies KNOW-11 authz + ARCH-9 anchor. */
+export type TransitionEmit = (node: TransitionNode, at: Hash) => EmitOut;
+
+/** The composition-root PRODUCER leg: `(unit, revBefore, revAfter)` → produce + GOVERNED-emit a justified transition. */
 export type TransitionProducer = (unit: string, revBefore: string, revAfter: string) => TransitionRun;
 
 /** The FILE half of a `unitKey` (`file::item::block` → `file`) — the repo-relative path a grounding entry
@@ -83,16 +91,19 @@ function entryOf(ref: StructRef, unitKey: string): GroundingEntry {
 }
 
 /**
- * Build the REACHABLE producer over the durable `store` + the arbitrary-rev `revIndex`. The returned leg reads
- * the unit's REAL content at each of the two revs, admits a justified transition (D-T1), and persists it.
+ * Build the REACHABLE producer over the arbitrary-rev `revIndex` + the GOVERNED emit door `emit`. The returned
+ * leg reads the unit's REAL content at each of the two revs, admits a justified transition (D-T1), and routes it
+ * THROUGH the governed door (`emit`) — which applies KNOW-11 authz + ARCH-9 anchor before it commits. `at` is
+ * the anchor rev the write is stamped at (the repo's live HEAD); the transition door IGNORES it (D-T2), threaded
+ * honestly to mirror the sound-relation derive leg.
  *
- * ABSTAIN, NOT FABRICATE (honest failure modes, both a MEASURED `admitted:false`, never a throw):
- *   - the unit does not resolve at revBefore or revAfter (a bad/unknown rev, or the unit did not exist there);
- *   - the unit's content hash is IDENTICAL across the two revs (`shaBefore === shaAfter`) — the unit did not
- *     change, so there is no transition to state (`transitionWellFormed` refuses it, exactly the transitionKey
- *     `shaBefore === shaAfter` malformed guard).
+ * ABSTAIN / REFUSE, NEVER FABRICATE (all a MEASURED result, never a throw):
+ *   - the unit does not resolve at a rev (a bad/unknown rev, or the unit did not exist there) ⇒ admitted:false;
+ *   - the content is IDENTICAL across the two revs (`shaBefore === shaAfter`) ⇒ no transition, admitted:false;
+ *   - the GOVERNED DOOR refuses (actor not in the unit's scope, or the scope does not own the unit, or the
+ *     ratifier declined) ⇒ admitted:true (the fact was well-formed) but persisted:false + the door's reason.
  */
-export function createTransitionProducer(store: DiskStore, revIndex: RevIndex): TransitionProducer {
+export function createTransitionProducer(revIndex: RevIndex, emit: TransitionEmit, at: Hash): TransitionProducer {
   return (unit, revBefore, revAfter) => {
     const base: TransitionRun = { admitted: false, unitKey: unit, revBefore, revAfter };
     if (typeof unit !== 'string' || unit.length === 0) return { ...base, reason: 'missing unit key' };
@@ -110,6 +121,7 @@ export function createTransitionProducer(store: DiskStore, revIndex: RevIndex): 
       refBefore: entryOf(refBefore, unit),
       refAfter: entryOf(refAfter, unit),
       tier: 'T2' as Tier, // the mined tier — a transition is a produced, advisory-class fact (mirrors the sound-arm tier)
+      scope: unitScopeOf(unit), // KNOW-11a authz scope — the unit's own containing directory; the door authorizes against it
       // DEFERRED (flagged): mechanically-derived derivation prose, NOT an LLM that read both bodies (§header).
       derivation: `unit '${unit}' changed content across revs ${revBefore.slice(0, 12)}→${revAfter.slice(0, 12)} (subtreeHash ${shaBefore.slice(0, 12)}→${shaAfter.slice(0, 12)}); a model-authored account of WHAT changed is deferred (#234 honest limit)`,
     };
@@ -119,32 +131,18 @@ export function createTransitionProducer(store: DiskStore, revIndex: RevIndex): 
     }
 
     const fact = buildTransition(proposal);
-    const contentHash = String(id(fact as unknown as CasObject));
-    const req: WriteRequest = {
-      nodeKey: String(fact.id),
-      contentHash,
-      family: 'transition',
-      claimNorm: fact.derivation ?? `transition on ${unit}`,
-      primaryAnchor: unit,
-      unitKey: fact.unitKey,
-      shaBefore: fact.shaBefore,
-      shaAfter: fact.shaAfter,
-      tier: fact.tier,
-      ...(fact.seal !== undefined ? { seal: fact.seal } : {}), // conditional — exactOptionalPropertyTypes (always 'justified' here)
-    };
-    const result = store.commitProjection<{ id: string }>((projection) => {
-      const next = upsert(projection, req).store; // the frozen KNOW-15 reducer — a transition routes as UPDATE/CREATE (check-less family)
-      return { out: { id: contentHash }, next, put: [fact as unknown as CasObject] };
-    });
+    // ROUTE THROUGH THE GOVERNED DOOR — KNOW-11 authz + ARCH-9 anchor gates apply here (the security fix). A
+    // refusal (unauthorized actor / anchor, or an unratified commit) is a MEASURED persisted:false, never a throw.
+    const out: EmitOut = emit(fact, at);
     return {
       admitted: true,
       unitKey: unit,
       revBefore,
       revAfter,
-      id: String(fact.id),
       shaBefore,
       shaAfter,
-      persisted: result.settled,
+      persisted: out.emitted,
+      ...(out.emitted ? { id: String(out.id) } : { reason: out.rejected ?? 'the governed door refused the write' }),
     };
   };
 }

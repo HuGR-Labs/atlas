@@ -33,13 +33,19 @@ invariant: #234 D4: a transition is an IMMUTABLE ADVISORY HISTORICAL record admi
 transition: src/pay.ts::charge @ <hash>… → <hash>… (seal: justified)
 ```
 
+## Authorization (governed)
+
+`atlas transition` PERSISTS **through the governed emit door** — the same door `atlas emit`/`atlas promote`/
+`atlas derive-relations` ride. **KNOW-11 actor-scope authz** and **ARCH-9 anchor binding** apply: the acting
+`ATLAS_ACTOR` must be a member of the unit's own scope (e.g. `src` for `src/pay.ts::charge`), and the scope
+must OWN the unit. An **unauthorized** actor is **REFUSED** (exit 2, `unauthorized`) and **nothing lands** —
+there is no gate-less write path into the governed knowledge projection. The transition door runs **no HEAD
+truth gate** (a transition grounds on PAST revs, D-T2, which a HEAD-freshness gate would always drift-reject);
+its grounding is validated structurally (the two rev entries carry real content hashes), and authz + anchor are
+the gates that bite.
+
 ## Honest limits (flagged, not silent)
 
-- **Write path.** The producer persists the finished transition node directly through the store's atomic
-  `commitProjection` door, **not** the governed authz/ratify door the other write commands ride. A transition
-  node is *complete* after admission (it grounds on the rev-pair it carries and needs no door to construct
-  anything — unlike a negation), so this is a real, safe persist; routing transitions through the governed gate
-  is a named follow-up.
 - **Derivation prose.** The `derivation` the `justified` seal names is **mechanically generated** ("the unit
   changed content across these revs"), not authored by a model that read both bodies. A full model-authored
   producer that describes *what* changed is out of #234's scope; the transition **fact** is fully admitted from

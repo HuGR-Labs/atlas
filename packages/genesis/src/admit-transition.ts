@@ -88,6 +88,7 @@ export function buildTransition(p: TransitionProposal): TransitionNode {
     claims: [],
     authoring: 'TRANSITIONED', // the mint value; lineage head/predecessor is derive-on-read (D-T3)
     seal: 'justified', // ADR-0017 — a transition is ALWAYS justified, NEVER proven (D-T1)
+    ...(typeof p.scope === 'string' && p.scope.length > 0 ? { scope: p.scope } : {}), // KNOW-11a authz scope — the governed door authorizes against it (absent-tolerant)
     ...(typeof p.derivation === 'string' && p.derivation.length > 0 ? { derivation: p.derivation } : {}),
   };
 }

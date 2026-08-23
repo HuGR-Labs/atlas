@@ -420,11 +420,11 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
   if (command === 'transition') {
     // #234/ADR-0015 D4: `atlas transition <unit> <revBefore> <revAfter>` — the reachable 2-rev transition
     // PRODUCER. It drives the composition root's `transition` leg, which reads the unit's REAL content at each
-    // rev through the arbitrary-rev index, admits a JUSTIFIED transition (no oracle — D-T1) and persists it
-    // atomically. Like `promote`/`derive-relations` it is a WRITE command intercepted before the handler (it
-    // opens no NEW governed surface — the flagged limit: it persists directly through `commitProjection`, not
-    // the governed authz door). Its rendered `CliVerdict` reaches the console over the SAME emit/exit path. It
-    // fails closed on an uncomposed runtime exactly as `promote` does.
+    // rev through the arbitrary-rev index, admits a JUSTIFIED transition (no oracle — D-T1) and PERSISTS it
+    // THROUGH the governed emit door (KNOW-11 actor-scope authz + ARCH-9 anchor apply — an unauthorized actor is
+    // REFUSED). Like `promote`/`derive-relations` it is a WRITE command intercepted before the handler that
+    // publishes through the existing emit door (opens no NEW governed surface). Its rendered `CliVerdict` reaches
+    // the console over the SAME emit/exit path. It fails closed on an uncomposed runtime exactly as `promote` does.
     if (!deps.transition) {
       return emit(
         errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'),

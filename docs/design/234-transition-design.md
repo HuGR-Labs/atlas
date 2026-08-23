@@ -27,11 +27,18 @@ The negation family is the other advisory-class, no-`check`, seal-carrying green
 
 ## Reachability — a true shipped path
 
-`atlas transition <unit> <revBefore> <revAfter>` (`cli/src/transition.ts` → `adapter-io/src/transition-source.ts` `createTransitionProducer`) reads the unit's REAL content at each rev through the arbitrary-rev index (`rev-index.ts` `createRevIndex`/`resolveAnchorAt`), builds a `TransitionProposal` over the two resolved rev anchors, admits a `justified` transition (`buildTransition`), and persists it atomically via `commitProjection`. `atlas transitions <unit>` reads it back. This is reachable over **real 2-rev git input**, not a test injector (AT-8/AT-9).
+`atlas transition <unit> <revBefore> <revAfter>` (`cli/src/transition.ts` → `adapter-io/src/transition-source.ts` `createTransitionProducer`) reads the unit's REAL content at each rev through the arbitrary-rev index (`rev-index.ts` `createRevIndex`/`resolveAnchorAt`), builds a `TransitionProposal` over the two resolved rev anchors, admits a `justified` transition (`buildTransition`), and PERSISTS it **through the governed emit door** (`governed-emit-transition.ts`). `atlas transitions <unit>` reads it back. Reachable over **real 2-rev git input**, not a test injector (AT-8/AT-9).
+
+### The governed door — why a dedicated branch (billy security review)
+
+A transition MUST NOT persist directly (a second gate-less write into the governed projection is the #87/ADR-0008 class ADR-0008 closed as a structural invariant). It routes through the SAME kind-agnostic `createGovernedEmit` instance the relation derive leg uses; the door's `kind:'transition'` branch (`governed-emit-transition.ts`, mirroring the negation door) applies:
+- **KNOW-11 authz** (`actorInScope`) — the actor must be in the unit's own scope (`unitScopeOf(unitKey)`, stamped on `node.scope` by the producer). An unauthorized actor is **REFUSED**, nothing lands.
+- **ARCH-9 anchor** (`scopeOwnsAnchor`) — the declared scope must OWN the unit; authority cannot be borrowed from an unrelated dir.
+- **NO HEAD truth gate** — the main door's gate 1 re-derives freshness of the grounding against HEAD (`driftDetect(grounding, axes)`); a transition grounds on PAST-rev content hashes, so it AND-folds to DRIFTED at any future HEAD by construction (D-T2) and the main gate would reject every legit transition. The transition door replaces it with a STRUCTURAL `isGrounded` check (the two rev entries carry non-empty subtreeHashes) — grounded by construction, minus the freshness that does not apply.
+- **advisory-class ratify + upsert+put** — verbatim the main/negation door's atomic commit. `origin:'promoted'` keeps the `justified` seal on the durable row (an authored payload's seal is stripped as untrusted).
 
 ### Flagged limits (honest, not silent)
 
-- **Write path.** The producer persists the finished node directly through `commitProjection`, **NOT** the governed authz/ratify door the other write commands ride. A transition node is *complete* after admission (it grounds on the rev-pair it carries and needs no door to construct anything — unlike a negation), so this is a real, safe persist; routing transitions through the governed gate is a named follow-up.
 - **Derivation prose.** The `derivation` the `justified` seal names is **mechanically generated** ("the unit changed content across these revs"), not authored by a model that read both bodies. A full model-authored producer describing *what* changed is deferred; the transition **fact** is fully admitted from real revs — only the richness of the justification prose is deferred.
 - **D-T4 (rename)** and **D-T5 (proven-flip)** are the two design-level deferrals, documented as honest limits.
 

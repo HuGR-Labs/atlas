@@ -125,6 +125,7 @@ export interface TransitionProposal {
   readonly refBefore: FactGroundingEntry; // the unit anchored at the BEFORE rev (anchor.subtreeHash = the before content hash) — grounding entry[0] + identity
   readonly refAfter: FactGroundingEntry; //  the unit anchored at the AFTER rev  (anchor.subtreeHash = the after content hash)  — grounding entry[1] + identity
   readonly tier: Tier;
+  readonly scope?: string; // KNOW-11a — the AUTHZ/write scope the governed door authorizes against (the unit's own scope, `unitScopeOf(unitKey)`, stamped by the producer). Carried onto `node.scope` by `buildTransition`.
   readonly derivation?: string; // the change the model read ACROSS the two rev bodies — the contestable ground the `justified` seal names (proven-vs-justified.md §JUSTIFIED)
   readonly scratch?: string; // chain-of-thought — discarded, never a fact (GEN-12f)
 }
