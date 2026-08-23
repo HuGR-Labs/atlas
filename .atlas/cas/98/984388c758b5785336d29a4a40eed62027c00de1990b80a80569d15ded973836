@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"The write-gate's authorization check is split across two files: write/authz.js provides only the runtime shape check (isScope), while the actual decision (actorInScope) lives in adapter-io/src/policy.ts, and a second, nominal implementation that used to live in write/authz.js had zero production callers and was deleted (#186).\"}\n```\n"

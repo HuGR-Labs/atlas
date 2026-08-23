@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"ToolSchema's inputSchema is deliberately kept as a generic structural JSON-Schema object rather than an atlas-owned type, because the schema DSL itself is the external MCP standard and not something this package defines.\"}\n```\n"

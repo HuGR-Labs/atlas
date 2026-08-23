@@ -111,6 +111,23 @@ describe('AT-8 — reachable through the SHIPPED producer over REAL 2-rev git in
     expect(read(UNIT)).toHaveLength(0);
   });
 
+  it('SECURITY TEETH — an AUTHORED transition emit is REFUSED outright (a transition is produced, never authored)', () => {
+    sbx = makeRepo();
+    const store = createDiskStore(join(sbx.repoPath, '.atlas'));
+    const revIndex = createRevIndex(sbx.repoPath);
+    // ACTOR *is* authorized over scope 'src', so this is refused on ORIGIN, not authz: even an in-scope actor
+    // cannot AUTHOR a transition — the door does not re-read the revs, so it will not accept a hand-supplied
+    // grounding. Only the trusted `origin:'promoted'` producer may write one.
+    const authoredEmit = createGovernedEmit({ store, gate: STUB_GATE, policy: POLICY, actor: ACTOR, origin: 'authored', ratifyToken: 'seat:ratifier' }).emit as TransitionEmit;
+    const produce = createTransitionProducer(revIndex, authoredEmit, asHash(''));
+    const read = createTransitionLeg(store);
+    const run = produce(UNIT, sbx.A, sbx.B);
+    expect(run.admitted).toBe(true); // the fact is well-formed
+    expect(run.persisted).toBe(false); // but the door refused it on ORIGIN (not authz — ACTOR is in scope)
+    expect(run.reason).toMatch(/produced fact|never authored/);
+    expect(read(UNIT)).toHaveLength(0); // nothing landed — the authored-forge surface is closed
+  });
+
   it('ABSTAINS (never fabricates) when the unit did not change across the two revs — same content ⇒ no transition', () => {
     sbx = makeRepo();
     const { produce } = producerFor(sbx, ACTOR);

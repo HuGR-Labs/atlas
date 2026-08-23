@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"isScope rejects an object like {toString: () => 'core'} even though such an object would read as the scope 'core' when used as a property key in an authorization lookup, because the typeof v === 'string' check runs first and blocks any value that would only become a valid scope string through coercion.\"}\n```\n"

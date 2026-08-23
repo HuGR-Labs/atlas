@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"The types.js module is re-exported with `export type *` (type-only), while every other facet module (build.js, depgraph.js, symbol-reverse.js, unit-deps.js, unit-exports.js, rollup.js, fold.js, resolve.js, retrieval.js, territory.js, ownership.js, coverage.js, compose.js, cas.js) is re-exported with a plain value `export *`.\"}\n```\n"

@@ -47,6 +47,13 @@ function commitRefusalFor(refusal: 'contended' | 'unreadable' | 'untrusted'): st
 /** Malformed-transition refusal (fail-closed verdict) — the door's own gate-0 shape check on the caller's OWN
  *  payload, disclosing nothing about any incumbent. A transition whose identity triple (unitKey, shaBefore,
  *  shaAfter) is not well-formed, or whose grounding is not the two real rev entries, has no address to write. */
+/** A transition is a PRODUCED fact (the 2-rev producer, `origin:'promoted'`), never AUTHORED. The door does
+ *  not re-read the two revs, so it cannot verify a hand-supplied grounding — an authored `atlas emit
+ *  {kind:'transition'}` is therefore refused OUTRIGHT (billy #234 re-review, defense-in-depth), closing the
+ *  authored-forge surface rather than merely stripping the seal off it. */
+export const REJECTED_AUTHORED_TRANSITION =
+  'a transition is a produced fact (atlas transition), never authored — an authored transition emit carries a grounding the door cannot verify and is refused';
+
 export const REJECTED_MALFORMED_TRANSITION =
   'malformed transition: a transition identity is the directed triple (unitKey, shaBefore, shaAfter) grounded ' +
   'on the two rev-pair entries. unitKey/shaBefore/shaAfter must each be a non-empty string, shaBefore and ' +
@@ -81,18 +88,21 @@ export function emitTransition(deps: GovernedEmitDeps, raw: TransitionNode): Emi
   // subtreeHashes (`isGrounded`), the structural validity a transition's rev-pair grounding has by construction.
   // The main door's HEAD-freshness gate is deliberately NOT run here — see the module header.
   if (!isGrounded(raw.grounding)) return { emitted: false, rejected: REJECTED_MALFORMED_TRANSITION };
+  // gate 1.1 PRODUCED-ONLY (billy #234 re-review, defense-in-depth) — a transition is minted ONLY by the
+  // trusted 2-rev producer (`origin:'promoted'`), which grounds it on a REAL git read. This door does not
+  // re-read the revs, so an AUTHORED transition would carry a grounding it cannot verify; refuse it outright
+  // (closing the authored-forge surface) rather than merely stripping its seal below.
+  if (deps.origin !== 'promoted') return { emitted: false, rejected: REJECTED_AUTHORED_TRANSITION };
 
   // The transition's address — minted off the identity triple (never trusted from the payload). Cannot throw:
   // gate 0.1 already cleared `transitionKey`'s own total-over-unknown guard.
   const key: NodeKey = transitionKey(unitKey, shaBefore, shaAfter);
 
-  // SEAL IS TRUSTED IFF THE WRITE IS PROMOTE-ORIGIN (SEAL-PROMOTE-CARRY) — the SAME law as the main/negation
-  // doors. `origin` is DOOR-DERIVED (never from the payload): a `promoted` transition is a mechanically-produced
-  // fact from the trusted producer, so its `seal:'justified'` survives onto `node` (and the CAS bytes); an
-  // AUTHORED transition carries an UNTRUSTED payload, so its seal is stripped before it can reach the bytes.
-  const { seal: _rejectedOperatorSeal, ...rawNoSeal } = raw;
+  // Only a `promoted` transition reaches here (gate 1.1 refused every other origin), so the trusted producer's
+  // `seal:'justified'` survives onto `node` (and the CAS bytes) — SEAL-PROMOTE-CARRY, the SAME law as the
+  // main/negation doors, now enforced by refusal rather than by a strip.
   const node: TransitionNode = {
-    ...(deps.origin === 'promoted' ? raw : rawNoSeal),
+    ...raw,
     id: key, // MINTED, never trusted from the payload
     tier,
     scope,

@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"Because bodyAtom's negative lookahead blocks any position where ANY_FAMILY_PREFIX could open, a single credential's own body can be truncated mid-match (not just merging with an adjacent credential) if it happens to contain a substring identical to another family's full prefix, such as a github token body containing the literal text AKIA.\"}\n```\n"
