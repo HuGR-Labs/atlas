@@ -34,6 +34,7 @@ function feed(opts: {
     holeSources: () => holes as unknown as readonly Hash[],
     opaqueRefSources: () => [],
     resolves: (sym: string) => sym === TARGET && resolvesTarget,
+    definesAt: (sym: string) => (sym === TARGET && resolvesTarget ? ('src/def.ts' as unknown as Hash) : undefined),
   };
 }
 

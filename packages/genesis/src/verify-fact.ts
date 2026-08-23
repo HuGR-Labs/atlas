@@ -32,7 +32,7 @@
 
 import type { Hash } from '@atlas/contracts';
 import type { SymbolReverseApi } from '@atlas/index';
-import { anyInScope } from './scope-predicate.js';
+import { anyInScope, underScope } from './scope-predicate.js';
 
 /** One "scope A depends on global symbol B" claim. `worldScope` is the directory the completeness check
  *  ranges over — retained as the `scope-open` diagnostic discriminant. (It formerly gated a REFUTE; that
@@ -99,4 +99,52 @@ export function verifyDependency(
   // No witnessed caller under sourceScope. NOT a refute (cross-package completeness is not guaranteed —
   // see FactVerdict): abstain either way, the reason is a diagnostic only.
   return abstain(anyInScope(reverse.holeSources(), pathOfHash, worldScope) ? 'scope-open' : 'no-caller-in-scope');
+}
+
+/** One "global symbol B is DEFINED under scope A" claim (#196d). No `worldScope`: a definition is a POSITIVE
+ *  WITNESSED EXISTENCE (the def-occurrence lies under the scope), sound in ANY world — there is no
+ *  closed-world absence to guard, so no completeness world is carried (`verifyDefinition` never emits the
+ *  `scope-open` diagnostic the dependency/count oracles carry `worldScope` for). Mirrors `DepClaim` minus that
+ *  leg. */
+export type DefClaim = {
+  readonly sourceScope: string;
+  readonly target: string;
+};
+
+/**
+ * PROVE/ABSTAIN on `claim`, over the live `reverse` feed (`SymbolReverseApi`, @atlas/index) — the DEFINITION
+ * class of the PROVEN family (#196d). PURE + TOTAL: no IO, no clock, never throws. The guard ladder is the
+ * dependency oracle's, verbatim through step 2 (a target that oracle would abstain on this one abstains on
+ * identically); the existence branch differs only in WHAT is witnessed:
+ *
+ *   0. malformed (`target`/`sourceScope` any empty) ⇒ abstain('malformed').
+ *   1. `isLocal(target)` (a `local ` SCIP symbol — document-scoped, #189) ⇒ abstain('target-not-global').
+ *   2. `!reverse.resolves(target)` (#220 — no in-index DEFINITION, a PHANTOM: nothing is defined to witness)
+ *      ⇒ abstain('target-unresolvable').
+ *   3. the symbol's first-definition-wins def-occurrence (`definesAt`) lies UNDER `sourceScope` ⇒ proven —
+ *      SOUND IN ANY WORLD (a witnessed definition-occurrence needs no completeness proof; an incomplete index
+ *      cannot fabricate a definition, exactly as it cannot fabricate a caller). NO closed-world assumption.
+ *   4. else ⇒ abstain('def-out-of-scope') — the symbol IS defined in the index (step 2 passed), but its def
+ *      lies OUTSIDE `sourceScope` (or its def-doc has no known path — fail-closed). NOT a refute: this is a
+ *      scoped non-answer, not a proof the symbol is undefined.
+ */
+export function verifyDefinition(
+  claim: DefClaim,
+  reverse: SymbolReverseApi,
+  pathOfHash: (h: Hash) => string | undefined,
+  isLocal: (sym: string) => boolean,
+): FactVerdict {
+  const { sourceScope, target } = claim;
+  if (target.length === 0 || sourceScope.length === 0) return abstain('malformed');
+  if (isLocal(target)) return abstain('target-not-global');
+  if (!reverse.resolves(target)) return abstain('target-unresolvable');
+
+  const defHash = reverse.definesAt(target); // present by construction once `resolves` is true; kept total either way
+  const defPath = defHash === undefined ? undefined : pathOfHash(defHash);
+  if (defPath !== undefined && underScope(defPath, sourceScope)) {
+    return { verdict: 'proven', oracle: 'symbol-reverse' };
+  }
+  // Defined in the index, but not under this scope (or def-doc path unknown — fail-closed). A scoped
+  // non-answer, NOT a refutation (the symbol is not proved undefined; it is proved defined ELSEWHERE).
+  return abstain('def-out-of-scope');
 }

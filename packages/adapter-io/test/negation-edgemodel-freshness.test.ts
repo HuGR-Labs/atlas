@@ -59,7 +59,7 @@ function axesDrifted(): Axes {
 
 // `resolves: () => true`: TARGET is a real, in-index-defined symbol that simply has no callers — the genuine
 // closed-empty scoped-negative this suite ADMITS (#220 gate 1c0 passes; the defect it guards is a phantom target).
-const emptyFeed: SymbolReverseApi = { reverseCallers: () => [], holeSources: () => [], opaqueRefSources: () => [], resolves: () => true };
+const emptyFeed: SymbolReverseApi = { reverseCallers: () => [], holeSources: () => [], opaqueRefSources: () => [], resolves: () => true, definesAt: () => ('src/x.ts' as unknown as Hash) };
 
 function negation(): NegationNode {
   return {

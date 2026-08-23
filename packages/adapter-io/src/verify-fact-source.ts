@@ -25,21 +25,22 @@
 // the oracles' headers name: `nodeHashOfPath(doc.relativePath)` for every document `createSymbolReverse` can
 // ever return a hash for, and no others (`symbol-reverse.ts` mints hashes for precisely those documents).
 
-import { verifyCount, verifyDependency, verifyNegation } from '@atlas/genesis';
-import type { CountClaim, DepClaim, FactVerdict, NegationClaim, NegationVerdict } from '@atlas/genesis';
+import { verifyCount, verifyDefinition, verifyDependency, verifyNegation } from '@atlas/genesis';
+import type { CountClaim, DefClaim, DepClaim, FactVerdict, NegationClaim, NegationVerdict } from '@atlas/genesis';
 import { createSymbolReverse, isLocalSymbol, nodeHashOfPath } from '@atlas/index';
 import type { ScipOutput, SymbolReverseApi } from '@atlas/index';
 import type { Hash } from '@atlas/contracts';
 import type { Guidance, Verdict } from '@atlas/tools';
 
-/** The three fact classes the PROVEN family decides. Closed vocabulary — a fourth class is a spec revision. */
-export type VerifyKind = 'dependency' | 'count' | 'negation';
+/** The four fact classes the PROVEN family decides. Closed vocabulary — a fifth class is a spec revision. */
+export type VerifyKind = 'dependency' | 'count' | 'definition' | 'negation';
 
 /** One dispatched verification request: a `kind` paired with its already-built typed claim. Discriminated so
  *  the leg routes to exactly one oracle and the type of `claim` is exact at each arm. */
 export type VerifyReq =
   | { readonly kind: 'dependency'; readonly claim: DepClaim }
   | { readonly kind: 'count'; readonly claim: CountClaim }
+  | { readonly kind: 'definition'; readonly claim: DefClaim }
   | { readonly kind: 'negation'; readonly claim: NegationClaim };
 
 /** The composition-root leg: a typed request → the oracle's verdict. TOTAL — every oracle is pure + total
@@ -48,8 +49,8 @@ export type VerifyFactLeg = (req: VerifyReq) => FactVerdict | NegationVerdict;
 
 /** The data payload a `verify-fact` verdict carries — the class asked, the oracle's decision + reason, and the
  *  claim's identifying (target, scope) so the answer is legible without the invocation. `verdict` spans all
- *  three oracle outcomes: `refuted` is reachable ONLY for `negation` (the closed-world dual); `dependency` and
- *  `count` never refute (a witnessed absence is not sound cross-package — see `FactVerdict`). */
+ *  oracle outcomes: `refuted` is reachable ONLY for `negation` (the closed-world dual); `dependency`, `count`
+ *  and `definition` never refute (a witnessed absence is not sound cross-package — see `FactVerdict`). */
 export interface VerifyFactData {
   readonly kind: VerifyKind;
   readonly verdict: 'proven' | 'refuted' | 'abstain';
@@ -85,6 +86,8 @@ export function createVerifyFactLeg(
         return verifyDependency(req.claim, reverse, pathOfHash, isLocalSymbol);
       case 'count':
         return verifyCount(req.claim, reverse, pathOfHash, isLocalSymbol);
+      case 'definition':
+        return verifyDefinition(req.claim, reverse, pathOfHash, isLocalSymbol);
       case 'negation':
         return verifyNegation(req.claim, reverse, pathOfHash, isLocalSymbol);
     }
@@ -142,10 +145,10 @@ export function verifyFactVerdict(
   target: string,
   opts: VerifyFactOpts,
 ): Verdict<VerifyFactData> {
-  if (kind !== 'dependency' && kind !== 'count' && kind !== 'negation') {
+  if (kind !== 'dependency' && kind !== 'count' && kind !== 'definition' && kind !== 'negation') {
     return reject(
-      `unknown kind '${kind}': verify-fact decides one of dependency | count | negation`,
-      '`atlas verify-fact <dependency|count|negation> <target> --scope <s> [--world <w>] [--min <n>] [--exact]`',
+      `unknown kind '${kind}': verify-fact decides one of dependency | count | definition | negation`,
+      '`atlas verify-fact <dependency|count|definition|negation> <target> --scope <s> [--world <w>] [--min <n>] [--exact]`',
     );
   }
   if (typeof target !== 'string' || target.length === 0) {
@@ -160,6 +163,10 @@ export function verifyFactVerdict(
   let req: VerifyReq;
   if (kind === 'dependency') {
     req = { kind: 'dependency', claim: { sourceScope: scope, target, worldScope: world } };
+  } else if (kind === 'definition') {
+    // #196d — a definition is a witnessed existence under a SINGLE scope; world/min/exact are not part of the
+    // claim (no closed-world absence to guard, exactly as the negation dual takes a single scope).
+    req = { kind: 'definition', claim: { sourceScope: scope, target } };
   } else if (kind === 'count') {
     if (opts.min === undefined) {
       return reject('missing --min: the count class requires the lower bound N to prove ≥N callers', '`atlas verify-fact count <target> --scope <s> --min <n> [--exact]` — `--min` is the integer lower bound');

@@ -166,7 +166,7 @@ export type Seal = 'proven' | 'justified';
  * mints the seal; an advisory/predicate/relation/negation fact with no seal carries no witness either.
  */
 export interface PredicateWitness {
-  readonly slot: PredicateSlot; // the oracle FAMILY the witness answers ('dependency' | 'count' | a type-expressible slot)
+  readonly slot: PredicateSlot; // the oracle FAMILY the witness answers ('dependency' | 'count' | 'definition' | a type-expressible slot)
   readonly target: string; // the global symbol the oracle proved against (verifyDependency/verifyCount's `target`)
   readonly scope: string; // the VERIFY-SCOPE directory the witness ranges over — NOT the authz `scope` above
   readonly atLeast?: number; // the witnessed lower bound N — present for the 'count' slot only

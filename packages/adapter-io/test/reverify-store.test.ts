@@ -77,7 +77,10 @@ function node(id: string, extra: Partial<CurrentNode> = {}): CurrentNode {
 
 /** A fact whose tier/anchor/prose all satisfy the three tamper bindings for the given witness — the
  *  well-formed baseline every TAMPER test mutates exactly ONE field away from. */
-function wellFormed(id: string, witness: { slot: 'dependency'; target: string; scope: string }): GroundedFact {
+function wellFormed(
+  id: string,
+  witness: { slot: 'dependency' | 'count' | 'definition'; target: string; scope: string; atLeast?: number },
+): GroundedFact {
   return advisory(id, { seal: 'proven', tier: 'T2', witness, claimNorm: claimNormFromWitness(witness) });
 }
 
@@ -126,6 +129,27 @@ describe('reverifyFact — one sealed fact against the real oracle', () => {
     const fact = wellFormed('nk-b', witness);
     const row = reverifyFact(node('nk-b'), fact, leg, docExists);
     expect(row?.outcome).toBe('broken');
+    expect(row?.reason).toContain('did NOT re-prove');
+  });
+
+  // ── 196d — the `definition` witnessed slot must round-trip the read-side reverify gate (the #240 trap:
+  //    a proven fact the mint-side proved but the read-side cannot replay is `unverifiable` ⇒ dropped from
+  //    tracked-provable reads). GREET is DEFINED in `src/def.ts` (under `src`), so its definition witness
+  //    re-proves; a symbol defined nowhere does not.
+  it('RE-PROVEN (definition, 196d) — a proven definition witness whose symbol is still defined under scope replays PROVEN', () => {
+    const witness = { slot: 'definition' as const, target: GREET, scope: 'src' };
+    const fact = wellFormed('nk-def-a', witness);
+    const row = reverifyFact(node('nk-def-a'), fact, leg, docExists);
+    // TEETH: before WITNESSED_SLOTS += 'definition' this was `unverifiable` (#240) — the fact would silently vanish.
+    expect(row).toEqual({ nodeKey: 'nk-def-a', outcome: 're-proven', reason: expect.stringContaining('PROVEN') });
+  });
+
+  it('BROKEN (definition, 196d) — a proven definition witness whose symbol is no longer defined does NOT re-prove', () => {
+    const GHOST = 'scip-ts npm fixture 1.0.0 `ghost`().'; // named by the witness, defined nowhere in the live index
+    const witness = { slot: 'definition' as const, target: GHOST, scope: 'src' };
+    const fact = wellFormed('nk-def-b', witness);
+    const row = reverifyFact(node('nk-def-b'), fact, leg, docExists);
+    expect(row?.outcome).toBe('broken'); // reached the oracle (not unverifiable), and the oracle abstained ⇒ broken
     expect(row?.reason).toContain('did NOT re-prove');
   });
 

@@ -164,6 +164,50 @@ export function makeDependencyClaimParser(resolveDep: DepResolver): ClaimParser 
 }
 
 /**
+ * The DEFINITION grammar (#196d candidate-grounded — the DEFINITION class of the PROVEN family). One line:
+ * `DEFINES: <name>` — a single symbol NAME the model SELECTED from the closed candidate list of THIS unit's own
+ * definitions. The `scope` is NOT asked of the model (a guessed directory was pure error): it is DERIVED from
+ * the mined unit's own path, exactly as the dependency arm derives it. COUPLED to `prompts/propose-definition.md`,
+ * which writes exactly this grammar; `llm-definition-parser.test.ts` pins the pair.
+ */
+const DEFINES_RE = /^DEFINES:\s*(\S+)\s*$/i;
+
+/** The reason a definition-arm answer that is not the abstain token AND does not match the `DEFINES:` grammar
+ *  abstains under — a MALFORMED proposal, fail-closed to a grounded abstention rather than a fabricated advisory,
+ *  exactly as `DEP_UNPARSEABLE_REASON`. */
+export const DEF_UNPARSEABLE_REASON = 'definition-answer-unparseable';
+
+/**
+ * The DEFINITION arm parser FACTORY (#196d candidate-grounded). A claim matching `DEFINES: <name>` whose
+ * `<name>` RESOLVES (via the injected `resolveDef`) to THIS unit's own defined symbol becomes a typed
+ * `PredicateSeed{ slot:'definition', target: <the resolved SYMBOL>, scope: <unit dir> }` — the target is the
+ * REAL symbol (so the fact is bound to the unit's specific definition, not a bare name), and the sound
+ * `verifyDefinition` oracle re-proves the def-occurrence lies under `scope`. A name that does NOT resolve (off
+ * the candidate list, a reference-only name, a typo) ABSTAINS with `DEF_UNPARSEABLE_REASON` — the SAME lucy
+ * BLOCKER discipline as the dependency arm. Reuses `DepResolver` (an identical `(name, site) => symbol | null`
+ * signature). `claim` keeps the raw human line; `rawAnswer` rides through (#195c). Never an advisory seed.
+ */
+export function makeDefinitionClaimParser(resolveDef: DepResolver): ClaimParser {
+  return (claim, cand, rawAnswer) => {
+    const m = DEFINES_RE.exec(claim.trim());
+    if (m === null) return { abstain: DEF_UNPARSEABLE_REASON };
+    const name = (m[1] ?? '').trim();
+    if (name === '') return { abstain: DEF_UNPARSEABLE_REASON };
+    const symbol = resolveDef(name, cand.site);
+    if (symbol === null) return { abstain: DEF_UNPARSEABLE_REASON }; // not a symbol defined in THIS unit
+    return {
+      kind: 'predicate',
+      slot: 'definition',
+      target: symbol, // the RESOLVED symbol — the fact's identity is bound to the unit's specific definition
+      scope: unitScopeOf(cand.site.qualifiedPath),
+      cand,
+      claim,
+      ...(rawAnswer !== undefined ? { rawAnswer } : {}),
+    };
+  };
+}
+
+/**
  * The COUNT grammar (#196c candidate-grounded — the CARDINALITY dual of the dependency arm). One line:
  * `COUNT: <name>` — a single exported symbol NAME the model SELECTED from the closed candidate list of THIS
  * unit's externally-called exports. The model NEVER emits the number: a stray digit or `@` breaks the `\S+`-

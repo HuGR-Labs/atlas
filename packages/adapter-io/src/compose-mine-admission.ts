@@ -61,10 +61,10 @@ export interface MineAdmission {
  * PLACEHOLDER WITH A VERDICT, not a measurement: it makes the stored score carry no information yet, and
  * inventing a keyword heuristic here would be inventing the oracle three documents refuse to invent.
  *
- * `admitPredicate` IS REACHABLE FROM THIS GATE, and the DEPENDENCY/COUNT sound legs it consults are REAL
- * (since #196a/#196c): `mine-gate.ts`'s `buildProposal` dispatches a `predicate`-kind seed to a
+ * `admitPredicate` IS REACHABLE FROM THIS GATE, and the DEPENDENCY/COUNT/DEFINITION sound legs it consults are
+ * REAL (since #196a/#196c/#196d): `mine-gate.ts`'s `buildProposal` dispatches a `predicate`-kind seed to a
  * `PredicateProposal`, which `admit` (genesis/src/admit-harness.ts) routes to `admitPredicate`, which reads
- * `deps.verifyDependency` / `deps.verifyCount` for the fact's dependency/count slot — both wired above to
+ * `deps.verifyDependency` / `deps.verifyCount` / `deps.verifyDefinition` for the fact's slot — all wired above to
  * `createVerifyFactLeg`'s sound symbol-reverse oracle over the real SCIP index, `proven`/`abstain` only. The
  * `refine` / `K` slots and the SYNTHESIZED-CHECK predicate leg (`predicate.synthesize/verify/teeth`) and
  * `typeOracle` remain FAIL-CLOSED PLACEHOLDERS: no dependency/count producer synthesizes an ad-hoc check for
@@ -103,6 +103,15 @@ export function buildMineAdmission(
     // closed-world claim we are not making). `proven`/`abstain` only (never `refuted`).
     verifyCount: (target, scope, atLeast) =>
       verifyDep({ kind: 'count', claim: { sourceScope: scope, target, worldScope: scope, atLeast } }).verdict === 'proven'
+        ? 'proven'
+        : 'abstain',
+    // [#196d candidate-grounded] The DEFINITION dual. `target` is the unit's OWN defined SYMBOL (the parser
+    // resolved the picked name to it PER-UNIT, `makeDefinitionClaimParser` over `UnitDefsApi.resolveDefFor`) and
+    // `scope` is the unit's own directory. The gate RE-PROVES via the SAME sound leg: `verifyDefinition` proves
+    // `proven` iff the symbol's def-occurrence lies UNDER `scope` — a witnessed existence, sound in ANY world.
+    // `proven`/`abstain` only (never `refuted`).
+    verifyDefinition: (target, scope) =>
+      verifyDep({ kind: 'definition', claim: { sourceScope: scope, target } }).verdict === 'proven'
         ? 'proven'
         : 'abstain',
     refine: () => null,
