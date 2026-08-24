@@ -43,13 +43,12 @@
 import { mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { build } from '@atlas/index';
 import type { Axes, IndexNode } from '@atlas/index';
 import { driftDetect } from '@atlas/grounding';
 import type { Hash, StructRef } from '@atlas/contracts';
 import type { GroundedFact } from '@atlas/knowledge';
-import { foldAstUnits } from './ast.js';
 import { walkFileTree } from './fs.js';
+import { deriveGroundingAxes } from './grounding-computer.js';
 import {
   runGit as gitExec,
   isDeterministicGitError,
@@ -98,7 +97,7 @@ export interface RevIndexDeps {
 /** The deterministic empty snapshot returned on any checkout/build failure (fail-closed totality). Built
  *  once from an empty tree — `build` is deterministic, so this is a stable, side-effect-free sentinel: no
  *  real file-path anchor resolves in it, so `driftDetect` against it is DRIFTED (⇒ `reDerives` false). */
-const EMPTY_AXES: Axes = build({ path: '.', children: [] }, { documents: [] });
+const EMPTY_AXES: Axes = deriveGroundingAxes({ path: '.', children: [] }, { documents: [] }).axes;
 
 /** Resolve the `IndexNode` whose key is `qp`, across the three axes — the SAME traversal grounding's
  *  `resolveCurrent`/`findByKey` (drift.ts) uses, so `resolveAnchorAt` and `reDerives` agree by construction.
@@ -135,8 +134,9 @@ function kindOf(node: IndexNode): StructRef['kind'] {
 /**
  * Construct the arbitrary-rev code-index capability over `repoPath` (COMPOSE-C).
  *
- * `axesAt(rev)` checks the rev out into a throwaway detached worktree under the OS temp dir, runs the
- * frozen `build(walkFileTree(dir), { documents: [] })`, then tears the worktree down — memoizing the
+ * `axesAt(rev)` checks the rev out into a throwaway detached worktree under the OS temp dir, runs the ONE
+ * grounding derivation over that rev's `walkFileTree` (`deriveGroundingAxes`, grounding-computer.ts — the
+ * SAME fold→build the HEAD gate + `anchors` planner use, AUTHOR-1), then tears the worktree down — memoizing the
  * resulting `Axes` by rev (build-once for an immutable rev). Every temp worktree is removed on BOTH the
  * happy and error paths (`attemptBuild`'s `finally`: `worktree remove --force` + `rmSync`), so the target
  * repo is left pristine. A checkout that FAILS is CLASSIFIED (rev-index.ts): a deterministic bad rev is
@@ -167,9 +167,11 @@ export function createRevIndex(repoPath: string, deps: RevIndexDeps = {}): RevIn
     try {
       // Detach the rev into the throwaway worktree; a bad/unknown rev OR a transient lock makes this throw.
       runGit(repoPath, ['worktree', 'add', '--detach', dir, rev]);
-      // Fold sub-file AST units BEFORE `build` — the SAME transform compose-time uses (compose.ts) — so this
-      // rev's index carries the `::` symbol nodes a fact is grounded against. Warmup-gated no-op otherwise.
-      return build(foldAstUnits(walkFileTree(dir)), { documents: [] });
+      // Route through the ONE grounding derivation (`deriveGroundingAxes`, grounding-computer.ts) — the SAME
+      // fold→build the HEAD gate + `anchors` planner use (AUTHOR-1), so this rev's index carries the `::`
+      // symbol nodes a fact is grounded against, byte-identical to compose-time. Warmup-gated no-op otherwise.
+      // The rev's own `.scip` is not read here (empty documents) — the deliberate asymmetry the header states.
+      return deriveGroundingAxes(walkFileTree(dir), { documents: [] }).axes;
     } finally {
       // Tear down this attempt's worktree unconditionally so the repo stays pristine — each step guarded.
       try {
