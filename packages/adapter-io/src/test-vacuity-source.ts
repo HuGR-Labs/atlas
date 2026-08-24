@@ -29,6 +29,7 @@ import { unitScopeOf } from './llm.js';
 import { rehydrateProjection } from './store.js';
 import type { DiskStore } from './store.js';
 import { MINED_TIER } from './reverify-store.js';
+import type { TestVacuityReplay } from './reverify-store.js';
 
 /** One HEAD test unit the producer scans — its LOCATION-FREE `unitKey` lineage, the repo-relative `path` (the
  *  grounding entry's human/nav leg), the unit's HEAD `anchor` (its `subtreeHash` the freshness leg), and the raw
@@ -130,6 +131,33 @@ export function createTestVacuityProducer(units: () => readonly TestUnit[], emit
       }
     }
     return runs;
+  };
+}
+
+/**
+ * Build the REVERIFY REPLAY leg (Wave 3, #95 D5) over the SAME injected HEAD `units` feed the producer rides —
+ * the read-side re-proof `reverifyTestVacuity` (reverify-store.ts) calls with a proven fact's `(unitKey, testName,
+ * shape)`. It re-parses the named unit at HEAD via the SAME tree-sitter path the producer uses (`parseTsDoc` +
+ * `scanTestVacuity`, never a second parser) and returns `'proven'` IFF a fact with this `(shape, testName)` STILL
+ * appears in the unit's HEAD scan, else `'abstain'` (the test changed / vanished ⇒ the caller reads `broken`).
+ *
+ * FAIL-CLOSED, NEVER a false re-prove (all a MEASURED `'abstain'`, never a throw): the unit is not among HEAD's
+ * test units (renamed / deleted) ⇒ `'abstain'`; the unit no longer parses (error tree / non-TS) ⇒ `'abstain'`.
+ * Pure over its feed; the only effect is the WASM parse, disposed on every path (ast.ts discipline). This is the
+ * exact same predicate the producer's own in-scan verifier applies (`facts.some(...)`) — the read-side re-run of
+ * the write-side proof, so the two can never disagree about what "still proven at HEAD" means.
+ */
+export function buildTestVacuityReplay(units: () => readonly TestUnit[]): TestVacuityReplay {
+  return (unitKey, testName, shape) => {
+    const u = units().find((x) => x.unitKey === unitKey);
+    if (u === undefined) return 'abstain'; // the unit is gone from HEAD — nothing to re-scan (fail-closed)
+    const doc = parseTsDoc(u.path, u.content);
+    if (doc === undefined) return 'abstain'; // no longer parses — fail-closed, never a false re-prove
+    try {
+      return scanTestVacuity(doc.root).some((f) => f.testName === testName && f.shape === shape) ? 'proven' : 'abstain';
+    } finally {
+      doc.dispose(); // release the WASM handles the parse held open (ast.ts discipline)
+    }
   };
 }
 

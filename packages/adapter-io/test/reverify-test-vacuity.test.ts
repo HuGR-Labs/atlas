@@ -58,6 +58,18 @@ describe('reverifyTestVacuity — re-run scanTestVacuity at HEAD', () => {
     expect(row?.reason).toMatch(/no longer appears/);
   });
 
+  it('a proven fact at a NON-mined tier ⇒ broken (TAMPERED — the tier line is load-bearing)', () => {
+    // A `proven` seal is minted ONLY by the mine pipeline (tier T2 = MINED_TIER). A committer re-tiering a
+    // proven test-vacuity to T0/T1 is a tamper, caught BEFORE the replay — so a THROWING replay proves the
+    // tier gate short-circuits (the oracle is never reached) and the row is `broken` with a `TAMPERED:` reason.
+    const THROW_REPLAY: TestVacuityReplay = () => { throw new Error('replay must NOT run for a tampered tier'); };
+    const row = reverifyFact(node, fact({ tier: 'T0' }), THROW_LEG, STUBS[0], STUBS[1], THROW_REPLAY);
+    expect(row?.outcome).toBe('broken');
+    expect(row?.reason).toMatch(/TAMPERED: tier 'T0' is not the mined tier/);
+    // And a still-wrong tier even WITH a holding replay stays broken (never a false re-prove).
+    expect(reverifyFact(node, fact({ tier: 'T1' }), THROW_LEG, STUBS[0], STUBS[1], STILL_HOLDS)?.outcome).toBe('broken');
+  });
+
   it('a proven seal with NO witness ⇒ unverifiable (nothing to replay — never a pass)', () => {
     const row = reverifyFact(node, factWithout('witness'), THROW_LEG, STUBS[0], STUBS[1], STILL_HOLDS);
     expect(row?.outcome).toBe('unverifiable');
