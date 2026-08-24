@@ -46,6 +46,14 @@ export interface WriteRequest {
   readonly unitKey?: string;
   readonly shaBefore?: string;
   readonly shaAfter?: string;
+  // ── TEST-VACUITY carrier (ADDITIVE, OPTIONAL — ADR-0015 D5 / #95) — the test name + proven shape of a
+  //    single-anchor test-vacuity fact, forwarded so `upsert` stamps them on the ROW and a future read-side
+  //    fold (Wave 1b) can index a vacuous test by its `unitKey` lineage (shared with the transition carrier
+  //    above) WITHOUT a CAS re-read. NOT ROUTED: none enters `RouteInputs`; a test-vacuity fact's identity is
+  //    `testVacuityKey` (test-vacuity-key.ts), computed upstream into `nodeKey` here. Present only on a
+  //    `family:'test-vacuity'` write; absent for the other families.
+  readonly testName?: string;
+  readonly shape?: string; // the closed-vocabulary TestVacuityShape VALUE (string form at this seam)
   // ── SEAL carrier (ADDITIVE, OPTIONAL — ADR-0017 two-seal provenance) — the seal (`proven`) the admit path
   //    decided for this fact's TYPE, forwarded so `upsert` stamps it on the ROW and the durable store carries
   //    it. PROVENANCE ONLY: it records HOW the fact's type was decided, is NOT an authority/governance leg,
@@ -162,6 +170,15 @@ export interface CurrentNode {
   readonly unitKey?: string;
   readonly shaBefore?: string;
   readonly shaAfter?: string;
+  // ── TEST-VACUITY carrier (ADDITIVE, OPTIONAL — ADR-0015 D5 / #95) — the test name + proven shape of a
+  //    single-anchor test-vacuity fact, stamped on the row so a future read-side fold (Wave 1b) indexes a
+  //    vacuous test by its `unitKey` lineage (shared with the transition carrier above) without a CAS re-read.
+  //    Present only on a `family:'test-vacuity'` row; absent otherwise. NONE enters `nodeKey` (identity is
+  //    `testVacuityKey`, already the row's `nodeKey`). ADDITIVE/OPTIONAL, back-compat, the `endpointA`/`scope`
+  //    discipline: a row minted before this WP has none, old sidecars round-trip unrewritten. Carried forward
+  //    by `upsert`.
+  readonly testName?: string;
+  readonly shape?: string;
   // ── SEAL carrier (ADDITIVE, OPTIONAL — ADR-0017 two-seal provenance) — the seal (`proven`) stamped on the
   //    ROW so the durable store carries HOW this fact's type was decided. PROVENANCE ONLY: NOT an
   //    authority/governance leg, never enters `nodeKey`, no gate reads it; absent for advisory-prose facts.

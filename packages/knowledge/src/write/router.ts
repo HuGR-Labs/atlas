@@ -103,8 +103,12 @@ export interface RouterApi {
  *  a 2-rev historical record that ALSO carries NO `check`, so it joins advisory/relation/negation on the
  *  UPDATE branch (re-admitting the SAME sha-pair is an in-place UPDATE, never a dup). Its LINEAGE supersession
  *  (a later transition on the same unitKey, a DIFFERENT sha-pair ⇒ a DISTINCT transitionKey ⇒ its own CREATE)
- *  is a DERIVE-ON-READ verdict over the lineage (read/transitions.ts), never a write-time route (D-T3). */
-export type NodeFamily = 'advisory' | 'predicate' | 'relation' | 'negation' | 'transition';
+ *  is a DERIVE-ON-READ verdict over the lineage (read/transitions.ts), never a write-time route (D-T3).
+ *  WIDENED AGAIN by ADR-0015 D5 (#95) with `test-vacuity` — a single-anchor PROVEN AST-shape fact that ALSO
+ *  carries NO `check` (its oracle is tree-sitter, not SCIP), so it joins advisory/relation/negation/transition
+ *  on the `family !== 'predicate'` UPDATE branch: re-evidencing the SAME `testVacuityKey` is an in-place UPDATE
+ *  (append claim/provenance), NEVER a SUPERSEDE-by-routing. */
+export type NodeFamily = 'advisory' | 'predicate' | 'relation' | 'negation' | 'transition' | 'test-vacuity';
 
 /**
  * The enumerated routing product — the four orthogonal, already-RESOLVED oracle inputs the
@@ -136,7 +140,9 @@ export function routeWrite(inputs: RouteInputs): WriteDecision {
   // the shared negationKey address, handled at the door (N2), NOT by this routing function. A transition's
   // LINEAGE supersession (D-T3) is likewise NOT a route here: a later transition on the same unitKey has a
   // DIFFERENT sha-pair ⇒ a DIFFERENT transitionKey ⇒ its own CREATE, and which one is the lineage HEAD is a
-  // DERIVE-ON-READ verdict (read/transitions.ts), never a write-time mutation of the incumbent.
+  // DERIVE-ON-READ verdict (read/transitions.ts), never a write-time mutation of the incumbent. A
+  // `test-vacuity` (ADR-0015 D5) likewise carries NO `check`, so re-evidencing an existing testVacuityKey is
+  // an UPDATE on this same `family !== 'predicate'` branch, never a SUPERSEDE-by-routing.
   if (inputs.family !== 'predicate') return 'UPDATE';
   return inputs.checkSame ? 'SUPERSEDE' : 'CREATE'; // 4e — same-check re-evidence supersedes
 }
@@ -368,6 +374,11 @@ export * from './negation-key.js';
 // sibling of `negation-key.js`/`relation-key.js` (the (unitKey, shaBefore, shaAfter) triple). Re-exported here
 // beside them, same pattern — so the package surface is unchanged.
 export * from './transition-key.js';
+
+// TEST-VACUITY IDENTITY (ADR-0015 D5 · #95) — the single-anchor PROVEN AST-shape fact's identity leg, the
+// 2-legged sibling of `negation-key.js`/`transition-key.js` (the (unitKey, testName) pair). Re-exported here
+// beside them, same pattern — so the package surface is unchanged.
+export * from './test-vacuity-key.js';
 
 
 /**

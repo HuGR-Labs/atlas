@@ -109,6 +109,26 @@ rev-pair `(unit@sha_before → unit@sha_after)`, both content-addressed. It is n
 HEAD (it was true and stays true — a closed valid-time interval); it is retained, indexed by unit lineage, and
 **superseded** by a later transition on the same lineage. The freshness oracle does not apply to it.
 
+**D5 — A test-vacuity fact is a SINGLE-ANCHOR PROVEN AST-shape record, sealed `proven` with a re-runnable
+witness (#95).** The SIXTH `GroundedFact` shape — "named test `testName` in unit `unitKey` has all its
+assertion-shaped calls inside `catch` clauses and no assertion-count guard" — a SYNTACTIC property that is a
+pure function of the hashed unit's AST (`scanTestVacuity`, `adapter-io/src/test-vacuity.ts`). Its grounding
+token is the SINGLE unit anchor (`subtreeHash(unit)`, the positive-intrinsic oracle), so — unlike a
+transition — it HAS a mechanical HEAD oracle and is SEALED **`proven`**, not `justified`: the single-anchor
+AST-substrate analogue of a proven `depends-on` relation (D2/#99a/ADR-0021). It carries NO `check` (its oracle
+is **tree-sitter**, not the SCIP/symbol-reverse substrate the `PredicateSlot`/`VerifyKind` dispatch runs on),
+so it is NOT a `PredicateNode` and never enters the predicate lifecycle — the oracle lives in adapter-io,
+injected like `verifyRelation`, never re-run inside genesis. Identity is the **(unitKey, testName) pair** (a
+unit may hold many named vacuous tests, each its own node); freshness is the unit anchor's `subtreeHash` and
+reverify RE-RUNS `scanTestVacuity` at HEAD, re-proving iff a fact with this `testName`+`shape` still appears
+(else `broken`). The seal carries its re-runnable derivation (a `TestVacuityWitness` = the proven `shape` +
+the `testName` the re-run must still find), so a proven node is never `unverifiable` (the #240 trap). The
+`shape` vocabulary is closed/additive-only (`assertion-only-in-catch` today; a new shape is a `cv` bump).
+
+| shape | example | grounding token | FRESH means | drift trigger |
+|---|---|---|---|---|
+| **test-vacuity** (single-anchor, AST-proven) | "test T asserts only in catch" | `subtreeHash(unit)` | `scanTestVacuity` still finds (shape, testName) | edit to the unit |
+
 ## The one hard problem, named honestly (spans D2 + D4)
 
 **Endpoint identity across a move+rename is provably outside content-hash equality.** A `subtreeHash` MUST
