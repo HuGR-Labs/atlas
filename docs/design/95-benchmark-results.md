@@ -19,6 +19,7 @@ named.
 | **A1 — advisory precision** (planted subject-test, no judge in the correctness loop) | false-admit **1/10**, catch **9/10**, false-alarm **0/10**; n=20 fixtures; Wilson95% on false-admit **[0.018, 0.404]** | `harness/probes/adjudicate/calibration-report.a1-subject.md` |
 | **A1-dogfood — advisory precision, whole repo** (LLM-panel, same-family, **cross-family-corroborated**, lower evidentiary tier — never blended with planted A1) | **616/657 = 93.8%** TRUE_GROUNDED, Wilson95% **[91.6, 95.4]**; 9 FALSE (1.4%), 31 NOT_GROUNDED; 20/677 abstained. Panel precision **98.7% (75/76)** vs a blind reasoned 4th seat on an 83-item systematic sample — panel under-credits, does not inflate | `a1-dogfood-verdicts.tsv` (657 rows) + `a1-dogfood-fullrepo.json` + `gold-seat4.tsv` / `gold-adjudication.tsv` / `gold-seat4.json` |
 | **A1-dogfood — CROSS-REPO** (same apparatus, third-party repo `colinhacks/zod` v3.23.8; removes home-field advantage; same-family-judged) | **66/76 = 86.8%** TRUE_GROUNDED, Wilson95% **[77.4, 92.7]**; 7 FALSE (9.2%, real proposer hallucination, 2 mechanically verified), 2 NOT_GROUNDED; 7/83 abstained. **Home was optimistic by ~7pts (93.8→86.8)** | `xrepo-zod-a1-verdicts.tsv` (76 rows) + `xrepo-zod-a1.json` |
+| **SOTA comparator — proven dependency arm** (vs madge 6.1.0, deterministic, 0 tokens, on zod) | Atlas **231** proven edges ⊇ madge **129**: **recall 100% (129/129)**, madge-only **0**; the 102 Atlas-only edges are real semantic (barrel-pierced) deps madge's syntactic graph cannot model | `xrepo-zod-sota-comparator.json` + `xrepo-zod-depgraph-compare.json` |
 | **A2 — staleness** (TWO numbers, never blended) | non-touching precision **4/4** (0 false-drift, real and discriminating) · semantic cross-file staleness **NOT SUPPORTED** (named limitation) | `docs/design/95b-staleness-a2-methodology.md` §6.2/§6.3 |
 | **A3 — cost** | **$0.964233 / 10 sites = $0.0964 per site**; 0 errors, 1 abstention, all 10 rows `claude-sonnet-5` | `harness/probes/a3-cost-sidecar.jsonl` (10 records; sum re-derived 2026-08-18) |
 | **A4 — recall, judge-free** (4 oracle-bearing shapes, planted mutations, `tsc` oracle) | dist-form index: count **163/163**, dependency **163/163**, negation **428/1200 = 35.67%**; dist-absent misbuild: count **7/163**, dependency **7/163**, negation **51/1200 = 4.25%** | `harness/probes/adjudicate/calibration-report.a4-planted.md` (`master`, merged in #193; numbers re-verified on `master` 2026-08-22) |
@@ -174,6 +175,43 @@ unanimous). Two of the 7 FALSE are mechanically verified: `ffc0cbfe` (`partials.
 `parse dateSchema invalid date` test that does not exist — a whole test confabulated). The same-family panel's
 grounding discipline caught them. Artifacts: `harness/probes/adjudicate/xrepo-zod-a1-verdicts.tsv` (76 rows,
 re-derivable) + `xrepo-zod-a1.json`.
+
+### SOTA comparator — the PROVEN dependency arm vs an independent tool (`master`, 2026-08-24)
+
+The earlier comparator ladder used a no-tool LLM as the floor — a jury called it a strawman. This is the
+answer for the **proven** arm (`#99` `depends-on`): compare Atlas's proven dependency edges against a real,
+established code-intelligence tool, **both sides mechanical, zero LLM, zero tokens**. Atlas edges come from
+`atlas derive-relations` (the derivation *is* the proof); the reference is **madge 6.1.0**
+(`madge --ts-config tsconfig.json --extensions ts --json src`). Target: the same third-party repo, `zod`
+v3.23.8.
+
+| | edges |
+|---|---|
+| Atlas proven (`derive-relations`) | **231** |
+| madge 6.1.0 | 129 |
+| intersection | 129 |
+| **recall vs madge** | **129/129 = 100%** (Atlas ⊇ madge) |
+| madge-only (Atlas missed) | **0** |
+| Atlas-only | 102 |
+
+**Atlas finds everything madge finds, and 102 edges more — and those 102 are real, not false.** madge builds
+a **syntactic import-statement graph** (it stops at the imported barrel); Atlas builds a **semantic
+symbol→definition graph** (it pierces the barrel to the definition site via SCIP witnessed references). Worked
+example: `safeparse.test.ts` imports only `../index`, but calls `z.string()` whose definition lives in
+`src/types.ts`; `index.ts` does `export * from "./external"` and `external.ts` does `export * from "./types"`,
+so Atlas's `safeparse.test.ts → types.ts` edge is a **true transitive symbol dependency madge structurally
+cannot represent**. All 102 Atlas-only targets (types 64, ZodError 21, external 9, index 5, errors/util/en 1
+each) are exactly the definition sites reachable through the `index → external` re-export chain.
+
+**So "precision 55.8%" (129/231) would be the WRONG metric** — it penalizes Atlas for correctly resolving
+re-export barrels to true definition sites. The two tools define "depends-on" differently (syntactic vs
+semantic); Atlas's extra edges are correct-by-construction (`#99` witnessed reference), not false. **Honest
+caveat:** the barrel-piercing *mechanism* was verified (the re-export chain, three sampled sources importing
+the barrel, and the `#99` witnessed-reference guarantee), not each of the 102 edges hand-traced; a stronger
+import-graph tool (`dependency-cruiser`) would behave like madge here (edge-per-import-statement, no barrel
+collapse), so semantic-vs-syntactic is the finding, not a madge weakness. Artifacts:
+`harness/probes/adjudicate/xrepo-zod-sota-comparator.json` + `xrepo-zod-depgraph-compare.json` (the full
+edge lists).
 
 ### A2 — staleness (`master`, per #190)
 
