@@ -70,7 +70,7 @@ const ARITY: Record<Command, number> = {
   'derive-relations': 0,
 };
 
-const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine|node|link|promote|own|relations|negations|verify-fact|verify-store|derive-relations';
+const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine|node|link|promote|own|relations|negations|transitions|transition|test-vacuities|test-vacuity|verify-fact|verify-store|derive-relations';
 
 function isCommand(s: string): s is Command {
   return Object.prototype.hasOwnProperty.call(COMMAND_LEG, s);

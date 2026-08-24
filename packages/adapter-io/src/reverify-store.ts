@@ -330,7 +330,12 @@ export type TestVacuityReplay = (unitKey: string, testName: string, shape: TestV
  *  `(shape, testName)` still appears; anything else is `broken` (the test changed / vanished — drift). A missing
  *  witness, or no `replay` leg wired, is `unverifiable` (nothing to replay — the trust-me-it-was-proved shape,
  *  never counted a pass). The witness IS the whole claim (like a negation's identity legs), so there is no
- *  anchor-binding tamper vector to close here — only the re-run. Pure + total. */
+ *  anchor-binding tamper vector to close here — but there IS a TIER staleness vector (mirroring reverifyRelation
+ *  §a / reverifyFact §a): a `proven` seal is minted EXCLUSIVELY by the mine/producer pipeline (`MINED_TIER`), so a
+ *  `proven`-sealed test-vacuity at any other tier was re-tiered by whoever committed it, not proven by anything —
+ *  `broken` (TAMPERED), checked BEFORE the replay so a tampered fact never needs the tree-sitter re-run to be
+ *  dropped. (`unverifiable` stays reserved for the "nothing to replay" shape — missing witness / no leg wired.)
+ *  Pure + total. */
 export function reverifyTestVacuity(nodeKey: string, fact: TestVacuityNode, replay: TestVacuityReplay | undefined): ReverifyRow {
   const w = fact.witness;
   if (w === undefined || typeof w.testName !== 'string' || w.testName.length === 0) {
@@ -338,6 +343,15 @@ export function reverifyTestVacuity(nodeKey: string, fact: TestVacuityNode, repl
   }
   if (typeof fact.unitKey !== 'string' || fact.unitKey.length === 0) {
     return { nodeKey, outcome: 'unverifiable', reason: 'test-vacuity witness is incomplete (missing unitKey to re-scan) — nothing to replay' };
+  }
+  // ── TAMPER BINDING (a) TIER — mirrors reverifyRelation §a (:225) / reverifyFact §a. Checked BEFORE the replay;
+  //    a `proven` seal at a non-mined tier is a committer's invention, `broken` + `TAMPERED:`, never a false pass. ──
+  if (fact.tier !== MINED_TIER) {
+    return {
+      nodeKey,
+      outcome: 'broken',
+      reason: `TAMPERED: tier '${String(fact.tier)}' is not the mined tier '${MINED_TIER}' — every seal:'proven' test-vacuity is minted by the mine pipeline, so a different tier was chosen by whoever committed it, not proven by anything`,
+    };
   }
   if (replay === undefined) {
     return { nodeKey, outcome: 'unverifiable', reason: 'no test-vacuity re-scan leg is wired — the tree-sitter oracle cannot be replayed here (fail-closed, never a false re-prove)' };

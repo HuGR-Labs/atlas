@@ -46,7 +46,7 @@ import { runDeriveRelations } from './relation-derive-run.js';
 import type { DeriveRelationsRun } from './relation-derive-run.js';
 import { createNegationLeg } from './negation-source.js';
 import { createTransitionLeg, createTransitionProducer, type TransitionLeg, type TransitionProducer } from './transition-source.js';
-import { createTestVacuityLeg, createTestVacuityProducer, testUnitsOf, type TestVacuityLeg, type TestVacuityProducer } from './test-vacuity-source.js';
+import { buildTestVacuityLegs, type TestVacuityLeg, type TestVacuityProducer } from './compose-test-vacuity.js';
 import type { RelationLeg } from './relation-source.js';
 import type { NegationLeg } from './negation-source.js';
 import { createVerifyFactLeg } from './verify-fact-source.js';
@@ -535,6 +535,10 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
       maxRelations: DERIVE_RELATIONS_BUDGET,
     });
 
+  // #95 D5 — the THREE test-vacuity legs (READ, HEAD PRODUCER, Wave-3 REVERIFY REPLAY) built from ONE shared HEAD
+  // units feed (`compose-test-vacuity.ts`); producer rides the governed `relationEmit` door, `replay` feeds `reverify`.
+  const tvLegs = buildTestVacuityLegs(readAccess.store, rawTree, axes, relationEmit, asHash(headSha(repoPath) ?? ''));
+
   return {
     handler: assembleHandler(config),
     doctorSource,
@@ -565,13 +569,8 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     // #234 — READ leg off the SAME store the query leg reads. The PRODUCER routes THROUGH the governed door (`relationEmit`; transition branch = `governed-emit-transition.ts`) so KNOW-11 authz + ARCH-9 anchor apply (billy #234 — no gate-less write).
     transitions: createTransitionLeg(readAccess.store),
     transition: createTransitionProducer(revIndex, relationEmit, asHash(headSha(repoPath) ?? '')),
-    // #95 D5 — READ leg off the SAME store the query leg reads + the reachable PRODUCER. The producer walks the
-    // repo's HEAD `*.test.ts`/`*.spec.ts` units (anchors read straight off `axes.spatial`, so the HEAD truth gate
-    // reads them FRESH) and routes every proven fact THROUGH the governed door (`relationEmit`; test-vacuity
-    // branch = `governed-emit-test-vacuity.ts`) so KNOW-11 authz + ARCH-9 anchor + the produced-only forge guard
-    // apply — no gate-less write. Wave 3: wire reverify replay + MINED_TIER check.
-    testVacuities: createTestVacuityLeg(readAccess.store),
-    testVacuity: createTestVacuityProducer(() => testUnitsOf(rawTree, axes), relationEmit, asHash(headSha(repoPath) ?? '')),
+    testVacuities: tvLegs.testVacuities, // #95 D5 READ leg (from `tvLegs` above; replay is its third leg, fed to `reverify`)
+    testVacuity: tvLegs.testVacuity,
     // THE SOUND-GENESIS PROVEN-FAMILY FEED (`atlas verify-fact`). Off the SAME `scipOutput` the axes ride — a
     // program oracle over the immutable code index, built once and closed over (see verify-fact-source.ts).
     verifyFact: verifyFactLeg,
@@ -592,7 +591,8 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     // BOTH of those this falls back to the pre-existing `reverifyStore(driftPairs, verifyFactLeg)` pass over
     // the WRITE-gated store, byte-identical to the prior behaviour (for `trusted`, that store is not
     // blanked; for `tracked-staging`, it blanks to `[]`, matching that leg's own refusal).
-    reverify: () => readAccess.reverified ?? reverifyStore(driftPairs, verifyFactLeg, docExists, scopeHasDocs),
+    // Wave 3 (#95 D5) — `tvLegs.replay` is now LIVE: a committed proven test-vacuity re-proves against HEAD.
+    reverify: () => readAccess.reverified ?? reverifyStore(driftPairs, verifyFactLeg, docExists, scopeHasDocs, tvLegs.replay),
     ...(readRefusal !== undefined ? { readRefusal } : {}),
     ...(readAdvisory !== undefined ? { readAdvisory } : {}),
   };
