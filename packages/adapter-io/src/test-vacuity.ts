@@ -1,11 +1,11 @@
-// ── REFERENCE MODEL — NO PRODUCTION CALLERS (yet) ─────────────────────────────────────────────────────
-// This is the #95 `test-vacuity` PROVEN-shape ORACLE. It is measured and unit-tested (0-false-admit on 14
-// planted soundness rails; 32 real assertion-only-in-catch tests proven on zod v3.23.8, hand-verified) but
-// NOT yet wired to a product path — its fact type / governed write-door / compose+CLI wiring / e2e bench are
-// the follow-up increments of the test-vacuity shape build. Until then it is a DECLARED reference model, in
-// the LEDGER in `harness/gates/reference-model-guard.mjs` (`shipped: null` — the pending oracle, not dead code).
-//
 // @atlas/adapter-io — src/test-vacuity.ts  (#95 — the `test-vacuity` structural PROVEN shape, oracle)
+//
+// SHIPPED (WP-TV-1a): the reachable PRODUCER (`test-vacuity-source.ts`) VALUE-imports `scanTestVacuity` to walk
+// HEAD test units, seal every proven fact through genesis's authority (`trySoundTestVacuity`) and persist it
+// through the governed test-vacuity door; the read-side reverify (`reverify-store.ts`) re-runs it at HEAD. So
+// this module is no longer a declared reference model — it moved dead → live (its ledger entry was DELETED).
+// It is measured + unit-tested (0-false-admit on 14 planted soundness rails; 32 real assertion-only-in-catch
+// tests proven on zod v3.23.8, hand-verified). The compose+CLI wiring + e2e bench are Wave 2.
 //
 // A PURE, TOTAL AST oracle: PROVE / ABSTAIN on the SYNTACTIC property "in this test, every assertion-shaped
 // call is lexically inside a `catch` clause, and there is no assertion-count guard" — the fragile

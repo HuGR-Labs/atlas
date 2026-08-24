@@ -125,6 +125,10 @@ export type { NegationLeg, NegationsData, NegationsRead } from './negation-sourc
 // PRODUCER (real 2-rev git input → justified transition → atomic persist). ADR-0015 D4.
 export { createTransitionLeg, createTransitionProducer, transitionsVerdict } from './transition-source.js';
 export type { TransitionLeg, TransitionProducer, TransitionRun, TransitionsData } from './transition-source.js';
+// #95 D5 — the single-anchor test-vacuity family: the reachable PRODUCER (HEAD test units → scanTestVacuity →
+// proven test-vacuity → governed-door persist). Its read leg is Wave 1b; its compose+CLI wiring is Wave 2.
+export { createTestVacuityProducer } from './test-vacuity-source.js';
+export type { TestVacuityProducer, TestVacuityRun, TestUnit, TestVacuityEmit } from './test-vacuity-source.js';
 // The sound-genesis PROVEN family's production feed + shared verdict — the ONE caller that makes
 // verify{Dependency,Count,Negation} (@atlas/genesis) running code rather than ledgered reference models.
 export { createVerifyFactLeg, verifyFactVerdict } from './verify-fact-source.js';
@@ -133,8 +137,8 @@ export type { VerifyFactLeg, VerifyFactData, VerifyFactOpts, VerifyKind, VerifyR
 // REVERIFY-GATE (versioned-store chapter, step 3): re-prove every `seal:'proven'` fact's OWN witness against
 // the live index — `re-proven` / `broken` / `unverifiable`, never folded together. The pure fold; `atlas
 // verify-store` (CLI) drives it over `ComposedRuntime.reverify`.
-export { reverifyFact, reverifyStore, MINED_TIER } from './reverify-store.js';
-export type { ReverifyOutcome, ReverifyRow, ReverifyReport, NodeFactPair } from './reverify-store.js';
+export { reverifyFact, reverifyStore, reverifyTestVacuity, MINED_TIER } from './reverify-store.js';
+export type { ReverifyOutcome, ReverifyRow, ReverifyReport, NodeFactPair, TestVacuityReplay } from './reverify-store.js';
 
 // #99 sound relation (ADR-0018) — WP-R3: the MECHANICAL projection of resolved cross-unit references to
 // PROVEN `depends-on` relations (no LLM). Reuses `createSymbolReverse` (the R2 oracle's own data) and admits

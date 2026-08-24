@@ -21,6 +21,7 @@ export type * from './types.js';
 export * from './extract.js';        // WP-8.28-a.GEN — budgeted grounded proposal (spend highest-first, 2-door, WhyNot)
 export * from './admit-harness.js';  // WP-8.28-b.GEN — mechanical admission (HOLDS-and-flips-BROKEN; vacuous dropped)
 export * from './admit-transition.js'; // #234 — the transition family's PURE admission legs (buildTransition/transitionWellFormed; justified, no oracle — D-T1), consumed by admit-harness AND the shipped producer
+export * from './admit-test-vacuity.js'; // #95 D5 — the test-vacuity family's PURE seal legs (trySoundTestVacuity/buildSoundTestVacuity; proven via injected scanTestVacuity oracle), consumed by admit-harness AND the shipped producer
 export * from './cost-policy.js';    // WP-8.28-c.GEN — tiered escalation defaults (1 sample/advisory/CEGIS≤1; refuter T0-only)
 export * from './align.js';          // WP-8.29.GEN   — candidate-only writes + one batched ratification pass
 export * from './seed.js';           // WP-8.29.GEN   — seed from ratified manifest; Awareness sources never fabricated

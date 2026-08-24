@@ -32,6 +32,7 @@ import {
 // scope-directory grounding + the abstention law stay the DOOR's (contract F4), so no truth-door call lives here.
 import { buildNegation, negationTripleResolves, DROP_NEGATION_MALFORMED } from './admit-negation.js';
 import { buildTransition, transitionWellFormed, DROP_TRANSITION_MALFORMED } from './admit-transition.js'; // #234 D4 — justified, NO oracle
+import { admitTestVacuity } from './admit-test-vacuity.js'; // #95 D5 — the PROVEN-only test-vacuity family's admission BODY (housed there; harness at the 600-LOC cap)
 import type { Candidate, WhyNot } from './types.js';
 
 /**
@@ -69,24 +70,8 @@ export interface PredicateApi {
 // `admit-proposals.ts` at the 400-LOC godfile ceiling when WP-96 widened it with the relation/negation
 // families (ADR-0015 D2/D3) — the harness keeps the ADMISSION ENGINE, that file keeps the shapes it admits.
 // RE-EXPORTED here so `import { Proposal, RelationProposal, ... } from '@atlas/genesis'` is byte-identical.
-export type {
-  FactGrounding,
-  PredicateProposal,
-  AdvisoryProposal,
-  RelationProposal,
-  NegationProposal,
-  TransitionProposal,
-  Abstention,
-  Proposal,
-} from './admit-proposals.js';
-import type {
-  FactGrounding,
-  PredicateProposal,
-  AdvisoryProposal,
-  RelationProposal,
-  NegationProposal,
-  Proposal,
-} from './admit-proposals.js';
+export type { FactGrounding, PredicateProposal, AdvisoryProposal, RelationProposal, NegationProposal, TransitionProposal, TestVacuityProposal, Abstention, Proposal } from './admit-proposals.js';
+import type { FactGrounding, PredicateProposal, AdvisoryProposal, RelationProposal, NegationProposal, Proposal } from './admit-proposals.js';
 
 // ---- the injected mechanical seams (defined elsewhere; consumed here) ----------------------------------
 
@@ -140,6 +125,7 @@ export interface AdmitDeps {
   readonly verifyCount?: (target: string, scope: string, atLeast: number) => "proven" | "abstain"; // GEN-12-count: sound cardinality oracle (#196c — verifyCount lower-bound)
   readonly verifyDefinition?: (target: string, scope: string) => "proven" | "abstain"; // GEN-12-def: sound definition oracle (#196d — verifyDefinition def-occurrence-under-scope)
   readonly verifyRelation?: (relationKind: RelationKind, target: string, sourceScope: string, endpointA: string, endpointB: string) => "proven" | "abstain"; // #99 sound relation (ADR-0018): the directed-edge oracle (verifyRelation — verify-fact.ts). Binds BOTH endpoint FILES to the witnessed edge (endpointA a real referrer, endpointB the definer). Only 'depends-on' can prove.
+  readonly verifyTestVacuity?: (unitKey: string, testName: string, shape: string) => "proven" | "abstain"; // #95 D5 sound test-vacuity oracle (scanTestVacuity-backed, injected in adapter-io — genesis has no tree-sitter)
   readonly refine: (check: Check, site: Candidate) => Check | null; // CEGIS refine; `null` = no change
   readonly indexState: IndexNode; // current code (KNOW-16 evaluate carrier)
   readonly K: number; // refine budget (GEN-13 default K≤1)
@@ -209,6 +195,8 @@ export function admit(p: Proposal, deps: AdmitDeps): Admission {
       return admitNegation(p, deps);
     case 'transition': // #234 (ADR-0015 D4) — JUSTIFIED, NO oracle (D-T1): gate-0 well-formed else DROP; mint+ground+seal in `buildTransition`
       return transitionWellFormed(p) ? { outcome: 'admitted', fact: buildTransition(p) } : { outcome: 'dropped', reason: DROP_TRANSITION_MALFORMED };
+    case 'test-vacuity': // #95 (ADR-0015 D5) — PROVEN-only sound family; the BODY (grounding+oracle+mint) lives in `admit-test-vacuity.ts` (harness at cap), bound to `deps.doors` here
+      return admitTestVacuity(p, deps.verifyTestVacuity, (g) => deps.doors.grounded(g, deps.indexState), (cn) => scoreObviousness(deps.doors, cn));
   }
 }
 

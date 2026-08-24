@@ -95,9 +95,10 @@
 import type { CasObject } from '@atlas/kernel';
 import type { Hash, Tier } from '@atlas/contracts';
 import { upsert, route, stage, ratify, isTier, isScope } from '@atlas/knowledge';
-import type { Candidate, CurrentNode, GroundedFact, NegationNode, TransitionNode, NodeFamily, WriteRequest, RatifyToken, WriteOrigin } from '@atlas/knowledge';
+import type { Candidate, CurrentNode, GroundedFact, NegationNode, TransitionNode, TestVacuityNode, NodeFamily, WriteRequest, RatifyToken, WriteOrigin } from '@atlas/knowledge';
 import { emitNegation, type NegationEmitDeps } from './governed-emit-negation.js'; // #99b N2 — THE ABSTENTION DOOR
 import { emitTransition } from './governed-emit-transition.js'; // #234 D4 — THE TRANSITION DOOR
+import { emitTestVacuity } from './governed-emit-test-vacuity.js'; // #95 D5 — THE TEST-VACUITY DOOR (relation gate ladder + produced-only)
 // FAMILY + IDENTITY resolution (all three fact shapes) — extracted at the LOC ceiling; a relation (ADR-0015
 // D2) is addressed by `relationKey`, never the intrinsic `nodeKey`. See that file's header.
 import { familyOf, claimNormOf, relationWellFormed, relationCarriers, resolveWriteIdentity, stripForgedRelationSeal } from './governed-emit-identity.js';
@@ -157,6 +158,10 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
     // carries authz + anchor gates but NO HEAD truth gate: a transition grounds on PAST revs (D-T2), which the
     // main gate-1 would always drift-reject. `at` unused (the transition's grounding is stamped, not re-checked).
     if (raw.kind === 'transition') return emitTransition(deps, raw as TransitionNode);
+    // #95 D5 — a test-vacuity re-routes to `emitTestVacuity` (its own gate ladder), branched before gate 0. It
+    // carries the HEAD truth gate (the relation ladder — a test-vacuity grounds on the current test file, so `at`
+    // IS used, unlike a transition) PLUS produced-only (the forge guard: its witness is not door-re-derivable).
+    if (raw.kind === 'test-vacuity') return emitTestVacuity(deps, raw as TestVacuityNode, at);
 
     // 0. WELL-FORMED PAYLOAD — `tier`, `scope` and the `kind`/`check` pair: the three fields every LATER
     //    gate routes on, and the three the author supplies.
