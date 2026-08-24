@@ -18,7 +18,7 @@
 // forces the classification to be DECLARED rather than discovered by the next reviewer.
 //
 // ── DECLARED COUNTS (gate-checked; a drift here FAILS this gate) ────────────────────────────────────────
-//   declared-modules: 54 · dead-value-exports: 224 · type-reachable: 6
+//   declared-modules: 53 · dead-value-exports: 221 · type-reachable: 6
 //   These three are read back from THIS file and asserted against the measured tree at the foot of the run
 //   (see "THE HEADER STATES COUNTS, AND THIS CHECKS THEM"). No count is QUOTED anywhere else in this
 //   header — a quoted integer that nothing checks is exactly what rotted here (task #143); this one cannot.
@@ -117,8 +117,14 @@ const LEDGER = {
 
   // ── @atlas/adapter-io — the outer ring, where a reader is most likely to assume "shipped". ────────────
   'packages/adapter-io/src/poke-file.ts': { values: 3, shipped: null, banner: true }, // the third transport; nothing constructs it (task #36)
-  'packages/adapter-io/src/test-vacuity.ts': { values: 1, shipped: null, banner: true }, // #95 test-vacuity oracle: measured+unit-tested, its mine/door/compose+CLI wiring is the follow-up increment
-  'packages/knowledge/src/write/test-vacuity-key.ts': { values: 3, shipped: null, banner: true }, // #95 test-vacuity IDENTITY leg (WP-TV-L1 scaffolding): re-exported+unit-tested, its admit/seal caller (buildTestVacuity) is Wave 1a
+  'packages/adapter-io/src/test-vacuity-source.ts': { values: 1, shipped: null, banner: true }, // #95 test-vacuity PRODUCER (WP-TV-1a): real parse→seal→governed-door persist, its compose+CLI wiring is Wave 2
+  // #95 WP-TV-1a landed: `test-vacuity.ts` (`scanTestVacuity`) and `write/test-vacuity-key.ts` (`testVacuityKey`
+  // + its refusals) BOTH moved dead → live and were REMOVED here, exactly the own.ts / relation-derive.ts
+  // dead→live transitions documented below. `scanTestVacuity` is now VALUE-imported by the reachable producer
+  // (`adapter-io/src/test-vacuity-source.ts` → `createTestVacuityProducer`); `testVacuityKey` is VALUE-imported
+  // by the seal path (`genesis/src/admit-test-vacuity.ts` → `buildSoundTestVacuity`) and the governed door
+  // (`adapter-io/src/governed-emit-test-vacuity.ts`). Their banners were dropped (test-vacuity.ts) — the ledger
+  // keeps the WP-TV-L1→1a transition on the record rather than the code.
   // #99 WP-R3 sound-relation MECHANICAL PROJECTION (relation-derive.ts) is DELETED from this ledger, not set to
   // zero: WP-R7 wired its shipped caller — `relation-derive-run.ts` value-imports `deriveRelations` /
   // `RelationBudgetExceededError`, reached from the composition root (`compose.ts` → `ComposedRuntime.

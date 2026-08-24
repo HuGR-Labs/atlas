@@ -12,7 +12,7 @@
 // harness casts the decision, never the model (GEN-12a). `scratch` is chain-of-thought — never a fact (GEN-12f).
 
 import type { NodeKey, Tier } from '@atlas/contracts';
-import type { AdvisoryNode, PredicateSlot, RelationKind } from '@atlas/knowledge';
+import type { AdvisoryNode, PredicateSlot, RelationKind, TestVacuityShape } from '@atlas/knowledge';
 import type { Candidate, WhyNot } from './types.js';
 
 /** The citations carrier of a grounded fact — reused from the frozen node shape, NEVER redefined. */
@@ -130,6 +130,26 @@ export interface TransitionProposal {
   readonly scratch?: string; // chain-of-thought — discarded, never a fact (GEN-12f)
 }
 
+/**
+ * A TEST-VACUITY candidate the PRODUCER emits (ADR-0015 D5, #95). Mirrors `TransitionProposal`: LOCATION-FREE,
+ * carrying NO `site` — the single-anchor `unitKey` lineage + the test's `testName` + the proven `shape` + ONE
+ * grounding entry anchoring the unit (its `subtreeHash` the freshness leg) + the mined `tier` + the authz
+ * `scope`. NO `check` — a test-vacuity is not a checkable predicate; its oracle is tree-sitter (`scanTestVacuity`),
+ * injected as `verifyTestVacuity`, NEVER re-run inside genesis. The identity (`testVacuityKey`) and the `witness`
+ * are DERIVED downstream from (`unitKey`, `testName`, `shape`) — never trusted off a payload id leg (KNOW-15b
+ * parity). Admission is `admitTestVacuity` → `trySoundTestVacuity` → `buildSoundTestVacuity`.
+ */
+export interface TestVacuityProposal {
+  readonly kind: 'test-vacuity';
+  readonly unitKey: string; // the LOCATION-FREE unit lineage (qualifiedPath) holding the test — identity leg
+  readonly testName: string; // the test's name string — identity leg (a unit may hold many named vacuous tests)
+  readonly shape: TestVacuityShape; // the proven syntactic property — 'assertion-only-in-catch' today
+  readonly grounding: FactGrounding; // EXACTLY one entry: anchors the unit (its subtreeHash the freshness leg)
+  readonly tier: Tier;
+  readonly scope?: string; // KNOW-11a — the AUTHZ/write scope the governed door authorizes against (the unit's own scope)
+  readonly scratch?: string; // chain-of-thought — discarded, never a fact (GEN-12f)
+}
+
 /** A grounded abstention (GEN-12g) — a VALID outcome, never a manufactured fact. */
 export interface Abstention {
   readonly kind: 'abstain';
@@ -143,4 +163,5 @@ export type Proposal =
   | RelationProposal
   | NegationProposal
   | TransitionProposal
+  | TestVacuityProposal
   | Abstention;

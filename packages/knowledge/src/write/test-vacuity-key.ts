@@ -1,12 +1,8 @@
-// ── REFERENCE MODEL — NO PRODUCTION CALLERS (yet) ─────────────────────────────────────────────────────
-// This is the #95 `test-vacuity` fact's IDENTITY leg (the L1 taproot scaffolding). `testVacuityKey` +
-// `MalformedTestVacuityError` are re-exported by `router.ts` and unit-tested, but the src caller that mints
-// the key — the admit/seal path (`buildTestVacuity`, mirror `admit-transition.ts`) — is Wave 1a, NOT this PR.
-// Until that lands it is a DECLARED reference model in the LEDGER in
-// `harness/gates/reference-model-guard.mjs` (`shipped: null` — pending scaffolding, not dead code), exactly
-// as the sibling oracle `adapter-io/src/test-vacuity.ts` is declared.
-//
 // @atlas/knowledge — src/write/test-vacuity-key.ts  (ADR-0015 D5 · #95 — the single-anchor test-vacuity's identity leg)
+//
+// SHIPPED (WP-TV-1a): `testVacuityKey` is VALUE-imported by the seal path (`genesis/src/admit-test-vacuity.ts`
+// → `buildSoundTestVacuity`) and the governed test-vacuity door (`adapter-io/src/governed-emit-test-vacuity.ts`),
+// so it moved dead → live and its reference-model ledger entry was DELETED (its banner dropped with it).
 //
 // The 2-legged SIBLING of `negation-key.ts` (#99b), `relation-key.ts` (#99a) and `transition-key.ts` (#234).
 // A test-vacuity fact is a single-anchor PROVEN record — "named test `testName` in unit `unitKey` has all its

@@ -50,7 +50,7 @@
 // second oracle constructed here (a duplicated oracle that drifts from the shipped one is a known failure
 // class in this repo, see `verify-fact-source.ts`'s header).
 
-import type { CurrentNode, GroundedFact, NegationNode, PredicateSlot, RelationNode } from '@atlas/knowledge';
+import type { CurrentNode, GroundedFact, NegationNode, PredicateSlot, RelationNode, TestVacuityNode, TestVacuityShape } from '@atlas/knowledge';
 import { claimNormFromWitness } from '@atlas/genesis';
 import { unitScopeOf } from './llm.js';
 import { underScope } from './anchor-scope.js';
@@ -315,6 +315,40 @@ export function reverifyNegation(nodeKey: string, fact: NegationNode, leg: Verif
   };
 }
 
+/** Re-run `scanTestVacuity` over a unit at HEAD and report whether a fact with `(shape, testName)` still appears
+ *  — the tree-sitter RE-PROOF leg (#95 D5, the test-vacuity family's re-runnable oracle). INJECTED (never a tree
+ *  parse built here — the leg re-reads + re-parses the unit at the composition root, exactly as the SCIP
+ *  `VerifyFactLeg` is injected rather than re-derived). `'proven'` iff the shape still holds; `'abstain'` iff the
+ *  test changed / vanished / the unit no longer parses. ABSENT (Wave 2 has not wired it) ⇒ `reverifyTestVacuity`
+ *  reads a proven test-vacuity as `unverifiable` (nothing to replay), never a false re-prove. */
+export type TestVacuityReplay = (unitKey: string, testName: string, shape: TestVacuityShape) => 'proven' | 'abstain';
+
+/** Re-verify ONE `seal:'proven'` TEST-VACUITY fact against the live tree-sitter oracle (#95 D5, single-anchor
+ *  analogue of the relation/negation reverify arms — closes the #240 trap for this family). A test-vacuity
+ *  carries a `TestVacuityWitness{shape, testName}` (no `PredicateSlot`), so it re-proves by RE-RUNNING
+ *  `scanTestVacuity` over the unit at HEAD (`replay`) and reading `'proven'` iff a fact with this
+ *  `(shape, testName)` still appears; anything else is `broken` (the test changed / vanished — drift). A missing
+ *  witness, or no `replay` leg wired, is `unverifiable` (nothing to replay — the trust-me-it-was-proved shape,
+ *  never counted a pass). The witness IS the whole claim (like a negation's identity legs), so there is no
+ *  anchor-binding tamper vector to close here — only the re-run. Pure + total. */
+export function reverifyTestVacuity(nodeKey: string, fact: TestVacuityNode, replay: TestVacuityReplay | undefined): ReverifyRow {
+  const w = fact.witness;
+  if (w === undefined || typeof w.testName !== 'string' || w.testName.length === 0) {
+    return { nodeKey, outcome: 'unverifiable', reason: "seal:'proven' test-vacuity but no witness was recorded — nothing to replay (the trust-me-it-was-proved shape)" };
+  }
+  if (typeof fact.unitKey !== 'string' || fact.unitKey.length === 0) {
+    return { nodeKey, outcome: 'unverifiable', reason: 'test-vacuity witness is incomplete (missing unitKey to re-scan) — nothing to replay' };
+  }
+  if (replay === undefined) {
+    return { nodeKey, outcome: 'unverifiable', reason: 'no test-vacuity re-scan leg is wired — the tree-sitter oracle cannot be replayed here (fail-closed, never a false re-prove)' };
+  }
+  const verdict = replay(fact.unitKey, w.testName, w.shape);
+  if (verdict === 'proven') {
+    return { nodeKey, outcome: 're-proven', reason: `replayed PROVEN — test '${w.testName}' still holds the ${w.shape} shape at HEAD` };
+  }
+  return { nodeKey, outcome: 'broken', reason: `replay did NOT re-prove — a fact with (shape '${w.shape}', test '${w.testName}') no longer appears in scanTestVacuity's HEAD output (the test changed or was removed)` };
+}
+
 /** Re-verify ONE sealed fact against the live oracle. `node` is the fact's OWN `CurrentNode` row — the
  *  source of `primaryAnchor`, which `GroundedFact` itself does not carry (KNOW-15d: the anchor is a
  *  projection-row carrier, `projection-types.ts`, not part of the CAS-stored fact). `undefined` iff the
@@ -353,7 +387,7 @@ export function reverifyNegation(nodeKey: string, fact: NegationNode, leg: Verif
  * operator can tell "the code moved under this fact" from "this fact was altered after the oracle proved
  * something else". Dropped, never clamped: silently rewriting a tampered tier/anchor/prose back to the
  * derived value would hide that a tamper was attempted at all. */
-export function reverifyFact(node: CurrentNode, fact: GroundedFact, leg: VerifyFactLeg, docExists: DocExists, scopeHasDocs: ScopeHasDocs): ReverifyRow | undefined {
+export function reverifyFact(node: CurrentNode, fact: GroundedFact, leg: VerifyFactLeg, docExists: DocExists, scopeHasDocs: ScopeHasDocs, replay?: TestVacuityReplay): ReverifyRow | undefined {
   // SEAL GATE — admit ONLY `seal:'proven'` into the re-proof. `seal:'justified'` (contestable derivation, no
   // mechanical witness) and unsealed facts BOTH return `undefined` here: out of scope, never counted in any
   // bucket — and crucially NEVER `unverifiable`, which is a `proven`-only diagnosis (see module header §justified).
@@ -370,6 +404,11 @@ export function reverifyFact(node: CurrentNode, fact: GroundedFact, leg: VerifyF
   //    anchor binding — a negation routes by `negationKey`). Routing it here closes the #240 trap that used to
   //    dump a proven negation to `unverifiable`. ─────────────────────────────────────────────────────────────
   if (fact.kind === 'negation') return reverifyNegation(nodeKey, fact, leg, scopeHasDocs);
+  // ── TEST-VACUITY FAMILY (#95 D5) — a `proven`-sealed test-vacuity carries a `TestVacuityWitness{shape,
+  //    testName}` and re-proves by RE-RUNNING `scanTestVacuity` over the unit at HEAD (the injected `replay`
+  //    leg), NOT the SCIP `leg`. Routing it here closes the #240 trap that would otherwise dump every proven
+  //    test-vacuity to `unverifiable` for want of a witnessed slot. ─────────────────────────────────────────────
+  if (fact.kind === 'test-vacuity') return reverifyTestVacuity(nodeKey, fact, replay);
   // Past the relation/negation branches above, the PREDICATE witness is carried ONLY on `AdvisoryNode` (#195
   // `buildSound` mints the predicate sound-oracle arm as an advisory), so a `proven`-sealed PREDICATE is
   // STRUCTURALLY witness-less here: `unverifiable`, not a type-narrowing dodge.
@@ -443,10 +482,10 @@ export interface NodeFactPair {
  * `CurrentNode` alongside it) — reading the STORE, never a command's own summary, per the chapter's honesty
  * requirement.
  */
-export function reverifyStore(pairs: readonly NodeFactPair[], leg: VerifyFactLeg, docExists: DocExists, scopeHasDocs: ScopeHasDocs): ReverifyReport {
+export function reverifyStore(pairs: readonly NodeFactPair[], leg: VerifyFactLeg, docExists: DocExists, scopeHasDocs: ScopeHasDocs, replay?: TestVacuityReplay): ReverifyReport {
   const rows: ReverifyRow[] = [];
   for (const { node, fact } of pairs) {
-    const row = reverifyFact(node, fact, leg, docExists, scopeHasDocs);
+    const row = reverifyFact(node, fact, leg, docExists, scopeHasDocs, replay);
     if (row !== undefined) rows.push(row);
   }
   return {
