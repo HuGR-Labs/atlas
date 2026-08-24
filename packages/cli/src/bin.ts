@@ -14,7 +14,7 @@ import { main } from './cli.js';
 // yet still index `::` sub-file symbol nodes, so a symbol grounding is groundable and `subsumes` fires.
 void (async () => {
   await initAst();
-  const { handler, doctorSource, promote, own, relations, negations, transitions, transition, testVacuities, testVacuity, verifyFact, reverify, deriveRelations, readRefusal, readAdvisory } = composeRuntime(process.cwd());
+  const { handler, doctorSource, promote, own, relations, negations, transitions, transition, testVacuities, testVacuity, verifyFact, reverify, deriveRelations, anchors, readRefusal, readAdvisory } = composeRuntime(process.cwd());
   // The provenance refusal rides the same injected-deps seam as the handler (conditional spread keeps it
   // ABSENT on a healthy repo — exactOptionalPropertyTypes), so prod and tests share ONE surface. `promote`
   // (the KNOW-8 governed promotion leg) rides that same seam: it is not a `Tool`, so it cannot arrive through
@@ -64,6 +64,12 @@ void (async () => {
     // entire difference between the mechanical relation projection (`relation-derive.ts`) being running code
     // reachable as `atlas derive-relations` and being a ledgered reference model.
     deriveRelations,
+    // `anchors` (the WP-10.A1 / ADR-0004 read-only DISCOVERY planner) rides the same injected-deps seam as
+    // `relations`/`transitions`. It is not a `Tool` (opens no governed surface, persists nothing — AUTHOR-2), so
+    // it cannot arrive through the handler; threading it here is the entire difference between the `createAnchors`
+    // planner (@atlas/tools) over the ONE `GroundingComputer` being running code reachable as `atlas anchors` and
+    // being a well-tested library nothing calls.
+    anchors,
     ...(readRefusal !== undefined ? { readRefusal } : {}),
     // TRAVEL-BY-REPROOF — the ADVISORY MESSAGE for a `tracked-provable` store, rides the same conditional-
     // spread discipline as `readRefusal` (ABSENT, not `undefined`, on a healthy repo — exactOptionalPropertyTypes).

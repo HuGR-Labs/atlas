@@ -149,6 +149,28 @@ function renderData(data: unknown): string {
     return `data:\n${lines.join('\n')}\n`;
   }
 
+  // anchors { rev, units, holes, reason? } — the read-only DISCOVERY planner listing (`atlas anchors <path>`,
+  // WP-10.A1.CLI / ADR-0004, the frozen `AnchorsOut`). Recognised by a `units` array PLUS a `holes` array (no
+  // other data shape carries either key, so no cross-shadowing with the shapes above/below). A header line states
+  // the rev and BOTH counts, so an EMPTY listing is a MEASURED fact ("0 unit(s), 0 hole(s)") and never an absent
+  // line; each unit renders `  unit <kind> <qualifiedPath> [<subtreeHash>]` in the leg's own deterministic (index)
+  // order, and each declared language hole renders `  hole <ext> — <fileCount> file(s): <reason>` (AUTHOR-4, the
+  // real census). The honest-empty `reason` (AUTHOR-3) renders as a trailing `  reason: <reason>` line ONLY when
+  // present (the leg sets it iff `units` is empty), so a populated listing stays byte-clean and an empty one is
+  // never silent about WHY.
+  if (Array.isArray(d.units) && Array.isArray(d.holes)) {
+    const units = d.units as readonly { qualifiedPath: string; kind: string; subtreeHash: string }[];
+    const holes = d.holes as readonly { ext: string; fileCount: number; reason: string }[];
+    const rev = typeof d.rev === 'string' ? d.rev : '';
+    const lines = [
+      `  anchors: rev ${rev} — ${units.length} unit(s), ${holes.length} hole(s)`,
+      ...units.map((u) => `  unit ${u.kind} ${u.qualifiedPath} [${u.subtreeHash}]`),
+      ...holes.map((h) => `  hole ${h.ext} — ${h.fileCount} file(s): ${h.reason}`),
+    ];
+    if (typeof d.reason === 'string') lines.push(`  reason: ${d.reason}`);
+    return `data:\n${lines.join('\n')}\n`;
+  }
+
   // link { linked, a, b, retracted? } — the governed sameAs write door result (WP-SAMEAS). A SUCCESSFUL link
   // renders a single `  linked: <a> ≡ <b>` line; a REJECTED link (linked:false) carries its `rejected` string
   // through the handler's ok:false path → the `reason:` block (mirrors emit), so it is never shadowed here.

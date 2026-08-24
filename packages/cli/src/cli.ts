@@ -12,7 +12,8 @@ import { asHash } from '@atlas/kernel';
 import { headSha, createHistorySource } from '@atlas/adapter-io';
 import { reportIndexPlan, relationsVerdict, negationsVerdict, transitionsVerdict, testVacuitiesVerdict, verifyFactVerdict } from '@atlas/adapter-io';
 import type { DeriveRelationsRun, IndexPlanReport, NegationLeg, OwnLeg, PromoteOut, RelationLeg, ReverifyReport, TestVacuityLeg, TestVacuityProducer, TransitionLeg, TransitionProducer, VerifyFactLeg, WiredHandler } from '@atlas/adapter-io';
-import type { DoctorSource, Guidance, Tool, Verdict } from '@atlas/tools';
+import type { AnchorsApi, DoctorSource, Guidance, Tool, Verdict } from '@atlas/tools';
+import { anchorsVerdict } from './anchors.js';
 import { runDoctor } from './doctor.js';
 import { ensureAtlasIgnored } from './gitignore.js';
 import { COMMAND_LEG } from './map.js';
@@ -189,6 +190,11 @@ export interface CliDeps {
    * routed command gives, never a silent projection over nothing.
    */
   readonly deriveRelations?: () => DeriveRelationsRun;
+  /** The composition root's read-only `anchors` DISCOVERY planner (`ComposedRuntime.anchors`, WP-10.A1 / ADR-0004)
+   *  — `createAnchors` over the ONE `GroundingComputer` (AUTHOR-1), the SAME grounding seam the emit truth-gate
+   *  re-derives against. Injected like `relations`/`transitions`: not a `Tool` (GOVERNANCE_SURFACE stays 5),
+   *  persists NOTHING (AUTHOR-2). ABSENT ⇒ `atlas anchors` fails closed, never a silent empty listing. */
+  readonly anchors?: AnchorsApi['anchors'];
 }
 
 /** A structured error verdict for a CLI-layer failure (parse / unwired command) — guidance always present. */
@@ -351,11 +357,7 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
     //
     // It fails closed on an uncomposed runtime for the same reason the READ commands do: composing a second
     // runtime here would brief from a store that is not the one `atlas query` reads.
-    if (!deps.own) {
-      return emit(
-        errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'),
-      );
-    }
+    if (!deps.own) return emit(errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'));
     return emitCli(runOwn(deps.own, positionals[0] ?? ''));
   }
 
@@ -394,11 +396,7 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
     // GOVERNANCE_SURFACE stays 5, WRITE_PATHS untouched). Rendered through the SHARED `renderVerdict`/`emit`
     // path (exit 0 with the edges on `data`; a structured error + exit 1 on an uncomposed runtime OR an
     // out-of-vocabulary direction). Never a throw — `relationsVerdict` + `relationsOf` are both total.
-    if (!deps.relations) {
-      return emit(
-        errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'),
-      );
-    }
+    if (!deps.relations) return emit(errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'));
     return emit(relationsVerdict(deps.relations, positionals[0] ?? '', positionals[1]));
   }
 
@@ -412,11 +410,7 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
     // 1 on an uncomposed runtime). Never a throw — `negationsVerdict` + both folds are total. The `--abstained`
     // flag FOCUSES the render on the honest abstentions; both are always in the data, so the abstention is
     // observable regardless (the #202 close).
-    if (!deps.negations) {
-      return emit(
-        errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'),
-      );
-    }
+    if (!deps.negations) return emit(errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'));
     return emit(negationsVerdict(deps.negations, positionals[0] ?? '', flags.abstained === 'true'));
   }
 
@@ -471,6 +465,15 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
       return emit(errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'));
     }
     return emitCli(runTestVacuityCli(deps.testVacuity));
+  }
+
+  if (command === 'anchors') {
+    // WP-10.A1.CLI / ADR-0004: `atlas anchors <path>` — the READ-ONLY DISCOVERY PLANNER over the composition
+    // root's frozen `anchors` leg. Intercepted before the handler like `relations`/`test-vacuities` (not a `Tool`;
+    // persists NOTHING, AUTHOR-2). Rendered through the SHARED `emit` path — exit 0 carrying the `AnchorsOut` (an
+    // empty listing is a legible answer WITH its honest reason); a missing path / uncomposed runtime → exit 1.
+    if (!deps.anchors) return emit(errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'));
+    return emit(anchorsVerdict(deps.anchors, positionals[0] ?? ''));
   }
 
   if (command === 'verify-fact') {
