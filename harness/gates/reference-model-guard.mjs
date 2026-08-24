@@ -18,7 +18,7 @@
 // forces the classification to be DECLARED rather than discovered by the next reviewer.
 //
 // ── DECLARED COUNTS (gate-checked; a drift here FAILS this gate) ────────────────────────────────────────
-//   declared-modules: 52 · dead-value-exports: 220 · type-reachable: 6
+//   declared-modules: 53 · dead-value-exports: 221 · type-reachable: 6
 //   These three are read back from THIS file and asserted against the measured tree at the foot of the run
 //   (see "THE HEADER STATES COUNTS, AND THIS CHECKS THEM"). No count is QUOTED anywhere else in this
 //   header — a quoted integer that nothing checks is exactly what rotted here (task #143); this one cannot.
@@ -117,6 +117,7 @@ const LEDGER = {
 
   // ── @atlas/adapter-io — the outer ring, where a reader is most likely to assume "shipped". ────────────
   'packages/adapter-io/src/poke-file.ts': { values: 3, shipped: null, banner: true }, // the third transport; nothing constructs it (task #36)
+  'packages/adapter-io/src/test-vacuity.ts': { values: 1, shipped: null, banner: true }, // #95 test-vacuity oracle: measured+unit-tested, its mine/door/compose+CLI wiring is the follow-up increment
   // #99 WP-R3 sound-relation MECHANICAL PROJECTION (relation-derive.ts) is DELETED from this ledger, not set to
   // zero: WP-R7 wired its shipped caller — `relation-derive-run.ts` value-imports `deriveRelations` /
   // `RelationBudgetExceededError`, reached from the composition root (`compose.ts` → `ComposedRuntime.
