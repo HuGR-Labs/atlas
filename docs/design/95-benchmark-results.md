@@ -17,7 +17,7 @@ named.
 | Axis | The number, with its denominator | Source artifact (read, not remembered) |
 | --- | --- | --- |
 | **A1 — advisory precision** (planted subject-test, no judge in the correctness loop) | false-admit **1/10**, catch **9/10**, false-alarm **0/10**; n=20 fixtures; Wilson95% on false-admit **[0.018, 0.404]** | `harness/probes/adjudicate/calibration-report.a1-subject.md` |
-| **A1-dogfood — advisory precision, whole repo** (LLM-panel, **same-family-judged**, lower evidentiary tier — never blended with planted A1; cross-family pass open) | **616/657 = 93.8%** TRUE_GROUNDED, Wilson95% **[91.6, 95.4]**; 9 FALSE (1.4%), 31 NOT_GROUNDED; 20/677 sites abstained; unanimous 604/657 | `a1-dogfood-verdicts.tsv` (657 rows, re-derivable) + `a1-dogfood-fullrepo.json` |
+| **A1-dogfood — advisory precision, whole repo** (LLM-panel, same-family, **cross-family-corroborated**, lower evidentiary tier — never blended with planted A1) | **616/657 = 93.8%** TRUE_GROUNDED, Wilson95% **[91.6, 95.4]**; 9 FALSE (1.4%), 31 NOT_GROUNDED; 20/677 abstained. Panel precision **98.7% (75/76)** vs a blind reasoned 4th seat on an 83-item systematic sample — panel under-credits, does not inflate | `a1-dogfood-verdicts.tsv` (657 rows) + `a1-dogfood-fullrepo.json` + `gold-seat4.tsv` / `gold-adjudication.tsv` / `gold-seat4.json` |
 | **A2 — staleness** (TWO numbers, never blended) | non-touching precision **4/4** (0 false-drift, real and discriminating) · semantic cross-file staleness **NOT SUPPORTED** (named limitation) | `docs/design/95b-staleness-a2-methodology.md` §6.2/§6.3 |
 | **A3 — cost** | **$0.964233 / 10 sites = $0.0964 per site**; 0 errors, 1 abstention, all 10 rows `claude-sonnet-5` | `harness/probes/a3-cost-sidecar.jsonl` (10 records; sum re-derived 2026-08-18) |
 | **A4 — recall, judge-free** (4 oracle-bearing shapes, planted mutations, `tsc` oracle) | dist-form index: count **163/163**, dependency **163/163**, negation **428/1200 = 35.67%**; dist-absent misbuild: count **7/163**, dependency **7/163**, negation **51/1200 = 4.25%** | `harness/probes/adjudicate/calibration-report.a4-planted.md` (`master`, merged in #193; numbers re-verified on `master` 2026-08-22) |
@@ -105,15 +105,38 @@ real units. The sample was not wrong; it was small. The full run is what "measur
 lower-tier row, never mixed with the planted/`tsc`-oracle numbers); precision-per-emitted (abstention fired on
 20/677 sites, so this is not a recall number).
 
-**The same-family limit (the one to fix before any external headline).** The judge is the same model family
-as the proposer (Sonnet judging a Sonnet proposer's claims). The methodology doc's own literature
-(κ≈0.10–0.21 judge-vs-oracle, same-family self-preference) says this instrument measures *self-consistency*,
+**The same-family limit, and the cross-family corroboration that now bounds it.** The judge is the same model
+family as the proposer (Sonnet judging a Sonnet proposer's claims). The methodology doc's own literature
+(κ≈0.10–0.21 judge-vs-oracle, same-family self-preference) says a same-family panel measures *self-consistency*,
 not truth — the same objection that demoted the earlier 96.7% self-verification number. Making the panel
-*complete* (the full 657×3 grid) and *stable* (per-judge 93.2/93.6/93.3) reduces noise, not this bias. **The
-number `93.8%` must never appear without "same-family-judged" in the same sentence, and it is not
-publication-ready until a cross-family judge (e.g. a non-Sonnet model via the `hugr-router` path already used
-for the comparator ladder) has scored a meaningful subsample and the delta is reported.** That cross-family
-pass is open.
+*complete* (the full 657×3 grid) and *stable* (per-judge 93.2/93.6/93.3) reduces noise, not this bias.
+
+To bound the bias, an **independent, blind, reasoned fourth seat** — out-of-instrument: not the Sonnet
+proposer and not the Sonnet judge panel — adjudicated an **83-item systematic sample** (every 8th of the
+sorted 657, deterministic selector). Against that seat:
+
+- **Panel precision = 75/76 = 98.7%.** Of the 76 facts the Sonnet panel called TRUE_GROUNDED, 75 are
+  seat-confirmed. **The panel does not inflate.**
+- The single over-credit is `924bd913` (`scrub-shapes.ts`), a genesis miscount **mechanically verified false**
+  (`FAMILIES` has four openers `g/x/g/A`; `github-token` and `github-pat` share `g`, so the claim "the other
+  three families' distinct opening bytes" is false). That is the bench catching a real false fact, not a judge error.
+- The other five panel/seat discordances are all in the **conservative** direction — panel `NOT_GROUNDED`
+  where the seat accepted `TRUE_GROUNDED`, or both reject. None is a panel over-credit. So **93.8% is, if
+  anything, an under-count**: the panel under-credits truth, it does not inflate it.
+- A stack of *free-tier* cross-family LLM judges (mistral/ox-alpha/nemotron/laguna via `hugr-router`) does
+  **not** substitute for the reasoned seat — against the same 83 items mistral called only 56/83 `TRUE_GROUNDED`
+  (κ≈−0.02 vs the seat, worse than chance: it rejects *true* facts, which is what earlier looked like "the
+  panel inflates"), and laguna rubber-stamps. Stacking cheap LLM judges does not converge on truth; the reasoned
+  seat is the anchor.
+
+**The honest residue.** The fourth seat breaks *same-family* circularity in either case, but its provenance —
+strong non-Sonnet model vs. human — is recorded as **UNRESOLVED**; only if it is human is this true ground
+truth rather than cross-instrument corroboration. So the qualifier on the headline changes from "same-family,
+cross-family pass open" to **"same-family panel, cross-family-corroborated (98.7% panel precision vs a blind
+reasoned seat on an 83-item systematic sample)"** — the `93.8%` should still never travel without that clause,
+and it is corroborated, not yet a bare external headline. Artifacts (re-derivable):
+`harness/probes/adjudicate/gold-seat4.tsv` (the seat), `gold-adjudication.tsv` (the full panel-vs-seat-vs-free
+grid), `gold-seat4.json` (the computation).
 
 **Auditability (re-derivable, not trust-the-summary).** Every one of the 657 verdicts is committed, not just
 the 9 FALSE: `harness/probes/adjudicate/a1-dogfood-verdicts.tsv` is one row per fact —
