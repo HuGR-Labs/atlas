@@ -18,6 +18,7 @@ named.
 | --- | --- | --- |
 | **A1 — advisory precision** (planted subject-test, no judge in the correctness loop) | false-admit **1/10**, catch **9/10**, false-alarm **0/10**; n=20 fixtures; Wilson95% on false-admit **[0.018, 0.404]** | `harness/probes/adjudicate/calibration-report.a1-subject.md` |
 | **A1-dogfood — advisory precision, whole repo** (LLM-panel, same-family, **cross-family-corroborated**, lower evidentiary tier — never blended with planted A1) | **616/657 = 93.8%** TRUE_GROUNDED, Wilson95% **[91.6, 95.4]**; 9 FALSE (1.4%), 31 NOT_GROUNDED; 20/677 abstained. Panel precision **98.7% (75/76)** vs a blind reasoned 4th seat on an 83-item systematic sample — panel under-credits, does not inflate | `a1-dogfood-verdicts.tsv` (657 rows) + `a1-dogfood-fullrepo.json` + `gold-seat4.tsv` / `gold-adjudication.tsv` / `gold-seat4.json` |
+| **A1-dogfood — CROSS-REPO** (same apparatus, third-party repo `colinhacks/zod` v3.23.8; removes home-field advantage; same-family-judged) | **66/76 = 86.8%** TRUE_GROUNDED, Wilson95% **[77.4, 92.7]**; 7 FALSE (9.2%, real proposer hallucination, 2 mechanically verified), 2 NOT_GROUNDED; 7/83 abstained. **Home was optimistic by ~7pts (93.8→86.8)** | `xrepo-zod-a1-verdicts.tsv` (76 rows) + `xrepo-zod-a1.json` |
 | **A2 — staleness** (TWO numbers, never blended) | non-touching precision **4/4** (0 false-drift, real and discriminating) · semantic cross-file staleness **NOT SUPPORTED** (named limitation) | `docs/design/95b-staleness-a2-methodology.md` §6.2/§6.3 |
 | **A3 — cost** | **$0.964233 / 10 sites = $0.0964 per site**; 0 errors, 1 abstention, all 10 rows `claude-sonnet-5` | `harness/probes/a3-cost-sidecar.jsonl` (10 records; sum re-derived 2026-08-18) |
 | **A4 — recall, judge-free** (4 oracle-bearing shapes, planted mutations, `tsc` oracle) | dist-form index: count **163/163**, dependency **163/163**, negation **428/1200 = 35.67%**; dist-absent misbuild: count **7/163**, dependency **7/163**, negation **51/1200 = 4.25%** | `harness/probes/adjudicate/calibration-report.a4-planted.md` (`master`, merged in #193; numbers re-verified on `master` 2026-08-22) |
@@ -146,6 +147,33 @@ UNSURE 1). Summary + the 9 FALSE with votes: `harness/probes/adjudicate/a1-dogfo
 proposer answers are `claude-sonnet-5` capture artifacts; the run is replay-deterministic given them, but the
 answer corpus itself is not committed to this repo (it lives in the run scratchpad) — a known auditability
 limit shared with the capture/replay probes, stated here rather than left implicit.
+
+### A1-dogfood — CROSS-REPO: the same apparatus off home field (`master`, 2026-08-24)
+
+Atlas-on-Atlas is a dogfood, and a dogfood can be flattered by home advantage — the proposer and the judge
+both know Atlas's conventions. So the identical apparatus (real `atlas mine` advisory slot →
+capture/replay → Sonnet proposer effort-medium → 3 blind Sonnet judges, majority-3) was pointed at a
+**third-party repo**: **`colinhacks/zod` v3.23.8** (`ca42965`), indexed with `scip-typescript` 0.4.0. Nothing
+changed but the target repo.
+
+| metric (zod, advisory slot) | value |
+|---|---|
+| sites visited | 83 |
+| facts emitted / abstained | 76 / 7 (emit 91.6%) |
+| **A1-dogfood precision (cross-repo)** | **66/76 = 86.8%**, Wilson95% **[77.4, 92.7]** |
+| FALSE / NOT_GROUNDED / UNSURE | 7 (9.2%) / 2 / 1 |
+| unanimous | 67/76 |
+| per-judge TG | 88.2 / 85.5 / 85.5% |
+
+**The home number was optimistic by ~7 points.** Off home field the precision drops **93.8% → 86.8%**. This
+86.8% is the more externally-valid figure (still same-family-judged; no reasoned 4th seat has been run on
+zod). The drop is **real proposer hallucination on dense unfamiliar test files, not judge noise** (67/76
+unanimous). Two of the 7 FALSE are mechanically verified: `ffc0cbfe` (`partials.test.ts:252` asserts
+`.success).toBe(false)`, but the claim said `success === true` — the proposer inverted the boolean) and
+`dd7f1aed` (`base.test.ts` contains only a `type guard` and a `test this binding` test; the claim describes a
+`parse dateSchema invalid date` test that does not exist — a whole test confabulated). The same-family panel's
+grounding discipline caught them. Artifacts: `harness/probes/adjudicate/xrepo-zod-a1-verdicts.tsv` (76 rows,
+re-derivable) + `xrepo-zod-a1.json`.
 
 ### A2 — staleness (`master`, per #190)
 
