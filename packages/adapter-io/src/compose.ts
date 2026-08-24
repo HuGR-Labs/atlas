@@ -23,7 +23,7 @@ import { asHash } from '@atlas/kernel';
 import { build, createSymbolReverse, nodeHashOfPath } from '@atlas/index';
 import type { Axes } from '@atlas/index';
 import { bindGate, isGrounded, driftDetect } from '@atlas/grounding';
-import { bindReconcile, currentNodes } from '@atlas/knowledge';
+import { bindReconcile } from '@atlas/knowledge';
 import type { GroundedFact } from '@atlas/knowledge';
 import type { DoctorSource, T0Heuristic, TruthGate } from '@atlas/tools';
 import { walkFileTree } from './fs.js';
@@ -46,14 +46,14 @@ import { runDeriveRelations } from './relation-derive-run.js';
 import type { DeriveRelationsRun } from './relation-derive-run.js';
 import { createNegationLeg } from './negation-source.js';
 import { createTransitionLeg, createTransitionProducer, type TransitionLeg, type TransitionProducer } from './transition-source.js';
-import { buildTestVacuityLegs, type TestVacuityLeg, type TestVacuityProducer } from './compose-test-vacuity.js';
+import { buildTestVacuityFeed, buildTestVacuityLegs, type TestVacuityLeg, type TestVacuityProducer } from './compose-test-vacuity.js';
 import type { RelationLeg } from './relation-source.js';
 import type { NegationLeg } from './negation-source.js';
 import { createVerifyFactLeg } from './verify-fact-source.js';
 import type { VerifyFactLeg } from './verify-fact-source.js';
-import { reverifyStore, makeScopeHasDocs } from './reverify-store.js';
-import type { DocExists, NodeFactPair, ReverifyReport } from './reverify-store.js';
-import { createDiskStore, rehydrateProjection } from './store.js';
+import { reverifyStore, makeScopeHasDocs, driftPairsOf } from './reverify-store.js';
+import type { DocExists, ReverifyReport } from './reverify-store.js';
+import { createDiskStore } from './store.js';
 import { gitStoreProvenance } from './store-provenance.js';
 import type { SidecarTrust } from './store-provenance.js';
 import { buildReadAccess, trackedProvableAdvisory } from './read-access.js';
@@ -351,16 +351,9 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
   const provenance = gitStoreProvenance(repoPath);
   const trusted: SidecarTrust = () => provenance() === 'trusted';
   const store = createDiskStore(join(repoPath, CAS_REL), () => headSha(repoPath), trusted);
-  // `driftPairs` carries each fact ALONGSIDE its own `CurrentNode` — `reverify` (`reverify-store.ts`
-  // finding 1b, #199 fix-round) needs `node.primaryAnchor` for the anchor-binding check, which
-  // `GroundedFact` itself never carries. `driftFacts` (the reconcile seams' input, unchanged shape) is
-  // just this same pairing's `.fact` projection — ONE store read, ONE map, no second pass.
-  const driftPairs: readonly NodeFactPair[] = currentNodes(rehydrateProjection(store))
-    .map((node) => {
-      const fact = store.get(node.contentHash as Hash);
-      return fact === undefined ? undefined : { node, fact };
-    })
-    .filter((p): p is NodeFactPair => p !== undefined);
+  // `driftPairs` carries each fact ALONGSIDE its own `CurrentNode` (`reverify` needs `node.primaryAnchor` for
+  // the anchor-binding check, #199); `driftFacts` is the same pairing's `.fact` projection — ONE store read.
+  const driftPairs = driftPairsOf(store);
   const driftFacts = driftPairs.map((p) => p.fact);
   // THE SOUND-GENESIS PROVEN-FAMILY ORACLE, built ONCE and shared by BOTH `verifyFact` (the CLI's
   // `atlas verify-fact`) and `reverify` (`atlas verify-store`) below — the ONE production oracle, never a
@@ -374,6 +367,10 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
   const docPaths = new Set(scipOutput.documents.map((d) => d.relativePath));
   const docExists: DocExists = (p) => docPaths.has(p);
   const scopeHasDocs = makeScopeHasDocs(scipOutput.documents); // #240 follow-up — ∃ doc under a negation's scope
+  // THE ONE SHARED TEST-VACUITY FEED (#95 D5), built HERE — BEFORE `buildReadAccess` — because its `replay`
+  // needs only `rawTree` + `axes` (in hand), NEVER `readAccess.store`. Early build lets the `tracked-provable`
+  // serve re-prove proven test-vacuities (#249); reused below so producer + BOTH replay sites scan ONE `testUnitsOf` (#186/N10).
+  const tvFeed = buildTestVacuityFeed(rawTree, axes);
   // THE READ-SIDE ANSWER (TRAVEL-BY-REPROOF, `read-access.ts`): what every read leg below is allowed to see.
   // `trusted` ⇒ `store` verbatim, no new cost. `tracked-staging` ⇒ a refusal, unchanged in kind. `tracked-
   // provable` ⇒ a raw re-read filtered to the facts that replay `re-proven` against `verifyFactLeg` — the
@@ -386,6 +383,9 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     verifyFactLeg,
     docExists,
     scopeHasDocs,
+    // #249 — thread the replay so `tracked-provable` RE-PROVES proven test-vacuities instead of dropping them
+    // `unverifiable`. `readAccess.reverified` is now computed WITH it, keeping the `reverify()` `??` consistent.
+    replay: tvFeed.replay,
   });
 
   const seams: WireSeams = {
@@ -535,9 +535,9 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
       maxRelations: DERIVE_RELATIONS_BUDGET,
     });
 
-  // #95 D5 — the THREE test-vacuity legs (READ, HEAD PRODUCER, Wave-3 REVERIFY REPLAY) built from ONE shared HEAD
-  // units feed (`compose-test-vacuity.ts`); producer rides the governed `relationEmit` door, `replay` feeds `reverify`.
-  const tvLegs = buildTestVacuityLegs(readAccess.store, rawTree, axes, relationEmit, asHash(headSha(repoPath) ?? ''));
+  // #95 D5 — the THREE test-vacuity legs built from the ONE shared feed `tvFeed` above (the SAME feed the
+  // `tracked-provable` serve filter already re-proved over). Producer rides `relationEmit`; `replay` feeds `reverify`.
+  const tvLegs = buildTestVacuityLegs(tvFeed, readAccess.store, relationEmit, asHash(headSha(repoPath) ?? ''));
 
   return {
     handler: assembleHandler(config),

@@ -36,7 +36,7 @@ import type { CurrentNode, GroundedFact } from '@atlas/knowledge';
 import { currentNodes } from '@atlas/knowledge';
 import { REJECTED_UNTRUSTED_STORE } from './read-provenance.js';
 import { reverifyFact } from './reverify-store.js';
-import type { DocExists, ReverifyReport, ScopeHasDocs } from './reverify-store.js';
+import type { DocExists, ReverifyReport, ScopeHasDocs, TestVacuityReplay } from './reverify-store.js';
 import type { CasPath, DiskStore } from './store.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
 import type { StoreProvenance } from './store-provenance.js';
@@ -98,6 +98,7 @@ function buildProvable(
   verifyFactLeg: VerifyFactLeg,
   docExists: DocExists,
   scopeHasDocs: ScopeHasDocs,
+  replay: TestVacuityReplay | undefined,
 ): { readonly store: DiskStore; readonly report: ReverifyReport } | undefined {
   try {
     // NO trust seam ⇒ never consulted ⇒ reads the raw file regardless of git status (`store.ts`'s own
@@ -113,7 +114,11 @@ function buildProvable(
       const fact = raw.get(node.contentHash as Hash) as GroundedFact | undefined;
       if (fact !== undefined) pairs.push({ node, fact });
     }
-    const rows = pairs.map((p) => reverifyFact(p.node, p.fact, verifyFactLeg, docExists, scopeHasDocs));
+    // `replay` threaded so a `seal:'proven'` test-vacuity RE-PROVES against HEAD here (over the ONE shared
+    // `testUnitsOf(rawTree, axes)` feed compose built before `buildReadAccess`) instead of falling to
+    // `unverifiable` for want of a re-scan leg — the over-refusal (#249) this closes. Fail-safe either way
+    // (a still-vacuous fact was DROPPED, never served stale-as-fresh); this stops dropping the honest ones.
+    const rows = pairs.map((p) => reverifyFact(p.node, p.fact, verifyFactLeg, docExists, scopeHasDocs, replay));
     const sealedProven = rows.filter((r): r is NonNullable<typeof r> => r !== undefined);
     const report: ReverifyReport = {
       sealedProven: sealedProven.length,
@@ -159,6 +164,11 @@ export function buildReadAccess(opts: {
   readonly verifyFactLeg: VerifyFactLeg;
   readonly docExists: DocExists;
   readonly scopeHasDocs: ScopeHasDocs;
+  /** The Wave-3 test-vacuity reverify replay (the ONE shared `testUnitsOf` feed's leg), threaded so a proven
+   *  test-vacuity RE-PROVES during the `tracked-provable` serve filter rather than dropping to `unverifiable`
+   *  (over-refusal, #249). `undefined` degrades to the pre-Wave-3 behaviour (test-vacuities `unverifiable`,
+   *  dropped) — fail-safe, never a false re-prove. Consumed ONLY on the `tracked-provable` leg. */
+  readonly replay?: TestVacuityReplay;
 }): ReadAccess {
   const kind = opts.provenance();
   if (kind === 'trusted') {
@@ -170,7 +180,7 @@ export function buildReadAccess(opts: {
     return { store: opts.gatedStore, refusal: REJECTED_UNTRUSTED_STORE, reverified: undefined };
   }
   // CASE 2 — tracked-provable: served, filtered to what re-proves; fail-closed if re-verification cannot run.
-  const built = buildProvable(opts.casPath, opts.headSha, opts.gatedStore, opts.verifyFactLeg, opts.docExists, opts.scopeHasDocs);
+  const built = buildProvable(opts.casPath, opts.headSha, opts.gatedStore, opts.verifyFactLeg, opts.docExists, opts.scopeHasDocs, opts.replay);
   if (built === undefined) {
     return { store: opts.gatedStore, refusal: REJECTED_UNTRUSTED_STORE, reverified: undefined };
   }
