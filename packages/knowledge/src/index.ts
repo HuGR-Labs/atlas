@@ -28,6 +28,7 @@ export * from './read/subsumes.js';     // WP-DEDUP-2 · DP-2 — derive the `su
 export * from './read/relations.js';    // ADR-0015 D2 / #99a — derive the bidirectional grounded-relation set on read (never stored)
 export * from './read/negations.js';    // ADR-0015 D3 / #99b — derive the grounded-negation set + honest abstentions on read (#202 observability)
 export * from './read/transitions.js';  // ADR-0015 D4 / #234 — derive the grounded-transition set + lineage supersession on read (never a stored flip)
+export * from './read/test-vacuity.js'; // ADR-0015 D5 / #95 — derive the grounded test-vacuity set on read (single-anchor, no lineage, never stored)
 export * from './write/negation-key.js'; // ADR-0015 D3 / #99b — the scoped-negative's identity leg (negationKey + MalformedNegationError); also re-exported by router.js
 export * from './read/sameas.js';       // WP-SAMEAS — derive the transitive `sameAs` equivalence on read (union-find, never a merge); A-D3 — retraction-aware, + `sameAsEdgeState`
 export * from './lifecycle/evaluator.js';   // WP-5.16.KNOW  — predicate check-engine: deterministic index-query, no code execution
