@@ -1,0 +1,125 @@
+# CAMPAIGN-10 re-cut — the authoring plan, corrected against the ARCH constitution
+
+> **What this is.** The 16-WP CAMPAIGN-10 slice in `requirements/work-packages/wp-campaign-10.md` was frozen
+> at `master @ 000b6ac`, *before* ADR-0006 introduced the ARCH constitution (`ARCH-1..12`,
+> `reference/atlas-architecture.md`) and its `layer-guard` gate. The constitution invalidated the plan's seam
+> ownership and dependency head. This document is the re-cut demanded by task #85: it corrects the plan so
+> every WP is buildable under `ARCH-2`, binds the doors that the frozen plan would have left unbound, and
+> ledgers the cold-review findings. **It changes the plan's shape and DAG head only — not the campaign's
+> intent, its epics, or its acceptance (delete `author.ts`).**
+>
+> **Truth precedence.** Where `wp-campaign-10.md` disagrees with `ADR-0006` / `reference/atlas-architecture.md`,
+> the ADR and the architecture reference are truth and the WP card is stale (it predates them). This doc does
+> not re-ratify the constitution; it re-cuts the plan *under* it.
+
+## The defect in one paragraph
+
+The frozen plan makes **`WP-10.A1.ADAPTER`** (an `adapter-io` module) *own* the `GroundingComputer` seam and
+declares it "blocks every other WP in the campaign" (`wp-campaign-10.md:20-22, 30-31, 120`). That inverts
+**ARCH-2** — `@atlas/tools` is the innermost port layer and MUST NOT depend on `@atlas/adapter-io`; every
+outside capability MUST be a **port declared in `tools`** and satisfied by an adapter
+(`atlas-architecture.md:64-69`, which names this exact plan as "the CAMPAIGN-10 defect… unbuildable"). A seam
+*owned by* adapter-io and *consumed by* a tools-side leg cannot compile in the ring's dependency direction.
+The same class produced a second defect: **no WP names `wire.ts`**, so the four planner doors would be built
+and never bound into the composition root.
+
+## The re-cut — seven corrections
+
+1. **Flip seam ownership (fixes bobby-1 / ARCH-2).** `GroundingComputer` and `GateChain` become **ports
+   declared in `@atlas/tools`**, implemented in `@atlas/adapter-io`. The port interface is the frozen artifact;
+   the adapter is the consumer of the freeze, not its owner. This is exactly ADR-0004's *"one grounding
+   computer"* (AUTHOR-1) — the re-cut only relocates *where the contract lives* to satisfy the ring.
+
+2. **Flip the DAG head.** The prerequisite that "blocks the campaign" is no longer `A1.ADAPTER` — it is
+   **`A1.TOOLS` freezing the `GroundingComputer` PORT**. Order becomes:
+   `A1.TOOLS (freeze port) → A1.ADAPTER (implement) → A1.CLI (surface)`. The card's `deps:` lines that read
+   `[ WP-10.A1.ADAPTER ]` as the root (`:136, :230`) flip to `[ WP-10.A1.TOOLS ]`. The coupling C1 the card
+   protects (one derivation, sequenced) is *preserved* — it is simply sequenced behind the port freeze, which
+   is where ARCH-2 requires the contract to sit.
+
+3. **Bind every door — `wire.ts` in the edit surface (fixes bobby-2 / ARCH-3).** Each WP that introduces a
+   planner leg (`anchors`, `slots`, `draft`, `check`) MUST list `packages/adapter-io/src/wire.ts` in its
+   `action_surface` and add the leg to the `composeRuntime` binding. A door not bound in `wire.ts` is dead on
+   arrival; the WP is not done until `wire.ts` advertises it.
+
+4. **Add the sixth seam.** The frozen plan froze five seams; the `GateChain` extraction (A3.ADAPTER) is a
+   sixth port (`tools`-declared, `adapter-io`-implemented). It is listed as a first-class seam so the
+   dependency `check → GateChain` is explicit, not implied.
+
+5. **Reference the amended `INV-MCP-1` (fixes lucy-1/lucy-2).** ADR-0006 already superseded the "exactly five /
+   no sixth tool" count with the **derived-surface property** (`GOVERNANCE_SURFACE` derived + budgeted, not a
+   magic number). Every WP that touched the old count (notably EPIC-A5's advertise-the-union) must cite the
+   amended `REQ-MCP-1a/1b`, not the retired count. No WP may re-assert "exactly five."
+
+6. **Close advertised ≡ invocable (fixes billy-1 / ARCH-5).** `server.ts callTool` dispatches on
+   `legs[tool]` with no membership check against the advertised surface. EPIC-A5's advertise-the-union WP MUST
+   add the structural check that the advertised set and the invocable set are the *same* set (a gate-spy or a
+   membership assertion), so a future divergence fails a test, not a user.
+
+7. **Correct the tracker.** Task **#82 ("CAMPAIGN-10.3 … 3 WPs") is mislabeled `completed`** — EPIC-A5 is
+   entirely unbuilt: `packages/e2e-blackbox/test/author.ts` is still present, `READ_SURFACE` has no export site
+   anywhere in `packages/**` (`server.ts:11`), and the union is advertised via a narrow read path, not a real
+   surface. #82's *freeze/plan* completed; its *build* did not. It reopens as CAMPAIGN-10.3.
+
+## The corrected DAG (unchanged epics, corrected edges)
+
+```
+EPIC-A1   A1.TOOLS(freeze GroundingComputer PORT) → A1.ADAPTER(impl) → A1.CLI(anchors + write-spy)
+EPIC-A2-a A2-a.TOOLS(slots+draft, +wire.ts) → A2-a.CLI → A2-a.E2E(draft→emit round-trip)   [after A1.TOOLS,A1.ADAPTER]
+EPIC-A2-b A2-b.TOOLS(route/CREATE-vs-UPDATE/supersede, +wire.ts) → A2-b.ADAPTER(retire-through-emit spy)
+EPIC-A3   A3.ADAPTER(extract GateChain PORT, behaviour-preserving) → A3.TOOLS(check leg)     [after A2-a.TOOLS]
+EPIC-A4   A4.TOOLS(widen EmitOut w/ read nodeKey) → A4.ADAPTER(populate receipt) → A4.CLI(help + full render)
+EPIC-A5   A5.TOOLS(READ_SURFACE export) → A5.MCP(advertise union + membership check) → A5.E2E(byte-parity + DELETE author.ts)
+```
+
+No cycles. Campaign order stays `10.1 (A1,A2-a,A2-b) → 10.2 (A3,A4) → 10.3 (A5)`. Acceptance is unchanged:
+a human authors+emits a fact through product doors on both transports, after which `author.ts` is deleted.
+
+## Cold-review findings ledger (#85)
+
+There is **no single findings dossier**; the ~25 are distributed across ADR-0006, `atlas-architecture.md §4`,
+the WP cards, and `authoring.md §5`. First-pass verdicts against `master @ e3ba705`:
+
+| id | summary | verdict |
+|---|---|---|
+| arch-#4 | layer-guard read manifests only (planted import passed) | **RESOLVED** — gated by `layer-guard.mjs` |
+| arch-#9 | check conflicted with ARCH-10 wording | **RESOLVED** — shipped as test (ADR-0007) |
+| arch-#10 | check already satisfied by target code | **RESOLVED / moot** |
+| A5-stale-1/2/3 | two singular-write-door strings, unscanned repo root, missing anti-drift pattern | **RESOLVED (standalone)** |
+| lucy-1 | INV-MCP-1 "exactly five" contradicts the 12-tool union | **OPEN (design)** — superseded on paper (ADR-0006), correction #5 wires it into the plan |
+| lucy-2 | register completeness table checked only the non-conflicting invariant | **OPEN** — folded into correction #5 |
+| bobby-1 | seam ownership inverts ARCH-2; 2 of 5 freezes unbuildable | **OPEN** — correction #1/#2 |
+| bobby-2 | no WP names `wire.ts`; four doors built and never bound | **OPEN** — correction #3 |
+| billy-1 | `callTool` has no membership check (advertised ≠ invocable) | **OPEN (structural)** — correction #6 |
+| arch-#8 | acceptance satisfiable with no code change | **OPEN** — belongs to the deferred AUTHORITY model (ARCH-9/11/12, out of scope) |
+| A5-stale-4 | `server.ts:63` "no more, no less" comment stale vs union | **OPEN** — correction #5/#6 sweep |
+| dogfood-5 (AUTH-12) | emit surfaces raw `TypeError`, no legible refusal | **OPEN** — shape gate, A3.ADAPTER |
+| F4 (AUTH-14) | emit returns `contentHash`, read doors take `NodeKey` — loop unclosed | **OPEN** — EPIC-A4 |
+| F5 (CLI-6) | `render.ts:99-104` drops 2 of 3 `InitOut` fields | **OPEN** — A4.CLI |
+| no-help (CLI-5) | `atlas help` does not exist | **OPEN** — A4.CLI |
+
+~6 already resolved; the rest are OPEN and each is now owned by a specific correction or WP above. `arch-#8`
+alone is out of scope — it belongs to the deferred AUTHORITY model (below).
+
+## Ratification gates — what the BUILD needs from the owner (DEFINE seat)
+
+The re-cut design needs no ratification (it is forced by ARCH-2, already law). The **build** does. Per the
+roadmap prerequisites, dispatch of CAMPAIGN-10.1 is blocked until:
+
+- **ADR-0004** (authoring = planners, not write doors) — currently *Proposed*. Gates all of 10.1.
+- **ADR-0005** (both-transports symmetry) — currently *Proposed*. Gates 10.3 only.
+- **ADR-0006 Decision 1** (hierarchy clauses) — *Proposed pending DEFINE seat*. Decision 2 (the exposure
+  amendment + ARCH-2 + layer-guard) is already owner-ratified and is what this re-cut leans on.
+
+**Explicitly out of scope of this re-cut:** the AUTHORITY model (`ARCH-9/11/12`, tracked ARCH-D3/D4) — it
+needs its own ADR and its own owner ratification, and `arch-#8` rides with it. CAMPAIGN-10 ships human
+authoring on the *existing* authority model; it does not extend authority.
+
+## What happens next
+
+1. Owner ratifies **ADR-0004** (10.1's gate). Recommendation on file: approve — it adds authoring without
+   touching the write surface (5 tools / 2 write-paths stay), precedent is `doctor reground`.
+2. On ratification, the lead folds these seven corrections into `wp-campaign-10.md` (the frozen card gets the
+   flipped seams, DAG head, and `wire.ts` bindings), then dispatches **wave 1 = EPIC-A1**:
+   `A1.TOOLS → A1.ADAPTER → A1.CLI`, sequential (the DAG head is a single chain), cold-reviewed per WP.
+3. No build seat is dispatched before step 1.
