@@ -17,6 +17,7 @@ named.
 | Axis | The number, with its denominator | Source artifact (read, not remembered) |
 | --- | --- | --- |
 | **A1 — advisory precision** (planted subject-test, no judge in the correctness loop) | false-admit **1/10**, catch **9/10**, false-alarm **0/10**; n=20 fixtures; Wilson95% on false-admit **[0.018, 0.404]** | `harness/probes/adjudicate/calibration-report.a1-subject.md` |
+| **A1-dogfood — advisory precision, whole repo** (LLM-panel, lower evidentiary tier — never blended with planted A1) | **616/657 = 93.8%** TRUE_GROUNDED, Wilson95% **[91.6, 95.4]**; 9 FALSE (1.4%), 31 NOT_GROUNDED; 20/677 sites abstained; unanimous 604/657 | `harness/probes/adjudicate/a1-dogfood-fullrepo.json` |
 | **A2 — staleness** (TWO numbers, never blended) | non-touching precision **4/4** (0 false-drift, real and discriminating) · semantic cross-file staleness **NOT SUPPORTED** (named limitation) | `docs/design/95b-staleness-a2-methodology.md` §6.2/§6.3 |
 | **A3 — cost** | **$0.964233 / 10 sites = $0.0964 per site**; 0 errors, 1 abstention, all 10 rows `claude-sonnet-5` | `harness/probes/a3-cost-sidecar.jsonl` (10 records; sum re-derived 2026-08-18) |
 | **A4 — recall, judge-free** (4 oracle-bearing shapes, planted mutations, `tsc` oracle) | dist-form index: count **163/163**, dependency **163/163**, negation **428/1200 = 35.67%**; dist-absent misbuild: count **7/163**, dependency **7/163**, negation **51/1200 = 4.25%** | `harness/probes/adjudicate/calibration-report.a4-planted.md` (`master`, merged in #193; numbers re-verified on `master` 2026-08-22) |
@@ -56,6 +57,54 @@ is: `judge_called_true_per_miner.atlas = 10/10` in that artifact.
 
 Caveats that stand: n=20; fixtures are synthetic-clean by design (you can only plant a false if you know the
 truth); the interval, not the point, is the claim.
+
+### A1-dogfood — advisory precision on the WHOLE repo, LLM-panel-judged (`master`, 2026-08-23)
+
+The planted subject-test above scores one faculty on 20 synthetic fixtures. This is the complementary
+measurement it cannot give: **let genesis mine the entire Atlas repo and measure how many of the facts it
+actually emits are true and grounded.** It is a *weaker evidentiary class* than every judge-free number in
+this document — an LLM panel decides correctness here, because on free-form advisory claims no mechanical
+oracle exists. It is labelled `A1-dogfood` and never blended with the planted A1.
+
+**Method.** Proposer = `claude-sonnet-5` (reasoning effort medium) answering the frozen v3 propose prompt at
+each of the **677** advisory sites the repo enumerates, via the shipped capture/replay path (no `claude -p` in
+the loop; model answers are captured artifacts). Judge = **3× `claude-sonnet-5`, blind and independent**
+(each sees only the unit bytes + the one claim — no proposer reasoning, no other judge, no provenance),
+majority-of-3, over the **complete 657×3 grid** (every emitted fact judged by all three; 0 gaps).
+
+**Numbers** (from `harness/probes/adjudicate/a1-dogfood-fullrepo.json`):
+
+| quantity | count |
+| --- | --- |
+| sites enumerated | 677 |
+| facts emitted (rest are `NO-FACT` abstentions) | **657/677** (20 abstained) |
+| **TRUE_GROUNDED** | 616 |
+| FALSE (contradicted / miscounted / mislabelled) | **9** |
+| NOT_GROUNDED (true but leans on bytes not in the unit) | 31 |
+| UNSURE | 1 |
+| **A1-dogfood precision** | **616/657 = 93.8%**, Wilson95% **[91.6, 95.4]** |
+| unanimous 3/3 | 604/657 (92%) |
+
+**Judge-robustness (why the panel is not the story).** Each judge *alone* scores TRUE_GROUNDED at
+93.2% / 93.6% / 93.3% — the number is invariant to which single judge you trust, and 92% of items are
+unanimous. The panel corrects noise, it does not manufacture the result.
+
+**The 9 FALSE, by class** — every one is a specific, checkable error, which is what makes them FALSE rather
+than vague: over-strong exact enumerations that miscount (`reinvoke` exported surface, negation fold ordering,
+the "only kind without a `site` field" claim in `admit-proposals.ts`), a substring-satisfied assertion read as
+semantic (`s26-query-description`: `toContain('advisory')` already met by `advisoryDropped`), and a
+mislabelled return-invariant (`ownership.test.ts` `reconcileModelCalls()` claim). Full list with per-judge
+votes in the artifact.
+
+**The honest headline: scale lowered the number, and that is the finding.** An earlier stratified 57-site
+sample (proposer `ox-alpha`, same judge apparatus) read **98.2%** — optimistically high. The full-repo
+Sonnet run reads **93.8%**, with 9 genuinely false claims (1.4%) that only surface across the long tail of
+real units. The sample was not wrong; it was small. The full run is what "measured for real" means.
+
+**Caveats that stand:** LLM-panel-judged (advisory strength, *not* proof — this is why it is a separate,
+lower-tier row, never mixed with the planted/`tsc`-oracle numbers); same-family judge (Sonnet judging a
+Sonnet proposer's claims); precision-per-emitted (abstention fired on 20/677 sites, so this is not a recall
+number). Provenance: `harness/probes/adjudicate/a1-dogfood-fullrepo.json`.
 
 ### A2 — staleness (`master`, per #190)
 
