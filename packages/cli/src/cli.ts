@@ -10,8 +10,8 @@ import { join } from 'node:path';
 import type { Hash } from '@atlas/contracts';
 import { asHash } from '@atlas/kernel';
 import { headSha, createHistorySource } from '@atlas/adapter-io';
-import { reportIndexPlan, relationsVerdict, negationsVerdict, transitionsVerdict, verifyFactVerdict } from '@atlas/adapter-io';
-import type { DeriveRelationsRun, IndexPlanReport, NegationLeg, OwnLeg, PromoteOut, RelationLeg, ReverifyReport, TransitionLeg, TransitionProducer, VerifyFactLeg, WiredHandler } from '@atlas/adapter-io';
+import { reportIndexPlan, relationsVerdict, negationsVerdict, transitionsVerdict, testVacuitiesVerdict, verifyFactVerdict } from '@atlas/adapter-io';
+import type { DeriveRelationsRun, IndexPlanReport, NegationLeg, OwnLeg, PromoteOut, RelationLeg, ReverifyReport, TestVacuityLeg, TestVacuityProducer, TransitionLeg, TransitionProducer, VerifyFactLeg, WiredHandler } from '@atlas/adapter-io';
 import type { DoctorSource, Guidance, Tool, Verdict } from '@atlas/tools';
 import { runDoctor } from './doctor.js';
 import { ensureAtlasIgnored } from './gitignore.js';
@@ -22,6 +22,7 @@ import { runOwn } from './own.js';
 import { runPromote } from './promote.js';
 import { runDeriveRelationsCli } from './derive-relations.js';
 import { runTransitionCli } from './transition.js';
+import { runTestVacuityCli } from './test-vacuity.js';
 import { runReverify } from './reverify.js';
 import { parse } from './parse.js';
 import { renderRefusal, renderVerdict } from './render.js';
@@ -133,6 +134,24 @@ export interface CliDeps {
    * ABSENT ⇒ `atlas transition` fails closed with the same "runtime is not composed yet" guidance.
    */
   readonly transition?: TransitionProducer;
+  /**
+   * The composition root's grounded test-vacuity READ leg (`ComposedRuntime.testVacuities`, #95) — the
+   * `testVacuitiesOf` fold over the durable projection. Injected on the SAME seam as `relations`/`transitions`,
+   * and for the same reason: the CLI must never stand up a second runtime, or the facts it reads stop being the
+   * ones off the store `atlas query` reads back. Not a `Tool`, opens no governed surface (`GOVERNANCE_SURFACE`
+   * stays 5), writes nothing. ABSENT ⇒ `atlas test-vacuities` fails closed with the same "runtime is not composed
+   * yet" guidance.
+   */
+  readonly testVacuities?: TestVacuityLeg;
+  /**
+   * The composition root's reachable single-anchor test-vacuity PRODUCER (`ComposedRuntime.testVacuity`, #95) —
+   * walks the repo's HEAD test units, runs `scanTestVacuity`, and admits + persists every proven
+   * `assertion-only-in-catch` fact (0-false-proven). Injected on the SAME seam as `transition`/`deriveRelations`
+   * (a producer that WRITES), for the same reason: the CLI must not stand up a second runtime, or the store it
+   * persists into stops being the store `atlas test-vacuities`/`atlas node` reads. ABSENT ⇒ `atlas test-vacuity`
+   * fails closed with the same "runtime is not composed yet" guidance.
+   */
+  readonly testVacuity?: TestVacuityProducer;
   /**
    * The composition root's sound-genesis PROVEN-family feed (`ComposedRuntime.verifyFact`) — the
    * `verify{Dependency,Count,Negation}` oracles (@atlas/genesis) over the live symbol-reverse view. Injected on
@@ -431,6 +450,27 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
       );
     }
     return emitCli(runTransitionCli(deps.transition, positionals[0] ?? '', positionals[1] ?? '', positionals[2] ?? ''));
+  }
+
+  if (command === 'test-vacuities') {
+    // #95/ADR-0015 D5: `atlas test-vacuities <unit>` — the READ-ONLY grounded test-vacuity door. Reads the
+    // `testVacuitiesOf` fold over the composition root's `testVacuities` leg (the SAME projection `atlas query`
+    // reads back), intercepted before the handler like `relations`/`transitions` (READ authority; no write path).
+    if (!deps.testVacuities) {
+      return emit(errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'));
+    }
+    return emit(testVacuitiesVerdict(deps.testVacuities, positionals[0] ?? ''));
+  }
+
+  if (command === 'test-vacuity') {
+    // #95/ADR-0015 D5: `atlas test-vacuity <path>` — the reachable single-anchor PRODUCER. Drives the composition
+    // root's `testVacuity` leg (walk HEAD test units → `scanTestVacuity` → seal proven → PERSIST THROUGH the
+    // governed emit door: KNOW-11 authz + ARCH-9 anchor + the HEAD truth gate; a sound test is NEVER proven — the
+    // 0-false-proven rail). A WRITE command over the existing emit door, like `transition`; fails closed uncomposed.
+    if (!deps.testVacuity) {
+      return emit(errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'));
+    }
+    return emitCli(runTestVacuityCli(deps.testVacuity));
   }
 
   if (command === 'verify-fact') {

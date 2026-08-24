@@ -1,9 +1,3 @@
-// ── REFERENCE MODEL — NO PRODUCTION CALLERS (yet) ─────────────────────────────────────────────────────
-// `testVacuitiesOf` is the #95 test-vacuity READ fold. It is pure, total, and unit-tested, but not yet wired
-// to a product path — its compose/CLI wiring is Wave 2 (`atlas test-vacuity` read surface). Until then it is a
-// DECLARED reference model in the LEDGER in `harness/gates/reference-model-guard.mjs` (`shipped: null`), exactly
-// as the WP-TV-1a producer/oracle were before their callers landed.
-//
 // @atlas/knowledge — src/read/test-vacuity.ts  (ADR-0015 D5 / #95 — the grounded test-vacuity read fold)
 //
 // The read surface of the single-anchor PROVEN family. One pure, total derive-on-read fold over the ONE store

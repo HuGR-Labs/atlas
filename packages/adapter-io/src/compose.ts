@@ -46,6 +46,7 @@ import { runDeriveRelations } from './relation-derive-run.js';
 import type { DeriveRelationsRun } from './relation-derive-run.js';
 import { createNegationLeg } from './negation-source.js';
 import { createTransitionLeg, createTransitionProducer, type TransitionLeg, type TransitionProducer } from './transition-source.js';
+import { createTestVacuityLeg, createTestVacuityProducer, testUnitsOf, type TestVacuityLeg, type TestVacuityProducer } from './test-vacuity-source.js';
 import type { RelationLeg } from './relation-source.js';
 import type { NegationLeg } from './negation-source.js';
 import { createVerifyFactLeg } from './verify-fact-source.js';
@@ -133,6 +134,12 @@ export interface ComposedRuntime {
    *  governed emit door (KNOW-11 authz + ARCH-9 anchor — `governed-emit-transition.ts`). */
   readonly transitions: TransitionLeg;
   readonly transition: TransitionProducer;
+  /** The single-anchor test-vacuity READ leg + reachable PRODUCER (#95 / ADR-0015 D5) — `testVacuities(unit)`
+   *  reads the unit's proven `assertion-only-in-catch` facts (single-anchor, no lineage); `testVacuity()` walks
+   *  the repo's HEAD test units, runs `scanTestVacuity`, and persists every proven fact THROUGH the governed emit
+   *  door (KNOW-11 authz + ARCH-9 anchor + the HEAD truth gate — `governed-emit-test-vacuity.ts`). */
+  readonly testVacuities: TestVacuityLeg;
+  readonly testVacuity: TestVacuityProducer;
   /** The sound-genesis PROVEN-family feed (`atlas verify-fact`) — PROVES/REFUTES/ABSTAINS on a typed
    *  dependency/count/negation claim over the live symbol-reverse view (off the SAME `scipOutput` the `axes`
    *  are). A READ door, and the ONE production caller that makes `verify{Dependency,Count,Negation}`
@@ -558,6 +565,13 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     // #234 — READ leg off the SAME store the query leg reads. The PRODUCER routes THROUGH the governed door (`relationEmit`; transition branch = `governed-emit-transition.ts`) so KNOW-11 authz + ARCH-9 anchor apply (billy #234 — no gate-less write).
     transitions: createTransitionLeg(readAccess.store),
     transition: createTransitionProducer(revIndex, relationEmit, asHash(headSha(repoPath) ?? '')),
+    // #95 D5 — READ leg off the SAME store the query leg reads + the reachable PRODUCER. The producer walks the
+    // repo's HEAD `*.test.ts`/`*.spec.ts` units (anchors read straight off `axes.spatial`, so the HEAD truth gate
+    // reads them FRESH) and routes every proven fact THROUGH the governed door (`relationEmit`; test-vacuity
+    // branch = `governed-emit-test-vacuity.ts`) so KNOW-11 authz + ARCH-9 anchor + the produced-only forge guard
+    // apply — no gate-less write. Wave 3: wire reverify replay + MINED_TIER check.
+    testVacuities: createTestVacuityLeg(readAccess.store),
+    testVacuity: createTestVacuityProducer(() => testUnitsOf(rawTree, axes), relationEmit, asHash(headSha(repoPath) ?? '')),
     // THE SOUND-GENESIS PROVEN-FAMILY FEED (`atlas verify-fact`). Off the SAME `scipOutput` the axes ride — a
     // program oracle over the immutable code index, built once and closed over (see verify-fact-source.ts).
     verifyFact: verifyFactLeg,

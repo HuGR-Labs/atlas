@@ -18,7 +18,7 @@
 // forces the classification to be DECLARED rather than discovered by the next reviewer.
 //
 // ── DECLARED COUNTS (gate-checked; a drift here FAILS this gate) ────────────────────────────────────────
-//   declared-modules: 54 · dead-value-exports: 222 · type-reachable: 6
+//   declared-modules: 52 · dead-value-exports: 220 · type-reachable: 6
 //   These three are read back from THIS file and asserted against the measured tree at the foot of the run
 //   (see "THE HEADER STATES COUNTS, AND THIS CHECKS THEM"). No count is QUOTED anywhere else in this
 //   header — a quoted integer that nothing checks is exactly what rotted here (task #143); this one cannot.
@@ -117,8 +117,13 @@ const LEDGER = {
 
   // ── @atlas/adapter-io — the outer ring, where a reader is most likely to assume "shipped". ────────────
   'packages/adapter-io/src/poke-file.ts': { values: 3, shipped: null, banner: true }, // the third transport; nothing constructs it (task #36)
-  'packages/adapter-io/src/test-vacuity-source.ts': { values: 1, shipped: null, banner: true }, // #95 test-vacuity PRODUCER (WP-TV-1a): real parse→seal→governed-door persist, its compose+CLI wiring is Wave 2
-  'packages/knowledge/src/read/test-vacuity.ts': { values: 1, shipped: null, banner: true }, // #95 test-vacuity READ fold (WP-TV-1b): `testVacuitiesOf` — pure derive-on-read; its compose+CLI wiring is Wave 2
+  // #95 WP-TV-2 landed: `test-vacuity-source.ts` (the PRODUCER + READ leg + units feed) and `read/test-vacuity.ts`
+  // (`testVacuitiesOf`) BOTH moved dead → live and were REMOVED here — exactly the own.ts / relation-derive.ts
+  // dead→live transitions documented below. The composition root (`compose.ts` → `ComposedRuntime.
+  // {testVacuity,testVacuities}`) value-imports `createTestVacuityProducer` / `createTestVacuityLeg` / `testUnitsOf`,
+  // reached from the `atlas test-vacuity` / `atlas test-vacuities` CLI verbs (bin.ts → cli.ts); `createTestVacuityLeg`
+  // in turn value-imports `testVacuitiesOf`. Their banners were dropped. Measured with this gate's own analyser:
+  // 54 → 52 entries, both rows absent, dead-value-exports 222 → 220 (their two exports), every other row unchanged.
   // #95 WP-TV-1a landed: `test-vacuity.ts` (`scanTestVacuity`) and `write/test-vacuity-key.ts` (`testVacuityKey`
   // + its refusals) BOTH moved dead → live and were REMOVED here, exactly the own.ts / relation-derive.ts
   // dead→live transitions documented below. `scanTestVacuity` is now VALUE-imported by the reachable producer

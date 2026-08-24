@@ -50,6 +50,12 @@ const ARITY: Record<Command, number> = {
   // `transition <unit> <revBefore> <revAfter>` — the unit lineage + the TWO revs it spans are all required
   // positionals, so arity is 3 (#234, ADR-0015 D4 producer).
   transition: 3,
+  // `test-vacuities <unit>` — the unit key whose grounded test-vacuity facts to read is the only positional
+  // (#95, ADR-0015 D5 read door).
+  'test-vacuities': 1,
+  // `test-vacuity <path>` — the repo path to scan is the only required positional (like `mine <repo>`, the
+  // producer scans the composed `process.cwd()`); arity is 1 (#95, ADR-0015 D5 producer).
+  'test-vacuity': 1,
   // `verify-fact <kind> <target> --scope <s> [--world <w>] [--min <n>] [--exact]` — the class and the target
   // symbol are BOTH required positionals (the scope + count bounds ride valued flags), so arity is 2.
   'verify-fact': 2,
