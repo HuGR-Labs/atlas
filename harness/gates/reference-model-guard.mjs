@@ -59,12 +59,22 @@
 
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import ts from 'typescript';
 import { referenceModels } from '../lib/reachability.mjs';
 
 const ROOT = process.env.REFERENCE_MODEL_GUARD_ROOT ?? join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const PKGS = join(ROOT, 'packages');
+
+// LEDGER SEAM. This gate's ledger and its self-checking DECLARED COUNTS header are, by default, baked into
+// THIS file (see BUILTIN_LEDGER + the `import.meta.url` read below), so the ROOT seam alone can never make
+// a throwaway fixture pass — every baked entry reads as STALE against the fixture tree. Set
+// REFERENCE_MODEL_GUARD_LEDGER to a `.mjs` module exporting `{ LEDGER, DECLARED_COUNTS }` to drive both
+// from a fixture; unset, behaviour is byte-identical to the baked-in ledger. Only the gate's OWN teeth
+// (reference-model-guard.test.mjs) set it — the real repo run never does.
+const LEDGER_OVERRIDE = process.env.REFERENCE_MODEL_GUARD_LEDGER
+  ? await import(pathToFileURL(process.env.REFERENCE_MODEL_GUARD_LEDGER).href)
+  : null;
 
 /** The fixed header marker a declared reference model must carry. Deliberately a section RULE and not a
  *  bare word: `REFERENCE MODEL` alone appears in ordinary prose all over this repo. */
@@ -104,7 +114,7 @@ function hasHeaderBanner(text) {
  * `shipped` names the module that actually does the job in the product, where one exists — and where it
  * does not, that is stated instead of implied. Counts are MEASURED (see the header of each cluster).
  */
-const LEDGER = {
+const BUILTIN_LEDGER = {
   // ── @atlas/tools — the port layer. 5 of its 13 modules are specification artifacts. Each names the ────
   //    frozen interface it witnesses; the composition root (adapter-io/src/wire.ts) value-imports only
   //    createHandler / createInit / createQuery / createReconcile from this package, and nothing anywhere
@@ -237,6 +247,8 @@ const LEDGER = {
   // record, exactly as it forced `own.ts`'s removal one wave over.
 };
 
+const LEDGER = LEDGER_OVERRIDE?.LEDGER ?? BUILTIN_LEDGER;
+
 const fail = [];
 const measured = new Map(referenceModels(PKGS).map((r) => [r.path, r]));
 const values = [...measured.values()].reduce((n, r) => n + r.values, 0);
@@ -248,7 +260,9 @@ const typed = [...measured.values()].filter((r) => r.typeReachable).length;
 // own source and asserts it against the measured tree. Change a number up there and this leg goes RED, so
 // the header is now a self-checking artifact rather than an un-checkable claim.
 {
-  const selfSource = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+  const selfSource = LEDGER_OVERRIDE
+    ? (LEDGER_OVERRIDE.DECLARED_COUNTS ?? '')
+    : readFileSync(fileURLToPath(import.meta.url), 'utf8');
   const declared = selfSource.match(
     /declared-modules:\s*(\d+)[^\n]*dead-value-exports:\s*(\d+)[^\n]*type-reachable:\s*(\d+)/,
   );
