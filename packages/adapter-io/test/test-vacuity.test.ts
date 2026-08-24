@@ -146,4 +146,33 @@ describe('scanTestVacuity — ABSTAIN (soundness rails, no false-admit)', () => 
       });`;
     expect(names(src)).toEqual([]);
   });
+
+  // Regression class (lucy cold-review, PR #234): a REAL success-path assertion whose callee carries no
+  // `expect`/`assert` token — the node:assert / ava / node:test vocabulary — must still count as an assertion
+  // OUTSIDE catch, or a genuinely non-vacuous test is falsely proven. Each of these has an assertion that runs
+  // on the non-exceptional path; all must ABSTAIN.
+  it('abstains: node:assert strictEqual on the success path', () => {
+    const src = `test("t1", () => { strictEqual(f(), 1); try { g(); } catch (e) { expect(e).toBe(1); } });`;
+    expect(names(src)).toEqual([]);
+  });
+
+  it('abstains: destructured node:assert ok() on the success path', () => {
+    const src = `test("t3", () => { ok(f()); try { g(); } catch (e) { expect(e).toBe(1); } });`;
+    expect(names(src)).toEqual([]);
+  });
+
+  it('abstains: bare equal() on the success path', () => {
+    const src = `test("t6", () => { equal(f(), 1); try { g(); } catch (e) { expect(e).toBe(1); } });`;
+    expect(names(src)).toEqual([]);
+  });
+
+  it('abstains: ava/tap t.throws on the success path', () => {
+    const src = `test("t4", () => { t.throws(() => g()); try { h(); } catch (e) { expect(e).toBe(1); } });`;
+    expect(names(src)).toEqual([]);
+  });
+
+  it('abstains: deepStrictEqual on the success path', () => {
+    const src = `test("t2", () => { deepStrictEqual(f(), {}); try { g(); } catch (e) { expect(e).toBe(1); } });`;
+    expect(names(src)).toEqual([]);
+  });
 });

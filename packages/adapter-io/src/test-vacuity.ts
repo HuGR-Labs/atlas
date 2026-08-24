@@ -73,9 +73,32 @@ const walk = (n: SyntaxNode, f: (n: SyntaxNode) => void): void => {
   for (const c of kids(n)) walk(c, f);
 };
 
-/** BROAD by design (soundness rail: over-detect). `expect(...)`, `assert(...)`, `assertEqual(...)`,
- *  `chai.assert.equal(...)`, `expect(x).toBe(...)`, `await expect(p).rejects...`, `x.should.equal(...)`. The
- *  callee text of a `call_expression`. Over-matching only ever forces ABSTAIN. */
+/** The trailing identifier of a callee (the segment after the final `.`, or the whole thing if bare):
+ *  `strictEqual` → `strictEqual`, `assert.ok` → `ok`, `t.throws` → `throws`, `expect(e).toBe` → `toBe`. */
+function trailingName(callee: SyntaxNode): string {
+  const m = callee.text.match(/([A-Za-z_$][\w$]*)\s*$/);
+  return m === null ? '' : m[1]!;
+}
+
+/** The CLOSED assertion vocabulary that carries no `expect`/`assert` token in its text, so the substring
+ *  branches below miss it: the `node:assert` / `node:test` surface (`strictEqual`, `ok`, `equal`, …, often
+ *  DESTRUCTURED so the callee is bare) and the ava/tap/`node:test` `t.*` matchers (`t.is`, `t.throws`, …).
+ *  A success-path call to any of these is a real assertion; missing it is the ONLY false-admit direction
+ *  (lucy cold-review, PR #234). Over-inclusion here only ever forces ABSTAIN — the safe direction — at the
+ *  cost of recall on tests that happen to call an unrelated method of the same bare name. */
+const ASSERTION_NAMES = new Set<string>([
+  // node:assert
+  'strictEqual', 'deepStrictEqual', 'notStrictEqual', 'notDeepStrictEqual', 'deepEqual', 'notDeepEqual',
+  'equal', 'notEqual', 'ok', 'match', 'doesNotMatch', 'throws', 'notThrows', 'doesNotThrow', 'rejects',
+  'doesNotReject', 'ifError', 'fail',
+  // ava / tap / node:test `t.*`
+  'is', 'not', 'true', 'false', 'truthy', 'falsy', 'pass', 'regex', 'notRegex', 'assert',
+]);
+
+/** BROAD by design (soundness rail: over-detect). Matches `expect(...)`, `assert…(...)`, `assertEqual(...)`,
+ *  `chai.assert.equal(...)`, `expect(x).toBe(...)`, `await expect(p).rejects…`, `x.should.equal(...)`, AND —
+ *  via `ASSERTION_NAMES` on the callee's trailing identifier — the `node:assert`/ava vocabulary whose text
+ *  carries no `expect`/`assert` token. The callee text of a `call_expression`. Over-matching only ABSTAINS. */
 function isAssertionShaped(callExpr: SyntaxNode): boolean {
   const callee = callExpr.child(0);
   if (callee === null) return false;
@@ -86,7 +109,8 @@ function isAssertionShaped(callExpr: SyntaxNode): boolean {
     /\.(toBe|toEqual|toThrow|toMatch|toContain|toHaveLength|toBeTruthy|toBeFalsy|toBeNull|toBeUndefined|toBeDefined|toBeInstanceOf|toStrictEqual|rejects|resolves)\b/.test(
       t,
     ) ||
-    /\.(should|must)\b/.test(t)
+    /\.(should|must)\b/.test(t) ||
+    ASSERTION_NAMES.has(trailingName(callee))
   );
 }
 
