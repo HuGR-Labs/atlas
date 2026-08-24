@@ -22,7 +22,7 @@
 
 import { build } from '@atlas/index';
 import type { Axes, FileTree, IndexNode, ScipOutput } from '@atlas/index';
-import { bindGate, isGrounded, driftDetect } from '@atlas/grounding';
+import { bindGate, isGrounded, driftDetect, resolveCurrent } from '@atlas/grounding';
 import type { Hash, StructRef } from '@atlas/contracts';
 import type { GroundedFact } from '@atlas/knowledge';
 import type { AnchorsOut, AnchorUnit, GroundingCandidate, GroundingComputer, LanguageHole, TruthGate } from '@atlas/tools';
@@ -162,22 +162,6 @@ function collectDescendants(node: IndexNode, into: IndexNode[]): void {
 }
 
 /**
- * Resolve a grounding anchor's CURRENT `subtreeHash` the SAME way the truth-gate does — scanning the
- * content-committing `spatial`/`territory` axes ONLY (never `dependency`, whose leaf hash is an identity that
- * commits to no content) and treating a node whose `subtreeHash` IS its own `key` as ABSENT. This is a faithful
- * mirror of `@atlas/grounding` `resolveCurrent` (drift.ts): so a `subtreeHash` this planner computes for an
- * anchor is byte-identical to the one the gate re-derives for it (PROP-AUTH-1 single-seam agreement), and a
- * draft grounded here re-derives FRESH by construction.
- */
-function resolveCurrent(axes: Axes, key: string): StructRef['subtreeHash'] | undefined {
-  for (const root of [axes.spatial, axes.territory]) {
-    const node = findByKey(root, key);
-    if (node !== undefined) return String(node.subtreeHash) === node.key ? undefined : node.subtreeHash;
-  }
-  return undefined;
-}
-
-/**
  * Build the SYNC {@link GroundingComputer} over an ALREADY-BUILT `Axes` (from {@link deriveGroundingAxes}).
  * Both port capabilities read that one axes, so the planner and the gate are provably the same seam:
  *   - `anchorsUnder(path)` lists the groundable units the built index carries UNDER `path` — each with its
@@ -186,8 +170,9 @@ function resolveCurrent(axes: Axes, key: string): StructRef['subtreeHash'] | und
  *     resolves to no node and returns the honest empty listing (no `reason` — the `anchors` leg supplies the
  *     floor reason, AUTHOR-3; a POPULATED listing carries NO reason, lucy note (a)).
  *   - `groundingFor(candidate)` computes the grounding anchor for the cited unit at the current rev — its
- *     `subtreeHash` is exactly the gate's drift oracle ({@link resolveCurrent}); an unresolvable anchor yields
- *     an empty `subtreeHash` (which the gate reads as DRIFTED — fail-closed, never a throw).
+ *     `subtreeHash` is exactly the gate's drift oracle (`@atlas/grounding` `resolveCurrent`, drift.ts — the
+ *     SAME function `driftDetect` re-derives with, not a mirror of it); an unresolvable anchor yields an empty
+ *     `subtreeHash` (which the gate reads as DRIFTED — fail-closed, never a throw).
  * Precondition: the axes were built with warmed grammars (the composition root's obligation; see the header).
  */
 export function buildGroundingComputer(cfg: GroundingComputerConfig): GroundingComputer {
