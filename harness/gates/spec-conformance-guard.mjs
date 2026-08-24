@@ -22,7 +22,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 // without importing this file's top-level sweep + process.exit. A regex nobody can falsify is not a gate.
 import { isStaleGovernanceClaim } from '../lib/drift-patterns.mjs';
 
-const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const REPO = process.env.SPEC_CONFORMANCE_GUARD_ROOT ?? join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const problems = [];
 
 // ── (1) CODE-SURFACE PIN ────────────────────────────────────────────────────────────────────────
