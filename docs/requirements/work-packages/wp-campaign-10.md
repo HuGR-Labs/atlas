@@ -9,17 +9,23 @@
 >
 > **Campaign coverage:** 6 leaf epics · **16 WPs** · **73 REQs** (AUTH 57 + CLI 6 + MCP 10) · REQ→WP = a
 > total function (each REQ owned by exactly one WP; orphans/doubles = **0**, verified mechanically).
-> **Seam-freezes = 5:** GroundingComputer (A1.ADAPTER → A1.TOOLS, A2-a.TOOLS) · the authoring data model
-> (A1.TOOLS → adapter-io, cli, mcp) · GateChain (A3.ADAPTER → A3.TOOLS) · EmitOut receipt widening
-> (A4.TOOLS → A4.ADAPTER) · READ_SURFACE (A5.TOOLS → A5.MCP, harness).
+> **Seam-freezes = 6 (RE-CUT):** GroundingComputer PORT (declared A1.TOOLS → implemented A1.ADAPTER, consumed
+> A2-a.TOOLS) · the authoring data model (A1.TOOLS → adapter-io, cli, mcp) · GateChain PORT (declared A3.TOOLS →
+> implemented A3.ADAPTER) · EmitOut receipt widening (A4.TOOLS → A4.ADAPTER) · READ_SURFACE (A5.TOOLS → A5.MCP,
+> harness). Every WP that introduces a planner leg also lists `packages/adapter-io/src/wire.ts` in its edit
+> surface (ARCH-3: a door not bound in the composition root is dead). See `design/campaign-10-recut.md`.
 >
 > **No WP edits the governed write surface.** `GOVERNANCE_SURFACE` and `WRITE_PATHS` are read-only for this
 > entire campaign; the one WP that touches `governed-emit.ts` (**WP-10.A3.ADAPTER**) is a *behaviour-preserving
 > refactor* — the gate chain is extracted, not changed — and is sequenced and reviewed as such.
 >
-> **Prerequisite gate:** **WP-10.A1.ADAPTER blocks every other WP in the campaign.** That is not scheduling
-> preference; it is the resolution of coupling **C1** (`design/authoring.md` §3.3) which makes the design
-> matrix triangular. A WP that computes a grounding before the seam is frozen re-introduces the coupling.
+> **Prerequisite gate (RE-CUT 2026-08-24, `design/campaign-10-recut.md`):** **WP-10.A1.TOOLS blocks every other
+> WP in the campaign** — it declares the `GroundingComputer` PORT (in `@atlas/tools`), which `WP-10.A1.ADAPTER`
+> then implements. This satisfies **ARCH-2** (the ring's innermost port layer owns the contract; adapters
+> satisfy it) and still resolves coupling **C1** (`design/authoring.md` §3.3): the derivation stays singular,
+> now sequenced behind the PORT freeze rather than an adapter-io module freeze. A WP that computes a grounding
+> before the PORT is frozen re-introduces the coupling. *(The pre-re-cut card made A1.ADAPTER the owner — that
+> inverts ARCH-2 and is unbuildable; see the arch reference.)*
 
 ---
 
@@ -52,8 +58,8 @@ source_reqs:                                   # ptr+digest
   - source: ../requirements-authoring.md#REQ-AUTH-4b   # ptr+digest
   - source: ../requirements-authoring.md#REQ-AUTH-4c   # ptr+digest
   - source: ../requirements-authoring.md#REQ-AUTH-4d   # ptr+digest
-seam-freezes: [ "GroundingComputer contract owned-by A1.ADAPTER, consumed-by A1.TOOLS and A2-a.TOOLS — FREEZE FIRST, blocks the campaign" ]
-anchor: packages/adapter-io/src/ — a new grounding-computer module owning the built-`Axes` derivation + its grammar warm-up; `governed-emit.ts` and the planner legs both call it
+seam-freezes: [ "GroundingComputer PORT is declared-by A1.TOOLS; this WP IMPLEMENTS it in adapter-io and rewires the gate to call the port (ARCH-2). No contract ownership here." ]
+anchor: packages/adapter-io/src/ — a new grounding-computer module IMPLEMENTING the tools-declared `GroundingComputer` port: the built-`Axes` derivation + its grammar warm-up; `governed-emit.ts` and the planner legs both reach it through the port
 interface_contract:                            # ptr+digest
   - source: ../../reference/atlas-authoring.md#author-1   # ptr+digest
   - source: ../../reference/atlas-authoring.md#author-3   # ptr+digest
@@ -89,7 +95,7 @@ acceptance:                                    # ptr+digest
   - source: ../goldens-authoring.md#SCN-AUTH-4c-1  # ptr+digest
   - source: ../goldens-authoring.md#SCN-AUTH-4d-1  # ptr+digest
   - source: ../properties-authoring.md#PROP-AUTH-1      # ptr+digest
-deps: [ ] · parallel_group: —
+deps: [ WP-10.A1.TOOLS ] · parallel_group: —
 exit_predicate: all acceptance goldens green ∧ PROP-AUTH-1 green ∧ derivation sites == 1 ∧ the pre-existing emit/reconcile suites are byte-unchanged
 context_refs: [ reference/atlas-authoring.md, method-tags-authoring.md#INV-AUTH-1/3/4, adr/ADR-0004 ]
 owner: charlie (FORGE)
@@ -111,8 +117,8 @@ source_reqs:                                   # ptr+digest
   - source: ../requirements-authoring.md#REQ-AUTH-2e   # ptr+digest
   - source: ../requirements-authoring.md#REQ-AUTH-3c   # ptr+digest
   - source: ../requirements-authoring.md#REQ-AUTH-3d   # ptr+digest
-seam-freezes: [ "the authoring data model owned-by A1.TOOLS, consumed-by adapter-io, cli, mcp-server" ]
-anchor: packages/tools/src/types.ts (the new result records) + a new anchors leg beside init/query/emit/reconcile
+seam-freezes: [ "the GroundingComputer PORT interface, declared-by A1.TOOLS, implemented-by adapter-io (ARCH-2)", "the authoring data model owned-by A1.TOOLS, consumed-by adapter-io, cli, mcp-server" ]
+anchor: packages/tools/src/types.ts (the new result records) + the `GroundingComputer` port interface + a new anchors leg beside init/query/emit/reconcile
 interface_contract:                            # ptr+digest
   - source: ../../reference/atlas-authoring.md#author-3   # ptr+digest
   - source: ../../reference/atlas-authoring.md#author-2   # ptr+digest
@@ -121,7 +127,7 @@ exclusions: >
   constants are READ-ONLY in this campaign. No CLI, no MCP advertisement (EPIC-A5).
 inputs:                                        # ptr+digest
   - source: ../../reference/atlas-authoring.md#author-3   # ptr+digest
-action: Freeze the authoring result records in the tools data model; add the anchors leg routing to the frozen GroundingComputer seam; carry rev + the honest-empty reason on the Verdict; assert non-membership in both governed constants.
+action: Declare the `GroundingComputer` PORT interface in tools (implemented later by adapter-io); freeze the authoring result records in the tools data model; add the anchors leg routing through that port; carry rev + the honest-empty reason on the Verdict; assert non-membership in both governed constants.
 action_surface: [ read-repo, edit(packages/tools/src/**), run(test:tools), typecheck ]
 guardrails: >
   Edit only under packages/tools/src. GOVERNANCE_SURFACE and WRITE_PATHS are read-only. Import core shapes,
@@ -133,7 +139,7 @@ acceptance:                                    # ptr+digest
   - source: ../goldens-authoring.md#SCN-AUTH-2e-1  # ptr+digest
   - source: ../goldens-authoring.md#SCN-AUTH-3c-1  # ptr+digest
   - source: ../goldens-authoring.md#SCN-AUTH-3d-1  # ptr+digest
-deps: [ WP-10.A1.ADAPTER ] · parallel_group: —
+deps: [ ] · parallel_group: —
 exit_predicate: all acceptance goldens green ∧ both governed constants byte-unchanged ∧ the spec-conformance guard still passes
 context_refs: [ reference/atlas-authoring.md, adr/ADR-0004, adr/ADR-0003 ]
 owner: charlie (FORGE)
