@@ -18,6 +18,10 @@ import type { NegationNode, AbstainedRecord } from './negation-types.js';
 // extraction as negation-types.ts) and IMPORTED here so `GroundedFact` can reference `TransitionNode`, then
 // RE-EXPORTED below for a byte-identical surface.
 import type { TransitionNode } from './transition-types.js';
+// The #95 test-vacuity shape (ADR-0015 D5) is declared in its own cohesive sibling (same godfile-ceiling
+// extraction as negation-types.ts/transition-types.ts) and IMPORTED here so `GroundedFact` can reference
+// `TestVacuityNode`, then RE-EXPORTED below for a byte-identical surface.
+import type { TestVacuityNode, TestVacuityWitness, TestVacuityShape } from './test-vacuity-types.js';
 
 /**
  * The Knowledge freshness vocabulary. Transcribed from atlas-knowledge:29 — `Freshness = 'FRESH' |
@@ -83,8 +87,15 @@ export type Check =
  * live-predicate/oracle shapes it is NEVER re-checked at HEAD (a closed valid-time interval) and is SEALED
  * `justified`, never `proven` (D-T1); it is SUPERSEDED, not falsified, by a later transition on the same unit
  * lineage (D-T3). See docs/design/234-transition-design.md.
+ *
+ * [ADR-0015 D5 — #95] WIDENED to a SIXTH variant, `TestVacuityNode` — a single-anchor PROVEN AST-shape fact
+ * ("named test T in unit U asserts only inside catch"), the single-anchor sibling of the sound arm. Like the
+ * relation/negation/transition shapes it carries NO `check` (its oracle is tree-sitter, not SCIP), but unlike
+ * a transition it HAS a mechanical HEAD oracle (`scanTestVacuity`), so it is SEALED `proven` (never
+ * `justified`) and carries a re-runnable `witness`, exactly as a proven `depends-on` relation does. Identity
+ * is the (unitKey, testName) pair. See docs/design/95-test-vacuity-design.md.
  */
-export type GroundedFact = AdvisoryNode | PredicateNode | RelationNode | NegationNode | TransitionNode;
+export type GroundedFact = AdvisoryNode | PredicateNode | RelationNode | NegationNode | TransitionNode | TestVacuityNode;
 
 /**
  * The closed relation vocabulary (NORMATIVE, additive-only — a new kind is a `cv` bump, exactly like the
@@ -145,6 +156,13 @@ export type { NegationNode, AbstainedRecord };
 // inline declaration, exactly as `negation-types.ts` is on the sibling #99b leg. `Seal`/`ObviousnessScore`
 // stay owned HERE and are imported by that module (a type-only cycle, erased at runtime).
 export type { TransitionNode };
+
+// The #95 test-vacuity shape (ADR-0015 D5) — `TestVacuityNode` (the SIXTH `GroundedFact` variant), its
+// `TestVacuityWitness` (the seal's re-runnable derivation) and `TestVacuityShape` — is DECLARED in
+// `test-vacuity-types.ts` (imported above) and RE-EXPORTED here so the package surface is byte-identical to an
+// inline declaration, exactly as `negation-types.ts`/`transition-types.ts` are on the sibling legs.
+// `Seal`/`ObviousnessScore` stay owned HERE and are imported by that module (a type-only cycle, erased at runtime).
+export type { TestVacuityNode, TestVacuityWitness, TestVacuityShape };
 
 /**
  * The ORDINAL leg of the obviousness score (ADR-0012). Two-point on purpose, and the honesty matters:

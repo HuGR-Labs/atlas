@@ -181,6 +181,19 @@ function transitionOf(req: WriteRequest): { unitKey?: string; shaBefore?: string
   };
 }
 
+/** The ADDITIVE test-vacuity carrier a write contributes to the row (ADR-0015 D5 / #95). Conditional spread,
+ *  same discipline as {@link transitionOf}: an omitted leg stays ABSENT, never an explicit `undefined`, keeping
+ *  `exactOptionalPropertyTypes` and the JSON round-trip honest. Present only on a `family:'test-vacuity'` write.
+ *  `unitKey` is the shared lineage leg (also carried by {@link transitionOf}); `testName`/`shape` are this
+ *  family's own identity/proven-shape legs. */
+function testVacuityOf(req: WriteRequest): { unitKey?: string; testName?: string; shape?: string } {
+  return {
+    ...(req.unitKey !== undefined ? { unitKey: req.unitKey } : {}),
+    ...(req.testName !== undefined ? { testName: req.testName } : {}),
+    ...(req.shape !== undefined ? { shape: req.shape } : {}),
+  };
+}
+
 /** The ADDITIVE answer-provenance carrier a MINED write contributes to the row (#195 b). Conditional spread,
  *  same discipline as {@link governanceOf}/{@link relationOf}: an omitted `answerRef` stays ABSENT (never an
  *  explicit `undefined`), keeping `exactOptionalPropertyTypes` and the JSON round-trip honest. Present ONLY on
@@ -271,6 +284,7 @@ export function upsert(store: StoreProjection, req: WriteRequest): UpsertResult 
         ...governanceOf(req), // GOVERNANCE carrier (ADR-0007) — absent when the caller declares neither half
         ...relationOf(req), // RELATION carrier (ADR-0015 D2) — the endpoint pair + kind on a family:'relation' write
         ...transitionOf(req), // TRANSITION carrier (ADR-0015 D4) — the unit lineage + rev-pair on a family:'transition' write
+        ...testVacuityOf(req), // TEST-VACUITY carrier (ADR-0015 D5) — the test name + proven shape on a family:'test-vacuity' write
         ...answerProvenanceOf(req), // ANSWER-PROVENANCE carrier (#195 b) — the mined answer receipt, mine path only
       });
       break;
@@ -318,6 +332,7 @@ export function upsert(store: StoreProjection, req: WriteRequest): UpsertResult 
         ...governanceOf(req), // re-states scope / re-states-or-RAISES tier; omitted ⇒ `...prior` stands
         ...relationOf(req), // RELATION carrier (ADR-0015 D2) — re-evidencing a relation re-states its endpoints
         ...transitionOf(req), // TRANSITION carrier (ADR-0015 D4) — re-evidencing the SAME sha-pair re-states its lineage
+        ...testVacuityOf(req), // TEST-VACUITY carrier (ADR-0015 D5) — re-evidencing the SAME (unit,test) re-states its shape
         ...answerProvenanceOf(req), // ANSWER-PROVENANCE carrier (#195 b) — re-mining re-states the receipt; else `...prior`
         // CARRY-FORWARD ON A RAISE IS DELIBERATE for `answerRef` and `sameAs` — the anti-laundering severance
         // above is scoped to `claims` ON PURPOSE, and dropping either here would be WRONG, not safer:
