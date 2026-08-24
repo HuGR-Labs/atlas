@@ -1,6 +1,6 @@
 # ADR-0004 — the authoring surface is a set of PLANNERS, not new write doors
 
-- **Status:** Proposed (2026-07-25) — DEFINE seat (owner) ratifies
+- **Status:** Accepted — owner-ratified 2026-08-24 (DEFINE seat, verbal "aprovo"); was Proposed 2026-07-25. Unblocks CAMPAIGN-10.1.
 - **Spec author:** lead, grounded against `master` @ `3496d6f` + the 2026-07-25 `corelink-runners` dogfood.
 - **Introduces:** `INV-AUTH-1..14` (reference/atlas-authoring.md), `CAMPAIGN-10`.
 - **Does NOT amend:** INV-TOOLS-1 / ADR-0003. `GOVERNANCE_SURFACE` stays 5; `WRITE_PATHS` stays 2.
