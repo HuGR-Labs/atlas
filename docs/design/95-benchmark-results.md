@@ -17,7 +17,7 @@ named.
 | Axis | The number, with its denominator | Source artifact (read, not remembered) |
 | --- | --- | --- |
 | **A1 — advisory precision** (planted subject-test, no judge in the correctness loop) | false-admit **1/10**, catch **9/10**, false-alarm **0/10**; n=20 fixtures; Wilson95% on false-admit **[0.018, 0.404]** | `harness/probes/adjudicate/calibration-report.a1-subject.md` |
-| **A1-dogfood — advisory precision, whole repo** (LLM-panel, lower evidentiary tier — never blended with planted A1) | **616/657 = 93.8%** TRUE_GROUNDED, Wilson95% **[91.6, 95.4]**; 9 FALSE (1.4%), 31 NOT_GROUNDED; 20/677 sites abstained; unanimous 604/657 | `harness/probes/adjudicate/a1-dogfood-fullrepo.json` |
+| **A1-dogfood — advisory precision, whole repo** (LLM-panel, **same-family-judged**, lower evidentiary tier — never blended with planted A1; cross-family pass open) | **616/657 = 93.8%** TRUE_GROUNDED, Wilson95% **[91.6, 95.4]**; 9 FALSE (1.4%), 31 NOT_GROUNDED; 20/677 sites abstained; unanimous 604/657 | `a1-dogfood-verdicts.tsv` (657 rows, re-derivable) + `a1-dogfood-fullrepo.json` |
 | **A2 — staleness** (TWO numbers, never blended) | non-touching precision **4/4** (0 false-drift, real and discriminating) · semantic cross-file staleness **NOT SUPPORTED** (named limitation) | `docs/design/95b-staleness-a2-methodology.md` §6.2/§6.3 |
 | **A3 — cost** | **$0.964233 / 10 sites = $0.0964 per site**; 0 errors, 1 abstention, all 10 rows `claude-sonnet-5` | `harness/probes/a3-cost-sidecar.jsonl` (10 records; sum re-derived 2026-08-18) |
 | **A4 — recall, judge-free** (4 oracle-bearing shapes, planted mutations, `tsc` oracle) | dist-form index: count **163/163**, dependency **163/163**, negation **428/1200 = 35.67%**; dist-absent misbuild: count **7/163**, dependency **7/163**, negation **51/1200 = 4.25%** | `harness/probes/adjudicate/calibration-report.a4-planted.md` (`master`, merged in #193; numbers re-verified on `master` 2026-08-22) |
@@ -102,9 +102,27 @@ Sonnet run reads **93.8%**, with 9 genuinely false claims (1.4%) that only surfa
 real units. The sample was not wrong; it was small. The full run is what "measured for real" means.
 
 **Caveats that stand:** LLM-panel-judged (advisory strength, *not* proof — this is why it is a separate,
-lower-tier row, never mixed with the planted/`tsc`-oracle numbers); same-family judge (Sonnet judging a
-Sonnet proposer's claims); precision-per-emitted (abstention fired on 20/677 sites, so this is not a recall
-number). Provenance: `harness/probes/adjudicate/a1-dogfood-fullrepo.json`.
+lower-tier row, never mixed with the planted/`tsc`-oracle numbers); precision-per-emitted (abstention fired on
+20/677 sites, so this is not a recall number).
+
+**The same-family limit (the one to fix before any external headline).** The judge is the same model family
+as the proposer (Sonnet judging a Sonnet proposer's claims). The methodology doc's own literature
+(κ≈0.10–0.21 judge-vs-oracle, same-family self-preference) says this instrument measures *self-consistency*,
+not truth — the same objection that demoted the earlier 96.7% self-verification number. Making the panel
+*complete* (the full 657×3 grid) and *stable* (per-judge 93.2/93.6/93.3) reduces noise, not this bias. **The
+number `93.8%` must never appear without "same-family-judged" in the same sentence, and it is not
+publication-ready until a cross-family judge (e.g. a non-Sonnet model via the `hugr-router` path already used
+for the comparator ladder) has scored a meaningful subsample and the delta is reported.** That cross-family
+pass is open.
+
+**Auditability (re-derivable, not trust-the-summary).** Every one of the 657 verdicts is committed, not just
+the 9 FALSE: `harness/probes/adjudicate/a1-dogfood-verdicts.tsv` is one row per fact —
+`sha · path · j1 · j2 · j3 · majority · claim` — so the headline recomputes with
+`awk -F'\t' 'NR>1{c[$6]++} END{for(k in c)print k,c[k]}'` (→ TRUE_GROUNDED 616, FALSE 9, NOT_GROUNDED 31,
+UNSURE 1). Summary + the 9 FALSE with votes: `harness/probes/adjudicate/a1-dogfood-fullrepo.json`. The
+proposer answers are `claude-sonnet-5` capture artifacts; the run is replay-deterministic given them, but the
+answer corpus itself is not committed to this repo (it lives in the run scratchpad) — a known auditability
+limit shared with the capture/replay probes, stated here rather than left implicit.
 
 ### A2 — staleness (`master`, per #190)
 
