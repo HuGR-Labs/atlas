@@ -20,14 +20,14 @@
 import { join } from 'node:path';
 import type { Hash } from '@atlas/contracts';
 import { asHash } from '@atlas/kernel';
-import { build, createSymbolReverse, nodeHashOfPath } from '@atlas/index';
+import { createSymbolReverse, nodeHashOfPath } from '@atlas/index';
 import type { Axes } from '@atlas/index';
-import { bindGate, isGrounded, driftDetect } from '@atlas/grounding';
 import { bindReconcile } from '@atlas/knowledge';
 import type { GroundedFact } from '@atlas/knowledge';
-import type { DoctorSource, T0Heuristic, TruthGate } from '@atlas/tools';
+import { createAnchors } from '@atlas/tools';
+import type { AnchorsApi, DoctorSource, T0Heuristic, TruthGate } from '@atlas/tools';
 import { walkFileTree } from './fs.js';
-import { foldAstUnits } from './ast.js';
+import { deriveGroundingAxes, buildGroundingComputer, buildGate } from './grounding-computer.js';
 import { readScipOrEmpty, readScipIndexerName } from './scip.js';
 import { loadPolicy } from './policy.js';
 import type { AtlasPolicy } from './policy.js';
@@ -102,6 +102,12 @@ export interface ComposedRuntime {
    * caller and stop a dishonest one for exactly as long as it takes to set one environment variable.
    */
   readonly own: OwnLeg;
+  /** The read-only `anchors` DISCOVERY planner (WP-10.A1 / ADR-0004, AUTHOR-3/4) — `anchors(path)` lists the
+   *  groundable units under `path` (qualifiedPath/kind/current subtreeHash), declares every language hole, and
+   *  reports the `rev`. Built over the SAME `axes` the emit truth-gate re-derives against (the one
+   *  {@link deriveGroundingAxes} seam, AUTHOR-1), so a fact grounded from a listed anchor is accepted by the
+   *  gate by construction. Rides beside the handler like `own`: NOT a `Tool`, opens no write path (AUTHOR-2). */
+  readonly anchors: AnchorsApi['anchors'];
   /**
    * The grounded-relation READ leg (#99a / ADR-0015 D2) — `relations(unit, direction)` returns the
    * `family:'relation'` facts touching a unit, both directions, via the `relationsOf` fold.
@@ -204,24 +210,10 @@ export function buildHeuristic(policy: AtlasPolicy): T0Heuristic {
   return { isCandidate: (t) => policy.t0Heuristic.keywords.some((k) => t.name.includes(k)) };
 }
 
-/**
- * Adapt the REAL GROUND truth-gate (`bindGate({ isGrounded, driftDetect })`) into the tools `TruthGate`
- * surface. The GROUND gate reads the candidate's incoming `Status` verdict + re-derives freshness against
- * `src = Axes`; here:
- *   - the incoming verdict is a `PredicateNode`'s `.status`, or `HOLDS` injected for an `AdvisoryNode`
- *     (which has no Status field) — an advisory is admitted iff it is grounded ∧ FRESH.
- *   - the `at` sha is IGNORED (vestigial): freshness is re-derived against the built-index `axes`, not a sha.
- * Downgrade-only + fail-closed: an ungrounded/DRIFTED node collapses to `NA`, never `HOLDS`.
- */
-export function buildGate(axes: Axes): TruthGate {
-  const real = bindGate({ isGrounded, driftDetect });
-  return {
-    gateHolds: (node: GroundedFact, _at: Hash) =>
-      real.gateHolds(node.kind === 'predicate' ? node.status : 'HOLDS', node.grounding, axes),
-  };
-}
-
-
+// `buildGate` — the REAL GROUND truth-gate adapted to the tools `TruthGate` surface — now lives with the ONE
+// grounding computer it shares an `Axes` with (grounding-computer.ts, AUTHOR-1: gate and `anchors` planner are
+// one seam). RE-EXPORTED so the barrel + `../src/compose.js` importers stay byte-unchanged.
+export { buildGate };
 /**
  * The LOCAL git identity (`git config user.email`) at `repoPath`, or `undefined`. TOTAL — never throws:
  * no git, no configured email, a non-repo/absent path, or ANY execFile failure ⇒ `undefined`; an empty
@@ -310,11 +302,16 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
   // Capture the RAW (unfolded) file tree so the sound-negation `dynamicReach` leg can scan file bytes off the
   // SAME walk `build` folds — no second FS traversal, no divergent view of what the repo contains.
   const rawTree = walkFileTree(repoPath);
-  // DEDUP-COMPOSITION (#241) — captured as its own binding (not inlined into the `build` call) so it can be
-  // threaded onto `WireConfig` below and `assembleHandler` (wire.ts) does not re-run `foldAstUnits` on a
-  // second `walkFileTree` of this same repo — see the `WireConfig` doc block for the coherence obligation.
-  const fileTree = foldAstUnits(rawTree);
-  const axes = build(fileTree, scipOutput);
+  // THE ONE GROUNDING DERIVATION (AUTHOR-1): the emit truth-gate (`buildGate(axes)`) and the `anchors` planner
+  // both route through this single seam (`deriveGroundingAxes` — the SOLE fold→build on the grounding path;
+  // rev-index.ts's arbitrary-rev oracle routes through it too), so neither can derive a different `subtreeHash`
+  // for an anchor. `fileTree` (the folded input) rides back for DEDUP-COMPOSITION (#241, threaded below).
+  const { axes, fileTree } = deriveGroundingAxes(rawTree, scipOutput);
+  // THE ONE GROUNDING COMPUTER (AUTHOR-1) over the axes just derived — the `anchors` planner's backing seam;
+  // `createAnchors` (frozen `@atlas/tools` leg) wraps it with the honest-empty invariant. Same `axes`/`rawTree`
+  // the gate rides, same HEAD sha the durable store stamps — provably one seam. A PLANNER (no write path).
+  const groundingComputer = buildGroundingComputer({ axes, rawTree, rev: headSha(repoPath) ?? '' });
+  const anchorsLeg = createAnchors(groundingComputer);
   // #96 F2 — the SAME N0 completeness view the emit leg rides (`() => index.symbolReverse()`, wire.ts:217),
   // built ONCE off the SAME `scipOutput` the axes above are built from, so the promote leg (below) reaches
   // `emitNegation` with its deps satisfied instead of fail-closing `scope-empty` for every promoted negation.
@@ -553,6 +550,9 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     // loaded `.atlas/policy.json` the write door gates on (it supplies the terrain OWNER, which is the
     // declared scope membership, not a second notion of ownership).
     own: createOwnLeg({ axes, store: readAccess.store, policy }),
+    // THE `anchors` DISCOVERY PLANNER (WP-10.A1 / ADR-0004) — the ARCH-3 binding that makes `createAnchors`
+    // running code (its production caller), over the ONE grounding computer. Read-only; not a `Tool`.
+    anchors: anchorsLeg.anchors,
     // THE GROUNDED-RELATION READ LEG (#99a). `readAccess.store` is the very object the handler's query leg
     // reads — passed, not rebuilt — so `atlas relations <unit>` and `atlas query <unit>` are two projections
     // of ONE store, and a relation emitted through the emit door is visible to the very next `relations` call.

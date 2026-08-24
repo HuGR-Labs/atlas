@@ -105,6 +105,12 @@ export {
 } from './governed-link-retract.js';
 export { composeRuntime, buildHeuristic, buildGate, buildMineAdmission } from './compose.js';
 export type { ComposedRuntime, MineAdmission, Reground } from './compose.js';
+// WP-10.A1.ADAPTER — the ONE grounding computer (AUTHOR-1): the single fold→build derivation the emit truth-
+// gate and the `anchors` planner both route to, plus the frozen `@atlas/tools` `GroundingComputer` PORT impl
+// and its self-warming seam entry. Exported so the A1.CLI `atlas anchors` verb (next WP) reaches the planner,
+// and so the seam is drivable directly (the conformance goldens).
+export { deriveGroundingAxes, buildGroundingComputer, warmGroundingComputer } from './grounding-computer.js';
+export type { GroundingComputerConfig, WarmGroundingComputer } from './grounding-computer.js';
 // The `own_<scope>` READ leg (RETR-12) — the production feed that gives `@atlas/retrieval`'s `createOwn` its
 // first caller outside its own test file. Exported because the CLI entrypoint threads it on the same injected
 // seam `promote` rides, and because a test must be able to drive the FEED (`buildOwnSources`) directly rather
