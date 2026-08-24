@@ -50,9 +50,9 @@ afterEach(() => vi.restoreAllMocks());
 // ── REQ-CLI-1 — total command surface ─────────────────────────────────────────────────────────────
 
 describe('SCN-CLI-1a — every command maps to exactly one leg', () => {
-  it('is total (17 keys) and mutually-exclusive over the ratified table', () => {
+  it('is total (19 keys) and mutually-exclusive over the ratified table', () => {
     // totality: every command in the finite surface has exactly one leg.
-    expect(COMMANDS).toEqual(['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'transitions', 'transition', 'verify-fact', 'verify-store', 'derive-relations']);
+    expect(COMMANDS).toEqual(['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'transitions', 'transition', 'test-vacuities', 'test-vacuity', 'verify-fact', 'verify-store', 'derive-relations']);
     expect(Object.keys(COMMAND_LEG).sort()).toEqual([...COMMANDS].sort());
     expect(COMMAND_LEG).toEqual({
       init: 'atlas-init',
@@ -75,6 +75,10 @@ describe('SCN-CLI-1a — every command maps to exactly one leg', () => {
       transition: 'atlas-emit', // WRITE authority oracle (#234 2-rev transition PRODUCER) — intercepted before the
       //                           handler, PERSISTS a justified transition THROUGH the governed emit door (KNOW-11
       //                           authz + ARCH-9 anchor apply); a write COMMAND over the SAME emit door
+      'test-vacuities': 'atlas-query', // READ authority oracle (#95 grounded test-vacuity fold) — intercepted before
+      //                                 the handler, a projection of the same durable store; carries no write authority
+      'test-vacuity': 'atlas-emit', // WRITE authority oracle (#95 single-anchor test-vacuity PRODUCER) — intercepted
+      //                               before the handler, PERSISTS proven facts THROUGH the governed emit door
       'verify-fact': 'atlas-query', // READ authority oracle (sound-genesis PROVEN family) — intercepted before the
       //                               handler, a program oracle over the code index; carries no write authority
       'verify-store': 'atlas-query', // READ authority oracle (REVERIFY-GATE whole-store pass) — intercepted
@@ -149,7 +153,7 @@ describe('SCN-CLI-2a/2b/2c — command × authority partition', () => {
   it('2b: the write COMMANDS funnel into the TWO governed write doors (asserted vs WRITE_PATHS)', () => {
     expect([...WRITE_PATHS].sort()).toEqual(['atlas-emit', 'atlas-link']); // the two governed write doors (WP-SAMEAS)
     const writers = COMMANDS.filter((c) => authorityOf(c) === 'write');
-    expect([...writers].sort()).toEqual(['derive-relations', 'emit', 'link', 'promote', 'transition']); // exactly the write commands (transition #234 publishes through the emit door)
+    expect([...writers].sort()).toEqual(['derive-relations', 'emit', 'link', 'promote', 'test-vacuity', 'transition']); // exactly the write commands (transition #234 + test-vacuity #95 publish through the emit door)
     expect(COMMAND_LEG.transition).toBe('atlas-emit'); // #234 producer persists through the EXISTING governed emit door (KNOW-11 authz + ARCH-9 anchor)
     expect(COMMAND_LEG.emit).toBe('atlas-emit');
     expect(COMMAND_LEG.link).toBe('atlas-link');

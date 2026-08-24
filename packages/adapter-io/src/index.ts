@@ -126,9 +126,10 @@ export type { NegationLeg, NegationsData, NegationsRead } from './negation-sourc
 export { createTransitionLeg, createTransitionProducer, transitionsVerdict } from './transition-source.js';
 export type { TransitionLeg, TransitionProducer, TransitionRun, TransitionsData } from './transition-source.js';
 // #95 D5 — the single-anchor test-vacuity family: the reachable PRODUCER (HEAD test units → scanTestVacuity →
-// proven test-vacuity → governed-door persist). Its read leg is Wave 1b; its compose+CLI wiring is Wave 2.
-export { createTestVacuityProducer } from './test-vacuity-source.js';
-export type { TestVacuityProducer, TestVacuityRun, TestUnit, TestVacuityEmit } from './test-vacuity-source.js';
+// proven test-vacuity → governed-door persist), the READ leg (`testVacuitiesOf` fold), the composition-root
+// units feed (`testUnitsOf`), and the shared read verdict. Wired to `atlas test-vacuity`/`test-vacuities` (Wave 2).
+export { createTestVacuityProducer, createTestVacuityLeg, testUnitsOf, testVacuitiesVerdict } from './test-vacuity-source.js';
+export type { TestVacuityProducer, TestVacuityRun, TestUnit, TestVacuityEmit, TestVacuityLeg, TestVacuitiesData } from './test-vacuity-source.js';
 // The sound-genesis PROVEN family's production feed + shared verdict — the ONE caller that makes
 // verify{Dependency,Count,Negation} (@atlas/genesis) running code rather than ledgered reference models.
 export { createVerifyFactLeg, verifyFactVerdict } from './verify-fact-source.js';

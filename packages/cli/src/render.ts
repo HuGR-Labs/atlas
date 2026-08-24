@@ -164,6 +164,25 @@ function renderData(data: unknown): string {
       : `data:\n  linked: ${d.a} ≡ ${d.b}\n`;
   }
 
+  // node (TEST-VACUITY) — a resolved `TestVacuityNode` (the `atlas node <addr>` read door) for the single-anchor
+  // proven family (#95, ADR-0015 D5). Recognised by `kind:'test-vacuity'` + a `grounding` object; the emit
+  // `{ id }` shape below has NEITHER and the other node shapes carry a different `kind`, so no cross-shadowing. A
+  // test-vacuity has no `claimNorm` at this seam — its claim IS the (testName @ unitKey, shape) triple, so that
+  // is what renders. The seal + witness render ONLY when present (additive/absent-tolerant, the `seal`/
+  // `witness` discipline the relation/predicate branches use); the witness is a `TestVacuityWitness`
+  // (shape/testName) — the re-runnable derivation `scanTestVacuity` re-proves at HEAD, never model prose.
+  if (d.kind === 'test-vacuity' && typeof d.grounding === 'object' && d.grounding !== null) {
+    let out =
+      `data:\n  node: ${String(d.id)}\n  tier: ${String(d.tier)}\n  kind: test-vacuity\n` +
+      `  test-vacuity: ${String(d.testName)} @ ${String(d.unitKey)} (${String(d.shape)})\n`;
+    if (typeof d.seal === 'string') out += `  seal: ${d.seal}\n`;
+    if (typeof d.witness === 'object' && d.witness !== null) {
+      const w = d.witness as Record<string, unknown>;
+      out += `  witness:\n    shape: ${String(w.shape)}\n    testName: ${String(w.testName)}\n`;
+    }
+    return out;
+  }
+
   // node (RELATION) — a resolved `RelationNode` (the `atlas node <addr>` read door) for the 2-ended family
   // (#99 R6, AR-12). Recognised by `kind:'relation'` + a `grounding` object; the emit `{ id }` shape below has
   // NEITHER and the `relations` LIST shape above carries `relations` (not a bare `kind`), so no cross-shadowing.

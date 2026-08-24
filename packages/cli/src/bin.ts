@@ -14,7 +14,7 @@ import { main } from './cli.js';
 // yet still index `::` sub-file symbol nodes, so a symbol grounding is groundable and `subsumes` fires.
 void (async () => {
   await initAst();
-  const { handler, doctorSource, promote, own, relations, negations, transitions, transition, verifyFact, reverify, deriveRelations, readRefusal, readAdvisory } = composeRuntime(process.cwd());
+  const { handler, doctorSource, promote, own, relations, negations, transitions, transition, testVacuities, testVacuity, verifyFact, reverify, deriveRelations, readRefusal, readAdvisory } = composeRuntime(process.cwd());
   // The provenance refusal rides the same injected-deps seam as the handler (conditional spread keeps it
   // ABSENT on a healthy repo — exactOptionalPropertyTypes), so prod and tests share ONE surface. `promote`
   // (the KNOW-8 governed promotion leg) rides that same seam: it is not a `Tool`, so it cannot arrive through
@@ -42,6 +42,12 @@ void (async () => {
     // git input rather than a reference model.
     transitions,
     transition,
+    // `testVacuities` (the #95 grounded test-vacuity read leg) + `testVacuity` (the reachable single-anchor
+    // producer) ride the same injected-deps seam as `transitions`/`transition`. The read leg makes
+    // `testVacuitiesOf` running code; the producer is what makes `atlas test-vacuity` a REACHED shipped path over
+    // the repo's HEAD test units (0-false-proven) rather than a reference model.
+    testVacuities,
+    testVacuity,
     // `verifyFact` (the sound-genesis PROVEN-family feed) rides the same injected-deps seam as `negations`.
     // It is not a `Tool` (opens no governed surface, writes nothing), so it cannot arrive through the handler;
     // threading it here is the entire difference between `verify{Dependency,Count,Negation}` (@atlas/genesis)

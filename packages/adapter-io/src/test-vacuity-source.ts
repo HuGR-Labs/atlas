@@ -1,13 +1,4 @@
-// ── REFERENCE MODEL — NO PRODUCTION CALLERS (yet) ─────────────────────────────────────────────────────
-// WP-TV-1a builds the producer + its seal + its governed door, but the COMPOSITION-ROOT wiring (the FileTree
-// `*.test.ts`/`*.spec.ts` walk that feeds `units`, and the `atlas` CLI verb that drives it) is Wave 2 —
-// scope-fenced OUT of this WP. Until Wave 2 value-imports `createTestVacuityProducer` from `compose.ts`, it has
-// no production caller and is a DECLARED reference model in `harness/gates/reference-model-guard.mjs`
-// (`shipped: null`). It is exercised end-to-end by `test/test-vacuity-producer.test.ts` (a real parse → seal →
-// governed-door persist). This banner is dropped when Wave 2 wires the leg, exactly as the sibling oracle
-// `test-vacuity.ts` shed its banner when THIS producer wired it.
-//
-// @atlas/adapter-io — src/test-vacuity-source.ts  (the reachable PRODUCER for the single-anchor test-vacuity family, #95 D5)
+// @atlas/adapter-io — src/test-vacuity-source.ts  (the reachable PRODUCER + READ leg for the single-anchor test-vacuity family, #95 D5)
 //
 // The shipped edge that turns the reference-model oracle `scanTestVacuity` (test-vacuity.ts) into running code —
 // the single-anchor HEAD analogue of the 2-rev transition producer (`transition-source.ts`). Given the repo's
@@ -26,13 +17,17 @@
 
 import type { Hash, StructRef, Tier } from '@atlas/contracts';
 import type { GroundingEntry } from '@atlas/grounding';
+import type { Axes, FileTree, IndexNode } from '@atlas/index';
 import { trySoundTestVacuity } from '@atlas/genesis';
 import type { TestVacuityProposal } from '@atlas/genesis';
-import type { TestVacuityNode, TestVacuityShape } from '@atlas/knowledge';
-import type { EmitOut } from '@atlas/tools';
+import { testVacuitiesOf } from '@atlas/knowledge';
+import type { GroundedTestVacuity, TestVacuityNode, TestVacuityShape } from '@atlas/knowledge';
+import type { EmitOut, Guidance, Verdict } from '@atlas/tools';
 import { parseTsDoc } from './ast.js';
 import { scanTestVacuity } from './test-vacuity.js';
 import { unitScopeOf } from './llm.js';
+import { rehydrateProjection } from './store.js';
+import type { DiskStore } from './store.js';
 import { MINED_TIER } from './reverify-store.js';
 
 /** One HEAD test unit the producer scans — its LOCATION-FREE `unitKey` lineage, the repo-relative `path` (the
@@ -136,4 +131,106 @@ export function createTestVacuityProducer(units: () => readonly TestUnit[], emit
     }
     return runs;
   };
+}
+
+// ── THE COMPOSITION-ROOT UNITS FEED — the HEAD `*.test.ts`/`*.spec.ts` walk that feeds `createTestVacuityProducer` ──
+
+/** A repo-relative test-unit path — `*.test.ts` / `*.spec.ts` (also `.tsx`/`.cts`/`.mts`), the leaves the
+ *  producer scans. A file NODE's key on the spatial rail is exactly this path; a sub-file AST item carries a
+ *  `::` refinement (adapter-io/src/ast.ts) and is NOT a test unit. */
+const TEST_UNIT = /\.(test|spec)\.[cm]?tsx?$/;
+
+/** Collect every walked LEAF's bytes into a `path → content` map. A leaf is a `FileTree` node with no children;
+ *  a directory carries children and no `content`. Total — a leaf without `content` (a bare structural node) is
+ *  simply skipped, never guessed at. */
+function collectContent(node: FileTree, out: Map<string, string>): void {
+  if (node.children.length === 0 && typeof node.content === 'string') out.set(node.path, node.content);
+  for (const child of node.children) collectContent(child, out);
+}
+
+/** Collect every FILE node on the spatial rail whose path is a test unit into a `TestUnit`, pairing the node's
+ *  HEAD `subtreeHash` (the anchor the truth gate re-derives — `driftDetect` resolves `qualifiedPath` against
+ *  the SAME `axes.spatial`, so this anchor reads FRESH) with the walked bytes for that path. A test file with no
+ *  content in the walk (unreadable / deleted) is skipped — the producer cannot parse bytes it does not hold. */
+function collectTestUnits(node: IndexNode, content: Map<string, string>, out: TestUnit[]): void {
+  // A FILE node's key is the repo-relative path (no `::`); an AST sub-item carries a `::` refinement.
+  if (!node.key.includes('::') && TEST_UNIT.test(node.key)) {
+    const bytes = content.get(node.key);
+    if (bytes !== undefined) {
+      out.push({
+        unitKey: node.key,
+        path: node.key,
+        anchor: { kind: 'file', qualifiedPath: node.key, subtreeHash: node.subtreeHash },
+        content: bytes,
+      });
+    }
+  }
+  for (const child of node.children) collectTestUnits(child, content, out);
+}
+
+/**
+ * The composition-root UNITS FEED (Wave 2): the repo's HEAD test units, one `TestUnit` per `*.test.ts`/
+ * `*.spec.ts` leaf, its `anchor.subtreeHash` read STRAIGHT off the built `axes.spatial` (so the producer's
+ * governed-door HEAD truth gate — `driftDetect` over the SAME axes — reads it FRESH) and its `content` from the
+ * SAME `fileTree` walk `build` folded. Pure + total: no clock, no IO (the walk + build already happened), so two
+ * calls over the same axes/tree are byte-identical. A repo with no test files yields `[]` (the producer then
+ * emits nothing — abstain-by-design, never a fabricated fact).
+ */
+export function testUnitsOf(fileTree: FileTree, axes: Axes): readonly TestUnit[] {
+  const content = new Map<string, string>();
+  collectContent(fileTree, content);
+  const units: TestUnit[] = [];
+  collectTestUnits(axes.spatial, content, units);
+  return units;
+}
+
+// ── THE READ LEG + READ VERDICT (mirrors createTransitionLeg / transitionsVerdict) ───────────────────────────
+
+/** The composition-root READ leg: `unit` → the grounded test-vacuity facts on that unit (empty ⇒ every unit).
+ *  TOTAL — `testVacuitiesOf` is pure + total. Re-reads the LIVE projection per call, so a fact produced in this
+ *  session is visible to the very next call. */
+export type TestVacuityLeg = (unit: string) => readonly GroundedTestVacuity[];
+
+/** Build the READ leg over the durable `store` — the SAME store the handler's query leg reads (so `atlas
+ *  test-vacuities` and `atlas query` are two projections of ONE store). Read-only; opens no write path. This is
+ *  the ONE production caller that makes `testVacuitiesOf` (@atlas/knowledge, WP-TV-1b) running code. */
+export function createTestVacuityLeg(store: DiskStore): TestVacuityLeg {
+  return (unit) => testVacuitiesOf(rehydrateProjection(store), unit);
+}
+
+/** The data payload a `test-vacuities` read verdict carries — the facts on the unit plus the query unit, so an
+ *  EMPTY result is a MEASURED fact (this unit, zero vacuous tests) and never an absent line. */
+export interface TestVacuitiesData {
+  readonly testVacuities: readonly GroundedTestVacuity[];
+  readonly unit: string;
+}
+
+/** The one property a reader should check the bytes against. */
+const READ_INVARIANT =
+  'TV-READ: `atlas test-vacuities` reads GROUNDED single-anchor proven facts (family:test-vacuity) off the live projection the query readback rides — sorted (unitKey, testName, nodeKey) so equal input is byte-identical output, each fact standing alone (no lineage, no supersession — the family is single-anchor), never a throw, no write path';
+
+/** The one actionable sentence, derived from the result's own numbers. */
+function readNextLine(unit: string, facts: readonly GroundedTestVacuity[]): string {
+  if (facts.length === 0) {
+    return `no grounded test-vacuity fact on unit '${unit}' — a fact is produced by \`atlas test-vacuity <path>\` when a test's assertions all sit inside a catch clause (assertion-only-in-catch); check the unit key spelling`;
+  }
+  return `${facts.length} proven test-vacuity fact(s) on unit '${unit}' — each a named test whose assertions all sit inside a catch clause (assertion-only-in-catch), sealed proven`;
+}
+
+/**
+ * The SHARED read-verdict builder — both transports call this over the SAME `TestVacuityLeg`, so identical
+ * `unit` yields a byte-identical `Verdict`. TOTAL: a missing/empty `unit` fails CLOSED to a structured `ok:false`
+ * verdict (exit 1 on the CLI), never a throw.
+ */
+export function testVacuitiesVerdict(leg: TestVacuityLeg, unit: string): Verdict<TestVacuitiesData> {
+  if (typeof unit !== 'string' || unit.length === 0) {
+    const guidance: Guidance = {
+      next: '`atlas test-vacuities <unit>` requires the unit key whose grounded test-vacuity facts to read',
+      invariant: 'CLI-1b: a malformed invocation yields a structured error + guidance + non-zero exit, never a crash',
+    };
+    return { ok: false, rejected: 'missing unit: `atlas test-vacuities` requires a non-empty unit key', guidance };
+  }
+  const testVacuities = leg(unit);
+  const guidance: Guidance = { next: readNextLine(unit, testVacuities), invariant: READ_INVARIANT };
+  return { ok: true, guidance, data: { testVacuities, unit } };
 }

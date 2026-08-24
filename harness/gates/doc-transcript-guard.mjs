@@ -177,6 +177,15 @@ const UNVERIFIABLE = {
   ...each('an illustrative worked example over a produced 2-rev transition (a clean fixture holds no such unit lineage nor two-rev change, so it reproduces to the empty/rejected form); the behaviour is pinned by the #234 acceptance suite + the blackbox e2e over a real 2-rev fixture, not reproducible from a clean checkout',
     'reference/commands/transitions.md#1', 'reference/commands/transition.md#1'
   ),
+  // #95 D5 — the `atlas test-vacuity`/`atlas test-vacuities` POPULATED examples show a produced proven
+  // test-vacuity fact (a named test whose only assertions sit inside `catch`). The clean fixture (README +
+  // src/{greet,math}.ts, one commit) holds no `*.test.ts` unit with an assertion-only-in-catch test, so it
+  // reproduces to the EMPTY/abstain form, not the populated success shown. The behaviour is pinned by the #95
+  // acceptance anchor (s95-test-vacuity.blackbox.test.ts over a real fixture repo), not reproducible from a
+  // clean checkout.
+  ...each('an illustrative worked example over a produced proven test-vacuity fact (a clean fixture holds no assertion-only-in-catch test unit, so it reproduces to the empty/abstain form); the behaviour is pinned by the #95 acceptance anchor s95-test-vacuity.blackbox.test.ts over a real fixture repo, not reproducible from a clean checkout',
+    'reference/commands/test-vacuity.md#1', 'reference/commands/test-vacuities.md#1'
+  ),
 };
 
 // ── enumeration ─────────────────────────────────────────────────────────────────────────────────────────
