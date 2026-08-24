@@ -20,6 +20,7 @@ export type * from './types.js';
 export * from './emit.js';        // WP-4.11-a.TOOLS — atlas-emit re-derives citation at source@sha, fail-closed reject
 export * from './reconcile.js';   // WP-4.12-a.TOOLS — atlas-reconcile: classify drift into a reviewable DriftItem[] (exit 2 on semantic)
 export * from './init.js';        // WP-8.27.TOOLS — atlas-init move-in: $0-LLM structural skeleton + blast radius + T0-candidate flags
+export * from './anchors.js';     // WP-10.A1.TOOLS — GroundingComputer PORT (AUTHOR-1) + the read-only `anchors` DISCOVERY planner (ADR-0004; NOT a governance tool, carries no write authority)
 export * from './guard.js';       // WP-7.26-a.TOOLS — INV-TOOLS-15 single-write-door structural store guard (store-row medium: emit-only, append-only/permissioned)
 export * from './fault.js';      // ERROR ATTRIBUTION — the three fault classes at the one handler (malformed-args / refusal / internal-fault) + faultOf
 export * from './handler.js';     // WP-7.26-a/-b/-c.TOOLS — one pure+total handler (GOVERNANCE_SURFACE.length === 5, WRITE_PATHS === ['atlas-emit','atlas-link']) + schema + resolveNode

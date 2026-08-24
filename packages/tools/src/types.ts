@@ -9,7 +9,7 @@
 // docs/adr/ADR-0003-governed-write-doors.md.
 
 import type { Hash, NodeKey, Pack, StructRef, Territory, ToolSchema } from '@atlas/contracts';
-import type { GroundedFact, SameAs, Subsumes } from '@atlas/knowledge';
+import type { GroundedFact, PredicateSlot, SameAs, Subsumes } from '@atlas/knowledge';
 import type { VersionDelta } from '@atlas/persist';
 import type { OwnPack, OwnUnit, RelationSet } from '@atlas/retrieval';
 
@@ -233,6 +233,118 @@ export interface DoctorOut {
  */
 export type DiffOut = VersionDelta;
 
+// ── authoring data model (CAMPAIGN-10 · ADR-0004 planner surface) ─────────────────────────────────────
+// The authoring surface's OWN result records — transcribed from `reference/atlas-authoring.md` §Data model.
+// Every planner computes a payload and persists NOTHING (AUTHOR-2); no record here is a member of
+// `WRITE_PATHS`/`GOVERNANCE_SURFACE`. Core shapes (`GroundedFact`, `PredicateSlot`, `StructRef`) are
+// @atlas/knowledge / @atlas/contracts-owned — IMPORTED, NEVER redefined. Only `AnchorUnit` / `AnchorsOut` /
+// `LanguageHole` are exercised in WP-10.A1.TOOLS; `SlotsOut` / `DraftOut` / `CheckOut` / `GateName` are
+// FROZEN for later epics (A2-a slots+draft, A3 check) per §author-2 / §author-3.
+
+/**
+ * One groundable unit the built index carries under a path (AUTHOR-3). Transcribed EXACTLY from
+ * §Data model — `{ qualifiedPath, kind: 'file'|'dir'|'symbol', subtreeHash, path }`. `subtreeHash` is the
+ * unit's CURRENT drift oracle; `qualifiedPath` is the folded unit path (`file::start:kind:name` for a
+ * symbol). Kept as the reference's own literal union — it names the coarse anchor grain the planner returns,
+ * NOT the finer 6-kind `StructRef.kind`; no core shape is duplicated (the grounding anchor stays `StructRef`).
+ */
+export interface AnchorUnit {
+  readonly qualifiedPath: string;
+  readonly kind: 'file' | 'dir' | 'symbol';
+  readonly subtreeHash: string;
+  readonly path: string;
+}
+
+/**
+ * A declared structural language hole (AUTHOR-4). A file in a language with NO configured grammar anchors at
+ * FILE level and DECLARES the hole rather than silently degrading. Transcribed EXACTLY from §Data model —
+ * `{ ext, fileCount, reason }`. `fileCount` is the REAL census of grammar-less files with this extension
+ * under the path (never a constant — SCN-AUTH-4b asserts it against the fixture).
+ */
+export interface LanguageHole {
+  readonly ext: string;
+  readonly fileCount: number;
+  readonly reason: string;
+}
+
+/**
+ * `anchors <path>` result (AUTHOR-3/4). Transcribed from §Data model — `{ rev, units, holes }` — with the
+ * honest-empty `reason` AUTHOR-3 demands ("MUST yield the honest empty set WITH its reason") surfaced as an
+ * OPTIONAL field: present iff the path was not groundable (untracked / non-git / unreadable), so a caller
+ * reads WHY `units` is empty rather than seeing a bare empty set.
+ *
+ * [FRAMING NOTE] §Data model's `AnchorsOut = { rev, units, holes }` line omits `reason`; AUTHOR-3 and
+ * SCN-AUTH-3d REQUIRE it, so it is declared here — ABSENT on the populated path, PRESENT on the
+ * honest-empty path (under `exactOptionalPropertyTypes`, genuinely absent-or-present).
+ */
+export interface AnchorsOut {
+  readonly rev: string;
+  readonly units: readonly AnchorUnit[];
+  readonly holes: readonly LanguageHole[];
+  readonly reason?: string; // AUTHOR-3 honest-empty reason — present iff `units` is empty (path not groundable)
+}
+
+/**
+ * One slot paired with its meaning (AUTHOR-5). Transcribed EXACTLY from §Data model — `{ slot, meaning }`.
+ * `PredicateSlot` is the @atlas/knowledge-owned CLOSED vocabulary — IMPORTED, never redefined.
+ */
+export interface SlotInfo {
+  readonly slot: PredicateSlot;
+  readonly meaning: string;
+}
+
+/**
+ * `slots` result (AUTHOR-5) — EXACTLY the closed `PredicateSlot` union, in order, each with its meaning.
+ * Transcribed from §Data model — `{ slots }`. FROZEN for WP-10.A2-a.TOOLS (not exercised here).
+ */
+export interface SlotsOut {
+  readonly slots: readonly SlotInfo[];
+}
+
+/**
+ * `draft` result (AUTHOR-6/7/9/10). Transcribed EXACTLY from §Data model —
+ *   `{ fact, rev, operation:'CREATE'|'UPDATE', route:'auto-accept'|'full-ratify', requires? }`.
+ * `fact` is the @atlas/knowledge `GroundedFact` the governed emit door consumes — IMPORTED, never redefined.
+ * `operation` reports CREATE vs UPDATE at the drafted `(anchor, slot)` identity (AUTHOR-10); `route` states
+ * the governed-door route up front and `requires` names the authorizing channel when `route ===
+ * 'full-ratify'` (AUTHOR-9). FROZEN for WP-10.A2-a.TOOLS (not exercised here).
+ */
+export interface DraftOut {
+  readonly fact: GroundedFact;
+  readonly rev: string;
+  readonly operation: 'CREATE' | 'UPDATE';
+  readonly route: 'auto-accept' | 'full-ratify';
+  readonly requires?: string;
+}
+
+/**
+ * The CLOSED set of governed-door gates (AUTHOR-11/12). Transcribed EXACTLY from §Data model —
+ * `'shape' | 'truth' | 'authz' | 'ratify'`. FROZEN for WP-10.A3.TOOLS.
+ */
+export type GateName = 'shape' | 'truth' | 'authz' | 'ratify';
+
+/**
+ * One gate's verdict inside a `check` dry-run (AUTHOR-11/12) — the row shape of `CheckOut.gates`. Every
+ * refusal names its `gate` from the closed `GateName` set and carries a `remedy` (AUTHOR-12: no raw runtime
+ * error ever reaches a user as the reason).
+ */
+export interface GateResult {
+  readonly gate: GateName;
+  readonly pass: boolean;
+  readonly reason?: string;
+  readonly remedy?: string;
+}
+
+/**
+ * `check` result (AUTHOR-11/12) — the dry-run that agrees with the governed door gate-for-gate, in the same
+ * order. Transcribed from §Data model — `{ wouldEmit, gates: {gate,pass,reason?,remedy?}[] }`. FROZEN for
+ * WP-10.A3.TOOLS (not exercised here).
+ */
+export interface CheckOut {
+  readonly wouldEmit: boolean;
+  readonly gates: readonly GateResult[];
+}
+
 // ── co-located handler surface (was ref/handler.ts — consumed by handler.ts + transport.ts + diff.ts) ──
 // The handler union / transport tag / oracle interface carry zero runtime; they live with the shared
 // model because each is consumed by ≥2 src files (housing them here keeps the impl files free of
@@ -258,7 +370,7 @@ export interface QueryEnvelope {
 /** The per-tool result payload carried on a `Verdict.data` — the union of the governance-tool result records
  *  (TOOLS-5/6/7/8 + WP-SAMEAS `LinkOut`), plus the `atlas-query` observability envelope (Seam-3). The handler
  *  is one oracle over all; the concrete leg is fixed by `tool`. */
-export type ToolData = InitOut | QueryOut | EmitOut | ReconcileOut | LinkOut | QueryEnvelope;
+export type ToolData = InitOut | QueryOut | EmitOut | ReconcileOut | LinkOut | QueryEnvelope | AnchorsOut;
 
 /** The transport a call arrived on (TOOLS-3/10). Transcribed from the reference's "one contract, two
  *  transports" (CLI≡MCP) plus the tri-transport node reads (MCP tool | poke | CLI). Behaviour MUST NOT
