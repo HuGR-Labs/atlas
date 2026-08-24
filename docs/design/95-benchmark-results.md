@@ -213,6 +213,38 @@ collapse), so semantic-vs-syntactic is the finding, not a madge weakness. Artifa
 `harness/probes/adjudicate/xrepo-zod-sota-comparator.json` + `xrepo-zod-depgraph-compare.json` (the full
 edge lists).
 
+### Grow proven / shrink advisory — the ceiling, measured (`master`, 2026-08-24)
+
+A jury asked for the proven tier to grow and the advisory tier to shrink. This measures the *ceiling*: of the
+76 advisory facts genesis mined on zod, how many could move to a 0-false proven arm, and where does the next
+sound-shape investment pay off? Each claim was classified by its SHAPE against the four existing sound shapes
+(`depends-on` / `count` / `negation` / `transition`):
+
+| bucket | count | meaning |
+|---|---|---|
+| **EXISTING** | 1 | provable NOW by an existing sound shape |
+| **NEW_SHAPE** | 21 | structural (AST-checkable) but needs a new sound shape |
+| **SEMANTIC** | 54 | irreducibly semantic — no mechanical oracle over one unit's bytes |
+
+**Shrink ceiling ≈ 29% (22/76); the other ≈71% is genuinely semantic.** The 54 SEMANTIC claims are almost all
+about zod's OWN runtime behavior (`parse` accepts / rejects / throws / coerces) — not mechanizable from the
+shown bytes. So the advisory tier is **not reducible by reclassification**; shrinking it means *building new
+sound shapes*, exactly as the `transition` shape (`#234`) already did once.
+
+**Why advisory is the hard residue.** `depends-on` and `count` claims are ~0 in the advisory slot because
+those shapes already route to the proven arm (separate mine slots). Advisory is **by design** the semantic
+leftover — which is why its 86.8% precision is measured on the genuinely-hard claims.
+
+**Highest-leverage next shape: test-vacuity.** ~9 of the 21 NEW_SHAPE claims are one family —
+`no-assertion-in-test` (3), `assertion-only-in-catch` (2), `unasserted-parse-call` (2), `commented-out-tests`
+(2). A single AST oracle ("every non-exceptional path in a test body carries an assertion") would convert the
+largest structural cluster to proven. Suggestive: one of the two mechanically-verified cross-repo FALSEs
+(`dd7f1aed`) lands in exactly this family — the shape that would most grow the proven arm is also where genesis
+most confabulates on test files.
+
+**Honesty.** This is an ESTIMATE, not a law: one repo (zod), one LLM classifier over claim *text* (not the
+source). Artifacts: `harness/probes/adjudicate/xrepo-zod-shape-census.tsv` (76 rows) + `xrepo-zod-shape-census.json`.
+
 ### A2 — staleness (`master`, per #190)
 
 **Report two numbers, never one blended score** (`95b-staleness-a2-methodology.md` §6):
