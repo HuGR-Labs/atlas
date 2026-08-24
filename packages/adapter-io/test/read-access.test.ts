@@ -212,6 +212,125 @@ describe('buildReadAccess — CASE 2 (tracked-provable): filtered to what RE-PRO
   });
 });
 
+// ── #249 — the test-vacuity reverify replay threaded into the `tracked-provable` SERVE ─────────────────────
+// A `proven` test-vacuity re-proves against HEAD by RE-RUNNING the tree-sitter scan (`reverifyTestVacuity`,
+// the injected `replay` leg), NOT the SCIP oracle. Before this WP the serve path called `reverifyFact` WITHOUT
+// the replay, so every proven test-vacuity fell to `unverifiable` and was DROPPED (over-refused). These pins
+// exercise `buildReadAccess`'s new `replay` opt end to end through `buildProvable`.
+const TV_SHAPE = 'assertion-only-in-catch' as const;
+const SERVED_NAME = 'served — still holds at HEAD';
+const CHANGED_NAME = 'changed — no longer proven';
+const TAMPERED_NAME = 'tampered — re-tiered off the mined tier';
+
+/** The injected re-scan: only the SERVED unit's test still holds the shape at HEAD; the CHANGED one abstains
+ *  (the code moved under it). The tampered fact never reaches here — its non-mined tier is caught first. */
+const TV_REPLAY = (_unitKey: string, testName: string): 'proven' | 'abstain' =>
+  testName === SERVED_NAME ? 'proven' : 'abstain';
+
+function tv(id: string, unitKey: string, testName: string, over: Partial<GroundedFact> = {}): GroundedFact {
+  return {
+    kind: 'test-vacuity',
+    id: asNodeKey(id),
+    tier: 'T2', // MINED_TIER — the ONLY tier a `proven` seal is minted at; a re-tier is a tamper
+    unitKey,
+    testName,
+    shape: TV_SHAPE,
+    grounding: { entries: [] },
+    freshness: 'FRESH',
+    claims: [],
+    authoring: 'PROVEN',
+    seal: 'proven',
+    witness: { shape: TV_SHAPE, testName },
+    ...over,
+  } as unknown as GroundedFact;
+}
+
+/** A bare store seeded with three PROVEN test-vacuities: one whose test still holds (SERVED), one whose test
+ *  changed (broken), one re-tiered off the mined tier (broken/tampered). Same disjoint-nodeKey discipline as
+ *  `seededStore` — the Map key is `hashOf(fact.id)`, distinct from the `fact.id` path. */
+function seededTvStore(): { readonly store: DiskStore; readonly casPath: string } {
+  const dir = mktemp();
+  const casPath = join(dir, 'cas');
+  const store = createDiskStore(casPath, () => asHash('seed'));
+  const facts = [
+    tv('tv-served', 'src/served.test.ts', SERVED_NAME),
+    tv('tv-changed', 'src/changed.test.ts', CHANGED_NAME),
+    tv('tv-tampered', 'src/tampered.test.ts', TAMPERED_NAME, { tier: 'T0' }),
+  ];
+  const rows = facts.map((fact) => ({ fact, hash: store.put(fact as unknown as never) }));
+  store.persistProjection({
+    current: new Map(
+      rows.map(({ fact, hash }) => {
+        const nodeKey = hashOf(String(fact.id));
+        return [
+          nodeKey,
+          {
+            nodeKey,
+            family: 'test-vacuity' as const,
+            contentHash: String(hash),
+            claims: [],
+            primaryAnchor: (fact as unknown as { unitKey: string }).unitKey,
+          },
+        ] as const;
+      }),
+    ),
+    cas: new Set(rows.map(({ hash }) => String(hash))),
+  });
+  return { store, casPath };
+}
+
+describe('buildReadAccess — CASE 2 (tracked-provable): the #249 test-vacuity replay is threaded into the SERVE', () => {
+  const opts = (store: DiskStore, casPath: string, replay?: (u: string, t: string) => 'proven' | 'abstain') => ({
+    provenance: () => 'tracked-provable' as const,
+    casPath,
+    headSha: () => asHash('seed') as unknown as string,
+    gatedStore: store,
+    verifyFactLeg: (() => {
+      throw new Error('SCIP oracle must NOT be called for a test-vacuity — it routes to the replay first');
+    }) as unknown as VerifyFactLeg,
+    docExists,
+    scopeHasDocs,
+    ...(replay !== undefined ? { replay: replay as never } : {}),
+  });
+
+  it('WITH the replay threaded: the still-holding test-vacuity is RE-PROVEN and SERVED; changed + tampered dropped', () => {
+    const { store, casPath } = seededTvStore();
+    const access = buildReadAccess(opts(store, casPath, TV_REPLAY));
+    expect(access.refusal).toBeUndefined();
+    expect(access.reverified).toEqual({
+      sealedProven: 3,
+      reProven: 1, // only the still-holding one
+      broken: 2, // changed (abstains) + tampered (non-mined tier, caught before the replay)
+      unverifiable: 0, // the whole point of #249: NOT dumped to unverifiable for want of a re-scan leg
+      rows: expect.any(Array),
+    });
+    const served = currentNodes(rehydrateProjection(access.store));
+    expect(served.map((n) => n.nodeKey).sort()).toEqual([hashOf('tv-served')]);
+    // and the address-direct bypass (`atlas node <hash>`) serves ONLY the re-proven row's bytes.
+    const projRaw = rehydrateProjection(createDiskStore(casPath));
+    for (const n of currentNodes(projRaw)) {
+      expect(access.store.get(n.contentHash as never) !== undefined).toBe(n.nodeKey === hashOf('tv-served'));
+    }
+  });
+
+  it('MUTATION-VERIFY the thread is load-bearing: WITHOUT the replay the SAME proven-still-holding fact is DROPPED', () => {
+    // Removing the `replay` threading (the exact bug #249 closes) makes `reverifyFact` re-prove the
+    // test-vacuity to `unverifiable` (no re-scan leg wired) — so it is filtered OUT and served NOTHING.
+    // This pins the served case above: if the `replay` opt stops reaching `reverifyFact`, this goes green
+    // and the served-case test goes red.
+    const { store, casPath } = seededTvStore();
+    const access = buildReadAccess(opts(store, casPath)); // replay OMITTED
+    expect(access.reverified).toEqual({
+      sealedProven: 3,
+      reProven: 0, // nothing re-proves without the re-scan leg
+      broken: 1, // only the tampered tier is broken pre-replay
+      unverifiable: 2, // served + changed both fall to "nothing to replay"
+      rows: expect.any(Array),
+    });
+    expect(currentNodes(rehydrateProjection(access.store)).length).toBe(0); // over-refused — the bug
+  });
+});
+
 describe('buildReadAccess — FAIL-CLOSED: `tracked-provable` degrades to a refusal, NEVER a raw/unfiltered serve', () => {
   it('TEETH (e): the oracle throwing mid-pass refuses — it does not fall back to the gated OR the raw store', () => {
     const { store, casPath } = seededStore();

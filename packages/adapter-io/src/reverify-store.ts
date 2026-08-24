@@ -50,10 +50,14 @@
 // second oracle constructed here (a duplicated oracle that drifts from the shipped one is a known failure
 // class in this repo, see `verify-fact-source.ts`'s header).
 
+import type { Hash } from '@atlas/contracts';
 import type { CurrentNode, GroundedFact, NegationNode, PredicateSlot, RelationNode, TestVacuityNode, TestVacuityShape } from '@atlas/knowledge';
+import { currentNodes } from '@atlas/knowledge';
 import { claimNormFromWitness } from '@atlas/genesis';
 import { unitScopeOf } from './llm.js';
 import { underScope } from './anchor-scope.js';
+import type { DiskStore } from './store.js';
+import { rehydrateProjection } from './store.js';
 import type { VerifyFactLeg, VerifyReq } from './verify-fact-source.js';
 
 // MIRRORS `packages/cli/src/mine-staging.ts` `MINED_TIER`. `adapter-io` cannot import `@atlas/cli` — `cli`
@@ -487,6 +491,19 @@ export function reverifyFact(node: CurrentNode, fact: GroundedFact, leg: VerifyF
 export interface NodeFactPair {
   readonly node: CurrentNode;
   readonly fact: GroundedFact;
+}
+
+/** The FULL durable-store readback as `NodeFactPair[]` — each projection row paired with the `GroundedFact` its
+ *  `contentHash` resolves to, dropping rows whose CAS bytes are absent (`undefined`). ONE store read, ONE map;
+ *  the shape both `reverifyStore` (via `driftFacts = pairs.map(p => p.fact)`) and the reconcile drift seams
+ *  ride. Extracted from `compose.ts` so the composition root stays under the godfile ceiling. */
+export function driftPairsOf(store: DiskStore): readonly NodeFactPair[] {
+  return currentNodes(rehydrateProjection(store))
+    .map((node) => {
+      const fact = store.get(node.contentHash as Hash);
+      return fact === undefined ? undefined : { node, fact };
+    })
+    .filter((p): p is NodeFactPair => p !== undefined);
 }
 
 /**

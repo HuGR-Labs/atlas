@@ -24,6 +24,7 @@ import {
   createTestVacuityProducer,
   buildTestVacuityReplay,
   testUnitsOf,
+  type TestUnit,
   type TestVacuityEmit,
   type TestVacuityLeg,
   type TestVacuityProducer,
@@ -34,6 +35,28 @@ import type { DiskStore } from './store.js';
 // Re-export the leg types so the composition root imports the whole test-vacuity surface from ONE place (its
 // `ComposedRuntime` interface names `TestVacuityLeg`/`TestVacuityProducer`), keeping compose.ts's import list flat.
 export type { TestVacuityLeg, TestVacuityProducer } from './test-vacuity-source.js';
+
+/** The ONE shared HEAD units feed the whole test-vacuity surface rides — `units` is the single
+ *  `testUnitsOf(rawTree, axes)` thunk, and `replay` the reverify leg derived FROM it. Built ONCE at the
+ *  composition root (compose.ts) BEFORE `buildReadAccess`, because the replay closure needs only `rawTree` +
+ *  `axes` (never `readAccess.store`) — so the `tracked-provable` serve path (`buildProvable` → `reverifyFact`)
+ *  and the producer/read-side legs re-prove over the SAME units. One feed shared by producer + BOTH replay
+ *  call-sites (the serve filter AND `atlas verify-store`) is the whole point (#186/N10 — never a second copy
+ *  of one question, free to diverge). */
+export interface TestVacuityFeed {
+  /** The single HEAD units thunk — `() => testUnitsOf(rawTree, axes)`. */
+  readonly units: () => readonly TestUnit[];
+  /** The reverify replay derived from `units` — the ONE re-scan every re-proof (serve filter + verify-store) rides. */
+  readonly replay: TestVacuityReplay;
+}
+
+/** Build the ONE shared feed from HEAD's `rawTree` + `axes` — callable BEFORE `buildReadAccess`, so its
+ *  `replay` can be threaded into the `tracked-provable` serve path (which re-proves test-vacuities during the
+ *  read filter), and the store-dependent legs below reuse the SAME thunk rather than rebuilding a second one. */
+export function buildTestVacuityFeed(rawTree: FileTree, axes: Axes): TestVacuityFeed {
+  const units = () => testUnitsOf(rawTree, axes);
+  return { units, replay: buildTestVacuityReplay(units) };
+}
 
 /** The three composition-root test-vacuity legs, built from ONE shared HEAD units feed (see the file header). */
 export interface TestVacuityLegs {
@@ -46,16 +69,18 @@ export interface TestVacuityLegs {
 }
 
 /**
- * Build all THREE test-vacuity legs from the composition root's primitives — `store` (the read/reverify store,
- * `readAccess.store`), the HEAD `rawTree` + `axes` the units feed derives from, the governed `emit` door, and the
- * anchor rev `at` the producer stamps writes at. The producer and the replay share ONE `testUnitsOf` thunk so the
- * write-side proof and the read-side re-proof scan the SAME units — see the file header for why that matters.
+ * Build all THREE test-vacuity legs from the composition root's primitives — the ALREADY-BUILT shared `feed`
+ * (the ONE `testUnitsOf(rawTree, axes)` thunk + its `replay`, built earlier so `buildReadAccess` could thread
+ * the replay into the `tracked-provable` serve), `store` (the read/reverify store, `readAccess.store`), the
+ * governed `emit` door, and the anchor rev `at` the producer stamps writes at. The producer runs over
+ * `feed.units` and the read-side re-proof rides `feed.replay` — the SAME units the serve filter already
+ * re-proved over, so write-side proof and read-side re-proof can never diverge in WHICH units they scanned
+ * (see the file header + `TestVacuityFeed` on why that matters).
  */
-export function buildTestVacuityLegs(store: DiskStore, rawTree: FileTree, axes: Axes, emit: TestVacuityEmit, at: Hash): TestVacuityLegs {
-  const units = () => testUnitsOf(rawTree, axes);
+export function buildTestVacuityLegs(feed: TestVacuityFeed, store: DiskStore, emit: TestVacuityEmit, at: Hash): TestVacuityLegs {
   return {
     testVacuities: createTestVacuityLeg(store),
-    testVacuity: createTestVacuityProducer(units, emit, at),
-    replay: buildTestVacuityReplay(units),
+    testVacuity: createTestVacuityProducer(feed.units, emit, at),
+    replay: feed.replay,
   };
 }
