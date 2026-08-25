@@ -39,6 +39,53 @@ export const GOVERNANCE_SURFACE: readonly Tool[] = [
  *  authority (guarded structurally in `./guard.ts`). */
 export const WRITE_PATHS: readonly Tool[] = ['atlas-emit', 'atlas-link'];
 
+/** The token vocabulary for `READ_SURFACE` (WP-10.A5.TOOLS, ADR-0005 / ENTRY-MCP-3) — deliberately its OWN
+ *  closed union, NOT a widening of `Tool`. `Tool` names the five `GOVERNANCE_SURFACE` members and stays
+ *  exactly that (ADR-0005 §Why this does not weaken TOOLS-1: growing `Tool` to admit a read door would make
+ *  `GOVERNANCE_SURFACE`'s own count meaningless — see the ADR's rejected alternative (a)). A `ReadDoor` is
+ *  never accepted by `handle(tool, args)`; each is its OWN planner/projection function (`createAnchors` /
+ *  `createSlots` / `createDraft` / `createCheck` / `createDoctor` / `HandlerApi.resolveNode` / `createAtlasDiff`),
+ *  never routed through this handler's `Tool` dispatch. */
+export type ReadDoor =
+  | 'atlas-anchors'
+  | 'atlas-slots'
+  | 'atlas-draft'
+  | 'atlas-check'
+  | 'atlas-doctor'
+  | 'atlas-node'
+  | 'atlas-diff';
+
+/** `READ_SURFACE` (ADR-0005, ENTRY-MCP-3) — the disjoint read/planner surface `GOVERNANCE_SURFACE` unions
+ *  with over MCP (A5.MCP wires the advertisement itself; this WP only freezes the constant + its two
+ *  disjointness properties + the write-freedom proof — see `harness/gates/spec-conformance-guard.mjs`'s
+ *  CODE-SURFACE PIN and `test/wp-10.a5-tools.test.ts`).
+ *
+ *  Membership, transcribed EXACTLY from ADR-0005's Decision + `docs/reference/atlas-authoring.md` A-D2:
+ *    - the four ADR-0004 authoring PLANNERS (AUTHOR-2: persist nothing, hold no store handle) —
+ *      `atlas-anchors` / `atlas-slots` / `atlas-draft` / `atlas-check`;
+ *    - the three already-shipped READ projections (TOOLS-10/12/16) — `atlas-doctor` / `atlas-node` /
+ *      `atlas-diff`.
+ *  Order is fixed; membership is the load-bearing fact (mirrors `GOVERNANCE_SURFACE`'s own convention).
+ *  `atlas-check` and `atlas-diff` are not (yet) reachable from a CLI command in this tree — `check` is
+ *  composed on `ComposedRuntime` (`@atlas/adapter-io` `compose.ts`) with no CLI/MCP door wired to it yet, and
+ *  `diff` is a declared reference model with ZERO production callers (`packages/tools/src/diff.ts`,
+ *  `reference-model-guard.mjs`'s ledger — its own header states "no `atlas diff` CLI command"). Both are
+ *  included here because ADR-0005 and A-D2 name them as `READ_SURFACE` members BY DESIGN — a door being
+ *  unwired to a transport is a wiring gap for a LATER WP to close, not evidence it carries write authority
+ *  (the disjointness + zero-write-authority properties below hold for the TYPE regardless of whether any
+ *  transport currently reaches it) — FLAGGED rather than silently resolved, since ADR-0005's own §Context
+ *  point 1 narrates `atlas-diff` as "wired, tested, and reachable from the CLI", which this tree's `diff.ts`
+ *  now contradicts in its own header. */
+export const READ_SURFACE: readonly ReadDoor[] = [
+  'atlas-anchors',
+  'atlas-slots',
+  'atlas-draft',
+  'atlas-check',
+  'atlas-doctor',
+  'atlas-node',
+  'atlas-diff',
+];
+
 /** A per-tool leg — the concrete tool computation the handler wraps. It MAY throw on a malformed argument;
  *  the wrapper converts that to a structured rejected `Verdict` (TOOLS-2 totality). */
 export type ToolLeg = (args: unknown) => ToolData;
