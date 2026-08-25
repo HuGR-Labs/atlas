@@ -18,8 +18,9 @@
 // `@atlas/knowledge` `GroundedFact` is deliberately NOT imported (it would invert the layer DAG).
 //
 // SCOPE: `isGrounded` is the SEALED co-verb (WP-4.10-a, ../src/drift.ts) — imported/reused, never
-// redefined. `findByKey`/`resolveCurrent` are module-local in the sealed `drift.ts` (not exported); the
-// minimal axes walk is replicated here rather than editing the sealed sibling.
+// redefined. `findByKey` is module-local/private in the sealed `drift.ts`; `resolveCurrent` IS exported
+// there (and reused by adapter-io's grounding-computer + governed-emit-negation), but the minimal axes walk
+// is replicated here rather than editing the sealed sibling to widen its private surface.
 
 import type { StructRef, SubtreeHash } from '@atlas/contracts';
 import type { Axes, IndexNode } from '@atlas/index';
