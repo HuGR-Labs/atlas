@@ -14,7 +14,7 @@ import { main } from './cli.js';
 // yet still index `::` sub-file symbol nodes, so a symbol grounding is groundable and `subsumes` fires.
 void (async () => {
   await initAst();
-  const { handler, doctorSource, promote, own, relations, negations, transitions, transition, testVacuities, testVacuity, verifyFact, reverify, deriveRelations, anchors, readRefusal, readAdvisory } = composeRuntime(process.cwd());
+  const { handler, doctorSource, promote, own, relations, negations, transitions, transition, testVacuities, testVacuity, verifyFact, reverify, deriveRelations, anchors, slots, draft, readRefusal, readAdvisory } = composeRuntime(process.cwd());
   // The provenance refusal rides the same injected-deps seam as the handler (conditional spread keeps it
   // ABSENT on a healthy repo — exactOptionalPropertyTypes), so prod and tests share ONE surface. `promote`
   // (the KNOW-8 governed promotion leg) rides that same seam: it is not a `Tool`, so it cannot arrive through
@@ -70,6 +70,12 @@ void (async () => {
     // planner (@atlas/tools) over the ONE `GroundingComputer` being running code reachable as `atlas anchors` and
     // being a well-tested library nothing calls.
     anchors,
+    // `slots`/`draft` (the WP-10.A2-a / ADR-0004 discovery + composition planners, AUTHOR-5/6/7) ride the same
+    // injected-deps seam as `anchors`. Neither is a `Tool` (opens no governed surface, persists nothing —
+    // AUTHOR-2); threading them here is what makes `atlas slots`/`atlas draft` REACHED shipped paths rather
+    // than reference models nothing outside a unit test calls.
+    slots,
+    draft,
     ...(readRefusal !== undefined ? { readRefusal } : {}),
     // TRAVEL-BY-REPROOF — the ADVISORY MESSAGE for a `tracked-provable` store, rides the same conditional-
     // spread discipline as `readRefusal` (ABSENT, not `undefined`, on a healthy repo — exactOptionalPropertyTypes).

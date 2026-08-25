@@ -47,8 +47,15 @@ import type { Tool, Verdict } from '@atlas/tools';
  *  Like `relations`/`transitions`/`test-vacuities` it binds `atlas-query` — a READ authority oracle — so
  *  `GOVERNANCE_SURFACE` stays 5 and `WRITE_PATHS` is untouched; `authorityOf` DERIVES that from `WRITE_PATHS`,
  *  it is not asserted here. It is intercepted before the handler (cli.ts) and driven over the composition
- *  root's frozen `anchors` leg (`createAnchors` over the ONE `GroundingComputer`, WP-10.A1.TOOLS/ADAPTER). */
-export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'transitions', 'transition', 'test-vacuities', 'test-vacuity', 'verify-fact', 'verify-store', 'derive-relations', 'anchors'] as const;
+ *  root's frozen `anchors` leg (`createAnchors` over the ONE `GroundingComputer`, WP-10.A1.TOOLS/ADAPTER).
+ *  [EXTENDED — WP-10.A2-a.CLI / ADR-0004] `slots` joins as the CLI door of the read-only DISCOVERY planner
+ *  over the closed `PredicateSlot` vocabulary (AUTHOR-5); `draft` joins as the CLI door of the read-only
+ *  COMPOSITION planner (`draft <anchor> <slot> <claim>`, AUTHOR-6/7). Both are PLANNERS, not governed doors:
+ *  they persist NOTHING (AUTHOR-2). Like `anchors` both bind `atlas-query` — a READ authority oracle — so
+ *  `GOVERNANCE_SURFACE` stays 5 and `WRITE_PATHS` is untouched; `authorityOf` DERIVES that from
+ *  `WRITE_PATHS`. Both are intercepted before the handler (cli.ts) and driven over the composition root's
+ *  frozen `slots`/`draft` legs (WP-10.A2-a.TOOLS). */
+export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'transitions', 'transition', 'test-vacuities', 'test-vacuity', 'verify-fact', 'verify-store', 'derive-relations', 'anchors', 'slots', 'draft'] as const;
 export type Command = (typeof COMMANDS)[number];
 
 /** The leg a command routes to — a governance `Tool`, or the genesis entry (data-only; NOT executed here —
@@ -136,6 +143,13 @@ export const COMMAND_LEG: Record<Command, Leg> = {
   //                         the built index and RETURNS the groundable units under a path — it PERSISTS NOTHING
   //                         (AUTHOR-2). Carries NO write authority — it opens no governed token, GOVERNANCE_SURFACE
   //                         stays 5, WRITE_PATHS untouched.
+  slots: 'atlas-query', // READ authority oracle (WP-10.A2-a.CLI / ADR-0004 discovery planner, AUTHOR-5); intercepted
+  //                       before the handler (cli.ts) and driven over the composition root's `slots` leg — the
+  //                       closed PredicateSlot vocabulary. PERSISTS NOTHING (AUTHOR-2); no write authority.
+  draft: 'atlas-query', // READ authority oracle (WP-10.A2-a.CLI / ADR-0004 composition planner, AUTHOR-6/7);
+  //                       intercepted before the handler (cli.ts) and driven over the composition root's `draft`
+  //                       leg — composes a candidate GroundedFact off the ONE GroundingComputer. PERSISTS
+  //                       NOTHING (AUTHOR-2); no write authority.
 };
 
 export type Authority = 'read' | 'write';

@@ -171,6 +171,37 @@ function renderData(data: unknown): string {
     return `data:\n${lines.join('\n')}\n`;
   }
 
+  // slots { slots } — the closed PredicateSlot vocabulary listing (`atlas slots`, AUTHOR-5, WP-10.A2-a.CLI).
+  // Recognised by a `slots` array of `{slot, meaning}` rows (no other data shape carries a `slots` key). A
+  // header line states the COUNT (a measured fact, never a hardcoded "13"); each row renders `  slot <name>:
+  // <meaning>` in the mapping's own declaration order.
+  if (Array.isArray(d.slots)) {
+    const rows = d.slots as readonly { slot: string; meaning: string }[];
+    const lines = [`  slots: ${rows.length} predicate slot(s)`, ...rows.map((s) => `  slot ${s.slot}: ${s.meaning}`)];
+    return `data:\n${lines.join('\n')}\n`;
+  }
+
+  // draft { fact, rev, operation, route, requires? } — the COMPOSITION planner's candidate payload (`atlas
+  // draft <anchor> <slot> <claim>`, AUTHOR-6/7/9/10, WP-10.A2-a.CLI). Recognised by `operation` + `route`
+  // (no other data shape carries either key). Renders the drafted fact's identity/tier/slot/claim, the rev
+  // its grounding was computed at (AUTHOR-7 — pair this with `--at` at emit time), the CREATE/UPDATE call
+  // and the stated ratification route (AUTHOR-9/10); the authorizing channel renders ONLY when present
+  // (additive/absent-tolerant, matching the `seal`/`witness` discipline above).
+  if (typeof d.operation === 'string' && typeof d.route === 'string' && typeof d.fact === 'object' && d.fact !== null) {
+    const fact = d.fact as Record<string, unknown>;
+    const lines = [
+      `  draft: ${String(fact.id)}`,
+      `  tier: ${String(fact.tier)}`,
+      `  slot: ${String(fact.predicateSlot)}`,
+      `  claim: ${String(fact.claimNorm)}`,
+      `  rev: ${String(d.rev)}`,
+      `  operation: ${d.operation}`,
+      `  route: ${d.route}`,
+    ];
+    if (typeof d.requires === 'string') lines.push(`  requires: ${d.requires}`);
+    return `data:\n${lines.join('\n')}\n`;
+  }
+
   // link { linked, a, b, retracted? } — the governed sameAs write door result (WP-SAMEAS). A SUCCESSFUL link
   // renders a single `  linked: <a> ≡ <b>` line; a REJECTED link (linked:false) carries its `rejected` string
   // through the handler's ok:false path → the `reason:` block (mirrors emit), so it is never shadowed here.
