@@ -45,11 +45,17 @@ function w(rel, body) {
   writeFileSync(p, body);
 }
 
-/** check (1): the built governance surface. Defaults to the canonical arrays; pass overrides to mutate. */
-function surface(governance = ['atlas-init', 'atlas-query', 'atlas-emit', 'atlas-reconcile', 'atlas-link'], writePaths = ['atlas-emit', 'atlas-link']) {
+/** check (1): the built governance surface. Defaults to the canonical arrays; pass overrides to mutate.
+ *  [WP-10.A5.TOOLS] `readSurface` joins `governance`/`writePaths` — the CODE-SURFACE PIN now also checks
+ *  `READ_SURFACE` (6 members, ADR-0005) + its two disjointness properties. */
+function surface(
+  governance = ['atlas-init', 'atlas-query', 'atlas-emit', 'atlas-reconcile', 'atlas-link'],
+  writePaths = ['atlas-emit', 'atlas-link'],
+  readSurface = ['atlas-anchors', 'atlas-slots', 'atlas-draft', 'atlas-check', 'atlas-doctor', 'atlas-node'],
+) {
   w(
     'packages/tools/dist/src/index.js',
-    `export const GOVERNANCE_SURFACE = ${JSON.stringify(governance)};\nexport const WRITE_PATHS = ${JSON.stringify(writePaths)};\n`,
+    `export const GOVERNANCE_SURFACE = ${JSON.stringify(governance)};\nexport const WRITE_PATHS = ${JSON.stringify(writePaths)};\nexport const READ_SURFACE = ${JSON.stringify(readSurface)};\n`,
   );
 }
 
@@ -96,6 +102,22 @@ describe('spec-conformance-guard — the gate can be falsified', () => {
     surface(undefined, ['atlas-emit', 'atlas-link', 'atlas-init']);
     const { code, out } = runGate();
     expect(out).toMatch(/CODE-SURFACE: WRITE_PATHS = \[.*atlas-init.*\] ≠ canonical/);
+    expect(code).toBe(1);
+  });
+
+  // [WP-10.A5.TOOLS] catches a mutated READ_SURFACE — cardinality, and a member that overlaps a governed set.
+  it('catches a mutated READ_SURFACE (cardinality drift)', () => {
+    surface(undefined, undefined, ['atlas-anchors', 'atlas-slots', 'atlas-draft', 'atlas-check', 'atlas-doctor']);
+    const { code, out } = runGate();
+    expect(out).toMatch(/CODE-SURFACE: READ_SURFACE = \[.*\] ≠ canonical/);
+    expect(code).toBe(1);
+  });
+
+  it('catches a READ_SURFACE member that overlaps GOVERNANCE_SURFACE/WRITE_PATHS (ENTRY-MCP-3 disjointness)', () => {
+    surface(undefined, undefined, ['atlas-anchors', 'atlas-slots', 'atlas-draft', 'atlas-check', 'atlas-doctor', 'atlas-node', 'atlas-emit']);
+    const { code, out } = runGate();
+    expect(out).toMatch(/CODE-SURFACE: READ_SURFACE ∩ GOVERNANCE_SURFACE ≠ ∅ — shared member\(s\) \[atlas-emit\]/);
+    expect(out).toMatch(/CODE-SURFACE: READ_SURFACE ∩ WRITE_PATHS ≠ ∅ — shared member\(s\) \[atlas-emit\]/);
     expect(code).toBe(1);
   });
 

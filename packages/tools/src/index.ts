@@ -6,7 +6,12 @@
 // `atlas-link` (sameAs edges) (TOOLS-1 / ADR-0003; grounded-row integrity structurally enforced by the
 // governed-store guard, TOOLS-15). `atlas-diff` (TOOLS-16), `atlas doctor` (TOOLS-12), and the per-node
 // projections (TOOLS-10) are READ-ONLY views of the same store, carrying NO write authority — NOT
-// governance tools.
+// governance tools. [WP-10.A5.TOOLS, ADR-0005] `atlas doctor` / the per-node projection, plus the four
+// ADR-0004 authoring planners (`atlas-anchors`/`atlas-slots`/`atlas-draft`/`atlas-check`), are the frozen,
+// disjoint 6-member `READ_SURFACE` (`handler.ts`) — the set MCP advertises alongside `GOVERNANCE_SURFACE`
+// (A5.MCP wires the advertisement; this facet only freezes + pins the constant). `atlas-diff` is NOT a
+// member (owner-decided 2026-08-24): it is a declared zero-caller reference model, unwired to any transport
+// — see its own note below and `diff.ts`'s header.
 // Re-exports the package's FULL public surface so consumers import from the bare package root
 // (`import type { Verdict } from '@atlas/tools'`). Each frozen interface is co-located with its impl; the
 // shared (handler) and impl-less (node) ones live in types.ts.
@@ -27,6 +32,10 @@ export * from './check.js';       // WP-10.A3.TOOLS — the read-only `check` DR
 export * from './guard.js';       // WP-7.26-a.TOOLS — INV-TOOLS-15 single-write-door structural store guard (store-row medium: emit-only, append-only/permissioned)
 export * from './fault.js';      // ERROR ATTRIBUTION — the three fault classes at the one handler (malformed-args / refusal / internal-fault) + faultOf
 export * from './handler.js';     // WP-7.26-a/-b/-c.TOOLS — one pure+total handler (GOVERNANCE_SURFACE.length === 5, WRITE_PATHS === ['atlas-emit','atlas-link']) + schema + resolveNode
+//                                   [WP-10.A5.TOOLS, ADR-0005] `handler.js` also carries `READ_SURFACE` (length 6) — the
+//                                   disjoint planner/read-projection surface `GOVERNANCE_SURFACE` unions with over MCP;
+//                                   this WP freezes + pins the constant only, it does NOT wire the MCP advertisement (A5.MCP).
+//                                   `atlas-diff` is excluded (owner-decided) — see the `./diff.js` note below.
 export * from './query.js';       // WP-7.26-b.TOOLS — atlas-query read projection
 export * from './bands.js';       // WP-per-fact-freshness — ADR-0013 two-band pack split + ADVISORY_CAP (the ONE definition; @atlas/adapter-io imports it)
 export * from './doctor.js';      // WP-7.26-b.TOOLS — read/advisory-only doctor (persists nothing; reground → plan via atlas-emit)
@@ -35,4 +44,8 @@ export * from './diff.js';        // WP-7.32.TOOLS — atlas-diff read-only vers
 //                                   (the barrel used to call it "not a 5th tool" — pre-ADR-0003 wording; the surface is 5, so it would
 //                                   be a sixth — and it is wired to NEITHER transport today: no `atlas diff` CLI command, and MCP
 //                                   advertises GOVERNANCE_SURFACE only, so `handle('atlas-diff')` fails closed as off-surface)
+//                                   [WP-10.A5.TOOLS — OWNER-DECIDED 2026-08-24] `atlas-diff` is ALSO NOT a `READ_SURFACE`
+//                                   member: ARCH-5 (advertised≡invocable) means an unwired door has no business in an
+//                                   ADVERTISED surface. It stays a declared reference model (reference-model-guard.mjs's
+//                                   ledger) until it is genuinely wired to a transport, in its own later WP.
 export * from './push.js';        // WP-6.22.TOOLS — TOOLS-14 phase-transition auto-inject (push-no-grant, mid-task pull non-load-bearing)
