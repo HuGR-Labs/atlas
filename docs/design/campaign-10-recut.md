@@ -72,8 +72,10 @@ EPIC-A4   A4.TOOLS(widen EmitOut w/ read nodeKey) → A4.ADAPTER(populate receip
 EPIC-A5   A5.TOOLS(READ_SURFACE export) → A5.MCP(advertise union + membership check) → A5.E2E(byte-parity + DELETE author.ts)
 ```
 
-No cycles. Campaign order stays `10.1 (A1,A2-a,A2-b) → 10.2 (A3,A4) → 10.3 (A5)`. Acceptance is unchanged:
-a human authors+emits a fact through product doors on both transports, after which `author.ts` is deleted.
+No cycles. Campaign order stays `10.1 (A1,A2-a,A2-b) → 10.2 (A3,A4) → 10.3 (A5)`. Acceptance:
+a human authors+emits a fact through product doors on both transports. [AMENDED 2026-08-25, owner-decided —
+see ADR-0004 §Consequences] The acceptance is that product-door proof, NOT the physical deletion of
+`author.ts` (which also carries a legitimate adversarial-fixture role that is kept).
 
 ## Cold-review findings ledger (#85)
 
