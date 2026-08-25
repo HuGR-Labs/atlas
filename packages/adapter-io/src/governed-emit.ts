@@ -93,30 +93,28 @@
 // frozen core (`@atlas/tools` emit, `@atlas/knowledge` upsert, the GROUND gate) — it re-implements none.
 
 import type { CasObject } from '@atlas/kernel';
-import type { Hash, Tier } from '@atlas/contracts';
-import { upsert, route, stage, ratify, isTier, isScope } from '@atlas/knowledge';
-import type { Candidate, CurrentNode, GroundedFact, NegationNode, TransitionNode, TestVacuityNode, NodeFamily, WriteRequest, RatifyToken, WriteOrigin } from '@atlas/knowledge';
+import type { Hash } from '@atlas/contracts';
+import { upsert } from '@atlas/knowledge';
+import type { Candidate, CurrentNode, GroundedFact, NegationNode, TransitionNode, TestVacuityNode, WriteRequest, WriteOrigin } from '@atlas/knowledge';
 import { emitNegation, type NegationEmitDeps } from './governed-emit-negation.js'; // #99b N2 — THE ABSTENTION DOOR
 import { emitTransition } from './governed-emit-transition.js'; // #234 D4 — THE TRANSITION DOOR
 import { emitTestVacuity } from './governed-emit-test-vacuity.js'; // #95 D5 — THE TEST-VACUITY DOOR (relation gate ladder + produced-only)
 // FAMILY + IDENTITY resolution (all three fact shapes) — extracted at the LOC ceiling; a relation (ADR-0015
 // D2) is addressed by `relationKey`, never the intrinsic `nodeKey`. See that file's header.
-import { familyOf, claimNormOf, relationWellFormed, relationCarriers, resolveWriteIdentity, stripForgedRelationSeal } from './governed-emit-identity.js';
+import { claimNormOf, relationCarriers, resolveWriteIdentity } from './governed-emit-identity.js';
 import type { EmitOut, TruthGate } from '@atlas/tools';
-import { ratifyCtxFor } from './governed-emit-route.js';
-// The ADDRESSABILITY gate + the commit-leg re-file (#136) — that file carries the measurement + the decision.
-import { addressOf, commitRefusalOf } from './governed-emit-address.js';
-import { actorInScope, scopeOwnsAnchor } from './policy.js';
-import type { AtlasPolicy } from './policy.js';
+// The GATE CHAIN (WP-10.A3.ADAPTER) — the four `GateName` buckets (`shape`|`truth`|`authz`|`ratify`),
+// extracted as PURE predicates so a store-less `check` leg (A3.TOOLS) can fold the SAME functions, in the
+// SAME order, over a read-only snapshot. See that file's header for the split-across-the-commit-boundary
+// rationale (shape+truth are incumbent-independent and run once; authz+ratify run per commit attempt).
+import { evalShapeGate, evalTruthGate, evalAuthzGate, evalRatifyGate } from './governed-emit-gates.js';
 import type { DiskStore } from './store.js';
 import type { CommitResult } from './sidecar.js';
-// The structured fail-closed reasons (TOOLS-7b / KNOW-11 / KNOW-8) — the door's user-visible contract AND
-// its disclosure surface, extracted to their own module at the LOC ceiling. See that file's header.
-import {
-  REJECTED_CONTENDED, REJECTED_UNREADABLE_STORE, REJECTED_MALFORMED_FAMILY, REJECTED_MALFORMED_RELATION, REJECTED_MALFORMED_SCOPE, REJECTED_MALFORMED_TIER,
-  REJECTED_UNAUTHORIZED, REJECTED_UNAUTHORIZED_ANCHOR, REJECTED_UNGROUNDED, REJECTED_UNRATIFIED,
-} from './governed-emit-reasons.js';
-import { incumbentDecision } from './governed-emit-incumbent.js';
+// The COMMIT-stage refusals (door-wide, outside the GateName ladder — neither discloses anything about a
+// node) + the ADDRESSABILITY commit-leg re-file (#136). See that file's header.
+import { commitRefusalOf } from './governed-emit-address.js';
+import { REJECTED_CONTENDED, REJECTED_UNREADABLE_STORE } from './governed-emit-reasons.js';
+import type { AtlasPolicy } from './policy.js';
 // The PROVENANCE refusal, shared with the read doors — one constant, so the write and read halves of the
 // tripwire cannot describe the same condition two different ways.
 import { REJECTED_UNTRUSTED_STORE } from './read-provenance.js';
@@ -163,106 +161,28 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
     // IS used, unlike a transition) PLUS produced-only (the forge guard: its witness is not door-re-derivable).
     if (raw.kind === 'test-vacuity') return emitTestVacuity(deps, raw as TestVacuityNode, at);
 
-    // 0. WELL-FORMED PAYLOAD — `tier`, `scope` and the `kind`/`check` pair: the three fields every LATER
-    //    gate routes on, and the three the author supplies.
-    //
-    //    `Tier` is a TYPE-ONLY union: it does not exist at runtime, and nothing upstream validates it —
-    //    `atlas emit` is `JSON.parse` + a cast, and the MCP `node` schema declares a bare `object`. So this
-    //    is the FIRST place an arbitrary payload value can be refused, and it must be, for two separate
-    //    reasons that a lattice-level guard alone does not cover:
-    //      · on an UPDATE, an off-lattice class made the downgrade comparison meaningless (`0 < undefined`
-    //        is `false`), which is the reproduced T0→T3→T2 erasure;
-    //      · on a CREATE there is no incumbent at all, so no lattice guard ever runs — yet the read side
-    //        bounds a pack with `inv.tier !== 'T2'` (TOOLS-6), so a node minted at `'T3'` would be served
-    //        as though it were ratified `T1`-or-stricter. Garbage in the class field is not a lesser
-    //        problem than a downgrade; it is the same problem one step earlier.
-    //    Read ONCE and carry the snapshot. Re-reading `raw.tier` at each gate would let a property whose
-    //    value changes between reads clear gate 0 as `T2` and route as something else — a TOCTOU. That is
-    //    unreachable over the CLI and MCP wires (both are `JSON.parse`, which cannot produce an accessor),
-    //    but `createGovernedEmit` is an EXPORTED library entry point, so an in-process embedder can hand it
-    //    any object at all. Gating a snapshot and then persisting that same snapshot means what was checked
+    // 0. WELL-FORMED PAYLOAD (the SHAPE gate — `GateName:'shape'`) — `tier`, `scope`, the `kind`/`check`
+    //    pair, relation well-formedness, grounding well-formedness (AUTHOR-12 — closes the 2026-07-25
+    //    dogfood's raw TypeError) and addressability, in that fixed order. EXTRACTED to `evalShapeGate`
+    //    (WP-10.A3.ADAPTER — see that file's header): a store-less `check` leg folds the identical function.
+    //    `Tier`/`scope` are TYPE-ONLY: nothing upstream validates them (`atlas emit` is `JSON.parse` + a
+    //    cast; the MCP `node` schema declares a bare `object`), so this is the FIRST place an arbitrary
+    //    payload can be refused. Read ONCE and the snapshot carried — re-reading `raw.tier` at each gate
+    //    would let a property whose value changes between reads clear this gate as `T2` and route as
+    //    something else (a TOCTOU unreachable over the CLI/MCP wires but reachable through the exported
+    //    library entry point). Gating a snapshot and persisting that same snapshot means what was checked
     //    is exactly what is stored.
-    //
-    //    `scope` IS THE OTHER HALF OF THE PAIR and had no guard at all — `isTier` was added for one of the
-    //    two fields a reader trusts and the symmetric one was left to the authz gate, which does not test
-    //    the SHAPE. `actorInScope` looks the scope up as a property KEY, and property keys COERCE: a
-    //    JSON-reachable `"scope": ["core"]` reads as `core` there and passes. The relocation gate below then
-    //    compares `node.scope !== stored.scope`, which for an object is REFERENCE equality — so nothing ever
-    //    equals it again, not even a byte-identical array literal re-sent by the same actor. Since `nodeKey`
-    //    is deterministic over PUBLIC code structure, any actor holding any scope could pre-compute an
-    //    anchor, squat it, and leave that (anchor, slot) unwritable by EVERYONE, billy included, forever —
-    //    the re-classification/migration door (task #88) is not built. Refused here for the same reason as
-    //    `tier`: the pair `(scope, tier)` is what a later reader trusts, so both halves are checked, and the
-    //    CHECKED value is the STORED one (the shorthand comes after the spread — that ordering is
-    //    load-bearing for both).
-    const tier = raw.tier;
-    if (!isTier(tier)) {
-      return { emitted: false, rejected: REJECTED_MALFORMED_TIER };
+    const shapeVerdict = evalShapeGate(raw, deps.origin);
+    if (!shapeVerdict.pass) {
+      return { emitted: false, rejected: shapeVerdict.result.reason ?? shapeVerdict.result.gate };
     }
-    const scope = raw.scope;
-    if (!isScope(scope)) {
-      return { emitted: false, rejected: REJECTED_MALFORMED_SCOPE };
-    }
-    // SEAL IS TRUSTED IFF THE WRITE IS PROMOTE-ORIGIN (billy T0, #187 → SEAL-PROMOTE-CARRY). `seal` (`proven`)
-    // is a TRUST SIGNAL write-gated to the sound admit path (`mine-decide.ts`, from `buildSound`'s oracle
-    // verdict). `origin` is DOOR-DERIVED, never from the payload (`RatifyContext.origin` — an operator cannot
-    // set it): a `promoted` write is a MINED fact re-emitted from the content-addressed staging CAS the
-    // trusted admit path wrote, so its `seal` is trusted; an AUTHORED write (`atlas emit <json>` / an
-    // in-process embedder) carries an UNTRUSTED payload, so a hand-written `seal` is a forgeable trust signal
-    // and must NOT survive onto `node` — which is what the WriteRequest AND the CAS bytes are both built from.
-    // So: keep `raw.seal` on `node` ONLY for `origin==='promoted'`; strip it for authored/undefined. Both
-    // branches then flow to the seal carrier at gate 3 (present ⇒ reaches the durable current row + bytes).
-    const { seal: _rejectedOperatorSeal, ...rawNoSeal } = raw;
-    const nodeWithSeal: GroundedFact =
-      deps.origin === 'promoted' ? { ...raw, tier, scope } : { ...rawNoSeal, tier, scope };
+    const { node, tier, scope, family, contentHash } = shapeVerdict;
 
-    // 0.05 FORGED RELATION SEAL (#99 ADR-0018, decision D-d) — the origin strip above trusts a PROMOTED
-    //    write's `seal` because a promote is a mined fact re-emitted from content-addressed staging the sound
-    //    admit path wrote. For a RELATION that trust is tightened by the witness itself: the sound relation
-    //    oracle (`admit-relation.ts`) is the ONLY minter of a proven `depends-on` edge and ALWAYS stamps a
-    //    re-derivable `RelationWitness` beside the seal, so a `seal:'proven'` relation with no valid witness
-    //    could not have come from it — a forgery (a hand-supplied proven seal, or a promote of one). Strip its
-    //    seal+witness HERE so the forgery is never persisted OR read back as proven — the WRITE-time rejection
-    //    D-d requires, not a mere `unverifiable` at read. A non-relation and a valid promoted proven relation
-    //    pass through byte-identical; the stripped relation still admits as an ordinary unsealed grounded edge.
-    const node: GroundedFact = stripForgedRelationSeal(nodeWithSeal);
-
-    //    THE FAMILY — `kind` cross-checked against `check`, on the SNAPSHOT (a spread reads each accessor
-    //    once, so every gate below sees the same bytes `put` will). Read `familyOf` for why presence is the
-    //    source of truth and `kind` the reading that had to agree. Refusing the contradiction is what closes
-    //    BOTH directions: `advisory`-with-a-check (which routed an UPDATE onto a predicate node, dropping a
-    //    generation of supersede lineage) and `predicate`-without-one (which threw a raw TypeError).
-    const family = familyOf(node);
-    if (family === undefined) {
-      return { emitted: false, rejected: REJECTED_MALFORMED_FAMILY };
-    }
-
-    // 0.1 WELL-FORMED RELATION (ADR-0015 D2) — a `family:'relation'` fact is identified by the ordered triple
-    //     (endpointA, relationKind, endpointB); refuse it here if any leg is malformed. Like `malformed
-    //     family`, it reads the caller's OWN payload and discloses nothing about an incumbent, so it belongs at
-    //     gate 0 before the truth door. A non-relation passes unconditionally. This makes `relationKey`
-    //     (called in `resolveWriteIdentity` below) unable to throw on a shape that reached this point.
-    if (!relationWellFormed(node)) {
-      return { emitted: false, rejected: REJECTED_MALFORMED_RELATION };
-    }
-
-    // 0.5 ADDRESSABLE — minted HERE, once, and REFUSED here rather than thrown from inside the commit. Safe
-    //     at this position: answered from the caller's OWN payload, so it discloses less than every gate below.
-    const addressed = addressOf(node);
-    if (addressed.rejected !== undefined) {
-      return { emitted: false, rejected: addressed.rejected };
-    }
-    const contentHash = addressed.hash;
-
-    // 1. TRUTH DOOR — re-derive the citation; a non-HOLDS verdict fails closed, nothing persisted.
-    if (deps.gate.gateHolds(node, at) !== 'HOLDS') {
-      return { emitted: false, rejected: REJECTED_UNGROUNDED };
-    }
-
-    // 2. AUTHZ — the KNOW-11 owner-scoped write gate; an actor not in the fact's scope is denied. An
-    //    empty/unset actor is in NO scope ⇒ every write is denied (fail-closed v1).
-    if (!actorInScope(deps.policy, deps.actor, node.scope)) {
-      return { emitted: false, rejected: REJECTED_UNAUTHORIZED };
+    // 1. TRUTH DOOR (`GateName:'truth'`) — re-derive the citation; a non-HOLDS verdict fails closed,
+    //    nothing persisted. EXTRACTED to `evalTruthGate`.
+    const truthVerdict = evalTruthGate(node, at, deps.gate);
+    if (!truthVerdict.pass) {
+      return { emitted: false, rejected: truthVerdict.reason ?? truthVerdict.gate };
     }
 
     // A GroundedFact carries its slot as `predicateSlot`; the `Candidate` identity/route fns
@@ -279,48 +199,29 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
       slot: node.kind === 'advisory' || node.kind === 'predicate' ? node.predicateSlot : undefined,
     } as unknown as Candidate;
 
-    // 2.1 ANCHOR BINDING (ARCH-9 for `scope` — ADR-0010 open item 3). Gate 2 asked whether the actor is in
-    //    the scope this write DECLARES; the author picks that string. Meanwhile the READ projection scopes
-    //    on the DERIVED `primaryAnchor` and never reads the row's scope at all
-    //    (`projection-query-index.ts`). Nothing bound the two, so an actor authorized only in `public` could
-    //    write a fact ANCHORED under `src/payments`, declare `scope:'public'`, clear authz, and have it
-    //    SERVED to `atlas query src/payments`. The incumbent gates below do NOT cover it: they stop a node
-    //    MOVING once it exists, and this is a CREATE — there is no incumbent to derive from.
+    // AUTHZ (`GateName:'authz'`, gates 2 / 2.1 / 2.25) — actor-in-declared-scope, then the ARCH-9 anchor
+    //    binding (ADR-0010 open item 3: gate 2 asks whether the actor is in the scope this write DECLARES;
+    //    the author picks that string, while the READ projection scopes on the DERIVED `primaryAnchor` and
+    //    never reads the row's scope at all — nothing bound the two before this gate), then the FOUR
+    //    incumbent-derived gates (the write's TARGET decides which gate it must clear, never the write
+    //    itself; see `governed-emit-incumbent.ts` for the confused-deputy narrative). EXTRACTED to
+    //    `evalAuthzGate` (WP-10.A3.ADAPTER): a store-less `check` leg folds the identical function.
     //
-    //    The binding is admin-DECLARED (`authz.anchors` in `.atlas/policy.json`), and NOT declared is the
-    //    default, so this gate stands aside on every policy that predates it. That is a NARROWING, not a
-    //    closure, and it is written down as one: which scope owns which anchor prefix is an owner judgement
-    //    about a particular repo, and a hard rule was measured to be unshippable here (governance scopes in
-    //    this product are labels like `core` while anchors are paths like `src/a.ts` — see `policy.ts`).
+    //    `targetKey`/`primaryAnchor` are resolved here (ADR-0015 D2: a RELATION binds on `endpointA`, its
+    //    SUBJECT, via `relationKey`; an intrinsic fact binds on `primaryAnchorId`, which THROWS
+    //    `DegenerateAnchorError` on a degenerate grounding — the door's existing behaviour, unchanged) and
+    //    reused by the WriteRequest below — one identity, one read.
     //
-    //    ORDER: it runs immediately after authz and BEFORE any incumbent is resolved, because it discloses
-    //    nothing but the policy file the caller can already read — so it owes the increasing-disclosure rule
-    //    nothing, and putting it later would let a caller with no authority over the target learn about the
-    //    target first. `primaryAnchorId` THROWS on a degenerate anchor (`DegenerateAnchorError`), which is
-    //    the door's existing behaviour for that shape and is left exactly as it was.
-    //
-    //    ADR-0015 D2: a RELATION resolves its identity + binding anchor differently — `targetKey` is
-    //    `relationKey(endpointA, kind, endpointB)` (the intrinsic `nodeKey→primaryAnchorId` throws on the
-    //    cross-file pair), and the scope gate binds on `endpointA` (the directed fact's SUBJECT — contract
-    //    §4a). `resolveWriteIdentity` branches on kind; for a relation `primaryAnchorId` is NEVER called.
+    //    2.25's incumbent-derived sub-gates need the LIVE incumbent, so `evalAuthzGate` runs PER COMMIT
+    //    ATTEMPT, inside the closure below — re-evaluated on every retry against whatever the projection
+    //    resolves at THAT attempt (ADR-0007: a decision must never be published against a snapshot that has
+    //    since acquired a billy-ratified T0 incumbent). Gates 2/2.1 do not depend on the incumbent at all —
+    //    folding them into the same per-attempt call is behaviour-preserving (deterministic given the same
+    //    payload/policy/actor, so a retry recomputes an IDENTICAL verdict for those two) and keeps the whole
+    //    AUTHZ bucket as ONE fold, matching the store-less leg's single pass.
     const { primaryAnchor, targetKey } = resolveWriteIdentity(node, candidateView);
-    if (!scopeOwnsAnchor(deps.policy, scope, primaryAnchor)) {
-      return { emitted: false, rejected: REJECTED_UNAUTHORIZED_ANCHOR };
-    }
 
-    // 2.25 INCUMBENT GUARD — the write's TARGET decides which gate it must clear, never the write itself.
-    //    The four target-derived gates and the whole confused-deputy narrative behind them live in
-    //    `./governed-emit-incumbent.ts`, extracted at the LOC ceiling. What stays HERE is the ORDER: this
-    //    call sits between authz and ratify, and `incumbentRefusal` returns the reason rather than deciding
-    //    `emitted`, so the door's increasing-disclosure sequence is still legible in one file.
-    //
-    //    The projection is read ONCE PER ATTEMPT — by the commit below, which hands the SAME snapshot to
-    //    these gates and to the upsert, so what the gates were priced against is exactly what the upsert
-    //    lands on. (An earlier version of this comment claimed the projection had been read TWICE before —
-    //    it had not. Parity presented as an improvement; corrected rather than deleted.)
-    //    (`targetKey` was resolved above by `resolveWriteIdentity` — one identity, kind-aware, one read.)
-
-    // ── THE ATOMIC COMMIT (stages 2.25 → 4) ─────────────────────────────────────────────────────────────
+    // ── THE ATOMIC COMMIT (stages 2 → 4) ────────────────────────────────────────────────────────────────
     // Everything from here down is ONE decision, taken against ONE snapshot of the projection and published
     // as a whole or not at all. The old shape — rehydrate, gate, upsert, `persistProjection` — was a
     // read-modify-whole-file-write with no lock and no compare-and-swap: 8 concurrent `atlas emit`s over a
@@ -340,26 +241,29 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
     try {
       committed = deps.store.commitProjection<EmitOut>((projection) => {
         const incumbent: CurrentNode | undefined = projection.current.get(targetKey);
+        const authzVerdict = evalAuthzGate({
+          policy: deps.policy, actor: deps.actor, scope, tier, node, candidateView, primaryAnchor,
+          incumbent, store: deps.store,
+        });
+        if (!authzVerdict.pass) {
+          return { out: { emitted: false, rejected: authzVerdict.result.reason ?? authzVerdict.result.gate } };
+        }
         // ARCH-9: the class the RESOURCE carries. Absent on a CREATE (nothing to derive from — ARCH-D3b, the
         // OPEN owner DEFINE) and on a refusal (the write does not reach `route` at all).
-        let derivedTier: Tier | undefined;
-        if (incumbent !== undefined) {
-          const decision = incumbentDecision(deps, incumbent, node, tier);
-          if (decision.refusal !== undefined) return { out: { emitted: false, rejected: decision.refusal } };
-          derivedTier = decision.derivedTier;
-        }
+        const derivedTier = authzVerdict.derivedTier;
 
-        // 2.5 RATIFY — the KNOW-8/KNOW-18 tier-ratification gate, BETWEEN authz and upsert. The fast-path
-        //    `route` auto-accepts a grounded ∧ lowRisk ∧ T2 ∧ advisory ∧ ¬contested fact (the common case —
-        //    straight to upsert, unchanged behavior). A T0 / predicate / contested fact routes to FULL
-        //    ratification: it commits ONLY with a valid KNOW-8 token, and a T0 fact requires the `billy` token.
-        //    The token is env-sourced by the composition root (never the payload). Absent/invalid ⇒ REJECTED
-        //    fail-closed, nothing persisted — this is the door that was previously bypassing the human+billy gate.
-        //    ARCH-9: the route is selected by `strictestTier(derived, declared)` when the door could derive a
-        //    class from the incumbent, and by the declared class alone on a CREATE. See `ratifyCtxFor`.
-        if (route(candidateView, ratifyCtxFor(derivedTier, deps.origin)) === 'full-ratify') {
-          const token: RatifyToken = { by: deps.ratifyToken ?? '' };
-          if (!ratify(stage(candidateView), token).committed) return { out: { emitted: false, rejected: REJECTED_UNRATIFIED } };
+        // RATIFY (`GateName:'ratify'`, gate 2.5) — the KNOW-8/KNOW-18 tier-ratification gate, BETWEEN authz
+        //    and upsert. EXTRACTED to `evalRatifyGate`. The fast-path `route` auto-accepts a grounded ∧
+        //    lowRisk ∧ T2 ∧ advisory ∧ ¬contested fact (the common case — straight to upsert, unchanged
+        //    behavior). A T0 / predicate / contested fact routes to FULL ratification: it commits ONLY with
+        //    a valid KNOW-8 token, and a T0 fact requires the `billy` token. The token is env-sourced by the
+        //    composition root (never the payload). Absent/invalid ⇒ REJECTED fail-closed, nothing persisted
+        //    — this is the door that was previously bypassing the human+billy gate. ARCH-9: the route is
+        //    selected by `strictestTier(derived, declared)` when the door could derive a class from the
+        //    incumbent, and by the declared class alone on a CREATE. See `ratifyCtxFor`.
+        const ratifyVerdict = evalRatifyGate({ candidateView, derivedTier, origin: deps.origin, ratifyToken: deps.ratifyToken });
+        if (!ratifyVerdict.pass) {
+          return { out: { emitted: false, rejected: ratifyVerdict.reason ?? ratifyVerdict.gate } };
         }
 
         // 3. ROUTE + UPSERT — the KNOW-15 write-decision over the rehydrated projection (mine.ts parity).
