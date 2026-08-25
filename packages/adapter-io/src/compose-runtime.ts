@@ -9,7 +9,7 @@
 // is reachable ONLY through `compose.ts`'s re-export, never imported directly by another module.
 
 import type { Hash } from '@atlas/contracts';
-import type { AnchorsApi, DoctorSource, DraftApi, SlotsApi } from '@atlas/tools';
+import type { AnchorsApi, CheckApi, DoctorSource, DraftApi, SlotsApi } from '@atlas/tools';
 import type { WiredHandler } from './wire.js';
 import type { PromoteOut } from './governed-promote.js';
 import type { OwnLeg } from './own-source.js';
@@ -73,6 +73,13 @@ export interface ComposedRuntime {
    *  drafted fact re-derives against the gate's own oracle by construction. Rides beside the handler like
    *  `anchors`: NOT a `Tool`, persists nothing (AUTHOR-2). */
   readonly draft: DraftApi['draft'];
+  /** The read-only `check` DRY-RUN planner (WP-10.A3 / ADR-0004, AUTHOR-11/12) — `check(candidate, at)` folds
+   *  the governed emit door's WHOLE gate chain (`shape → truth → authz → ratify`) over a candidate fact
+   *  WITHOUT any write, via the injected `GateChainRunner` port (`@atlas/tools` `check.ts`) implemented over
+   *  `runGateChain` (`check-source.ts`, WP-10.A3.ADAPTER). Its verdict agrees with the real door's BY
+   *  CONSTRUCTION (PROP-AUTH-11) — same store, same truth-gate, same policy, same actor, same ratify token.
+   *  Rides beside the handler like `draft`: NOT a `Tool`, opens no write path (AUTHOR-2). */
+  readonly check: CheckApi['check'];
   /**
    * The grounded-relation READ leg (#99a / ADR-0015 D2) — `relations(unit, direction)` returns the
    * `family:'relation'` facts touching a unit, both directions, via the `relationsOf` fold.

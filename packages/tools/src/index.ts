@@ -23,6 +23,7 @@ export * from './init.js';        // WP-8.27.TOOLS — atlas-init move-in: $0-LL
 export * from './anchors.js';     // WP-10.A1.TOOLS — GroundingComputer PORT (AUTHOR-1) + the read-only `anchors` DISCOVERY planner (ADR-0004; NOT a governance tool, carries no write authority)
 export * from './slots.js';       // WP-10.A2-a.TOOLS — the read-only `slots` DISCOVERY planner (AUTHOR-5, ADR-0004; NOT a governance tool)
 export * from './draft.js';       // WP-10.A2-a.TOOLS — the read-only `draft` COMPOSITION planner (AUTHOR-6/7, ADR-0004; NOT a governance tool, persists nothing)
+export * from './check.js';       // WP-10.A3.TOOLS — the read-only `check` DRY-RUN planner + GateChainRunner PORT (AUTHOR-11/12, ADR-0004; NOT a governance tool, opens no write path)
 export * from './guard.js';       // WP-7.26-a.TOOLS — INV-TOOLS-15 single-write-door structural store guard (store-row medium: emit-only, append-only/permissioned)
 export * from './fault.js';      // ERROR ATTRIBUTION — the three fault classes at the one handler (malformed-args / refusal / internal-fault) + faultOf
 export * from './handler.js';     // WP-7.26-a/-b/-c.TOOLS — one pure+total handler (GOVERNANCE_SURFACE.length === 5, WRITE_PATHS === ['atlas-emit','atlas-link']) + schema + resolveNode
