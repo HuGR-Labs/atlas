@@ -19,8 +19,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, mcpSession, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedAdvisoryFact } from './author.js';
 import { ACTOR, RATIFIER, emitFact, invLines, scopedPolicy } from './support.js';
+import { draftFact } from './author8-subprocess.js';
 
 const SRC = 'export const foo = 1;\n';
 const MORE = 'export const bar = 2;\n';
@@ -43,7 +43,7 @@ beforeAll(() => {
 
   repo = makeFixtureRepo({ files: { 'src/foo.ts': SRC }, policy: scopedPolicy('src') });
   // Emit ONE FRESH grounded fact at genesis HEAD — the store stamps `builtAt = HEAD-at-persist` (N11).
-  const fact = groundedAdvisoryFact({ repoPath: repo.repoPath, filePath: 'src/foo.ts', slot: 'invariant', claim: 'foo is one' });
+  const fact = draftFact(repo, 'src/foo.ts', 'invariant', 'foo is one').fact;
   factId = fact.id as unknown as string;
   const e = emitFact(repo, fact);
   if (e.exitCode !== 0) throw new Error(`S15 setup: grounded emit failed:\n${e.stdout}`);
