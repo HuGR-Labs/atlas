@@ -33,7 +33,10 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedAdvisoryFact, groundedSymbolFact, subtreeHashOf } from './author.js';
+import { draftFact, symbolAnchorKey } from './author8-subprocess.js';
+// groundedSymbolFact + subtreeHashOf + SymbolFactSpec stay: `combinedSymbolPlusFileFact` below builds a
+// MULTI-ENTRY (symbol + secondary-file) grounding that the single-anchor `atlas draft` door cannot author.
+import { groundedSymbolFact, subtreeHashOf } from './author.js';
 import type { SymbolFactSpec } from './author.js';
 import { nodeKey } from '@atlas/knowledge';
 import type { Candidate, GroundedFact, PredicateSlot } from '@atlas/knowledge';
@@ -152,8 +155,8 @@ describe('S12A — symbol + file both resolve & readback; drift contrast (mechan
       policy: scopedPolicy('src'),
     });
     genesis = repo.sha();
-    symFact = groundedSymbolFact({ repoPath: repo.repoPath, filePath: 'src/keep.ts', symbolName: 'foo', slot: 'invariant', claim: 'foo is 1' });
-    fileFact = groundedAdvisoryFact({ repoPath: repo.repoPath, filePath: 'src/rot.ts', slot: 'invariant', claim: 'rot exists' });
+    symFact = draftFact(repo, symbolAnchorKey(repo, 'src/keep.ts', 'foo'), 'invariant', 'foo is 1').fact;
+    fileFact = draftFact(repo, 'src/rot.ts', 'invariant', 'rot exists').fact;
     // Emit BOTH pre-drift and CAPTURE the real results — asserted by the first `it` below. Re-emitting these
     // exact facts AFTER the drifting commit (further down) would legitimately fail: `symFact`'s anchor cites
     // the PRE-move `::` unit key, which the truth gate looks up by EXACT qualifiedPath (unlike doctor's
@@ -245,7 +248,7 @@ describe('S12B — identity is symbol-only: a non-symbol grounding detail never 
     });
     combinedA = combinedSymbolPlusFileFact({ repoPath: repo.repoPath, symbolSpec: symbolSpecFor('src/aux1.ts', 'K1'), secondaryFilePath: 'src/aux1.ts' });
     combinedB = combinedSymbolPlusFileFact({ repoPath: repo.repoPath, symbolSpec: symbolSpecFor('src/aux2.ts', 'K2'), secondaryFilePath: 'src/aux2.ts' });
-    fileOnly = groundedAdvisoryFact({ repoPath: repo.repoPath, filePath: 'src/aux1.ts', slot: 'gotcha', claim: 'K1' });
+    fileOnly = draftFact(repo, 'src/aux1.ts', 'gotcha', 'K1').fact;
   });
 
   afterAll(() => repo?.cleanup());

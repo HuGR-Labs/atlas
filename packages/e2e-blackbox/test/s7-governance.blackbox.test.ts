@@ -18,8 +18,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedAdvisoryFact } from './author.js';
-import type { FactSpec } from './author.js';
+import { draftFact } from './author8-subprocess.js';
+import type { Tier } from '@atlas/contracts';
 import { ACTOR, BILLY, RATIFIER, emitFact, invLines, scopedPolicy } from './support.js';
 
 const SRC = 'export const foo = (): number => 1;\n';
@@ -41,10 +41,10 @@ function setEnv(actor: string | undefined, token: string | undefined): void {
   else process.env.ATLAS_RATIFY_TOKEN = token;
 }
 
-/** A grounded advisory fact anchored at `src/foo.ts` (re-derives FRESH), at the given tier + claim. */
-function fact(repo: FixtureRepo, claim: string, tier: FactSpec['tier'] = 'T1') {
-  const spec: FactSpec = { repoPath: repo.repoPath, filePath: 'src/foo.ts', slot: 'invariant', claim, tier };
-  return groundedAdvisoryFact(spec);
+/** A grounded advisory fact anchored at `src/foo.ts` (re-derives FRESH), at the given tier + claim —
+ *  authored through the product `atlas draft` door. */
+function fact(repo: FixtureRepo, claim: string, tier: Tier = 'T1') {
+  return draftFact(repo, 'src/foo.ts', 'invariant', claim, tier).fact;
 }
 
 const repos: FixtureRepo[] = [];
@@ -120,9 +120,12 @@ describe('S7a — owner-scoped authz (KNOW-11): allow in-scope, deny everyone el
     // nothing persisted. Only the STAGE that refuses it (and so the reason it reports) is different, and
     // earlier-and-more-specific is the direction we want. Carving `''` back out of gate 0 to preserve the old
     // string is what caused the `governance-relocation` brick in the first place.
-    const spec: FactSpec = { repoPath: r.repoPath, filePath: 'src/foo.ts', slot: 'invariant', claim: 'no-scope fact', tier: 'T1', scope: '' };
+    // The adversarial payload: a product-grounded fact with its scope FORGED empty (the `draft` door always
+    // computes a real `scopeOf(anchor)`, never ''), so the governed emit must refuse it. Grounding + identity
+    // are product-door-composed; only the scope field — the one thing under test — is forged.
+    const noScopeFact = { ...draftFact(r, 'src/foo.ts', 'invariant', 'no-scope fact').fact, scope: '' };
     setEnv(ACTOR, RATIFIER);
-    const out = emitFact(r, groundedAdvisoryFact(spec));
+    const out = emitFact(r, noScopeFact);
     expect(out.exitCode).toBe(2);
     expect(out.stdout).toContain('reason: malformed scope');
     expect(out.stdout).not.toContain('reason: unauthorized'); // refused BEFORE authz, not by it

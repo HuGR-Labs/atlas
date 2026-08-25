@@ -4,10 +4,11 @@
 // `atlas query <scope>` and sees the fact rendered. Driven ONLY through the real `atlas` CLI subprocess.
 //
 // THE GROUNDED-FACT CRUX (crux option 2): the emit truth-gate accepts a fact only if its grounding RE-DERIVES
-// FRESH against the built index. The fact is authored by `groundedAdvisoryFact` (test/author.ts), which reads
-// the fixture file's ACTUAL `subtreeHash` from the SAME `Axes` the runtime builds — so the anchor re-derives
-// by construction. Authoring uses product libs (the stand-in for the tool a user would use, since `atlas
-// mine` abstains — a finding); EXECUTION + every ASSERTION below is pure black-box (subprocess stdout/exit).
+// FRESH against the built index. The fact is authored through the product `atlas draft --json` door
+// (`draftFact`, test/author8-subprocess.ts) — a read-only composition planner that computes the grounding
+// (the fixture file's real `subtreeHash`) and the identity off the runtime's OWN index, so the anchor
+// re-derives by construction. Authoring is a product door; EXECUTION + every ASSERTION below is pure
+// black-box (subprocess stdout/exit).
 //
 // SOTA invariants pinned here: DETERMINISM (RETR-1/INDEX-8 — the same query renders byte-identically) and
 // CONTENT-ADDRESSED identity (KERNEL-1 — the emitted `id` is a stable function of the fact bytes).
@@ -15,8 +16,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedAdvisoryFact } from './author.js';
-import type { FactSpec } from './author.js';
+import { draftFact } from './author8-subprocess.js';
 import { ACTOR, RATIFIER, emitFact, invLines, scopedPolicy } from './support.js';
 import type { GroundedFact } from '@atlas/knowledge';
 
@@ -34,8 +34,7 @@ beforeAll(() => {
   process.env.ATLAS_ACTOR = ACTOR; // KNOW-11 write actor — matches the scoped policy below
   process.env.ATLAS_RATIFY_TOKEN = RATIFIER; // KNOW-8 ratifier — the T1 fact routes to full-ratify (visible in reads)
   repo = makeFixtureRepo({ files: { 'src/foo.ts': SRC }, policy: scopedPolicy('src') });
-  const spec: FactSpec = { repoPath: repo.repoPath, filePath: 'src/foo.ts', slot: 'invariant', claim: CLAIM };
-  fact = groundedAdvisoryFact(spec);
+  fact = draftFact(repo, 'src/foo.ts', 'invariant', CLAIM).fact;
 });
 
 afterAll(() => {
