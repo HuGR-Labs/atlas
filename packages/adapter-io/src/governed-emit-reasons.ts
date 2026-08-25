@@ -69,6 +69,18 @@ export const REJECTED_MALFORMED_FAMILY =
   '`advisory` MUST carry none: keeping the check while declaring `kind:"advisory"` routed an UPDATE onto a ' +
   'predicate node (free text on a checked fact, one generation of supersede lineage dropped), and declaring ' +
   '`kind:"predicate"` with no check threw a raw TypeError out of the door instead of refusing';
+export const REJECTED_MALFORMED_GROUNDING =
+  'malformed grounding: `grounding` must be an object carrying an `entries` ARRAY, and every entry must ' +
+  'carry an `anchor` OBJECT. Nothing downstream validates this shape — `isGrounded`/`driftDetect` (the ' +
+  'truth-gate\'s own real-grounding + freshness predicates) read `grounding.entries.length` and each ' +
+  '`entry.anchor.subtreeHash` assuming both are already there, and a payload that skips either (an absent ' +
+  '`grounding`, a missing/non-array `entries`, a `null` entry, an entry with no `anchor`) used to reach the ' +
+  'truth door and THROW a raw `Cannot read properties of undefined` out of the write door instead of being ' +
+  'refused (the 2026-07-25 dogfood). Refused HERE, before the truth gate ever runs, for the same reason as ' +
+  '`malformed tier`/`malformed scope`: the payload\'s OWN shape is checked before any incumbent is read, so ' +
+  'it discloses nothing. A `subtreeHash`/`qualifiedPath` of the wrong TYPE is not this refusal — it clears ' +
+  'this gate and is caught by the truth gate itself as an ordinary ungrounded fact (never a throw either ' +
+  'way), so this refusal never widens beyond the shapes that used to crash';
 export const REJECTED_MALFORMED_RELATION =
   'malformed relation: a relation fact (ADR-0015 D2) is identified by the ordered triple (endpointA, ' +
   'relationKind, endpointB), and one of the three is not well-formed. endpointA and endpointB must each be a ' +
