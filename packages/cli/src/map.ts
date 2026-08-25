@@ -40,8 +40,15 @@ import type { Tool, Verdict } from '@atlas/tools';
  *  single-anchor PRODUCER (`atlas test-vacuity <path>`); like `transition`/`derive-relations`/`promote` it is a
  *  WRITE command that binds `atlas-emit` — it PERSISTS proven `assertion-only-in-catch` facts THROUGH the existing
  *  governed emit door (ADR-0008: a producer is an ordinary USE of the emit door, KNOW-11 authz + ARCH-9 anchor
- *  apply), so it is not a new tool, `GOVERNANCE_SURFACE` stays 5 and `WRITE_PATHS` does not move. */
-export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'transitions', 'transition', 'test-vacuities', 'test-vacuity', 'verify-fact', 'verify-store', 'derive-relations'] as const;
+ *  apply), so it is not a new tool, `GOVERNANCE_SURFACE` stays 5 and `WRITE_PATHS` does not move.
+ *  [EXTENDED — WP-10.A1.CLI / ADR-0004] `anchors` joins as the CLI door of the read-only DISCOVERY planner
+ *  (`anchors <path>`, AUTHOR-3/4). It is a PLANNER, not a governed door: it reads the built index and RETURNS
+ *  the groundable units under `path` (with declared language holes + the `rev`), persisting NOTHING (AUTHOR-2).
+ *  Like `relations`/`transitions`/`test-vacuities` it binds `atlas-query` — a READ authority oracle — so
+ *  `GOVERNANCE_SURFACE` stays 5 and `WRITE_PATHS` is untouched; `authorityOf` DERIVES that from `WRITE_PATHS`,
+ *  it is not asserted here. It is intercepted before the handler (cli.ts) and driven over the composition
+ *  root's frozen `anchors` leg (`createAnchors` over the ONE `GroundingComputer`, WP-10.A1.TOOLS/ADAPTER). */
+export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'transitions', 'transition', 'test-vacuities', 'test-vacuity', 'verify-fact', 'verify-store', 'derive-relations', 'anchors'] as const;
 export type Command = (typeof COMMANDS)[number];
 
 /** The leg a command routes to — a governance `Tool`, or the genesis entry (data-only; NOT executed here —
@@ -124,6 +131,11 @@ export const COMMAND_LEG: Record<Command, Leg> = {
   //                                   `deriveRelations` leg, which PERSISTS proven `depends-on` relations THROUGH
   //                                   this leg's own door — the same `createGovernedEmit` `wire.ts` binds. A
   //                                   fourth write COMMAND over the SAME two write doors; WRITE_PATHS untouched.
+  anchors: 'atlas-query', // READ authority oracle (WP-10.A1.CLI / ADR-0004 discovery planner); intercepted before
+  //                         the handler (cli.ts) and driven over the composition root's `anchors` leg, which reads
+  //                         the built index and RETURNS the groundable units under a path — it PERSISTS NOTHING
+  //                         (AUTHOR-2). Carries NO write authority — it opens no governed token, GOVERNANCE_SURFACE
+  //                         stays 5, WRITE_PATHS untouched.
 };
 
 export type Authority = 'read' | 'write';

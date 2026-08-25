@@ -68,9 +68,13 @@ const ARITY: Record<Command, number> = {
   // relations and persists them into THAT repo's store, so a path argument would let the index projected diverge
   // from the store written and the one every other command reads (#99 WP-R7).
   'derive-relations': 0,
+  // `anchors <path>` — the tree path to list groundable units under is the only required positional (AUTHOR-3/4,
+  // ADR-0004 discovery planner); arity is 1. A path outside the tracked set / a non-git dir / an unreadable path
+  // is NOT a parse error — it is the leg's honest-empty-with-a-reason answer (never a throw).
+  anchors: 1,
 };
 
-const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine|node|link|promote|own|relations|negations|transitions|transition|test-vacuities|test-vacuity|verify-fact|verify-store|derive-relations';
+const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine|node|link|promote|own|relations|negations|transitions|transition|test-vacuities|test-vacuity|verify-fact|verify-store|derive-relations|anchors';
 
 function isCommand(s: string): s is Command {
   return Object.prototype.hasOwnProperty.call(COMMAND_LEG, s);

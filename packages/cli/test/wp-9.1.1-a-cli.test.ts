@@ -50,9 +50,9 @@ afterEach(() => vi.restoreAllMocks());
 // ── REQ-CLI-1 — total command surface ─────────────────────────────────────────────────────────────
 
 describe('SCN-CLI-1a — every command maps to exactly one leg', () => {
-  it('is total (19 keys) and mutually-exclusive over the ratified table', () => {
+  it('is total (20 keys) and mutually-exclusive over the ratified table', () => {
     // totality: every command in the finite surface has exactly one leg.
-    expect(COMMANDS).toEqual(['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'transitions', 'transition', 'test-vacuities', 'test-vacuity', 'verify-fact', 'verify-store', 'derive-relations']);
+    expect(COMMANDS).toEqual(['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'transitions', 'transition', 'test-vacuities', 'test-vacuity', 'verify-fact', 'verify-store', 'derive-relations', 'anchors']);
     expect(Object.keys(COMMAND_LEG).sort()).toEqual([...COMMANDS].sort());
     expect(COMMAND_LEG).toEqual({
       init: 'atlas-init',
@@ -85,6 +85,8 @@ describe('SCN-CLI-1a — every command maps to exactly one leg', () => {
       //                                before the handler, re-proves every stored witness; no write authority
       'derive-relations': 'atlas-emit', // WRITE authority oracle (#99 WP-R7 sound-relation projection) — intercepted
       //                                   before the handler, PERSISTS proven relations THROUGH the existing emit door
+      anchors: 'atlas-query', // READ authority oracle (WP-10.A1.CLI / ADR-0004 discovery planner) — intercepted
+      //                         before the handler, lists groundable units off the built index; persists NOTHING (AUTHOR-2)
     });
     // teeth: a command bound to zero legs (totality) or two legs (uniqueness) — each key resolves to one string.
     for (const c of COMMANDS) {
