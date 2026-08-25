@@ -15,6 +15,7 @@
     "@atlas/contracts": "*",
     "@atlas/kernel": "*",
     "@atlas/persist": "*",
+    "@atlas/grounding": "*",
     "@atlas/knowledge": "*",
     "@atlas/retrieval": "*"
   },

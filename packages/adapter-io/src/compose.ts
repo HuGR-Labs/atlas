@@ -24,8 +24,8 @@ import { createSymbolReverse, nodeHashOfPath } from '@atlas/index';
 import type { Axes } from '@atlas/index';
 import { bindReconcile } from '@atlas/knowledge';
 import type { GroundedFact } from '@atlas/knowledge';
-import { createAnchors } from '@atlas/tools';
-import type { AnchorsApi, DoctorSource, T0Heuristic, TruthGate } from '@atlas/tools';
+import { createAnchors, createSlots, createDraft } from '@atlas/tools';
+import type { T0Heuristic, TruthGate } from '@atlas/tools';
 import { walkFileTree } from './fs.js';
 import { deriveGroundingAxes, buildGroundingComputer, buildGate } from './grounding-computer.js';
 import { readScipOrEmpty, readScipIndexerName } from './scip.js';
@@ -38,27 +38,23 @@ import { createGovernedEmit } from './governed-emit.js';
 import { buildTargetEscapes } from './escape/target-escapes.js';
 import { buildDynamicReach } from './escape/dynamic-reach.js';
 import { createGovernedPromote } from './governed-promote.js';
-import type { PromoteOut } from './governed-promote.js';
 import { createOwnLeg } from './own-source.js';
-import type { OwnLeg } from './own-source.js';
 import { createRelationLeg } from './relation-source.js';
 import { runDeriveRelations } from './relation-derive-run.js';
 import type { DeriveRelationsRun } from './relation-derive-run.js';
 import { createNegationLeg } from './negation-source.js';
-import { createTransitionLeg, createTransitionProducer, type TransitionLeg, type TransitionProducer } from './transition-source.js';
-import { buildTestVacuityFeed, buildTestVacuityLegs, type TestVacuityLeg, type TestVacuityProducer } from './compose-test-vacuity.js';
-import type { RelationLeg } from './relation-source.js';
-import type { NegationLeg } from './negation-source.js';
+import { createTransitionLeg, createTransitionProducer } from './transition-source.js';
+import { buildTestVacuityFeed, buildTestVacuityLegs } from './compose-test-vacuity.js';
 import { createVerifyFactLeg } from './verify-fact-source.js';
-import type { VerifyFactLeg } from './verify-fact-source.js';
 import { reverifyStore, makeScopeHasDocs, driftPairsOf } from './reverify-store.js';
-import type { DocExists, ReverifyReport } from './reverify-store.js';
+import type { DocExists } from './reverify-store.js';
 import { createDiskStore } from './store.js';
 import { gitStoreProvenance } from './store-provenance.js';
 import type { SidecarTrust } from './store-provenance.js';
 import { buildReadAccess, trackedProvableAdvisory } from './read-access.js';
 import { assembleHandler, bindFreshnessOracle, edgeModelVersion } from './wire.js';
-import type { WireConfig, WireSeams, WiredHandler } from './wire.js';
+import type { WireConfig, WireSeams } from './wire.js';
+import type { ComposedRuntime } from './compose-runtime.js';
 
 // The `mine` ADMISSION SUPPLY (REQ-CLI-4d), split to its own file at the LOC ceiling and RE-EXPORTED here so
 // the composition root's SURFACE is unchanged — see that file's header for why the seam is real, and for the
@@ -66,130 +62,11 @@ import type { WireConfig, WireSeams, WiredHandler } from './wire.js';
 export { buildMineAdmission } from './compose-mine-admission.js';
 export type { MineAdmission, Reground } from './compose-mine-admission.js';
 
-/** The composed runtime: the ONE governed durable `WiredHandler` every entrypoint drives, PLUS the real
- *  read-only `DoctorSource` `atlas doctor` reads over — both built from the SAME store + revIndex so they
- *  can never diverge (WIRE-1). The CLI passes both; the MCP entrypoint drives only the handler. */
-export interface ComposedRuntime {
-  readonly handler: WiredHandler;
-  readonly doctorSource: DoctorSource;
-  /**
-   * The governed PROMOTION leg (KNOW-8) — `promote(at)` lifts the explorer's staged candidates into governed
-   * knowledge THROUGH the emit door. It rides beside the handler for the same reason `doctorSource` does: it
-   * opens no new governed surface (`GOVERNANCE_SURFACE` stays 5, `WRITE_PATHS` stays `{atlas-emit,
-   * atlas-link}`) so it is not a `Tool` and has no leg to dispatch to — ADR-0008 pre-decided that a curator
-   * door is an ordinary USE of the existing emit door. It is built over the SAME durable store PATH and the
-   * SAME seams the handler's emit leg and query readback ride — a `DiskStore` holds no state of its own (all
-   * of it is the sidecar + CAS files it names), which is why `driftFacts` above can already read back what
-   * the handler wrote — so a promoted fact is visible to the very next `atlas query`.
-   */
-  readonly promote: (at: Hash) => PromoteOut;
-  /**
-   * The `own_<scope>` READ leg (RETR-12) — `own(scope)` composes the curated, mechanically-ranked briefing
-   * for a scope-unit through `@atlas/retrieval`'s `createOwn`, over the feed in `own-source.ts`.
-   *
-   * IT IS BUILT FROM `store` AND `axes`, THE SAME TWO OBJECTS THE HANDLER'S QUERY LEG READS, and that is the
-   * whole reason it is composed here rather than in the CLI: a briefing assembled over a second store would
-   * be a different repository's knowledge wearing this repository's scope name. `DiskStore` holds no state of
-   * its own (all of it is the sidecar + CAS files it names), so a fact emitted through the handler in the
-   * same process is visible to the very next `own` — the feed re-reads the live projection per call.
-   *
-   * It rides BESIDE the handler for the same reason `doctorSource` and `promote` do: it is not a `Tool`.
-   * `GOVERNANCE_SURFACE` stays 5 and `WRITE_PATHS` stays `{atlas-emit, atlas-link}` — this is a READ door,
-   * it opens no write path, and there is nothing for `WiredHandler.handle` to route.
-   *
-   * NO AUTHZ GATE, DELIBERATELY (KNOW-11b): reads are universal in Atlas. The actor is a self-asserted
-   * string (see the posture note on {@link composeRuntime}), so gating a read on it would refuse an honest
-   * caller and stop a dishonest one for exactly as long as it takes to set one environment variable.
-   */
-  readonly own: OwnLeg;
-  /** The read-only `anchors` DISCOVERY planner (WP-10.A1 / ADR-0004, AUTHOR-3/4) — `anchors(path)` lists the
-   *  groundable units under `path` (qualifiedPath/kind/current subtreeHash), declares every language hole, and
-   *  reports the `rev`. Built over the SAME `axes` the emit truth-gate re-derives against (the one
-   *  {@link deriveGroundingAxes} seam, AUTHOR-1), so a fact grounded from a listed anchor is accepted by the
-   *  gate by construction. Rides beside the handler like `own`: NOT a `Tool`, opens no write path (AUTHOR-2). */
-  readonly anchors: AnchorsApi['anchors'];
-  /**
-   * The grounded-relation READ leg (#99a / ADR-0015 D2) — `relations(unit, direction)` returns the
-   * `family:'relation'` facts touching a unit, both directions, via the `relationsOf` fold.
-   *
-   * IT IS BUILT FROM `store`, THE SAME OBJECT THE HANDLER'S QUERY LEG READS, and that is the whole reason it
-   * is composed here rather than in a transport: the relations touching a unit are read off the very
-   * projection `atlas query` reads back, so the two can never diverge. `DiskStore` holds no state of its own
-   * (all of it is the sidecar + CAS files it names), so a relation emitted through the handler in the same
-   * process is visible to the very next `atlas relations` — the leg re-reads the live projection per call.
-   *
-   * It rides BESIDE the handler for the same reason `doctorSource`/`promote`/`own` do: it is not a `Tool`.
-   * `GOVERNANCE_SURFACE` stays 5 and `WRITE_PATHS` is untouched — this is a READ door, it opens no write
-   * path, and there is nothing for `WiredHandler.handle` to route.
-   */
-  readonly relations: RelationLeg;
-  /**
-   * The grounded-negation + abstention READ leg (#99b / ADR-0015 D3) — `negations(scope)` returns the
-   * `family:'negation'` negatives the truth door admitted AND the honest ABSTENTIONS it filed under a scope,
-   * via the `negationsOf`/`abstentionsOf` folds. Built from `store`, the SAME object the handler's query leg
-   * reads — passed, not rebuilt — so `atlas negations <scope>` and `atlas query <scope>` are two projections
-   * of ONE store. It rides BESIDE the handler for the same reason `relations`/`own` do: it is not a `Tool`,
-   * `GOVERNANCE_SURFACE` stays 5 and `WRITE_PATHS` is untouched — a READ door, no write path. This leg is what
-   * makes `negationsOf`/`abstentionsOf` running code rather than reference models, and it is the surface that
-   * makes a fired abstention observable (closes #202).
-   */
-  readonly negations: NegationLeg;
-  /** The grounded-transition READ leg + reachable 2-rev PRODUCER (#234 / ADR-0015 D4) — `transitions(unit)`
-   *  reads the lineage's 2-rev records (head TRANSITIONED + predecessors SUPERSEDED, D-T3); `transition(unit,
-   *  before, after)` reads REAL content at two revs and persists a JUSTIFIED transition (D-T1) THROUGH the
-   *  governed emit door (KNOW-11 authz + ARCH-9 anchor — `governed-emit-transition.ts`). */
-  readonly transitions: TransitionLeg;
-  readonly transition: TransitionProducer;
-  /** The single-anchor test-vacuity READ leg + reachable PRODUCER (#95 / ADR-0015 D5) — `testVacuities(unit)`
-   *  reads the unit's proven `assertion-only-in-catch` facts (single-anchor, no lineage); `testVacuity()` walks
-   *  the repo's HEAD test units, runs `scanTestVacuity`, and persists every proven fact THROUGH the governed emit
-   *  door (KNOW-11 authz + ARCH-9 anchor + the HEAD truth gate — `governed-emit-test-vacuity.ts`). */
-  readonly testVacuities: TestVacuityLeg;
-  readonly testVacuity: TestVacuityProducer;
-  /** The sound-genesis PROVEN-family feed (`atlas verify-fact`) — PROVES/REFUTES/ABSTAINS on a typed
-   *  dependency/count/negation claim over the live symbol-reverse view (off the SAME `scipOutput` the `axes`
-   *  are). A READ door, and the ONE production caller that makes `verify{Dependency,Count,Negation}`
-   *  (@atlas/genesis) running code — see `verify-fact-source.ts`. */
-  readonly verifyFact: VerifyFactLeg;
-  /** The REVERIFY-GATE pass (`atlas verify-store`) — re-proves every `seal:'proven'` fact against the LIVE
-   *  index into `re-proven`/`broken`/`unverifiable` (see `reverify-store.ts`). Rides the SAME `verifyFact` leg
-   *  (no second oracle) + the SAME `driftFacts` readback (no second store read) — a THUNK. A READ door,
-   *  GOVERNANCE_SURFACE stays 5. */
-  readonly reverify: () => ReverifyReport;
-  /**
-   * The #99 SOUND-RELATION derive-and-persist pass (`atlas derive-relations`, WP-R7) — the mechanical projection
-   * of the index's resolved cross-unit references to PROVEN `depends-on` relations, driven end to end and LANDED
-   * in the durable store. It is the ONLY reachability seam that makes `relation-derive.ts` running code: it
-   * composes `buildMineAdmission` (now carrying the sound `verifyRelation` oracle) + `ground`-over-`Axes` and
-   * emits every proven relation through the SAME `origin:'promoted'` governed emit door promote publishes through
-   * (`relationEmit` below), so the seal + re-derivable witness reach the durable row + CAS bytes. Rides beside
-   * the handler like `promote`: a WRITE leg opening no NEW governed surface (`GOVERNANCE_SURFACE` stays 5 — an
-   * ordinary USE of the emit door, ADR-0008). A THUNK (paid only on demand); NO LLM anywhere (AR-23). */
-  readonly deriveRelations: () => DeriveRelationsRun;
-  /**
-   * The PROVENANCE refusal for this repo's durable store, or `undefined` when reads may proceed
-   * (`read-provenance.ts` / TRAVEL-BY-REPROOF `read-access.ts`). PRESENT means every read serves nothing and
-   * every write refuses — TODAY that is `tracked-staging` (ADR-0008 candidates, no replayable witness) or
-   * the fail-closed leg of `tracked-provable` (re-verification could not run). ABSENT no longer means
-   * "nothing is tracked" — see `readAdvisory` below for the narrowed middle case, where reads DO proceed but
-   * only over what re-proves.
-   *
-   * It is surfaced HERE, on the composed runtime, because the refusal has to be legible on doors that the
-   * handler does not own: `atlas doctor` sub-dispatches to `DoctorApi` without touching the handler, and
-   * `atlas node` reaches `resolveNode`, which the frozen handler does NOT wrap in a try/catch. One value the
-   * entrypoint can render once covers all of them, in the entrypoint's own prose, instead of each door
-   * rediscovering the condition — and the leg-level guards stay as the backstop for every other caller.
-   */
-  readonly readRefusal?: string;
-  /**
-   * The ADVISORY MESSAGE for a `tracked-provable` store (TRAVEL-BY-REPROOF) — present ONLY when the durable
-   * store is being served NARROWED (filtered to facts that replay `re-proven`), so a user whose committed
-   * store serves fewer facts than it holds is told WHY in the product's own voice rather than left to notice
-   * a shrunk count. ABSENT for every other case: nothing narrowed (`trusted`), or nothing served at all
-   * (`readRefusal` present instead).
-   */
-  readonly readAdvisory?: string;
-}
+// `ComposedRuntime` — extracted to `compose-runtime.ts` at the godfile-guard HARD ceiling (mechanical,
+// byte/behaviour-preserving: the interface body is transcribed verbatim there). Imported above and
+// RE-EXPORTED here under the same name so every existing import site is untouched (`adapter-io/src/
+// index.ts`'s `export type { ComposedRuntime, … } from './compose.js'`).
+export type { ComposedRuntime } from './compose-runtime.js';
 
 /** Where `composeRuntime` looks for the optional SCIP dump under a repo (empty axes if absent, per §7). */
 const SCIP_REL = join('.atlas', 'index.scip');
@@ -312,6 +189,13 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
   // the gate rides, same HEAD sha the durable store stamps — provably one seam. A PLANNER (no write path).
   const groundingComputer = buildGroundingComputer({ axes, rawTree, rev: headSha(repoPath) ?? '' });
   const anchorsLeg = createAnchors(groundingComputer);
+  // THE `slots` DISCOVERY PLANNER (WP-10.A2-a / ADR-0004, AUTHOR-5) — no injected port: it reads the
+  // compile-time `PredicateSlot` union, not the index, so it needs no `groundingComputer`.
+  const slotsLeg = createSlots();
+  // THE `draft` COMPOSITION PLANNER (WP-10.A2-a / ADR-0004, AUTHOR-6/7) — over the SAME `groundingComputer`
+  // `anchors` rides (AUTHOR-1: one grounding seam), so a drafted fact's `subtreeHash` is exactly the value
+  // the emit truth-gate will re-derive against.
+  const draftLeg = createDraft(groundingComputer);
   // #96 F2 — the SAME N0 completeness view the emit leg rides (`() => index.symbolReverse()`, wire.ts:217),
   // built ONCE off the SAME `scipOutput` the axes above are built from, so the promote leg (below) reaches
   // `emitNegation` with its deps satisfied instead of fail-closing `scope-empty` for every promoted negation.
@@ -553,6 +437,12 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     // THE `anchors` DISCOVERY PLANNER (WP-10.A1 / ADR-0004) — the ARCH-3 binding that makes `createAnchors`
     // running code (its production caller), over the ONE grounding computer. Read-only; not a `Tool`.
     anchors: anchorsLeg.anchors,
+    // THE `slots` DISCOVERY PLANNER (WP-10.A2-a / ADR-0004) — the ARCH-3 binding that makes `createSlots`
+    // running code (its production caller). No port injected (see the `slotsLeg` build site above).
+    slots: slotsLeg.slots,
+    // THE `draft` COMPOSITION PLANNER (WP-10.A2-a / ADR-0004) — the ARCH-3 binding that makes `createDraft`
+    // running code (its production caller), over the SAME grounding computer `anchors` reads.
+    draft: draftLeg.draft,
     // THE GROUNDED-RELATION READ LEG (#99a). `readAccess.store` is the very object the handler's query leg
     // reads — passed, not rebuilt — so `atlas relations <unit>` and `atlas query <unit>` are two projections
     // of ONE store, and a relation emitted through the emit door is visible to the very next `relations` call.
