@@ -10,7 +10,7 @@
 //   • TIER-RATIFY (KNOW-8 / KNOW-18, N7) — a T2 advisory grounded fact AUTO-ACCEPTS with NO token (fastpath);
 //     a T1 / T0 fact routes to FULL ratification and commits ONLY with a valid token (T0 requires `billy`).
 //
-// The fact is AUTHORED through the product `atlas draft` door (`draftFact`, author8-subprocess.ts) so its
+// The fact is AUTHORED through the product `atlas draft` door (`draftFact`, support.ts) so its
 // grounding re-derives FRESH; every EXECUTION and ASSERTION below is pure black-box (spawned
 // bin, stdout/exit). ACTOR + RATIFY token are threaded via env (`ATLAS_ACTOR` / `ATLAS_RATIFY_TOKEN`) exactly
 // as `composeRuntime` sources them — NEVER off the fact payload.
@@ -18,7 +18,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { draftFact } from './author8-subprocess.js';
+import { draftFact } from './support.js';
 import type { Tier } from '@atlas/contracts';
 import { ACTOR, BILLY, RATIFIER, emitFact, invLines, scopedPolicy } from './support.js';
 

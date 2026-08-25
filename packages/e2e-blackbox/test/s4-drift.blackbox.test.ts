@@ -14,7 +14,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { draftFact } from './author8-subprocess.js';
+import { draftFact } from './support.js';
 import type { GroundedFact } from '@atlas/knowledge';
 import { ACTOR, RATIFIER, emitFact, scopedPolicy } from './support.js';
 

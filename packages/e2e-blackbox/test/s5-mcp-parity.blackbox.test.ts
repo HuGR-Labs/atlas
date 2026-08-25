@@ -19,7 +19,7 @@ import type { FixtureRepo } from '../src/harness.js';
 import { ungroundedFact } from './adversarial-fixtures.js';
 import type { GroundedFact } from '@atlas/knowledge';
 import { ACTOR, RATIFIER, emitFact, invLines, scopedPolicy } from './support.js';
-import { draftFact } from './author8-subprocess.js';
+import { draftFact } from './support.js';
 
 // The CLOSED governance surface (TOOLS-1) — the five GOVERNED write/read doors, each routed through the one
 // wired handler. This stays exactly five; a new governed door is a constitution change.

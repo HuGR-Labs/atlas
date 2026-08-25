@@ -44,7 +44,7 @@ import { join } from 'node:path';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
 import { ACTOR, RATIFIER, invLines, scopedPolicy } from './support.js';
-import { draftFact } from './author8-subprocess.js';
+import { draftFact } from './support.js';
 
 const SRC = 'export function greet(name: string): string {\n  return `hi ${name}`;\n}\n';
 

@@ -25,7 +25,7 @@
 //     recipe, reused here as the grounding-kind axis's own drift-contrast leg).
 //
 // Everything below drives the REAL `atlas` bin (CLI subprocess). Happy-path facts are authored through the
-// product `atlas draft` door (`draftFact` / `symbolAnchorKey`, author8-subprocess.ts). The surviving
+// product `atlas draft` door (`draftFact` / `symbolAnchorKey`, support.ts). The surviving
 // product-lib fabricators `groundedSymbolFact` / `subtreeHashOf` (adversarial-fixtures.ts) are used ONLY to
 // build the multi-entry combined facts below — a symbol+file grounding the single-anchor draft door cannot
 // author — plus the id-prediction used to recognize a real query row; every EXECUTION and every ASSERTION
@@ -34,7 +34,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { draftFact, symbolAnchorKey } from './author8-subprocess.js';
+import { draftFact, symbolAnchorKey } from './support.js';
 // groundedSymbolFact + subtreeHashOf + SymbolFactSpec stay: `combinedSymbolPlusFileFact` below builds a
 // MULTI-ENTRY (symbol + secondary-file) grounding that the single-anchor `atlas draft` door cannot author.
 import { groundedSymbolFact, subtreeHashOf } from './adversarial-fixtures.js';

@@ -20,7 +20,7 @@ import { makeFixtureRepo } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
 import { groundedMultiSymbolFact } from './adversarial-fixtures.js';
 import { ACTOR, RATIFIER, emitFact, scopedPolicy } from './support.js';
-import { draftFact } from './author8-subprocess.js';
+import { draftFact } from './support.js';
 
 const FILES = {
   'src/billing.ts': 'export function charge() { return 1; }\n',

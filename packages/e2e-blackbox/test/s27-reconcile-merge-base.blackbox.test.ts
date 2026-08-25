@@ -23,7 +23,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { draftFact } from './author8-subprocess.js';
+import { draftFact } from './support.js';
 import { ACTOR, RATIFIER, emitFact, scopedPolicy } from './support.js';
 
 /** The `reason: <discriminant>: …` line of a rejected/errored verdict (the attributed refusal channel). */

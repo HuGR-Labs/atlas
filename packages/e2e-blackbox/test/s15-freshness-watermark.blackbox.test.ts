@@ -20,7 +20,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, mcpSession, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
 import { ACTOR, RATIFIER, emitFact, invLines, scopedPolicy } from './support.js';
-import { draftFact } from './author8-subprocess.js';
+import { draftFact } from './support.js';
 
 const SRC = 'export const foo = 1;\n';
 const MORE = 'export const bar = 2;\n';

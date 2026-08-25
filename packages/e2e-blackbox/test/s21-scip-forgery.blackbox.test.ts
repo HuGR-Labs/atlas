@@ -40,7 +40,7 @@ import type { FixtureRepo } from '../src/harness.js';
 import { subtreeHashOf } from './adversarial-fixtures.js';
 import { ACTOR, RATIFIER, emitFact, invLines, scopedPolicy } from './support.js';
 import type { GroundedFact } from '@atlas/knowledge';
-import { draftFact } from './author8-subprocess.js';
+import { draftFact } from './support.js';
 
 const TARGET = 'src/target.ts';
 const OTHER = 'src/other.ts';

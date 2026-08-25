@@ -16,7 +16,7 @@ import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
 import type { GroundedFact } from '@atlas/knowledge';
 import { ACTOR, RATIFIER, emitFact, scopedPolicy } from './support.js';
-import { draftFact } from './author8-subprocess.js';
+import { draftFact } from './support.js';
 
 const CLAIM = 'node door fact — resolvable by content address';
 

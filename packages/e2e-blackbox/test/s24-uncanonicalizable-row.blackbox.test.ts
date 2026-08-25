@@ -26,7 +26,7 @@ import { existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { makeFixtureRepo, mcpSession, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { draftFact } from './author8-subprocess.js';
+import { draftFact } from './support.js';
 import { ACTOR, RATIFIER, scopedPolicy } from './support.js';
 
 const SRC = 'export function greet(name: string): string {\n  return `hi ${name}`;\n}\n';

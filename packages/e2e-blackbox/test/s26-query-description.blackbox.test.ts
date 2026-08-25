@@ -29,7 +29,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { mcpSession, makeFixtureRepo } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { draftFact } from './author8-subprocess.js';
+import { draftFact } from './support.js';
 import { ACTOR, RATIFIER, emitFact, scopedPolicy } from './support.js';
 
 /**

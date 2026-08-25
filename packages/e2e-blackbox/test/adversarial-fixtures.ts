@@ -1,7 +1,7 @@
 // @atlas/e2e-blackbox — test/adversarial-fixtures.ts  (fact fixtures the product doors CANNOT author)
 //
 // Every happy-path GROUNDED fact is now authored through the product `atlas draft` door (see
-// test/author8-subprocess.ts — `draftFact` / `symbolAnchorKey`). What survives HERE is the complement: fact
+// test/support.ts — `draftFact` / `symbolAnchorKey`). What survives HERE is the complement: fact
 // shapes the product doors REFUSE, or cannot compose by construction, so a black-box story that needs one as
 // INPUT must fabricate it. Each is a deliberate hostile/degenerate payload the governed emit gate is meant
 // to reject, or a grounding the single-anchor draft door cannot build:

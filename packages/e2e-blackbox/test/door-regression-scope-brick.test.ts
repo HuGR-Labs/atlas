@@ -17,7 +17,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
 import type { GroundedFact } from '@atlas/knowledge';
-import { draftFact } from './author8-subprocess.js';
+import { draftFact } from './support.js';
 import { ACTOR, RATIFIER, emitFact, scopedPolicy } from './support.js';
 
 const SRC = 'export const settle = 1;\n';

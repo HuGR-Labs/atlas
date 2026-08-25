@@ -21,7 +21,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { makeFixtureRepo, mcpSession, runAtlas } from '../src/harness.js';
 import type { AtlasRun, FixtureRepo } from '../src/harness.js';
-import { draftFact } from './author8-subprocess.js';
+import { draftFact } from './support.js';
 import { ACTOR, emitFact, invLines, scopedPolicy } from './support.js';
 
 const SRC = 'export const foo = 1;\n';

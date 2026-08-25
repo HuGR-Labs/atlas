@@ -5,7 +5,7 @@
 //
 // THE GROUNDED-FACT CRUX (crux option 2): the emit truth-gate accepts a fact only if its grounding RE-DERIVES
 // FRESH against the built index. The fact is authored through the product `atlas draft --json` door
-// (`draftFact`, test/author8-subprocess.ts) — a read-only composition planner that computes the grounding
+// (`draftFact`, test/support.ts) — a read-only composition planner that computes the grounding
 // (the fixture file's real `subtreeHash`) and the identity off the runtime's OWN index, so the anchor
 // re-derives by construction. Authoring is a product door; EXECUTION + every ASSERTION below is pure
 // black-box (subprocess stdout/exit).
@@ -16,7 +16,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { draftFact } from './author8-subprocess.js';
+import { draftFact } from './support.js';
 import { ACTOR, RATIFIER, emitFact, invLines, scopedPolicy } from './support.js';
 import type { GroundedFact } from '@atlas/knowledge';
 

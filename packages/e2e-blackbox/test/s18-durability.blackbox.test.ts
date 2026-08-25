@@ -25,7 +25,7 @@ import { existsSync, readFileSync, readdirSync, statSync, truncateSync, writeFil
 import { join } from 'node:path';
 import { CLI_BIN, makeFixtureRepo } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { draftFact } from './author8-subprocess.js';
+import { draftFact } from './support.js';
 import { ACTOR, scopedPolicy } from './support.js';
 import { IDENTITY_SCHEMA } from '@atlas/adapter-io';
 import type { GroundedFact } from '@atlas/knowledge';

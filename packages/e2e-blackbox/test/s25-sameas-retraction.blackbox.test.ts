@@ -27,7 +27,7 @@ import { makeFixtureRepo, mcpSession, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
 import type { GroundedFact } from '@atlas/knowledge';
 import { ACTOR, RATIFIER, emitFact, scopedPolicy } from './support.js';
-import { draftFact } from './author8-subprocess.js';
+import { draftFact } from './support.js';
 
 const SRC = { 'src/a.ts': 'export const a = 1;\n', 'src/b.ts': 'export const b = 2;\n', 'src/c.ts': 'export const c = 3;\n' };
 

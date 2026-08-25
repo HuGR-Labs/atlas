@@ -16,7 +16,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { draftFact, symbolAnchorKey } from './author8-subprocess.js';
+import { draftFact, symbolAnchorKey } from './support.js';
 import type { GroundedFact } from '@atlas/knowledge';
 import { ACTOR, RATIFIER, emitFact, invLines, scopedPolicy, subsumesLines } from './support.js';
 

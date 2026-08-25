@@ -29,7 +29,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { draftFact } from './author8-subprocess.js';
+import { draftFact } from './support.js';
 import { MINED_SCOPE, stageCandidate } from './stage.js';
 
 /** The seat `.atlas/policy.json` appoints as curator over the mined scope. */

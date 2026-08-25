@@ -30,7 +30,7 @@ import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
 import type { GroundedFact } from '@atlas/knowledge';
 import { ACTOR, RATIFIER, emitFact, scopedPolicy } from './support.js';
-import { draftFact, symbolAnchorKey } from './author8-subprocess.js';
+import { draftFact, symbolAnchorKey } from './support.js';
 
 /** A stable, order-independent snapshot of every byte under `.atlas/cas` (proves doctor mutates nothing). */
 function casSnapshot(repoPath: string): string {
