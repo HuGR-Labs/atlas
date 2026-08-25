@@ -15,9 +15,20 @@ import type { FixtureRepo } from '../src/harness.js';
  *  the governed `atlas-link` write door as the fifth). */
 const GOVERNANCE_TOOLS = ['atlas-init', 'atlas-query', 'atlas-emit', 'atlas-reconcile', 'atlas-link'];
 /** The full surface the SHIPPED server advertises: the governance five PLUS the `atlas-relations` (#99a) and
- *  `atlas-negations` (#99b) READ tools, served from the injected read legs — no governed token,
- *  GOVERNANCE_SURFACE still closed at five (see mcp-server/src/server.ts). Production advertises SEVEN. */
-const ADVERTISED_TOOLS = [...GOVERNANCE_TOOLS, 'atlas-relations', 'atlas-negations'];
+ *  `atlas-negations` (#99b) READ tools, PLUS the six READ_SURFACE authoring/read doors (WP-10.A5.MCP —
+ *  anchors, slots, draft, check, doctor, node), all served from injected read legs — no governed token,
+ *  GOVERNANCE_SURFACE still closed at five (see mcp-server/src/server.ts). Production advertises THIRTEEN. */
+const ADVERTISED_TOOLS = [
+  ...GOVERNANCE_TOOLS,
+  'atlas-relations',
+  'atlas-negations',
+  'atlas-anchors',
+  'atlas-slots',
+  'atlas-draft',
+  'atlas-check',
+  'atlas-doctor',
+  'atlas-node',
+];
 
 let repo: FixtureRepo;
 
@@ -66,7 +77,7 @@ describe('runAtlas — drives the REAL atlas CLI as a subprocess', () => {
 });
 
 describe('mcpSession — drives the REAL atlas-mcp server over stdio', () => {
-  it('listTools() returns the 5 governance tools PLUS the atlas-relations + atlas-negations read tools, with input schemas; then close()', async () => {
+  it('listTools() returns the 5 governance tools PLUS the 2 relations/negations + 6 READ_SURFACE authoring tools, with input schemas; then close()', async () => {
     const session = await mcpSession(repo.repoPath);
     try {
       const { tools } = await session.client.listTools();
