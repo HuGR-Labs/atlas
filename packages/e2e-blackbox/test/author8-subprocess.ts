@@ -22,6 +22,8 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { runAtlas } from '../src/harness.js';
 import type { AtlasRun, FixtureRepo } from '../src/harness.js';
+import type { GroundedFact } from '@atlas/knowledge';
+import type { Tier } from '@atlas/contracts';
 
 // ── discovery parsing (anchors/slots have no --json yet — their rendered TEXT is the only surface) ────────
 
@@ -90,4 +92,69 @@ export function draftThenEmit(repo: FixtureRepo, anchor: string, slot: string, c
   const path = join(repo.repoPath, `envelope-${randomUUID()}.json`);
   writeFileSync(path, envelopeBytes); // the SAME bytes, byte for byte — the relay
   return runAtlas(repo.repoPath, ['emit', path, `--at=${rev}`]);
+}
+
+// ── the happy-path fact AUTHOR — the product `draft` door, replacing the in-process author.ts fabricators ──
+
+/** The structurally-relevant fields of the `DraftOut` envelope `atlas draft --json` prints. The product
+ *  `DraftOut` (@atlas/tools types.ts) carries more — `operation`/`route`/`requires` — but a black-box author
+ *  needs only the composed `fact` and the `rev` the emit wire requires; parsed off the wire, never product-
+ *  imported (`@atlas/tools` is not an e2e-blackbox dependency, and the whole point is to stay black-box). */
+interface DraftEnvelope {
+  readonly fact: GroundedFact;
+  readonly rev: string;
+}
+
+/**
+ * Author a happy-path GROUNDED fact through the PRODUCT `atlas draft <anchor> <slot> <claim> --json` door —
+ * a READ-ONLY composition planner that persists NOTHING (cli.ts) — and return the `GroundedFact` it composes
+ * off the runtime's OWN index. This is the product-door STAND-IN replacement for the former in-process
+ * `author.ts` fabricators (`groundedAdvisoryFact`/`groundedSymbolFact`): the parts author.ts used to FAKE by
+ * re-building `Axes` in process — the grounding, the real `subtreeHash`, the `nodeKey` identity — are now all
+ * PRODUCT-computed, exactly as a user typing `atlas draft` receives them.
+ *
+ * TWO deliberate departures from a bare envelope, each a governance-class DECLARATION (not grounding — the
+ * truth gate still re-derives the product grounding at emit, untouched):
+ *   - `tier` is APPLIED here (default `T1`). `atlas draft` hard-defaults `T2` "by construction" (KNOW-6
+ *     move-in, draft.ts `DRAFT_TIER`), but the visible-fact stories need `tier≥T1` (TOOLS-6 bounds `T2` OUT of
+ *     the read pack) — the SAME `T1` the retired `groundedAdvisoryFact` defaulted to. `tier` is NOT in the
+ *     identity formula (draft.ts), so this never shifts the drafted `id`.
+ *   - `scope` is passed through from the door (it computes `scopeOf(anchor)` — the anchor's first path
+ *     segment), matching the old default of `'src'` for `src/*` anchors.
+ *
+ * Emit is DELIBERATELY separate — callers drive `emitFact` themselves. The ordered dedup / drift / supersede
+ * stories interleave `query` assertions BETWEEN emits (emit F, assert one node, re-emit F, assert dedup…), so
+ * folding emit into authoring would corrupt their sequence. Returns `{fact, draft}`; the `draft` run is the
+ * read-only subprocess (exit 0 already asserted here). Throws on a non-zero draft (a TEST-SETUP fault —
+ * a silent empty fact would make every downstream assertion pass VACUOUSLY).
+ */
+export function draftFact(repo: FixtureRepo, anchor: string, slot: string, claim: string, tier: Tier = 'T1'): { readonly fact: GroundedFact; readonly draft: AtlasRun } {
+  const run = runAtlas(repo.repoPath, ['draft', anchor, slot, claim, '--json']);
+  if (run.exitCode !== 0) {
+    throw new Error(`author8-subprocess: 'atlas draft ${anchor} ${slot} … --json' exited ${run.exitCode}:\n${run.stdout}${run.stderr}`);
+  }
+  const env = JSON.parse(run.stdout) as DraftEnvelope;
+  if (env.fact === undefined || typeof env.rev !== 'string') {
+    throw new Error(`author8-subprocess: 'draft --json' printed no {fact, rev}:\n${run.stdout}`);
+  }
+  return { fact: { ...env.fact, tier }, draft: run };
+}
+
+/** The declared NAME of a folded unit key — the trailing `:`-field of its last `::` segment
+ *  (`file::<start>:<kind>:<name>` ⇒ `<name>`, cf. adapter-io/src/ast.ts `unitPath`). */
+function unitLeafName(key: string): string {
+  const seg = key.split('::').at(-1) ?? '';
+  return seg.slice(seg.lastIndexOf(':') + 1);
+}
+
+/** Resolve a top-level SYMBOL name inside `filePath` to the folded `::` unit qualifiedPath `atlas draft`
+ *  expects as a symbol anchor — by reading the product `atlas anchors <file>` census (the discovery door),
+ *  never re-folding the index in process. Throws if no such symbol unit exists (a TEST-SETUP fault). */
+export function symbolAnchorKey(repo: FixtureRepo, filePath: string, symbolName: string): string {
+  const { units } = anchorsOf(repo.repoPath, filePath);
+  const hit = units.find((u) => u.kind === 'symbol' && unitLeafName(u.qualifiedPath) === symbolName);
+  if (hit === undefined) {
+    throw new Error(`author8-subprocess: no symbol unit '${symbolName}' under '${filePath}' (anchors census has no such '::' node)`);
+  }
+  return hit.qualifiedPath;
 }
