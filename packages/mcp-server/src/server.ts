@@ -47,6 +47,8 @@ import type { NegationLeg, RelationLeg, WiredHandler } from '@atlas/adapter-io';
 import { negationsVerdict, relationsVerdict } from '@atlas/adapter-io';
 import { faultOf, GOVERNANCE_SURFACE } from '@atlas/tools';
 import type { Tool, Verdict } from '@atlas/tools';
+import type { ReadSurfaceLegs } from './server-read-tools.js';
+import { advertisedAuthoringTools, callAuthoringTool } from './server-read-tools.js';
 
 /** The stdio MCP server handle (frozen ring shape — `start()` connects the SDK stdio transport). */
 export interface McpServer {
@@ -174,9 +176,22 @@ export function advertisedReadTools(relations?: RelationLeg, negations?: Negatio
 }
 
 /** The ListTools response — the closed governance surface (TOOLS-1), PLUS the `relations`/`negations` read
- *  tools when their legs are injected. With no leg the response is byte-for-byte the closed governance surface. */
-export function listTools(handler: WiredHandler, relations?: RelationLeg, negations?: NegationLeg): ListToolsResult {
-  return { tools: [...advertisedTools(handler), ...advertisedReadTools(relations, negations)] };
+ *  tools when their legs are injected, PLUS the full `READ_SURFACE` (6: anchors, slots, draft, check, doctor,
+ *  node) when the authoring bundle is injected (WP-10.A5.MCP). With no leg the response is byte-for-byte the
+ *  closed governance surface. */
+export function listTools(
+  handler: WiredHandler,
+  relations?: RelationLeg,
+  negations?: NegationLeg,
+  readLegs?: ReadSurfaceLegs,
+): ListToolsResult {
+  return {
+    tools: [
+      ...advertisedTools(handler),
+      ...advertisedReadTools(relations, negations),
+      ...advertisedAuthoringTools(readLegs),
+    ],
+  };
 }
 
 /**
@@ -213,7 +228,14 @@ export function callTool(
   args: unknown,
   relations?: RelationLeg,
   negations?: NegationLeg,
+  readLegs?: ReadSurfaceLegs,
 ): CallToolResult {
+  // The full READ_SURFACE (6: anchors, slots, draft, check, doctor, node) is routed DIRECTLY to its SHARED
+  // verdict builder (`@atlas/adapter-io`, the SAME body the CLI drives) — byte-identical `Verdict` on both
+  // transports. NONE reaches a write path (`node` rides the handler's read-only `resolveNode`; the rest ride
+  // read/planner legs that persist nothing). `undefined` ⇒ `name` is not a READ_SURFACE token; fall through.
+  const readVerdict = callAuthoringTool(handler, readLegs, name, args);
+  if (readVerdict !== undefined) return verdictToResult(readVerdict);
   // `atlas-relations` (#99a) is served DIRECTLY from the injected read leg through the SHARED verdict builder
   // (`relationsVerdict`, @atlas/adapter-io) — the SAME body the CLI drives, so identical input yields a
   // byte-identical `Verdict` on both transports (the SCHEMA + VERDICT parity invariant). It never reaches
@@ -243,21 +265,32 @@ export function callTool(
 
 /** Wire the SDK `Server` over the one handler: advertise the closed surface (+ the `relations` read tool when
  *  a read leg is injected) and route every CallTool. */
-function configureServer(handler: WiredHandler, relations?: RelationLeg, negations?: NegationLeg): Server {
+function configureServer(
+  handler: WiredHandler,
+  relations?: RelationLeg,
+  negations?: NegationLeg,
+  readLegs?: ReadSurfaceLegs,
+): Server {
   const server = new Server(SERVER_INFO, { capabilities: { tools: {} } });
-  server.setRequestHandler(ListToolsRequestSchema, () => listTools(handler, relations, negations));
+  server.setRequestHandler(ListToolsRequestSchema, () => listTools(handler, relations, negations, readLegs));
   server.setRequestHandler(CallToolRequestSchema, (request) =>
-    callTool(handler, request.params.name, request.params.arguments, relations, negations),
+    callTool(handler, request.params.name, request.params.arguments, relations, negations, readLegs),
   );
   return server;
 }
 
 /** Construct the stdio MCP server over the one wired handler (MCP-1), optionally exposing the `relations`
- *  (#99a) and `negations` (#99b) read tools when the composition root injects their legs. */
-export function createMcpServer(handler: WiredHandler, relations?: RelationLeg, negations?: NegationLeg): McpServer {
+ *  (#99a) and `negations` (#99b) read tools, plus the full `READ_SURFACE` (6, WP-10.A5.MCP) when the
+ *  composition root injects their legs. */
+export function createMcpServer(
+  handler: WiredHandler,
+  relations?: RelationLeg,
+  negations?: NegationLeg,
+  readLegs?: ReadSurfaceLegs,
+): McpServer {
   return {
     async start(): Promise<void> {
-      const server = configureServer(handler, relations, negations);
+      const server = configureServer(handler, relations, negations, readLegs);
       const transport = new StdioServerTransport();
       await server.connect(transport);
     },
