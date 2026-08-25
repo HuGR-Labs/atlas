@@ -128,7 +128,11 @@ describe('doc-transcript-guard — the gate can be falsified', () => {
 
   it('FAILS on a wrong EXIT CODE even when every output line matches', () => {
     const root = scratchRoot();
-    edit(root, VERIFIED_FILE, (s) => s.replace(`${VERIFIED_ROW}\n   # exit 0`, `${VERIFIED_ROW}\n   # exit 2`));
+    // Flip block #2 (`atlas query src`)'s exit 0 → 2. Anchored on the block's terminal data line
+    // (`axisHash: <64hex>`, which the CLI render now emits) so the mutation stays adjacent to the
+    // `# exit N` line no matter what output fields precede it — a string coupled to a specific data
+    // row silently no-ops when the render grows a line, blinding this teeth test.
+    edit(root, VERIFIED_FILE, (s) => s.replace(/(axisHash: [0-9a-f]{64}\n\s*# exit) 0/, '$1 2'));
     const { code, out } = run(root);
     expect(code, out).toBe(1);
     expect(out).toMatch(/exit code diverged/);
