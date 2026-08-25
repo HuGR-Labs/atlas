@@ -14,40 +14,71 @@
 // via the injected computer) or DEFAULTED (`tier`, `freshness`, `claims`, `authoring`, `scope`) — never
 // demanded of the author (AUTHOR-6f).
 //
-// [FRAMING NOTE — AUTHOR-9/10 are OUT OF SCOPE for this facet, and the gap is deliberate, not silent.] The
-// frozen `DraftOut` (types.ts) also carries `operation: 'CREATE'|'UPDATE'` and `route:
-// 'auto-accept'|'full-ratify'` — AUTHOR-9/10's concerns, not AUTHOR-6/7's, and NOT covered by this WP's
-// acceptance goldens (SCN-AUTH-5*/6*/7* only). Both fields need information this planner's ONE injected
-// port (`GroundingComputer` — grounding-only, AUTHOR-1) cannot supply:
-//   - `operation` (AUTHOR-10) needs to know whether a node ALREADY EXISTS at the drafted (anchor, slot)
-//     identity — an INCUMBENT LOOKUP against the durable store. No store handle is injected here (the same
-//     "closure over a computer, no store handle" shape `anchors` uses) — claiming CREATE when a node exists
-//     would violate AUTHOR-10 ("MUST NOT silently overwrite the author's mental model"), so this planner
-//     states the conservative, always-true half instead: `'CREATE'`. A caller for whom UPDATE-detection
-//     matters MUST confirm via `atlas query` before authoring — this is a KNOWN GAP for a follow-up WP that
-//     threads an incumbent-lookup port, not a claim of correctness.
-//   - `route` (AUTHOR-9) needs the store/threshold-derived `RatifyContext.lowRisk`/`contested` verdicts
-//     (`@atlas/knowledge` `ratify/fastpath.ts`) — also store-derived, also unavailable here. Rather than
-//     invent a value, this planner picks the SAFE DIRECTION: it always reports `'full-ratify'` with
-//     `requires: 'ATLAS_RATIFY_TOKEN'` (the real env channel `composeRuntime` sources — `compose.ts`). The
-//     failure mode of an over-conservative `route` is an author who prepares a ratify token the real door
-//     turns out not to need (harmless); the failure mode of a false `'auto-accept'` is an author who is
-//     surprised by a full-ratify refusal at emit time — exactly the discovery-by-refusal AUTHOR-9 forbids.
-//     Never the dangerous direction.
+// [WP-10.A2-b.TOOLS — AUTHOR-9/10/13, ADR-0004.] `operation`/`route` are no longer conservative defaults:
+// this facet now closes over a SECOND injected port (`IncumbentPort`, declared below) that answers the two
+// questions the file-header note above used to declare out of scope:
+//   - `operation` (AUTHOR-10) — CREATE vs UPDATE, by an INCUMBENT LOOKUP keyed on the SAME `nodeKey` this
+//     planner mints (`id`, below), NEVER on the CAS `contentHash` (SCN-AUTH-10c-1's teeth: a reworded claim
+//     at the SAME `(anchor, slot)` keeps the SAME `nodeKey` and so must still read UPDATE, not a second
+//     CREATE — a contentHash-keyed check would get this backwards, since a reworded claim changes the
+//     content).
+//   - `route` (AUTHOR-9) — this facet CALLS the existing `route` function (`@atlas/knowledge`
+//     `ratify/fastpath.ts`), never re-derives the KNOW-18 fast-path policy. The `RatifyContext` `route`
+//     needs (`lowRisk`/`contested`/`derivedTier`/`origin`) is STORE/THRESHOLD-derived and so is also
+//     supplied by the injected port (`ratifyContextFor`) — built, on the production side, from the SAME
+//     `ratifyCtxFor` the real governed emit door computes its own context from (`adapter-io`
+//     `governed-emit-route.ts`), so a drafted route and the door's own route agree by construction on the
+//     SAME incumbent state, never a second parallel policy.
+//
+// THE LAYER SPLIT (same shape `GroundingComputer`/`GateChainRunner` already use, ARCH-2): the incumbent
+// lookup + ratify-context are STORE-derived, but `@atlas/tools` MUST NOT import `@atlas/adapter-io`. So
+// `IncumbentPort` is a PORT declared here and IMPLEMENTED by `@atlas/adapter-io` (`draft-incumbent-source.ts`)
+// over the REAL durable projection — this facet holds no store handle of any kind, exactly like `anchors`
+// and `check` before it.
+//
+// AUTHOR-13 (retire/supersede is a DRAFT VARIANT, not a door): `draftSupersede` reuses the IDENTICAL
+// composition `draft` runs — same grounding seam, same identity mint, same incumbent lookup, same route
+// call — and differs in EXACTLY one field: the drafted fact's `authoring` is stamped `'SUPERSEDED'` instead
+// of `'ADVISORY'`. No new write door is opened; a supersede is persisted through the SAME `atlas-emit` gate
+// chain any other draft is (AUTHOR-13b/d) — this facet still PERSISTS NOTHING (AUTHOR-2).
 
-import { nodeKey } from '@atlas/knowledge';
-import type { Candidate, ClaimProvenance, GroundedFact } from '@atlas/knowledge';
-import type { Tier } from '@atlas/contracts';
+import { nodeKey, route } from '@atlas/knowledge';
+import type { Candidate, ClaimProvenance, CurrentNode, GroundedFact, RatifyContext } from '@atlas/knowledge';
+import type { NodeKey, Tier } from '@atlas/contracts';
 import type { Grounding } from '@atlas/grounding';
 import type { DraftOut } from './types.js';
 import type { GroundingCandidate, GroundingComputer } from './anchors.js';
 
+/**
+ * The STORE-derived seam `draft`/`draftSupersede` need and `@atlas/tools` MUST NOT reach for directly
+ * (ARCH-2) — declared here, IMPLEMENTED by `@atlas/adapter-io` (`draft-incumbent-source.ts`) over the real
+ * durable projection + the real `ratifyCtxFor`. The SAME split `GroundingComputer` (anchors.ts) and
+ * `GateChainRunner` (check.ts) use, for the identical reason.
+ */
+export interface IncumbentPort {
+  /** Look up the CURRENT node at `key` — the SAME `nodeKey` this planner mints (AUTHOR-10). Occupancy is
+   *  keyed on the `nodeKey`, NEVER on the CAS `contentHash` (SCN-AUTH-10c-1's teeth). `undefined` ⇒ no
+   *  current node at that identity ⇒ CREATE; a defined result ⇒ UPDATE. Read-only — no write, no throw. */
+  incumbentAt(key: NodeKey): CurrentNode | undefined;
+  /** Build the `RatifyContext` (`@atlas/knowledge` `ratify/fastpath.ts`) `route` needs for a write DERIVING
+   *  `derivedTier` from the resolved incumbent (ARCH-9 — `undefined` on a CREATE) — the SAME store/threshold
+   *  -derived defaults + door-derived class the real governed emit door computes its own context from,
+   *  never re-invented here (AUTHOR-9's "never discover by refusal" clause depends on this NOT diverging). */
+  ratifyContextFor(derivedTier: Tier | undefined): RatifyContext;
+}
+
 export interface DraftApi {
-  /** Compose a candidate `GroundedFact` from the author's `(anchor, slot, claim)` triple (AUTHOR-6). Pure
-   *  + total over the injected `GroundingComputer`; never throws on a candidate the computer can ground —
-   *  an unresolvable anchor yields the computer's own empty `subtreeHash` (fail-closed at the emit gate,
-   *  not here). */
+  /** Compose a candidate `GroundedFact` from the author's `(anchor, slot, claim)` triple (AUTHOR-6), with
+   *  `operation`/`route` resolved against the injected `IncumbentPort` (AUTHOR-9/10). Pure + total over the
+   *  injected `GroundingComputer`/`IncumbentPort`; never throws on a candidate the computer can ground — an
+   *  unresolvable anchor yields the computer's own empty `subtreeHash` (fail-closed at the emit gate, not
+   *  here). */
   draft(candidate: GroundingCandidate): DraftOut;
+  /** AUTHOR-13 — express a retire/supersede as a DRAFT VARIANT, never a new write door. IDENTICAL
+   *  composition to {@link DraftApi.draft}; the drafted fact's `authoring` is `'SUPERSEDED'` instead of
+   *  `'ADVISORY'`. Persists NOTHING here — a supersede reaches the store only through the SAME `atlas-emit`
+   *  gate chain any other draft does (AUTHOR-13b/d). */
+  draftSupersede(candidate: GroundingCandidate): DraftOut;
 }
 
 /** KNOW-6's move-in default — every territory ships `T2/advisory` "by construction" (`ratify/init.ts`).
@@ -68,13 +99,13 @@ const DRAFT_PROVENANCE: ClaimProvenance = { source: 'atlas-draft', trusted: fals
 const RATIFY_CHANNEL = 'ATLAS_RATIFY_TOKEN';
 
 /**
- * Build the `draft` planner over an injected `GroundingComputer` (AUTHOR-1) — the SAME port `anchors`
- * consumes, so a fact drafted here re-derives against the identical seam the emit truth-gate re-derives
- * against (AUTHOR-8's round-trip precondition). Pure + total and READ-ONLY: it persists NOTHING
- * (AUTHOR-2).
+ * Build the `draft`/`draftSupersede` planners over an injected `GroundingComputer` (AUTHOR-1) — the SAME
+ * port `anchors` consumes, so a fact drafted here re-derives against the identical seam the emit truth-gate
+ * re-derives against (AUTHOR-8's round-trip precondition) — and an injected `IncumbentPort` (AUTHOR-9/10)
+ * for the occupancy lookup + `route` call. Pure + total and READ-ONLY: it persists NOTHING (AUTHOR-2).
  */
-export function createDraft(computer: GroundingComputer): DraftApi {
-  const draft = (input: GroundingCandidate): DraftOut => {
+export function createDraft(computer: GroundingComputer, incumbent: IncumbentPort): DraftApi {
+  const build = (input: GroundingCandidate, authoring: 'ADVISORY' | 'SUPERSEDED'): DraftOut => {
     // (a) GROUNDING — the ONE computer, never a second derivation (AUTHOR-1/6c).
     const anchor = computer.groundingFor(input);
     const grounding: Grounding = { entries: [{ anchor, path: anchor.qualifiedPath }] };
@@ -100,16 +131,32 @@ export function createDraft(computer: GroundingComputer): DraftApi {
     // recomputes from content at write time (`governed-emit.ts`: "the author-supplied payload `node.id` is
     // NEVER used for routing"). A draft that invented its own `id` would still emit correctly (the door
     // ignores it) — which is exactly why SCN-AUTH-6b-1 compares against the FORMULA, not against a
-    // round-trip through emit.
+    // round-trip through emit. This SAME `id` is the occupancy key AUTHOR-10 reads below — NEVER the CAS
+    // `contentHash`, so a reworded claim at the same `(anchor, slot)` — same `id`, different `claimNorm` —
+    // still resolves an incumbent and reports UPDATE (SCN-AUTH-10c-1).
     const id = nodeKey(candidateView);
+
+    // AUTHOR-10 — CREATE vs UPDATE by an INCUMBENT LOOKUP keyed on `id` (the minted `nodeKey`), through the
+    // injected port — never a store handle held here, never a lookup keyed on content.
+    const currentNode = incumbent.incumbentAt(id);
+    const operation: 'CREATE' | 'UPDATE' = currentNode === undefined ? 'CREATE' : 'UPDATE';
+
+    // AUTHOR-9 — CALL the existing `route` function (`@atlas/knowledge` `ratify/fastpath.ts`), never
+    // re-derive its policy here. `ctx` is built by the injected port from the SAME incumbent just resolved
+    // (ARCH-9's `derivedTier`, `undefined` on a CREATE) — the identical shape the real governed emit door
+    // computes its own context from, so a drafted route cannot diverge from the door's on the SAME state.
+    const ctx = incumbent.ratifyContextFor(currentNode?.tier);
+    const routeVerdict = route(candidateView, ctx);
 
     // THE DRAFTED FACT — every field the emit door destructures (`governed-emit.ts` gate 0 / familyOf /
     // claimNormOf / candidateView) is present and well-formed: `tier` (a real `Tier`), `scope` (a
     // non-empty string — AUTHOR-6d defaults it; no anchor→scope authority oracle is available to this
     // planner, so this is a STRUCTURAL placeholder an author may override before `atlas emit`, never a
     // claim about which admin-declared scope owns the anchor), no `check` (⇒ advisory family), `claimNorm`,
-    // `predicateSlot`. `freshness`/`claims`/`authoring` complete the `AdvisoryNode` shape the type demands
-    // (the door does not gate on them, but a `GroundedFact` is not well-formed without them).
+    // `predicateSlot`. `freshness`/`claims` complete the `AdvisoryNode` shape the type demands (the door
+    // does not gate on them, but a `GroundedFact` is not well-formed without them). `authoring` is the
+    // AUTHOR-13 variant selector: `'ADVISORY'` for `draft`, `'SUPERSEDED'` for `draftSupersede` — the ONE
+    // field that differs between the two legs.
     const fact: GroundedFact = {
       kind: 'advisory',
       id,
@@ -118,7 +165,7 @@ export function createDraft(computer: GroundingComputer): DraftApi {
       grounding,
       freshness: 'FRESH',
       claims: [],
-      authoring: 'ADVISORY',
+      authoring,
       scope: scopeOf(input.anchor),
       predicateSlot: input.slot,
     };
@@ -126,16 +173,18 @@ export function createDraft(computer: GroundingComputer): DraftApi {
     return {
       fact,
       rev,
-      // AUTHOR-10 — see the file-header FRAMING NOTE: no incumbent-lookup port is injected here, so the
-      // conservative, always-true half is reported.
-      operation: 'CREATE',
-      // AUTHOR-9 — see the file-header FRAMING NOTE: the store-derived conjuncts are unavailable, so the
-      // safe direction is always reported (never a false `auto-accept`).
-      route: 'full-ratify',
-      requires: RATIFY_CHANNEL,
+      operation,
+      route: routeVerdict,
+      // AUTHOR-9b — the authorizing channel is named ONLY when it is actually owed (`exactOptionalPropertyTypes`:
+      // absent on `auto-accept`, present on `full-ratify`), so a caller reading `requires` on the fast path
+      // does not see a channel nothing will ask it for.
+      ...(routeVerdict === 'full-ratify' ? { requires: RATIFY_CHANNEL } : {}),
     };
   };
-  return { draft };
+  return {
+    draft: (input) => build(input, 'ADVISORY'),
+    draftSupersede: (input) => build(input, 'SUPERSEDED'),
+  };
 }
 
 /** The FIRST path segment of an anchor's `qualifiedPath` (e.g. `packages/tools/src/foo.ts::bar` →
@@ -152,11 +201,20 @@ function scopeOf(anchor: string): string {
   return first.length > 0 ? first : 'root';
 }
 
-// differential-vs-oracle (compile-time): the impl's `draft` conforms to the co-located frozen
-// `DraftApi.draft` signature. `GroundingComputer` is the SAME port `anchors` declares — the port stays
-// UNIMPLEMENTED here, satisfied by injection.
-const _draftConforms: DraftApi['draft'] = createDraft({
-  anchorsUnder: () => ({ rev: '', units: [], holes: [] }),
-  groundingFor: () => ({ kind: 'file', qualifiedPath: '', subtreeHash: '' as never }),
-}).draft;
+// differential-vs-oracle (compile-time): the impl's `draft`/`draftSupersede` conform to the co-located
+// frozen `DraftApi` signatures. `GroundingComputer` is the SAME port `anchors` declares; `IncumbentPort` is
+// declared above — BOTH stay UNIMPLEMENTED here, satisfied by injection.
+const _draftApi: DraftApi = createDraft(
+  {
+    anchorsUnder: () => ({ rev: '', units: [], holes: [] }),
+    groundingFor: () => ({ kind: 'file', qualifiedPath: '', subtreeHash: '' as never }),
+  },
+  {
+    incumbentAt: () => undefined,
+    ratifyContextFor: () => ({ contested: false, lowRisk: true }),
+  },
+);
+const _draftConforms: DraftApi['draft'] = _draftApi.draft;
+const _draftSupersedeConforms: DraftApi['draftSupersede'] = _draftApi.draftSupersede;
 void _draftConforms;
+void _draftSupersedeConforms;

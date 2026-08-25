@@ -29,6 +29,7 @@ import type { T0Heuristic, TruthGate } from '@atlas/tools';
 import { walkFileTree } from './fs.js';
 import { deriveGroundingAxes, buildGroundingComputer, buildGate } from './grounding-computer.js';
 import { buildCheckPort } from './check-source.js';
+import { buildDraftIncumbentPort } from './draft-incumbent-source.js';
 import { readScipOrEmpty, readScipIndexerName } from './scip.js';
 import { loadPolicy } from './policy.js';
 import type { AtlasPolicy } from './policy.js';
@@ -193,10 +194,6 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
   // THE `slots` DISCOVERY PLANNER (WP-10.A2-a / ADR-0004, AUTHOR-5) — no injected port: it reads the
   // compile-time `PredicateSlot` union, not the index, so it needs no `groundingComputer`.
   const slotsLeg = createSlots();
-  // THE `draft` COMPOSITION PLANNER (WP-10.A2-a / ADR-0004, AUTHOR-6/7) — over the SAME `groundingComputer`
-  // `anchors` rides (AUTHOR-1: one grounding seam), so a drafted fact's `subtreeHash` is exactly the value
-  // the emit truth-gate will re-derive against.
-  const draftLeg = createDraft(groundingComputer);
   // #96 F2 — the SAME N0 completeness view the emit leg rides (`() => index.symbolReverse()`, wire.ts:217),
   // built ONCE off the SAME `scipOutput` the axes above are built from, so the promote leg (below) reaches
   // `emitNegation` with its deps satisfied instead of fail-closing `scope-empty` for every promoted negation.
@@ -233,6 +230,12 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
   const provenance = gitStoreProvenance(repoPath);
   const trusted: SidecarTrust = () => provenance() === 'trusted';
   const store = createDiskStore(join(repoPath, CAS_REL), () => headSha(repoPath), trusted);
+  // THE `draft` + `draftSupersede` COMPOSITION PLANNERS (WP-10.A2-a/b / ADR-0004, AUTHOR-6/7/9/10/13) — over
+  // the SAME `groundingComputer` `anchors` rides (AUTHOR-1: one grounding seam), so a drafted fact's
+  // `subtreeHash` is exactly the value the emit truth-gate will re-derive against, PLUS the `IncumbentPort`
+  // (`@atlas/tools` `draft.ts`) built here over the SAME `store` the durable emit door and the `check`
+  // dry-run leg (below) ride — never a second store, never a second occupancy notion.
+  const draftLeg = createDraft(groundingComputer, buildDraftIncumbentPort(store));
   // `driftPairs` carries each fact ALONGSIDE its own `CurrentNode` (`reverify` needs `node.primaryAnchor` for
   // the anchor-binding check, #199); `driftFacts` is the same pairing's `.fact` projection — ONE store read.
   const driftPairs = driftPairsOf(store);
@@ -464,6 +467,9 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     // THE `draft` COMPOSITION PLANNER (WP-10.A2-a / ADR-0004) — the ARCH-3 binding that makes `createDraft`
     // running code (its production caller), over the SAME grounding computer `anchors` reads.
     draft: draftLeg.draft,
+    // THE `draftSupersede` RETIRE/SUPERSEDE VARIANT (WP-10.A2-b / ADR-0004, AUTHOR-13) — the SAME
+    // composition as `draft`, opening NO new write door; the drafted fact differs only in `authoring`.
+    draftSupersede: draftLeg.draftSupersede,
     // THE `check` DRY-RUN PLANNER (WP-10.A3 / ADR-0004, AUTHOR-11/12) — the ARCH-3 binding that makes
     // `createCheck` running code (its production caller), over the `GateChainRunner` port built above
     // (`buildCheckPort` → `runGateChain`, WP-10.A3.ADAPTER). Read-only; not a `Tool`; opens no write path.
