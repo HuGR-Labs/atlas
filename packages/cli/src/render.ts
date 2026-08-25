@@ -58,7 +58,15 @@ function renderData(data: unknown): string {
 
   // query envelope { pack, subsumes } — the observability readback (Seam-1+3).
   const pack = d.pack as
-    | { invariants?: unknown; advisory?: unknown; advisoryDropped?: unknown; stale?: unknown; tokenEstimate?: unknown }
+    | {
+        invariants?: unknown;
+        advisory?: unknown;
+        advisoryDropped?: unknown;
+        stale?: unknown;
+        tokenEstimate?: unknown;
+        territory?: unknown;
+        axisHash?: unknown;
+      }
     | undefined;
   if (pack && typeof pack === 'object' && Array.isArray(pack.invariants)) {
     const invs = pack.invariants as readonly InvRow[];
@@ -85,6 +93,11 @@ function renderData(data: unknown): string {
       // WP-SAMEAS: one line per (pre-sorted) human equivalence edge — surfaced like subsumes, never a merge.
       ...sames.map((s) => `  sameAs ${s.a} ≡ ${s.b}`),
     ];
+    // [ENTRY-CLI-6] `territory` + `axisHash` are the two `Pack` fields (@atlas/contracts) this block used to
+    // drop silently — a caller could see the invariants a query resolved but never which territory/axis they
+    // were resolved AGAINST. APPENDED (never inserted earlier), so every pre-existing line stays in place.
+    if (typeof pack.territory === 'string') lines.push(`  territory: ${pack.territory}`);
+    if (typeof pack.axisHash === 'string') lines.push(`  axisHash: ${pack.axisHash}`);
     return `data:\n${lines.join('\n')}\n`;
   }
 
@@ -154,17 +167,22 @@ function renderData(data: unknown): string {
   // other data shape carries either key, so no cross-shadowing with the shapes above/below). A header line states
   // the rev and BOTH counts, so an EMPTY listing is a MEASURED fact ("0 unit(s), 0 hole(s)") and never an absent
   // line; each unit renders `  unit <kind> <qualifiedPath> [<subtreeHash>]` in the leg's own deterministic (index)
-  // order, and each declared language hole renders `  hole <ext> — <fileCount> file(s): <reason>` (AUTHOR-4, the
-  // real census). The honest-empty `reason` (AUTHOR-3) renders as a trailing `  reason: <reason>` line ONLY when
-  // present (the leg sets it iff `units` is empty), so a populated listing stays byte-clean and an empty one is
-  // never silent about WHY.
+  // order — [ENTRY-CLI-6] the fourth `AnchorUnit` field, `path` (the FILE the unit lives under, distinct from
+  // `qualifiedPath`'s folded `::` symbol form for a `symbol`-kind unit), used to have NO rendered line at all;
+  // it now rides a SEPARATE trailing `  unit-path <qualifiedPath>: <path>` line per unit rather than being
+  // spliced into the pre-existing `unit` line, so that line's bytes stay byte-for-byte what they always were
+  // — and each declared language hole renders `  hole <ext> — <fileCount> file(s): <reason>` (AUTHOR-4, the
+  // real census). The honest-empty `reason` (AUTHOR-3) renders as a trailing `  reason: <reason>` line ONLY
+  // when present (the leg sets it iff `units` is empty), so a populated listing stays byte-clean and an
+  // empty one is never silent about WHY.
   if (Array.isArray(d.units) && Array.isArray(d.holes)) {
-    const units = d.units as readonly { qualifiedPath: string; kind: string; subtreeHash: string }[];
+    const units = d.units as readonly { qualifiedPath: string; kind: string; subtreeHash: string; path: string }[];
     const holes = d.holes as readonly { ext: string; fileCount: number; reason: string }[];
     const rev = typeof d.rev === 'string' ? d.rev : '';
     const lines = [
       `  anchors: rev ${rev} — ${units.length} unit(s), ${holes.length} hole(s)`,
       ...units.map((u) => `  unit ${u.kind} ${u.qualifiedPath} [${u.subtreeHash}]`),
+      ...units.map((u) => `  unit-path ${u.qualifiedPath}: ${u.path}`),
       ...holes.map((h) => `  hole ${h.ext} — ${h.fileCount} file(s): ${h.reason}`),
     ];
     if (typeof d.reason === 'string') lines.push(`  reason: ${d.reason}`);
@@ -286,19 +304,67 @@ function renderData(data: unknown): string {
     return out;
   }
 
-  // emit { id } — the CAS id of the persisted fact.
+  // emit { id, nodeKey? } — the CAS id of the persisted fact. [ENTRY-CLI-6 / AUTHOR-14] `nodeKey` — the
+  // SAME identity `atlas node <addr>` reads back — used to ride the `EmitOut` receipt completely unrendered;
+  // it now gets its OWN trailing line, APPENDED after `id` (never replacing it), and ONLY when present
+  // (additive/absent-tolerant — a pre-#… receipt with no `nodeKey` renders byte-identically to before).
   if (typeof d.id === 'string') {
-    return `data:\n  id: ${d.id}\n`;
+    let out = `data:\n  id: ${d.id}\n`;
+    if (typeof d.nodeKey === 'string') out += `  nodeKey: ${d.nodeKey}\n`;
+    return out;
   }
 
-  // init { territories } — the structural move-in. An EMPTY territory set renders NO block (there are no
-  // lines to show) so a zero-territory init stays byte-identical to its pre-Seam-2 output (back-compat).
+  // init { territories, blastRadius, t0Candidates } — the structural move-in (`InitOut`, ENTRY-CLI-6 §
+  // regression witness: two of the record's three fields — `blastRadius` and `t0Candidates` — used to be
+  // dropped here entirely; a reader saw the territory set and NOTHING about the reachability closure or
+  // which T0-keyword territories got flagged). `blastRadius`/`t0Candidates` render as their OWN trailing
+  // line-groups, APPENDED after the pre-existing (sorted) `territory:` lines — never spliced into them — so
+  // a zero-territory / zero-blastRadius / zero-t0Candidates init still renders NOTHING for that group (a
+  // measured absence, not a header for an empty set) and the whole block stays byte-identical to the
+  // pre-#ENTRY-CLI-6 output whenever all three arrays are empty (back-compat, SCN-CLI-6b-1 pins the
+  // populated case; the pre-existing sorted-by-name territory line order is UNCHANGED).
   if (Array.isArray(d.territories)) {
     const names = (d.territories as readonly { name: string }[])
       .map((t) => t.name)
       .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-    if (names.length === 0) return '';
-    return `data:\n${names.map((n) => `  territory: ${n}`).join('\n')}\n`;
+    const blastRadius = Array.isArray(d.blastRadius) ? (d.blastRadius as readonly string[]) : [];
+    const t0Candidates = Array.isArray(d.t0Candidates) ? (d.t0Candidates as readonly string[]) : [];
+    const lines = [
+      ...names.map((n) => `  territory: ${n}`),
+      ...blastRadius.map((b) => `  blastRadius: ${b}`),
+      ...t0Candidates.map((c) => `  t0Candidate: ${c}`),
+    ];
+    if (lines.length === 0) return '';
+    return `data:\n${lines.join('\n')}\n`;
+  }
+
+  // reconcile { drift, mechanical, semantic, regroundedCount, reauthorCount, exitCode } — the drift-review
+  // pass (`ReconcileOut`, TOOLS-8/13). [ENTRY-CLI-6] this shape used to render NO block at all — every field
+  // was silently dropped (the `renderData` guard chain had no branch for it, so `renderAs`'s dataBlock was
+  // always `''` for a reconcile verdict, even though the SAME verdict already carries `exitCode` into the
+  // exit-code derivation via `deriveStatus`/duck-typing in map.ts). Recognised by `mechanical`+`semantic`
+  // arrays PLUS a numeric `exitCode` (no other shape carries all three; `relations`/`negations` carry
+  // arrays under different keys, so no cross-shadowing). A header line states BOTH review-set counts and the
+  // exit code (a measured fact, matching what the process actually returns), then the two named-fact lists,
+  // then the re-ground/re-author counts. `drift`'s richer `DriftItem` rows render their fact + class +
+  // anchors so a reviewer sees WHAT moved, not just its name twice.
+  if (Array.isArray(d.mechanical) && Array.isArray(d.semantic) && typeof d.exitCode === 'number') {
+    const drift = Array.isArray(d.drift)
+      ? (d.drift as readonly { fact: string; class: string; anchorWas: unknown; anchorNow: unknown }[])
+      : [];
+    const mechanical = d.mechanical as readonly string[];
+    const semantic = d.semantic as readonly string[];
+    const regroundedCount = typeof d.regroundedCount === 'number' ? d.regroundedCount : 0;
+    const reauthorCount = typeof d.reauthorCount === 'number' ? d.reauthorCount : 0;
+    const lines = [
+      `  reconcile: exitCode ${d.exitCode} — ${mechanical.length} mechanical, ${semantic.length} semantic`,
+      ...drift.map((item) => `  drift ${item.class} ${item.fact}`),
+      ...mechanical.map((f) => `  mechanical: ${f}`),
+      ...semantic.map((f) => `  semantic: ${f}`),
+      `  regroundedCount: ${regroundedCount}`,
+      `  reauthorCount: ${reauthorCount}`,
+    ];
+    return `data:\n${lines.join('\n')}\n`;
   }
 
   return '';

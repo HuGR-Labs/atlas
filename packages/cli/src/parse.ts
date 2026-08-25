@@ -4,7 +4,7 @@
 // cac/yargs/commander throw or call `process.exit` on bad input (violating CLI-1c totality). This parser
 // NEVER throws and NEVER touches `process.exit` — a malformed invocation fails CLOSED to a `ParseError`.
 
-import { COMMAND_LEG } from './map.js';
+import { COMMAND_LEG, COMMANDS } from './map.js';
 import type { Command } from './map.js';
 
 /** A successful parse — the routed command plus its captured positionals/flags. */
@@ -23,8 +23,10 @@ export interface ParseError {
 
 export type ParseResult = ParseOk | ParseError;
 
-/** The minimum positional arity each command requires (CLI-1b: a missing positional is a parse error). */
-const ARITY: Record<Command, number> = {
+/** The minimum positional arity each command requires (CLI-1b: a missing positional is a parse error).
+ *  EXPORTED — `help.ts` (ENTRY-CLI-5) derives the help door's per-command arity line from THIS table, never
+ *  a second hand-transcribed count. */
+export const ARITY: Record<Command, number> = {
   init: 1, // init <path>
   query: 1, // query <scope>
   emit: 1, // emit <node>
@@ -80,7 +82,11 @@ const ARITY: Record<Command, number> = {
   draft: 3,
 };
 
-const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine|node|link|promote|own|relations|negations|transitions|transition|test-vacuities|test-vacuity|verify-fact|verify-store|derive-relations|anchors|slots|draft';
+// [ENTRY-CLI-5 clean-up] this used to be a HAND-TRANSCRIBED string literal — a second copy of `COMMANDS`
+// (map.ts), three feet from the array that already enumerates the surface, and exactly the smell that made
+// `COMMAND_LEG`'s own count-in-a-comment wrong twice (map.ts:63-65). DERIVED now: an error message built
+// from this is automatically current the moment a command joins `COMMANDS`, never a second list to remember.
+const COMMAND_LIST = COMMANDS.join('|');
 
 function isCommand(s: string): s is Command {
   return Object.prototype.hasOwnProperty.call(COMMAND_LEG, s);
@@ -91,8 +97,9 @@ function isCommand(s: string): s is Command {
  * Valued today: `--at`/`--by` (emit anchor rev / query axis) and `--scope`/`--world`/`--min` (verify-fact's
  * claim scope, completeness world, and count lower bound). Everything else stays a bare boolean. Any unknown
  * flag simply folds into the bag (a bare `--x` becomes `'true'`) — never a parse error, preserving totality.
- */
-const VALUED_FLAGS = new Set(['at', 'by', 'scope', 'world', 'min']);
+ *  EXPORTED — `help.ts` (ENTRY-CLI-5) lists these as the flags help names, rather than a second hand-
+ *  transcribed set. */
+export const VALUED_FLAGS = new Set(['at', 'by', 'scope', 'world', 'min']);
 
 /**
  * Fold one `-x`/`--x`/`--x=y`/`--x y` token into the flag bag — a bare flag is `'true'`. For a VALUED flag in
