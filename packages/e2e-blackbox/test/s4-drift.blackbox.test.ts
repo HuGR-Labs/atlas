@@ -14,7 +14,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedAdvisoryFact } from './author.js';
+import { draftFact } from './author8-subprocess.js';
 import type { GroundedFact } from '@atlas/knowledge';
 import { ACTOR, RATIFIER, emitFact, scopedPolicy } from './support.js';
 
@@ -52,7 +52,7 @@ beforeAll(() => {
   process.env.ATLAS_ACTOR = ACTOR;
   process.env.ATLAS_RATIFY_TOKEN = RATIFIER; // KNOW-8 ratifier — T1 fact routes to full-ratify
   repo = makeFixtureRepo({ files: { 'src/foo.ts': 'export const foo = 1;\n' }, policy: scopedPolicy('src') });
-  fact = groundedAdvisoryFact({ repoPath: repo.repoPath, filePath: 'src/foo.ts', slot: 'invariant', claim: 'foo is 1' });
+  fact = draftFact(repo, 'src/foo.ts', 'invariant', 'foo is 1').fact;
   genesis = repo.sha();
   const emit = emitFact(repo, fact);
   if (emit.exitCode !== 0) throw new Error(`S4 setup: grounded emit failed:\n${emit.stdout}`);

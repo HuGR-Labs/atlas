@@ -22,7 +22,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, mcpSession, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedAdvisoryFact } from './author.js';
+import { draftFact } from './author8-subprocess.js';
 import type { GroundedFact } from '@atlas/knowledge';
 import { ACTOR, RATIFIER, emitFact, scopedPolicy } from './support.js';
 
@@ -70,7 +70,7 @@ beforeAll(() => {
 
   // Emit two DISTINCT grounded facts per repo (distinct file anchors ⇒ distinct nodeKeys).
   const emit = (repo: FixtureRepo, filePath: string, claim: string): GroundedFact => {
-    const fact = groundedAdvisoryFact({ repoPath: repo.repoPath, filePath, slot: 'invariant', claim });
+    const fact = draftFact(repo, filePath, 'invariant', claim).fact;
     const e = emitFact(repo, fact);
     if (e.exitCode !== 0) throw new Error(`S16 setup: grounded emit failed for ${filePath}:\n${e.stdout}`);
     return fact;

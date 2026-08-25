@@ -52,7 +52,7 @@ import {
 } from '@c4312/scip';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedAdvisoryFact } from './author.js';
+import { draftFact } from './author8-subprocess.js';
 import type { GroundedFact } from '@atlas/knowledge';
 import { ACTOR, RATIFIER, emitFact, invLines, scopedPolicy } from './support.js';
 
@@ -144,7 +144,7 @@ beforeAll(() => {
   writeScipDepEdge(repo.repoPath);
 
   const at = (filePath: string, slot: 'invariant' | 'gotcha' | 'definition', claim: string, tier?: 'T2') =>
-    groundedAdvisoryFact({ repoPath: repo.repoPath, filePath, slot, claim, ...(tier ? { tier } : {}) });
+    draftFact(repo, filePath, slot, claim, tier ?? 'T1').fact;
 
   factInv = at('src/greet.ts', 'invariant', CLAIM_INV);
   factGotcha = at('src/greet.ts', 'gotcha', CLAIM_GOTCHA);

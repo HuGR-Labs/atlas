@@ -24,7 +24,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { makeFixtureRepo, mcpSession, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedAdvisoryFact } from './author.js';
+import { draftFact } from './author8-subprocess.js';
 import type { GroundedFact } from '@atlas/knowledge';
 import { ACTOR, RATIFIER, emitFact, scopedPolicy } from './support.js';
 
@@ -68,12 +68,7 @@ beforeAll(() => {
     },
     policy: scopedPolicy('src'),
   });
-  fact = groundedAdvisoryFact({
-    repoPath: repo.repoPath,
-    filePath: 'src/foo.ts',
-    slot: 'invariant',
-    claim: 'foo is 1',
-  });
+  fact = draftFact(repo, 'src/foo.ts', 'invariant', 'foo is 1').fact;
   genesis = repo.sha();
   const e = emitFact(repo, fact);
   if (e.exitCode !== 0) throw new Error(`S26 setup: grounded emit failed:\n${e.stdout}\n${e.stderr}`);

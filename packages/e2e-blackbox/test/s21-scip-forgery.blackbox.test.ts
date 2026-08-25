@@ -37,9 +37,10 @@ import {
 } from '@c4312/scip';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedAdvisoryFact, subtreeHashOf } from './author.js';
+import { subtreeHashOf } from './author.js';
 import { ACTOR, RATIFIER, emitFact, invLines, scopedPolicy } from './support.js';
 import type { GroundedFact } from '@atlas/knowledge';
+import { draftFact } from './author8-subprocess.js';
 
 const TARGET = 'src/target.ts';
 const OTHER = 'src/other.ts';
@@ -124,9 +125,7 @@ afterAll(() => {
 
 describe('S21 — a forged `.atlas/index.scip` cannot launder a stale fact into FRESH', () => {
   it('(i) BASELINE: a genuinely grounded fact is accepted and served', () => {
-    const emitted = emitFact(repo, groundedAdvisoryFact({
-      repoPath: repo.repoPath, filePath: TARGET, slot: 'invariant', claim: CLAIM_BASE,
-    }));
+    const emitted = emitFact(repo, draftFact(repo, TARGET, 'invariant', CLAIM_BASE).fact);
     expect(emitted.exitCode).toBe(0);
     expect(emitted.stdout).toContain('status: ok');
 
@@ -176,9 +175,7 @@ describe('S21 — a forged `.atlas/index.scip` cannot launder a stale fact into 
   it('(iv) REVERSE — no denial-of-knowledge: a genuinely fresh citation still commits under the forgery', () => {
     // The forged dump from (iii) is STILL on disk. A citation against the CURRENT bytes must be accepted:
     // a forgery that could knock a live fact over would be a denial-of-knowledge, the mirror of laundering.
-    const fresh = groundedAdvisoryFact({
-      repoPath: repo.repoPath, filePath: TARGET, slot: 'gotcha', claim: CLAIM_AFTER,
-    });
+    const fresh = draftFact(repo, TARGET, 'gotcha', CLAIM_AFTER).fact;
     const r = emitFact(repo, fresh);
     expect(r.exitCode).toBe(0);
     expect(r.stdout).toContain('status: ok');
@@ -191,9 +188,7 @@ describe('S21 — a forged `.atlas/index.scip` cannot launder a stale fact into 
   it('(v) WHAT THE FORGERY DOES MOVE: the dependency-mode blast radius follows the dump, by design', () => {
     // The dependency axis IS derived from the dump (`deriveEdges`) — that is its declared input, so this is
     // the honest consequence, recorded so the boundary of the finding is explicit rather than implied.
-    const otherFact = groundedAdvisoryFact({
-      repoPath: repo.repoPath, filePath: OTHER, slot: 'invariant', claim: CLAIM_OTHER,
-    });
+    const otherFact = draftFact(repo, OTHER, 'invariant', CLAIM_OTHER).fact;
     expect(emitFact(repo, otherFact).exitCode).toBe(0);
 
     // FORGERY A: "other depends on target" ⇒ the reverse closure of target contains other.
@@ -222,9 +217,7 @@ describe('S21 — a forged `.atlas/index.scip` cannot launder a stale fact into 
  *  Built by hand (not through `groundedAdvisoryFact`, which reads the CURRENT hash) because the whole
  *  point is a citation the index no longer corroborates. */
 function staleFact(): GroundedFact {
-  const live = groundedAdvisoryFact({
-    repoPath: repo.repoPath, filePath: TARGET, slot: 'gotcha', claim: CLAIM_STALE,
-  });
+  const live = draftFact(repo, TARGET, 'gotcha', CLAIM_STALE).fact;
   const entry = live.grounding.entries[0]!;
   const anchor = { ...entry.anchor, subtreeHash: staleHash as typeof entry.anchor.subtreeHash };
   return { ...live, claimNorm: CLAIM_STALE, grounding: { entries: [{ ...entry, anchor }] } } as GroundedFact;

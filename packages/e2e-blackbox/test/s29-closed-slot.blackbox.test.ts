@@ -43,8 +43,8 @@ import { existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedAdvisoryFact } from './author.js';
 import { ACTOR, RATIFIER, invLines, scopedPolicy } from './support.js';
+import { draftFact } from './author8-subprocess.js';
 
 const SRC = 'export function greet(name: string): string {\n  return `hi ${name}`;\n}\n';
 
@@ -90,12 +90,7 @@ function generations(): string[] {
  *  whatever the case wants — including a value the frozen type forbids, which is the whole point: the wire
  *  is `JSON.parse` + a cast, so the type stops nothing and this is exactly what an author can send. */
 function factWithSlot(slot: string | undefined, claim: string): Record<string, unknown> {
-  const base = groundedAdvisoryFact({
-    repoPath: repo.repoPath,
-    filePath: 'src/greet.ts',
-    slot: 'invariant',
-    claim,
-  }) as unknown as Record<string, unknown>;
+  const base = draftFact(repo, 'src/greet.ts', 'invariant', claim).fact as unknown as Record<string, unknown>;
   if (slot === undefined) {
     const { predicateSlot: _dropped, ...rest } = base;
     return rest;

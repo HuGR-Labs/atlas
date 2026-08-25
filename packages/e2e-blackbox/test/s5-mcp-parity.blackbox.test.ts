@@ -16,9 +16,10 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, mcpSession, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedAdvisoryFact, ungroundedFact } from './author.js';
+import { ungroundedFact } from './author.js';
 import type { GroundedFact } from '@atlas/knowledge';
 import { ACTOR, RATIFIER, emitFact, invLines, scopedPolicy } from './support.js';
+import { draftFact } from './author8-subprocess.js';
 
 // The CLOSED governance surface (TOOLS-1) — the five GOVERNED write/read doors, each routed through the one
 // wired handler. This stays exactly five; a new governed door is a constitution change.
@@ -67,7 +68,7 @@ beforeAll(() => {
   process.env.ATLAS_ACTOR = ACTOR;
   process.env.ATLAS_RATIFY_TOKEN = RATIFIER; // KNOW-8 ratifier — T1 fact routes to full-ratify
   repo = makeFixtureRepo({ files: { 'src/foo.ts': 'export const foo = 1;\n' }, policy: scopedPolicy('src') });
-  fact = groundedAdvisoryFact({ repoPath: repo.repoPath, filePath: 'src/foo.ts', slot: 'invariant', claim: 'foo is 1' });
+  fact = draftFact(repo, 'src/foo.ts', 'invariant', 'foo is 1').fact;
   const e = emitFact(repo, fact); // persist ONE grounded fact via the CLI door — both transports read it back
   if (e.exitCode !== 0) throw new Error(`S5 setup: grounded emit failed:\n${e.stdout}`);
 });

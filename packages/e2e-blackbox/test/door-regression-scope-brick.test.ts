@@ -17,7 +17,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
 import type { GroundedFact } from '@atlas/knowledge';
-import { groundedAdvisoryFact } from './author.js';
+import { draftFact } from './author8-subprocess.js';
 import { ACTOR, RATIFIER, emitFact, scopedPolicy } from './support.js';
 
 const SRC = 'export const settle = 1;\n';
@@ -45,7 +45,7 @@ afterAll(teardown);
 
 describe('DOOR REGRESSION (real CLI) — a malformed scope must not brick an anchor', () => {
   it('DOOR-SCOPE-CLI-1 — after a JSON array scope, the same anchor is still writable', () => {
-    const legit = groundedAdvisoryFact({ repoPath: repo.repoPath, filePath: 'src/a.ts', slot: 'invariant', claim: 'the real claim' });
+    const legit = draftFact(repo, 'src/a.ts', 'invariant', 'the real claim').fact;
     // The SAME fact with the one field the wire can carry and the type system cannot police.
     const squat = { ...legit, scope: ['src'] } as unknown as GroundedFact;
 
