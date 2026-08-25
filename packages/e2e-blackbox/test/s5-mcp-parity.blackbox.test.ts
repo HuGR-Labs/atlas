@@ -29,8 +29,14 @@ const GOVERNANCE_TOOLS = ['atlas-init', 'atlas-query', 'atlas-emit', 'atlas-reco
 // CLI drives, so it opens no governed token and leaves `GOVERNANCE_SURFACE` byte-for-byte closed at five (the
 // honest divergence stated in mcp-server/src/server.ts). Production therefore advertises SEVEN; a build with no
 // read leg falls back to the closed governance surface alone (asserted by the mcp-server unit test).
-const ADVERTISED_TOOLS = [...GOVERNANCE_TOOLS, 'atlas-relations', 'atlas-negations'];
-const REQUIRED: Record<string, string[]> = {
+// WP-10.A5.MCP added the six READ_SURFACE authoring/read doors (anchors, slots, draft, check, doctor, node),
+// each served DIRECTLY from its injected leg through the SAME shared verdict builder the CLI drives — so like
+// relations/negations they open no governed token and leave `GOVERNANCE_SURFACE` byte-for-byte closed at five.
+// Production therefore advertises THIRTEEN (5 governance + 2 relations/negations + 6 authoring); a build with
+// no read leg falls back to the closed governance surface alone (asserted by the mcp-server unit test).
+const AUTHORING_TOOLS = ['atlas-anchors', 'atlas-slots', 'atlas-draft', 'atlas-check', 'atlas-doctor', 'atlas-node'];
+const ADVERTISED_TOOLS = [...GOVERNANCE_TOOLS, 'atlas-relations', 'atlas-negations', ...AUTHORING_TOOLS];
+const REQUIRED: Record<string, string[] | undefined> = {
   'atlas-init': ['path'],
   'atlas-query': ['scope'],
   'atlas-emit': ['node', 'at'],
@@ -38,6 +44,13 @@ const REQUIRED: Record<string, string[]> = {
   'atlas-link': ['a', 'b'], // WP-SAMEAS — the governed sameAs door's two nodeKeys
   'atlas-relations': ['unit'], // #99a — the grounded-relation read tool; unit is the required nodeKey
   'atlas-negations': ['scope'], // #99b — the grounded-negation + abstention read tool; scope is required
+  // WP-10.A5.MCP READ_SURFACE — the six authoring/read doors' documented input schemas (server-read-tools.ts).
+  'atlas-anchors': ['path'],
+  'atlas-slots': undefined, // no required arg — the closed-vocabulary listing takes no input
+  'atlas-draft': ['anchor', 'slot', 'claim'],
+  'atlas-check': ['fact', 'at'],
+  'atlas-doctor': ['sub'],
+  'atlas-node': ['node'],
 };
 
 interface McpText { data?: unknown; rejected?: unknown; guidance?: { next?: string; invariant?: string } }
@@ -68,13 +81,14 @@ afterAll(() => {
 });
 
 describe('S5 — MCP stdio parity with the CLI over the one governed core', () => {
-  it('listTools() advertises the 5 governance tools PLUS the atlas-relations + atlas-negations read tools, each with an object input schema + required args', { timeout: 20000 }, async () => {
+  it('listTools() advertises the 5 governance tools PLUS the 2 relations/negations + 6 READ_SURFACE authoring tools, each with an object input schema + required args', { timeout: 20000 }, async () => {
     const session = await mcpSession(repo.repoPath);
     try {
       const { tools } = await session.client.listTools();
-      // The shipped composition root injects the relation (#99a) and negation (#99b) read legs, so production
-      // advertises SEVEN: the closed governance surface + `atlas-relations` + `atlas-negations`. The governance
-      // five are still all present and unchanged.
+      // The shipped composition root injects the relation (#99a) + negation (#99b) read legs AND the full
+      // READ_SURFACE authoring bundle (WP-10.A5.MCP), so production advertises THIRTEEN: the closed governance
+      // surface + `atlas-relations` + `atlas-negations` + the 6 authoring doors. The governance five are still
+      // all present and unchanged, and none of the 8 read/authoring doors opens a governed token.
       expect(tools.map((t) => t.name)).toEqual(ADVERTISED_TOOLS);
       for (const t of tools) {
         expect(t.inputSchema).toMatchObject({ type: 'object' });
