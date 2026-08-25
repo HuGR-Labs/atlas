@@ -21,7 +21,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { makeFixtureRepo, mcpSession, runAtlas } from '../src/harness.js';
 import type { AtlasRun, FixtureRepo } from '../src/harness.js';
-import { groundedAdvisoryFact } from './author.js';
+import { draftFact } from './support.js';
 import { ACTOR, emitFact, invLines, scopedPolicy } from './support.js';
 
 const SRC = 'export const foo = 1;\n';
@@ -114,7 +114,7 @@ describe('S6 — edge / totality (WAVE-COV-4): every corner degrades, never cras
     // author a fact that WOULD be accepted under the scoped policy (grounded ∧ fresh), THEN remove the policy
     // (stage the deletion so it is not a tracked-but-missing file — that is the separate N8-family crash noted
     // in the header). Now the loader resolves `defaultPolicy()` (empty scopes ⇒ every write denied).
-    const fact = groundedAdvisoryFact({ repoPath: f.repoPath, filePath: 'src/foo.ts', slot: 'invariant', claim: 'foo is 1' });
+    const fact = draftFact(f, 'src/foo.ts', 'invariant', 'foo is 1').fact;
     execFileSync('git', ['rm', '-q', '.atlas/policy.json'], { cwd: f.repoPath });
     execFileSync('git', ['commit', '-q', '-m', 'drop policy'], { cwd: f.repoPath });
 

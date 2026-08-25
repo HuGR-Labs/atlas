@@ -16,7 +16,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedAdvisoryFact, groundedSymbolFact } from './author.js';
+import { draftFact, symbolAnchorKey } from './support.js';
 import type { GroundedFact } from '@atlas/knowledge';
 import { ACTOR, RATIFIER, emitFact, invLines, scopedPolicy, subsumesLines } from './support.js';
 
@@ -39,12 +39,12 @@ beforeAll(() => {
   process.env.ATLAS_RATIFY_TOKEN = RATIFIER; // KNOW-8 ratifier — T1 facts route to full-ratify
   repo = makeFixtureRepo({ files: FILES, policy: scopedPolicy('src') });
   const at = (filePath: string, claim: string): GroundedFact =>
-    groundedAdvisoryFact({ repoPath: repo.repoPath, filePath, slot: 'invariant', claim });
+    draftFact(repo, filePath, 'invariant', claim).fact;
   F = at('src/foo.ts', 'C1');
   Frew = at('src/foo.ts', 'C1-reworded');
   Gbar = at('src/bar.ts', 'C1');
   // The SAME claim C1, same slot, grounded at the SYMBOL `foo` INSIDE src/foo.ts — a proper `::` descendant.
-  Sfoo = groundedSymbolFact({ repoPath: repo.repoPath, filePath: 'src/foo.ts', symbolName: 'foo', slot: 'invariant', claim: 'C1' });
+  Sfoo = draftFact(repo, symbolAnchorKey(repo, 'src/foo.ts', 'foo'), 'invariant', 'C1').fact;
 });
 
 afterAll(() => {

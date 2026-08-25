@@ -21,7 +21,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, mcpSession, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedAdvisoryFact } from './author.js';
+import { draftFact } from './support.js';
 import type { GroundedFact } from '@atlas/knowledge';
 import { ACTOR, RATIFIER, emitFact, invLines, scopedPolicy } from './support.js';
 
@@ -74,7 +74,7 @@ afterAll(() => {
 
 describe('S13a — stale: a pure function of the CURRENT fact set (projection-query-index.ts ~48-67)', () => {
   it('baseline: a FRESH grounded fact packs `stale: false`', () => {
-    const fact = groundedAdvisoryFact({ repoPath: staleRepo.repoPath, filePath: 'src/foo.ts', slot: 'invariant', claim: 'foo baseline' });
+    const fact = draftFact(staleRepo, 'src/foo.ts', 'invariant', 'foo baseline').fact;
     const e = emitFact(staleRepo, fact);
     if (e.exitCode !== 0) throw new Error(`S13a setup: grounded emit failed:\n${e.stdout}`);
 
@@ -92,7 +92,7 @@ describe('S13a — stale: a pure function of the CURRENT fact set (projection-qu
     // gate (`gateHolds`) re-derives ONLY the grounding citation, never reads `freshness` (TOOLS-7b), so a
     // fact that is STILL grounded but authored with `freshness: 'DRIFTED'` is admitted verbatim. This is the
     // honest way to demonstrate the `stale` fold from the black-box doors — see the ANY-finding note below.
-    const base = groundedAdvisoryFact({ repoPath: staleRepo.repoPath, filePath: 'src/foo.ts', slot: 'rationale', claim: 'foo drifted-signal' });
+    const base = draftFact(staleRepo, 'src/foo.ts', 'rationale', 'foo drifted-signal').fact;
     const drifted: GroundedFact = { ...base, freshness: 'DRIFTED' };
     const e = emitFact(staleRepo, drifted);
     expect(e.exitCode).toBe(0); // still grounded (re-derives) ⇒ still admitted — freshness is not a gate input
@@ -111,7 +111,7 @@ describe('S13a — stale: a pure function of the CURRENT fact set (projection-qu
 describe('S13b — tokenEstimate: an ADVISORY char-sum proxy, NEVER truncated on the query path (tools/src/query.ts ~50-51)', () => {
   it('reports a positive char-sum over the merged claims (rendered on BOTH the CLI and MCP doors)', async () => {
     const claim = 'foo is one';
-    const fact = groundedAdvisoryFact({ repoPath: tokenRepo.repoPath, filePath: 'src/foo.ts', slot: 'invariant', claim });
+    const fact = draftFact(tokenRepo, 'src/foo.ts', 'invariant', claim).fact;
     const e = emitFact(tokenRepo, fact);
     if (e.exitCode !== 0) throw new Error(`S13b setup: grounded emit failed:\n${e.stdout}`);
 
@@ -142,7 +142,7 @@ describe('S13b — tokenEstimate: an ADVISORY char-sum proxy, NEVER truncated on
     // Deliberately exceeds `packages/retrieval/src/pack.ts` `PACK_CAP=2000` — a DIFFERENT, unit-owned
     // consumer `atlas query` never reaches (the memory-injection Packer, not this read door).
     const bigClaim = 'x'.repeat(2500);
-    const fact = groundedAdvisoryFact({ repoPath: tokenRepo.repoPath, filePath: 'src/foo.ts', slot: 'rationale', claim: bigClaim });
+    const fact = draftFact(tokenRepo, 'src/foo.ts', 'rationale', bigClaim).fact;
     const e = emitFact(tokenRepo, fact);
     if (e.exitCode !== 0) throw new Error(`S13b setup: grounded emit failed:\n${e.stdout}`);
 
@@ -171,7 +171,7 @@ describe('S13c — underScope: a SEGMENT-WISE boundary, NOT raw startsWith (proj
   let anchored: GroundedFact;
 
   beforeAll(() => {
-    anchored = groundedAdvisoryFact({ repoPath: scopeRepo.repoPath, filePath: 'src/foo.ts', slot: 'invariant', claim: 'anchored under src' });
+    anchored = draftFact(scopeRepo, 'src/foo.ts', 'invariant', 'anchored under src').fact;
     const e = emitFact(scopeRepo, anchored);
     if (e.exitCode !== 0) throw new Error(`S13c setup: grounded emit failed:\n${e.stdout}`);
   });

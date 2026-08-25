@@ -18,7 +18,7 @@
 //      the story needed no edit when the gate landed — but the note itself would have become a lie, and a
 //      test that pins the right number for a retired reason is how a suite stops describing its product.
 //      The staged candidate the rest of the story needs is still placed through the product's own staging
-//      door (`test/stage.ts`), the same concession `test/author.ts` makes one door over: this story needs
+//      door (`test/stage.ts`), the same concession `test/adversarial-fixtures.ts` makes one door over: this story needs
 //      ONE candidate with known bytes, not whatever a proposer answered.
 //
 //  (2) A PROMOTED MINED FACT IS `T2`, AND `atlas query` BOUNDS `T2` OUT (TOOLS-6). So the read-back that
@@ -29,7 +29,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedAdvisoryFact } from './author.js';
+import { draftFact } from './support.js';
 import { MINED_SCOPE, stageCandidate } from './stage.js';
 
 /** The seat `.atlas/policy.json` appoints as curator over the mined scope. */
@@ -73,9 +73,11 @@ function repoWith(policy: string): FixtureRepo {
 /** Stage one mined-shaped candidate: grounded at a REAL index unit (so the truth door re-derives it FRESH),
  *  through the product's own staging door. Returns the identity the promotion will mint for it. */
 function stageOne(repo: FixtureRepo, claim = CLAIM): string {
+  // scope/tier are NOT set here: stageCandidate re-stamps MINED_SCOPE/MINED_TIER onto both the bytes and the
+  // row (stage.ts), so the drafted fact only has to carry the product-composed grounding for 'src/util.ts'.
   return stageCandidate(
     repo.repoPath,
-    groundedAdvisoryFact({ repoPath: repo.repoPath, filePath: 'src/util.ts', slot: 'definition', claim, scope: MINED_SCOPE, tier: 'T2' }),
+    draftFact(repo, 'src/util.ts', 'definition', claim).fact,
   ).nodeKey;
 }
 

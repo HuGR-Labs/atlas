@@ -23,7 +23,7 @@ import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedAdvisoryFact } from './author.js';
+import { draftFact } from './support.js';
 import { ACTOR, RATIFIER, emitFact, invLines, scopedPolicy } from './support.js';
 
 const APP = 'src/app/foo.ts';
@@ -51,7 +51,7 @@ beforeAll(() => {
     policy: scopedPolicy('src'),
   });
   // Fact A at genesis (C1), grounded at src/app/foo.ts — the fact that will DRIFT.
-  const a = groundedAdvisoryFact({ repoPath: repo.repoPath, filePath: APP, slot: 'invariant', claim: 'foo is one' });
+  const a = draftFact(repo, APP, 'invariant', 'foo is one').fact;
   factA = a.id as unknown as string;
   const e = emitFact(repo, a);
   if (e.exitCode !== 0) throw new Error(`S26 setup: emit A failed:\n${e.stdout}`);
@@ -91,7 +91,7 @@ describe('S26 — an unrelated write cannot LAUNDER the freshness watermark (it 
   it('THE DEFECT: an UNRELATED emit must not re-stamp the drifted fact — `stale` stays true', () => {
     // The unrelated write. Fact B is grounded at src/lib/other.ts — a different file, a different sub-tree,
     // untouched by the C2 commit. It re-derives FRESH, so the emit legitimately settles at C2.
-    const b = groundedAdvisoryFact({ repoPath: repo.repoPath, filePath: LIB, slot: 'invariant', claim: 'other is two' });
+    const b = draftFact(repo, LIB, 'invariant', 'other is two').fact;
     factB = b.id as unknown as string;
     const e = emitFact(repo, b);
     expect(e.exitCode).toBe(0);

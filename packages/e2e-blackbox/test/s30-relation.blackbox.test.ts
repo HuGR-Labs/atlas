@@ -23,7 +23,7 @@
 // refusal — the exact path a relation must bypass. Relation EMITS where intrinsic THROWS.
 //
 // Pure black-box: the real `atlas` CLI as a subprocess, asserted on exit code + rendered stdout + the bytes
-// of the durable projection sidecar. Facts are AUTHORED with the product-lib helper (author.ts) only so
+// of the durable projection sidecar. Facts are AUTHORED with the product-lib helper (adversarial-fixtures.ts) only so
 // their groundings re-derive FRESH; the write is then decided on identity alone.
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -31,7 +31,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedMultiSymbolFact, groundedRelationFact } from './author.js';
+import { groundedMultiSymbolFact, groundedRelationFact } from './adversarial-fixtures.js';
 import { ACTOR, RATIFIER, emitFact, scopedPolicy } from './support.js';
 
 // Two files in DIFFERENT top-level directories ⇒ no common `::` ancestor ⇒ the intrinsic identity path is

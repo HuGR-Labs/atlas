@@ -23,7 +23,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedAdvisoryFact } from './author.js';
+import { draftFact } from './support.js';
 import { ACTOR, RATIFIER, emitFact, scopedPolicy } from './support.js';
 
 /** The `reason: <discriminant>: …` line of a rejected/errored verdict (the attributed refusal channel). */
@@ -45,7 +45,7 @@ beforeAll(() => {
 
   repo = makeFixtureRepo({ files: { 'src/foo.ts': 'export const foo = 1;\n' }, policy: scopedPolicy('src') });
   genesis = repo.sha();
-  const fact = groundedAdvisoryFact({ repoPath: repo.repoPath, filePath: 'src/foo.ts', slot: 'invariant', claim: 'foo is 1' });
+  const fact = draftFact(repo, 'src/foo.ts', 'invariant', 'foo is 1').fact;
   const emit = emitFact(repo, fact);
   if (emit.exitCode !== 0) throw new Error(`S27 setup: grounded emit failed:\n${emit.stdout}`);
   // A code change that MOVES the grounding ⇒ real, semantic, BLOCKING drift against `genesis`.
@@ -92,7 +92,7 @@ describe('S27 — `atlas reconcile` refuses an unresolvable merge base instead o
     // `resolveAnchorAt(later, 'src/late.ts')` is `undefined` — a genuine "no baseline anchor for THIS fact".
     // That must stay a per-fact skip: the base exists, so the gate has a real answer and the answer is clean.
     repo.commit({ 'src/late.ts': 'export const late = 3;\n' });
-    const late = groundedAdvisoryFact({ repoPath: repo.repoPath, filePath: 'src/late.ts', slot: 'invariant', claim: 'late is 3' });
+    const late = draftFact(repo, 'src/late.ts', 'invariant', 'late is 3').fact;
     const emit = emitFact(repo, late);
     expect(emit.exitCode).toBe(0);
 

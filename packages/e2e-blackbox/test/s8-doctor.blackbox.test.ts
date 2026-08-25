@@ -28,9 +28,9 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedAdvisoryFact, groundedSymbolFact } from './author.js';
 import type { GroundedFact } from '@atlas/knowledge';
 import { ACTOR, RATIFIER, emitFact, scopedPolicy } from './support.js';
+import { draftFact, symbolAnchorKey } from './support.js';
 
 /** A stable, order-independent snapshot of every byte under `.atlas/cas` (proves doctor mutates nothing). */
 function casSnapshot(repoPath: string): string {
@@ -89,9 +89,9 @@ beforeAll(() => {
   });
   // MECHANICAL: a fact grounded at the `::` symbol unit `foo` (a sub-file anchor whose subtreeHash is `foo`'s
   // own body). A body-preserving move re-keys the unit (byte-start shifts) but the content re-derives at HEAD.
-  mechFact = groundedSymbolFact({ repoPath: repo.repoPath, filePath: 'src/keep.ts', symbolName: 'foo', slot: 'invariant', claim: 'foo is 1' });
+  mechFact = draftFact(repo, symbolAnchorKey(repo, 'src/keep.ts', 'foo'), 'invariant', 'foo is 1').fact;
   // SEMANTIC: a fact grounded at the FILE `src/rot.ts`; rewriting its body makes the recorded content vanish.
-  semFact = groundedAdvisoryFact({ repoPath: repo.repoPath, filePath: 'src/rot.ts', slot: 'invariant', claim: 'rot exists' });
+  semFact = draftFact(repo, 'src/rot.ts', 'invariant', 'rot exists').fact;
   const e1 = emitFact(repo, mechFact);
   if (e1.exitCode !== 0) throw new Error(`S8 setup: mechanical grounded emit failed:\n${e1.stdout}`);
   const e2 = emitFact(repo, semFact);

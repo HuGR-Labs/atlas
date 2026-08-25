@@ -28,7 +28,7 @@
 //   - DETERMINISTIC (RETR-12): equal input ⇒ byte-identical output.
 //
 // Every EXECUTION + ASSERTION is pure black-box (subprocess). Product libs are touched ONLY to author the
-// grounded input facts + a valid SCIP dump (the crux — same discipline as author.ts / S9).
+// grounded input facts + a valid SCIP dump (the crux — grounded facts authored through the product draft door / S9).
 //
 // #189: the fixture's edge symbol was `local G` until this line was added — a SCIP `local` symbol is
 // document-scoped BY GRAMMAR and cannot legally cross `src/greet.ts` → `src/caller.ts` at all, so THE
@@ -52,7 +52,7 @@ import {
 } from '@c4312/scip';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedAdvisoryFact } from './author.js';
+import { draftFact } from './support.js';
 import type { GroundedFact } from '@atlas/knowledge';
 import { ACTOR, RATIFIER, emitFact, invLines, scopedPolicy } from './support.js';
 
@@ -144,7 +144,7 @@ beforeAll(() => {
   writeScipDepEdge(repo.repoPath);
 
   const at = (filePath: string, slot: 'invariant' | 'gotcha' | 'definition', claim: string, tier?: 'T2') =>
-    groundedAdvisoryFact({ repoPath: repo.repoPath, filePath, slot, claim, ...(tier ? { tier } : {}) });
+    draftFact(repo, filePath, slot, claim, tier ?? 'T1').fact;
 
   factInv = at('src/greet.ts', 'invariant', CLAIM_INV);
   factGotcha = at('src/greet.ts', 'gotcha', CLAIM_GOTCHA);

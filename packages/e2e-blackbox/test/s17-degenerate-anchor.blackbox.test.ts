@@ -11,15 +11,16 @@
 //
 // Everything below is pure black-box: the real `atlas` CLI as a subprocess, asserted on exit code, rendered
 // stdout, and the bytes of the durable projection sidecar. The facts are AUTHORED with the product-lib helper
-// (author.ts) only so their groundings re-derive FRESH — the write is then decided on identity alone.
+// (adversarial-fixtures.ts) only so their groundings re-derive FRESH — the write is then decided on identity alone.
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { makeFixtureRepo } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedAdvisoryFact, groundedMultiSymbolFact } from './author.js';
+import { groundedMultiSymbolFact } from './adversarial-fixtures.js';
 import { ACTOR, RATIFIER, emitFact, scopedPolicy } from './support.js';
+import { draftFact } from './support.js';
 
 const FILES = {
   'src/billing.ts': 'export function charge() { return 1; }\n',
@@ -56,9 +57,7 @@ afterAll(() => {
 
 describe('S17 — a grounding too diffuse to name one fact is REFUSED at the write door', () => {
   it('the victim writes an ordinary, single-anchor fact — accepted, one node', () => {
-    const victim = groundedAdvisoryFact({
-      repoPath: repo.repoPath, filePath: 'src/billing.ts', slot: 'invariant', claim: 'charges are idempotent',
-    });
+    const victim = draftFact(repo, 'src/billing.ts', 'invariant', 'charges are idempotent').fact;
     const run = emitFact(repo, victim);
     expect(run.exitCode).toBe(0);
     expect(run.stdout).toContain('status: ok');
@@ -119,9 +118,7 @@ describe('S17 — a grounding too diffuse to name one fact is REFUSED at the wri
   });
 
   it('NO BRICK: the refused claim is writable the moment it is re-grounded at a containing unit', () => {
-    const regrounded = groundedAdvisoryFact({
-      repoPath: repo.repoPath, filePath: 'src/ledger.ts', slot: 'invariant', claim: 'charges and postings agree',
-    });
+    const regrounded = draftFact(repo, 'src/ledger.ts', 'invariant', 'charges and postings agree').fact;
     const run = emitFact(repo, regrounded);
     expect(run.exitCode).toBe(0);
     expect(run.stdout).toContain('status: ok');

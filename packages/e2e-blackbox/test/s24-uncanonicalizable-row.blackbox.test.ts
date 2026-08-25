@@ -26,7 +26,7 @@ import { existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { makeFixtureRepo, mcpSession, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedAdvisoryFact } from './author.js';
+import { draftFact } from './support.js';
 import { ACTOR, RATIFIER, scopedPolicy } from './support.js';
 
 const SRC = 'export function greet(name: string): string {\n  return `hi ${name}`;\n}\n';
@@ -80,12 +80,7 @@ function generations(): string[] {
 
 /** A grounded fact whose citation re-derives FRESH, plus whatever extra properties the case injects. */
 function factWith(extra: Record<string, unknown>): Record<string, unknown> {
-  const base = groundedAdvisoryFact({
-    repoPath: repo.repoPath,
-    filePath: 'src/greet.ts',
-    slot: 'invariant',
-    claim: 'greet returns a greeting',
-  }) as unknown as Record<string, unknown>;
+  const base = draftFact(repo, 'src/greet.ts', 'invariant', 'greet returns a greeting').fact as unknown as Record<string, unknown>;
   return { ...base, ...extra };
 }
 

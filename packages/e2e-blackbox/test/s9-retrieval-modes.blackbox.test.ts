@@ -12,7 +12,7 @@
 //   (iv)  `--by bogus` fails CLOSED (structured error, non-zero exit) — the marshaller rejects the mode.
 //
 // Every EXECUTION + ASSERTION is pure black-box (subprocess). Product libs are touched ONLY to author the
-// grounded input facts + a valid SCIP dump (the crux — same discipline as author.ts).
+// grounded input facts + a valid SCIP dump (the crux — grounded facts authored through the product draft door).
 //
 // #189: the fixture's edge symbol was `local S` until this line was added — a SCIP `local` symbol is
 // document-scoped BY GRAMMAR and cannot legally cross `src/dep.ts` → `src/use.ts` at all, so this story's
@@ -35,7 +35,7 @@ import {
 } from '@c4312/scip';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedAdvisoryFact } from './author.js';
+import { draftFact } from './support.js';
 import type { GroundedFact } from '@atlas/knowledge';
 import { ACTOR, RATIFIER, emitFact, invLines, scopedPolicy } from './support.js';
 
@@ -93,11 +93,11 @@ beforeAll(() => {
   // Author a REAL depends-on edge into the SCIP dump the runtime reads (use → dep).
   writeScipDepEdge(repo.repoPath);
 
-  factDep = groundedAdvisoryFact({ repoPath: repo.repoPath, filePath: 'src/dep.ts', slot: 'invariant', claim: CLAIM_DEP });
-  factUse = groundedAdvisoryFact({ repoPath: repo.repoPath, filePath: 'src/use.ts', slot: 'invariant', claim: CLAIM_USE });
+  factDep = draftFact(repo, 'src/dep.ts', 'invariant', CLAIM_DEP).fact;
+  factUse = draftFact(repo, 'src/use.ts', 'invariant', CLAIM_USE).fact;
   // TWO facts on the SAME file at DIFFERENT slots ⇒ distinct nodeKeys, ONE shared primaryAnchor. depgraph
   // edges are file-granular, so the blast-radius bridge maps one closure key to BOTH — the multimap teeth.
-  factUse2 = groundedAdvisoryFact({ repoPath: repo.repoPath, filePath: 'src/use.ts', slot: 'gotcha', claim: CLAIM_USE2 });
+  factUse2 = draftFact(repo, 'src/use.ts', 'gotcha', CLAIM_USE2).fact;
   for (const [label, f] of [['dep', factDep], ['use', factUse], ['use2', factUse2]] as const) {
     const e = emitFact(repo, f);
     if (e.exitCode !== 0) throw new Error(`S9 setup: ${label} grounded emit failed:\n${e.stdout}`);

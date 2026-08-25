@@ -14,9 +14,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedAdvisoryFact } from './author.js';
 import type { GroundedFact } from '@atlas/knowledge';
 import { ACTOR, RATIFIER, emitFact, scopedPolicy } from './support.js';
+import { draftFact } from './support.js';
 
 const CLAIM = 'node door fact — resolvable by content address';
 
@@ -42,7 +42,7 @@ beforeAll(() => {
     files: { 'src/thing.ts': 'export const thing = 1;\n' },
     policy: scopedPolicy('src'),
   });
-  fact = groundedAdvisoryFact({ repoPath: repo.repoPath, filePath: 'src/thing.ts', slot: 'invariant', claim: CLAIM });
+  fact = draftFact(repo, 'src/thing.ts', 'invariant', CLAIM).fact;
   const e = emitFact(repo, fact);
   if (e.exitCode !== 0) throw new Error(`S10 setup: grounded emit failed:\n${e.stdout}`);
   addr = emittedAddress(e.stdout); // the content address the durable write door persisted the fact under

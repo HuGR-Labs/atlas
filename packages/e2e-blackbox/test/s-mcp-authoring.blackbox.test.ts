@@ -11,7 +11,7 @@
 // NO CLI SUBPROCESS ON THE AUTHORING PATH, NO @atlas AUTHORING. This is the MCP mirror of s-author8-round-trip's
 // CLI byte relay: there the relay was `draft --json | emit` across two CLI subprocesses; here it is
 // `atlas-draft → atlas-emit` across one MCP session, the draft's `fact`/`rev` handed to emit UNTOUCHED. The old
-// in-process fabricator (`author.ts` — `@atlas/index build` + full synthesis) authors NOTHING here; the product's
+// in-process fabricator (`adversarial-fixtures.ts` — `@atlas/index build` + full synthesis) authors NOTHING here; the product's
 // own doors do. That is the whole point of routing the READ_SURFACE onto MCP (WP-10.A5.MCP).
 //
 // BLACK-BOX. The only execution seam is `mcpSession` (the shipped `atlas-mcp` bin over real stdio). This file

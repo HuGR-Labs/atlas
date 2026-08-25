@@ -25,7 +25,7 @@ import { existsSync, readFileSync, readdirSync, statSync, truncateSync, writeFil
 import { join } from 'node:path';
 import { CLI_BIN, makeFixtureRepo } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedAdvisoryFact } from './author.js';
+import { draftFact } from './support.js';
 import { ACTOR, scopedPolicy } from './support.js';
 import { IDENTITY_SCHEMA } from '@atlas/adapter-io';
 import type { GroundedFact } from '@atlas/knowledge';
@@ -117,7 +117,7 @@ describe('S18 — durability of the governed store', () => {
     // T0 on purpose: the pre-fix overwrite never read `tier`, so the strictest, human-ratified class was as
     // losable as any other. If a T0 fact can be lost, the ratification gate protected nothing durable.
     const paths = Array.from({ length: W }, (_, i) =>
-      factFile(repo, groundedAdvisoryFact({ repoPath: repo.repoPath, filePath: `src/f${i}.ts`, slot: 'invariant', claim: `C${i}`, tier: 'T0' }), `w${i}`),
+      factFile(repo, draftFact(repo, `src/f${i}.ts`, 'invariant', `C${i}`, 'T0').fact, `w${i}`),
     );
     const runs = await Promise.all(paths.map((p) => emit(repo.repoPath, p, at)));
     const accepted = runs.filter((r) => r.exitCode === 0).length;
@@ -147,7 +147,7 @@ describe('S18 — durability of the governed store', () => {
     truncateSync(target, Math.floor(before.bytes * 0.6));
     const torn = readFileSync(target, 'utf8');
 
-    const p = factFile(repo, groundedAdvisoryFact({ repoPath: repo.repoPath, filePath: 'src/f0.ts', slot: 'invariant', claim: 'one innocent claim' }), 'x');
+    const p = factFile(repo, draftFact(repo, 'src/f0.ts', 'invariant', 'one innocent claim').fact, 'x');
     const r = await emit(repo.repoPath, p, repo.sha());
 
     // PRE-FIX: exit 0, `status: ok`, and the store silently became 1 node. The door must instead refuse,
