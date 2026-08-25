@@ -19,6 +19,7 @@ import { slotsVerdict } from './slots.js';
 import { draftVerdict } from './draft.js';
 import { runDoctor } from './doctor.js';
 import { ensureAtlasIgnored } from './gitignore.js';
+import { renderHelp } from './help.js';
 import { COMMAND_LEG } from './map.js';
 import { marshalArgs } from './marshal.js';
 import { runOwn } from './own.js';
@@ -214,6 +215,17 @@ export interface CliDeps {
  * TOTAL — a malformed invocation renders a structured non-zero error, never a throw / `process.exit`.
  */
 export async function main(argv: string[], deps: CliDeps = {}): Promise<number> {
+  // ENTRY-CLI-5 — the help door. Intercepted BEFORE `parse()` (not a member of `COMMANDS`/`COMMAND_LEG`:
+  // it opens no leg, needs no composed runtime, and is reachable even over an uncomposed/refused store, the
+  // one invocation that must never itself require the thing it explains how to reach). `atlas help` /
+  // `atlas --help` / `atlas -h` all render the SAME derived text, exit 0. Empty argv is DELIBERATELY left to
+  // fall through to `parse()`'s existing `no command` error (CLI-1b totality, unchanged) rather than being
+  // widened to mean help — that would be a behavior change to an already-pinned path, not an addition.
+  if (argv[0] === 'help' || argv[0] === '--help' || argv[0] === '-h') {
+    process.stdout.write(renderHelp());
+    return 0;
+  }
+
   const parsed = parse(argv);
   if (!parsed.ok) {
     return emit(errorVerdict(parsed.error));

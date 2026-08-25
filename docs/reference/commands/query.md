@@ -81,6 +81,8 @@ data:
   advisoryDropped: 0
   stale: false
   tokenEstimate: 0
+  territory: src
+  axisHash: e1b2abbef0b33119ed2f03bad1965d2f89c4af0a33f803b93e0a0fd49a635c36
 # exit 0
 ```
 
