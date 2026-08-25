@@ -1,6 +1,6 @@
 // @atlas/e2e-blackbox — test/stage.ts  (the candidate-STAGING helper — NOT the black-box execution harness)
 //
-// THE CRUX, and it is the same one `author.ts` records one door over. `atlas promote` reads the explorer's
+// THE CRUX, and it is the same one `adversarial-fixtures.ts` records one door over. `atlas promote` reads the explorer's
 // STAGING sidecar, and the only thing that writes that sidecar is `atlas mine`.
 //
 // [AMENDED — REQ-CLI-4d] This note used to say `atlas mine` stages ZERO candidates ALWAYS, structurally:
@@ -8,7 +8,7 @@
 // `makeAdmitGate` had NO production caller at all. That was measured and it was true. It no longer is —
 // the composition root supplies the gate, and `atlas mine .` on Atlas itself stages 200 candidates.
 //
-// The helper stays, for the reason `author.ts` gives rather than the one this file used to give: a black-box
+// The helper stays, for the reason `adversarial-fixtures.ts` gives rather than the one this file used to give: a black-box
 // story needs ONE candidate with KNOWN bytes, a known claim and a known nodeKey to assert against, and what
 // a real pass stages is whatever the operator's proposer answered at whatever the frontier ranked. Driving
 // `mine` to produce the fixture would make every promotion assertion depend on a model's output.
@@ -20,7 +20,7 @@
 // format moves, this moves with it, because it is the same code path `cli/src/mine.ts` takes.
 //
 // Product LIBS are imported ONLY to place the input. Every EXECUTION and every ASSERTION in the story stays
-// pure black-box (the spawned `atlas` binary), which is the same boundary `author.ts` draws.
+// pure black-box (the spawned `atlas` binary), which is the same boundary `adversarial-fixtures.ts` draws.
 //
 // WHAT IT STANDS IN FOR, precisely: the row a wired mine gate would have staged. It is NOT a claim that
 // `atlas mine` produces one today — it does not, and the story says so in its own prose.

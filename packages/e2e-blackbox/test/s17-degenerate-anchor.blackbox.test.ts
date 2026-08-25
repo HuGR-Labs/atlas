@@ -11,14 +11,14 @@
 //
 // Everything below is pure black-box: the real `atlas` CLI as a subprocess, asserted on exit code, rendered
 // stdout, and the bytes of the durable projection sidecar. The facts are AUTHORED with the product-lib helper
-// (author.ts) only so their groundings re-derive FRESH — the write is then decided on identity alone.
+// (adversarial-fixtures.ts) only so their groundings re-derive FRESH — the write is then decided on identity alone.
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { makeFixtureRepo } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedMultiSymbolFact } from './author.js';
+import { groundedMultiSymbolFact } from './adversarial-fixtures.js';
 import { ACTOR, RATIFIER, emitFact, scopedPolicy } from './support.js';
 import { draftFact } from './author8-subprocess.js';
 

@@ -16,7 +16,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, mcpSession, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { ungroundedFact } from './author.js';
+import { ungroundedFact } from './adversarial-fixtures.js';
 import type { GroundedFact } from '@atlas/knowledge';
 import { ACTOR, RATIFIER, emitFact, invLines, scopedPolicy } from './support.js';
 import { draftFact } from './author8-subprocess.js';

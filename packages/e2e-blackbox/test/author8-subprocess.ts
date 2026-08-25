@@ -109,8 +109,9 @@ interface DraftEnvelope {
  * Author a happy-path GROUNDED fact through the PRODUCT `atlas draft <anchor> <slot> <claim> --json` door —
  * a READ-ONLY composition planner that persists NOTHING (cli.ts) — and return the `GroundedFact` it composes
  * off the runtime's OWN index. This is the product-door STAND-IN replacement for the former in-process
- * `author.ts` fabricators (`groundedAdvisoryFact`/`groundedSymbolFact`): the parts author.ts used to FAKE by
- * re-building `Axes` in process — the grounding, the real `subtreeHash`, the `nodeKey` identity — are now all
+ * happy-path fabricators (`groundedAdvisoryFact`, since RETIRED; `groundedSymbolFact`, kept in
+ * adversarial-fixtures.ts only as a multi-entry building block): the parts those used to FAKE by re-building
+ * `Axes` in process — the grounding, the real `subtreeHash`, the `nodeKey` identity — are now all
  * PRODUCT-computed, exactly as a user typing `atlas draft` receives them.
  *
  * TWO deliberate departures from a bare envelope, each a governance-class DECLARATION (not grounding — the

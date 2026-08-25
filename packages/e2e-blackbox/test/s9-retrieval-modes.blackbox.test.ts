@@ -12,7 +12,7 @@
 //   (iv)  `--by bogus` fails CLOSED (structured error, non-zero exit) — the marshaller rejects the mode.
 //
 // Every EXECUTION + ASSERTION is pure black-box (subprocess). Product libs are touched ONLY to author the
-// grounded input facts + a valid SCIP dump (the crux — same discipline as author.ts).
+// grounded input facts + a valid SCIP dump (the crux — grounded facts authored through the product draft door).
 //
 // #189: the fixture's edge symbol was `local S` until this line was added — a SCIP `local` symbol is
 // document-scoped BY GRAMMAR and cannot legally cross `src/dep.ts` → `src/use.ts` at all, so this story's

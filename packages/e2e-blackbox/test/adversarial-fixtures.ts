@@ -1,19 +1,22 @@
-// @atlas/e2e-blackbox — test/author.ts  (the fact-AUTHORING helper — NOT the black-box execution harness)
+// @atlas/e2e-blackbox — test/adversarial-fixtures.ts  (fact fixtures the product doors CANNOT author)
 //
-// THE CRUX (grounded-fact authoring). `atlas emit` runs a TRUTH gate: a fact is accepted only if its
-// grounding RE-DERIVES FRESH against the built index at emit time (governed-emit.ts → driftDetect). The
-// fixture's SCIP is empty, and — see the FINDING below — the index build produces ONLY file/directory
-// nodes (no sub-file `::` symbol granularity), so the ONLY groundable units are real file/dir paths. To
-// author a genuinely GROUNDED fact this helper does exactly what the crux's option 2 sanctions: it
-// COMPUTES the grounding "the same way the index does" — it builds the REAL `Axes` from the fixture repo
-// (the identical `build(walkFileTree(repo), …)` the runtime composes) and reads the fixture file's ACTUAL
-// `subtreeHash`, so the authored anchor re-derives FRESH. Identity (`nodeKey`) is the REAL product formula.
-//
-// This is the stand-in for the authoring tool a real user would reach for: `atlas mine` (the CLI mining
-// door) abstains with no model wired and writes ZERO grounded candidates (a usability FINDING), so a story
-// that needs a durable grounded fact MUST construct it. Product LIBS are imported ONLY to construct the
-// input fact here; every EXECUTION and every ASSERTION in the stories stays pure black-box (subprocess /
-// stdio). No product code touches the assertions.
+// Every happy-path GROUNDED fact is now authored through the product `atlas draft` door (see
+// test/author8-subprocess.ts — `draftFact` / `symbolAnchorKey`). What survives HERE is the complement: fact
+// shapes the product doors REFUSE, or cannot compose by construction, so a black-box story that needs one as
+// INPUT must fabricate it. Each is a deliberate hostile/degenerate payload the governed emit gate is meant
+// to reject, or a grounding the single-anchor draft door cannot build:
+//   - `ungroundedFact` — cites a subtreeHash NO index unit carries ⇒ the truth gate DRIFTS it (rejected).
+//   - `subtreeHashOf` — reads the REAL folded-index subtreeHash of a path; the primitive the forged/stale-
+//     hash relation fixtures and the s12 hand-built multi-entry grounding cite.
+//   - `groundedSymbolFact` — a single `::` symbol-anchored fact, kept as a BUILDING BLOCK for s12's
+//     multi-entry (symbol + secondary-file) grounding, which the single-anchor draft door cannot author.
+//   - `groundedMultiSymbolFact` — a MANY-anchor grounding `nodeKey` refuses to mint (the degenerate-anchor
+//     case); the door could not even construct the adversarial input.
+//   - `groundedRelationFact` — a directed two-endpoint RELATION node (its own `relationKey` identity).
+//   - `negationPayload` — a raw scoped-negation node as it ARRIVES at the abstention door (the door re-mints
+//     id / grounding / edgeModel; only the identity triple + tier are honest here).
+// Product LIBS are imported ONLY to construct these inputs; every EXECUTION and every ASSERTION in the
+// stories stays pure black-box (subprocess / stdio). No product code touches the assertions.
 
 import { build } from '@atlas/index';
 import type { Axes, IndexNode } from '@atlas/index';
@@ -62,50 +65,6 @@ export function subtreeHashOf(repoPath: string, qualifiedPath: string): string {
     if (hit !== undefined) return hit;
   }
   throw new Error(`author: no index unit for '${qualifiedPath}' — cannot ground (index has no such node)`);
-}
-
-/** The recipe for one grounded advisory fact. `filePath` is a REAL fixture file (the grounding anchor). */
-export interface FactSpec {
-  readonly repoPath: string;
-  readonly filePath: string; // a real fixture file path — the grounding qualifiedPath (a spatial node)
-  readonly slot: PredicateSlot;
-  readonly claim: string;
-  readonly tier?: Tier; // default 'T1' — query bounds OUT 'T2' (TOOLS-6), so a served fact must be ≥T1
-  readonly scope?: string; // default 'src' — the KNOW-11 authz scope the fact is written under
-}
-
-/** A serializable advisory `GroundedFact` whose grounding RE-DERIVES FRESH (subtreeHash from the real index)
- *  and whose identity is the REAL `nodeKey(anchor‖slot)` — so byte-identical re-emit DEDUPs, a reworded
- *  claim at the same (anchor,slot) UPDATEs (same nodeKey), and a different file CREATEs a distinct node. */
-export function groundedAdvisoryFact(spec: FactSpec): GroundedFact {
-  // Default T1 — the fact must be `tier≥T1` to be VISIBLE in the bounded read pack (TOOLS-6 bounds T2 OUT,
-  // tools/query.ts). A T1 fact routes to KNOW-18 full-ratify, so these stories drive `atlas emit` under a
-  // ratifier token (ATLAS_RATIFY_TOKEN, set alongside ATLAS_ACTOR in each story) — a lead-ratified emit.
-  const tier: Tier = spec.tier ?? 'T1';
-  const subtreeHash = asSubtree(subtreeHashOf(spec.repoPath, spec.filePath));
-  const grounding: GroundedFact['grounding'] = {
-    entries: [{ anchor: { kind: 'file', qualifiedPath: spec.filePath, subtreeHash }, path: spec.filePath }],
-  };
-  const candidate: Candidate = {
-    claimText: spec.claim,
-    claimNorm: spec.claim,
-    slot: spec.slot,
-    grounding,
-    provenance: { source: 'e2e-blackbox', trusted: true },
-    tier,
-  };
-  return {
-    kind: 'advisory',
-    id: nodeKey(candidate),
-    tier,
-    claimNorm: spec.claim,
-    grounding,
-    freshness: 'FRESH',
-    claims: [],
-    authoring: 'ADVISORY',
-    scope: spec.scope ?? 'src',
-    predicateSlot: spec.slot,
-  };
 }
 
 /** DFS for the `IndexNode` whose `key` equals `key` (a file path OR a `::` sub-file unit key). */

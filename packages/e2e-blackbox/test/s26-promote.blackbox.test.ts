@@ -18,7 +18,7 @@
 //      the story needed no edit when the gate landed — but the note itself would have become a lie, and a
 //      test that pins the right number for a retired reason is how a suite stops describing its product.
 //      The staged candidate the rest of the story needs is still placed through the product's own staging
-//      door (`test/stage.ts`), the same concession `test/author.ts` makes one door over: this story needs
+//      door (`test/stage.ts`), the same concession `test/adversarial-fixtures.ts` makes one door over: this story needs
 //      ONE candidate with known bytes, not whatever a proposer answered.
 //
 //  (2) A PROMOTED MINED FACT IS `T2`, AND `atlas query` BOUNDS `T2` OUT (TOOLS-6). So the read-back that

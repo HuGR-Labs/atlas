@@ -24,11 +24,12 @@
 //     no longer re-derives ANYWHERE (semantic, dead). See s8-doctor.blackbox.test.ts ~line 90-104 (same
 //     recipe, reused here as the grounding-kind axis's own drift-contrast leg).
 //
-// Everything below drives the REAL `atlas` bin (CLI subprocess). `author.ts`'s exported `groundedSymbolFact`
-// / `groundedAdvisoryFact` / `subtreeHashOf` are product-lib AUTHORING helpers (per the file's own header,
-// the sanctioned stand-in for `atlas mine`, which abstains with no model wired) — used ONLY to construct
-// input facts (incl. the multi-entry combined facts below, and the id-prediction used to recognize a real
-// query row); every EXECUTION and every ASSERTION stays pure black-box (subprocess stdout/exit).
+// Everything below drives the REAL `atlas` bin (CLI subprocess). Happy-path facts are authored through the
+// product `atlas draft` door (`draftFact` / `symbolAnchorKey`, author8-subprocess.ts). The surviving
+// product-lib fabricators `groundedSymbolFact` / `subtreeHashOf` (adversarial-fixtures.ts) are used ONLY to
+// build the multi-entry combined facts below — a symbol+file grounding the single-anchor draft door cannot
+// author — plus the id-prediction used to recognize a real query row; every EXECUTION and every ASSERTION
+// stays pure black-box (subprocess stdout/exit).
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
@@ -36,14 +37,14 @@ import type { FixtureRepo } from '../src/harness.js';
 import { draftFact, symbolAnchorKey } from './author8-subprocess.js';
 // groundedSymbolFact + subtreeHashOf + SymbolFactSpec stay: `combinedSymbolPlusFileFact` below builds a
 // MULTI-ENTRY (symbol + secondary-file) grounding that the single-anchor `atlas draft` door cannot author.
-import { groundedSymbolFact, subtreeHashOf } from './author.js';
-import type { SymbolFactSpec } from './author.js';
+import { groundedSymbolFact, subtreeHashOf } from './adversarial-fixtures.js';
+import type { SymbolFactSpec } from './adversarial-fixtures.js';
 import { nodeKey } from '@atlas/knowledge';
 import type { Candidate, GroundedFact, PredicateSlot } from '@atlas/knowledge';
 import type { SubtreeHash } from '@atlas/contracts';
 import { ACTOR, RATIFIER, emitFact, invLines, scopedPolicy } from './support.js';
 
-/** Brand a raw digest string as `SubtreeHash` (erased in JSON — mirrors author.ts `asSubtree`). */
+/** Brand a raw digest string as `SubtreeHash` (erased in JSON — mirrors adversarial-fixtures.ts `asSubtree`). */
 const asSubtree = (h: string): SubtreeHash => h as unknown as SubtreeHash;
 
 /**
@@ -51,7 +52,7 @@ const asSubtree = (h: string): SubtreeHash => h as unknown as SubtreeHash;
  * AND a SECONDARY `file` anchor on a different, unrelated fixture file. Both entries independently
  * re-derive FRESH (each carries the REAL subtreeHash the emit truth-gate re-checks — `driftDetect` requires
  * EVERY entry to resolve), so this is honestly grounded, not a shortcut. Its `id` is the REAL `nodeKey`
- * (recomputed here via the real product formula, exactly as `groundedSymbolFact`/`groundedAdvisoryFact` do)
+ * (recomputed here via the real product formula, exactly as the product identity formula does)
  * so the story can recognize which query row is "this" node — the runtime NEVER trusts a payload's `id`
  * for routing (governed-emit.ts recomputes it from content), so a query-row match against this predicted id
  * is proof the real product agrees, not a tautology.
@@ -97,7 +98,7 @@ function combinedSymbolPlusFileFact(spec: {
  *  no product src file anywhere ever constructs one of these (grep-verified), and the fixture index (plain
  *  source tree, no policy-artifact heading/section folding) has no node any such `qualifiedPath` could
  *  resolve to. The `subtreeHash` value is irrelevant to the outcome — `driftDetect` fails at `resolveCurrent`
- *  (the qualifiedPath itself is unresolvable) before the hash is ever compared. Same shape as author.ts's
+ *  (the qualifiedPath itself is unresolvable) before the hash is ever compared. Same shape as adversarial-fixtures.ts's
  *  `ungroundedFact`, parameterized over the reserved kind. */
 function reservedKindFact(kind: 'block' | 'repo' | 'project', claim: string): GroundedFact {
   const grounding: GroundedFact['grounding'] = {

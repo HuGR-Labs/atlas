@@ -1,8 +1,8 @@
 // @atlas/e2e-blackbox — test/s11-predicate-lineage.blackbox.test.ts  (S11 — Predicate facts + SUPERSEDE lineage)
 //
-// NARRATIVE (WAVE-COV-1 cell 1): `author.ts` only mints ADVISORY `GroundedFact`s (no `check`), so a story
-// that needs a genuinely PREDICATED node must author one itself. This file does exactly that — reusing
-// `author.ts`'s `subtreeHashOf` (the REAL re-derivable grounding recipe) and `@atlas/knowledge`'s `nodeKey`
+// NARRATIVE (WAVE-COV-1 cell 1): the product `atlas draft` door only mints ADVISORY `GroundedFact`s (no
+// `check`), so a story that needs a genuinely PREDICATED node must author one itself. This file does exactly
+// that — reusing `adversarial-fixtures.ts`'s `subtreeHashOf` (the REAL re-derivable grounding recipe) and `@atlas/knowledge`'s `nodeKey`
 // (the SAME identity mint `governed-emit.ts` recomputes on write: `candidateView = {...node, slot:
 // node.predicateSlot}`, and — since `node.check` is already present on a `PredicateNode` — the spread carries
 // it straight into the `Candidate` view) — so the locally-minted `id` matches what the write door recomputes.
@@ -34,7 +34,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { subtreeHashOf } from './author.js';
+import { subtreeHashOf } from './adversarial-fixtures.js';
 import { nodeKey, normalizeCheck } from '@atlas/knowledge';
 import type { Candidate, Check, GroundedFact, PredicateSlot } from '@atlas/knowledge';
 import type { SubtreeHash, Tier } from '@atlas/contracts';
@@ -42,9 +42,9 @@ import { ACTOR, RATIFIER, emitFact, invLines, scopedPolicy } from './support.js'
 
 const asSubtree = (h: string): SubtreeHash => h as unknown as SubtreeHash;
 
-/** The recipe for one grounded PREDICATE fact — the sibling of `author.ts`'s `groundedAdvisoryFact`, but for
- *  the checkable family (author.ts mints ADVISORY only). Grounding is the REAL re-derivable citation
- *  (`subtreeHashOf`, reused from author.ts); identity is minted the SAME way `governed-emit.ts` recomputes it
+/** The recipe for one grounded PREDICATE fact — the checkable-family sibling of the product `atlas draft`
+ *  door's ADVISORY output (draft mints ADVISORY only). Grounding is the REAL re-derivable citation
+ *  (`subtreeHashOf`, reused from adversarial-fixtures.ts); identity is minted the SAME way `governed-emit.ts` recomputes it
  *  on write — a `Candidate` view carrying BOTH `slot` (from `predicateSlot`) AND `check` (present verbatim on
  *  a `PredicateNode`), fed through the REAL `nodeKey` — so the authored `id` matches the write door's mint. */
 interface PredicateFactSpec {

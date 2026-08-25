@@ -17,7 +17,7 @@
 //         design. Asserted as the real, bounded consequence — not as a masked failure.
 //
 // Every EXECUTION and ASSERTION is black-box (subprocess). Product libs are touched ONLY to author the
-// input facts and the forged dump — the same discipline as `author.ts`.
+// input facts and the forged dump — the same discipline as `adversarial-fixtures.ts`.
 //
 // SYNTHETIC: `src/target.ts` / `src/other.ts` and every symbol below are invented for this suite; the repo
 // lives under `os.tmpdir()`.
@@ -37,7 +37,7 @@ import {
 } from '@c4312/scip';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { subtreeHashOf } from './author.js';
+import { subtreeHashOf } from './adversarial-fixtures.js';
 import { ACTOR, RATIFIER, emitFact, invLines, scopedPolicy } from './support.js';
 import type { GroundedFact } from '@atlas/knowledge';
 import { draftFact } from './author8-subprocess.js';
@@ -214,7 +214,7 @@ describe('S21 — a forged `.atlas/index.scip` cannot launder a stale fact into 
 });
 
 /** The fact authored against the PRE-edit bytes: the anchor is real, the cited digest is the stale one.
- *  Built by hand (not through `groundedAdvisoryFact`, which reads the CURRENT hash) because the whole
+ *  Built by hand (not through the product `atlas draft` door, which reads the CURRENT hash) because the whole
  *  point is a citation the index no longer corroborates. */
 function staleFact(): GroundedFact {
   const live = draftFact(repo, TARGET, 'gotcha', CLAIM_STALE).fact;

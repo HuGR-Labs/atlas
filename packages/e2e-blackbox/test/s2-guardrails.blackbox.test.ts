@@ -11,7 +11,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo, runAtlas, DEFAULT_POLICY } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { ungroundedFact } from './author.js';
+import { ungroundedFact } from './adversarial-fixtures.js';
 import { ACTOR, emitFact, invLines, scopedPolicy } from './support.js';
 import { draftFact } from './author8-subprocess.js';
 

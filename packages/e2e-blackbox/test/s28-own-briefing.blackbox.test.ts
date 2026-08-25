@@ -28,7 +28,7 @@
 //   - DETERMINISTIC (RETR-12): equal input ⇒ byte-identical output.
 //
 // Every EXECUTION + ASSERTION is pure black-box (subprocess). Product libs are touched ONLY to author the
-// grounded input facts + a valid SCIP dump (the crux — same discipline as author.ts / S9).
+// grounded input facts + a valid SCIP dump (the crux — grounded facts authored through the product draft door / S9).
 //
 // #189: the fixture's edge symbol was `local G` until this line was added — a SCIP `local` symbol is
 // document-scoped BY GRAMMAR and cannot legally cross `src/greet.ts` → `src/caller.ts` at all, so THE

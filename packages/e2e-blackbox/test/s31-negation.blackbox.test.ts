@@ -40,7 +40,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { makeFixtureRepo, runAtlas } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { negationPayload } from './author.js';
+import { negationPayload } from './adversarial-fixtures.js';
 import { ACTOR, RATIFIER, emitFact } from './support.js';
 
 // The CLOSED scope: X has no caller and no unresolved reference under it. `keep.ts` exists on disk so the
