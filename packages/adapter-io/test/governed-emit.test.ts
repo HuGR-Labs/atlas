@@ -18,6 +18,7 @@ import { createGovernedEmit } from '../src/governed-emit.js';
 import type { DiskStore } from '../src/store.js';
 import { makeStoreSpy, HOLDS_GATE, NA_GATE, POLICY, advisory, mkAdvisory, predicate, realKey, AT } from './harness/governed-fixtures.js';
 
+
 // ── cases ──────────────────────────────────────────────────────────────────────────────────────────
 
 describe('COMPOSE-A — createGovernedEmit (truth-door · authz · upsert · durable persist)', () => {
@@ -362,5 +363,53 @@ describe('COMPOSE-A — createGovernedEmit (truth-door · authz · upsert · dur
     const allowed = createGovernedEmit({ store: okSpy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice', ratifyToken: 'lead' });
     expect(allowed.emit(predicate('core'), AT).emitted).toBe(true);
     expect(okSpy.persists()).toHaveLength(1);
+  });
+
+  // ── WP-10.A4.ADAPTER (AUTHOR-14 — SCN-AUTH-14b-1 / 14c-1) ────────────────────────────────────────────
+  // `EmitOut.nodeKey` was widened onto the type (WP-10.A4.TOOLS); this door now POPULATES it on success —
+  // `targetKey`, the SAME minted routing key the incumbent guard + `WriteRequest.nodeKey` already carry, no
+  // re-mint. These two cases prove BOTH consumers from ONE receipt, EACH RESOLVED THROUGH ITS REAL CONSUMER
+  // rather than asserted by literal equality — the honest reading of "prove it, don't claim it".
+  //
+  // FRAMING NOTE (measured, not assumed): the wired per-node read door (`atlas node <addr>` /
+  // `NodeSource.resolve` in `adapter-io/src/wire.ts:452-482`) resolves EXCLUSIVELY by CONTENT ADDRESS —
+  // `readStore.get(addr as Hash)`, the SAME `store.get` this suite's `spy.store.get` fakes (keyed by
+  // `id(obj)`, `governed-fixtures.ts`). `nodeKey` (`hash(primaryAnchorId ‖ slot[‖ check])`, `router.ts`) is a
+  // DIFFERENT digest over a DIFFERENT (smaller) preimage than `id`/`contentHash` (the whole node bytes) — SCN
+  // -GE-3's own sibling golden pins that rewording a claim moves the CONTENT hash but NOT the nodeKey, i.e.
+  // the two are provably NOT interchangeable. So `out.id` is what actually resolves through the WIRED
+  // `atlas node` door; `out.nodeKey` is what resolves through the LINK door (`governed-link.ts`'s
+  // `proj.current.get(a/b)`) and the incumbent/authz gates in THIS file — the receipt's two consumers are
+  // `atlas node` (via `id`) and `atlas-link` (via `nodeKey`), not the SAME field serving both. Mirrored here
+  // rather than importing `wire.ts` (out of this WP's file scope) — the mirror is the identical one-liner.
+  it('SCN-AUTH-14b-1 / 14c-1 — the receipt serves BOTH its real consumers from one emit', () => {
+    const spy = makeStoreSpy();
+    const { emit } = createGovernedEmit({ store: spy.store, gate: HOLDS_GATE, policy: POLICY, actor: 'alice' });
+    const node = advisory('core');
+    const out = emit(node, AT);
+    expect(out.emitted).toBe(true);
+
+    // ADDITIVE: nodeKey is now present on a success receipt, and equals the SAME minted identity the door
+    // routes the write's OWN durable row under (never re-derived independently — one identity, one read).
+    expect(out.nodeKey).toBeDefined();
+    expect(out.id).toBeDefined();
+    expect(String(out.nodeKey)).toBe(realKey(node));
+
+    // ── ARM 1 — `atlas node <addr>` (mirrors wire.ts's `NodeSource.resolve`: CAS content-address lookup). ──
+    const resolveNode = (addr: string): unknown => /^[0-9a-f]{64}$/.test(addr) ? spy.store.get(addr as unknown as Parameters<typeof spy.store.get>[0]) : undefined;
+    expect(resolveNode(String(out.id))).toEqual(node); // out.id resolves through the per-node read door
+    // TEETH — out.nodeKey does NOT resolve there (a different digest over a different preimage); proving the
+    // negative is what keeps this golden from silently degrading into an equality-of-two-strings vacuity.
+    expect(String(out.nodeKey)).not.toBe(String(out.id));
+
+    // ── ARM 2 — `atlas-link` (mirrors governed-link.ts: `proj.current.get(nodeKey)`). ──────────────────────
+    const projection = spy.persists().at(-1)!;
+    const row = projection.current.get(String(out.nodeKey));
+    expect(row).toBeDefined(); // out.nodeKey resolves through the link door's own row lookup
+    expect(row!.contentHash).toBe(String(out.id)); // and that row names the SAME CAS object `id` addresses
+    expect(spy.store.get(row!.contentHash as unknown as Parameters<typeof spy.store.get>[0])).toEqual(node);
+
+    // ── the drift/doctor CAS read-back arm (byte-unchanged) — `id` alone, unchanged by the widening. ───────
+    expect(spy.store.get(out.id!)).toEqual(node);
   });
 });
