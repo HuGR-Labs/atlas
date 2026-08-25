@@ -50,9 +50,9 @@ afterEach(() => vi.restoreAllMocks());
 // ── REQ-CLI-1 — total command surface ─────────────────────────────────────────────────────────────
 
 describe('SCN-CLI-1a — every command maps to exactly one leg', () => {
-  it('is total (20 keys) and mutually-exclusive over the ratified table', () => {
+  it('is total (22 keys) and mutually-exclusive over the ratified table', () => {
     // totality: every command in the finite surface has exactly one leg.
-    expect(COMMANDS).toEqual(['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'transitions', 'transition', 'test-vacuities', 'test-vacuity', 'verify-fact', 'verify-store', 'derive-relations', 'anchors']);
+    expect(COMMANDS).toEqual(['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'transitions', 'transition', 'test-vacuities', 'test-vacuity', 'verify-fact', 'verify-store', 'derive-relations', 'anchors', 'slots', 'draft']);
     expect(Object.keys(COMMAND_LEG).sort()).toEqual([...COMMANDS].sort());
     expect(COMMAND_LEG).toEqual({
       init: 'atlas-init',
@@ -87,6 +87,10 @@ describe('SCN-CLI-1a — every command maps to exactly one leg', () => {
       //                                   before the handler, PERSISTS proven relations THROUGH the existing emit door
       anchors: 'atlas-query', // READ authority oracle (WP-10.A1.CLI / ADR-0004 discovery planner) — intercepted
       //                         before the handler, lists groundable units off the built index; persists NOTHING (AUTHOR-2)
+      slots: 'atlas-query', // READ authority oracle (WP-10.A2-a.CLI / ADR-0004 discovery planner, AUTHOR-5) —
+      //                       intercepted before the handler, the closed PredicateSlot vocabulary; persists NOTHING
+      draft: 'atlas-query', // READ authority oracle (WP-10.A2-a.CLI / ADR-0004 composition planner, AUTHOR-6/7) —
+      //                       intercepted before the handler, composes a candidate GroundedFact; persists NOTHING
     });
     // teeth: a command bound to zero legs (totality) or two legs (uniqueness) — each key resolves to one string.
     for (const c of COMMANDS) {

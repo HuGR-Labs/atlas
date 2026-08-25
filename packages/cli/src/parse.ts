@@ -72,9 +72,15 @@ const ARITY: Record<Command, number> = {
   // ADR-0004 discovery planner); arity is 1. A path outside the tracked set / a non-git dir / an unreadable path
   // is NOT a parse error — it is the leg's honest-empty-with-a-reason answer (never a throw).
   anchors: 1,
+  // `slots` takes NO positional — it answers "what can I say?" over the WHOLE closed PredicateSlot vocabulary,
+  // never a scoped subset (AUTHOR-5, WP-10.A2-a.CLI).
+  slots: 0,
+  // `draft <anchor> <slot> <claim>` — EXACTLY the three fields AUTHOR-6d says the author supplies; arity 3
+  // (WP-10.A2-a.CLI). Every other field of the composed fact is computed or defaulted, never a positional here.
+  draft: 3,
 };
 
-const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine|node|link|promote|own|relations|negations|transitions|transition|test-vacuities|test-vacuity|verify-fact|verify-store|derive-relations|anchors';
+const COMMAND_LIST = 'init|query|emit|reconcile|doctor|mine|node|link|promote|own|relations|negations|transitions|transition|test-vacuities|test-vacuity|verify-fact|verify-store|derive-relations|anchors|slots|draft';
 
 function isCommand(s: string): s is Command {
   return Object.prototype.hasOwnProperty.call(COMMAND_LEG, s);
