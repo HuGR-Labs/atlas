@@ -5,9 +5,13 @@
 //
 //   ARCH-1/2  LAYER      — dependencies flow outer→inner only; the graph is acyclic; `tools` (the port
 //                          layer) has ZERO edges to adapter-io / cli / mcp-server.
-//   ARCH-3    BINDING    — every member of the tool union has a bound leg at the ONE composition root, and
-//                          every bound leg's token is a member of the union. Checked in BOTH directions:
-//                          a typed-but-unbound door is a hole, a bound-but-undeclared leg is a ghost.
+//   ARCH-3    BINDING    — every member of the tool union is bound SOMEWHERE real. `GOVERNANCE_SURFACE`
+//                          members bind at the ONE `Tool`-leg composition root (`wire.ts`); `READ_SURFACE`
+//                          members bind by ANY of three kinds — a compose-planner field (`compose.ts`), a
+//                          query-projection via the CLI's command→leg map onto a bound `atlas-query` leg
+//                          (`cli/src/map.ts`), or a direct `wire.ts` leg (see `boundReadDoor`, WP-10.A5.TOOLS).
+//                          Checked in BOTH directions: a typed-but-unbound door is a hole, a bound-but-
+//                          undeclared `wire.ts` leg is a ghost.
 //   ARCH-5/6  SURFACE    — advertised ≡ invocable; GOVERNANCE_SURFACE ⊎ READ_SURFACE is total and disjoint;
 //                          WRITE_PATHS ⊆ GOVERNANCE_SURFACE.
 //   ARCH-7    BUDGET     — the statically-advertised tool count stays ≤ 30 (a MEASURED threshold, not an
@@ -62,8 +66,27 @@ const FORBIDDEN_EDGES = [
 /** ARCH-7 — the measured static-surface budget. See §2.2 for the citations behind the number. */
 const TOOL_BUDGET = 30;
 
-/** The ONE composition root (ARCH-3). */
+/** The ONE composition root for the five `Tool` legs (ARCH-3). */
 const COMPOSITION_ROOT = join(PKGS, 'adapter-io', 'src', 'wire.ts');
+
+/** [WP-10.A5.TOOLS binding fix] `READ_SURFACE` doors do NOT all bind at `COMPOSITION_ROOT` — verified against
+ *  the shipped tree, not assumed. There are THREE legitimate binding kinds, and a member is bound iff it
+ *  satisfies ANY of them (see `boundReadDoor` below):
+ *   (a) COMPOSE-PLANNER — `atlas-anchors` / `atlas-slots` / `atlas-draft` / `atlas-check` are fields on the
+ *       `ComposedRuntime` object literal `composeRuntime` (`adapter-io/src/compose.ts`) returns — built from
+ *       the planner factories declared in `@atlas/tools` (`anchors.ts`/`slots.ts`/`draft.ts`/`check.ts`) and
+ *       threaded there. NOT in `wire.ts`'s `legs`.
+ *   (b) QUERY-PROJECTION — `atlas-doctor` / `atlas-node` are not their own leg at all: the CLI intercepts
+ *       `doctor`/`node` BEFORE the handler and reuses the `atlas-query` leg (`cli/src/map.ts`
+ *       `COMMAND_LEG['doctor'] === COMMAND_LEG['node'] === 'atlas-query'`) — a second PROJECTION of the read
+ *       door that IS bound in `wire.ts`'s `legs`, not a second door.
+ *   (c) DIRECT TOOL LEG — a token bound literally in `wire.ts`'s `legs` (the pre-existing check, unchanged;
+ *       covers the five `GOVERNANCE_SURFACE` members and would cover a future READ_SURFACE member wired the
+ *       same way).
+ *  A member satisfying NONE of the three is a real hole and still reds ARCH-3/5 (teeth: see the gate's own
+ *  test / the WP's return card — a bogus `'atlas-nonexistent'` member was probed live and reverted). */
+const COMPOSE_ROOT = join(PKGS, 'adapter-io', 'src', 'compose.ts');
+const CLI_MAP = join(PKGS, 'cli', 'src', 'map.ts');
 
 const fail = [];
 const note = (msg) => fail.push(msg);
@@ -194,6 +217,103 @@ function boundLegs() {
   return new Set([...block.matchAll(/^\s*['"](atlas-[a-z0-9-]+)['"]\s*:/gm)].map((m) => m[1]));
 }
 
+/** [WP-10.A5.TOOLS binding fix, kind (a)] The bare (unquoted) top-level keys of the `composeRuntime` return
+ *  object literal in `COMPOSE_ROOT` — where the compose-planner doors (`anchors`/`slots`/`draft`/`check`)
+ *  are actually threaded (`compose.ts`, NOT `wire.ts`). Located the same way `boundLegs` locates the `legs`
+ *  literal: strip comments first (so a `}`/`:` in prose cannot be mistaken for syntax), anchor on the
+ *  `composeRuntime`'s distinctive first bound field (`handler: assembleHandler(config)`, stable since
+ *  WP-7.26), then brace-match from the literal's own opening brace. `null` ⇒ the anchor moved and this
+ *  parse needs updating — reported, never silently treated as "nothing bound". */
+function boundComposeFields() {
+  if (!existsSync(COMPOSE_ROOT)) {
+    note(`ARCH-3 compose root missing: ${COMPOSE_ROOT} — the compose-planner doors (anchors/slots/draft/check) have nowhere to bind`);
+    return null;
+  }
+  const src = stripComments(readFileSync(COMPOSE_ROOT, 'utf8'), 'compose.ts');
+  const anchor = /return\s*\{\s*handler\s*:\s*assembleHandler\s*\(\s*config\s*\)/;
+  const m = anchor.exec(src);
+  if (m === null) {
+    note(`ARCH-3 compose root: could not locate composeRuntime's \`return { handler: assembleHandler(config), … }\` literal (${COMPOSE_ROOT}) — the binding anchor moved, update boundComposeFields()`);
+    return null;
+  }
+  const start = m.index + m[0].indexOf('{');
+  let depth = 0;
+  let end = -1;
+  for (let i = start; i < src.length; i++) {
+    if (src[i] === '{') depth++;
+    else if (src[i] === '}' && --depth === 0) { end = i; break; }
+  }
+  if (end < 0) {
+    note('ARCH-3 compose root: unbalanced braces in the composeRuntime return literal');
+    return null;
+  }
+  const block = src.slice(start, end);
+  // Same top-level-spread scan `boundLegs` runs, with the SAME carve-out `boundLegs`' own header documents
+  // for a nested conditional (`...(cond ? {…} : {})`) — compose.ts uses exactly that shape for
+  // `readRefusal`/`readAdvisory`. A BARE top-level spread of an unknown object would hide a field from this
+  // scan the same way it hides a leg in `boundLegs` — reported, not silently under-counted.
+  let nest = 0;
+  for (let i = 0; i < block.length; i++) {
+    const c = block[i];
+    if (c === '{' || c === '[' || c === '(') nest++;
+    else if (c === '}' || c === ']' || c === ')') nest--;
+    else if (nest === 1 && block.startsWith('...', i) && !block.startsWith('...(', i)) {
+      note('ARCH-3 compose root: the composeRuntime return literal contains a bare (non-conditional) top-level SPREAD — the bound field set cannot be determined statically. Bind every field with a literal key.');
+      break;
+    }
+  }
+  return new Set([...block.matchAll(/^\s*([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/gm)].map((m) => m[1]));
+}
+
+/** [WP-10.A5.TOOLS binding fix, kind (b)] `COMMAND_LEG` from `CLI_MAP` (`cli/src/map.ts`) — the CLI's
+ *  command→leg map. `doctor`/`node` are commands that are "second projections" of `atlas-query`
+ *  (`COMMAND_LEG['doctor'] === COMMAND_LEG['node'] === 'atlas-query'`): intercepted before the handler, but
+ *  reading off the SAME bound `atlas-query` leg, never a leg of their own. Parsed from source (comment-
+ *  stripped, same discipline as `boundLegs`/`boundComposeFields`) so this runs before a build too. */
+function commandLegMap() {
+  if (!existsSync(CLI_MAP)) {
+    note(`ARCH-3 CLI command map missing: ${CLI_MAP} — the query-projection doors (doctor/node) cannot be verified`);
+    return null;
+  }
+  const src = stripComments(readFileSync(CLI_MAP, 'utf8'), 'map.ts');
+  const start = src.indexOf('export const COMMAND_LEG');
+  if (start < 0) {
+    note(`ARCH-3 CLI command map: no \`export const COMMAND_LEG\` binding found (${CLI_MAP})`);
+    return null;
+  }
+  const open = src.indexOf('{', start);
+  let depth = 0;
+  let end = -1;
+  for (let i = open; i < src.length; i++) {
+    if (src[i] === '{') depth++;
+    else if (src[i] === '}' && --depth === 0) { end = i; break; }
+  }
+  if (end < 0) {
+    note('ARCH-3 CLI command map: unbalanced braces in the COMMAND_LEG binding block');
+    return null;
+  }
+  const block = src.slice(open, end);
+  const map = new Map();
+  for (const cm of block.matchAll(/^\s*([a-zA-Z_$][a-zA-Z0-9_$-]*)\s*:\s*'([^']+)'/gm)) map.set(cm[1], cm[2]);
+  return map;
+}
+
+/** [WP-10.A5.TOOLS binding fix] A READ_SURFACE token (`atlas-anchors`, …) is BOUND iff it satisfies kind
+ *  (a), (b), or (c) — see the header note beside `COMPOSE_ROOT`/`CLI_MAP`. `legs` is `boundLegs()`'s result
+ *  (kind (c)); `composeFields` is `boundComposeFields()`'s (kind (a)); `cmdLeg` is `commandLegMap()`'s (kind
+ *  (b), resolved against `legs` — a command that maps to an UNBOUND Tool does not count). All three inputs
+ *  may be `null` (their own parse already `note()`d why) — a `null` input contributes ZERO bindings, never a
+ *  free pass, so a member that could only be verified through a missing/moved anchor still reds, honestly.
+ */
+function boundReadDoor(token, legs, composeFields, cmdLeg) {
+  const bare = token.replace(/^atlas-/, ''); // 'atlas-anchors' → 'anchors', 'atlas-doctor' → 'doctor'
+  if ((legs ?? new Set()).has(token)) return true; // (c) direct Tool leg
+  if ((composeFields ?? new Set()).has(bare)) return true; // (a) compose-planner field
+  const command = cmdLeg?.get(bare); // (b) query-projection via the CLI's command→leg map
+  if (command !== undefined && (legs ?? new Set()).has(command)) return true;
+  return false;
+}
+
 async function checkSurface(legs) {
   let mod;
   try {
@@ -205,9 +325,16 @@ async function checkSurface(legs) {
 
   const governance = [...(mod.GOVERNANCE_SURFACE ?? [])];
   const write = [...(mod.WRITE_PATHS ?? [])];
-  // READ_SURFACE does not exist yet (ARCH-6 / CAMPAIGN-10.3). Absent ⇒ empty, so the checks below hold
-  // today and tighten automatically the moment the constant lands.
+  // READ_SURFACE absent ⇒ empty, so the checks below hold vacuously until the constant lands (WP-10.A5.TOOLS
+  // landed it — 6 members, three binding kinds, see `boundReadDoor`).
   const read = [...(mod.READ_SURFACE ?? [])];
+  // `boundComposeFields`/`commandLegMap` each parse a SEPARATE source file (`compose.ts` / `cli/src/map.ts`)
+  // that a miniature/fixture tree — or a real tree with no READ_SURFACE member yet — has no reason to carry.
+  // Computed LAZILY, only when there is an actual READ_SURFACE member to verify, so their own "file missing"
+  // diagnostics never fire on a tree that legitimately has nothing for them to check (an empty READ_SURFACE
+  // is not itself a violation — ARCH-6/7 already treat it as vacuous, consistent with that).
+  const composeFields = read.length > 0 ? boundComposeFields() : null;
+  const cmdLeg = read.length > 0 ? commandLegMap() : null;
 
   const union = new Set([...governance, ...read]);
 
@@ -222,9 +349,16 @@ async function checkSurface(legs) {
 
   // ARCH-5 — the surface constants vs the bound legs (legs are resolved by the caller so ARCH-3 runs
   // even when dist is absent — an earlier revision nested it here, so a missing build silently skipped it).
+  // GOVERNANCE_SURFACE members are checked directly against `legs` (kind (c), unchanged). READ_SURFACE
+  // members are checked via `boundReadDoor` — bound iff kind (a), (b), OR (c) (WP-10.A5.TOOLS).
   if (legs !== null) {
-    for (const t of union) {
+    for (const t of governance) {
       if (!legs.has(t)) note(`ARCH-3/5 '${t}' is declared in the tool surface but has NO bound leg at the composition root — a typed-but-unbound door is a hole`);
+    }
+    for (const t of read) {
+      if (!boundReadDoor(t, legs, composeFields, cmdLeg)) {
+        note(`ARCH-3/5 '${t}' is declared in READ_SURFACE but has NO binding — checked all three kinds: not a compose-planner field (adapter-io/src/compose.ts), not a query-projection via cli/src/map.ts's COMMAND_LEG onto a bound atlas-query leg, and not a direct wire.ts leg. A typed-but-unbound door is a hole.`);
+      }
     }
     for (const t of legs) {
       if (!union.has(t)) note(`ARCH-3/5 leg '${t}' is bound at the composition root but is in NO surface constant — a bound-but-undeclared leg is invocable and invisible to every surface pin`);

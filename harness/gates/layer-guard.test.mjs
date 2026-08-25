@@ -381,3 +381,100 @@ describe('layer-guard — the leg scan cannot be blinded by prose or by a digit'
     expect(code).toBe(0);
   });
 });
+
+// [WP-10.A5.TOOLS] The three-way READ_SURFACE binding kinds `boundReadDoor` checks — a compose-planner
+// field, a CLI command→leg projection onto a bound `atlas-query` leg, or a direct `wire.ts` leg — plus the
+// negative case: a member bound by NONE of the three still reds, honestly.
+describe('layer-guard — READ_SURFACE binds by THREE kinds (compose-planner / query-projection / direct leg)', () => {
+  const wire = (...legLines) =>
+    ['export function assemble() {', '  const legs: ToolLegs = {', ...legLines, '  };', '  return legs;', '}', ''].join('\n');
+  const compose = (...fieldLines) =>
+    [
+      'export function composeRuntime(repoPath) {',
+      '  return {',
+      '    handler: assembleHandler(config),',
+      ...fieldLines,
+      '  };',
+      '}',
+      '',
+    ].join('\n');
+  const cliMap = (...entryLines) => ['export const COMMAND_LEG = {', ...entryLines, '};', ''].join('\n');
+  const readSurface = (members) =>
+    writeFileSync(
+      join(root, 'packages', 'tools', 'dist', 'src', 'index.js'),
+      `export const GOVERNANCE_SURFACE = ['atlas-init', 'atlas-query'];\nexport const WRITE_PATHS = [];\nexport const READ_SURFACE = ${JSON.stringify(members)};\n`,
+    );
+
+  it('kind (a) — a compose-planner field (compose.ts) satisfies its READ_SURFACE member', () => {
+    readSurface(['atlas-anchors']);
+    pkg('adapter-io', ['tools'], {
+      'wire.ts': wire("    'atlas-init': () => ({}),", "    'atlas-query': () => ({}),"),
+      'compose.ts': compose('    anchors: anchorsLeg.anchors,'),
+    });
+    pkg('cli', ['tools'], { 'map.ts': cliMap() });
+    const { code, out } = runGate();
+    expect(out).not.toContain('✗');
+    expect(code).toBe(0);
+  });
+
+  it('kind (b) — a query-projection (CLI COMMAND_LEG onto a bound atlas-query leg) satisfies its member', () => {
+    readSurface(['atlas-doctor']);
+    pkg('adapter-io', ['tools'], {
+      'wire.ts': wire("    'atlas-init': () => ({}),", "    'atlas-query': () => ({}),"),
+      'compose.ts': compose(),
+    });
+    pkg('cli', ['tools'], { 'map.ts': cliMap("  doctor: 'atlas-query',") });
+    const { code, out } = runGate();
+    expect(out).not.toContain('✗');
+    expect(code).toBe(0);
+  });
+
+  it('kind (b), negative — a COMMAND_LEG entry onto an UNBOUND Tool does NOT satisfy the member', () => {
+    readSurface(['atlas-doctor']);
+    pkg('adapter-io', ['tools'], {
+      // 'atlas-query' is declared in GOVERNANCE_SURFACE (fixture surface) but NOT bound in wire.ts legs here.
+      'wire.ts': wire("    'atlas-init': () => ({}),"),
+      'compose.ts': compose(),
+    });
+    pkg('cli', ['tools'], { 'map.ts': cliMap("  doctor: 'atlas-query',") });
+    const { code, out } = runGate();
+    expect(out).toMatch(/ARCH-3\/5 'atlas-doctor' is declared in READ_SURFACE but has NO binding/);
+    expect(code).toBe(1);
+  });
+
+  it('kind (c) — a direct wire.ts leg satisfies its READ_SURFACE member (unchanged pre-existing path)', () => {
+    // 'atlas-widget' is bound directly in wire.ts's legs, like a Tool would be, but is NOT a GOVERNANCE_SURFACE
+    // member (disjointness would fire otherwise) — a future READ_SURFACE door bound the SAME way as a Tool.
+    readSurface(['atlas-widget']);
+    pkg('adapter-io', ['tools'], {
+      'wire.ts': wire("    'atlas-init': () => ({}),", "    'atlas-query': () => ({}),", "    'atlas-widget': () => ({}),"),
+      'compose.ts': compose(),
+    });
+    pkg('cli', ['tools'], { 'map.ts': cliMap() });
+    const { code, out } = runGate();
+    expect(out).not.toContain('✗');
+    expect(code).toBe(0);
+  });
+
+  it('NEGATIVE — a member bound by NONE of the three kinds still reds (the property has teeth)', () => {
+    readSurface(['atlas-nonexistent']);
+    pkg('adapter-io', ['tools'], {
+      'wire.ts': wire("    'atlas-init': () => ({}),", "    'atlas-query': () => ({}),"),
+      'compose.ts': compose('    anchors: anchorsLeg.anchors,'),
+    });
+    pkg('cli', ['tools'], { 'map.ts': cliMap("  doctor: 'atlas-query',") });
+    const { code, out } = runGate();
+    expect(out).toMatch(/ARCH-3\/5 'atlas-nonexistent' is declared in READ_SURFACE but has NO binding — checked all three kinds/);
+    expect(code).toBe(1);
+  });
+
+  it('an EMPTY READ_SURFACE (module absent/vacuous) never triggers a compose.ts/map.ts "missing" note', () => {
+    // No `compose.ts`/`cli` package at all in this fixture — mirrors every OTHER describe block in this
+    // file, which predate READ_SURFACE and never carry one. `read.length === 0` must short-circuit BEFORE
+    // `boundComposeFields`/`commandLegMap` ever try to read a file that legitimately does not exist here.
+    pkg('adapter-io', ['tools'], { 'wire.ts': wire("    'atlas-init': () => ({}),") });
+    const { code, out } = runGate();
+    expect(out).not.toMatch(/compose root missing|CLI command map missing/);
+    expect(code).toBe(0);
+  });
+});

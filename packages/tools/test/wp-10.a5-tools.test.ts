@@ -4,16 +4,17 @@
 // `handler.ts` constant, its two disjointness properties against the governed constants, its cardinality,
 // and — driven over the REUSED write-spy harness (`packages/cli/test/write-spy-store.ts`, imported here
 // as a test-only cross-package dependency; `layer-guard` scans `src/` only, so this is NOT an ARCH-2 edge) —
-// the zero-write-authority property for every one of its seven members.
+// the zero-write-authority property for every one of its six members.
 //
 // Facets under test, imported DIRECTLY from source:
 //   • ../src/handler.js — GOVERNANCE_SURFACE / WRITE_PATHS (byte-unchanged, transcribed as the oracle) +
-//     the NEW READ_SURFACE (7 members, ADR-0005's Decision + docs/reference/atlas-authoring.md A-D2).
+//     the NEW READ_SURFACE (6 members, ADR-0005's Decision (reconciled 2026-08-24) + atlas-authoring.md A-D2).
 //   • ../src/anchors.js / slots.js / draft.js / check.js / doctor.js — the five planner/projection factories.
-//   • ../src/diff.js — the atlas-diff read-only projection (a declared reference model, WP-7.32).
 //
 // `atlas-node` is exercised through `handler.js`'s own `createHandler(...).resolveNode` (TOOLS-10) — it has
-// no dedicated `node.ts` module; the per-node read is co-located in the ONE handler.
+// no dedicated `node.ts` module; the per-node read is co-located in the ONE handler. `atlas-diff` is
+// DELIBERATELY EXCLUDED from `READ_SURFACE` (owner-decided) — it stays a declared zero-caller reference
+// model (`../src/diff.ts`) until it is genuinely wired to a transport, so it is not exercised here either.
 
 import { describe, it, expect } from 'vitest';
 import type { Hash } from '@atlas/contracts';
@@ -26,7 +27,6 @@ import { createDraft } from '../src/draft.js';
 import { createCheck } from '../src/check.js';
 import type { GateChainRunner } from '../src/check.js';
 import { createDoctor } from '../src/doctor.js';
-import { createAtlasDiff } from '../src/diff.js';
 
 // Reused, NOT re-implemented (per WP mandate): `packages/cli/test/write-spy-store.ts`, the reusable
 // `DiskStore`-backed write-freedom harness EPIC-A2/A3 already share. It pulls `@atlas/adapter-io` (a REAL
@@ -75,7 +75,6 @@ const CANONICAL_READ_SURFACE = [
   'atlas-check',
   'atlas-doctor',
   'atlas-node',
-  'atlas-diff',
 ] as const;
 
 describe('WP-10.A5.TOOLS — READ_SURFACE is frozen, disjoint, and correctly sized (PROP-MCP-3)', () => {
@@ -85,10 +84,10 @@ describe('WP-10.A5.TOOLS — READ_SURFACE is frozen, disjoint, and correctly siz
     expect([...WRITE_PATHS]).toEqual([...CANONICAL_WRITE_PATHS]);
   });
 
-  // SCN-MCP-3c-1 — READ_SURFACE membership + cardinality (7), IN ORDER.
-  it('SCN-MCP-3c-1 — READ_SURFACE deep-equals the 7-member ADR-0005 set, in order', () => {
+  // SCN-MCP-3c-1 — READ_SURFACE membership + cardinality (6), IN ORDER.
+  it('SCN-MCP-3c-1 — READ_SURFACE deep-equals the 6-member ADR-0005 set, in order', () => {
     expect([...READ_SURFACE]).toEqual([...CANONICAL_READ_SURFACE]);
-    expect(READ_SURFACE.length).toBe(7);
+    expect(READ_SURFACE.length).toBe(6);
     expect(GOVERNANCE_SURFACE.length).toBe(5); // pinned cardinality, unmoved by this campaign
     expect(WRITE_PATHS.length).toBe(2); // pinned cardinality, unmoved by this campaign
   });
@@ -122,7 +121,7 @@ describe('WP-10.A5.TOOLS — READ_SURFACE is frozen, disjoint, and correctly siz
 });
 
 describe('WP-10.A5.TOOLS — every READ_SURFACE member carries ZERO write authority (write-spy)', () => {
-  it('SCN-MCP-3d-2 — anchors / slots / draft / check / doctor / node / diff reach NO write door, over ONE shared spy', () => {
+  it('SCN-MCP-3d-2 — anchors / slots / draft / check / doctor / node reach NO write door, over ONE shared spy', () => {
     const harness = createWriteSpyStore();
     seedSomeBytes(harness.seed); // a NON-EMPTY store, so the census arm is a real assertion (not vacuous)
     // the `atlas-node` fixture below needs ONE real seeded object too — seed it here, BEFORE the census
@@ -196,12 +195,6 @@ describe('WP-10.A5.TOOLS — every READ_SURFACE member carries ZERO write author
       },
     };
     createHandler({}, nodeSource).resolveNode('node:test' as never, 'cli');
-
-    // atlas-diff — the DiffSource port is `diff(shaA, shaB) => VersionDelta`; no store handle (a declared
-    // reference model, WP-7.32 — see `diff.ts`'s own header).
-    createAtlasDiff({
-      diff: () => ({ added: [], edited: [], superseded: [], decayed: [] }),
-    }).diff('cas:a' as Hash, 'cas:b' as Hash);
 
     // ── the assertion every leg above ran under: ZERO write-door calls, byte-identical store ─────────────
     expect(harness.calls()).toEqual([]);

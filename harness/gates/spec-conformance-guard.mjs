@@ -30,9 +30,11 @@ const problems = [];
 const EXPECTED_SURFACE = ['atlas-init', 'atlas-query', 'atlas-emit', 'atlas-reconcile', 'atlas-link'];
 const EXPECTED_WRITE_PATHS = ['atlas-emit', 'atlas-link'];
 // [WP-10.A5.TOOLS, ADR-0005 / ENTRY-MCP-3] `READ_SURFACE` — the disjoint planner/read-projection set MCP
-// advertises alongside `GOVERNANCE_SURFACE`. Membership transcribed from the ADR's Decision + A-D2: the four
-// ADR-0004 authoring planners (anchors/slots/draft/check) + the three already-shipped read projections
-// (doctor/node/diff).
+// advertises alongside `GOVERNANCE_SURFACE`. Membership transcribed from the ADR's Decision (reconciled
+// 2026-08-24) + A-D2: the four ADR-0004 authoring planners (anchors/slots/draft/check) + the two
+// already-shipped, ALREADY-INVOCABLE read projections (doctor/node). `atlas-diff` is DELIBERATELY EXCLUDED
+// (owner-decided): it is a declared zero-caller reference model, unwired to any transport — ARCH-5
+// (advertised≡invocable) forbids an unwired door in an advertised surface. Re-add only alongside real wiring.
 const EXPECTED_READ_SURFACE = [
   'atlas-anchors',
   'atlas-slots',
@@ -40,7 +42,6 @@ const EXPECTED_READ_SURFACE = [
   'atlas-check',
   'atlas-doctor',
   'atlas-node',
-  'atlas-diff',
 ];
 try {
   const mod = await import(pathToFileURL(join(REPO, 'packages/tools/dist/src/index.js')).href);
@@ -259,4 +260,4 @@ if (problems.length) {
   for (const p of problems) console.error('  ✗ ' + p);
   process.exit(1);
 }
-console.log(`spec-conformance-guard: OK — surface pinned (5 tools / 2 governed doors / 7 read-surface doors, disjoint), ${files.length} files drift-free, whole-file digest pins fresh (${WHOLE_FILE_PINNED.join(', ')}).`);
+console.log(`spec-conformance-guard: OK — surface pinned (5 tools / 2 governed doors / 6 read-surface doors, disjoint), ${files.length} files drift-free, whole-file digest pins fresh (${WHOLE_FILE_PINNED.join(', ')}).`);
