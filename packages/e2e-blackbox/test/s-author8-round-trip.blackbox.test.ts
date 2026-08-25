@@ -1,13 +1,20 @@
 // @atlas/e2e-blackbox — test/s-author8-round-trip.blackbox.test.ts  (WP-10.A2-a.E2E — PROP-AUTH-8)
 //
 // THE ROUND-TRIP PROPERTY, BLACK-BOX, OVER THE WHOLE FIXTURE — not one hand-picked anchor. `atlas anchors`
-// / `atlas slots` / `atlas draft` / `atlas emit` are all driven as SUBPROCESS invocations of the SHIPPED
-// `atlas` bin (`../src/harness.js`'s `runAtlas`, the same seam every sibling `*.blackbox.test.ts` uses).
-// This file imports NOTHING from `@atlas/*` in any EXECUTION or ASSERTION path — the envelope `atlas emit`
-// consumes is reconstructed PURELY from real subprocess stdout plus the frozen, fully-quoted structural
-// defaults `packages/tools/src/draft.ts` documents (see `./envelope.ts`'s header for exactly why the CLI's
-// rendered text alone is not enough, and exactly which byte comes from where — that file names the missing
-// door: `atlas draft`/`atlas anchors` have no machine-readable JSON output mode today).
+// / `atlas slots` / `atlas draft --json` / `atlas emit` are all driven as SUBPROCESS invocations of the
+// SHIPPED `atlas` bin (`../src/harness.js`'s `runAtlas`, the same seam every sibling `*.blackbox.test.ts`
+// uses). This file imports NOTHING from `@atlas/*` in any EXECUTION or ASSERTION path.
+//
+// A TRUE BYTE RELAY, NOT A RECONSTRUCTION. WP-10.A2-a.CLI-JSON shipped `atlas draft <anchor> <slot> <claim>
+// --json`, which prints the WHOLE `DraftOut` envelope (`JSON.stringify`'d verbatim) instead of the old
+// human-text subset. `./author8-subprocess.ts`'s `draftThenEmit` captures that stdout UNTOUCHED, writes the
+// EXACT SAME bytes to the file `atlas emit <file> --at <rev>` reads, and reads only `.rev` off the captured
+// JSON (needed because the CLI wire requires a positional `--at <sha>`) — no field of the envelope is
+// inspected, hand-picked, or rebuilt anywhere in this story. The envelope crossing draft→emit is produced
+// ENTIRELY by product doors; this story supplies the anchor/slot/claim in, and asserts the exit code out.
+// (An earlier revision of this file DID reconstruct the envelope by hand, off the pre-`--json` human-text
+// render plus frozen `packages/tools/src/draft.ts` literals — that code and its helper `envelope.ts` are
+// DELETED now that the CLI closes the gap directly; see the campaign history for why it existed at all.)
 //
 // THE `fix-author` FIXTURE (goldens-authoring.md §Fixture universe) — TWO COMMITS, a `.ts` + a `.rs` + a
 // non-code file: R1 commits `.gitignore` + the two TypeScript files (symbol-capable, folds `::` units); R2
@@ -35,8 +42,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFixtureRepo } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { anchorsOf, draftThenEmit, slotNames } from './envelope.js';
-import type { AnchorRow } from './envelope.js';
+import { anchorsOf, draftThenEmit, slotNames } from './author8-subprocess.js';
+import type { AnchorRow } from './author8-subprocess.js';
 
 const ACTOR = 'e2e@atlas.local';
 const RATIFIER = 'lead';
@@ -54,9 +61,9 @@ const R2_FILES: Readonly<Record<string, string>> = {
   'docs/notes.md': '# notes\n\nsome prose, no symbols.\n',
 };
 
-/** The `authz.scopes` every draft's `scopeOf(anchor)` (the first `/`-segment) resolves to over this fixture
- *  — `src`/`core`/`docs`, each granting {@link ACTOR}. `AUTHOR-6d`'s scope default is STRUCTURAL (the first
- *  path segment), so this is exactly the closed set the fixture's real anchors can ever compute. */
+/** The `authz.scopes` every draft's `scopeOf(anchor)` (the first `/`-segment — AUTHOR-6d's structural
+ *  default) resolves to over this fixture — `src`/`core`/`docs`, each granting {@link ACTOR}. Sized by
+ *  INSPECTING the fixture's own path layout, not by importing the product's `scopeOf` implementation. */
 const POLICY = JSON.stringify({
   nearDup: { claimNormThreshold: 1 },
   t0Heuristic: { keywords: [] },
@@ -125,10 +132,10 @@ describe('fix-author — the real unit census (sanity, not the property itself)'
 
 // ── (1) SCN-AUTH-8a-1 — the round trip closes for ONE anchor ─────────────────────────────────────────────
 describe('SCN-AUTH-8a-1 — the round trip closes', () => {
-  it("`src/app.ts::…run` drafted with slot 'invariant' and emitted at R2 is ACCEPTED", () => {
+  it("`src/app.ts::…run` drafted with slot 'invariant' and emitted at R2 is ACCEPTED (draft --json | emit, no reconstruction)", () => {
     const unit = units.find((u) => u.kind === 'symbol' && u.qualifiedPath.endsWith(':run'));
     expect(unit).toBeDefined();
-    const run = draftThenEmit(repo, unit as AnchorRow, 'invariant', 'run never returns an empty string', rev);
+    const run = draftThenEmit(repo, (unit as AnchorRow).qualifiedPath, 'invariant', 'run never returns an empty string');
     expect(run.exitCode).toBe(0);
     expect(run.stdout).toContain('status: ok');
     expect(run.stdout).toMatch(/^ {2}id: [0-9a-f]{64}$/m); // the persisted CAS content hash — a real accept
@@ -138,16 +145,15 @@ describe('SCN-AUTH-8a-1 — the round trip closes', () => {
 // ── (2) SCN-AUTH-8b-1 (guard) — no self-rejection across EVERY real unit in the fixture ────────────────────
 describe("SCN-AUTH-8b-1 (guard) — no self-rejection across the fixture's REAL unit set", () => {
   // Registered at COLLECTION time off the module-level fixture is not possible (the fixture is built in
-  // `beforeAll`), so this block drives the ∀ inside ONE `it` per real unit via `it.each`-style dynamic
-  // registration is likewise unavailable pre-`beforeAll` — instead, a SINGLE `it` iterates the whole unit
-  // set (comfortably inside the default 10s budget: this fixture's unit count is small — see the file
-  // header's scope note for why the OTHER dimension, the slot union, is covered separately in PROP-AUTH-8).
-  it('every unit — dir, file, symbol, grammar-less file — drafted with slot `invariant` and emitted is ACCEPTED', () => {
+  // `beforeAll`), so this block drives the ∀ inside ONE `it` iterating the whole unit set (comfortably
+  // inside the default 10s budget: this fixture's unit count is small — see the file header's scope note
+  // for why the OTHER dimension, the slot union, is covered separately in PROP-AUTH-8).
+  it('every unit — dir, file, symbol, grammar-less file — drafted with slot `invariant` and emitted (draft --json | emit) is ACCEPTED', () => {
     expect(units.length).toBeGreaterThan(0); // non-vacuity: the loop below actually iterates something
     const rejected: { unit: string; reason: string }[] = [];
     for (const unit of units) {
       const claim = `a claim about ${unit.qualifiedPath}`; // non-empty, unit-specific — never a shared literal
-      const run = draftThenEmit(repo, unit, 'invariant', claim, rev);
+      const run = draftThenEmit(repo, unit.qualifiedPath, 'invariant', claim);
       if (run.exitCode !== 0) rejected.push({ unit: unit.qualifiedPath, reason: run.stdout });
     }
     expect(rejected).toEqual([]); // teeth: a drafter wrong for JUST the `::` symbol path fails ONLY here
@@ -176,9 +182,8 @@ describe('PROP-AUTH-8 — draft→emit round-trip acceptance, ∀ over the real 
   // `arb claim strings (unicode, very long, punctuation-heavy, near-empty)` — cycled deterministically across
   // (kind, slot) combos so every claim SHAPE the law names is exercised at least once per representative kind,
   // never a single shared literal (which would leave a claim-shape-specific bug unreachable, per the law's
-  // own arbitrary-generator spec). No literal newline in any variant — keeps this file's line-oriented
-  // `atlas draft` stdout parser (`./envelope.ts`) unambiguous; harmless to the property under test (identity
-  // for an advisory fact never reads the claim body at all — `nodeKey = hash(primaryAnchorId ‖ slot)`).
+  // own arbitrary-generator spec). No literal newline in any variant (kept simple for readability, not for
+  // parsing — nothing in this file parses `draft`'s claim back out of anything anymore).
   const CLAIM_VARIANTS: readonly string[] = [
     'this predicate holds for the cited unit', // plain
     'ユニコード claim — π ≈ 3.14159, café, Ω, "quoted", 日本語', // unicode
@@ -189,19 +194,19 @@ describe('PROP-AUTH-8 — draft→emit round-trip acceptance, ∀ over the real 
 
   for (const { label, qualifiedPath } of REPRESENTATIVES) {
     describe(`unit kind: ${label} (${qualifiedPath})`, () => {
-      // One `it` per (kind, slot) pair — registered synchronously at collection time off the MODULE-level
-      // `beforeAll`-independent constants above (`REPRESENTATIVES`/`CLAIM_VARIANTS` are static; the fixture
-      // itself — `repo`/`rev`/`units` — is read inside each test body, after `beforeAll` has run, never at
-      // registration time). `slots` (the real 13-member union) is only known post-`beforeAll`, so the LOOP
-      // itself has to run inside a single `it` per kind — 13 draft+emit pairs per kind, well inside the
-      // default 10s budget at ~1s/subprocess-pair.
-      it(`every one of the 13 real slots round-trips (draft → emit) — ACCEPTED, zero rejections`, () => {
+      // One `it` per kind, looping all 13 slots inside — registered synchronously at collection time off the
+      // MODULE-level `beforeAll`-independent constants above (`REPRESENTATIVES`/`CLAIM_VARIANTS` are static;
+      // the fixture itself — `repo`/`units` — is read inside each test body, after `beforeAll` has run, never
+      // at registration time). `slots` (the real 13-member union) is only known post-`beforeAll`, so the LOOP
+      // itself has to run inside a single `it` per kind — 13 draft+emit pairs per kind, past the file's
+      // default 10s test budget (a real per-`it` timeout override below), well inside 30s.
+      it(`every one of the 13 real slots round-trips (draft --json | emit) — ACCEPTED, zero rejections`, () => {
         expect(slots.length).toBe(13); // fixture sanity re-asserted here too — a stale/empty union would be silent otherwise
         const unit = representative(qualifiedPath);
         const rejected: { slot: string; reason: string }[] = [];
         slots.forEach((slot, i) => {
           const claim = `${CLAIM_VARIANTS[i % CLAIM_VARIANTS.length]} (${slot}@${qualifiedPath})`;
-          const run = draftThenEmit(repo, unit, slot, claim, rev);
+          const run = draftThenEmit(repo, unit.qualifiedPath, slot, claim);
           if (run.exitCode !== 0) rejected.push({ slot, reason: run.stdout });
         });
         expect(rejected).toEqual([]); // PROP-AUTH-8: rejections == 0, over the WHOLE slot union, for THIS kind
@@ -221,12 +226,12 @@ describe('black-box law — this story imports no product library', () => {
     expect(productImports).toEqual([]);
   });
 
-  it("`./envelope.ts` — the helper this story's execution/assertion path routes through — carries none either", async () => {
+  it("`./author8-subprocess.ts` — the helper this story's execution/assertion path routes through — carries none either", async () => {
     const { readFileSync } = await import('node:fs');
     const { fileURLToPath } = await import('node:url');
     const here = fileURLToPath(import.meta.url);
-    const envelopePath = here.replace(/s-author8-round-trip\.blackbox\.test\.ts$/, 'envelope.ts');
-    const src = readFileSync(envelopePath, 'utf8');
+    const helperPath = here.replace(/s-author8-round-trip\.blackbox\.test\.ts$/, 'author8-subprocess.ts');
+    const src = readFileSync(helperPath, 'utf8');
     const imports = [...src.matchAll(/^import .*from '([^']+)'/gm)].map((m) => m[1]);
     const productImports = imports.filter((spec) => spec?.startsWith('@atlas/'));
     expect(productImports).toEqual([]);
