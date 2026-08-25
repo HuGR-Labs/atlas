@@ -93,7 +93,7 @@
 // frozen core (`@atlas/tools` emit, `@atlas/knowledge` upsert, the GROUND gate) — it re-implements none.
 
 import type { CasObject } from '@atlas/kernel';
-import type { Hash } from '@atlas/contracts';
+import type { Hash, NodeKey } from '@atlas/contracts';
 import { upsert } from '@atlas/knowledge';
 import type { Candidate, CurrentNode, GroundedFact, NegationNode, TransitionNode, TestVacuityNode, WriteRequest, WriteOrigin } from '@atlas/knowledge';
 import { emitNegation, type NegationEmitDeps } from './governed-emit-negation.js'; // #99b N2 — THE ABSTENTION DOOR
@@ -316,7 +316,15 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
         //    names the objects the protocol writes before it links the generation in. A failing `put`
         //    (disk-full / permission) throws before any sidecar byte, so the sidecar can NEVER reference a
         //    contentHash whose bytes are absent from CAS.
-          return { out: { emitted: true, id: contentHash }, next, put: [node as CasObject] };
+          // AUTHOR-14 (ADDITIVE) — `targetKey` is the SAME minted identity the incumbent guard above already
+          // resolved and the WriteRequest's `nodeKey` above carries onto the durable row (one identity, one
+          // read — no re-mint). Stamped onto the receipt so the LINK door (`atlas-link`, which addresses a
+          // node BY nodeKey — see `governed-link.ts`'s `proj.current.get(a/b)`) can consume it with no
+          // separate query. Cast mirrors the existing `id: contentHash` line just above: `targetKey` is typed
+          // `string` here (ADR-0015 D2 — a relation's targetKey is a `relationKey`, not a `nodeKey`), while
+          // `EmitOut.nodeKey` is branded `NodeKey`; the door already trusts this value as an address (it is
+          // the live map key `projection.current` is keyed by), so the brand is asserted, not re-derived.
+          return { out: { emitted: true, id: contentHash, nodeKey: targetKey as unknown as NodeKey }, next, put: [node as CasObject] };
       });
     } catch (e) {
       // ONLY a REFUSAL is re-filed (unaddressable-CAS-object; closed-slot, gate 3.5); every other throw propagates UNCHANGED — laundering one hides a broken disk behind a verdict. `commitRefusalOf` says why.

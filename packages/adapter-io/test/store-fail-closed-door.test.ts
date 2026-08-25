@@ -130,7 +130,11 @@ describe('(A) the PRODUCT write path — createGovernedEmit over a real createDi
     ws = freshWorkspace();
     const door = doorOver(ws);
     const fact = advisoryFact({ anchor: ANCHOR, scope: SCOPE, claimNorm: 'a clean claim' });
-    expect(door.emit(fact, AT)).toStrictEqual({ emitted: true, id: expect.any(String) as unknown as string });
+    expect(door.emit(fact, AT)).toStrictEqual({
+      emitted: true,
+      id: expect.any(String) as unknown as string,
+      nodeKey: expect.any(String) as unknown as string, // AUTHOR-14: additive on every success receipt
+    });
     const state = durableState(ws);
     expect(state.cas).toBe(1);
     expect(state.generations).toStrictEqual(['projection.1.json']);
