@@ -73,6 +73,11 @@ export interface ComposedRuntime {
    *  drafted fact re-derives against the gate's own oracle by construction. Rides beside the handler like
    *  `anchors`: NOT a `Tool`, persists nothing (AUTHOR-2). */
   readonly draft: DraftApi['draft'];
+  /** The read-only `draftSupersede` RETIRE/SUPERSEDE VARIANT (WP-10.A2-b / ADR-0004, AUTHOR-13) — IDENTICAL
+   *  composition to `draft` (SAME grounding seam, SAME identity mint, SAME `IncumbentPort`); the drafted
+   *  fact's `authoring` is `'SUPERSEDED'` instead of `'ADVISORY'`. Opens NO new write door — a supersede
+   *  reaches the store only through the SAME `atlas-emit` gate chain any other draft does (AUTHOR-13b/d). */
+  readonly draftSupersede: DraftApi['draftSupersede'];
   /** The read-only `check` DRY-RUN planner (WP-10.A3 / ADR-0004, AUTHOR-11/12) — `check(candidate, at)` folds
    *  the governed emit door's WHOLE gate chain (`shape → truth → authz → ratify`) over a candidate fact
    *  WITHOUT any write, via the injected `GateChainRunner` port (`@atlas/tools` `check.ts`) implemented over
