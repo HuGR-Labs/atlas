@@ -24,10 +24,11 @@ import { createSymbolReverse, nodeHashOfPath } from '@atlas/index';
 import type { Axes } from '@atlas/index';
 import { bindReconcile } from '@atlas/knowledge';
 import type { GroundedFact } from '@atlas/knowledge';
-import { createAnchors, createSlots, createDraft } from '@atlas/tools';
+import { createAnchors, createSlots, createDraft, createCheck } from '@atlas/tools';
 import type { T0Heuristic, TruthGate } from '@atlas/tools';
 import { walkFileTree } from './fs.js';
 import { deriveGroundingAxes, buildGroundingComputer, buildGate } from './grounding-computer.js';
+import { buildCheckPort } from './check-source.js';
 import { readScipOrEmpty, readScipIndexerName } from './scip.js';
 import { loadPolicy } from './policy.js';
 import type { AtlasPolicy } from './policy.js';
@@ -269,9 +270,29 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     replay: tvFeed.replay,
   });
 
+  // THE ONE TRUTH-GATE INSTANCE — built once here so `seams.gate` (the durable emit door's gate) and the
+  // `check` dry-run below (next) share the IDENTICAL adapted gate over the SAME `axes`, never two instances
+  // that could drift apart.
+  const truthGate = buildGate(axes);
+
+  // THE `check` DRY-RUN PLANNER (WP-10.A3 / ADR-0004, AUTHOR-11/12) — the `GateChainRunner` port
+  // (`@atlas/tools`) implemented over `runGateChain` (WP-10.A3.ADAPTER, `check-source.ts`) with the IDENTICAL
+  // dependency bag `promotedEmit`/the operator emit door below are composed over: the SAME `store`, the
+  // SAME `truthGate`, the SAME `policy`, the SAME `actor`, the SAME `ratifyToken`. A dry run and a real
+  // `atlas emit` for the SAME fact at the SAME rev can only diverge on a store mutation BETWEEN the two
+  // calls — never on which gate predicate ran (PROP-AUTH-11).
+  const checkPort = buildCheckPort({
+    store,
+    gate: truthGate,
+    policy,
+    actor,
+    ...(ratifyToken !== undefined ? { ratifyToken } : {}),
+  });
+  const checkLeg = createCheck(checkPort);
+
   const seams: WireSeams = {
     heuristic: buildHeuristic(policy),
-    gate: buildGate(axes),
+    gate: truthGate,
     // N10 — the reconcile classifier is CONTENT-ADDRESSED: a drifted fact is MECHANICAL iff its recorded
     // content re-derives SOMEWHERE at the new sha (`resolveBySubtreeAt`), not just at the SAME
     // qualifiedPath. The original predicate was PATH-KEYED, so a genuinely moved-but-alive fact read `false`
@@ -443,6 +464,10 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     // THE `draft` COMPOSITION PLANNER (WP-10.A2-a / ADR-0004) — the ARCH-3 binding that makes `createDraft`
     // running code (its production caller), over the SAME grounding computer `anchors` reads.
     draft: draftLeg.draft,
+    // THE `check` DRY-RUN PLANNER (WP-10.A3 / ADR-0004, AUTHOR-11/12) — the ARCH-3 binding that makes
+    // `createCheck` running code (its production caller), over the `GateChainRunner` port built above
+    // (`buildCheckPort` → `runGateChain`, WP-10.A3.ADAPTER). Read-only; not a `Tool`; opens no write path.
+    check: checkLeg.check,
     // THE GROUNDED-RELATION READ LEG (#99a). `readAccess.store` is the very object the handler's query leg
     // reads — passed, not rebuilt — so `atlas relations <unit>` and `atlas query <unit>` are two projections
     // of ONE store, and a relation emitted through the emit door is visible to the very next `relations` call.
