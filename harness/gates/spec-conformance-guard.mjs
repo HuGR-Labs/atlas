@@ -3,9 +3,10 @@
 // edit that drifts one from the other fails CI instead of surviving on human review alone.
 //
 // Three checks:
-//   (1) CODE-SURFACE PIN — the shipped `GOVERNANCE_SURFACE` / `WRITE_PATHS` (the single source of truth)
-//       must equal the ratified canonical set. Changing the surface is a deliberate edit to THIS pin,
-//       reviewable in one place (INV-TOOLS-1 / ADR-0003).
+//   (1) CODE-SURFACE PIN — the shipped `GOVERNANCE_SURFACE` / `WRITE_PATHS` / `READ_SURFACE` (the single
+//       source of truth) must equal the ratified canonical sets, and `READ_SURFACE` must stay DISJOINT from
+//       both governed constants. Changing any surface is a deliberate edit to THIS pin, reviewable in one
+//       place (INV-TOOLS-1 / ADR-0003; READ_SURFACE / ENTRY-MCP-3 / ADR-0005).
 //   (2) DOC ANTI-DRIFT — no canonical doc or source/test comment may reintroduce the pre-amendment
 //       "single write door / four tools / four-leg / cardinality==4 / no fifth" governance-count forms.
 //       (Excludes the ADR-narrative, the TOOLS-15 store-row-medium term-of-art, and doctor's four READ legs.)
@@ -28,6 +29,20 @@ const problems = [];
 // ── (1) CODE-SURFACE PIN ────────────────────────────────────────────────────────────────────────
 const EXPECTED_SURFACE = ['atlas-init', 'atlas-query', 'atlas-emit', 'atlas-reconcile', 'atlas-link'];
 const EXPECTED_WRITE_PATHS = ['atlas-emit', 'atlas-link'];
+// [WP-10.A5.TOOLS, ADR-0005 / ENTRY-MCP-3] `READ_SURFACE` — the disjoint planner/read-projection set MCP
+// advertises alongside `GOVERNANCE_SURFACE`. Membership transcribed from the ADR's Decision (reconciled
+// 2026-08-24) + A-D2: the four ADR-0004 authoring planners (anchors/slots/draft/check) + the two
+// already-shipped, ALREADY-INVOCABLE read projections (doctor/node). `atlas-diff` is DELIBERATELY EXCLUDED
+// (owner-decided): it is a declared zero-caller reference model, unwired to any transport — ARCH-5
+// (advertised≡invocable) forbids an unwired door in an advertised surface. Re-add only alongside real wiring.
+const EXPECTED_READ_SURFACE = [
+  'atlas-anchors',
+  'atlas-slots',
+  'atlas-draft',
+  'atlas-check',
+  'atlas-doctor',
+  'atlas-node',
+];
 try {
   const mod = await import(pathToFileURL(join(REPO, 'packages/tools/dist/src/index.js')).href);
   const eq = (a, b) => Array.isArray(a) && a.length === b.length && a.every((x, i) => x === b[i]);
@@ -37,6 +52,25 @@ try {
   }
   if (!eq(mod.WRITE_PATHS, EXPECTED_WRITE_PATHS)) {
     problems.push(`CODE-SURFACE: WRITE_PATHS = [${mod.WRITE_PATHS}] ≠ canonical [${EXPECTED_WRITE_PATHS}].`);
+  }
+  if (!eq(mod.READ_SURFACE, EXPECTED_READ_SURFACE)) {
+    problems.push(`CODE-SURFACE: READ_SURFACE = [${mod.READ_SURFACE}] ≠ canonical [${EXPECTED_READ_SURFACE}]. ` +
+      `If the read surface changed by ratified amendment, update EXPECTED_READ_SURFACE here AND ADR-0005 / atlas-authoring.md A-D2.`);
+  }
+  // ENTRY-MCP-3 disjointness — `READ_SURFACE` shares NO member with either governed constant. A door that
+  // migrated into both sets would silently inherit write authority it never earned, or make
+  // `GOVERNANCE_SURFACE`'s own count meaningless (ADR-0005 §Why this does not weaken TOOLS-1).
+  if (Array.isArray(mod.READ_SURFACE) && Array.isArray(mod.GOVERNANCE_SURFACE)) {
+    const overlapGov = mod.READ_SURFACE.filter((t) => mod.GOVERNANCE_SURFACE.includes(t));
+    if (overlapGov.length) {
+      problems.push(`CODE-SURFACE: READ_SURFACE ∩ GOVERNANCE_SURFACE ≠ ∅ — shared member(s) [${overlapGov}] (ENTRY-MCP-3).`);
+    }
+  }
+  if (Array.isArray(mod.READ_SURFACE) && Array.isArray(mod.WRITE_PATHS)) {
+    const overlapWrite = mod.READ_SURFACE.filter((t) => mod.WRITE_PATHS.includes(t));
+    if (overlapWrite.length) {
+      problems.push(`CODE-SURFACE: READ_SURFACE ∩ WRITE_PATHS ≠ ∅ — shared member(s) [${overlapWrite}] (ENTRY-MCP-3, ADR-0005).`);
+    }
   }
 } catch (e) {
   problems.push(`CODE-SURFACE: could not import built constants (run \`npm run build\` first): ${e.message}`);
@@ -226,4 +260,4 @@ if (problems.length) {
   for (const p of problems) console.error('  ✗ ' + p);
   process.exit(1);
 }
-console.log(`spec-conformance-guard: OK — surface pinned (5 tools / 2 governed doors), ${files.length} files drift-free, whole-file digest pins fresh (${WHOLE_FILE_PINNED.join(', ')}).`);
+console.log(`spec-conformance-guard: OK — surface pinned (5 tools / 2 governed doors / 6 read-surface doors, disjoint), ${files.length} files drift-free, whole-file digest pins fresh (${WHOLE_FILE_PINNED.join(', ')}).`);

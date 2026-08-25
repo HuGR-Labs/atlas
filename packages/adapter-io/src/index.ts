@@ -103,6 +103,10 @@ export {
   RETRACT_NOT_LINKED,
   RETRACT_RETRACTED_PAIR,
 } from './governed-link-retract.js';
+// WP-10.A5.MCP — the SHARED authoring/read verdict builders both transports drive (the CLI RE-IMPORTS
+// `anchorsVerdict`/`slotsVerdict`/`draftVerdict` from here; `checkVerdict`/`doctorVerdict` are new). They live
+// here (not @atlas/cli) because the MCP server cannot import @atlas/cli — the ring forbids that layer.
+export { anchorsVerdict, slotsVerdict, draftVerdict, checkVerdict, doctorVerdict } from './author-verdicts.js';
 export { composeRuntime, buildHeuristic, buildGate, buildMineAdmission } from './compose.js';
 export type { ComposedRuntime, MineAdmission, Reground } from './compose.js';
 // WP-10.A1.ADAPTER — the ONE grounding computer (AUTHOR-1): the single fold→build derivation the emit truth-

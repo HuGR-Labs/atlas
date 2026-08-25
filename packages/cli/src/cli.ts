@@ -19,6 +19,7 @@ import { slotsVerdict } from './slots.js';
 import { draftVerdict } from './draft.js';
 import { runDoctor } from './doctor.js';
 import { ensureAtlasIgnored } from './gitignore.js';
+import { renderHelp } from './help.js';
 import { COMMAND_LEG } from './map.js';
 import { marshalArgs } from './marshal.js';
 import { runOwn } from './own.js';
@@ -214,6 +215,17 @@ export interface CliDeps {
  * TOTAL — a malformed invocation renders a structured non-zero error, never a throw / `process.exit`.
  */
 export async function main(argv: string[], deps: CliDeps = {}): Promise<number> {
+  // ENTRY-CLI-5 — the help door. Intercepted BEFORE `parse()` (not a member of `COMMANDS`/`COMMAND_LEG`:
+  // it opens no leg, needs no composed runtime, and is reachable even over an uncomposed/refused store, the
+  // one invocation that must never itself require the thing it explains how to reach). `atlas help` /
+  // `atlas --help` / `atlas -h` all render the SAME derived text, exit 0. Empty argv is DELIBERATELY left to
+  // fall through to `parse()`'s existing `no command` error (CLI-1b totality, unchanged) rather than being
+  // widened to mean help — that would be a behavior change to an already-pinned path, not an addition.
+  if (argv[0] === 'help' || argv[0] === '--help' || argv[0] === '-h') {
+    process.stdout.write(renderHelp());
+    return 0;
+  }
+
   const parsed = parse(argv);
   if (!parsed.ok) {
     return emit(errorVerdict(parsed.error));
@@ -427,7 +439,22 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
     if (!deps.draft || !deps.slots) {
       return emit(errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'));
     }
-    return emit(draftVerdict(deps.draft, deps.slots, positionals[0] ?? '', positionals[1] ?? '', positionals[2] ?? ''));
+    const verdict = draftVerdict(deps.draft, deps.slots, positionals[0] ?? '', positionals[1] ?? '', positionals[2] ?? '');
+    // WP-10.A2-a.CLI-JSON — `atlas draft ... --json`: the CLI arm of the AUTHOR-8 round trip (`draft | emit`)
+    // was closed by product doors ONLY over MCP — the default render here prints a human-text SUBSET of the
+    // `DraftOut` envelope (draft id / tier / slot / claim / rev / operation / route), never the whole thing, so
+    // there was no way to CAPTURE the envelope `atlas emit <file> --at <rev>` reads (`marshalEmit` already
+    // accepts it — recognised structurally by BOTH `.fact` and `.rev`, see marshal.ts). `--json` is a NEW
+    // branch, gated on a successful draft ONLY (an `ok:false` verdict has no envelope to print, so it falls
+    // through to the SAME human `emit(verdict)` path as today — the failure rendering is untouched). On success
+    // it prints the RAW `DraftOut` — `JSON.stringify`'d whole, never hand-picked fields, so `fact`'s full
+    // `GroundedFact` (with its grounding) survives the round trip intact — and exits 0, mirroring the human
+    // path's own exit code for the same verdict.
+    if (flags.json === 'true' && verdict.ok) {
+      process.stdout.write(`${JSON.stringify(verdict.data)}\n`);
+      return 0;
+    }
+    return emit(verdict);
   }
 
   if (command === 'verify-fact') {

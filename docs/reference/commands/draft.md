@@ -21,8 +21,14 @@ atlas draft <anchor> <slot> <claim>
   value outside that vocabulary is refused BEFORE the grounding computer is ever consulted.
 - `<claim>` — required. The claim body to draft.
 
-Nothing else is accepted — there is no `--id`, `--subtree-hash`, or `--rev` flag: those fields are ALWAYS
-computed (AUTHOR-6d/6f), never a positional or a flag this door reads.
+No INPUT flag is accepted — there is no `--id`, `--subtree-hash`, or `--rev` flag: those fields are ALWAYS
+computed (AUTHOR-6d/6f), never a positional or a flag this door reads. The one flag it honors is an OUTPUT
+mode:
+
+- `--json` — on a successful draft, print the WHOLE `DraftOut` envelope (`{ fact, rev, operation, route,
+  requires? }`) as a single machine-readable JSON object to stdout, INSTEAD of the human `data:` render. This
+  is what lets an author capture the envelope and feed it straight to `atlas emit` (see the round trip below).
+  On a failed draft it is ignored and the same human error render is printed.
 
 ## Outcome
 
@@ -50,10 +56,17 @@ data:
 
 ## Rev-stamping and the round trip (AUTHOR-7/8)
 
-A draft is **rev-stamped**: the `rev:` line names exactly the commit its `subtreeHash` was derived at. Emit
-it with [`atlas emit`](./emit.md) at the **SAME rev** — `atlas emit <file> --at <rev>` — to close the round
-trip (AUTHOR-8). `atlas emit` accepts EITHER a bare `GroundedFact` (its pre-existing input shape) OR the whole
-draft envelope this command's `data:` fields correspond to; when it is fed the envelope and `--at` names a
+A draft is **rev-stamped**: the `rev:` line names exactly the commit its `subtreeHash` was derived at. Capture
+the envelope with `--json` and emit it with [`atlas emit`](./emit.md) at the **SAME rev** to close the round
+trip (AUTHOR-8), entirely through product doors:
+
+```
+atlas draft <anchor> <slot> <claim> --json > draft.json
+atlas emit draft.json --at <rev>
+```
+
+`atlas emit` accepts EITHER a bare `GroundedFact` (its pre-existing input shape) OR the whole
+draft envelope this command's `--json` output carries; when it is fed the envelope and `--at` names a
 **different** rev than the one the draft carries, the refusal **names the rev mismatch explicitly** —
 DISTINCT from the generic "ungrounded: citation does not re-derive at source@sha" refusal a genuinely stale
 citation gets — and does **not** attribute the failure to the claim (AUTHOR-7b/7c).

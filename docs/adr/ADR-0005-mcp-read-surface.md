@@ -6,6 +6,16 @@
 - **Spec author:** lead, grounded against `packages/mcp-server/src/server.ts` @ `3496d6f`.
 - **Introduces:** `INV-MCP-3`, `INV-MCP-4` (reference/atlas-authoring.md#entry-mcp-3, #entry-mcp-4).
 - **Does NOT amend:** INV-TOOLS-1 / ADR-0003. `GOVERNANCE_SURFACE` stays 5; `WRITE_PATHS` stays 2.
+- **[RECONCILED 2026-08-24, owner-decided, WP-10.A5.TOOLS]** This ADR's original text (below) claimed
+  `atlas-diff` was "wired, tested, and reachable from the CLI" alongside `doctor`/`node`. **That claim is
+  FALSE against the shipped tree** — `packages/tools/src/diff.ts` is a declared reference model with ZERO
+  production callers (`reference-model-guard.mjs`'s ledger; its own header states "no `atlas diff` CLI
+  command"). `READ_SURFACE` as SHIPPED is the **SIX genuinely invocable** read doors —
+  `atlas-anchors`/`atlas-slots`/`atlas-draft`/`atlas-check`/`atlas-doctor`/`atlas-node` — never seven.
+  `atlas-diff` stays a reference model until it is genuinely wired to a transport, in its own later WP; it is
+  NOT a `READ_SURFACE` member today. The paragraphs below are left as originally written (an ADR narrates
+  the decision as reasoned at the time) with inline `[CORRECTED]` notes at the specific false claims — see
+  §Context point 1, §Decision, §Rejected (b), §Consequences.
 
 ## Context
 
@@ -15,9 +25,12 @@ The server's own comment states the surface is *"EXACTLY the `GOVERNANCE_SURFACE
 
 Three consequences, all verified against the code:
 
-1. **The already-built read doors are CLI-only.** `atlas doctor` (four sub-legs), `atlas node`, and
-   `atlas-diff` are wired, tested, and reachable from the CLI — and completely absent over MCP. An agent
-   seat cannot inspect the archive, explain a drift, read a node, or see a version delta.
+1. **The already-built read doors are CLI-only.** `atlas doctor` (four sub-legs) and `atlas node` are wired,
+   tested, and reachable from the CLI — and completely absent over MCP. An agent seat cannot inspect the
+   archive, explain a drift, or read a node. **[CORRECTED 2026-08-24]** This point originally also named
+   `atlas-diff` as "wired, tested, and reachable from the CLI" — FALSE against the shipped tree: `diff.ts`
+   is a declared zero-caller reference model (no `atlas diff` CLI command ever existed). `atlas-diff` is
+   removed from this point and from `READ_SURFACE` (§Decision).
 2. **The authoring surface would inherit the same asymmetry.** `anchors`/`slots`/`draft`/`check`
    (ADR-0004) are planners; if the advertised set may only contain governance tools, an agent gets none of
    them and the owner's both-transports requirement cannot be met.
@@ -36,8 +49,13 @@ advertised = GOVERNANCE_SURFACE  ∪  READ_SURFACE
 GOVERNANCE_SURFACE = { atlas-init, atlas-query, atlas-emit, atlas-reconcile, atlas-link }   // 5, unchanged
 WRITE_PATHS        = { atlas-emit, atlas-link }                                             // 2, unchanged
 READ_SURFACE       = { atlas-anchors, atlas-slots, atlas-draft, atlas-check,                // planners
-                       atlas-doctor, atlas-node, atlas-diff }                               // already built
+                       atlas-doctor, atlas-node }                                           // already invocable
 ```
+
+**[CORRECTED 2026-08-24]** The original text here also listed `atlas-diff` as a seventh `READ_SURFACE`
+member ("already built"). Removed: `diff.ts` is a declared reference model with zero production callers —
+ARCH-5 (advertised≡invocable, `layer-guard.mjs`) forbids an unwired door in an ADVERTISED surface. `diff`
+re-joins `READ_SURFACE` only alongside real CLI/MCP wiring, in its own later WP.
 
 Normatively (`INV-MCP-3`): every `READ_SURFACE` member carries **zero write authority**; membership must
 not confer, imply, or route to a write; `GOVERNANCE_SURFACE` remains exactly five and `WRITE_PATHS`
@@ -70,7 +88,9 @@ as ADR-0003 made it.
 
 **(b) Keep the authoring doors CLI-only.** Rejected — it directly contradicts the owner's directive, and it
 would leave the agent seat (the primary consumer of a knowledge substrate) unable to author at all. It also
-entrenches the existing `doctor`/`node`/`diff` asymmetry rather than fixing it.
+entrenches the existing `doctor`/`node` asymmetry rather than fixing it. **[CORRECTED 2026-08-24]** originally
+also named `diff` here — removed; `diff` was never CLI-wired, so there was no CLI-only asymmetry to entrench
+for that door specifically.
 
 **(c) A second MCP server process for read tools.** Rejected as ceremony: two processes, two lifecycles,
 two schema publishers, to express what one disjoint constant expresses.
@@ -84,8 +104,10 @@ from the tool schema is not a door (the Usability risk in `design/authoring.md` 
   state the union and cite this ADR. **This comment is exactly the class of stale claim the
   spec-conformance guard exists to catch** — it is updated in the same change, and the guard gains the
   `READ_SURFACE ∩ WRITE_PATHS == ∅` check.
-- The already-built `doctor`/`node`/`diff` legs join `READ_SURFACE` in the same campaign, closing a
-  pre-existing transport asymmetry that predates this work.
+- The already-invocable `doctor`/`node` legs join `READ_SURFACE` in the same campaign, closing a
+  pre-existing transport asymmetry that predates this work. **[CORRECTED 2026-08-24]** `diff` does NOT join
+  `READ_SURFACE` — it was never CLI/MCP-wired (a declared reference model, `diff.ts`), and ARCH-5
+  (advertised≡invocable) forbids advertising an unwired door. It joins only once a later WP wires it.
 - Every advertised tool continues to publish its `description` + `inputSchema` from `handler.schema(tool)`
   — the handler stays the single schema owner (TOOLS-3); no schema is hand-authored at the transport.
 - `INV-MCP-4` parity goldens are required for each new door; the existing black-box harness already drives

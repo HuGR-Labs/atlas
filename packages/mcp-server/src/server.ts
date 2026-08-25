@@ -2,18 +2,19 @@
 //
 // Stand up a stdio MCP server whose every GOVERNED tool call routes through the one wired handler
 // (@atlas/adapter-io), returning the frozen `Verdict` (@atlas/tools) shape. The advertised surface is
-// `GOVERNANCE_SURFACE` (exactly five, TOOLS-1, pinned) PLUS any injected READ leg — today TWO read tools,
-// `atlas-relations` (#99a / ADR-0015 D2) and `atlas-negations` (#99b / ADR-0015 D3), advertised via
-// `advertisedReadTools(relations, negations)` when their legs are composed, so production advertises SEVEN
-// tools (5 governance + 2 read). Each read tool opens NO governed token and leaves `GOVERNANCE_SURFACE`
-// byte-for-byte closed at five. HONEST DIVERGENCE, stated so it is not mistaken for the
-// designed seam: the constitution's extension point is `GOVERNANCE_SURFACE ∪ READ_SURFACE` (ADR-0006), but
-// `READ_SURFACE` has NO export site anywhere in `packages/**` (CAMPAIGN-10.3 / WP-10.A5.TOOLS is not built —
-// `npm run layer-guard` reports it DECLARED UNCOVERED). Rather than block a read tool on that unbuilt seam,
-// `atlas-relations` is advertised through a NARROW parallel path that leaves `GOVERNANCE_SURFACE` byte-for-byte
-// closed at five (SCN-MCP-1 holds) and is served DIRECTLY from the injected leg, never through `handler.handle`
-// — it opens no governed token and no write path. Folding this into the formal `READ_SURFACE` seam remains
-// owed to CAMPAIGN-10.3.
+// `GOVERNANCE_SURFACE` (exactly five, TOOLS-1, pinned) PLUS injected READ legs. Two families of read leg
+// are advertised, each served DIRECTLY from its injected leg and never through `handler.handle` (so each
+// opens NO governed token, no write path, and leaves `GOVERNANCE_SURFACE` byte-for-byte closed at five):
+//   • the pre-existing pair `atlas-relations` (#99a / ADR-0015 D2) + `atlas-negations` (#99b / ADR-0015 D3),
+//     via `advertisedReadTools(relations, negations)`;
+//   • the authoring bundle `READ_SURFACE` (WP-10.A5.TOOLS/A5.MCP) — the six planner/read doors
+//     `atlas-anchors|slots|draft|check|doctor|node` — via `advertisedAuthoringTools`/`callAuthoringTool`
+//     (server-read-tools.ts), threaded as `readLegs`.
+// With all legs composed production advertises THIRTEEN tools (5 governance + 2 relations/negations + 6
+// authoring). `READ_SURFACE` now HAS its export site (`@atlas/tools`, WP-10.A5.TOOLS) and the layer-guard's
+// `GOVERNANCE_SURFACE ∪ READ_SURFACE` partition (ADR-0006) is covered; `SCN-MCP-1e-2` pins that every
+// READ_SURFACE member is advertised AND routes to a non-write leg. When NO read bundle is injected the
+// advertised surface is byte-for-byte the closed governance surface (SCN-MCP-1 holds).
 //
 // PARITY — precisely which one holds. SCHEMA + VERDICT parity HOLDS: `inputSchema`/`description` are read
 // from `handler.schema(tool)` verbatim and every call routes through the ONE wired handler, so identical
@@ -47,6 +48,8 @@ import type { NegationLeg, RelationLeg, WiredHandler } from '@atlas/adapter-io';
 import { negationsVerdict, relationsVerdict } from '@atlas/adapter-io';
 import { faultOf, GOVERNANCE_SURFACE } from '@atlas/tools';
 import type { Tool, Verdict } from '@atlas/tools';
+import type { ReadSurfaceLegs } from './server-read-tools.js';
+import { advertisedAuthoringTools, callAuthoringTool } from './server-read-tools.js';
 
 /** The stdio MCP server handle (frozen ring shape — `start()` connects the SDK stdio transport). */
 export interface McpServer {
@@ -174,9 +177,22 @@ export function advertisedReadTools(relations?: RelationLeg, negations?: Negatio
 }
 
 /** The ListTools response — the closed governance surface (TOOLS-1), PLUS the `relations`/`negations` read
- *  tools when their legs are injected. With no leg the response is byte-for-byte the closed governance surface. */
-export function listTools(handler: WiredHandler, relations?: RelationLeg, negations?: NegationLeg): ListToolsResult {
-  return { tools: [...advertisedTools(handler), ...advertisedReadTools(relations, negations)] };
+ *  tools when their legs are injected, PLUS the full `READ_SURFACE` (6: anchors, slots, draft, check, doctor,
+ *  node) when the authoring bundle is injected (WP-10.A5.MCP). With no leg the response is byte-for-byte the
+ *  closed governance surface. */
+export function listTools(
+  handler: WiredHandler,
+  relations?: RelationLeg,
+  negations?: NegationLeg,
+  readLegs?: ReadSurfaceLegs,
+): ListToolsResult {
+  return {
+    tools: [
+      ...advertisedTools(handler),
+      ...advertisedReadTools(relations, negations),
+      ...advertisedAuthoringTools(readLegs),
+    ],
+  };
 }
 
 /**
@@ -213,7 +229,14 @@ export function callTool(
   args: unknown,
   relations?: RelationLeg,
   negations?: NegationLeg,
+  readLegs?: ReadSurfaceLegs,
 ): CallToolResult {
+  // The full READ_SURFACE (6: anchors, slots, draft, check, doctor, node) is routed DIRECTLY to its SHARED
+  // verdict builder (`@atlas/adapter-io`, the SAME body the CLI drives) — byte-identical `Verdict` on both
+  // transports. NONE reaches a write path (`node` rides the handler's read-only `resolveNode`; the rest ride
+  // read/planner legs that persist nothing). `undefined` ⇒ `name` is not a READ_SURFACE token; fall through.
+  const readVerdict = callAuthoringTool(handler, readLegs, name, args);
+  if (readVerdict !== undefined) return verdictToResult(readVerdict);
   // `atlas-relations` (#99a) is served DIRECTLY from the injected read leg through the SHARED verdict builder
   // (`relationsVerdict`, @atlas/adapter-io) — the SAME body the CLI drives, so identical input yields a
   // byte-identical `Verdict` on both transports (the SCHEMA + VERDICT parity invariant). It never reaches
@@ -243,21 +266,32 @@ export function callTool(
 
 /** Wire the SDK `Server` over the one handler: advertise the closed surface (+ the `relations` read tool when
  *  a read leg is injected) and route every CallTool. */
-function configureServer(handler: WiredHandler, relations?: RelationLeg, negations?: NegationLeg): Server {
+function configureServer(
+  handler: WiredHandler,
+  relations?: RelationLeg,
+  negations?: NegationLeg,
+  readLegs?: ReadSurfaceLegs,
+): Server {
   const server = new Server(SERVER_INFO, { capabilities: { tools: {} } });
-  server.setRequestHandler(ListToolsRequestSchema, () => listTools(handler, relations, negations));
+  server.setRequestHandler(ListToolsRequestSchema, () => listTools(handler, relations, negations, readLegs));
   server.setRequestHandler(CallToolRequestSchema, (request) =>
-    callTool(handler, request.params.name, request.params.arguments, relations, negations),
+    callTool(handler, request.params.name, request.params.arguments, relations, negations, readLegs),
   );
   return server;
 }
 
 /** Construct the stdio MCP server over the one wired handler (MCP-1), optionally exposing the `relations`
- *  (#99a) and `negations` (#99b) read tools when the composition root injects their legs. */
-export function createMcpServer(handler: WiredHandler, relations?: RelationLeg, negations?: NegationLeg): McpServer {
+ *  (#99a) and `negations` (#99b) read tools, plus the full `READ_SURFACE` (6, WP-10.A5.MCP) when the
+ *  composition root injects their legs. */
+export function createMcpServer(
+  handler: WiredHandler,
+  relations?: RelationLeg,
+  negations?: NegationLeg,
+  readLegs?: ReadSurfaceLegs,
+): McpServer {
   return {
     async start(): Promise<void> {
-      const server = configureServer(handler, relations, negations);
+      const server = configureServer(handler, relations, negations, readLegs);
       const transport = new StdioServerTransport();
       await server.connect(transport);
     },

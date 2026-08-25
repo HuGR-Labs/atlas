@@ -99,9 +99,24 @@ alternative to it.
   gains a help surface (ENTRY-CLI-5); malformed payloads get a structured reason instead of a raw
   `TypeError` (AUTHOR-12); the required-but-discarded `id` field stops being demanded of authors (AUTHOR-6).
 - **Acceptance of the whole campaign** is AUTHOR-8 plus one black-box story: a user authors and emits a
-  fact using **only** product doors, on **both** transports — after which
-  `packages/e2e-blackbox/test/author.ts` is **deleted**. Until that helper can be deleted, the gap is not
-  closed.
+  fact using **only** product doors, on **both** transports. Delivered by two new black-box stories that
+  import NOTHING from `@atlas/*`: `s-mcp-authoring` (drives anchors→slots→draft→emit over stdio MCP alone,
+  reads the fact back) and `s-mcp-4-draft-parity` (PROP-MCP-4: byte-identical `draft` verdict CLI≡MCP,
+  including the partially-populated divergence-teeth arm SCN-MCP-4c-1).
+- **[AMENDED 2026-08-25, owner-decided] The acceptance is the product-door authoring PROOF above, not the
+  physical deletion of `author.ts`.** The original clause "after which `author.ts` is deleted" rested on an
+  incomplete view of that file. WP-10.A5.E2E measured it: `author.ts` conflates **two** roles.
+  (a) The **authoring stand-in** — the happy-path fact fabricator the campaign exists to replace. This role
+  is **retired**: the two stories above prove a human/agent authors and emits through product doors on both
+  transports, importing no product library. (b) An **adversarial fixture factory** — `ungroundedFact`,
+  `subtreeHashOf`-forged stale hashes, `groundedMultiSymbolFact`, `groundedRelationFact`, `negationPayload`:
+  facts the product **must refuse**, which by design **no product door can produce** (you cannot author "a
+  fact the gate rejects" through the gate that rejects it; hand-hardcoding the hashes would be brittle and
+  vacuous, the exact smell the grounding tests warn against). Role (b) is a **legitimate, permanent test
+  fixture**, not campaign debt, and it is **kept**. Re-pointing the ~28 remaining happy-path consumers off
+  `author.ts` onto a shared `draft→emit` helper — so its authoring-stand-in role is fully gone and the file
+  narrows to role (b) alone (ideally renamed to its adversarial-fixture identity) — is tracked **hygiene
+  follow-up**, not an acceptance blocker. The campaign's product thesis is closed on the proof, not the `rm`.
 - Two findings were **deferred, not solved**, and were recorded as open DEFINE items (A-D3, A-D4).
   **A-D3 is now DECIDED and BUILT** (task #83): `sameAs` retraction ships as a MODE of the existing
   `atlas-link` door, so it needed no third write door and no amendment — see ADR-0003 §Retraction.

@@ -60,7 +60,7 @@ campaign: CAMPAIGN-10.2
 
 ### EPIC-A5 — the agent gets the same doors as the human
 goal-trace: "a knowledge substrate whose primary consumer is an agent must be authorable by an agent → the MCP server advertises the governance surface union a disjoint, structurally write-free read surface, at byte-identical parity → the owner's both-transports requirement, and the pre-existing doctor/node/diff asymmetry closed with it"
-vertical: tools (READ_SURFACE constant · membership) → mcp-server (advertisement · routing) → e2e-blackbox (parity goldens · the authoring story) → harness (the surface pin) — demoable: an agent authors and emits a fact over MCP alone, and `packages/e2e-blackbox/test/author.ts` is **deleted**
+vertical: tools (READ_SURFACE constant · membership) → mcp-server (advertisement · routing) → e2e-blackbox (parity goldens · the authoring story) → harness (the surface pin) — demoable: an agent authors and emits a fact over MCP alone. [AMENDED 2026-08-25 — see ADR-0004 §Consequences] acceptance is that product-door proof, not deleting `author.ts` (kept for its adversarial-fixture role; happy-path re-point is hygiene follow-up)
 reqs: [ REQ-MCP-3a, REQ-MCP-3b, REQ-MCP-3c, REQ-MCP-3d, REQ-MCP-3e, REQ-MCP-3f, REQ-MCP-3g, REQ-MCP-4a, REQ-MCP-4b, REQ-MCP-4c ]
 campaign: CAMPAIGN-10.3
 

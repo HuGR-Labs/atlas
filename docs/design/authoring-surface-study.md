@@ -365,5 +365,9 @@ extensions for UC-2/3/4; resolve F1) is the remaining work before this feeds S1.
 | WP-AUTH-FIX | the five §7.4 non-door fixes | — |
 | WP-AUTH-E2E | black-box story: a user authors + emits a fact using ONLY product doors, on both transports — and `author.ts` is deleted | all |
 
-**WP-AUTH-E2E is the real acceptance test of this whole study:** the day `packages/e2e-blackbox/test/author.ts`
-can be deleted because the product does its job, the authoring gap is closed. Not before.
+**WP-AUTH-E2E is the real acceptance test of this whole study:** a user authors + emits a fact using ONLY
+product doors, on both transports. [AMENDED 2026-08-25, owner-decided — see ADR-0004 §Consequences] The
+acceptance is that product-door PROOF, not the physical deletion of `author.ts`: measurement showed the file
+also carries a legitimate, irreplaceable ADVERSARIAL-fixture role (facts the product must refuse, which no
+door can produce by design). Its authoring-stand-in role is retired; the file is kept for the adversarial
+role; re-pointing the happy-path consumers is hygiene follow-up.

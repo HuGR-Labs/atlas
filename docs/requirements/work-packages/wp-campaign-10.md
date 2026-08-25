@@ -697,39 +697,44 @@ rationale: ../../adr/ADR-0005-mcp-read-surface.md   # ptr
 epic: EPIC-A5
 id: WP-10.A5.E2E
 content_hash: <filled-at-freeze>
-title: Transport parity, the agent authoring story — and the deletion of `author.ts`
+title: Transport parity, the agent authoring story — and the RETIREMENT of `author.ts`'s authoring role
 intent: >
-  Prove byte-parity across CLI and MCP for every authoring door, drive the full authoring story over MCP
-  alone, and then DELETE the test helper that has authored every fact Atlas has ever held. That deletion is
-  the campaign's real acceptance. (Non-authoritative handle.)
+  Prove byte-parity across CLI and MCP for the `draft` authoring door, and drive the full authoring story
+  over MCP alone through product doors. [AMENDED 2026-08-25, owner-decided] The campaign's real acceptance is
+  this product-door PROOF, not the physical deletion of `author.ts`: WP measurement showed that file also
+  serves a legitimate, permanent ADVERSARIAL-fixture role (facts the product must refuse, which no product
+  door can produce by design) that must be kept. Re-pointing the ~28 happy-path consumers off it is hygiene
+  follow-up. See ADR-0004 §Consequences [AMENDED]. (Non-authoritative handle.)
 source_reqs:                                   # ptr+digest
   - source: ../requirements-authoring.md#REQ-MCP-4a   # ptr+digest
   - source: ../requirements-authoring.md#REQ-MCP-4b   # ptr+digest
   - source: ../requirements-authoring.md#REQ-MCP-4c   # ptr+digest
 seam-freezes: [ ]
-anchor: packages/e2e-blackbox/test/ — a parity story over both transports; **`packages/e2e-blackbox/test/author.ts` is removed** and every story that imported it re-pointed at the product doors
+anchor: packages/e2e-blackbox/test/ — a parity story over both transports; two new @atlas-free stories (`s-mcp-authoring`, `s-mcp-4-draft-parity`) drive product doors only. [AMENDED] `author.ts` is KEPT for its adversarial-fixture role; re-pointing happy-path consumers off it is hygiene follow-up
 interface_contract:                            # ptr+digest
   - source: ../properties-authoring.md#PROP-MCP-4      # ptr+digest
 exclusions: >
-  No product-library imports in any assertion. No new product behaviour — this WP proves and deletes.
+  No product-library imports in any assertion of the NEW stories. No new product behaviour — this WP proves.
+  [AMENDED] It does NOT delete author.ts: measurement showed author.ts also carries a legitimate,
+  irreplaceable adversarial-fixture role (see ADR-0004 §Consequences [AMENDED]).
 inputs:                                        # ptr+digest
   - source: ../properties-authoring.md#PROP-MCP-4             # ptr+digest
-action: Drive every authoring door over the subprocess CLI and the stdio MCP harness with valid, malformed, and PARTIALLY-POPULATED inputs, asserting byte-identical Verdicts; author and emit a fact over MCP alone; delete `author.ts` and re-point every dependent story at the product doors.
+action: Drive the `draft` authoring door over the subprocess CLI and the stdio MCP harness with valid, malformed, and PARTIALLY-POPULATED inputs, asserting byte-identical Verdicts; author and emit a fact over MCP alone. [AMENDED] The new stories import NOTHING from @atlas/*; author.ts is retained for its adversarial-fixture role (re-point of happy-path consumers is hygiene follow-up).
 action_surface: [ read-repo, edit(packages/e2e-blackbox/**), run(test:e2e-blackbox) ]
 guardrails: >
-  Edit only under packages/e2e-blackbox. NO @atlas/* import may remain in any story after this WP — that is
-  the exit condition. If a story cannot be re-pointed, STOP and report the missing door rather than keeping
-  the helper.
-repair_budget: 3 — early-stop if any story still requires a product-library import
+  Edit only under packages/e2e-blackbox. The two NEW stories carry a self-guard asserting zero @atlas/*
+  import specifiers. [AMENDED] author.ts is NOT deleted — its adversarial-fixture role has no product-door
+  replacement by design; re-pointing the ~28 happy-path consumers is tracked hygiene follow-up.
+repair_budget: 3
 acceptance:                                    # ptr+digest
   - source: ../goldens-authoring.md#SCN-MCP-4a-1  # ptr+digest
   - source: ../goldens-authoring.md#SCN-MCP-4b-1  # ptr+digest
   - source: ../goldens-authoring.md#SCN-MCP-4c-1  # ptr+digest
   - source: ../properties-authoring.md#PROP-MCP-4      # ptr+digest
 deps: [ WP-10.A5.MCP, WP-10.A2-a.E2E ] · parallel_group: —
-exit_predicate: PROP-MCP-4 green (including the partially-populated arm) ∧ **`author.ts` deleted** ∧ zero `@atlas/*` imports across `packages/e2e-blackbox/test/**` ∧ the full black-box suite green
+exit_predicate: PROP-MCP-4 green (including the partially-populated arm SCN-MCP-4c-1) ∧ the MCP-only authoring story green (`s-mcp-authoring`) ∧ the two new stories import zero `@atlas/*` ∧ the full black-box suite green. [AMENDED 2026-08-25] author.ts deletion is NOT an exit condition (owner-decided) — its adversarial-fixture role is kept; happy-path re-point is hygiene follow-up.
 context_refs: [ properties-authoring.md#PROP-MCP-4, adr/ADR-0004 §Consequences ]
-owner: charlie (FORGE); lucy (MICROSCOPE) cold-reviews the deletion
+owner: charlie (FORGE); lucy (MICROSCOPE) cold-reviews the two new acceptance-bearing stories
 outputs: [ ] · provenance: [ ] · trace_ref: —
 rationale: ../../adr/ADR-0004-authoring-planner-doors.md   # ptr
 
