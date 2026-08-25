@@ -2,18 +2,19 @@
 //
 // Stand up a stdio MCP server whose every GOVERNED tool call routes through the one wired handler
 // (@atlas/adapter-io), returning the frozen `Verdict` (@atlas/tools) shape. The advertised surface is
-// `GOVERNANCE_SURFACE` (exactly five, TOOLS-1, pinned) PLUS any injected READ leg — today TWO read tools,
-// `atlas-relations` (#99a / ADR-0015 D2) and `atlas-negations` (#99b / ADR-0015 D3), advertised via
-// `advertisedReadTools(relations, negations)` when their legs are composed, so production advertises SEVEN
-// tools (5 governance + 2 read). Each read tool opens NO governed token and leaves `GOVERNANCE_SURFACE`
-// byte-for-byte closed at five. HONEST DIVERGENCE, stated so it is not mistaken for the
-// designed seam: the constitution's extension point is `GOVERNANCE_SURFACE ∪ READ_SURFACE` (ADR-0006), but
-// `READ_SURFACE` has NO export site anywhere in `packages/**` (CAMPAIGN-10.3 / WP-10.A5.TOOLS is not built —
-// `npm run layer-guard` reports it DECLARED UNCOVERED). Rather than block a read tool on that unbuilt seam,
-// `atlas-relations` is advertised through a NARROW parallel path that leaves `GOVERNANCE_SURFACE` byte-for-byte
-// closed at five (SCN-MCP-1 holds) and is served DIRECTLY from the injected leg, never through `handler.handle`
-// — it opens no governed token and no write path. Folding this into the formal `READ_SURFACE` seam remains
-// owed to CAMPAIGN-10.3.
+// `GOVERNANCE_SURFACE` (exactly five, TOOLS-1, pinned) PLUS injected READ legs. Two families of read leg
+// are advertised, each served DIRECTLY from its injected leg and never through `handler.handle` (so each
+// opens NO governed token, no write path, and leaves `GOVERNANCE_SURFACE` byte-for-byte closed at five):
+//   • the pre-existing pair `atlas-relations` (#99a / ADR-0015 D2) + `atlas-negations` (#99b / ADR-0015 D3),
+//     via `advertisedReadTools(relations, negations)`;
+//   • the authoring bundle `READ_SURFACE` (WP-10.A5.TOOLS/A5.MCP) — the six planner/read doors
+//     `atlas-anchors|slots|draft|check|doctor|node` — via `advertisedAuthoringTools`/`callAuthoringTool`
+//     (server-read-tools.ts), threaded as `readLegs`.
+// With all legs composed production advertises THIRTEEN tools (5 governance + 2 relations/negations + 6
+// authoring). `READ_SURFACE` now HAS its export site (`@atlas/tools`, WP-10.A5.TOOLS) and the layer-guard's
+// `GOVERNANCE_SURFACE ∪ READ_SURFACE` partition (ADR-0006) is covered; `SCN-MCP-1e-2` pins that every
+// READ_SURFACE member is advertised AND routes to a non-write leg. When NO read bundle is injected the
+// advertised surface is byte-for-byte the closed governance surface (SCN-MCP-1 holds).
 //
 // PARITY — precisely which one holds. SCHEMA + VERDICT parity HOLDS: `inputSchema`/`description` are read
 // from `handler.schema(tool)` verbatim and every call routes through the ONE wired handler, so identical
