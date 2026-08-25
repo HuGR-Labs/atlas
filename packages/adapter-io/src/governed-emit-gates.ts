@@ -99,11 +99,17 @@ export type ShapeVerdict =
 
 /**
  * Evaluate the SHAPE bucket — `tier` → `scope` → the operator-seal strip → the forged-relation-seal strip →
- * `kind↔check` family → relation well-formedness → the NEW grounding well-formedness → addressability, in
- * EXACTLY that order (unchanged from the door's prior inline sequence). The grounding check sits LAST,
- * immediately before addressability's own commit-time re-check and immediately before where the TRUTH gate
- * used to throw — never earlier — so an input that a prior shape check already refused for a DIFFERENT
- * reason (a malformed tier, an unaddressable float) keeps getting THAT reason, byte-identical to before.
+ * `kind↔check` family → relation well-formedness → addressability → the NEW grounding well-formedness, in
+ * EXACTLY that order. Every check up through addressability is unchanged from the door's prior inline
+ * sequence; the grounding check is appended LAST, after ALL of them, immediately before where the TRUTH
+ * gate used to throw. LAST is load-bearing, not just "sits late": a payload malformed BOTH in `grounding`
+ * AND in a way `addressOf` already refuses (e.g. a float alongside an absent `grounding.entries`) must keep
+ * getting addressability's `canonical-form violation` — the reason the door gave it before this gate
+ * existed — not `malformed grounding`. `addressOf` itself never throws on a malformed grounding regardless
+ * of order (KERNEL-8 excludes `grounding` from the canonical preimage), so nothing FORCES this order for
+ * addressability's own sake; it is forced by "no gate decision may change" — an earlier position here would
+ * silently swap which reason such a doubly-malformed payload gets, which is a decision change even though
+ * `emitted` stays `false` on both sides.
  */
 export function evalShapeGate(raw: GroundedFact, origin: WriteOrigin | undefined): ShapeVerdict {
   const tier = raw.tier;
@@ -129,15 +135,23 @@ export function evalShapeGate(raw: GroundedFact, origin: WriteOrigin | undefined
   if (!relationWellFormed(node)) {
     return { pass: false, result: { gate: 'shape', pass: false, reason: REJECTED_MALFORMED_RELATION, remedy: REMEDY_RELATION } };
   }
-  // NEW — WELL-FORMED GROUNDING (AUTHOR-12 / #author-12) — see the file header for why this sits HERE.
-  if (!groundingWellFormed(node)) {
-    return { pass: false, result: { gate: 'shape', pass: false, reason: REJECTED_MALFORMED_GROUNDING, remedy: REMEDY_GROUNDING } };
-  }
-  // 0.5 ADDRESSABLE — unchanged verbatim (excludes `grounding` from canonicalization, KERNEL-8, so this
-  //     never throws on the shape the check above already accepted).
+  // 0.5 ADDRESSABLE — unchanged verbatim, and it MUST run BEFORE the new grounding check below: `addressOf`
+  //     excludes `grounding` from canonicalization (KERNEL-8), so it never throws on a malformed grounding
+  //     regardless of order — but a payload malformed in BOTH ways (an unaddressable float AND a malformed
+  //     `grounding`) has to keep getting the SAME reason the OLD door gave it (`canonical-form violation`),
+  //     because that is the door that ran first before this WP existed. Running the grounding check first
+  //     would answer such a payload with `malformed grounding` instead — same `emitted:false`, a DIFFERENT
+  //     `rejected` string, which is exactly the "no gate decision may change" law this WP is bound by.
   const addressed = addressOf(node);
   if (addressed.rejected !== undefined) {
     return { pass: false, result: { gate: 'shape', pass: false, reason: addressed.rejected, remedy: REMEDY_ADDRESS } };
+  }
+  // NEW — WELL-FORMED GROUNDING (AUTHOR-12 / #author-12), LAST in the shape bucket — immediately before the
+  //     TRUTH gate, where the raw TypeError used to escape. Sitting after EVERY prior shape check (including
+  //     addressability) means an input a prior check already refused for a DIFFERENT reason keeps getting
+  //     THAT reason, byte-identical to before — see the ordering note above.
+  if (!groundingWellFormed(node)) {
+    return { pass: false, result: { gate: 'shape', pass: false, reason: REJECTED_MALFORMED_GROUNDING, remedy: REMEDY_GROUNDING } };
   }
   return { pass: true, node, tier, scope, family, contentHash: addressed.hash };
 }

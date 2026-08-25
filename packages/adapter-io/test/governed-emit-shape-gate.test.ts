@@ -144,6 +144,33 @@ describe('WP-10.A3.ADAPTER — AUTHOR-12 the grounding shape gate (2026-07-25 do
     expect(groundingWellFormed(withGrounding({ entries: [{}] }))).toBe(false);
   });
 
+  it('lucy cold-review — doubly-malformed (canonical-form violation AND malformed grounding) keeps the OLD door\'s reason: `canonical-form violation`, never `malformed grounding`', () => {
+    // ADDRESSABILITY (0.5) must run BEFORE the grounding check — `addressOf` excludes `grounding` from
+    // canonicalization (KERNEL-8) so it never THROWS on a malformed grounding regardless of order, but
+    // ORDER still decides WHICH reason a doubly-malformed payload gets, and that reason is the door's
+    // user-visible contract. Before this fix a payload malformed BOTH ways (a float ⇒ canonical-form
+    // violation, AND an absent `grounding.entries`) answered `malformed grounding` — a reason the OLD door
+    // (before this WP existed) never gave, because the old door never reached a grounding check at all and
+    // its `addressOf` call ran first and refused the float. That is a decision change this WP is forbidden
+    // to make, even though `emitted:false` on both sides makes it easy to miss.
+    const doublyMalformed = { ...advisory('core'), confidence: 0.5, grounding: undefined } as unknown as GroundedFact;
+
+    const spy = makeStoreSpy();
+    const { emit } = createGovernedEmit({ store: spy.store, gate: REAL_TRUTH_GATE, policy: POLICY, actor: 'alice' });
+    const out = emit(doublyMalformed, AT);
+
+    expect(out.emitted).toBe(false);
+    expect(reasonOf(out.rejected)).toBe('canonical-form violation'); // NOT `malformed grounding`
+    expect(out.rejected).toContain('floats forbidden');
+
+    // CONTROL — the SAME payload with the float removed (grounding-malformed ALONE) still gets the NEW
+    // reason: the fix does not widen `canonical-form violation` to swallow every doubly-malformed input,
+    // it only re-orders which check runs FIRST when both apply.
+    const groundingOnlyMalformed = { ...advisory('core'), grounding: undefined } as unknown as GroundedFact;
+    const groundingOnlyOut = emit(groundingOnlyMalformed, AT);
+    expect(reasonOf(groundingOnlyOut.rejected)).toBe('malformed grounding');
+  });
+
   it('an empty `entries: []` — well-formed, but ungrounded — still reaches and fails the TRUTH gate (never intercepted as malformed)', () => {
     const spy = makeStoreSpy();
     const { emit } = createGovernedEmit({ store: spy.store, gate: REAL_TRUTH_GATE, policy: POLICY, actor: 'alice' });

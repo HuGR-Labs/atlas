@@ -162,8 +162,8 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
     if (raw.kind === 'test-vacuity') return emitTestVacuity(deps, raw as TestVacuityNode, at);
 
     // 0. WELL-FORMED PAYLOAD (the SHAPE gate — `GateName:'shape'`) — `tier`, `scope`, the `kind`/`check`
-    //    pair, relation well-formedness, grounding well-formedness (AUTHOR-12 — closes the 2026-07-25
-    //    dogfood's raw TypeError) and addressability, in that fixed order. EXTRACTED to `evalShapeGate`
+    //    pair, relation well-formedness, addressability, and — LAST, AUTHOR-12, closes the 2026-07-25
+    //    dogfood's raw TypeError — grounding well-formedness, in that fixed order. EXTRACTED to `evalShapeGate`
     //    (WP-10.A3.ADAPTER — see that file's header): a store-less `check` leg folds the identical function.
     //    `Tier`/`scope` are TYPE-ONLY: nothing upstream validates them (`atlas emit` is `JSON.parse` + a
     //    cast; the MCP `node` schema declares a bare `object`), so this is the FIRST place an arbitrary
