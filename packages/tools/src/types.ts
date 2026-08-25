@@ -102,10 +102,21 @@ export type QueryOut = Pack;
  * [FLAG — `id` = `Hash`] atlas-tools:21 leaves `id` untyped; it is the content-addressed CAS id of the
  * persisted object (mirrors the @atlas/knowledge `EmitApi.admit` receipt `id?: Hash`). Transcribed as
  * `Hash`. Under `exactOptionalPropertyTypes`, `id?` is absent-on-reject / present-on-emit.
+ *
+ * [AUTHOR-14 — ADDITIVE `nodeKey`] AUTHOR-14 (`docs/reference/atlas-authoring.md#author-14`, SCN-AUTH-14a-1/
+ * 14b-1/14c-1): the receipt closes the loop — the value the governed emit door returns on success MUST also
+ * carry the identity the per-node read door (`atlas node`, `NodeApi.node(nodeAddr: NodeKey)`) and the link
+ * door (`atlas-link`) consume, so an author can address the fact they just wrote without a separate query.
+ * `nodeKey` is `NodeKey` — the SAME identity type `NodeApi.node` takes, imported from `@atlas/contracts`,
+ * NEVER redefined. Purely ADDITIVE: the existing CAS `id` stays, same name, same type (SCN-AUTH-14c-1 teeth —
+ * a receipt that carries `nodeKey` but drops the CAS `id` fails the drift/doctor CAS read-back arm). No
+ * population logic here (WP-10.A4.ADAPTER); under `exactOptionalPropertyTypes`, `nodeKey?` is
+ * absent-on-reject / present-on-emit, mirroring `id?`.
  */
 export interface EmitOut {
   readonly emitted: boolean;
   readonly id?: Hash; // [FLAG] CAS id of the persisted object — mirrors knowledge EmitApi.admit
+  readonly nodeKey?: NodeKey; // [AUTHOR-14, ADDITIVE] read-door identity — same type as NodeApi.node's arg
   readonly rejected?: string; // structured fail-closed reason (TOOLS-7)
 }
 
