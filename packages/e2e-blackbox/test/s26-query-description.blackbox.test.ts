@@ -29,7 +29,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { mcpSession, makeFixtureRepo } from '../src/harness.js';
 import type { FixtureRepo } from '../src/harness.js';
-import { groundedAdvisoryFact } from './author.js';
+import { draftFact } from './author8-subprocess.js';
 import { ACTOR, RATIFIER, emitFact, scopedPolicy } from './support.js';
 
 /**
@@ -147,12 +147,8 @@ describe('S26.4b — the claim itself, stated as properties so re-freezing a lie
 
 describe('S26.4c — the description is TRUE of the payload, not merely pinned against itself', () => {
   it('a T1 and a T2 fact in one scope come back as TWO populated bands with the promised fields', async () => {
-    const t1 = groundedAdvisoryFact({
-      repoPath: repo.repoPath, filePath: 'src/foo.ts', slot: 'invariant', claim: 'foo is 1', tier: 'T1',
-    });
-    const t2 = groundedAdvisoryFact({
-      repoPath: repo.repoPath, filePath: 'src/foo.ts', slot: 'rationale', claim: 'foo may be one', tier: 'T2',
-    });
+    const t1 = draftFact(repo, 'src/foo.ts', 'invariant', 'foo is 1', 'T1').fact;
+    const t2 = draftFact(repo, 'src/foo.ts', 'rationale', 'foo may be one', 'T2').fact;
     for (const f of [t1, t2]) {
       const e = emitFact(repo, f);
       if (e.exitCode !== 0) throw new Error(`S26.4c setup: emit of ${f.tier} failed:\n${e.stdout}\n${e.stderr}`);
