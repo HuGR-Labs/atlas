@@ -248,21 +248,38 @@ function boundComposeFields() {
     return null;
   }
   const block = src.slice(start, end);
-  // Same top-level-spread scan `boundLegs` runs, with the SAME carve-out `boundLegs`' own header documents
-  // for a nested conditional (`...(cond ? {…} : {})`) — compose.ts uses exactly that shape for
-  // `readRefusal`/`readAdvisory`. A BARE top-level spread of an unknown object would hide a field from this
-  // scan the same way it hides a leg in `boundLegs` — reported, not silently under-counted.
+  // ONE depth-aware pass does both the spread scan AND the key scan — [FIX 2, cold-review gate-integrity]
+  // the key scan used to be a SEPARATE, depth-BLIND regex (`/^\s*ident\s*:/gm`) that matched a line-start
+  // `ident:` at ANY nesting depth inside the block, not just the literal's own top-level fields. A NESTED
+  // key (`real: { phantom: 1 }`) then satisfied a `READ_SURFACE` member named `phantom` even though
+  // `phantom` is never an actual returned dispatch field — `composeRuntime` never binds it to anything a
+  // caller can reach. Keys are now captured ONLY at `nest === 1` (immediately inside the block's own opening
+  // brace), the SAME depth the spread scan already anchors on, so both share one brace-depth counter and
+  // cannot drift apart from each other.
+  //
+  // The spread carve-out is unchanged: a nested conditional spread (`...(cond ? {…} : {})`) is legitimate
+  // here (compose.ts uses exactly that shape for `readRefusal`/`readAdvisory`) and still excluded by the
+  // `...(` check; only a BARE top-level spread — which would hide a field from this scan the same way it
+  // hides a leg in `boundLegs` — is reported.
   let nest = 0;
+  const fields = new Set();
   for (let i = 0; i < block.length; i++) {
     const c = block[i];
+    if (nest === 1) {
+      // A line-start (mid-string) `ident:` reached ONLY at depth 1 — the literal's own top-level key.
+      const bol = i === 0 || block[i - 1] === '\n';
+      if (bol) {
+        const m = /^[ \t]*([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/.exec(block.slice(i));
+        if (m !== null) fields.add(m[1]);
+      }
+    }
     if (c === '{' || c === '[' || c === '(') nest++;
     else if (c === '}' || c === ']' || c === ')') nest--;
     else if (nest === 1 && block.startsWith('...', i) && !block.startsWith('...(', i)) {
       note('ARCH-3 compose root: the composeRuntime return literal contains a bare (non-conditional) top-level SPREAD — the bound field set cannot be determined statically. Bind every field with a literal key.');
-      break;
     }
   }
-  return new Set([...block.matchAll(/^\s*([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/gm)].map((m) => m[1]));
+  return fields;
 }
 
 /** [WP-10.A5.TOOLS binding fix, kind (b)] `COMMAND_LEG` from `CLI_MAP` (`cli/src/map.ts`) — the CLI's
@@ -309,8 +326,16 @@ function boundReadDoor(token, legs, composeFields, cmdLeg) {
   const bare = token.replace(/^atlas-/, ''); // 'atlas-anchors' → 'anchors', 'atlas-doctor' → 'doctor'
   if ((legs ?? new Set()).has(token)) return true; // (c) direct Tool leg
   if ((composeFields ?? new Set()).has(bare)) return true; // (a) compose-planner field
-  const command = cmdLeg?.get(bare); // (b) query-projection via the CLI's command→leg map
-  if (command !== undefined && (legs ?? new Set()).has(command)) return true;
+  // (b) query-projection via the CLI's command→leg map — EXACT-MATCH onto `atlas-query`, the ONE read
+  // oracle `doctor`/`node` are documented as projecting onto. [FIX 1, cold-review gate-integrity] Checking
+  // only "the mapped leg is SOME bound leg" (no name check) let `COMMAND_LEG` project a READ_SURFACE member
+  // onto a bound WRITE leg (e.g. `atlas-emit`) and still pass — the door would then secretly route to a
+  // governed write door while the surface pin calls it read-only. Do NOT weaken this to "not in
+  // WRITE_PATHS": the contract this kind documents is specifically "reads off atlas-query", not merely
+  // "reads off something that isn't a write door" — a THIRD read-ish Tool added later must not silently
+  // qualify either.
+  const command = cmdLeg?.get(bare);
+  if (command === 'atlas-query' && (legs ?? new Set()).has(command)) return true;
   return false;
 }
 

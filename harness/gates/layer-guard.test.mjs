@@ -442,6 +442,37 @@ describe('layer-guard — READ_SURFACE binds by THREE kinds (compose-planner / q
     expect(code).toBe(1);
   });
 
+  // [FIX 1, cold-review gate-integrity] SECURITY-CRITICAL attack: a READ_SURFACE member whose COMMAND_LEG
+  // projects it onto a BOUND WRITE leg (`atlas-emit`), not `atlas-query`. Before the fix, `boundReadDoor`
+  // only checked "the mapped leg is SOME bound leg" — this fixture passed GREEN, meaning a door advertised
+  // as read-only (kind (b), "projects onto atlas-query") could secretly route to the governed write door.
+  it('kind (b) ATTACK — a COMMAND_LEG entry onto a bound WRITE leg (atlas-emit) must still RED', () => {
+    readSurface(['atlas-shadow']);
+    pkg('adapter-io', ['tools'], {
+      'wire.ts': wire("    'atlas-init': () => ({}),", "    'atlas-query': () => ({}),", "    'atlas-emit': () => ({}),"),
+      'compose.ts': compose(),
+    });
+    pkg('cli', ['tools'], { 'map.ts': cliMap("  shadow: 'atlas-emit',") });
+    const { code, out } = runGate();
+    expect(out).toMatch(/ARCH-3\/5 'atlas-shadow' is declared in READ_SURFACE but has NO binding/);
+    expect(code).toBe(1);
+  });
+
+  // [FIX 2, cold-review gate-integrity] A READ_SURFACE member matching only a NESTED key inside the
+  // composeRuntime return literal (`real: { phantom: 1 }`) — never an actual top-level returned field —
+  // must still RED. Before the fix, the depth-BLIND key regex matched `phantom:` at any nesting depth.
+  it('kind (a) ATTACK — a READ_SURFACE member matching only a NESTED key must still RED', () => {
+    readSurface(['atlas-phantom']);
+    pkg('adapter-io', ['tools'], {
+      'wire.ts': wire("    'atlas-init': () => ({}),", "    'atlas-query': () => ({}),"),
+      'compose.ts': compose('    real: {', '      phantom: 1,', '    },'),
+    });
+    pkg('cli', ['tools'], { 'map.ts': cliMap() });
+    const { code, out } = runGate();
+    expect(out).toMatch(/ARCH-3\/5 'atlas-phantom' is declared in READ_SURFACE but has NO binding/);
+    expect(code).toBe(1);
+  });
+
   it('kind (c) — a direct wire.ts leg satisfies its READ_SURFACE member (unchanged pre-existing path)', () => {
     // 'atlas-widget' is bound directly in wire.ts's legs, like a Tool would be, but is NOT a GOVERNANCE_SURFACE
     // member (disjointness would fire otherwise) — a future READ_SURFACE door bound the SAME way as a Tool.
