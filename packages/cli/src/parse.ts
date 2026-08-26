@@ -80,6 +80,9 @@ export const ARITY: Record<Command, number> = {
   // `draft <anchor> <slot> <claim>` — EXACTLY the three fields AUTHOR-6d says the author supplies; arity 3
   // (WP-10.A2-a.CLI). Every other field of the composed fact is computed or defaulted, never a positional here.
   draft: 3,
+  // `check <anchor> <slot> <claim>` — the SAME three author fields as `draft`; `atlas check` composes the
+  // candidate through the draft planner then dry-runs the emit gate chain over it (WP-10.A3.CLI, AUTHOR-11/12).
+  check: 3,
 };
 
 // [ENTRY-CLI-5 clean-up] this used to be a HAND-TRANSCRIBED string literal — a second copy of `COMMANDS`
