@@ -13,10 +13,11 @@ import { asHash } from '@atlas/kernel';
 import { headSha } from '@atlas/adapter-io';
 import { reportIndexPlan, relationsVerdict, negationsVerdict, transitionsVerdict, testVacuitiesVerdict, verifyFactVerdict } from '@atlas/adapter-io';
 import type { DeriveRelationsRun, IndexPlanReport, NegationLeg, OwnLeg, PromoteOut, RelationLeg, ReverifyReport, TestVacuityLeg, TestVacuityProducer, TransitionLeg, TransitionProducer, VerifyFactLeg, WiredHandler } from '@atlas/adapter-io';
-import type { AnchorsApi, DoctorSource, DraftApi, SlotsApi, Tool } from '@atlas/tools';
+import type { AnchorsApi, CheckApi, DoctorSource, DraftApi, SlotsApi, Tool } from '@atlas/tools';
 import { anchorsVerdict } from './anchors.js';
 import { slotsVerdict } from './slots.js';
 import { draftVerdict } from './draft.js';
+import { checkVerdict } from '@atlas/adapter-io';
 import { runDoctor } from './doctor.js';
 import { ensureAtlasIgnored } from './gitignore.js';
 import { renderHelp } from './help.js';
@@ -208,6 +209,12 @@ export interface CliDeps {
    *  `atlas draft` also reads `deps.slots` to validate the slot argument against ONE vocabulary. ABSENT ⇒
    *  `atlas draft` fails closed. */
   readonly draft?: DraftApi['draft'];
+
+  /** The composition root's read-only `check` DRY-RUN planner (ComposedRuntime.check, WP-10.A3 / AUTHOR-11/12)
+   *  — `check(candidate, at)` folds the governed emit door's WHOLE gate chain over a candidate GroundedFact at
+   *  a rev WITHOUT any write. `atlas check` composes the candidate with `deps.draft` (SAME three-field
+   *  discipline, SAME slot vocabulary via `deps.slots`) then dry-runs it. ABSENT ⇒ `atlas check` fails closed. */
+  readonly check?: CheckApi['check'];
 }
 
 /**
@@ -455,6 +462,24 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
       return 0;
     }
     return emit(verdict);
+  }
+
+  if (command === 'check') {
+    // WP-10.A3.CLI / AUTHOR-11/12: `atlas check <anchor> <slot> <claim>` — READ-ONLY DRY-RUN of the governed
+    // emit door's WHOLE gate chain over a candidate, WITHOUT any write. Composes the candidate through the SAME
+    // `draftVerdict` planner (SAME three-field discipline, SAME closed slot vocabulary via `deps.slots`), then
+    // dry-runs the drafted fact at its own drafted rev. Intercepted before the handler like `draft` (not a
+    // `Tool`; persists NOTHING, AUTHOR-2). The `wouldEmit` verdict and the first-refusing gate agree with the
+    // real door's BY CONSTRUCTION (PROP-AUTH-11, the SAME `runGateChain` fold), never a second gate ladder. A
+    // bad slot / empty field fails at the SAME surface as `atlas draft` (the composition refusal is emitted as-is).
+    if (!deps.check || !deps.draft || !deps.slots) {
+      return emit(errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'));
+    }
+    const drafted = draftVerdict(deps.draft, deps.slots, positionals[0] ?? '', positionals[1] ?? '', positionals[2] ?? '');
+    // `Verdict.ok` is a plain boolean (not a discriminated union), so narrow `.data` explicitly — a failed
+    // compose (bad slot / empty field) OR a defensively-absent envelope both fall through to the SAME rejection.
+    if (!drafted.ok || !drafted.data) return emit(drafted);
+    return emit(checkVerdict(deps.check, drafted.data.fact, drafted.data.rev));
   }
 
   if (command === 'verify-fact') {

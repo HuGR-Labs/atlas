@@ -14,7 +14,7 @@ import { main } from './cli.js';
 // yet still index `::` sub-file symbol nodes, so a symbol grounding is groundable and `subsumes` fires.
 void (async () => {
   await initAst();
-  const { handler, doctorSource, promote, own, relations, negations, transitions, transition, testVacuities, testVacuity, verifyFact, reverify, deriveRelations, anchors, slots, draft, readRefusal, readAdvisory } = composeRuntime(process.cwd());
+  const { handler, doctorSource, promote, own, relations, negations, transitions, transition, testVacuities, testVacuity, verifyFact, reverify, deriveRelations, anchors, slots, draft, check, readRefusal, readAdvisory } = composeRuntime(process.cwd());
   // The provenance refusal rides the same injected-deps seam as the handler (conditional spread keeps it
   // ABSENT on a healthy repo — exactOptionalPropertyTypes), so prod and tests share ONE surface. `promote`
   // (the KNOW-8 governed promotion leg) rides that same seam: it is not a `Tool`, so it cannot arrive through
@@ -76,6 +76,11 @@ void (async () => {
     // than reference models nothing outside a unit test calls.
     slots,
     draft,
+    // `check` (the WP-10.A3.CLI / AUTHOR-11/12 read-only DRY-RUN planner) rides the same injected-deps seam as
+    // `draft`. It is not a `Tool` (opens no governed surface, persists nothing — AUTHOR-2); threading it here is
+    // what makes `atlas check` a REACHED shipped path over the composition root's `check` leg rather than a
+    // reference model — the CLI transport counterpart of the already-shipped `atlas-check` MCP tool.
+    check,
     ...(readRefusal !== undefined ? { readRefusal } : {}),
     // TRAVEL-BY-REPROOF — the ADVISORY MESSAGE for a `tracked-provable` store, rides the same conditional-
     // spread discipline as `readRefusal` (ABSENT, not `undefined`, on a healthy repo — exactOptionalPropertyTypes).

@@ -55,7 +55,7 @@ import type { Tool, Verdict } from '@atlas/tools';
  *  `GOVERNANCE_SURFACE` stays 5 and `WRITE_PATHS` is untouched; `authorityOf` DERIVES that from
  *  `WRITE_PATHS`. Both are intercepted before the handler (cli.ts) and driven over the composition root's
  *  frozen `slots`/`draft` legs (WP-10.A2-a.TOOLS). */
-export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'transitions', 'transition', 'test-vacuities', 'test-vacuity', 'verify-fact', 'verify-store', 'derive-relations', 'anchors', 'slots', 'draft'] as const;
+export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'transitions', 'transition', 'test-vacuities', 'test-vacuity', 'verify-fact', 'verify-store', 'derive-relations', 'anchors', 'slots', 'draft', 'check'] as const;
 export type Command = (typeof COMMANDS)[number];
 
 /** The leg a command routes to — a governance `Tool`, or the genesis entry (data-only; NOT executed here —
@@ -150,6 +150,11 @@ export const COMMAND_LEG: Record<Command, Leg> = {
   //                       intercepted before the handler (cli.ts) and driven over the composition root's `draft`
   //                       leg — composes a candidate GroundedFact off the ONE GroundingComputer. PERSISTS
   //                       NOTHING (AUTHOR-2); no write authority.
+  check: 'atlas-query', // READ authority oracle (WP-10.A3.CLI / ADR-0004 DRY-RUN planner, AUTHOR-11/12);
+  //                       intercepted before the handler (cli.ts) and driven over the composition root's `check`
+  //                       leg — folds the governed emit door's WHOLE gate chain over a candidate WITHOUT any
+  //                       write (the SAME `runGateChain` fold, so `wouldEmit` agrees with the door BY
+  //                       CONSTRUCTION). PERSISTS NOTHING (AUTHOR-2); no write authority.
 };
 
 export type Authority = 'read' | 'write';
