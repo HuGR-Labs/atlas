@@ -367,6 +367,27 @@ function renderData(data: unknown): string {
     return `data:\n${lines.join('\n')}\n`;
   }
 
+  // check { wouldEmit, gates } — the DRY-RUN planner's gate-chain verdict (`atlas check <anchor> <slot>
+  // <claim>`, AUTHOR-11/12, WP-10.A3.CLI). Recognised by `wouldEmit` (boolean) + `gates` (array) — no other
+  // data shape carries either key. Renders the overall `wouldEmit` decision, then EVERY gate row in door order
+  // (shape → truth → authz → ratify) with pass/refuse and, for a refusing gate, its reason + remedy — so the
+  // CLI shows the WHOLE chain the MCP `atlas-check` tool already returns, not just the first refusal the
+  // top-level `next:` guidance names. Closes the CLI-vs-MCP asymmetry (mirrors the `draft` render's rule of
+  // printing its whole payload, not a hand-picked subset).
+  if (typeof d.wouldEmit === 'boolean' && Array.isArray(d.gates)) {
+    const gates = d.gates as ReadonlyArray<Record<string, unknown>>;
+    const lines = [
+      `  wouldEmit: ${d.wouldEmit}`,
+      ...gates.map((g) => {
+        const head = `  gate ${String(g.gate)}: ${g.pass === true ? 'pass' : 'refuse'}`;
+        const why = typeof g.reason === 'string' && g.reason.length > 0 ? ` — ${g.reason}` : '';
+        const fix = typeof g.remedy === 'string' && g.remedy.length > 0 ? ` [remedy: ${g.remedy}]` : '';
+        return `${head}${why}${fix}`;
+      }),
+    ];
+    return `data:\n${lines.join('\n')}\n`;
+  }
+
   return '';
 }
 

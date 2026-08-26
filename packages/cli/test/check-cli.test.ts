@@ -106,7 +106,14 @@ describe('WP-10.A3.CLI — `atlas check <anchor> <slot> <claim>` wiring', () => 
     expect(out).toContain('status: ok');
     // the verdict names whether the candidate WOULD be admitted, and does so through the gate-chain language.
     expect(out).toMatch(/ADMITTED|REFUSED/);
-    expect(out.toLowerCase()).toContain('gate');
+    // the WHOLE gate ledger is rendered at the CLI — not just the first refusal the `next:` line names — so the
+    // CLI is not asymmetric with the MCP `atlas-check` tool (WP-10.A3.CLI render branch). The `data:` block
+    // carries the overall `wouldEmit:` decision and at least one per-gate row (`gate <name>: pass|refuse`).
+    // This assertion has teeth ONLY because the render branch exists: without it renderData returns '' and no
+    // `data:`/`wouldEmit:`/`gate ` line is printed (the exact CLI-vs-MCP asymmetry this closes).
+    expect(out).toContain('data:');
+    expect(out).toMatch(/wouldEmit: (true|false)/);
+    expect(out).toMatch(/gate \w+: (pass|refuse)/);
   });
 
   it('an out-of-vocabulary slot is refused at the SAME surface as `atlas draft` — check leg never reached', async () => {

@@ -186,6 +186,14 @@ const UNVERIFIABLE = {
   ...each('an illustrative worked example over a produced proven test-vacuity fact (a clean fixture holds no assertion-only-in-catch test unit, so it reproduces to the empty/abstain form); the behaviour is pinned by the #95 acceptance anchor s95-test-vacuity.blackbox.test.ts over a real fixture repo, not reproducible from a clean checkout',
     'reference/commands/test-vacuity.md#1', 'reference/commands/test-vacuities.md#1'
   ),
+  // WP-10.A3.CLI — the `atlas check` dry-run verdict NAMES the first refusing gate and carries that gate's
+  // remedy; the gate and remedy vary by candidate, anchor, and revision (over the clean fixture the citation
+  // does not re-derive so gate 'truth' refuses, but the remedy string is not byte-stable across fixtures). The
+  // behaviour — composes via the draft planner, dry-runs the gate chain, fails closed, refuses an out-of-vocab
+  // slot at the draft surface — is pinned by packages/cli/test/check-cli.test.ts over a real composed runtime.
+  ...each('an illustrative dry-run verdict naming the first refusing gate + its remedy (which vary by candidate, anchor, and revision — not byte-stable across fixtures); the behaviour is pinned by check-cli.test.ts over a real composed runtime, not reproducible from a clean checkout',
+    'reference/commands/check.md#1'
+  ),
 };
 
 // ── enumeration ─────────────────────────────────────────────────────────────────────────────────────────
