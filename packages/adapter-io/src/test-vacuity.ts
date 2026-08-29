@@ -5,7 +5,11 @@
 // through the governed test-vacuity door; the read-side reverify (`reverify-store.ts`) re-runs it at HEAD. So
 // this module is no longer a declared reference model — it moved dead → live (its ledger entry was DELETED).
 // It is measured + unit-tested (0-false-admit on 14 planted soundness rails; 32 real assertion-only-in-catch
-// tests proven on zod v3.23.8, hand-verified). The compose+CLI wiring + e2e bench are Wave 2.
+// tests proven on zod v3.23.8, hand-verified). The compose+CLI wiring and the e2e bench are ALSO shipped:
+// the composition root exposes the producer/read legs (`compose-test-vacuity.ts`, `governed-emit-test-vacuity.ts`)
+// behind the CLI's `atlas test-vacuity` / `atlas test-vacuities` commands, and the judge-free planted A4 bench
+// (`test-vacuity-bench.test.ts`, reported in `harness/probes/adjudicate/calibration-report.a4-test-vacuity.md`)
+// measured falseAdmit 0/10 and recallTrue 10/10 across four framework families.
 //
 // A PURE, TOTAL AST oracle: PROVE / ABSTAIN on the SYNTACTIC property "in this test, every assertion-shaped
 // call is lexically inside a `catch` clause, and there is no assertion-count guard" — the fragile
