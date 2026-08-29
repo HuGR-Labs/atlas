@@ -33,8 +33,12 @@ Artifact: [`harness/probes/adjudicate/calibration-report.a4-planted.md`](harness
   adjudicated line-by-line — 0 genuine unsoundness** (every one is a real SCIP reference
   witness that is not a call). Both definitions and the full adjudication are in the artifact.
 - Negation recall is the price of the 0-false floor: the gate proves absence only where a
-  mechanical escape analysis closes the world, and abstains elsewhere. With the gate off,
-  the same corpus false-admits 132/163 (81%) — the gate is what buys the zero.
+  mechanical escape analysis closes the world, and abstains elsewhere.
+- Non-vacuity, stated precisely: on the **dist-absent misbuild**, switching the gate off
+  false-admits 132/163 (81%) — there, the zero is demonstrably earned. On the **operating**
+  build state the same gate-off probe currently shows 0/163, and the artifact itself flags
+  negation's 0-false as *"proven non-vacuous by nothing on the operating index"* — an open
+  finding, recorded there and repeated in the limits below.
 - The legacy `relation` arm states **no truth predicate** (it admits all 452/452 by design)
   and is not counted as sound. It is superseded by the `depends-on` projection below.
 
@@ -103,18 +107,21 @@ teeth: [`harness/probes/a2-staleness-teeth.mjs`](harness/probes/a2-staleness-tee
 Metered sidecar, `claude-sonnet-5`, prompt-cache-assisted, per-site advisory mining.
 Artifact: [`harness/probes/a3-cost-sidecar.jsonl`](harness/probes/a3-cost-sidecar.jsonl).
 
-- Measured: 10 metered calls, **$0.96 total, ≈$0.10/site**.
-- Independent pilot on 31 sites: $3.22 (≈$0.10/site) — consistent.
+- Measured: 10 metered calls, **$0.96 total, ≈$0.10/site**. This is the only committed cost
+  artifact; no larger-run cost artifact exists yet.
 - The proven tier and the graph build cost **0 LLM tokens** — indexing is SCIP +
   deterministic projection; proofs are mechanical.
 
 ## 6 — How far can the advisory tier shrink?
 
 Shape census of all 76 cross-repo advisory facts (single-classifier estimate, recorded as
-such): **22/76 (~29%)** are structural claims a new sound shape could move to the proven
-tier; **54/76 (~71%)** are irreducibly semantic. The largest structural cluster
-(test-vacuity, ~9 claims) has since shipped as a sound shape (`atlas test-vacuity`,
-0-false-proven end-to-end) — the census is a roadmap, and it is being executed.
+such): **22/76 (~29%)** are structural — 21 needing a new sound shape, 1 already provable
+by an existing one; **54/76 (~71%)** are irreducibly semantic. The largest structural
+cluster — test-vacuity, ~9 claims across four idioms — has **begun** converting: the
+`assertion-only-in-catch` idiom (~2 of the 9) is live end-to-end as `atlas test-vacuity`,
+measured in
+[`calibration-report.a4-test-vacuity.md`](harness/probes/adjudicate/calibration-report.a4-test-vacuity.md);
+the other three idioms have no sound oracle yet. The census is a roadmap, partially executed.
 Artifact: [`xrepo-zod-shape-census.json`](harness/probes/adjudicate/xrepo-zod-shape-census.json).
 
 ---
@@ -132,8 +139,12 @@ Stated as limits, not footnotes. In order of how much they matter:
 4. **The subject-test is n = 20.** Its CI is honest and wide.
 5. **Negation recall is build-state sensitive** (8× swing dist-absent vs. dist-form). The
    trap and the exact recipe are documented in the A4 artifact; both states are reported.
-6. **A3 is measured on 10–31 sites on one model.** Full-repo cost is extrapolation.
-7. **No shared public benchmark with adjacent tools.** Memory-retrieval suites (LOCOMO,
+6. **Negation's 0-false is currently proven non-vacuous only on the misbuild.** The
+   gate-off probe that shows the zero is earned (132/163 admitted without the gate) runs on
+   the dist-absent state; on the operating state it shows 0/163. Open finding, tracked in
+   the A4 artifact.
+7. **A3 is measured on 10 sites on one model.** Full-repo cost is extrapolation.
+8. **No shared public benchmark with adjacent tools.** Memory-retrieval suites (LOCOMO,
    LongMemEval) measure conversational-memory QA — a different axis; scores are not
    comparable in either direction. The only measured external comparison here is the
    deterministic madge superset (§2). A common code-KG precision benchmark does not exist
