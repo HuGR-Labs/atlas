@@ -21,6 +21,7 @@ jobs:
       - run: npm run spec-conformance-guard  # shipped surface == specs; no governance-count drift; property pins fresh
       - run: npm run id-integrity    # docs id graph: unique definitions, no dangling citation/anchor, no orphan REQ/SCN, links resolve
       - run: npm run command-doc-guard  # every shipped CLI command has a reference page, and vice versa
+      - run: npm run wiring-guard        # BUILT != REACHABLE: the unreached-package ledger vs the import graph
       - run: npm run adr-citation-guard  # every ADR-NNNN cited under docs/ resolves to docs/adr/ADR-NNNN-*.md
       - run: npm run req-clause-guard  # every REQ's normative-clause still occurs in the invariant it cites
       - run: npm run ears-coamend-guard  # a changed normative-clause must co-amend its EARS phrase in the same commit (#198)

@@ -29,11 +29,58 @@ a hashed structural index (BLAKE3-merkle CAS) resolved by scope, dependency blas
   → BROKEN` as the code changes (the drift oracle is the structural subtree hash, not line ranges).
 - **Nothing dies** — git-native versioning; every fact/memory is re-spawnable from versioned state.
 - **Knowledge ≠ Memory** — Knowledge is shared, project-level, edited/superseded (never blind-append);
-  Memory is per-seat, scoped, decays by non-use. Distinct kinds within one substrate.
+  Memory is per-seat, scoped, decays by non-use. Distinct kinds within one substrate. **Read this one as a
+  library property, not a running one:** `packages/memory` is built and tested, and nothing in the shipped
+  product calls it — see [What is built but not reachable](#what-is-built-but-not-reachable) below. This
+  bullet sat under *What it guarantees* with no such caveat, which made a dead package read as a promise
+  the product keeps.
 - **Governed write doors** — every write flows through a governed door: `atlas-emit` (grounded facts) or
   `atlas-link` (sameAs edges). Two doors, one bar (ADR-0003 — this line used to say "one governed
   write-door", which stopped being true when `atlas-link` was ratified on 2026-07-21). Reads carry no
   write authority; the doors are the frozen `WRITE_PATHS` constant in `packages/tools/src/handler.ts`.
+
+## What is built but not reachable
+
+Built, tested and documented is not the same as *reached by anything that runs*. A package can be complete
+and dead while every other check stays green: the layer guard checks direction and cycles, the doc guards
+check correspondence, and each package's suite checks the package against itself. None of them asks whether
+anyone CALLS it. This ledger is that question, and `npm run wiring-guard` fails the build when it and the
+import graph disagree in either direction.
+
+The tree already knew this at module granularity — `reference-model-guard` lists every `packages/memory`
+module as a zero-production-caller reference model, and has for a long time. What was missing is that the
+declaration never rolled up to the package and never reached this page, which claimed the opposite under a
+heading that says *guarantees*. Internal honesty a reader cannot see does not protect the reader.
+
+A package is counted as **reached** when some other package imports it in a declaration that survives
+compilation. An `import type` does not count: it is erased, so it is a design-time reference and not a call.
+
+<!-- unreached:begin -->
+
+| package | why nothing imports it |
+| --- | --- |
+| `cli` | entry point — it imports the tree, nothing imports it. By design. |
+| `mcp-server` | entry point, same. By design. |
+| `e2e-blackbox` | test suite — it drives the built binary as a subprocess, not as an import. By design. (`e2e` is not listed: it has no `src/` at all, so it is not a node in this graph.) |
+| `contracts` | pure types; every other package imports it `import type`, which is erased. By design. |
+| `memory` | **the finding, not a design choice.** ~2000 lines across 11 source files with 11 test files and a reference contract, and the only reference to it anywhere outside itself is an `import type` in `packages/genesis/src/seed.ts`. No command, no MCP tool, no composition root reaches it: the per-seat Memory kind is a library this product never calls. `own-source.ts` records the same fact from the other side — *"a per-seat store with no production instance"* — and serves `memory: null` on every pack. |
+
+<!-- unreached:end -->
+
+### Three fields that are wired but degenerate
+
+Distinct from the above: these run, and return a defensible value that is not the designed one. The code
+names each one at the site that serves it (`packages/adapter-io/src/own-source.ts`), and the ranking is
+deterministic either way — it is simply not the ranking the design calls for.
+
+- **Frecency (`hits`)** — the retrieval frecency ledger has no production writer; nothing records that a
+  pack was served. Every candidate is `hits: 0`, so the `(tier, hits, ppr, nodeKey)` rank degenerates to
+  `(tier, nodeKey)`.
+- **Graph importance (`ppr`)** — genesis computes a personalized-PageRank score on a candidate, and the
+  field is dropped on the way to a stored fact. `0` everywhere.
+- **The `dependencies` band** — the index exposes `reverseClosure` and no forward closure, so *"what
+  depends on me"* is real and *"what I depend on"* is **always empty**, and says so rather than being
+  back-filled from a second traversal.
 
 ## Commands
 

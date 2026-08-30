@@ -18,6 +18,7 @@
     "reference-model-guard": "node harness/gates/reference-model-guard.mjs",
     "id-integrity": "node harness/gates/id-integrity.mjs",
     "command-doc-guard": "node harness/gates/command-doc-guard.mjs",
+    "wiring-guard": "node harness/gates/wiring-guard.mjs",
     "adr-citation-guard": "node harness/gates/adr-citation-guard.mjs",
     "req-clause-guard": "node harness/gates/req-clause-guard.mjs",
     "ears-coamend-guard": "node harness/gates/ears-coamend-guard.mjs",
