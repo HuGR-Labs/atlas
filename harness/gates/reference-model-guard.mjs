@@ -18,7 +18,7 @@
 // forces the classification to be DECLARED rather than discovered by the next reviewer.
 //
 // ── DECLARED COUNTS (gate-checked; a drift here FAILS this gate) ────────────────────────────────────────
-//   declared-modules: 52 · dead-value-exports: 215 · type-reachable: 6
+//   declared-modules: 53 · dead-value-exports: 219 · type-reachable: 7
 //   These three are read back from THIS file and asserted against the measured tree at the foot of the run
 //   (see "THE HEADER STATES COUNTS, AND THIS CHECKS THEM"). No count is QUOTED anywhere else in this
 //   header — a quoted integer that nothing checks is exactly what rotted here (task #143); this one cannot.
@@ -165,9 +165,15 @@ const BUILTIN_LEDGER = {
   // exists to refuse. It becomes shipped code the moment W4 composes it, and this entry goes stale then —
   // which the STALE leg above will say out loud.
   'packages/adapter-io/src/memory-store.ts': { values: 2, shipped: null, banner: true },
+  // NEW 2026-08-30 -- CAMPAIGN-11 W5. Binds the memory package's `NamedScanner` seam (portable.ts, MEM-9b/9c)
+  // to a real gitleaks/trufflehog binary via subprocess, or to an honest fail-closed refusal when neither is
+  // on PATH. Wiring it into the write door is W4, a different work package in the same campaign -- declared
+  // rather than pre-wired for the same reason memory-store.ts is: composing a door early just to clear this
+  // gate is exactly the stub it exists to refuse. It becomes shipped code the moment W4 composes it.
+  'packages/adapter-io/src/scanner.ts': { values: 4, shipped: null, banner: true },
   'packages/memory/src/logbook.ts': { values: 6, shipped: null, banner: false },
   'packages/memory/src/orient.ts': { values: 10, shipped: null, banner: false },
-  'packages/memory/src/portable.ts': { values: 5, shipped: null, banner: false },
+  'packages/memory/src/portable.ts': { values: 5, types: true, shipped: null, banner: false },
   // `packages/memory/src/respawn.ts` was listed here and is NOT any more: CAMPAIGN-11 W2's durable store
   // (`adapter-io/src/memory-store.ts`) calls `versioned` and `respawnFromRecord`, so the reference model
   // became shipped code. Deleted rather than re-counted — that is what this ledger's STALE leg is for.
