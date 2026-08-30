@@ -154,3 +154,55 @@ Emitted in clean ascending order. (Renumbered from the source spec's scrambled `
 13. **Recall fires at re-spawn.** A seat re-spawned onto a task/PR it previously touched receives its **own**
     closing fold (`attempted/failedWith/stoppedAt/lesson`) at spawn with no manual `memory-recall`; a fold
     that no re-spawn ever recalls is a spec failure, not acceptable dead weight. *(MEM-13)*
+
+---
+
+## Decisions (ratified / DEFINE-pending)
+
+The two questions that blocked the memory ring were surfaced by a cold review of the CAMPAIGN-11 plan and
+**ratified by the owner on 2026-08-30**. They are recorded here, in the module's own contract, rather than
+in a new ADR — this reference already carries the data model, the invariants and the acceptance checks, and
+a second home for the same clause is a failure this repository has already made twice.
+
+- **D1 — the write owner is the composition root's resolved `actor` (RATIFIED 2026-08-30).**
+  `kinds.ts::put` threw on **both** branches: on a conflated partition, and — deliberately — on the matched
+  one, because a `MemoryRecord` requires an `owner` and `put` had no argument to get one from. Refusing to
+  fabricate it was correct; the park was declared in the code and honoured by `packages/e2e/test/s07-memory-scoping.e2e.test.ts`.
+  The owner is now `ATLAS_ACTOR ?? gitUserEmail(repo) ?? ''`, the SAME identity the knowledge write door
+  already uses. This package does not resolve it and does not interpret it — it receives it, which is why
+  `owner` is a parameter and not an import.
+  - *Rejected: a new `MemberId` brand.* `types.ts` carries a note that a brand should be sourced "if one is
+    ratified". Minting one here would put a seat concept inside the foundation, and the foundation is
+    consumed one-way by the thing that actually has seats. When Orchestra exists it supplies real seat ids
+    into this same field and nothing in this package changes.
+  - *Consequence, stated rather than discovered later:* `actor` resolves to the empty string when neither
+    source is present, so an empty owner is a REACHABLE value. An unowned record would be injected to every
+    caller whose actor also resolves empty — that is a scoping key matching by accident — so an empty owner
+    is refused fail-closed (`UnownedWriteError`).
+
+- **D2 — Awareness seeding stays with genesis; the ring wires it (RATIFIED 2026-08-30).**
+  `genesis/src/seed.ts::seedAwareness` already sources `constitution` from the ratified `T0` manifest and
+  `taste` from `CONVENTIONS.md@sha`. `mission` needs a *ratified* DEFINE artifact, and `terrain` / `ontology`
+  have no genesis source, so all three render the labeled `UN-SEEDED` sentinel — the specified behaviour for
+  an absent source, never a fabricated line. The ring therefore wires the seeder that exists and does not
+  invent a seeding convention before the persona that curates one does.
+  - *Rejected: deriving the five facets from conventional Atlas scopes.* It would make five scope names
+    load-bearing and duplicate a seeder that already ships.
+
+- **D3 — the `MemoryKind` is DERIVED from the entry's shape, never declared (RATIFIED 2026-08-30, by the
+  orchestrator under the same delegation).** `validate(kind, entry)` takes the type as a parameter, so
+  before this the caller chose which template judged their own write: a logbook payload could be filed as
+  `project` and be checked against three keys instead of nine. That is the confused deputy
+  `reference/atlas-architecture.md` forbids by name at the governance doors — **ARCH-9, "a gate-selecting
+  field is derived, never chosen"** — one layer down and in the same shape, since `kind` selects
+  `REQUIRED[kind]` and `REQUIRED[kind]` *is* the gate. `partition()` already derived the
+  Memory-vs-Knowledge axis; `memoryKindOf()` closes the other one, so `put` now derives **both** and the
+  payload announces neither.
+  - *The soundness is checked, not assumed.* The derivation holds only while the four templates are
+    mutually exclusive under "required keys present ∧ no key outside the template". That is a property of
+    the data, so a tie is an **error**, never a first-match win: if a future template makes two types
+    simultaneously satisfiable the write fails loudly instead of being filed under whichever is listed
+    first.
+  - *Scope, stated honestly:* this changes `put`. `validate(kind, entry)` keeps its parameter, because it
+    is also the vehicle by which a caller asks "would this be a valid `logbook`?" — a legitimate question.
+    The door is what must not let the payload pick its own judge, and the door now does not.

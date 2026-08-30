@@ -18,7 +18,7 @@
 // forces the classification to be DECLARED rather than discovered by the next reviewer.
 //
 // ── DECLARED COUNTS (gate-checked; a drift here FAILS this gate) ────────────────────────────────────────
-//   declared-modules: 52 · dead-value-exports: 220 · type-reachable: 6
+//   declared-modules: 52 · dead-value-exports: 221 · type-reachable: 6
 //   These three are read back from THIS file and asserted against the measured tree at the foot of the run
 //   (see "THE HEADER STATES COUNTS, AND THIS CHECKS THEM"). No count is QUOTED anywhere else in this
 //   header — a quoted integer that nothing checks is exactly what rotted here (task #143); this one cannot.
@@ -154,7 +154,11 @@ const BUILTIN_LEDGER = {
   //    each other look live (the direct-reachability limit above), so the ledger under-counts here.
   'packages/memory/src/awareness.ts': { values: 11, shipped: null, banner: false },
   'packages/memory/src/inject.ts': { values: 6, shipped: null, banner: false },
-  'packages/memory/src/kinds.ts': { values: 3, shipped: null, banner: false },
+  // 3 → 4 on 2026-08-30: `UnownedWriteError`, added when the OWNER-DEFINE park closed
+  // (`reference/atlas-memory.md` §Decisions D1). It is dead for the same reason the other three are — the
+  // whole package has no production caller yet (see the README's unreached ledger) — and it becomes live
+  // the moment CAMPAIGN-11's write door composes `put`. Justified, not silenced.
+  'packages/memory/src/kinds.ts': { values: 4, shipped: null, banner: false },
   'packages/memory/src/logbook.ts': { values: 6, shipped: null, banner: false },
   'packages/memory/src/orient.ts': { values: 10, shipped: null, banner: false },
   'packages/memory/src/portable.ts': { values: 5, shipped: null, banner: false },

@@ -73,6 +73,65 @@ function templateKeys(kind: MemoryKind): ReadonlySet<string> {
   return new Set([...REQUIRED[kind], ...OPTIONAL[kind]]);
 }
 
+// ── the DERIVED MemoryKind (ARCH-9 applied one layer down) ───────────────────────────────────────────────
+
+/** The four types, in a fixed order so an ambiguous entry reports its candidates deterministically. */
+const KINDS: readonly MemoryKind[] = ['project', 'task', 'pr', 'logbook'];
+
+/**
+ * Raised when an entry's shape does not identify exactly one template — no candidate, or more than one.
+ * Fail-closed: an entry the discriminator cannot name is never written under a guessed type.
+ */
+export class UndeterminedKindError extends Error {
+  readonly candidates: readonly MemoryKind[];
+  constructor(candidates: readonly MemoryKind[]) {
+    super(
+      candidates.length === 0
+        ? 'MEM-5 kind derivation: no template matches this entry (it satisfies no type\u2019s required keys, ' +
+          'or carries keys outside every template) \u2014 rejected, never written under a guessed type'
+        : `MEM-5 kind derivation: entry matches MORE THAN ONE template (${candidates.join(', ')}) — the ` +
+          'templates are no longer mutually exclusive, so the derivation is not sound; rejected',
+    );
+    this.name = 'UndeterminedKindError';
+    this.candidates = candidates;
+  }
+}
+
+/**
+ * Derive an entry's `MemoryKind` from its SHAPE — the unique type whose required keys are all present and
+ * whose template contains every key the entry carries.
+ *
+ * WHY THIS EXISTS, AND WHY IT IS NOT A CONVENIENCE. `validate(kind, entry)` takes the type as a PARAMETER,
+ * so before this the caller chose which template judged their own write. That is the confused deputy the
+ * architecture reference forbids by name at the governance doors (ARCH-9: *"a gate-selecting field is
+ * derived, never chosen"*), one layer down and in the same shape — `kind` selects `REQUIRED[kind]`, which
+ * IS the gate. A caller could claim `project` for a logbook payload and be judged against three keys
+ * instead of nine. `partition()` already derives the Memory-vs-Knowledge axis; this closes the other one,
+ * so `put` now derives BOTH discriminants and the payload announces neither.
+ *
+ * SOUNDNESS IS CHECKED, NOT ASSUMED. The derivation is sound only while the four templates are mutually
+ * exclusive under this predicate. That is a property of the data, not a wish, so a tie is an ERROR rather
+ * than a first-match win: if a future template makes two types simultaneously satisfiable, this fails
+ * loudly instead of silently picking the one that happens to be listed first.
+ *
+ * Pure + total over any input — an untemplated value is inspected behind `Record<string, unknown>` and
+ * yields the no-candidate error, never a throw from property access.
+ */
+export function memoryKindOf(entry: MemoryEntry): MemoryKind {
+  // `Object.keys(null)` THROWS a TypeError, so totality is not free here — an explicit non-object guard is
+  // what makes the sentence above true. A test asserted the null case and passed on the WRONG throw.
+  if (entry === null || typeof entry !== 'object') throw new UndeterminedKindError([]);
+  const rec = entry as unknown as Record<string, unknown>;
+  const keys = Object.keys(rec);
+  const candidates = KINDS.filter((k) => {
+    if (REQUIRED[k].some((r) => rec[r] === undefined)) return false;
+    const allowed = templateKeys(k);
+    return keys.every((key) => allowed.has(key));
+  });
+  if (candidates.length !== 1) throw new UndeterminedKindError(candidates);
+  return candidates[0] as MemoryKind;
+}
+
 // ── MEM-5: the fail-closed validator ─────────────────────────────────────────────────────────────────────
 
 /**

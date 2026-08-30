@@ -15,21 +15,23 @@
 //   (5) memory is NEVER deleted — a hard-delete THROWS and a non-orchestrator logbook append is refused
 //       (the log returned UNCHANGED, not thrown) (MEM-7f / MEM-8a).
 //
-// HONESTY / PARK BOUNDARY (stated + not violated). `@atlas/memory` `kinds.ts :: put(kind, entry)` has an
-// OWNER-DEFINE-parked MATCHED branch: a *successful* matched write throws
-//   'MEM-2 put: matched-partition write projection is OWNER-DEFINE-parked (no `owner` input to `put`; ...'.
-// `put` receives no `owner` and no acceptance golden exercises the matched branch, so the reference does
-// NOT fabricate one. Therefore this test NEVER asserts `put()` returning a `MemoryRecord` on the happy path
-// — it asserts ONLY the CONFLATION-rejection branch (a mismatched claimed kind ⇒ `KindConflationError`),
-// and it pins the parked matched branch as a throw (documenting the boundary, not laundering a record out).
-// The genuine successful memory writes in Atlas go through `RuleStore` / `logbook.append` / `template.validate`
-// — exercised below — NOT through `put`.
+// THE PARK IS CLOSED (2026-08-30) — this header used to state the boundary; it now states what replaced it.
+// `kinds.ts :: put(kind, entry)` had an OWNER-DEFINE-parked MATCHED branch that THREW on a *successful*
+// write, because a `MemoryRecord` needs an `owner` and there was nowhere honest to get one. That refusal to
+// fabricate was right, and this test pinned it as a throw. `reference/atlas-memory.md` §Decisions D1
+// ratified the source — the composition root's already-resolved `actor` — so the signature took an `owner`
+// argument and the branch materializes the record. The assertion here was REPLACED rather than deleted: a
+// test that documented an absence became one that asserts the presence, which is the only honest way to
+// retire a pin. Two teeth guard the new branch: an EMPTY owner is refused (`UnownedWriteError` — an unowned
+// record would be injected to every caller whose actor also resolves empty), and the record's `kind` is
+// DERIVED from the entry's shape, never announced by the payload.
 
 import { describe, it, expect } from 'vitest';
 import {
   partition,
   put,
   KindConflationError,
+  UnownedWriteError,
   injectFor,
   recall,
   assembleHeader,
@@ -138,11 +140,18 @@ describe('S7 · memory is per-seat scoped and is NOT Knowledge (fail-closed, app
 
     // a write claiming `memory` for a knowledge-shaped entry is REJECTED fail-closed (claimed ≠ actual).
     // teeth (breaks-on "a knowledge-shaped entry is silently written as memory — the partition is bypassed"):
-    expect(() => put('memory', knowledgeFact)).toThrow(KindConflationError);
+    expect(() => put('memory', knowledgeFact, 'alice')).toThrow(KindConflationError);
 
-    // HONESTY/PARK: even the MATCHED branch does NOT launder a record out — it is OWNER-DEFINE-parked and
-    // throws. We pin that boundary (never assert a happy-path MemoryRecord from `put`).
-    expect(() => put('memory', pmAlice)).toThrow('OWNER-DEFINE-parked');
+    // [AMENDED 2026-08-30 — the park is CLOSED, so the assertion that PINNED it is REPLACED, not deleted.]
+    // This line used to assert `.toThrow('OWNER-DEFINE-parked')`: a test documenting the ABSENCE of a
+    // behaviour. `reference/atlas-memory.md` §Decisions D1 ratified the owner-source, so the matched branch
+    // now materializes a record and the honest pin is that it does — with BOTH discriminants derived and
+    // neither announced by the payload.
+    const written = put('memory', pmAlice, 'alice');
+    expect(written).toEqual({ owner: 'alice', kind: 'project', entry: pmAlice });
+
+    // teeth (breaks-on "an unowned write mints a record every empty-actor caller is then injected"):
+    expect(() => put('memory', pmAlice, '')).toThrow(UnownedWriteError);
   });
 
   it("injects only a seat's own Memory and refuses a broad read — 0 cross-seat leak (MEM-1 / MEM-4b)", () => {
