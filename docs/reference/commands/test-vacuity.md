@@ -11,7 +11,10 @@ closed, additive-only `TestVacuityShape` vocabulary* (normative list:
   assertion guard, discards at least one expression that is not dead code, and neither throws, `fail()`s,
   returns a value nor holds a `catch`. Such a test **executes work and can never fail on a wrong result**.
 
-Both are fragile shapes the oracle proves **syntactically** — neither is a claim that the test's bug fires. This command is the **reachable producer**: it walks the repo's HEAD
+- **`assertion-never-invoked`** — a matcher rooted in `expect(...)` is referenced but never called
+  (`expect(x).toBeNull;`). The matcher is a function, so the assertion **never executes** and the test passes silently.
+
+All three are fragile shapes the oracle proves **syntactically** — neither is a claim that the test's bug fires. This command is the **reachable producer**: it walks the repo's HEAD
 `*.test.ts` / `*.spec.ts` units, runs the `scanTestVacuity` AST oracle over each, seals every **proven** fact
 through genesis's authority, and **persists** it.
 

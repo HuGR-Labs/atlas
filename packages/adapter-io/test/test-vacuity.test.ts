@@ -347,3 +347,61 @@ describe('scanTestVacuity — PROVEN no-assertion-in-test', () => {
     expect(shapes(src)).toEqual(['catch only:assertion-only-in-catch', 'no assertion:no-assertion-in-test']);
   });
 });
+
+describe('scanTestVacuity — PROVEN assertion-never-invoked', () => {
+  it('proves the census idiom: a matcher referenced but never called', () => {
+    const src = `
+      test("min max getters", () => {
+        expect(z.number().min(2).minValue).toBeNull;
+      });`;
+    expect(shapes(src)).toEqual(['min max getters:assertion-never-invoked']);
+  });
+
+  it('proves it through a modifier chain', () => {
+    expect(shapes('test("t", () => { expect(x).not.toBeNull; });')).toEqual(['t:assertion-never-invoked']);
+  });
+
+  it('proves it inside a callback — an executed context, not excluded', () => {
+    const src = `
+      test("each", () => {
+        cases.forEach((c) => { expect(c).toBeDefined; });
+      });`;
+    expect(shapes(src)).toEqual(['each:assertion-never-invoked']);
+  });
+
+  // ── THE soundness rail: a chai getter DOES assert on access ────────────────────────────────────────
+  it('ABSTAINS on a chai getter — it asserts on ACCESS, so flagging it would be a false admit', () => {
+    expect(names('test("chai", () => { x.should.be.ok; });')).toEqual([]);
+    expect(names('test("chai2", () => { result.must.be.empty; });')).toEqual([]);
+  });
+
+  it('ABSTAINS when the matcher IS invoked (the correct code)', () => {
+    expect(names('test("ok", () => { expect(x).toBeNull(); });')).toEqual([]);
+  });
+
+  it('ABSTAINS when the matcher is bound rather than dropped', () => {
+    expect(names('test("bound", () => { const m = expect(x).toBeNull; use(m); });')).toEqual([]);
+  });
+
+  it('ABSTAINS on a trailing name outside the closed matcher set', () => {
+    expect(names('test("unknown", () => { expect(x).someCustomThing; });')).toEqual([]);
+  });
+
+  it('takes PRECEDENCE over assertion-only-in-catch when a body holds both', () => {
+    const src = `
+      test("both", async () => {
+        expect(y).toBeNull;
+        try { await risky(); } catch (e) { expect(e).toBeDefined(); }
+      });`;
+    expect(shapes(src)).toEqual(['both:assertion-never-invoked']);
+  });
+
+  it('never yields two facts for one test', () => {
+    const src = `
+      test("both", async () => {
+        expect(y).toBeNull;
+        try { await risky(); } catch (e) { expect(e).toBeDefined(); }
+      });`;
+    expect(shapes(src)).toHaveLength(1);
+  });
+});

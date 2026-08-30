@@ -45,7 +45,8 @@ import type { KnowledgeFreshness, ObviousnessScore, Seal } from './types.js';
  */
 export type TestVacuityShape =
   | 'assertion-only-in-catch' // every assertion sits inside a `catch`; the success path asserts nothing
-  | 'no-assertion-in-test'; // the body discards work and contains no assertion-shaped call at all
+  | 'no-assertion-in-test' // the body discards work and contains no assertion-shaped call at all
+  | 'assertion-never-invoked'; // a matcher is REFERENCED but never CALLED, so the assertion never runs
 
 /**
  * A single-anchor PROVEN `test-vacuity` fact (#95, ADR-0015 D5): "named test `testName` in unit

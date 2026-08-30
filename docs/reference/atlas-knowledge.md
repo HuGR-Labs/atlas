@@ -217,9 +217,10 @@ residual risk to PRECISION (a flagged test may be fine) rather than soundness.
 |---|---|---|
 | `assertion-only-in-catch` | every assertion-shaped call sits lexically inside a `catch`, at least one does, and there is no assertion-count guard | if the `try` body completes without throwing, the `catch` never runs and the test passes having asserted nothing |
 | `no-assertion-in-test` | the body contains NO check — call *or* getter chain — carries no assertion guard, discards at least one expression that is not inside a nested (dead) function, and neither throws, `fail()`s, returns a value, nor holds a `catch` | the test performs no EXPLICIT check, so it can only fail if the work it performs happens to throw — an implicit smoke check, not a verification of any result |
+| `assertion-never-invoked` | a matcher rooted in an `expect(...)` call is REFERENCED as a bare expression statement but never CALLED (`expect(x).toBeNull;`), its trailing name being one of the closed `INVOCABLE_MATCHERS` set | the matcher is a FUNCTION, so the statement evaluates it and drops it — the assertion never executes and the test passes silently |
 
-The two are **mutually exclusive by construction** (one requires a catch-assertion, the other refuses any
-assertion and any `catch`), so a given `(unitKey, testName)` yields at most one fact and its identity stays
+`assertion-never-invoked` is tried FIRST, by ORDERED PRECEDENCE rather than by construction: a body can hold both a real catch-assertion and, elsewhere, an un-invoked matcher, and the un-invoked matcher is the more specific defect. The other two are **mutually exclusive by construction** (one requires a catch-assertion, the other refuses any
+check and any `catch`), so a given `(unitKey, testName)` yields at most one fact and its identity stays
 unambiguous.
 
 **Absence is judged against a broader vocabulary than the shared matcher, and why — measured.** The shared
@@ -234,6 +235,8 @@ yield **0 facts across this repo's 3365 test-call sites** (467 of 470 files; thr
 tests were already fixed (#114).
 
 **A check need not be a call.** Cold review found the call-only version proving a body whose only check was a chai getter chain (`x.should.be.ok;`) — a real false admit against the published claim, since the claim is "checks nothing", not "makes no check-shaped call". Absence is now judged over non-call member chains too.
+
+**Why a chai getter is NOT an un-invoked assertion.** `x.should.be.ok;` looks identical in shape to `expect(x).toBeNull;` but asserts ON ACCESS — chai defines `ok`/`true`/`empty` as getters with side effects. Flagging it would be a false admit. The rail is that the chain must contain an `expect(` CALL, which is the family whose matchers are function-valued and therefore dead when un-invoked.
 
 **Residual limit, stated:** a helper named outside that vocabulary (`hasNoCollateral(...)`) still yields a
 proven fact — sound, since no check-shaped call appears in that body, but imprecise. Pinned by a
