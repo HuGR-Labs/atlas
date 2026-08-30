@@ -277,6 +277,32 @@ const INVOCABLE_MATCHERS = new Set<string>([
 ]);
 
 /**
+ * Is this member chain rooted at the BARE global `expect(` — not `<anything>.expect(`?
+ *
+ * WHY A SUBSTRING TEST IS NOT ENOUGH (cold-review finding). This file's broad-match idiom is safe wherever
+ * over-matching pushes a verdict toward ABSTAIN. Here it pushes toward PROVE, so it must be exact: a
+ * substring test for `expect(` also matches `request(app).expect(200).toBeNull` (supertest),
+ * `this.expect(x).toBe`, `global.expect(...)` — objects whose `expect` METHOD is not jest's global and whose
+ * properties may well have access-time side effects. Proving those would be the very false admit the
+ * chai-getter rail exists to prevent.
+ *
+ * So the chain is walked to its base call and the callee must be the bare `identifier` `expect`. Modifier
+ * links (`.not`, `.resolves`) are traversed on the way down; anything else roots elsewhere and ABSTAINS.
+ */
+function rootedAtGlobalExpect(member: SyntaxNode): boolean {
+  let cur: SyntaxNode | null = member;
+  while (cur !== null) {
+    if (cur.type === 'call_expression') {
+      const callee = cur.child(0);
+      return callee !== null && callee.type === 'identifier' && callee.text === 'expect';
+    }
+    if (cur.type !== 'member_expression') return false;
+    cur = cur.childForFieldName('object');
+  }
+  return false;
+}
+
+/**
  * PROVE / ABSTAIN the `assertion-never-invoked` shape: the body contains a matcher that is REFERENCED but
  * never CALLED — `expect(x).toBeNull;` where `expect(x).toBeNull();` was meant. The matcher is a function, so
  * the statement evaluates it and throws the value away: the assertion never executes and the test passes
@@ -284,10 +310,13 @@ const INVOCABLE_MATCHERS = new Set<string>([
  * referenced without being called ... so those assertions never actually execute").
  *
  * SOUNDNESS RAILS (violating any is a false-admit):
- *   · THE CHAIN MUST CONTAIN AN `expect(` CALL. This is the rail that separates a dead jest matcher from a
- *     LIVE chai getter: `x.should.be.ok;` asserts ON ACCESS (chai defines `ok`/`true`/`empty` as getters with
- *     side effects), so flagging it would be a false admit — the assertion DOES run. Only the
- *     `expect(...)`-rooted family is function-valued and therefore dead when un-invoked.
+ *   · THE CHAIN MUST BE ROOTED AT THE BARE GLOBAL `expect(` (`rootedAtGlobalExpect`, exact — NOT a substring
+ *     test). This is the rail that separates a dead jest matcher from a LIVE getter: `x.should.be.ok;`
+ *     asserts ON ACCESS (chai defines `ok`/`true`/`empty` as getters with side effects), so flagging it would
+ *     be a false admit — the assertion DOES run. Only the bare-global-`expect`-rooted family is
+ *     function-valued and therefore dead when un-invoked. A substring test would also match
+ *     `request(app).expect(200).toBeNull` (supertest) and `this.expect(x).toBe`, whose `expect` is somebody
+ *     else's method with semantics this oracle does not model — cold review caught exactly that.
  *   · THE TRAILING NAME MUST BE IN THE CLOSED `INVOCABLE_MATCHERS` SET. An unknown trailing name may be a
  *     property with getter semantics we do not model, so it ABSTAINS. Costs recall, cannot cost soundness.
  *   · THE MEMBER ACCESS MUST BE THE WHOLE EXPRESSION OF AN `expression_statement`. `const m = expect(x).toBe;`
@@ -304,7 +333,7 @@ function bodyHasUninvokedMatcher(body: SyntaxNode): boolean {
     if (found || n.type !== 'expression_statement') return;
     const expr = n.namedChild(0);
     if (expr === null || expr.type !== 'member_expression') return;
-    if (!/(^|[.\s])expect\s*\(/.test(expr.text)) return; // NOT a chai getter — see the rail above
+    if (!rootedAtGlobalExpect(expr)) return; // bare global `expect(` only — see the rail above
     if (!INVOCABLE_MATCHERS.has(trailingName(expr))) return;
     found = true;
   });

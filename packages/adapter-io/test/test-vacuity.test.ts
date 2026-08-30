@@ -387,6 +387,24 @@ describe('scanTestVacuity — PROVEN assertion-never-invoked', () => {
     expect(names('test("unknown", () => { expect(x).someCustomThing; });')).toEqual([]);
   });
 
+  // COLD-REVIEW REGRESSION: a substring test for `expect(` also matched somebody ELSE'S `expect` method —
+  // supertest's `request(app).expect(...)`, `this.expect(...)` — whose properties may have access-time
+  // semantics this oracle does not model. Over-matching here pushes toward PROVE, the dangerous direction.
+  it('ABSTAINS when the chain is rooted at someone else\'s .expect() method, not the bare global', () => {
+    for (const chain of [
+      'request(app).expect(200).toBeNull',
+      'this.expect(x).toBe',
+      'global.expect(x).toBeDefined',
+      'obj.expect(x).toEqual',
+    ]) {
+      expect(names(`test("t", () => { ${chain}; });`)).toEqual([]);
+    }
+  });
+
+  it('still PROVES when rooted at the bare global expect, through modifier links', () => {
+    expect(shapes('test("t", () => { expect(x).resolves.toBe; });')).toEqual(['t:assertion-never-invoked']);
+  });
+
   it('takes PRECEDENCE over assertion-only-in-catch when a body holds both', () => {
     const src = `
       test("both", async () => {

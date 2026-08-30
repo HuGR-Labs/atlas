@@ -41,7 +41,7 @@ export const DROP_TEST_VACUITY_MALFORMED =
 export const DROP_TEST_VACUITY_UNGROUNDED =
   'test-vacuity fails the truth door — the unit-anchor citation does not re-derive FRESH (GEN-12e / ADR-0015 D5)';
 export const DROP_TEST_VACUITY_UNPROVEN =
-  'the injected sound oracle (scanTestVacuity) did not re-prove the assertion-only-in-catch shape at HEAD — the ' +
+  'the injected sound oracle (scanTestVacuity) did not re-prove the proposed test-vacuity shape at HEAD — the ' +
   'PROVEN-only test-vacuity family has no advisory form, so an abstaining oracle yields NO fact (ADR-0015 D5)';
 
 /**
