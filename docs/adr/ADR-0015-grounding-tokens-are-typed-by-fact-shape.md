@@ -1,7 +1,9 @@
 # ADR-0015 — A grounding token is typed by the fact's SHAPE, not one hash for all
 
-**Status:** PROPOSED — owner ratification required (amends the GROUND-1 oracle model).
-**⚠ All five decisions have SHIPPED against this un-ratified ADR** — see the RECONCILIATION section at the end before ratifying. The ratification list below is stale (it asks for D1–D4; D5 shipped too).
+**Status:** ACCEPTED — owner-ratified 2026-08-29, on the RECONCILIATION section at the end of this file (not on the original "What the owner must ratify" list, which was stale). Amends the GROUND-1 oracle model. Scope of the signature: **D1–D5** — see the RATIFICATION block below for the two corrections the owner ratified WITH.
+
+> **Note on how this was ratified.** All five decisions had already SHIPPED against this ADR while it was still PROPOSED — that is a governance failure the RECONCILIATION section records rather than hides. The owner ratified after that reconciliation was put in front of him, on what exists, not on the original proposal.
+
 **Closes:** the product limit in #99 (Atlas cannot ground a negative, a relation, or a transition — 5 seats
 hit the same wall). Reconnects the deferred GAP-1 (multi-unit anchor, ADR-0014 §"does NOT close") and #189
 (the dependency graph is an under-approximation) to a real consumer. It originally named `hugit-diff` (structural
@@ -278,4 +280,44 @@ ratified D5. Until D5 is signed, each one adds to the debt instead of paying it 
 This reconciliation was authored by the lead against shipped code. It does not re-ratify anything, and it does
 not claim the build was authorised — the build happened on a PROPOSED ADR, and that is the finding, not the
 fix. The fix is the owner's signature or the owner's objection.
+
+---
+
+## RATIFICATION — owner, 2026-08-29
+
+**Ratified: D1, D2, D3, D4, D5** (the typed-token model, the negation abstention law, transition-as-advisory,
+and the test-vacuity `proven` shape), as reconciled against shipped code in the section above.
+
+The signature carries two corrections and two clarifications:
+
+**Correction 1 — the scope is D1–D5, not D1–D4.** The original "What the owner must ratify" list predates D5,
+which was appended later and shipped. D5 is the decision that mints `proven` seals, so ratifying the older
+list would have left the load-bearing decision unsigned. **That list is superseded by this block.**
+
+**Correction 2 — the rename gap is ratified AS AN EXCLUSION, and is now an explicit non-goal.** This ADR left
+rename reconciliation TBD after `hugit-diff` was discontinued; the build closed it by excluding the case
+(`knowledge/src/transition-types.ts:24`, D-T4: a move/rename that changes `unitKey` is out of scope). The
+owner ratifies that exclusion. The reasoning, recorded so a future reader can re-open it on evidence rather
+than on discomfort: a transition is *defined* as the same `unitKey` across two revs, so a rename is a
+different concept, not a degenerate transition; no shipped consumer needs it; and re-opening it would be a
+design project with no consumer today. **It is a NON-GOAL, not an unknown.** Re-opening costs nothing later,
+because an exclusion leaves no wrong implementation to unwind.
+
+**Clarification 1 — the `D-T1..D-T4` layer rides under this signature.** The transition and test-vacuity
+builds carry their own numbered decisions in `docs/design/234-transition-design.md` and
+`docs/design/95-test-vacuity-design.md`. They are implementation-level decisions taken *under* the shapes this
+ADR decides, and they are ratified with it — but they are named here so they are visible rather than
+invisible. A decision in those docs that changes a SHAPE, rather than implementing one, needs its own ADR.
+
+**Clarification 2 — the "Recommended decomposition" section is historical.** #99a (relation), #99b (negation),
+#99c (transition) and D5 (test-vacuity) have all landed. Nothing in that section is a live plan; it is kept as
+the record of the sequencing that was followed.
+
+### What this unlocks
+
+D5 closes the `shape` vocabulary as **additive-only** — *"a new shape is a `cv` bump"* — and the machinery is
+in place (`knowledge/src/test-vacuity-types.ts:37`, the `RelationKind` pattern). The next proven shapes —
+`no-assertion-in-test`, `unasserted-parse-call`, `commented-out-tests`, the largest convertible cluster in the
+cross-repo shape census (`harness/probes/adjudicate/xrepo-zod-shape-census.json`) — are a `cv` bump under this
+ratified D5 and need **no new ADR**.
 
