@@ -148,11 +148,22 @@ Artifact: [`harness/probes/a3-cost-sidecar.jsonl`](harness/probes/a3-cost-sideca
 Shape census of all 76 cross-repo advisory facts (single-classifier estimate, recorded as
 such): **22/76 (~29%)** are structural — 21 needing a new sound shape, 1 already provable
 by an existing one; **54/76 (~71%)** are irreducibly semantic. The largest structural
-cluster — test-vacuity, ~9 claims across four idioms — has **begun** converting: the
-`assertion-only-in-catch` idiom (~2 of the 9) is live end-to-end as `atlas test-vacuity`,
-measured in
-[`calibration-report.a4-test-vacuity.md`](harness/probes/adjudicate/calibration-report.a4-test-vacuity.md);
-the other three idioms have no sound oracle yet. The census is a roadmap, partially executed.
+cluster — test-vacuity, ~9 claims across four idioms — is now **substantially converted by two shapes**:
+`assertion-only-in-catch` (~2 of the 9, measured in
+[`calibration-report.a4-test-vacuity.md`](harness/probes/adjudicate/calibration-report.a4-test-vacuity.md))
+and `no-assertion-in-test` (~3). The other two idioms are **not getting shapes of their own**, for reasons
+that are findings rather than backlog:
+
+- `unasserted-parse-call` (~2) is **subsumed** — a discarded call with no wrapping assertion already yields
+  `no-assertion-in-test`. And the claims themselves say the test *does* check something ("it only checks
+  that parsing does not throw"), so a shape asserting vacuity over it would publish a false characterisation.
+- `commented-out-tests` (~2) is **half subsumed** (the one executing no-op test is proven by
+  `no-assertion-in-test`) and half **outside the identity model**: a commented-out test has no AST node, so
+  it cannot anchor to the family's `(unitKey, testName)` identity without fabricating a name.
+
+So the census's largest cluster needed two shapes, not four. Coverage is asserted over faithful
+reproductions of the claim bodies run through the shipped oracle — not a re-run against zod. Artifact:
+[`test-vacuity-idiom-coverage.json`](harness/probes/adjudicate/test-vacuity-idiom-coverage.json).
 Artifact: [`xrepo-zod-shape-census.json`](harness/probes/adjudicate/xrepo-zod-shape-census.json).
 
 ---
