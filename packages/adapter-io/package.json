@@ -18,6 +18,7 @@
     "@atlas/index": "*",
     "@atlas/kernel": "*",
     "@atlas/knowledge": "*",
+    "@atlas/memory": "*",
     "@atlas/persist": "*",
     "@atlas/retrieval": "*",
     "@atlas/tools": "*",

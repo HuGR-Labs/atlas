@@ -35,6 +35,12 @@ dist/
 # re-admitted and stays denied by the blanket rule above — the one population this amendment leaves refused.
 !.atlas/projection.json
 !.atlas/cas/
+# `memory.jsonl` — the per-seat Memory log. MEM-10a REQUIRES it to travel at every commit / PR / branch /
+# fork, so it is admitted like the projection is. It is safe to admit for a reason the projection cannot
+# claim: the file is append-only and content-keyed one record per line (KERNEL-12b/12c), so a plain git text
+# merge can only union or duplicate whole lines — never splice two records — and a duplicate is deduped by
+# content id on the fold. There are no numbered generations to drag in, because nothing is ever replaced.
+!.atlas/memory.jsonl
 # …and the admin-owned policy, as before: the ratified config the doors READ, reviewable in the same place
 # as the code.
 !.atlas/policy.json
