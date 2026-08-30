@@ -31,6 +31,13 @@ export interface ArmScore {
   readonly falseAdmit: number | null; // admitted∧FALSE / FALSE
   readonly recallTrue: number | null; // admitted∧TRUE  / (TRUE ∧ groundable)
   readonly n: number; //               rows in this arm (both labels)
+  // The RAW counts the two ratios above are computed from, carried through UNCHANGED so a report can state the
+  // fraction as MEASURED (read off the run) instead of INFERRED (re-derived by arithmetic from a printed
+  // percentage). Reporting only — no assertion, no threshold and no scoring semantics reads these.
+  readonly falseAdmitNum: number; // |admitted ∧ label=FALSE|
+  readonly falseAdmitDen: number; // |label=FALSE|
+  readonly recallNum: number; //    |admitted ∧ label=TRUE ∧ groundable|
+  readonly recallDen: number; //    |label=TRUE ∧ groundable|
 }
 
 export type Score = Record<Arm, ArmScore>;
@@ -71,6 +78,10 @@ export function score(rows: readonly Row[], outcomes: readonly Outcome[]): Score
       falseAdmit: a.faDen === 0 ? null : a.faNum / a.faDen,
       recallTrue: a.rDen === 0 ? null : a.rNum / a.rDen,
       n: a.n,
+      falseAdmitNum: a.faNum,
+      falseAdmitDen: a.faDen,
+      recallNum: a.rNum,
+      recallDen: a.rDen,
     };
   }
   return out;
