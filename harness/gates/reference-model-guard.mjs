@@ -18,7 +18,7 @@
 // forces the classification to be DECLARED rather than discovered by the next reviewer.
 //
 // ── DECLARED COUNTS (gate-checked; a drift here FAILS this gate) ────────────────────────────────────────
-//   declared-modules: 49 · dead-value-exports: 167 · type-reachable: 7
+//   declared-modules: 49 · dead-value-exports: 162 · type-reachable: 7
 //   These three are read back from THIS file and asserted against the measured tree at the foot of the run
 //   (see "THE HEADER STATES COUNTS, AND THIS CHECKS THEM"). No count is QUOTED anywhere else in this
 //   header — a quoted integer that nothing checks is exactly what rotted here (task #143); this one cannot.
@@ -149,23 +149,20 @@ const BUILTIN_LEDGER = {
   // 53 → 52 entries, relation-derive.ts absent, dead-value-exports 223 → 220 (its three exports), every other
   // adapter-io row unchanged.
 
-  // ── @atlas/memory — a CLOSED PACKAGE. No module anywhere outside `packages/memory` value-imports it; ──
-  //    the sole cross-package edge is one `import type` in genesis/src/seed.ts. Its internal modules make
-  //    each other look live (the direct-reachability limit above), so the ledger under-counts here.
+  // ── @atlas/memory — NO LONGER a closed package. `memory-store.ts` (W2), `memory-emit.ts` (W4), ────────
+  //    `awareness-store.ts` (W7a) and `memory-read.ts` (W6, below) all value-import across the package
+  //    boundary now; what remains true is that no module WITHIN `packages/memory` itself is reached except
+  //    through those doors, so its internal modules still make each other look live to a direct-reachability
+  //    analyser and the ledger still under-counts here.
   // `packages/memory/src/awareness.ts` is DELETED from this ledger, not set to zero: CAMPAIGN-11 W7a's
   // durable Awareness store (`adapter-io/src/awareness-store.ts`) VALUE-imports `atlasRoot` / `rollup` /
   // `awarenessBytes` / `makeAwarenessMemo`, so the module moved dead → live — the same `own.ts` /
   // `relation-derive.ts` transition documented elsewhere in this ledger.
-  'packages/memory/src/inject.ts': { values: 6, shipped: null, banner: false },
-  // 3 → 4 on 2026-08-30: `UnownedWriteError`, added when the OWNER-DEFINE park closed
-  // (`reference/atlas-memory.md` §Decisions D1). It is dead for the same reason the other three are — the
-  // whole package has no production caller yet (see the README's unreached ledger) — and it becomes live
-  // the moment CAMPAIGN-11's write door composes `put`. Justified, not silenced.
-  // NEW 2026-08-30 — CAMPAIGN-11 W2. The durable Memory store exists and no product path calls it yet: the
-  // doors that will (`W4` the governed write door, `W6` the read doors) are later work packages in the same
-  // campaign. Declared rather than pre-wired, because wiring a door to clear this gate is the stub the gate
-  // exists to refuse. It becomes shipped code the moment W4 composes it, and this entry goes stale then —
-  // which the STALE leg above will say out loud.
+  // `packages/memory/src/inject.ts` was listed here and is NOT any more: CAMPAIGN-11 W6's durable read
+  // doors (`adapter-io/src/memory-read.ts`, below) VALUE-import `injectFor` (MEM-1 owner-scoping) and
+  // `recall` (MEM-4's one consultable path), so the module moved dead → live — the same `own.ts` /
+  // `relation-derive.ts` / `awareness.ts` transition documented elsewhere in this ledger. Measured with this
+  // gate's own analyser: dead-value-exports 167 → 162 (its 6 exports, minus the 1 this file itself adds).
   // `types: true` since W4 — `memory-emit.ts` imports its `DurableMemory` type, so the declarations are a
   // LIVE seam even while the values have no caller. Flagged so nobody deletes it as dead.
   'packages/adapter-io/src/memory-store.ts': { values: 2, shipped: null, banner: true, types: true },
@@ -190,6 +187,12 @@ const BUILTIN_LEDGER = {
   // `packages/memory/src/respawn.ts` was listed here and is NOT any more: CAMPAIGN-11 W2's durable store
   // (`adapter-io/src/memory-store.ts`) calls `versioned` and `respawnFromRecord`, so the reference model
   // became shipped code. Deleted rather than re-counted — that is what this ledger's STALE leg is for.
+  // NEW — CAMPAIGN-11 W6, the read doors: `createMemoryRead` composes `injectFor`/`recall` (inject.ts,
+  // deleted above), `foldArchiveFromRecord`/`makeRespawn` (respawn.ts, already live) and the pinned
+  // `DECAY_PER_WAVE`/`NEAR_ZERO_FRECENCY`/`RULES_SLAB_SLOTS` constants (rules.ts, already live) over the
+  // durable store. Zero-caller until W8 exposes it over the CLI/MCP transport, same standing as the write
+  // door above.
+  'packages/adapter-io/src/memory-read.ts': { values: 1, shipped: null, banner: true },
 
   // ── @atlas/retrieval — NO LONGER CLOSED, and the ledger is how we found out. ──────────────────────────
   //    It was closed for the package's whole life: every cross-package edge into it was an `import type`,
