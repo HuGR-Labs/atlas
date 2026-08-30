@@ -24,6 +24,8 @@ beforeAll(async () => {
 });
 
 const names = (src: string): string[] => scanTestVacuity(parser.parse(src).rootNode).map((f) => f.testName);
+const shapes = (src: string): string[] =>
+  scanTestVacuity(parser.parse(src).rootNode).map((f) => `${f.testName}:${f.shape}`);
 
 describe('scanTestVacuity — PROVEN assertion-only-in-catch', () => {
   it('proves a single try/catch whose only assertion is in the catch', () => {
@@ -174,5 +176,174 @@ describe('scanTestVacuity — ABSTAIN (soundness rails, no false-admit)', () => 
   it('abstains: deepStrictEqual on the success path', () => {
     const src = `test("t2", () => { deepStrictEqual(f(), {}); try { g(); } catch (e) { expect(e).toBe(1); } });`;
     expect(names(src)).toEqual([]);
+  });
+});
+
+describe('scanTestVacuity — PROVEN no-assertion-in-test', () => {
+  it('proves a body that discards work and asserts nothing', () => {
+    const src = `
+      test("parses a date", () => {
+        const schema = z.string();
+        schema.parse("2020-01-01");
+      });`;
+    expect(shapes(src)).toEqual(['parses a date:no-assertion-in-test']);
+  });
+
+  it('proves the census idiom: bare discarded expression with the assertions commented out', () => {
+    const src = `
+      test("getter access", () => {
+        obj.someGetter;
+        // expect(obj.someGetter).toBe(3);
+      });`;
+    expect(shapes(src)).toEqual(['getter access:no-assertion-in-test']);
+  });
+
+  // ── the soundness rails: each must move the verdict to ABSTAIN ──────────────────────────────────────
+  it('ABSTAINS when any assertion-shaped call is present', () => {
+    const src = `
+      test("has one", () => {
+        const r = f();
+        expect(r).toBe(1);
+      });`;
+    expect(names(src)).toEqual([]);
+  });
+
+  it('ABSTAINS on an assert*-named helper (the BROAD matcher catches these)', () => {
+    const src = `
+      test("delegates", () => {
+        assertValid(subject);
+      });`;
+    expect(names(src)).toEqual([]);
+  });
+
+  it('ABSTAINS on an expect*-prefixed helper — the shape-local widening, measured against real hits', () => {
+    // Scanning this repo's own tests WITHOUT `isCheckShaped` produced 4 hits, all of them
+    // `expectNoCollateral(...)` in sameas-pairkey-forgery.test.ts — correct tests asserting inside a helper.
+    // Precision was 0/4, which is why absence is judged against the broader check-shaped vocabulary.
+    const src = `
+      test("delegates", () => {
+        expectNoCollateral(a, b);
+      });`;
+    expect(names(src)).toEqual([]);
+  });
+
+  it('ABSTAINS on check/verify/ensure/should-prefixed helpers too', () => {
+    for (const call of ['checkValid(x)', 'verifyShape(x)', 'ensureSorted(x)', 'shouldReject(x)']) {
+      expect(names(`test("t", () => { ${call}; });`)).toEqual([]);
+    }
+  });
+
+  // COLD-REVIEW REGRESSION (real false admit, found by review not by tests): a chai getter assertion is a
+  // CHECK that is not a CALL. The call-only oracle proved this body "checks nothing" while it checks.
+  it('ABSTAINS on a getter-style assertion — a check need not be a call', () => {
+    expect(names('test("chai getter", () => { x.should.be.ok; });')).toEqual([]);
+  });
+
+  it('ABSTAINS on other non-call check chains', () => {
+    for (const stmt of ['x.should.be.true', 'result.must.be.empty', 'assert.isOk']) {
+      expect(names(`test("t", () => { ${stmt}; });`)).toEqual([]);
+    }
+  });
+
+  // COLD-REVIEW REGRESSION: dead code is not work. A declared-but-never-invoked helper used to satisfy the
+  // discarded-expression rail, proving a body that does nothing at all.
+  it('ABSTAINS when the only discarded work sits inside a never-invoked nested function', () => {
+    const src = `
+      test("dead helper", () => {
+        function helper() { doSomething(); }
+      });`;
+    expect(names(src)).toEqual([]);
+  });
+
+  it('still PROVES when the discarded work is in the body itself, not nested', () => {
+    expect(shapes('test("real work", () => { doSomething(); });')).toEqual(['real work:no-assertion-in-test']);
+  });
+
+  // CHARACTERIZATION of the RESIDUAL limit, pinned so it stays visible rather than becoming folklore: a
+  // helper named outside the check-shaped vocabulary still yields a proven fact. Sound (no check-shaped call
+  // appears in THIS body) but imprecise. If the vocabulary is ever widened again, THIS test flips — which is
+  // the point: the change becomes deliberate instead of silent.
+  it('PROVES a helper named outside the vocabulary — the residual limit, pinned', () => {
+    const src = `
+      test("delegates", () => {
+        hasNoCollateral(a, b);
+      });`;
+    expect(shapes(src)).toEqual(['delegates:no-assertion-in-test']);
+  });
+
+  it('ABSTAINS when an assertion guard is present (the body DOES defend)', () => {
+    const src = `
+      test("guarded", () => {
+        expect.assertions(1);
+        doWork();
+      });`;
+    expect(names(src)).toEqual([]);
+  });
+
+  it('ABSTAINS on a body that throws — a throw IS a check', () => {
+    const src = `
+      test("throws on purpose", () => {
+        doWork();
+        throw new Error("boom");
+      });`;
+    expect(names(src)).toEqual([]);
+  });
+
+  it('ABSTAINS on a fail()-shaped call', () => {
+    const src = `
+      test("fails", () => {
+        doWork();
+        fail("nope");
+      });`;
+    expect(names(src)).toEqual([]);
+  });
+
+  it('ABSTAINS on a valued return — a returned promise is an implicit check', () => {
+    const src = `
+      test("returns a promise", () => {
+        return doWork();
+      });`;
+    expect(names(src)).toEqual([]);
+  });
+
+  it('ABSTAINS on an empty body (a different smell, not this shape)', () => {
+    const src = `test("empty", () => {});`;
+    expect(names(src)).toEqual([]);
+  });
+
+  it('ABSTAINS on a declaration-only body (setup, nothing discarded)', () => {
+    const src = `
+      test("setup only", () => {
+        const a = 1;
+        const b = compute(a);
+      });`;
+    expect(names(src)).toEqual([]);
+  });
+
+  it('ABSTAINS when a catch clause is present (that is the sibling shape territory)', () => {
+    const src = `
+      test("try no assert", () => {
+        try {
+          doWork();
+        } catch (e) {
+          log(e);
+        }
+      });`;
+    expect(names(src)).toEqual([]);
+  });
+
+  it('the two shapes are MUTUALLY EXCLUSIVE — no test yields two facts', () => {
+    const src = `
+      test("catch only", async () => {
+        try {
+          await risky();
+        } catch (e) {
+          expect(e).toBeDefined();
+        }
+      });
+      test("no assertion", () => {
+        risky();
+      });`;
+    expect(shapes(src)).toEqual(['catch only:assertion-only-in-catch', 'no assertion:no-assertion-in-test']);
   });
 });

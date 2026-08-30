@@ -1,10 +1,17 @@
 # `atlas test-vacuity`
 
 Produce **grounded test-vacuity facts** for a repository's **HEAD test files**. A test-vacuity fact (ADR-0015
-**D5** / #95) is a **single-anchor `proven`** record — *named test `testName` in unit `unitKey` has **every**
-assertion-shaped call inside a `catch` clause and no assertion-count guard* (shape **`assertion-only-in-catch`**).
-Such a test **passes with no assertion executed** whenever the guarded call does not throw — a fragile shape the
-oracle can prove **syntactically**. This command is the **reachable producer**: it walks the repo's HEAD
+**D5** / #95) is a **single-anchor `proven`** record — *named test `testName` in unit `unitKey` holds one shape of the
+closed, additive-only `TestVacuityShape` vocabulary* (normative list:
+[`reference/atlas-knowledge.md`](../atlas-knowledge.md)):
+
+- **`assertion-only-in-catch`** — every assertion-shaped call sits inside a `catch` clause and there is no
+  assertion-count guard. Such a test **passes with no assertion executed** whenever the guarded call does not throw.
+- **`no-assertion-in-test`** — the body contains no check at all (call *or* getter chain), carries no
+  assertion guard, discards at least one expression that is not dead code, and neither throws, `fail()`s,
+  returns a value nor holds a `catch`. Such a test **executes work and can never fail on a wrong result**.
+
+Both are fragile shapes the oracle proves **syntactically** — neither is a claim that the test's bug fires. This command is the **reachable producer**: it walks the repo's HEAD
 `*.test.ts` / `*.spec.ts` units, runs the `scanTestVacuity` AST oracle over each, seals every **proven** fact
 through genesis's authority, and **persists** it.
 
@@ -29,8 +36,9 @@ atlas test-vacuity <path>
 $ atlas test-vacuity .
 status: ok
 next: admitted 1 proven test-vacuity fact(s) durably through the governed door — read one back with `atlas node <id>`
-invariant: #95 D5: a test-vacuity is a single-anchor PROVEN AST-shape fact — named test T in unit U has EVERY assertion-shaped call inside a catch clause and no assertion-count guard (shape assertion-only-in-catch), re-derivable at HEAD by `scanTestVacuity`, sealed `proven` ONLY when the injected oracle re-proves it, admitted THROUGH the governed emit door (KNOW-11 authz + ARCH-9 anchor); the PROVEN-only family has no advisory form, so an abstaining oracle yields NO fact (0-false-proven)
+invariant: #95 D5: a test-vacuity is a single-anchor PROVEN AST-shape fact — named test T in unit U holds one shape of the closed, additive-only `TestVacuityShape` vocabulary (reference/atlas-knowledge.md): `assertion-only-in-catch` (every assertion-shaped call inside a catch clause, no assertion-count guard) or `no-assertion-in-test` (no assertion-shaped call at all in a body that discards work and neither throws, fails, returns a value nor catches). Each is re-derivable at HEAD by `scanTestVacuity`, sealed `proven` ONLY when the injected oracle re-proves it, admitted THROUGH the governed emit door (KNOW-11 authz + ARCH-9 anchor); the PROVEN-only family has no advisory form, so an abstaining oracle yields NO fact (0-false-proven)
 test-vacuity: vacuous-catch-only @ test/sample.test.ts (assertion-only-in-catch, seal: proven) — <id>
+test-vacuity: unchecked-parse @ test/sample.test.ts (no-assertion-in-test, seal: proven) — <id>
 ```
 
 ## The 0-false-proven rail

@@ -33,9 +33,19 @@ import type { ClaimEntry } from '@atlas/kernel';
 import type { Grounding } from '@atlas/grounding';
 import type { KnowledgeFreshness, ObviousnessScore, Seal } from './types.js';
 
-/** The proven SHAPE a test-vacuity fact names — today only `assertion-only-in-catch`. A closed,
- *  additive-only single-literal union (a new shape is a `cv` bump), exactly like `RelationKind`. */
-export type TestVacuityShape = 'assertion-only-in-catch';
+/**
+ * The proven SHAPE a test-vacuity fact names. A CLOSED, ADDITIVE-ONLY union (adding a member is a spec
+ * revision — the `cv` bump ADR-0015 D5 names), exactly like `RelationKind`. The normative vocabulary lives
+ * in `reference/atlas-knowledge.md` — a member added here without a row there is an undocumented widening.
+ *
+ * Every member is a SYNTACTIC property of the test's own AST, provable by `scanTestVacuity` from the hashed
+ * unit's bytes alone. None is a runtime claim that the test's bug fires (that is a semantic, cross-procedural
+ * question no AST oracle can settle) — each flags a fragile SHAPE, which is what makes the family
+ * 0-false-admit by construction.
+ */
+export type TestVacuityShape =
+  | 'assertion-only-in-catch' // every assertion sits inside a `catch`; the success path asserts nothing
+  | 'no-assertion-in-test'; // the body discards work and contains no assertion-shaped call at all
 
 /**
  * A single-anchor PROVEN `test-vacuity` fact (#95, ADR-0015 D5): "named test `testName` in unit
@@ -53,7 +63,7 @@ export interface TestVacuityNode {
   readonly tier: Tier;
   readonly unitKey: string; // the LOCATION-FREE unit lineage (qualifiedPath) holding the test — identity leg
   readonly testName: string; // the test's name string — identity leg (a unit may hold many named tests)
-  readonly shape: TestVacuityShape; // the proven syntactic property — 'assertion-only-in-catch' today
+  readonly shape: TestVacuityShape; // WHICH proven syntactic property this fact names (identity leg with unitKey+testName)
   readonly grounding: Grounding; // EXACTLY one entry: anchors the unit (its subtreeHash the freshness leg)
   readonly freshness: KnowledgeFreshness;
   readonly claims: readonly ClaimEntry[];

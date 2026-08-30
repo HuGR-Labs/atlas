@@ -199,6 +199,46 @@ bumps the contract version `cv`. Each slot binds to exactly one write template (
 | `dependency` | a required relationship / ordering | "grounding must resolve before reconcile" |
 | `definition` | a term / ontology definition (feeds Awareness `ontology`) | "a *territory* is owner + tier" |
 
+### The closed `TestVacuityShape` vocabulary (normative)
+
+A proven `test-vacuity` fact names exactly one of these shapes; the list is **closed and additive-only** —
+adding a shape is a spec revision that bumps the contract version `cv`, exactly like the `predicateSlot`
+list above (ADR-0015 D5, owner-ratified 2026-08-29). The union is declared in
+`@atlas/knowledge` `test-vacuity-types.ts`; a member added there without a row HERE is an undocumented
+widening.
+
+Every shape is a SYNTACTIC property of the test's own AST, provable by `scanTestVacuity`
+(`@atlas/adapter-io` `test-vacuity.ts`) from the hashed unit's bytes alone. **No shape is a runtime claim
+that the test's bug fires** — that is a semantic, cross-procedural question no AST oracle can settle. Each
+names a fragile SHAPE, which is what makes the family 0-false-admit by construction and confines the
+residual risk to PRECISION (a flagged test may be fine) rather than soundness.
+
+| shape | the proven property | why it is fragile |
+|---|---|---|
+| `assertion-only-in-catch` | every assertion-shaped call sits lexically inside a `catch`, at least one does, and there is no assertion-count guard | if the `try` body completes without throwing, the `catch` never runs and the test passes having asserted nothing |
+| `no-assertion-in-test` | the body contains NO check — call *or* getter chain — carries no assertion guard, discards at least one expression that is not inside a nested (dead) function, and neither throws, `fail()`s, returns a value, nor holds a `catch` | the test executes work and checks nothing, so it cannot fail on a wrong result |
+
+The two are **mutually exclusive by construction** (one requires a catch-assertion, the other refuses any
+assertion and any `catch`), so a given `(unitKey, testName)` yields at most one fact and its identity stays
+unambiguous.
+
+**Absence is judged against a broader vocabulary than the shared matcher, and why — measured.** The shared
+`isAssertionShaped` requires a whole-word `expect`, so it misses a delegating helper such as
+`expectNoCollateral(...)`. Scanning this repo's own tests with `no-assertion-in-test` before that was
+accounted for produced 4 facts, and **all four were exactly that pattern** (correct tests asserting inside a
+helper) — precision 0/4. So this shape judges absence with a shape-LOCAL widening (`isCheckShaped`: any
+callee named `expect*` / `assert*` / `check*` / `verify*` / `ensure*` / `should*`). The widening is local
+because broadening the shared matcher would also move the already-measured sibling shape's recall; and it can
+only move a test from PROVEN to ABSTAIN, so it costs recall and cannot cost soundness. After it, both shapes
+yield **0 facts across this repo's 3365 test-call sites** (467 of 470 files; three fail to parse under the pinned grammar and are excluded fail-closed, by design) — the expected result for a repo whose vacuous
+tests were already fixed (#114).
+
+**A check need not be a call.** Cold review found the call-only version proving a body whose only check was a chai getter chain (`x.should.be.ok;`) — a real false admit against the published claim, since the claim is "checks nothing", not "makes no check-shaped call". Absence is now judged over non-call member chains too.
+
+**Residual limit, stated:** a helper named outside that vocabulary (`hasNoCollateral(...)`) still yields a
+proven fact — sound, since no check-shaped call appears in that body, but imprecise. Pinned by a
+characterization test so a future widening is deliberate and visible rather than silent drift.
+
 ## Acceptance
 
 One falsifiable check per invariant; each MUST fail if its invariant is violated.

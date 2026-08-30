@@ -143,7 +143,7 @@ export interface TestVacuityProposal {
   readonly kind: 'test-vacuity';
   readonly unitKey: string; // the LOCATION-FREE unit lineage (qualifiedPath) holding the test — identity leg
   readonly testName: string; // the test's name string — identity leg (a unit may hold many named vacuous tests)
-  readonly shape: TestVacuityShape; // the proven syntactic property — 'assertion-only-in-catch' today
+  readonly shape: TestVacuityShape; // WHICH proven syntactic property (closed vocabulary, reference/atlas-knowledge.md)
   readonly grounding: FactGrounding; // EXACTLY one entry: anchors the unit (its subtreeHash the freshness leg)
   readonly tier: Tier;
   readonly scope?: string; // KNOW-11a — the AUTHZ/write scope the governed door authorizes against (the unit's own scope)

@@ -118,7 +118,7 @@ export interface ComposedRuntime {
   readonly transitions: TransitionLeg;
   readonly transition: TransitionProducer;
   /** The single-anchor test-vacuity READ leg + reachable PRODUCER (#95 / ADR-0015 D5) — `testVacuities(unit)`
-   *  reads the unit's proven `assertion-only-in-catch` facts (single-anchor, no lineage); `testVacuity()` walks
+   *  reads the unit's proven test-vacuity facts of ANY shape (single-anchor, no lineage); `testVacuity()` walks
    *  the repo's HEAD test units, runs `scanTestVacuity`, and persists every proven fact THROUGH the governed emit
    *  door (KNOW-11 authz + ARCH-9 anchor + the HEAD truth gate — `governed-emit-test-vacuity.ts`). */
   readonly testVacuities: TestVacuityLeg;

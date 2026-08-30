@@ -151,7 +151,7 @@ export interface CliDeps {
   /**
    * The composition root's reachable single-anchor test-vacuity PRODUCER (`ComposedRuntime.testVacuity`, #95) —
    * walks the repo's HEAD test units, runs `scanTestVacuity`, and admits + persists every proven
-   * `assertion-only-in-catch` fact (0-false-proven). Injected on the SAME seam as `transition`/`deriveRelations`
+   * test-vacuity fact of any proven shape (0-false-proven). Injected on the SAME seam as `transition`/`deriveRelations`
    * (a producer that WRITES), for the same reason: the CLI must not stand up a second runtime, or the store it
    * persists into stops being the store `atlas test-vacuities`/`atlas node` reads. ABSENT ⇒ `atlas test-vacuity`
    * fails closed with the same "runtime is not composed yet" guidance.
