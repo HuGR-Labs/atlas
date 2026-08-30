@@ -58,7 +58,7 @@ type SyntaxNode = Parser.SyntaxNode;
  *  `it(` call — the witness span into the content-addressed bytes. */
 export interface TestVacuityFact {
   readonly testName: string;
-  readonly shape: 'assertion-only-in-catch' | 'no-assertion-in-test';
+  readonly shape: 'assertion-only-in-catch' | 'no-assertion-in-test' | 'assertion-never-invoked';
   readonly row: number;
   readonly col: number;
 }
@@ -265,6 +265,81 @@ function insideNestedFunction(node: SyntaxNode, body: SyntaxNode): boolean {
   return false;
 }
 
+/** The vitest/jest matcher vocabulary — FUNCTION-valued matchers. Accessing one without invoking it does
+ *  NOTHING, which is the whole defect. Closed on purpose: a name outside this set ABSTAINS (recall loss,
+ *  the safe direction), because the shape's soundness rests on the matcher being a function. */
+const INVOCABLE_MATCHERS = new Set<string>([
+  'toBe', 'toEqual', 'toStrictEqual', 'toBeNull', 'toBeUndefined', 'toBeDefined', 'toBeTruthy', 'toBeFalsy',
+  'toBeNaN', 'toContain', 'toContainEqual', 'toHaveLength', 'toMatch', 'toMatchObject', 'toMatchSnapshot',
+  'toMatchInlineSnapshot', 'toThrow', 'toThrowError', 'toBeInstanceOf', 'toBeGreaterThan', 'toBeLessThan',
+  'toBeGreaterThanOrEqual', 'toBeLessThanOrEqual', 'toBeCloseTo', 'toHaveProperty', 'toHaveBeenCalled',
+  'toHaveBeenCalledWith', 'toHaveBeenCalledTimes', 'toHaveReturned', 'toSatisfy',
+]);
+
+/**
+ * Is this member chain rooted at the BARE global `expect(` — not `<anything>.expect(`?
+ *
+ * WHY A SUBSTRING TEST IS NOT ENOUGH (cold-review finding). This file's broad-match idiom is safe wherever
+ * over-matching pushes a verdict toward ABSTAIN. Here it pushes toward PROVE, so it must be exact: a
+ * substring test for `expect(` also matches `request(app).expect(200).toBeNull` (supertest),
+ * `this.expect(x).toBe`, `global.expect(...)` — objects whose `expect` METHOD is not jest's global and whose
+ * properties may well have access-time side effects. Proving those would be the very false admit the
+ * chai-getter rail exists to prevent.
+ *
+ * So the chain is walked to its base call and the callee must be the bare `identifier` `expect`. Modifier
+ * links (`.not`, `.resolves`) are traversed on the way down; anything else roots elsewhere and ABSTAINS.
+ */
+function rootedAtGlobalExpect(member: SyntaxNode): boolean {
+  let cur: SyntaxNode | null = member;
+  while (cur !== null) {
+    if (cur.type === 'call_expression') {
+      const callee = cur.child(0);
+      return callee !== null && callee.type === 'identifier' && callee.text === 'expect';
+    }
+    if (cur.type !== 'member_expression') return false;
+    cur = cur.childForFieldName('object');
+  }
+  return false;
+}
+
+/**
+ * PROVE / ABSTAIN the `assertion-never-invoked` shape: the body contains a matcher that is REFERENCED but
+ * never CALLED — `expect(x).toBeNull;` where `expect(x).toBeNull();` was meant. The matcher is a function, so
+ * the statement evaluates it and throws the value away: the assertion never executes and the test passes
+ * silently. Named by the cross-repo census on zod's `number.test.ts` ("every `.toBeNull` matcher is
+ * referenced without being called ... so those assertions never actually execute").
+ *
+ * SOUNDNESS RAILS (violating any is a false-admit):
+ *   · THE CHAIN MUST BE ROOTED AT THE BARE GLOBAL `expect(` (`rootedAtGlobalExpect`, exact — NOT a substring
+ *     test). This is the rail that separates a dead jest matcher from a LIVE getter: `x.should.be.ok;`
+ *     asserts ON ACCESS (chai defines `ok`/`true`/`empty` as getters with side effects), so flagging it would
+ *     be a false admit — the assertion DOES run. Only the bare-global-`expect`-rooted family is
+ *     function-valued and therefore dead when un-invoked. A substring test would also match
+ *     `request(app).expect(200).toBeNull` (supertest) and `this.expect(x).toBe`, whose `expect` is somebody
+ *     else's method with semantics this oracle does not model — cold review caught exactly that.
+ *   · THE TRAILING NAME MUST BE IN THE CLOSED `INVOCABLE_MATCHERS` SET. An unknown trailing name may be a
+ *     property with getter semantics we do not model, so it ABSTAINS. Costs recall, cannot cost soundness.
+ *   · THE MEMBER ACCESS MUST BE THE WHOLE EXPRESSION OF AN `expression_statement`. `const m = expect(x).toBe;`
+ *     binds the matcher rather than dropping it, and `expect(x).toBe(1);` parses as a `call_expression`, not a
+ *     bare member access — neither is this shape.
+ *   · Modifier chains are fine: `expect(x).not.toBeNull;` trails on `toBeNull` and IS the defect.
+ *   · Nesting is NOT excluded here (unlike the discarded-work rail of `no-assertion-in-test`): a matcher
+ *     un-invoked inside a `forEach` callback is a real, executed-context bug, and excluding nesting would
+ *     lose exactly the cases worth catching.
+ */
+function bodyHasUninvokedMatcher(body: SyntaxNode): boolean {
+  let found = false;
+  walk(body, (n) => {
+    if (found || n.type !== 'expression_statement') return;
+    const expr = n.namedChild(0);
+    if (expr === null || expr.type !== 'member_expression') return;
+    if (!rootedAtGlobalExpect(expr)) return; // bare global `expect(` only — see the rail above
+    if (!INVOCABLE_MATCHERS.has(trailingName(expr))) return;
+    found = true;
+  });
+  return found;
+}
+
 /**
  * PROVE / ABSTAIN the `no-assertion-in-test` shape for ONE test body: the body does work and makes no
  * EXPLICIT check.
@@ -347,14 +422,20 @@ export function scanTestVacuity(root: SyntaxNode): TestVacuityFact[] {
     if (n.type !== 'call_expression') return;
     const t = plainTestBody(n);
     if (t === undefined) return;
-    // The two shapes are MUTUALLY EXCLUSIVE by construction: `bodyIsCatchOnly` requires a catch-assertion,
-    // `bodyHasNoAssertion` refuses any assertion AND any catch. So at most one fires per test, and the
-    // (unitKey, testName) identity stays unambiguous — no unit can hold two facts for one test name.
-    const shape = bodyIsCatchOnly(t.body)
-      ? ('assertion-only-in-catch' as const)
-      : bodyHasNoAssertion(t.body)
-        ? ('no-assertion-in-test' as const)
-        : undefined;
+    // EXACTLY ONE shape per test — the (unitKey, testName) identity admits no second fact.
+    //   · `assertion-never-invoked` is tried FIRST, by ORDERED PRECEDENCE not by construction: a body can
+    //     hold BOTH a real catch-assertion and, elsewhere, a matcher that is never invoked. Both predicates
+    //     would then be true, and the un-invoked matcher is the strictly more specific, more actionable
+    //     defect, so it wins. Stated plainly because it is the one pair that is not disjoint on its own.
+    //   · The remaining two ARE disjoint by construction: `bodyIsCatchOnly` requires a catch-assertion,
+    //     `bodyHasNoAssertion` refuses any check AND any catch.
+    const shape = bodyHasUninvokedMatcher(t.body)
+      ? ('assertion-never-invoked' as const)
+      : bodyIsCatchOnly(t.body)
+        ? ('assertion-only-in-catch' as const)
+        : bodyHasNoAssertion(t.body)
+          ? ('no-assertion-in-test' as const)
+          : undefined;
     if (shape === undefined) return;
     facts.push({
       testName: t.name,

@@ -321,3 +321,10 @@ in place (`knowledge/src/test-vacuity-types.ts:37`, the `RelationKind` pattern).
 cross-repo shape census (`harness/probes/adjudicate/xrepo-zod-shape-census.json`) — are a `cv` bump under this
 ratified D5 and need **no new ADR**.
 
+> **Follow-up note (2026-08-30, lead — not part of the ratified text).** The "What this unlocks" list above
+> named three next shapes. What actually happened: `no-assertion-in-test` shipped (#270) and
+> `assertion-never-invoked` shipped as the third; `unasserted-parse-call` turned out to be SUBSUMED by
+> `no-assertion-in-test`, and `commented-out-tests` is half subsumed and half outside the family's
+> `(unitKey, testName)` identity model. The cluster needed three shapes, not four —
+> `harness/probes/adjudicate/test-vacuity-idiom-coverage.json` carries the evidence. The additive-only clause
+> ratified here is what made all three `cv` bumps rather than new ADRs.
