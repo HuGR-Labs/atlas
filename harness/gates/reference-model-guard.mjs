@@ -18,7 +18,7 @@
 // forces the classification to be DECLARED rather than discovered by the next reviewer.
 //
 // ── DECLARED COUNTS (gate-checked; a drift here FAILS this gate) ────────────────────────────────────────
-//   declared-modules: 52 · dead-value-exports: 221 · type-reachable: 6
+//   declared-modules: 52 · dead-value-exports: 215 · type-reachable: 6
 //   These three are read back from THIS file and asserted against the measured tree at the foot of the run
 //   (see "THE HEADER STATES COUNTS, AND THIS CHECKS THEM"). No count is QUOTED anywhere else in this
 //   header — a quoted integer that nothing checks is exactly what rotted here (task #143); this one cannot.
@@ -159,10 +159,18 @@ const BUILTIN_LEDGER = {
   // whole package has no production caller yet (see the README's unreached ledger) — and it becomes live
   // the moment CAMPAIGN-11's write door composes `put`. Justified, not silenced.
   'packages/memory/src/kinds.ts': { values: 4, shipped: null, banner: false },
+  // NEW 2026-08-30 — CAMPAIGN-11 W2. The durable Memory store exists and no product path calls it yet: the
+  // doors that will (`W4` the governed write door, `W6` the read doors) are later work packages in the same
+  // campaign. Declared rather than pre-wired, because wiring a door to clear this gate is the stub the gate
+  // exists to refuse. It becomes shipped code the moment W4 composes it, and this entry goes stale then —
+  // which the STALE leg above will say out loud.
+  'packages/adapter-io/src/memory-store.ts': { values: 2, shipped: null, banner: true },
   'packages/memory/src/logbook.ts': { values: 6, shipped: null, banner: false },
   'packages/memory/src/orient.ts': { values: 10, shipped: null, banner: false },
   'packages/memory/src/portable.ts': { values: 5, shipped: null, banner: false },
-  'packages/memory/src/respawn.ts': { values: 8, shipped: null, banner: false },
+  // `packages/memory/src/respawn.ts` was listed here and is NOT any more: CAMPAIGN-11 W2's durable store
+  // (`adapter-io/src/memory-store.ts`) calls `versioned` and `respawnFromRecord`, so the reference model
+  // became shipped code. Deleted rather than re-counted — that is what this ledger's STALE leg is for.
   'packages/memory/src/rules.ts': { values: 17, shipped: null, banner: false },
 
   // ── @atlas/retrieval — NO LONGER CLOSED, and the ledger is how we found out. ──────────────────────────

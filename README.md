@@ -29,11 +29,12 @@ a hashed structural index (BLAKE3-merkle CAS) resolved by scope, dependency blas
   → BROKEN` as the code changes (the drift oracle is the structural subtree hash, not line ranges).
 - **Nothing dies** — git-native versioning; every fact/memory is re-spawnable from versioned state.
 - **Knowledge ≠ Memory** — Knowledge is shared, project-level, edited/superseded (never blind-append);
-  Memory is per-seat, scoped, decays by non-use. Distinct kinds within one substrate. **Read this one as a
-  library property, not a running one:** `packages/memory` is built and tested, and nothing in the shipped
-  product calls it — see [What is built but not reachable](#what-is-built-but-not-reachable) below. This
-  bullet sat under *What it guarantees* with no such caveat, which made a dead package read as a promise
-  the product keeps.
+  Memory is per-seat, scoped, decays by non-use. Distinct kinds within one substrate. **Read this one as
+  partly running:** the Memory kind now has a durable, travelling store (`.atlas/memory.jsonl`, append-only
+  and content-keyed) and a governed write projection, but **no CLI command or MCP tool exposes it yet** —
+  CAMPAIGN-11 is mid-flight. Until a door ships, no *user* can exercise this bullet. It sat here with no
+  caveat at all while the package was called by nothing, which made a dead library read as a promise the
+  product keeps; the caveat shrinks as the campaign lands and does not disappear early.
 - **Governed write doors** — every write flows through a governed door: `atlas-emit` (grounded facts) or
   `atlas-link` (sameAs edges). Two doors, one bar (ADR-0003 — this line used to say "one governed
   write-door", which stopped being true when `atlas-link` was ratified on 2026-07-21). Reads carry no
@@ -47,8 +48,16 @@ check correspondence, and each package's suite checks the package against itself
 anyone CALLS it. This ledger is that question, and `npm run wiring-guard` fails the build when it and the
 import graph disagree in either direction.
 
-The tree already knew this at module granularity — `reference-model-guard` lists every `packages/memory`
-module as a zero-production-caller reference model, and has for a long time. What was missing is that the
+**`memory` was on this list and is not any more (2026-08-30).** It was the entry this section was written
+for: ~2000 lines, fully tested, and called by nothing, while the *What it guarantees* section above promised
+Knowledge ≠ Memory as if the product exercised it. CAMPAIGN-11 W2 gave it a durable store in the composition
+layer, so the row is deleted because the fact changed — which is the only reason a row here may ever be
+deleted. **Stated precisely, because "reached" is a low bar:** `adapter-io` now imports it at runtime, and no
+CLI command or MCP tool exposes it yet. It is wired, not yet reachable by a user, and the *What it
+guarantees* bullet still says so.
+
+The tree already knew this at module granularity — `reference-model-guard` lists the `packages/memory`
+modules as zero-production-caller reference models, and has for a long time. What was missing is that the
 declaration never rolled up to the package and never reached this page, which claimed the opposite under a
 heading that says *guarantees*. Internal honesty a reader cannot see does not protect the reader.
 
@@ -65,7 +74,6 @@ not that the product uses it, and conflating the two is how a library reads as s
 | `mcp-server` | entry point, same. By design. |
 | `e2e-blackbox` | test suite — it drives the built binary as a subprocess, not as an import. By design. (`e2e` is not listed: it has no `src/` at all, so it is not a node in this graph.) |
 | `contracts` | pure types; every other package imports it `import type`, which is erased. By design. |
-| `memory` | **the finding, not a design choice.** ~2000 lines across 11 source files with 11 test files and a reference contract. No command, no MCP tool, no composition root reaches it: the per-seat Memory kind is a library the *product* never calls. The only reference from any package's `src/` is an `import type` in `packages/genesis/src/seed.ts`, which is erased. `own-source.ts` records the same fact from the other side — *"a per-seat store with no production instance"* — and serves `memory: null` on every pack. **Not "untested at the seam":** `packages/e2e/test/s07-memory-scoping.e2e.test.ts` drives the real runtime across the package boundary and proves five laws (the Memory≠Knowledge partition, per-seat scoping with zero cross-seat leak, explicit-only recall, the capped frecency-ranked Rules slab, and delete-never). Tests are outside this gate's scope by design — it reads `packages/*/src` — so *unreached* here means unreached **by the shipped product**, which is the claim that matters, and it is not the same as unexercised. |
 
 <!-- unreached:end -->
 
