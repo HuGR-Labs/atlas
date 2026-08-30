@@ -18,7 +18,7 @@
 // forces the classification to be DECLARED rather than discovered by the next reviewer.
 //
 // ── DECLARED COUNTS (gate-checked; a drift here FAILS this gate) ────────────────────────────────────────
-//   declared-modules: 52 · dead-value-exports: 206 · type-reachable: 6
+//   declared-modules: 49 · dead-value-exports: 167 · type-reachable: 7
 //   These three are read back from THIS file and asserted against the measured tree at the foot of the run
 //   (see "THE HEADER STATES COUNTS, AND THIS CHECKS THEM"). No count is QUOTED anywhere else in this
 //   header — a quoted integer that nothing checks is exactly what rotted here (task #143); this one cannot.
@@ -161,26 +161,35 @@ const BUILTIN_LEDGER = {
   // (`reference/atlas-memory.md` §Decisions D1). It is dead for the same reason the other three are — the
   // whole package has no production caller yet (see the README's unreached ledger) — and it becomes live
   // the moment CAMPAIGN-11's write door composes `put`. Justified, not silenced.
-  'packages/memory/src/kinds.ts': { values: 4, shipped: null, banner: false },
   // NEW 2026-08-30 — CAMPAIGN-11 W2. The durable Memory store exists and no product path calls it yet: the
   // doors that will (`W4` the governed write door, `W6` the read doors) are later work packages in the same
   // campaign. Declared rather than pre-wired, because wiring a door to clear this gate is the stub the gate
   // exists to refuse. It becomes shipped code the moment W4 composes it, and this entry goes stale then —
   // which the STALE leg above will say out loud.
-  'packages/adapter-io/src/memory-store.ts': { values: 2, shipped: null, banner: true },
-  // NEW 2026-08-30 — CAMPAIGN-11 W7a. The durable Awareness store composes the real root + calls
-  // @atlas/memory's `rollup` / `makeAwarenessMemo`, and no product path calls IT yet: W8 is the later work
-  // package that wires it into the wave transport. Declared rather than pre-wired, the same
-  // `memory-store.ts` discipline above. It becomes shipped code the moment W8 composes it, and this entry
-  // goes stale then — which the STALE leg above will say out loud.
+  // `types: true` since W4 — `memory-emit.ts` imports its `DurableMemory` type, so the declarations are a
+  // LIVE seam even while the values have no caller. Flagged so nobody deletes it as dead.
+  'packages/adapter-io/src/memory-store.ts': { values: 2, shipped: null, banner: true, types: true },
+  // NEW 2026-08-30 — CAMPAIGN-11 W3, same standing as the memory store above: the durable Orientation log
+  // exists and the slab composition (W7) and transport (W8) that will call it are later work packages.
+  'packages/adapter-io/src/orientation-store.ts': { values: 2, shipped: null, banner: true },
+  // CAMPAIGN-11 W4 deleted several `packages/memory/src/*` entries in one go: the governed write door
+  // composes `memoryKindOf`/`validate` (template.ts), `put` (kinds.ts), `capGate` (rules.ts), the logbook
+  // guard and the scanner seam (portable.ts), so those modules acquired the production callers they had
+  // never had. Deleted rather than re-counted — that is what this ledger's STALE leg is for, and it is the
+  // ledger measuring a campaign landing rather than a bookkeeping chore.
+  // NEW — the door itself, zero-caller until W8 exposes it over the CLI and MCP.
+  'packages/adapter-io/src/memory-emit.ts': { values: 1, shipped: null, banner: true },
+  // `packages/adapter-io/src/scanner.ts` was declared here by W5 and is NOT any more, after ONE line: the
+  // write door imports `NO_SCANNER_NAME` to tell an absent scanner from a hit, which makes the adapter
+  // shipped code. The entry lived for the length of an integration.
+  // `packages/memory/src/orient.ts` was listed here and is NOT any more: CAMPAIGN-11 W3's durable
+  // Orientation log (`adapter-io/src/orientation-store.ts`) calls `orient` and `orientEvent`, so the
+  // reference model became shipped code. Deleted rather than re-counted.
+
   'packages/adapter-io/src/awareness-store.ts': { values: 2, shipped: null, banner: true },
-  'packages/memory/src/logbook.ts': { values: 6, shipped: null, banner: false },
-  'packages/memory/src/orient.ts': { values: 10, shipped: null, banner: false },
-  'packages/memory/src/portable.ts': { values: 5, shipped: null, banner: false },
   // `packages/memory/src/respawn.ts` was listed here and is NOT any more: CAMPAIGN-11 W2's durable store
   // (`adapter-io/src/memory-store.ts`) calls `versioned` and `respawnFromRecord`, so the reference model
   // became shipped code. Deleted rather than re-counted — that is what this ledger's STALE leg is for.
-  'packages/memory/src/rules.ts': { values: 17, shipped: null, banner: false },
 
   // ── @atlas/retrieval — NO LONGER CLOSED, and the ledger is how we found out. ──────────────────────────
   //    It was closed for the package's whole life: every cross-package edge into it was an `import type`,

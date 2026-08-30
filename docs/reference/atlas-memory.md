@@ -188,6 +188,26 @@ a second home for the same clause is a failure this repository has already made 
   invent a seeding convention before the persona that curates one does.
   - *Rejected: deriving the five facets from conventional Atlas scopes.* It would make five scope names
     load-bearing and duplicate a seeder that already ships.
+  - **AMENDED 2026-08-30, same day, because the premise was wrong.** D2 said the ring would *wire the
+    seeder that exists*. Building W7a proved that is not available: `seedAwareness` assembles the
+    `Awareness` facets DIRECTLY with its own local helpers and never calls `atlasRoot` / `rollup`, so it
+    bypasses the memoized, grounded, drift-checked rollup that MEM-11 and MEM-12 require of an INJECTED
+    slab; and its `SeedDeps.locateConventions` seam is wired nowhere in the tree. It is a genesis-time
+    bootstrap that produces a slab once, not a ring-time assembler that can produce one per turn.
+    So the ring reads the SAME SOURCES — the ratified `T0` manifest, `CONVENTIONS.md@sha` — through the
+    rollup machinery, and does not call the seeder. The decision's INTENT stands unchanged (do not invent a
+    seeding convention; take what already exists); its mechanism was wrong and is corrected here rather
+    than left as a contract the code quietly disagrees with.
+  - `CONVENTIONS.md` now exists at the repository root, so `taste` seeds from real content instead of
+    rendering `UN-SEEDED` for want of a file. That was the second half of D2 and it was a missing file, not
+    a missing design.
+  - **MEASURED on this repository, 2026-08-30**, by running the assembled slab rather than reasoning about
+    it: `taste` = **seeded** (`taste: CONVENTIONS.md@sha`); `mission`, `terrain`, `ontology` and
+    **`constitution`** = labeled `UN-SEEDED`. Constitution reads UN-SEEDED here not because the source is
+    wrong but because this working tree carries **no persisted `.atlas/projection.json`**, so there are no
+    ratified `T0` rows to roll up. That is the specified degradation working, and it is recorded because
+    "constitution comes from the ratified T0 manifest" is true of the MECHANISM and was not yet true of
+    this checkout — a distinction the earlier wording blurred.
 
 - **D3 — the `MemoryKind` is DERIVED from the entry's shape, never declared (RATIFIED 2026-08-30, by the
   orchestrator under the same delegation).** `validate(kind, entry)` takes the type as a parameter, so
