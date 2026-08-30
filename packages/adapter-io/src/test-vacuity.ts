@@ -58,7 +58,7 @@ type SyntaxNode = Parser.SyntaxNode;
  *  `it(` call — the witness span into the content-addressed bytes. */
 export interface TestVacuityFact {
   readonly testName: string;
-  readonly shape: 'assertion-only-in-catch';
+  readonly shape: 'assertion-only-in-catch' | 'no-assertion-in-test';
   readonly row: number;
   readonly col: number;
 }
@@ -213,6 +213,82 @@ function bodyIsCatchOnly(body: SyntaxNode): boolean {
 }
 
 /**
+ * SHAPE-LOCAL widening of `isAssertionShaped`, used ONLY by `no-assertion-in-test`.
+ *
+ * WHY IT EXISTS, measured not assumed. The shared matcher requires a WHOLE-WORD `expect`, so a delegating
+ * helper named `expectNoCollateral(...)` does not match it. Scanning this repo's own tests with the shape
+ * WITHOUT this widening produced 4 hits, and ALL FOUR were that pattern
+ * (`packages/knowledge/test/sameas-pairkey-forgery.test.ts`) — correct tests that assert inside a helper.
+ * Precision on real code was 0/4. A shape whose only real-world hits are noise should not mint `proven`
+ * facts, so absence-of-assertion is judged against a BROADER vocabulary of check-shaped callees.
+ *
+ * It is deliberately LOCAL: widening the shared matcher would also move the already-measured sibling
+ * shape's recall, which is a separate change needing its own re-measurement. Widening here can only move
+ * this shape from PROVEN to ABSTAIN — the safe direction — so it cannot introduce a false admit.
+ */
+function isCheckShaped(callExpr: SyntaxNode): boolean {
+  if (isAssertionShaped(callExpr)) return true;
+  const callee = callExpr.child(0);
+  if (callee === null) return false;
+  const name = trailingName(callee);
+  return /^(expect|assert|check|verify|ensure|should)/i.test(name);
+}
+
+/**
+ * PROVE / ABSTAIN the `no-assertion-in-test` shape for ONE test body: the body DOES work and checks NOTHING.
+ *
+ * WHAT THE FACT IS. Syntactic, exactly like its sibling: "test T's body contains NO assertion-shaped call,
+ * carries no assertion guard, and discards at least one expression". It is NOT a claim that T is vacuous at
+ * runtime — a body whose only statement is `checkValid(x)` (a helper that asserts internally) matches this
+ * SHAPE while being a perfectly good test. Naming the shape, not the bug, is what keeps the family
+ * 0-false-admit; the residual is PRECISION (a consumer may judge a flagged test fine), never soundness.
+ *
+ * SOUNDNESS RAILS (violating any is a false-admit):
+ *   · REUSES the deliberately-BROAD `isAssertionShaped`. Over-detection moves a test from PROVEN to ABSTAIN
+ *     — the safe direction.
+ *   · Judged with `isCheckShaped`, a SHAPE-LOCAL widening (see its own header): the shared matcher needs a
+ *     whole-word `expect`, and measuring this shape against this repo's tests without the widening produced
+ *     4 hits that were ALL delegating helpers named `expectNoCollateral` — precision 0/4. Widening here can
+ *     only move PROVEN to ABSTAIN, never the reverse, so it costs recall and cannot cost soundness.
+ *   · RESIDUAL LIMIT, stated: a helper named outside that vocabulary (`hasNoCollateral(...)`) still yields a
+ *     proven fact. Sound — no check-shaped call appears in THIS body — but imprecise. Pinned by a
+ *     characterization test so it stays visible rather than becoming folklore.
+ *   · ANY assertion-shaped call anywhere in the body ⇒ ABSTAIN. There is no "outside a catch" carve-out
+ *     here: this shape is the ABSENCE of assertions, so one anywhere refutes it.
+ *   · An `expect.assertions(n)` / `expect.hasAssertions()` guard ⇒ ABSTAIN. The guard IS a check, and a
+ *     guarded body with no assertion fails at runtime rather than passing vacuously.
+ *   · At least one DISCARDED expression statement is required ⇒ otherwise ABSTAIN. An empty body, or a body
+ *     of declarations only, is a different smell (an empty/setup-only test), not this one. This is also the
+ *     discriminator the observed claims share (`xrepo-zod-shape-census.tsv`: "bare discarded expression",
+ *     "absence of any expect/toEqual call", "no expect call on any accessed getter").
+ *   · ANY `throw_statement` or `fail()`-shaped call (`isFailCall`) ⇒ ABSTAIN. A body that throws IS checking something.
+ *   · ANY `return_statement` carrying a value ⇒ ABSTAIN. A returned promise is an implicit check: the runner
+ *     fails the test if it rejects. Missing this would be a false-admit on the whole async-return idiom.
+ *   · A `catch_clause` anywhere ⇒ ABSTAIN. That body belongs to the sibling shape's territory; leaving both
+ *     shapes able to fire on one test would make the (unitKey, testName) identity ambiguous.
+ */
+function bodyHasNoAssertion(body: SyntaxNode): boolean {
+  let anyAssertion = false;
+  let hasGuard = false;
+  let discarded = 0;
+  let checks = false; // a throw / fail() / valued return / catch — the body IS checking something
+  walk(body, (n) => {
+    if (n.type === 'catch_clause' || n.type === 'throw_statement') checks = true;
+    if (n.type === 'return_statement' && n.namedChildCount > 0) checks = true;
+    if (n.type === 'expression_statement') discarded += 1;
+    if (n.type !== 'call_expression') return;
+    if (isAssertionGuard(n)) {
+      hasGuard = true;
+      return;
+    }
+    if (isCheckShaped(n)) anyAssertion = true;
+    if (isFailCall(n)) checks = true;
+  });
+  if (anyAssertion || hasGuard || checks) return false;
+  return discarded > 0;
+}
+
+/**
  * Scan a parsed test-unit's AST `root` and return one `TestVacuityFact` per test PROVEN to hold the
  * assertion-only-in-catch shape. PURE + TOTAL. Abstentions are simply absent from the result. Pass the root
  * of a successfully-parsed TS doc; a doc the caller could not parse yields no facts (fail-closed at the leg).
@@ -223,10 +299,18 @@ export function scanTestVacuity(root: SyntaxNode): TestVacuityFact[] {
     if (n.type !== 'call_expression') return;
     const t = plainTestBody(n);
     if (t === undefined) return;
-    if (!bodyIsCatchOnly(t.body)) return;
+    // The two shapes are MUTUALLY EXCLUSIVE by construction: `bodyIsCatchOnly` requires a catch-assertion,
+    // `bodyHasNoAssertion` refuses any assertion AND any catch. So at most one fires per test, and the
+    // (unitKey, testName) identity stays unambiguous — no unit can hold two facts for one test name.
+    const shape = bodyIsCatchOnly(t.body)
+      ? ('assertion-only-in-catch' as const)
+      : bodyHasNoAssertion(t.body)
+        ? ('no-assertion-in-test' as const)
+        : undefined;
+    if (shape === undefined) return;
     facts.push({
       testName: t.name,
-      shape: 'assertion-only-in-catch',
+      shape,
       row: n.startPosition.row,
       col: n.startPosition.column,
     });

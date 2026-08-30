@@ -21,7 +21,7 @@ import type { CliVerdict } from './render.js';
 
 /** The invariant line every produce outcome carries. */
 const INVARIANT =
-  '#95 D5: a test-vacuity is a single-anchor PROVEN AST-shape fact — named test T in unit U has EVERY assertion-shaped call inside a catch clause and no assertion-count guard (shape assertion-only-in-catch), re-derivable at HEAD by `scanTestVacuity`, sealed `proven` ONLY when the injected oracle re-proves it, admitted THROUGH the governed emit door (KNOW-11 authz + ARCH-9 anchor); the PROVEN-only family has no advisory form, so an abstaining oracle yields NO fact (0-false-proven)';
+  '#95 D5: a test-vacuity is a single-anchor PROVEN AST-shape fact — named test T in unit U holds one shape of the closed, additive-only `TestVacuityShape` vocabulary (reference/atlas-knowledge.md): `assertion-only-in-catch` (every assertion-shaped call inside a catch clause, no assertion-count guard) or `no-assertion-in-test` (no assertion-shaped call at all in a body that discards work and neither throws, fails, returns a value nor catches). Each is re-derivable at HEAD by `scanTestVacuity`, sealed `proven` ONLY when the injected oracle re-proves it, admitted THROUGH the governed emit door (KNOW-11 authz + ARCH-9 anchor); the PROVEN-only family has no advisory form, so an abstaining oracle yields NO fact (0-false-proven)';
 
 /** Project one finished produce-and-persist pass to the CLI's process outcome. PURE — a function of the
  *  `TestVacuityRun[]` alone, so the same outcome renders byte-identically. The `admitted N` count is the number
@@ -37,14 +37,14 @@ export function testVacuityVerdict(runs: readonly TestVacuityRun[]): CliVerdict 
         'status: rejected\n' +
         `next: admitted 0 proven test-vacuity facts — ${
           refused.length === 0
-            ? 'no test in the scanned HEAD units has the assertion-only-in-catch shape (nothing to admit, abstain-by-design)'
+            ? 'no test in the scanned HEAD units holds a proven vacuity shape (nothing to admit, abstain-by-design)'
             : `the GOVERNED emit door REFUSED every proven fact: ${refused[0]?.reason ?? 'unknown'} — nothing was written. Check that ATLAS_ACTOR is a member of the unit's scope (KNOW-11 authz) and holds a ratify token`
         }\n` +
         `invariant: ${INVARIANT}\n`,
     };
   }
   const lines = committed
-    .map((r) => `test-vacuity: ${r.testName ?? '?'} @ ${r.unitKey} (assertion-only-in-catch, seal: proven) — ${r.id ?? ''}`)
+    .map((r) => `test-vacuity: ${r.testName ?? '?'} @ ${r.unitKey} (${r.shape ?? 'shape?'}, seal: proven) — ${r.id ?? ''}`)
     .join('\n');
   return {
     exitCode: 0,

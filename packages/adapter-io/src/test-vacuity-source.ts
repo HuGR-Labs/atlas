@@ -54,6 +54,8 @@ export interface TestVacuityRun {
   readonly admitted: boolean;
   readonly unitKey: string;
   readonly testName?: string; // present once a proven fact was proposed (absent on an unparseable unit)
+  readonly shape?: TestVacuityShape; // WHICH vacuity shape was proven — carried to the render so no surface
+  //                                    states a shape the fact does not hold (the wp-surface-truth class)
   readonly id?: string; // the durable content address the door returned, present iff persisted
   readonly persisted?: boolean; // whether the governed door COMMITTED (false ⇒ authz/anchor/ratify/ground refusal)
   readonly reason?: string; // the honest why-not / the governed door's refusal text, present iff NOT admitted-and-persisted
@@ -112,7 +114,7 @@ export function createTestVacuityProducer(units: () => readonly TestUnit[], emit
           // `ObviousnessScore.by` admits only 'harness-predicate'), exactly as a transition carries none.
           const node = trySoundTestVacuity(proposal, verify);
           if (node === undefined) {
-            runs.push({ admitted: false, unitKey: u.unitKey, testName: f.testName, reason: 'the injected sound oracle did not re-prove the assertion-only-in-catch shape at HEAD' });
+            runs.push({ admitted: false, unitKey: u.unitKey, testName: f.testName, shape: f.shape, reason: `the injected sound oracle did not re-prove the '${f.shape}' shape at HEAD` });
             continue;
           }
           // ROUTE THROUGH THE GOVERNED DOOR — the HEAD truth gate + KNOW-11 authz + ARCH-9 anchor + produced-only
@@ -122,6 +124,7 @@ export function createTestVacuityProducer(units: () => readonly TestUnit[], emit
             admitted: true,
             unitKey: u.unitKey,
             testName: f.testName,
+            shape: f.shape, // carried so the render names the shape PROVEN, never a hardcoded one
             persisted: out.emitted,
             ...(out.emitted ? { id: String(out.id) } : { reason: out.rejected ?? 'the governed door refused the write' }),
           });
@@ -240,9 +243,9 @@ const READ_INVARIANT =
 /** The one actionable sentence, derived from the result's own numbers. */
 function readNextLine(unit: string, facts: readonly GroundedTestVacuity[]): string {
   if (facts.length === 0) {
-    return `no grounded test-vacuity fact on unit '${unit}' — a fact is produced by \`atlas test-vacuity <path>\` when a test's assertions all sit inside a catch clause (assertion-only-in-catch); check the unit key spelling`;
+    return `no grounded test-vacuity fact on unit '${unit}' — a fact is produced by \`atlas test-vacuity <path>\` when a test holds one of the proven vacuity shapes (assertions all inside a catch clause, or no assertion at all in a body that discards work); check the unit key spelling`;
   }
-  return `${facts.length} proven test-vacuity fact(s) on unit '${unit}' — each a named test whose assertions all sit inside a catch clause (assertion-only-in-catch), sealed proven`;
+  return `${facts.length} proven test-vacuity fact(s) on unit '${unit}' — each a named test proven to hold one of the vacuity shapes, sealed proven`;
 }
 
 /**
