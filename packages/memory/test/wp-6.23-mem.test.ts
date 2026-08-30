@@ -109,7 +109,7 @@ describe('SCN-MEM-1b-1 — a repo reader reads every seat Memory bytes (by desig
 describe('SCN-MEM-2a-1 — a Memory entry routed into Knowledge is rejected', () => {
   it('rejects put(knowledge, <Memory entry>) — partition(entry) must equal the claimed kind', () => {
     expect(partition(pmA)).toBe('memory');
-    expect(() => put('knowledge', pmA)).toThrow();
+    expect(() => put('knowledge', pmA, 'alice')).toThrow();
   });
 });
 
@@ -118,7 +118,7 @@ describe('SCN-MEM-2a-1 — a Memory entry routed into Knowledge is rejected', ()
 describe('SCN-MEM-2b-1 — a Knowledge fact routed into Memory is rejected', () => {
   it('rejects put(memory, <Knowledge fact>) — no Knowledge fact is stored as Memory', () => {
     expect(partition(knowledgeFact)).toBe('knowledge');
-    expect(() => put('memory', knowledgeFact)).toThrow();
+    expect(() => put('memory', knowledgeFact, 'alice')).toThrow();
   });
 });
 

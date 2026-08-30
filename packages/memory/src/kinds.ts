@@ -5,7 +5,8 @@
 // `AtlasKind` (a STRUCTURAL discriminant, no hashing) and `put` rejects any write whose claimed kind disagrees.
 
 import type { InjectionKind } from '@atlas/contracts';
-import type { MemoryEntry, MemoryRecord } from './types.js';
+import type { MemberId, MemoryEntry, MemoryRecord } from './types.js';
+import { memoryKindOf } from './template.js';
 
 // ── frozen kind-partition surface, co-located here (was ref/kinds.ts) ──────────────────────────────────────
 
@@ -35,8 +36,15 @@ export interface KindsApi {
    *
    *  [PINNED — updated-store return] no post-write store projection is frozen; the minimal honest shape
    *  the reference implies is the `MemoryRecord` actually written (owner-scoped, kind-partitioned) — the
-   *  knowledge partition is out of this package's surface. */
-  put(kind: AtlasKind, entry: MemoryEntry): MemoryRecord;
+   *  knowledge partition is out of this package's surface.
+   *
+   *  [AMENDED 2026-08-30 — the OWNER-DEFINE park is CLOSED] `owner` is now an argument. The signature was
+   *  `put(kind, entry)` and the matched-partition branch THREW, because a `MemoryRecord` needs an `owner`
+   *  and there was nowhere honest to get one; fabricating it was correctly refused. Ratified in
+   *  `reference/atlas-memory.md` §Decisions D1: the owner is the composition root's already-resolved
+   *  `actor`. This package does not resolve it and does not interpret it — it RECEIVES it, which is why
+   *  the parameter is here and not an import. */
+  put(kind: AtlasKind, entry: MemoryEntry, owner: MemberId): MemoryRecord;
 
   /** The partition an entry belongs to; the reference asserts `partition(entry) == entry.kind` for every
    *  write (0 conflation — MEM-2). (method-tags-mem:32) */
@@ -83,13 +91,31 @@ export function partition(entry: MemoryEntry): AtlasKind {
  * goldens are rejections), so rather than fabricate an `owner` the matched write projection is fail-closed
  * — NOT invented. When the owner-source is ratified, the matched branch materializes the record.
  */
-export function put(kind: AtlasKind, entry: MemoryEntry): MemoryRecord {
+/**
+ * Raised when a write carries no owner. Fail-closed on purpose: the composition root resolves `actor` as
+ * `ATLAS_ACTOR ?? gitUserEmail(repo) ?? ''`, so an EMPTY string is a reachable value, and an empty owner
+ * would mint a record that `injectFor` hands to every caller whose actor is also empty. An unowned memory
+ * is not a memory — it is a leak with a scoping key that matches by accident.
+ */
+export class UnownedWriteError extends Error {
+  constructor() {
+    super(
+      'MEM-1 put: the write carries no owner (empty `MemberId`) — rejected. Memory is scoped BY owner, so ' +
+        'an unowned record would be injected to every caller resolving the same empty actor.',
+    );
+    this.name = 'UnownedWriteError';
+  }
+}
+
+export function put(kind: AtlasKind, entry: MemoryEntry, owner: MemberId): MemoryRecord {
   const actual = partition(entry);
   if (actual !== kind) throw new KindConflationError(kind, actual);
-  throw new Error(
-    'MEM-2 put: matched-partition write projection is OWNER-DEFINE-parked (no `owner` input to `put`; ' +
-      'oracle-pin-map). Not invented.',
-  );
+  // BOTH discriminants are DERIVED here and neither is announced by the payload: `partition` decides the
+  // Memory-vs-Knowledge axis, `memoryKindOf` decides which of the four templates judges the write. It
+  // throws `UndeterminedKindError` on no match or a tie — never a guessed type.
+  const memoryKind = memoryKindOf(entry);
+  if (owner === '') throw new UnownedWriteError();
+  return { owner, kind: memoryKind, entry };
 }
 
 // differential-vs-oracle (compile-time): the free functions conform EXACTLY to the FROZEN `KindsApi`.
