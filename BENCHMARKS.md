@@ -1,9 +1,26 @@
-# Atlas — measured results
+# Measured results — the Genesis fact pipeline
 
 Every number in this file links to the committed artifact that derives it. A figure whose
 derivation you cannot re-open does not belong here. Method: [`docs/design/95-benchmark-methodology.md`](docs/design/95-benchmark-methodology.md).
 
-Atlas ships knowledge under two seals, and they are measured differently:
+## What is measured here, and what is not
+
+**Scope: the Genesis protocol and the governed doors it drives** — not Atlas as a whole.
+Genesis (`packages/genesis`) is Atlas's Layer-8 **bootstrap**: it seeds a knowledge graph onto an
+existing repo — deterministic skeleton, one rationed LLM entry point, then a hand-off. Everything
+below measures **how a fact gets in and whether it stays true**: mining and proposing (Genesis),
+proving and admitting (`admit-harness` / `verify-fact` / `verify-count`, Genesis), the governed
+emit doors and re-proof (`packages/adapter-io`), and the dependency projection
+(`derive-relations`, `packages/cli`).
+
+**Not measured here:** retrieval quality, the versioned store and its travel-by-reproof, the
+governance ring, the MCP and CLI surfaces, and the authoring planners. Those are Atlas the system;
+this page is about the trustworthiness of what Genesis puts into it. Do not read these numbers as
+a score for Atlas as a product.
+
+## The two seals
+
+Facts enter under one of two seals, and they are measured differently:
 
 | seal | what it means | how it is measured |
 | --- | --- | --- |
