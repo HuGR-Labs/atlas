@@ -1,5 +1,15 @@
 # Work Packages — CAMPAIGN-10 (state S4) · the authoring surface
 
+> **STATUS: ALL 16 WPs BUILT — campaign closed** (audited 2026-08-29 against `master @ 92e9fa3`; the
+> audit checked each WP's own acceptance predicate against shipped code, not against this card).
+> The cards below are the historical freeze and are **stale as a plan**: the seam ownership and DAG head
+> they carry were superseded by [`../../design/campaign-10-recut.md`](../../design/campaign-10-recut.md)
+> (itself now closed), and the campaign shipped under the re-cut. Read this file as a record of what was
+> specified, never as a list of work outstanding.
+>
+> Shipped: A1.{TOOLS,ADAPTER,CLI} · A2-a.{TOOLS,CLI,E2E} · A2-b.{TOOLS,ADAPTER} · A3.{ADAPTER,TOOLS} ·
+> A4.{TOOLS,ADAPTER,CLI} · A5.{TOOLS,MCP,E2E}.
+
 > The authoring surface: **planner doors** over the built ring. One **WP-card** per (epic × module),
 > conforming to [`method/wp-template.md`](../../method/wp-template.md). Every substantive field is a
 > `ptr+digest` (the digest is tooling-filled at freeze — the pointer carries a `# ptr+digest` marker, no

@@ -1,5 +1,31 @@
 # CAMPAIGN-10 re-cut — the authoring plan, corrected against the ARCH constitution
 
+> **STATUS: CLOSED — the campaign is BUILT (audited 2026-08-29 against `master @ 92e9fa3`).**
+> All 16 WPs are shipped and every "OPEN" row in the findings ledger below is closed in code.
+> This document is kept as the historical re-cut record; **its ledger verdicts and correction #7 are
+> stale and must not be read as current state.** The audited verdicts are:
+>
+> | ledger row | audited verdict | evidence |
+> | --- | --- | --- |
+> | lucy-1 / lucy-2 | CLOSED | union counted derivedly, no literal count — `surface-conformance-req-mcp-1e.test.ts` |
+> | bobby-1 | CLOSED | port declared `tools/src/anchors.ts:50`, implemented `adapter-io/src/grounding-computer.ts:178` |
+> | bobby-2 | CLOSED | every planner leg bound — `adapter-io/src/compose.ts:27,190-476` |
+> | billy-1 | CLOSED | structural advertised≡invocable test — `mcp-server/test/surface-conformance-req-mcp-1e.test.ts:97-138` |
+> | dogfood-5 (AUTH-12) | CLOSED | structured shape gate — `adapter-io/src/governed-emit-gates.ts:114-152` |
+> | F4 (AUTH-14) | CLOSED | `tools/src/types.ts:116-121` (`EmitOut.nodeKey`), populated `adapter-io/src/governed-emit.ts:278` |
+> | F5 (CLI-6) | CLOSED | `cli/src/render.ts:317-335` renders all three `InitOut` fields |
+> | no-help (CLI-5) | CLOSED | `cli/src/cli.ts:231` — `help` / `--help` / `-h`, intercepted before `parse()` |
+> | A5-stale-4 | CLOSED | swept with correction #5/#6 |
+> | arch-#8 | still out of scope | deferred AUTHORITY model (ARCH-9/11/12) |
+>
+> **Correction #7 is factually stale:** it claims EPIC-A5 is entirely unbuilt, that `author.ts` is still
+> present, and that `READ_SURFACE` has no export site. All three are false at `92e9fa3` — `READ_SURFACE`
+> is exported at `tools/src/handler.ts:78`, EPIC-A5 shipped (TOOLS/MCP/E2E), and `author.ts` became
+> `adversarial-fixtures.ts` in `634e6ae`.
+>
+> **Remaining, explicitly NOT campaign work:** re-point the ~28 happy-path `adversarial-fixtures.ts`
+> consumers onto the product `draft` door (hygiene follow-up), and `arch-#8` (deferred AUTHORITY model).
+
 > **What this is.** The 16-WP CAMPAIGN-10 slice in `requirements/work-packages/wp-campaign-10.md` was frozen
 > at `master @ 000b6ac`, *before* ADR-0006 introduced the ARCH constitution (`ARCH-1..12`,
 > `reference/atlas-architecture.md`) and its `layer-guard` gate. The constitution invalidated the plan's seam
