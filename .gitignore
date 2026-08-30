@@ -41,6 +41,11 @@ dist/
 # merge can only union or duplicate whole lines — never splice two records — and a duplicate is deduped by
 # content id on the fold. There are no numbered generations to drag in, because nothing is ever replaced.
 !.atlas/memory.jsonl
+# `orientation.jsonl` — the derived-channel event log the Orientation slab folds. Admitted for a REQUIREMENT,
+# not a convenience: MEM-6 says the slab is byte-identical across all members, members work in different
+# clones, so a log that stayed local would fold to a different Orientation per machine and the invariant
+# would be false by construction. Same append-only content-keyed form, same safe line merge.
+!.atlas/orientation.jsonl
 # …and the admin-owned policy, as before: the ratified config the doors READ, reviewable in the same place
 # as the code.
 !.atlas/policy.json

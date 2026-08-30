@@ -18,7 +18,7 @@
 // forces the classification to be DECLARED rather than discovered by the next reviewer.
 //
 // ── DECLARED COUNTS (gate-checked; a drift here FAILS this gate) ────────────────────────────────────────
-//   declared-modules: 52 · dead-value-exports: 215 · type-reachable: 6
+//   declared-modules: 52 · dead-value-exports: 207 · type-reachable: 6
 //   These three are read back from THIS file and asserted against the measured tree at the foot of the run
 //   (see "THE HEADER STATES COUNTS, AND THIS CHECKS THEM"). No count is QUOTED anywhere else in this
 //   header — a quoted integer that nothing checks is exactly what rotted here (task #143); this one cannot.
@@ -165,8 +165,13 @@ const BUILTIN_LEDGER = {
   // exists to refuse. It becomes shipped code the moment W4 composes it, and this entry goes stale then —
   // which the STALE leg above will say out loud.
   'packages/adapter-io/src/memory-store.ts': { values: 2, shipped: null, banner: true },
+  // NEW 2026-08-30 — CAMPAIGN-11 W3, same standing as the memory store above: the durable Orientation log
+  // exists and the slab composition (W7) and transport (W8) that will call it are later work packages.
+  'packages/adapter-io/src/orientation-store.ts': { values: 2, shipped: null, banner: true },
   'packages/memory/src/logbook.ts': { values: 6, shipped: null, banner: false },
-  'packages/memory/src/orient.ts': { values: 10, shipped: null, banner: false },
+  // `packages/memory/src/orient.ts` was listed here and is NOT any more: CAMPAIGN-11 W3's durable
+  // Orientation log (`adapter-io/src/orientation-store.ts`) calls `orient` and `orientEvent`, so the
+  // reference model became shipped code. Deleted rather than re-counted.
   'packages/memory/src/portable.ts': { values: 5, shipped: null, banner: false },
   // `packages/memory/src/respawn.ts` was listed here and is NOT any more: CAMPAIGN-11 W2's durable store
   // (`adapter-io/src/memory-store.ts`) calls `versioned` and `respawnFromRecord`, so the reference model
