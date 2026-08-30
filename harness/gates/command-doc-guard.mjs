@@ -14,6 +14,20 @@
 //                             A page for a deleted command is not harmless: it is a documented door that
 //                             does not open, which is how a docs tree accumulates lies about a surface
 //                             that moved. Both legs, or the ledger only ever grows.
+//   (3) README TABLE        — the command table in README.md, delimited by the `command-table` markers,
+//                             must name EXACTLY `COMMANDS`, both ways. This leg exists because the README
+//                             CLAIMED this gate protected that table while the gate did not read the file
+//                             at all: the table listed ten commands against a shipped surface of
+//                             twenty-three, and every check was green. A sentence asserting that a gate
+//                             guards something is worth less than nothing when it is false — it stops the
+//                             reader from checking. The table is the first thing a stranger reads, so a
+//                             stale one misdescribes the product at its widest point of contact.
+//
+// The README region is delimited by `<!-- command-table:begin -->` / `<!-- command-table:end -->` rather
+// than sniffed out of the prose. A heuristic that scans the whole file for backticked `atlas <word>` would
+// silently widen or narrow as the prose moves around it, and a check whose scope drifts is the failure mode
+// this gate was written against. The markers are explicit, and their ABSENCE is a hard failure — never a
+// zero-row region that passes vacuously.
 //
 // ── WHAT IT DELIBERATELY DOES NOT CHECK ──────────────────────────────────────────────────────────────
 // The CONTENT of a page. No word count, no required heading, no "must show an example". Existence and
@@ -52,9 +66,16 @@ const ROOT = process.env.COMMAND_DOC_GUARD_ROOT ?? join(dirname(fileURLToPath(im
 const MAP_REL = join('packages', 'cli', 'src', 'map.ts');
 /** One page per command lives here. Its PATH is a convention this gate defines; nothing else reads it. */
 const DOCS_REL = join('docs', 'reference', 'commands');
+/** The front door. Its command table is the first surface description a stranger reads. */
+const README_REL = 'README.md';
 
 const MAP = join(ROOT, MAP_REL);
 const DOCS = join(ROOT, DOCS_REL);
+const README = join(ROOT, README_REL);
+
+/** The delimiters of the checked region in the README. Explicit, so the gate's scope cannot drift with the prose. */
+const TABLE_BEGIN = '<!-- command-table:begin -->';
+const TABLE_END = '<!-- command-table:end -->';
 
 /** The exported identifier that enumerates the shipped surface. */
 const ORACLE = 'COMMANDS';
@@ -99,6 +120,46 @@ function extractCommands(text) {
   return { names };
 }
 
+/**
+ * Extract the command names the README's delimited table claims exist.
+ *
+ * A row is counted only when its FIRST cell opens with a backticked `atlas <name>` — the shape every row of
+ * that table already has. Anything else inside the region (a header row, a separator, prose) contributes
+ * nothing, so the region may carry the table and nothing but the table without the gate becoming a linter.
+ *
+ * Fail-closed exactly like `extractCommands`: a missing file, a missing marker, markers in the wrong order,
+ * and an EMPTY region are each a named failure. A region that yields zero rows must never read as "the
+ * table agrees with a surface of zero commands".
+ */
+function extractReadmeCommands(text) {
+  const b = text.indexOf(TABLE_BEGIN);
+  const e = text.indexOf(TABLE_END);
+  if (b === -1 || e === -1) {
+    return { broken: `${README_REL} is missing the ${b === -1 ? TABLE_BEGIN : TABLE_END} marker. The gate cannot tell which rows are the command table, and refuses to guess — a check whose scope is inferred from prose stops checking the moment the prose moves.` };
+  }
+  if (e < b) {
+    return { broken: `${README_REL} has ${TABLE_END} BEFORE ${TABLE_BEGIN}. The region is inside-out, so it encloses nothing.` };
+  }
+
+  const names = [];
+  for (const line of text.slice(b + TABLE_BEGIN.length, e).split('\n')) {
+    const m = /^\s*\|\s*`atlas ([a-z][a-z0-9-]*)/.exec(line);
+    if (m !== null) names.push(m[1]);
+  }
+  if (names.length === 0) {
+    return { broken: `the ${README_REL} command-table region extracted ZERO rows. Either the table was emptied or its row shape changed, and a table that names no commands would agree with any surface at all. Failing instead.` };
+  }
+
+  const seen = new Set();
+  for (const n of names) {
+    if (seen.has(n)) {
+      return { broken: `the ${README_REL} command table lists \`atlas ${n}\` TWICE. A duplicated row makes the table's own count meaningless and hides a missing command behind a matching set.` };
+    }
+    seen.add(n);
+  }
+  return { names };
+}
+
 /** Every `.md` under DOCS, as slash-joined paths relative to it (recursive: a nested page is not a hiding place). */
 function pages(dir, prefix = '') {
   if (!existsSync(dir)) return [];
@@ -118,6 +179,12 @@ if (!existsSync(MAP)) {
   process.exit(1);
 }
 
+if (!existsSync(README)) {
+  console.error('command-doc-guard: FAIL\n');
+  console.error(`  ✗ EXTRACTION BROKEN — ${README_REL} does not exist, so the front door's command table cannot be checked.\n`);
+  process.exit(1);
+}
+
 const { names, broken } = extractCommands(readFileSync(MAP, 'utf8'));
 
 if (broken !== undefined) {
@@ -127,8 +194,18 @@ if (broken !== undefined) {
   process.exit(1);
 }
 
+const readme = extractReadmeCommands(readFileSync(README, 'utf8'));
+
+if (readme.broken !== undefined) {
+  console.error('command-doc-guard: FAIL\n');
+  console.error(`  ✗ EXTRACTION BROKEN — ${readme.broken}\n`);
+  console.error('The gate refuses to report on a table it could not read. Fix the extraction, not the docs.');
+  process.exit(1);
+}
+
 const documented = new Set(pages(DOCS));
 const shipped = new Set(names);
+const tabled = new Set(readme.names);
 
 // (1) a shipped command nobody wrote a page for.
 for (const c of names) {
@@ -153,6 +230,29 @@ for (const p of documented) {
   }
 }
 
+// (3) a shipped command the front door does not mention.
+for (const c of names) {
+  if (!tabled.has(c)) {
+    fail.push(
+      `MISSING FROM THE README TABLE — \`atlas ${c}\`\n` +
+        `      Shipped (it is in \`${ORACLE}\`, ${MAP_REL}) and absent from the command table in ${README_REL}.\n` +
+        `      A stranger reads that table as the product's surface, so a command missing from it does not\n` +
+        `      exist as far as anyone outside this repo is concerned. Add the row.`,
+    );
+  }
+}
+
+// (4) a row for a door that is not there.
+for (const c of tabled) {
+  if (!shipped.has(c)) {
+    fail.push(
+      `README TABLE NAMES A NON-COMMAND — \`atlas ${c}\`\n` +
+        `      The command table in ${README_REL} advertises it; \`${ORACLE}\` (${MAP_REL}) does not contain it.\n` +
+        `      The front door promises a command that does not run. Delete the row, or ship the command.`,
+    );
+  }
+}
+
 if (fail.length > 0) {
   console.error('command-doc-guard: FAIL\n');
   for (const f of fail) console.error(`  ✗ ${f}\n`);
@@ -165,6 +265,7 @@ if (fail.length > 0) {
 
 console.log(
   `command-doc-guard: OK — ${names.length} shipped command(s) (${names.join(', ')}), ` +
-    `${documented.size} reference page(s) under ${DOCS_REL}. Correspondence holds in both directions. ` +
+    `${documented.size} reference page(s) under ${DOCS_REL}, ${tabled.size} row(s) in the ${README_REL} ` +
+    'command table. Correspondence holds in all three directions. ' +
     'Existence only — whether a page is worth reading is a human job and is not claimed here.',
 );
