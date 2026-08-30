@@ -216,7 +216,7 @@ residual risk to PRECISION (a flagged test may be fine) rather than soundness.
 | shape | the proven property | why it is fragile |
 |---|---|---|
 | `assertion-only-in-catch` | every assertion-shaped call sits lexically inside a `catch`, at least one does, and there is no assertion-count guard | if the `try` body completes without throwing, the `catch` never runs and the test passes having asserted nothing |
-| `no-assertion-in-test` | the body contains NO check — call *or* getter chain — carries no assertion guard, discards at least one expression that is not inside a nested (dead) function, and neither throws, `fail()`s, returns a value, nor holds a `catch` | the test executes work and checks nothing, so it cannot fail on a wrong result |
+| `no-assertion-in-test` | the body contains NO check — call *or* getter chain — carries no assertion guard, discards at least one expression that is not inside a nested (dead) function, and neither throws, `fail()`s, returns a value, nor holds a `catch` | the test performs no EXPLICIT check, so it can only fail if the work it performs happens to throw — an implicit smoke check, not a verification of any result |
 
 The two are **mutually exclusive by construction** (one requires a catch-assertion, the other refuses any
 assertion and any `catch`), so a given `(unitKey, testName)` yields at most one fact and its identity stays

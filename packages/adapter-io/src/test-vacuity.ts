@@ -266,7 +266,15 @@ function insideNestedFunction(node: SyntaxNode, body: SyntaxNode): boolean {
 }
 
 /**
- * PROVE / ABSTAIN the `no-assertion-in-test` shape for ONE test body: the body DOES work and checks NOTHING.
+ * PROVE / ABSTAIN the `no-assertion-in-test` shape for ONE test body: the body does work and makes no
+ * EXPLICIT check.
+ *
+ * PRECISION OF THE CLAIM. "No explicit check" is not "cannot fail": a discarded call that THROWS on bad
+ * input (zod's `schema.parse(x)`, an invariant assert inside the callee) still fails the test. That is an
+ * implicit smoke check, and it is exactly what the cross-repo census's `unasserted-parse-call` claims
+ * describe — "it only checks that parsing does not throw rather than verifying any output". Wording that
+ * says such a test "cannot fail on a wrong result" overreaches; the honest fragility is that NO RESULT IS
+ * VERIFIED, so a wrong-but-non-throwing result passes silently.
  *
  * WHAT THE FACT IS. Syntactic, exactly like its sibling: "test T's body contains NO assertion-shaped call,
  * carries no assertion guard, and discards at least one expression". It is NOT a claim that T is vacuous at
