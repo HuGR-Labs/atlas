@@ -18,7 +18,7 @@
 // forces the classification to be DECLARED rather than discovered by the next reviewer.
 //
 // ── DECLARED COUNTS (gate-checked; a drift here FAILS this gate) ────────────────────────────────────────
-//   declared-modules: 49 · dead-value-exports: 176 · type-reachable: 7
+//   declared-modules: 49 · dead-value-exports: 167 · type-reachable: 7
 //   These three are read back from THIS file and asserted against the measured tree at the foot of the run
 //   (see "THE HEADER STATES COUNTS, AND THIS CHECKS THEM"). No count is QUOTED anywhere else in this
 //   header — a quoted integer that nothing checks is exactly what rotted here (task #143); this one cannot.
@@ -152,7 +152,10 @@ const BUILTIN_LEDGER = {
   // ── @atlas/memory — a CLOSED PACKAGE. No module anywhere outside `packages/memory` value-imports it; ──
   //    the sole cross-package edge is one `import type` in genesis/src/seed.ts. Its internal modules make
   //    each other look live (the direct-reachability limit above), so the ledger under-counts here.
-  'packages/memory/src/awareness.ts': { values: 11, shipped: null, banner: false },
+  // `packages/memory/src/awareness.ts` is DELETED from this ledger, not set to zero: CAMPAIGN-11 W7a's
+  // durable Awareness store (`adapter-io/src/awareness-store.ts`) VALUE-imports `atlasRoot` / `rollup` /
+  // `awarenessBytes` / `makeAwarenessMemo`, so the module moved dead → live — the same `own.ts` /
+  // `relation-derive.ts` transition documented elsewhere in this ledger.
   'packages/memory/src/inject.ts': { values: 6, shipped: null, banner: false },
   // 3 → 4 on 2026-08-30: `UnownedWriteError`, added when the OWNER-DEFINE park closed
   // (`reference/atlas-memory.md` §Decisions D1). It is dead for the same reason the other three are — the
@@ -182,6 +185,8 @@ const BUILTIN_LEDGER = {
   // `packages/memory/src/orient.ts` was listed here and is NOT any more: CAMPAIGN-11 W3's durable
   // Orientation log (`adapter-io/src/orientation-store.ts`) calls `orient` and `orientEvent`, so the
   // reference model became shipped code. Deleted rather than re-counted.
+
+  'packages/adapter-io/src/awareness-store.ts': { values: 2, shipped: null, banner: true },
   // `packages/memory/src/respawn.ts` was listed here and is NOT any more: CAMPAIGN-11 W2's durable store
   // (`adapter-io/src/memory-store.ts`) calls `versioned` and `respawnFromRecord`, so the reference model
   // became shipped code. Deleted rather than re-counted — that is what this ledger's STALE leg is for.
