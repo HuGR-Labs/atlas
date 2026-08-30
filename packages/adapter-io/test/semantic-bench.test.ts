@@ -17,7 +17,7 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve as presolve, join } from 'node:path';
 import {
-  score, buildReport, reportShapeValid, SCOPE_LIMIT_DISCLAIMER, type Outcome, type Score,
+  score, buildReport, reportShapeValid, SCOPE_LIMIT_DISCLAIMER, type ArmScore, type Outcome, type Score,
 } from './support/bench-scorer.js';
 import {
   mutate, deriveLabel, editDistance, KIND_ARM, type Claim, type Row, type TscWitness,
@@ -176,13 +176,25 @@ function brokenScoreSwapped(rows: readonly Row[], outcomes: readonly Outcome[]):
   for (let i = 0; i < rows.length; i += 1) {
     if (rows[i]!.label === 'FALSE') { faDen += 1; if (outcomes[i]!.admitted) faNum += 1; }
   }
-  return { ...score(rows, outcomes), dependency: { falseAdmit: faNum === 0 ? null : faDen / faNum, recallTrue: 0, n: rows.length } };
+  return {
+    ...score(rows, outcomes),
+    dependency: {
+      falseAdmit: faNum === 0 ? null : faDen / faNum, recallTrue: 0, n: rows.length,
+      falseAdmitNum: faNum, falseAdmitDen: faDen, recallNum: 0, recallDen: 0,
+    },
+  };
 }
 /** A deliberately BROKEN scorer: counts any non-admitted as admitted (drop-vs-admit confusion). */
 function brokenScoreConfused(rows: readonly Row[], _outcomes: readonly Outcome[]): Score {
   let rNum = 0, rDen = 0;
   for (const r of rows) { if (r.label === 'TRUE') { rDen += 1; rNum += 1; } }
-  return { ...score(rows, _outcomes), dependency: { falseAdmit: 0, recallTrue: rDen === 0 ? null : rNum / rDen, n: rows.length } };
+  return {
+    ...score(rows, _outcomes),
+    dependency: {
+      falseAdmit: 0, recallTrue: rDen === 0 ? null : rNum / rDen, n: rows.length,
+      falseAdmitNum: 0, falseAdmitDen: 0, recallNum: rNum, recallDen: rDen,
+    },
+  };
 }
 
 // ───────────────────────────── SUBSTRATE (ATLAS_SEM_BENCH=1) ─────────────────────────────
@@ -216,12 +228,15 @@ describe.skipIf(!RUN)('#196b WP-1 — drives the SHIPPED admission over atlas-se
     console.log(`targets: ${sb.counts.targets}  scopes: ${sb.counts.scopes}`);
     for (const arm of ['count', 'relation', 'dependency', 'negation'] as const) {
       const a = s[arm];
-      console.log(`  ${arm.padEnd(11)} falseAdmit=${fmt(a.falseAdmit)}  recallTrue=${fmt(a.recallTrue)}  n=${a.n}`);
+      console.log(
+        `  ${arm.padEnd(11)} falseAdmit=${fmt(a.falseAdmit)} ${frac(a.falseAdmitNum, a.falseAdmitDen)}`
+        + `  recallTrue=${fmt(a.recallTrue)} ${frac(a.recallNum, a.recallDen)}  n=${a.n}`,
+      );
     }
     const teeth = score(sb.negTeeth.map((d) => d.row), sb.negTeeth.map((d) => d.outcome));
     const gateOff = score(sb.negGateOff.map((d) => d.row), sb.negGateOff.map((d) => d.outcome));
-    console.log(`  negation TEETH (reverse-caller leg BLINDED): falseAdmit=${fmt(teeth.negation.falseAdmit)}  <= must be > 0 (asserted non-vacuity)`);
-    console.log(`  negation DIAGNOSTIC (#99 collapsed-local opaque gate OFF): falseAdmit=${fmt(gateOff.negation.falseAdmit)}  (REPORTED, not asserted — see AC-6 comment: this leg is NOT load-bearing on a dist-form index)`);
+    console.log(`  negation TEETH (reverse-caller leg BLINDED): falseAdmit=${fa(teeth.negation)}  <= must be > 0 (asserted non-vacuity)`);
+    console.log(`  negation DIAGNOSTIC (#99 collapsed-local opaque gate OFF): falseAdmit=${fa(gateOff.negation)}  (REPORTED, not asserted — see AC-6 comment: this leg is NOT load-bearing on a dist-form index)`);
     console.log('==================================================================================\n');
     /* eslint-enable no-console */
     // dependency: after the abstain⇒justified inversion (genesis-epistemic-contract.md) a tsc-false claim the
@@ -339,12 +354,12 @@ describe.skipIf(!RUN)('#196b WP-1 — drives the SHIPPED admission over atlas-se
     // grounds identically and is admitted. A door property too (no direction check), reported not asserted-away.
     // eslint-disable-next-line no-console
     console.log(
-      `FINDING: negation door false-admit = ${fmt(s.negation.falseAdmit)}; non-vacuity witnessed by the `
-      + `callers-BLIND teeth = ${fmt(teeth.negation.falseAdmit)} (gate (c) reverseCallers is the load-bearing leg here), `
-      + `while the #99 opaque-gate-OFF diagnostic measures ${fmt(gateOff.negation.falseAdmit)} — that leg is STALE on a `
+      `FINDING: negation door false-admit = ${fa(s.negation)}; non-vacuity witnessed by the `
+      + `callers-BLIND teeth = ${fa(teeth.negation)} (gate (c) reverseCallers is the load-bearing leg here), `
+      + `while the #99 opaque-gate-OFF diagnostic measures ${fa(gateOff.negation)} — that leg is STALE on a `
       + `dist-form index (canonicalizeSymbol resolves the cross-package refs instead of collapsing them). `
-      + `relation = ${fmt(s.relation.falseAdmit)} (no direction oracle in admitRelation), `
-      + `dependency = ${fmt(s.dependency.falseAdmit)} residual (all ${depFalseAdmits.length} backed by a REAL in-scope `
+      + `relation = ${fa(s.relation)} (no direction oracle in admitRelation), `
+      + `dependency = ${fa(s.dependency)} residual (all ${depFalseAdmits.length} backed by a REAL in-scope `
       + `tsc reference — call-vs-reference oracle gap, no fabricated edge).`,
     );
   });
@@ -398,3 +413,8 @@ describe.skipIf(!RUN)('#196b WP-1 — drives the SHIPPED admission over atlas-se
 });
 
 const fmt = (x: number | null): string => (x === null ? 'n/a' : (x * 100).toFixed(2) + '%');
+/** The RAW fraction behind a printed percentage — so a report can state it as MEASURED, not re-derived by
+ *  arithmetic from the rounded percentage. Output only; nothing asserts on it. */
+const frac = (num: number, den: number): string => `(${num}/${den})`;
+/** A false-admit rate printed WITH its raw fraction: `12.25% (25/204)`. */
+const fa = (a: ArmScore): string => `${fmt(a.falseAdmit)} ${frac(a.falseAdmitNum, a.falseAdmitDen)}`;
