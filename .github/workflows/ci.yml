@@ -25,4 +25,5 @@ jobs:
       - run: npm run req-clause-guard  # every REQ's normative-clause still occurs in the invariant it cites
       - run: npm run ears-coamend-guard  # a changed normative-clause must co-amend its EARS phrase in the same commit (#198)
       - run: npm run doc-transcript-guard  # every documented command transcript is re-run against the built binary, or named as unverifiable
+      - run: npm run service-gate-guard  # THE TRIPWIRE: no non-stdio transport while the service gates are shut (ARCH-12)
       - run: npm test                # vitest run — own-suite + held-out GATE + totality fences
