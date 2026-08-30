@@ -233,6 +233,32 @@ describe('scanTestVacuity — PROVEN no-assertion-in-test', () => {
     }
   });
 
+  // COLD-REVIEW REGRESSION (real false admit, found by review not by tests): a chai getter assertion is a
+  // CHECK that is not a CALL. The call-only oracle proved this body "checks nothing" while it checks.
+  it('ABSTAINS on a getter-style assertion — a check need not be a call', () => {
+    expect(names('test("chai getter", () => { x.should.be.ok; });')).toEqual([]);
+  });
+
+  it('ABSTAINS on other non-call check chains', () => {
+    for (const stmt of ['x.should.be.true', 'result.must.be.empty', 'assert.isOk']) {
+      expect(names(`test("t", () => { ${stmt}; });`)).toEqual([]);
+    }
+  });
+
+  // COLD-REVIEW REGRESSION: dead code is not work. A declared-but-never-invoked helper used to satisfy the
+  // discarded-expression rail, proving a body that does nothing at all.
+  it('ABSTAINS when the only discarded work sits inside a never-invoked nested function', () => {
+    const src = `
+      test("dead helper", () => {
+        function helper() { doSomething(); }
+      });`;
+    expect(names(src)).toEqual([]);
+  });
+
+  it('still PROVES when the discarded work is in the body itself, not nested', () => {
+    expect(shapes('test("real work", () => { doSomething(); });')).toEqual(['real work:no-assertion-in-test']);
+  });
+
   // CHARACTERIZATION of the RESIDUAL limit, pinned so it stays visible rather than becoming folklore: a
   // helper named outside the check-shaped vocabulary still yields a proven fact. Sound (no check-shaped call
   // appears in THIS body) but imprecise. If the vocabulary is ever widened again, THIS test flips — which is

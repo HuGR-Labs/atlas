@@ -235,6 +235,37 @@ function isCheckShaped(callExpr: SyntaxNode): boolean {
 }
 
 /**
+ * A CHECK that is not a CALL — the getter-style assertion (`x.should.be.ok;`, `expect(x).to.be.true;`'s
+ * tail, chai's `.ok`/`.true`/`.empty`/`.NaN`). Cold review found this as a genuine FALSE ADMIT: the oracle
+ * inspected only `call_expression`, so a body whose only check is a property chain was proven to "check
+ * nothing" while it demonstrably checks something. The claim this shape publishes is the ABSENCE of checks,
+ * so absence must be judged over non-call chains too, not merely over calls.
+ *
+ * Tested on the chain's own text, which is what makes it total: any `should`/`must` segment, or an
+ * `expect`/`assert*` head. Over-matching only ever moves this shape from PROVEN to ABSTAIN.
+ */
+function isCheckShapedChain(member: SyntaxNode): boolean {
+  const t = member.text;
+  return /(^|[.\s])(should|must)\b/.test(t) || /(^|[.\s])expect\b/.test(t) || /(^|[.\s])assert\w*\b/.test(t);
+}
+
+/**
+ * Is `node` lexically inside a function that is NESTED within `body` (rather than being the test body's own
+ * statements)? Cold review found that the discarded-expression counter fired on work inside a declared but
+ * never-invoked helper — `test("t", () => { function helper() { doWork(); } })` — which satisfies the coded
+ * predicate while contradicting the prose ("the body DOES work"). Dead code is not work.
+ */
+function insideNestedFunction(node: SyntaxNode, body: SyntaxNode): boolean {
+  const NESTED = new Set(['function_declaration', 'function_expression', 'arrow_function', 'method_definition', 'generator_function_declaration']);
+  let cur = node.parent;
+  while (cur !== null && cur.id !== body.id) {
+    if (NESTED.has(cur.type)) return true;
+    cur = cur.parent;
+  }
+  return false;
+}
+
+/**
  * PROVE / ABSTAIN the `no-assertion-in-test` shape for ONE test body: the body DOES work and checks NOTHING.
  *
  * WHAT THE FACT IS. Syntactic, exactly like its sibling: "test T's body contains NO assertion-shaped call,
@@ -253,8 +284,15 @@ function isCheckShaped(callExpr: SyntaxNode): boolean {
  *   · RESIDUAL LIMIT, stated: a helper named outside that vocabulary (`hasNoCollateral(...)`) still yields a
  *     proven fact. Sound — no check-shaped call appears in THIS body — but imprecise. Pinned by a
  *     characterization test so it stays visible rather than becoming folklore.
- *   · ANY assertion-shaped call anywhere in the body ⇒ ABSTAIN. There is no "outside a catch" carve-out
- *     here: this shape is the ABSENCE of assertions, so one anywhere refutes it.
+ *   · ANY check anywhere in the body ⇒ ABSTAIN. There is no "outside a catch" carve-out here: this shape
+ *     is the ABSENCE of checks, so one anywhere refutes it.
+ *   · A CHECK NEED NOT BE A CALL. `isCheckShapedChain` judges non-call member chains (`x.should.be.ok;`,
+ *     chai's getter assertions) because the published claim is "checks nothing", not "makes no check-shaped
+ *     CALL". Cold review found a body proven by the call-only version while it demonstrably checked — a
+ *     real false admit against the stated claim, not a recall loss. Fixed here.
+ *   · The discarded-expression counter ignores statements inside a NESTED function: a declared-but-never-
+ *     invoked helper is dead code, not work, and counting it satisfied the coded predicate while
+ *     contradicting the prose.
  *   · An `expect.assertions(n)` / `expect.hasAssertions()` guard ⇒ ABSTAIN. The guard IS a check, and a
  *     guarded body with no assertion fails at runtime rather than passing vacuously.
  *   · At least one DISCARDED expression statement is required ⇒ otherwise ABSTAIN. An empty body, or a body
@@ -275,7 +313,9 @@ function bodyHasNoAssertion(body: SyntaxNode): boolean {
   walk(body, (n) => {
     if (n.type === 'catch_clause' || n.type === 'throw_statement') checks = true;
     if (n.type === 'return_statement' && n.namedChildCount > 0) checks = true;
-    if (n.type === 'expression_statement') discarded += 1;
+    if (n.type === 'expression_statement' && !insideNestedFunction(n, body)) discarded += 1;
+    // A CHECK need not be a CALL: judge non-call member chains too (cold-review false admit).
+    if (n.type === 'member_expression' && isCheckShapedChain(n)) anyAssertion = true;
     if (n.type !== 'call_expression') return;
     if (isAssertionGuard(n)) {
       hasGuard = true;

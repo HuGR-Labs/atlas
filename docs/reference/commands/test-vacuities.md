@@ -2,7 +2,7 @@
 
 Read the **grounded test-vacuity facts** on a unit. A test-vacuity fact (ADR-0015 **D5** / #95) is a
 **single-anchor `proven`** record — *named test `testName` in unit `unitKey` has every assertion-shaped call
-inside a `catch` clause and no assertion-count guard* (shape **`assertion-only-in-catch`**). This is the
+inside a `catch` clause and no assertion-count guard* (one shape of the closed `TestVacuityShape` vocabulary). This is the
 **read-only** door: it folds the `family:'test-vacuity'` rows off the **same durable projection** `atlas query`
 reads back, so a fact produced by [`atlas test-vacuity`](./test-vacuity.md) is visible to the very next call.
 
@@ -27,7 +27,7 @@ atlas test-vacuities <unit>
 ```
 $ atlas test-vacuities test/sample.test.ts
 status: ok
-next: 1 proven test-vacuity fact(s) on unit 'test/sample.test.ts' — each a named test whose assertions all sit inside a catch clause (assertion-only-in-catch), sealed proven
+next: 1 proven test-vacuity fact(s) on unit 'test/sample.test.ts' — each a named test proven to hold one of the vacuity shapes, sealed proven
 invariant: TV-READ: `atlas test-vacuities` reads GROUNDED single-anchor proven facts (family:test-vacuity) off the live projection the query readback rides — sorted (unitKey, testName, nodeKey) so equal input is byte-identical output, each fact standing alone (no lineage, no supersession — the family is single-anchor), never a throw, no write path
 ```
 

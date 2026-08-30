@@ -216,7 +216,7 @@ residual risk to PRECISION (a flagged test may be fine) rather than soundness.
 | shape | the proven property | why it is fragile |
 |---|---|---|
 | `assertion-only-in-catch` | every assertion-shaped call sits lexically inside a `catch`, at least one does, and there is no assertion-count guard | if the `try` body completes without throwing, the `catch` never runs and the test passes having asserted nothing |
-| `no-assertion-in-test` | the body contains NO assertion-shaped call, carries no assertion guard, discards at least one expression, and neither throws, `fail()`s, returns a value, nor holds a `catch` | the test executes work and checks nothing, so it cannot fail on a wrong result |
+| `no-assertion-in-test` | the body contains NO check — call *or* getter chain — carries no assertion guard, discards at least one expression that is not inside a nested (dead) function, and neither throws, `fail()`s, returns a value, nor holds a `catch` | the test executes work and checks nothing, so it cannot fail on a wrong result |
 
 The two are **mutually exclusive by construction** (one requires a catch-assertion, the other refuses any
 assertion and any `catch`), so a given `(unitKey, testName)` yields at most one fact and its identity stays
@@ -230,8 +230,10 @@ helper) — precision 0/4. So this shape judges absence with a shape-LOCAL widen
 callee named `expect*` / `assert*` / `check*` / `verify*` / `ensure*` / `should*`). The widening is local
 because broadening the shared matcher would also move the already-measured sibling shape's recall; and it can
 only move a test from PROVEN to ABSTAIN, so it costs recall and cannot cost soundness. After it, both shapes
-yield **0 facts across this repo's 3365 test-call sites** — the expected result for a repo whose vacuous
+yield **0 facts across this repo's 3365 test-call sites** (467 of 470 files; three fail to parse under the pinned grammar and are excluded fail-closed, by design) — the expected result for a repo whose vacuous
 tests were already fixed (#114).
+
+**A check need not be a call.** Cold review found the call-only version proving a body whose only check was a chai getter chain (`x.should.be.ok;`) — a real false admit against the published claim, since the claim is "checks nothing", not "makes no check-shaped call". Absence is now judged over non-call member chains too.
 
 **Residual limit, stated:** a helper named outside that vocabulary (`hasNoCollateral(...)`) still yields a
 proven fact — sound, since no check-shaped call appears in that body, but imprecise. Pinned by a

@@ -38,7 +38,7 @@ import type { Tool, Verdict } from '@atlas/tools';
  *  (`testVacuitiesOf`, ADR-0015 D5). Like `relations`/`transitions` it binds `atlas-query` — a READ authority
  *  oracle — so `GOVERNANCE_SURFACE` stays 5 and `WRITE_PATHS` is untouched. `test-vacuity` joins as the reachable
  *  single-anchor PRODUCER (`atlas test-vacuity <path>`); like `transition`/`derive-relations`/`promote` it is a
- *  WRITE command that binds `atlas-emit` — it PERSISTS proven `assertion-only-in-catch` facts THROUGH the existing
+ *  WRITE command that binds `atlas-emit` — it PERSISTS proven test-vacuity facts (any shape) THROUGH the existing
  *  governed emit door (ADR-0008: a producer is an ordinary USE of the emit door, KNOW-11 authz + ARCH-9 anchor
  *  apply), so it is not a new tool, `GOVERNANCE_SURFACE` stays 5 and `WRITE_PATHS` does not move.
  *  [EXTENDED — WP-10.A1.CLI / ADR-0004] `anchors` joins as the CLI door of the read-only DISCOVERY planner
@@ -115,7 +115,7 @@ export const COMMAND_LEG: Record<Command, Leg> = {
   //                                  GOVERNANCE_SURFACE stays 5, WRITE_PATHS untouched.
   'test-vacuity': 'atlas-emit', // WRITE authority oracle (#95 single-anchor test-vacuity PRODUCER) — intercepted
   //                               before the handler (cli.ts) and driven over the composition root's `testVacuity`
-  //                               leg, which PERSISTS proven assertion-only-in-catch facts THROUGH this leg's own
+  //                               leg, which PERSISTS proven test-vacuity facts of any shape THROUGH this leg's own
   //                               governed emit door (the same `createGovernedEmit` `wire.ts` binds — KNOW-11 authz
   //                               + ARCH-9 anchor apply). A write COMMAND over the SAME emit door; WRITE_PATHS untouched.
   'verify-fact': 'atlas-query', // READ authority oracle (sound-genesis PROVEN family); intercepted before the
