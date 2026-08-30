@@ -18,7 +18,7 @@
 // forces the classification to be DECLARED rather than discovered by the next reviewer.
 //
 // ── DECLARED COUNTS (gate-checked; a drift here FAILS this gate) ────────────────────────────────────────
-//   declared-modules: 52 · dead-value-exports: 215 · type-reachable: 6
+//   declared-modules: 52 · dead-value-exports: 206 · type-reachable: 6
 //   These three are read back from THIS file and asserted against the measured tree at the foot of the run
 //   (see "THE HEADER STATES COUNTS, AND THIS CHECKS THEM"). No count is QUOTED anywhere else in this
 //   header — a quoted integer that nothing checks is exactly what rotted here (task #143); this one cannot.
@@ -152,7 +152,10 @@ const BUILTIN_LEDGER = {
   // ── @atlas/memory — a CLOSED PACKAGE. No module anywhere outside `packages/memory` value-imports it; ──
   //    the sole cross-package edge is one `import type` in genesis/src/seed.ts. Its internal modules make
   //    each other look live (the direct-reachability limit above), so the ledger under-counts here.
-  'packages/memory/src/awareness.ts': { values: 11, shipped: null, banner: false },
+  // `packages/memory/src/awareness.ts` is DELETED from this ledger, not set to zero: CAMPAIGN-11 W7a's
+  // durable Awareness store (`adapter-io/src/awareness-store.ts`) VALUE-imports `atlasRoot` / `rollup` /
+  // `awarenessBytes` / `makeAwarenessMemo`, so the module moved dead → live — the same `own.ts` /
+  // `relation-derive.ts` transition documented elsewhere in this ledger.
   'packages/memory/src/inject.ts': { values: 6, shipped: null, banner: false },
   // 3 → 4 on 2026-08-30: `UnownedWriteError`, added when the OWNER-DEFINE park closed
   // (`reference/atlas-memory.md` §Decisions D1). It is dead for the same reason the other three are — the
@@ -165,6 +168,12 @@ const BUILTIN_LEDGER = {
   // exists to refuse. It becomes shipped code the moment W4 composes it, and this entry goes stale then —
   // which the STALE leg above will say out loud.
   'packages/adapter-io/src/memory-store.ts': { values: 2, shipped: null, banner: true },
+  // NEW 2026-08-30 — CAMPAIGN-11 W7a. The durable Awareness store composes the real root + calls
+  // @atlas/memory's `rollup` / `makeAwarenessMemo`, and no product path calls IT yet: W8 is the later work
+  // package that wires it into the wave transport. Declared rather than pre-wired, the same
+  // `memory-store.ts` discipline above. It becomes shipped code the moment W8 composes it, and this entry
+  // goes stale then — which the STALE leg above will say out loud.
+  'packages/adapter-io/src/awareness-store.ts': { values: 2, shipped: null, banner: true },
   'packages/memory/src/logbook.ts': { values: 6, shipped: null, banner: false },
   'packages/memory/src/orient.ts': { values: 10, shipped: null, banner: false },
   'packages/memory/src/portable.ts': { values: 5, shipped: null, banner: false },
