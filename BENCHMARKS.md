@@ -14,7 +14,9 @@ emit doors and re-proof (`packages/adapter-io`), and the dependency projection
 (`derive-relations`, `packages/cli`).
 
 **Not measured here:** retrieval quality, the versioned store and its travel-by-reproof, the
-governance ring, the MCP and CLI surfaces, and the authoring planners. Those are Atlas the system;
+governance ring, the MCP and CLI transports *as surfaces* (two CLI commands — `derive-relations` in §2
+and `test-vacuity` in §6 — are used as measurement instruments; their ergonomics, parity and transport
+behaviour are not what is scored), and the authoring planners. Those are Atlas the system;
 this page is about the trustworthiness of what Genesis puts into it. Do not read these numbers as
 a score for Atlas as a product.
 
