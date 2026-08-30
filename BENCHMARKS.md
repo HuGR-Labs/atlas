@@ -34,17 +34,23 @@ Artifact: [`harness/probes/adjudicate/calibration-report.a4-planted.md`](harness
   witness that is not a call). Both definitions and the full adjudication are in the artifact.
 - Negation recall is the price of the 0-false floor: the gate proves absence only where a
   mechanical escape analysis closes the world, and abstains elsewhere.
-- Non-vacuity is **witnessed on the operating build**, and re-measured for this page: blinding
-  one leg of the byte-identical shipped door (gate (c), `reverseCallers` forced to `[]`) drives
-  negation's false-admit from **0.00% to 12.25%**, so the zero is earned rather than vacuous.
-  The older diagnostic — switching off the #99 opaque gate — measures 0 here and is *not* the
-  witness on this build state (it is load-bearing only on the dist-absent misbuild, where it
-  false-admits 132/163). The bench prints both. Artifact:
+- **The negation zero is earned, not vacuous** — re-measured for this page on a fresh operating
+  index at current master: blinding one leg of the byte-identical shipped door (gate (c),
+  `reverseCallers` forced to `[]`) drives negation's false-admit from **0.00% to 12.25%**. It is
+  not guaranteed to rise: rows already abstained by the upstream gates abstain identically under
+  both doors, so this would legitimately measure 0 — and fail — if gate (c) were not the leg
+  carrying the soundness. The older diagnostic (switching off the #99 opaque gate) measures 0 on
+  this build state and is *not* the witness here; it is load-bearing only on the dist-absent
+  misbuild, where it false-admits 132/163. Both are printed. That re-run also measures a larger
+  planted pool than the table above (204 FALSE rows vs. the artifact's 163) — the door is 0-false
+  on both. Artifact:
   [`negation-nonvacuity-recheck.json`](harness/probes/adjudicate/negation-nonvacuity-recheck.json).
-- **What the zero ranges over.** These are the **proven-sealed** admits. The `justified` advisory
-  tier deliberately admits a grounded claim the oracle cannot refute — that is the two-tier design,
-  not a leak — so the bench's raw per-arm admit rates are near-total and carry no soundness claim.
-  Soundness is asserted only where the door stamped `proven`.
+- **What the `dependency` / `count` / `relation` zeros range over** (this does *not* apply to
+  negation, which has no advisory tier): they are the **proven-sealed** admits. Since the
+  abstain⇒justified inversion, the `justified` advisory tier deliberately admits a grounded claim
+  the oracle cannot refute — that is the two-tier design, not a leak — so the bench's *raw* per-arm
+  admit rates on those three arms are near-total and carry no soundness claim. Soundness is
+  asserted only where the door stamped `proven`.
 - The legacy `relation` arm states **no truth predicate** (it admits all 452/452 by design)
   and is not counted as sound. It is superseded by the `depends-on` projection below.
 
