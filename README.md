@@ -52,8 +52,10 @@ module as a zero-production-caller reference model, and has for a long time. Wha
 declaration never rolled up to the package and never reached this page, which claimed the opposite under a
 heading that says *guarantees*. Internal honesty a reader cannot see does not protect the reader.
 
-A package is counted as **reached** when some other package imports it in a declaration that survives
-compilation. An `import type` does not count: it is erased, so it is a design-time reference and not a call.
+A package is counted as **reached** when some other package's `src/` imports it in a declaration that
+survives compilation. An `import type` does not count: it is erased, so it is a design-time reference and not
+a call. **Test trees are out of scope on purpose** — a suite exercising a package proves the package works,
+not that the product uses it, and conflating the two is how a library reads as shipped surface.
 
 <!-- unreached:begin -->
 
@@ -63,7 +65,7 @@ compilation. An `import type` does not count: it is erased, so it is a design-ti
 | `mcp-server` | entry point, same. By design. |
 | `e2e-blackbox` | test suite — it drives the built binary as a subprocess, not as an import. By design. (`e2e` is not listed: it has no `src/` at all, so it is not a node in this graph.) |
 | `contracts` | pure types; every other package imports it `import type`, which is erased. By design. |
-| `memory` | **the finding, not a design choice.** ~2000 lines across 11 source files with 11 test files and a reference contract, and the only reference to it anywhere outside itself is an `import type` in `packages/genesis/src/seed.ts`. No command, no MCP tool, no composition root reaches it: the per-seat Memory kind is a library this product never calls. `own-source.ts` records the same fact from the other side — *"a per-seat store with no production instance"* — and serves `memory: null` on every pack. |
+| `memory` | **the finding, not a design choice.** ~2000 lines across 11 source files with 11 test files and a reference contract. No command, no MCP tool, no composition root reaches it: the per-seat Memory kind is a library the *product* never calls. The only reference from any package's `src/` is an `import type` in `packages/genesis/src/seed.ts`, which is erased. `own-source.ts` records the same fact from the other side — *"a per-seat store with no production instance"* — and serves `memory: null` on every pack. **Not "untested at the seam":** `packages/e2e/test/s07-memory-scoping.e2e.test.ts` drives the real runtime across the package boundary and proves five laws (the Memory≠Knowledge partition, per-seat scoping with zero cross-seat leak, explicit-only recall, the capped frecency-ranked Rules slab, and delete-never). Tests are outside this gate's scope by design — it reads `packages/*/src` — so *unreached* here means unreached **by the shipped product**, which is the claim that matters, and it is not the same as unexercised. |
 
 <!-- unreached:end -->
 
