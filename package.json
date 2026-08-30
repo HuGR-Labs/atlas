@@ -21,7 +21,8 @@
     "adr-citation-guard": "node harness/gates/adr-citation-guard.mjs",
     "req-clause-guard": "node harness/gates/req-clause-guard.mjs",
     "ears-coamend-guard": "node harness/gates/ears-coamend-guard.mjs",
-    "doc-transcript-guard": "node harness/gates/doc-transcript-guard.mjs"
+    "doc-transcript-guard": "node harness/gates/doc-transcript-guard.mjs",
+    "service-gate-guard": "node harness/gates/service-gate-guard.mjs"
   },
   "engines": {
     "node": ">=20"
