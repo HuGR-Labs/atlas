@@ -1,6 +1,7 @@
 # ADR-0015 — A grounding token is typed by the fact's SHAPE, not one hash for all
 
 **Status:** PROPOSED — owner ratification required (amends the GROUND-1 oracle model).
+**⚠ All five decisions have SHIPPED against this un-ratified ADR** — see the RECONCILIATION section at the end before ratifying. The ratification list below is stale (it asks for D1–D4; D5 shipped too).
 **Closes:** the product limit in #99 (Atlas cannot ground a negative, a relation, or a transition — 5 seats
 hit the same wall). Reconnects the deferred GAP-1 (multi-unit anchor, ADR-0014 §"does NOT close") and #189
 (the dependency graph is an under-approximation) to a real consumer. It originally named `hugit-diff` (structural
@@ -219,3 +220,62 @@ are the high-value facts the frontier's comment-rich units already gesture at bu
   fact the comment gestures at but never grounds — non-obvious by construction.
 - The negation axis is the one where the SOTA and the owner's honesty law agree exactly: the cheap version is
   a lie, and abstention is the only honest floor.
+
+---
+
+## RECONCILIATION — what actually shipped (2026-08-29, lead)
+
+> **Read this before ratifying.** This ADR still says *"No code lands on this ADR"* and its status is still
+> PROPOSED. Both statements are now false in practice: **all five decisions have shipped**, and two product
+> doors name this ADR in their first line — `governed-emit-test-vacuity.ts` (*"ADR-0015 D5 — THE TEST-VACUITY
+> DOOR"*) and `governed-emit-transition.ts` (*"ADR-0015 D4 — THE TRANSITION DOOR"*). This section reconciles
+> the design against the build so the ratification decision is made on what exists, not on what was proposed.
+> It changes no decision and asserts no new one.
+
+### Per-decision verdict, verified against shipped code
+
+| decision | verdict | where it lives |
+|---|---|---|
+| **D1** positive-intrinsic unchanged | **shipped as designed** | the existing `subtreeHash` oracle, untouched |
+| **D2** relation = 2-ended fact | **shipped as designed** | `RelationKind` (closed `'depends-on'\|'calls'`, `knowledge/src/types.ts`); `atlas relations` + `atlas derive-relations` |
+| **D3** negation abstains unless complete | **shipped as designed** | `adapter-io/src/governed-emit-negation.ts` — scope-Merkle via `resolveCurrent` (insertion-sensitive, as D3 requires), `edgeModel` stamped from the pinned extractor release, and the `scope-open` / `escape-open` abstention gates |
+| **D4** transition is advisory-historical | **shipped, with one gap closed differently — see below** | `adapter-io/src/governed-emit-transition.ts`; lineage supersession is derive-on-read (D-T3) |
+| **D5** test-vacuity, sealed `proven` | **shipped as designed** | `adapter-io/src/test-vacuity.ts` + `governed-emit-test-vacuity.ts`; `shape` is the additive-only union D5 specifies (`knowledge/src/test-vacuity-types.ts:37`) |
+
+### The four things ratification must now decide
+
+1. **The ratification list is stale.** *"What the owner must ratify"* above asks for **D1–D4**. **D5 was
+   appended later and has shipped** — sealed `proven`, measured 0-false-admit end-to-end. Ratifying D1–D4 as
+   written would leave the one decision that mints `proven` seals unsigned. **The list should read D1–D5.**
+
+2. **D4's rename gap was closed by EXCLUSION, not by the TBD.** This ADR scoped rename reconciliation to
+   `hugit-diff`, recorded it as discontinued, and left the seam **TBD**. The build did not reopen the seam —
+   it excluded the case: `knowledge/src/transition-types.ts:24` states that *a move/rename changing `unitKey`
+   is OUT OF SCOPE (D-T4)*. That is a defensible narrowing (a transition needs the same `unitKey` across both
+   revs), but it is a **decision the ADR deferred and the build made**. Ratify the exclusion, or reopen the
+   seam as its own work.
+
+3. **A decision layer grew below this ADR.** The transition and test-vacuity builds carry their own numbered
+   decisions (`D-T1…D-T4`) in `docs/design/234-transition-design.md` and `docs/design/95-test-vacuity-design.md`.
+   They are lead-authored design, not owner-ratified, and this ADR never anticipated them. Say whether they
+   ride under this signature or need their own.
+
+4. **The sequencing recommendation is spent.** *"Ratify D1–D4 + the sequencing, then build #99a first"* —
+   #99a (relation), #99b (negation), #99c (transition) and D5 (test-vacuity) have all landed. The
+   decomposition section is a historical record now, not a plan. Nothing to ratify there.
+
+### What ratification unlocks immediately
+
+D5 closes the `shape` vocabulary as **additive-only**: *"a new shape is a `cv` bump"*, and the machinery is
+already in place (`knowledge/src/test-vacuity-types.ts:37`, the same pattern as `RelationKind`). So the next
+proven shapes — the `no-assertion-in-test` / `unasserted-parse-call` / `commented-out-tests` idioms the
+cross-repo shape census names as the largest convertible cluster
+(`harness/probes/adjudicate/xrepo-zod-shape-census.json`) — need **no new ADR**. They are a `cv` bump under a
+ratified D5. Until D5 is signed, each one adds to the debt instead of paying it down.
+
+### Honest statement of the gap this section does not close
+
+This reconciliation was authored by the lead against shipped code. It does not re-ratify anything, and it does
+not claim the build was authorised — the build happened on a PROPOSED ADR, and that is the finding, not the
+fix. The fix is the owner's signature or the owner's objection.
+
