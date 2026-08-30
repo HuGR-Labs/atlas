@@ -176,6 +176,9 @@ const BUILTIN_LEDGER = {
   // ledger measuring a campaign landing rather than a bookkeeping chore.
   // NEW — the door itself, zero-caller until W8 exposes it over the CLI and MCP.
   'packages/adapter-io/src/memory-emit.ts': { values: 1, shipped: null, banner: true },
+  // `packages/adapter-io/src/scanner.ts` was declared here by W5 and is NOT any more, after ONE line: the
+  // write door imports `NO_SCANNER_NAME` to tell an absent scanner from a hit, which makes the adapter
+  // shipped code. The entry lived for the length of an integration.
   // `packages/memory/src/orient.ts` was listed here and is NOT any more: CAMPAIGN-11 W3's durable
   // Orientation log (`adapter-io/src/orientation-store.ts`) calls `orient` and `orientEvent`, so the
   // reference model became shipped code. Deleted rather than re-counted.

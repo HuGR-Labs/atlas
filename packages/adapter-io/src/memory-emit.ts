@@ -61,6 +61,7 @@ import type {
   ProjectMemoryEntry,
 } from '@atlas/memory';
 import type { DurableMemory } from './memory-store.js';
+import { NO_SCANNER_NAME } from './scanner.js';
 
 /** The named refusals. A caller distinguishes them; none is a generic failure. */
 export type MemoryRefusal =
@@ -188,11 +189,20 @@ export function createMemoryEmit(deps: MemoryEmitDeps): MemoryEmit {
     }
 
     // 6 — MEM-9. Absent scanner ⇒ refuse; see `MemoryEmitDeps.scanner`.
-    if (deps.scanner === undefined || deps.scanner.name === '') {
+    //
+    // `NO_SCANNER_NAME` IS AN ABSENCE, NOT A HIT, and this line exists because W4 and W5 were built in
+    // parallel and were each correct alone while being WRONG TOGETHER. W5's adapter, finding no binary on
+    // PATH, returns a `NamedScanner` named `no-scanner-on-path` whose `scan()` always answers `true` —
+    // fail-closed, which is right. But this door reads `scan() === true` as `scanner-blocked`, so the pair
+    // would have told a user "a secret was detected in your write" when the truth is "nothing looked". A
+    // refusal that misnames its own reason is a worse failure than the one it reports, because the user
+    // acts on the reason: they would go hunting a secret that is not there instead of installing gitleaks.
+    if (deps.scanner === undefined || deps.scanner.name === '' || deps.scanner.name === NO_SCANNER_NAME) {
       return reject(
         'scanner-unavailable',
         'MEM-9 pre-write scan: no NAMED scanner is configured, so this write was not checked for secrets. ' +
-          '"Not checked" and "no secret" are refused as the same value.',
+          '"Not checked" and "no secret" are refused as the same value — and so are "not checked" and ' +
+          '"a secret was found".',
         { scanner: deps.scanner?.name ?? '' },
       );
     }

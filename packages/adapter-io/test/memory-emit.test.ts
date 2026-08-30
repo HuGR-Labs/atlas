@@ -16,6 +16,7 @@ import { createMemoryEmit } from '../src/memory-emit.js';
 import type { MemoryEmitDeps } from '../src/memory-emit.js';
 import { MEMBER_TOK_CAP } from '@atlas/memory';
 import type { MemoryEntry, NamedScanner } from '@atlas/memory';
+import { NO_SCANNER_NAME } from '../src/scanner.js';
 
 let repo: string;
 
@@ -179,6 +180,17 @@ describe('A8 / A9 — MEM-9, the pre-write scanner', () => {
   it('refuses an UNNAMED scanner — the stage must be attributable', () => {
     const v = door({ scanner: { name: '', scan: () => false } }).emit(project('r'));
     expect((v as { refusal: string }).refusal).toBe('scanner-unavailable');
+    expect(lines()).toHaveLength(0);
+  });
+
+  it("W5's no-binary adapter is an ABSENCE, not a HIT — the refusal must not misname its own reason", () => {
+    // The cross-WP defect: W5's adapter blocks by answering `true`, which this door would otherwise read
+    // as "a secret was detected". A user would go hunting a secret that is not there instead of installing
+    // a scanner. teeth (breaks-on "a missing binary is reported as a detected secret").
+    const noBinary: NamedScanner = { name: NO_SCANNER_NAME, scan: () => true };
+    const v = door({ scanner: noBinary }).emit(project('r'));
+    expect((v as { refusal: string }).refusal).toBe('scanner-unavailable');
+    expect((v as { refusal: string }).refusal).not.toBe('scanner-blocked');
     expect(lines()).toHaveLength(0);
   });
 
