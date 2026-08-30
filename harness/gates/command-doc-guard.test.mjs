@@ -43,6 +43,30 @@ function map(body) {
   const p = join(root, 'packages', 'cli', 'src', 'map.ts');
   mkdirSync(dirname(p), { recursive: true });
   writeFileSync(p, `import type { Tool } from '@atlas/tools';\n\nexport const COMMANDS = ${body};\nexport type Command = (typeof COMMANDS)[number];\n`);
+
+  // Keep the README in step by DEFAULT, so a test that moves the surface exercises the leg it is aiming at
+  // and not this one too. The literal-string shapes planted by the anti-vacuity tests have no names to
+  // mirror; those cases fail on extraction long before the README is read.
+  const literal = [...body.matchAll(/'([a-z][a-z0-9-]*)'/g)].map((m) => m[1]);
+  if (literal.length > 0) readme(literal);
+}
+
+/**
+ * Write the README with a command table naming exactly `names`, wrapped in the markers the gate reads.
+ *
+ * `map()` calls this itself, so a test that changes the shipped surface gets a README that FOLLOWS it and
+ * keeps testing one leg at a time. A test aimed at the README leg calls this directly to desync the two.
+ */
+function readme(names, { begin = true, end = true } = {}) {
+  const rows = names.map((n) => `| \`atlas ${n} <x>\` | read | does a thing | [reference](./docs/reference/commands/${n}.md) |`);
+  writeFileSync(
+    join(root, 'README.md'),
+    ['# Fixture', '', 'Prose that mentions `atlas init` OUTSIDE the region and must not be counted.', '',
+      begin ? '<!-- command-table:begin -->' : '',
+      '', '| command | kind | what it does | page |', '| --- | --- | --- | --- |', ...rows, '',
+      end ? '<!-- command-table:end -->' : '',
+      '', 'More prose naming `atlas query` after the region.', ''].join('\n'),
+  );
 }
 
 /** Write a reference page. `rel` may be nested. Content is irrelevant BY DESIGN — the gate never reads it. */
@@ -54,7 +78,7 @@ function page(rel) {
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'command-doc-guard-'));
-  map("['init', 'query', 'emit'] as const");
+  map("['init', 'query', 'emit'] as const"); // also writes a README table naming exactly those three
   page('init.md');
   page('query.md');
   page('emit.md');
@@ -67,7 +91,69 @@ describe('command-doc-guard — the gate can be falsified', () => {
     const { code, out } = runGate();
     expect(out).not.toContain('✗');
     expect(out).toMatch(/command-doc-guard: OK — 3 shipped command\(s\)/);
+    expect(out).toMatch(/3 row\(s\) in the README\.md command table/);
     expect(code).toBe(0);
+  });
+
+  it('FAILS a command the README table does NOT list, and NAMES it', () => {
+    readme(['init', 'query']); // `emit` ships and has a page; the front door omits it
+    const { code, out } = runGate();
+    expect(out).toMatch(/MISSING FROM THE README TABLE — `atlas emit`/);
+    expect(out).not.toMatch(/MISSING FROM THE README TABLE — `atlas init`/); // and only that one
+    expect(code).toBe(1);
+  });
+
+  it('FAILS a README row for a command that does not ship, and NAMES it', () => {
+    readme(['init', 'query', 'emit', 'teleport']);
+    const { code, out } = runGate();
+    expect(out).toMatch(/README TABLE NAMES A NON-COMMAND — `atlas teleport`/);
+    expect(code).toBe(1);
+  });
+
+  it('counts ONLY the delimited region — `atlas …` in the surrounding prose is not a row', () => {
+    readme(['init', 'query', 'emit']); // the fixture prose names `atlas init` and `atlas query` outside it
+    const { code, out } = runGate();
+    expect(out).toMatch(/3 row\(s\) in the README\.md command table/);
+    expect(code).toBe(0);
+  });
+
+  it('ANTI-VACUITY: a MISSING begin marker FAILS instead of checking nothing', () => {
+    readme(['init', 'query', 'emit'], { begin: false });
+    const { code, out } = runGate();
+    expect(out).toMatch(/EXTRACTION BROKEN/);
+    expect(out).toMatch(/missing the <!-- command-table:begin --> marker/);
+    expect(out).not.toMatch(/command-doc-guard: OK/);
+    expect(code).toBe(1);
+  });
+
+  it('ANTI-VACUITY: a MISSING end marker FAILS', () => {
+    readme(['init', 'query', 'emit'], { end: false });
+    const { code, out } = runGate();
+    expect(out).toMatch(/missing the <!-- command-table:end --> marker/);
+    expect(code).toBe(1);
+  });
+
+  it('ANTI-VACUITY: an EMPTY region FAILS rather than agreeing with any surface', () => {
+    readme([]);
+    const { code, out } = runGate();
+    expect(out).toMatch(/EXTRACTION BROKEN/);
+    expect(out).toMatch(/extracted ZERO rows/);
+    expect(code).toBe(1);
+  });
+
+  it('ANTI-VACUITY: a MISSING README FAILS', () => {
+    rmSync(join(root, 'README.md'), { force: true });
+    const { code, out } = runGate();
+    expect(out).toMatch(/EXTRACTION BROKEN/);
+    expect(out).toMatch(/README\.md does not exist/);
+    expect(code).toBe(1);
+  });
+
+  it('FAILS a DUPLICATED row — a repeated command hides a missing one behind a matching set', () => {
+    readme(['init', 'query', 'emit', 'emit']);
+    const { code, out } = runGate();
+    expect(out).toMatch(/lists `atlas emit` TWICE/);
+    expect(code).toBe(1);
   });
 
   it('FAILS a command with NO page, and NAMES the command', () => {
