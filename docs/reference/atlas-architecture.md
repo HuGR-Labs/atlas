@@ -1,7 +1,8 @@
 # atlas-architecture — Reference (the hierarchy, the exposure model, the authority model)
 
-> owner: orchestrator · status: **draft — ratification candidate.** The tool-exposure amendment (§2) was
-> **owner-ratified 2026-07-25**; the rest awaits the DEFINE seat.
+> owner: orchestrator · status: **partially ratified.** The tool-exposure amendment (§2) was
+> **owner-ratified 2026-07-25**; the AUTHORITY model (§3) was **ratified 2026-08-30** by the orchestrator
+> under delegated authority — see §3.4, which also records the ARCH-D3b ruling. §1 still awaits the DEFINE seat.
 >
 > **Why this document exists.** Three independent cold reviews of CAMPAIGN-10 found the same disease by three
 > different routes: the layer hierarchy **was written down and never enforced** (`ARCHITECTURE.md` §graph, plus
@@ -20,7 +21,7 @@
 > | **ARCH-4** | self-referential (it *is* the requirement to gate) |
 > | **ARCH-8** (growth path) | **prose** — no gate; triggered by ARCH-7 failing |
 > | **ARCH-10** | **IMPLEMENTED and mutation-tested** — the incumbent guard, `packages/adapter-io/src/governed-emit.ts` §2.25, ratified by `ADR-0007`. Its checker is a **test**, not `layer-guard.mjs`: `SCN-GE-I1`/`I2`/`I5` in `packages/adapter-io/test/governed-emit-incumbent.test.ts` (deleting the guard block turns all three red). |
-> | **ARCH-9, ARCH-11, ARCH-12** (the rest of the AUTHORITY model) | **prose only, and NOT YET IMPLEMENTED.** ARCH-9 in particular is still open on a CREATE, where the author-supplied `tier` alone selects the route (`packages/knowledge/src/ratify/fastpath.ts:64`) — see §3.1. They are proposed remediation, not shipped behaviour. Tracked as ARCH-D3b/D4. |
+> | **ARCH-9, ARCH-11, ARCH-12** (the rest of the AUTHORITY model) | **ratified as rules (§3.4), NOT YET IMPLEMENTED as behaviour.** ARCH-9 is partly closed: the UPDATE leg is shipped (ARCH-10) and, on the CREATE leg, the `tier` conjunct is closed by the one-way lattice join at `packages/knowledge/src/ratify/fastpath.ts:143` — a declared class can only make the gate HARDER. What remains open on CREATE is narrower and is now named: the two hardcoded fast-path conjuncts (`packages/adapter-io/src/governed-emit-route.ts:24`) and the author-supplied `scope`. See §3.4. Tracked as ARCH-D3b/D4. |
 >
 > **The bar.** Each of the three models below is grounded in named prior art and, where the state of the art
 > gives a *measured* threshold, the measurement is cited rather than a number being invented.
@@ -251,12 +252,59 @@ dry-run door (`check`) discloses nothing an attacker could not already read.
 > live vulnerabilities the day the transport goes remote, and this repository is public — so publishing
 > it is an **accepted trade**, made in favour of honesty over obscurity, not an oversight. The ordering
 > it implies is now enforced mechanically rather than by prose: `harness/gates/service-gate-guard.mjs`
-> turns CI red on any non-stdio transport until the blockers are declared closed.
+> turns CI red on any non-stdio transport until four named blockers — identity, isolation,
+> policy-integrity and resource-limits — are declared closed in a ledger. **Stated precisely, because the
+> loose reading is an overclaim:** the gate enforces *those four*, by name, and it checks that the ledger
+> mentions them, not that they are true. Hardening that is not on that list — disclosure redaction, abuse
+> control, renderer escaping, supply chain — is unprotected by it. The gate buys ordering, not coverage.
 
 > <a id="arch-12"></a>**ARCH-12 The posture is written down.** This threat model MUST be stated in the
 > reference, not inferred from the code. If the transport ever becomes remote or multi-tenant, both the
 > env-var actor and the readable policy become live vulnerabilities and this clause MUST be revisited before
 > that transport ships.
+
+### 3.4 Ratification, and the ARCH-D3b ruling (2026-08-30)
+
+**Status: §3 is RATIFIED.** ARCH-9, ARCH-10, ARCH-11 and ARCH-12 stand as written and are normative from
+this date. The owner delegated this ratification to the orchestrator; it is recorded here rather than in a
+new ADR, because §3 already carries the adversary, the reach, the promises and the rejected alternatives,
+and a second tracker for the same clause is a failure this repository has already made twice.
+
+Ratifying the rules does not implement them. The enforcement table in the header is the authority on what is
+shipped, and it says ARCH-9 (CREATE leg), ARCH-11 and ARCH-12 are prose.
+
+**The ARCH-D3b question — on a CREATE there is no incumbent, so where does the governing class come from?**
+The question was posed as though `tier` were the open field. Read against the code, it is not:
+
+- `route` joins the declared class with any door-derived one as `strictestTier(derived, declared)`
+  (`packages/knowledge/src/ratify/fastpath.ts:143`), and the fast path requires `T2 ∧ advisory`. So on a
+  CREATE a self-declared **`T0` buys a STRICTER gate**, not a cheaper one — it routes to full ratification
+  and commits only with the KNOW-8 token, which the author does not hold. A self-declared **`T2` buys
+  auto-accept but mints only an advisory node**; it purchases no authority, because the class it declared is
+  the class it got.
+- Therefore the `tier` conjunct of ARCH-9 is **CLOSED on CREATE by the direction of the join**, not by an
+  absent derivation. Deriving a floor would be a no-op: the join already refuses to be widened.
+
+**What is actually open on CREATE**, and this is the ruling that re-scopes the work:
+
+1. **The two hardcoded conjuncts.** `DOOR_RATIFY_CTX = { contested: false, lowRisk: true }`
+   (`packages/adapter-io/src/governed-emit-route.ts:24`) is exactly what ARCH-9's own text forbids by
+   name — *"a constant that pins the gate open does not satisfy this clause."* The derivation sources
+   already exist upstream and are simply not wired: `lowRisk` is the KNOW-17 door-2 threshold verdict,
+   `contested` is the KNOW-18b store veto. **This, not `tier`, is the live hole.**
+2. **`scope`.** Authz is `actor === scope` over two author-supplied strings, while the read projection
+   scopes on the derived `primaryAnchor` with nothing binding the two. §3.2 already records why a
+   disjunction cannot close this; only derivation from `primaryAnchor` can.
+
+**Residual, stated rather than hidden.** A cheap CREATE can still *occupy* a `(anchor, slot)` with an
+advisory fact. That is slot squatting, not an authority bypass: raising the occupant to `T0` is an UPDATE,
+routes to full ratification on the declared class, and still demands the token. Under the current local
+posture (§3.3) this is an anti-accident concern; it must be re-judged if the transport goes remote, which
+is ARCH-12's revisit condition.
+
+**Consequence for the plan.** The ARCH-9-on-CREATE work item is smaller and more concrete than it was
+written to be: wire two verdicts that already exist, and derive `scope` from `primaryAnchor`. It is not a
+new governance mechanism.
 
 ---
 
@@ -297,7 +345,7 @@ dry-run door (`check`) discloses nothing an attacker could not already read.
 | **ARCH-D1** | Ports declared inward, adapters outward; `tools` never depends on `adapter-io` | **proposed** — ADR-0006 §hierarchy |
 | **ARCH-D2** | INV-MCP-1's "exactly five tools" is superseded by the derived-surface property + a measured budget | **OWNER-RATIFIED 2026-07-25** — ADR-0006 |
 | **ARCH-D3a** (UPDATE leg) | On a write that lands on an EXISTING node, `tier` and `scope` stop being author-supplied gate selectors: the required class and the authorized scope are read off the incumbent's own stored fact | **CLOSED 2026-07-25 — ADR-0007.** `governed-emit.ts` §2.25 refuses `governance-downgrade` / `unauthorized for target` (which, per the F1 amendment to ADR-0007, is ALSO the refusal for an incumbent whose stored fact is unreadable — a distinct reason there was a CAS-health oracle) / `governance-relocation`; pinned by `SCN-GE-I1`/`I2`/`I5`/`I15` |
-| **ARCH-D3b** (CREATE leg) | The same for a write that mints a node, where there is no incumbent to derive from | **OPEN — DEFINE required.** `route` still selects on the declared `tier` (`packages/knowledge/src/ratify/fastpath.ts:64`), and gate 0 only checks that the payload is WELL-FORMED (the class is on the lattice, the scope is a non-empty string, `kind` agrees with `check`) — never that the declaration is EARNED. Still a live governance hole; it is not CAMPAIGN-10 debt |
+| **ARCH-D3b** (CREATE leg) | The same for a write that mints a node, where there is no incumbent to derive from | **DECIDED 2026-08-30 (§3.4), IMPLEMENTATION OPEN.** The `tier` conjunct is closed by the one-way join at `packages/knowledge/src/ratify/fastpath.ts:143` — a declared class can only make the gate harder, so a self-declared `T0` buys full ratification and a self-declared `T2` buys no authority. The hole is re-scoped to two named items: the constant `DOOR_RATIFY_CTX = { contested: false, lowRisk: true }` (`packages/adapter-io/src/governed-emit-route.ts:24`), which is the pinned-open constant ARCH-9 forbids by name, and `scope`, which must derive from `primaryAnchor`. Gate 0 still checks only well-formedness. Residual slot-squatting is stated in §3.4 |
 | **ARCH-D4** | Planner legs take an unforgeable read-only port (ocap), replacing the write-spy as the guarantee | **proposed** — supersedes ADR-0004's "property of the type" claim, which is currently overstated |
 
 ## Sources
