@@ -240,6 +240,19 @@ against a policy file readable by anyone who can invoke the CLI. **KNOW-11 is an
 not an adversarial control.** That is a legitimate posture for a local developer tool, and it means a
 dry-run door (`check`) discloses nothing an attacker could not already read.
 
+> **STATED LIMITATION, NOT A SETTLED POSITION (2026-08-30).** The destination is now named: Atlas is to
+> become an open-source product AND a hosted service. Under that destination the paragraph above is a
+> LIMITATION with an expiry, not a resting place — and ARCH-12's revisit condition has FIRED.
+> Specifically, the `check`-discloses-nothing argument holds *because the attacker can already read the
+> disk*; a remote caller cannot, so that justification does not survive the transport and every read
+> door must be re-judged, not just `check`.
+>
+> This paragraph stays, deliberately. It is a precise, self-authored map of the two things that become
+> live vulnerabilities the day the transport goes remote, and this repository is public — so publishing
+> it is an **accepted trade**, made in favour of honesty over obscurity, not an oversight. The ordering
+> it implies is now enforced mechanically rather than by prose: `harness/gates/service-gate-guard.mjs`
+> turns CI red on any non-stdio transport until the blockers are declared closed.
+
 > <a id="arch-12"></a>**ARCH-12 The posture is written down.** This threat model MUST be stated in the
 > reference, not inferred from the code. If the transport ever becomes remote or multi-tenant, both the
 > env-var actor and the readable policy become live vulnerabilities and this clause MUST be revisited before

@@ -38,6 +38,19 @@ READ / PLANNER doors     anchors · slots · draft · check     (new — zero wr
 
 Two invariants make this structural rather than aspirational:
 
+> **AMENDED 2026-08-30 — the word "structural" overclaims what ships.** The ratified text above is left
+> intact; this note corrects it. `reference/atlas-architecture.md` (ARCH-11) states the honest reading:
+> *"the honest claim is 'structurally **checked**' (a spy), not 'structurally **guaranteed**' (a type) —
+> and ADR-0004 currently claims the latter."* The planner legs are built as arrow closures in the same
+> lexical scope as `const store = createDiskStore(…)` (`wire.ts`), so a leg CAN reach `store.put`;
+> write-freedom is enforced today by a runtime spy in tests, not by a type that makes the mutator
+> unreachable. AUTHOR-2 and AUTHOR-13 are true as PROPERTIES; what is not true is that the architecture
+> makes violating them impossible. Closing this is ARCH-11, and its own acceptance criterion is
+> *"enforced by the type, demonstrated by a compile failure, not by a spy"* — not yet implemented.
+>
+> Corrected because this repository is PUBLIC: a reader relies on the word "structural" meaning the
+> code cannot do otherwise, and today it can.
+
 - **AUTHOR-2** — no planner writes, mutates, stages, caches, or queues any byte; no planner appears in
   `WRITE_PATHS` or `GOVERNANCE_SURFACE`.
 - **AUTHOR-13** — retire/supersede is expressed as a *draft variant* carrying the superseded authoring
