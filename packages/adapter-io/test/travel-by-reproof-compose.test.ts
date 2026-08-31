@@ -10,7 +10,7 @@
 // committed, `.atlas/projection`+`cas` committed (staging not).
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { mkdirSync, writeFileSync, copyFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, copyFileSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
@@ -361,3 +361,63 @@ describe('ROUND 3 — ANCHOR EXISTENCE: an otherwise-HONEST fact anchored at som
     }
   });
 });
+
+describe('a COMMITTED store whose proven fact has no bytes is COUNTED, not dropped', () => {
+  // The committed-store pass in `read-access.ts` builds its OWN `ReverifyReport`, separately from
+  // `reverifyStore`. Both used to drop an unresolvable row silently, and the live proof of the fix ran
+  // through the OTHER path — so without this test half the change would be unexercised, which is exactly
+  // the shape of gap the whole `dangling` bucket exists to close.
+
+  it('the CONTROL: with its bytes present, the fact is counted and NOT dangling', () => {
+    const attack = forgeAttackRepo({ primaryAnchor: 'packages/payments/charge.ts' });
+    try {
+      git(attack.repoPath, 'add', '-f', '.atlas/projection.json', '.atlas/cas', '.atlas/policy.json', '.atlas/index.scip');
+      git(attack.repoPath, 'commit', '-q', '-m', 'committed store, bytes intact');
+      const report = composeRuntime(attack.repoPath).reverify?.();
+      expect(report).toMatchObject({ sealedProven: 1, dangling: 0 });
+    } finally {
+      attack.cleanup();
+    }
+  });
+
+  it('with its CAS object deleted, the row lands in `dangling` — not in a zero', () => {
+    const attack = forgeAttackRepo({ primaryAnchor: 'packages/payments/charge.ts' });
+    try {
+      // The fixture's hand-built projection row omits `seal`, while a REAL sealed row carries it — measured
+      // on Atlas's own store, where exactly the 17 proven rows carry a `seal` field and the other 596 do
+      // not. Stamped here so the fixture matches the data this pass actually reads; without it the test
+      // would be asserting over a shape the product never produces.
+      // EVERY `projection*.json`, not just the bare one: `persistProjection` also writes a numbered
+      // generation file, and the reader takes the generation — stamping only `projection.json` edits a file
+      // nothing reads, which is how the first cut of this test failed while looking correct.
+      const atlas = join(attack.repoPath, '.atlas');
+      const projFiles = readdirSync(atlas).filter((f) => /^projection.*\.json$/.test(f));
+      expect(projFiles.length, 'no projection sidecar to stamp — the fixture changed').toBeGreaterThan(0);
+      for (const f of projFiles) {
+        const at = join(atlas, f);
+        const proj = JSON.parse(readFileSync(at, 'utf8')) as { current: [string, Record<string, unknown>][] };
+        for (const entry of proj.current) entry[1]['seal'] = 'proven';
+        writeFileSync(at, JSON.stringify(proj));
+      }
+
+      // Commit the PROJECTION only: the row survives, its bytes do not. That is the shape found on Atlas's
+      // own store — 17 rows served as proven, every object gone.
+      const casRoot = join(attack.repoPath, '.atlas', 'cas');
+      for (const shard of readdirSync(casRoot)) {
+        const d = join(casRoot, shard);
+        if (statSync(d).isDirectory()) rmSync(d, { recursive: true, force: true });
+      }
+      git(attack.repoPath, 'add', '-f', ...projFiles.map((f) => `.atlas/${f}`), '.atlas/policy.json', '.atlas/index.scip');
+      git(attack.repoPath, 'commit', '-q', '-m', 'committed store, bytes gone');
+
+      const report = composeRuntime(attack.repoPath).reverify?.();
+      expect(report?.dangling).toBe(1);
+      expect(report?.sealedProven).toBe(1); // the denominator counts what was CONSIDERED, not what resolved
+      expect(report?.reProven).toBe(0);
+      expect(report?.rows.some((r) => r.outcome === 'dangling')).toBe(true);
+    } finally {
+      attack.cleanup();
+    }
+  });
+});
+

@@ -120,7 +120,7 @@ describe('doc-transcript-guard — the gate can be falsified', () => {
     edit(root, VERIFIED_FILE, (s) => s.replace('     stale: false', '     stale: falsE'));
     const { code, out } = run(root);
     expect(code, out).toBe(1);
-    expect(out).toMatch(/how-to\/move-a-repo-in\.md#\d+ \(docs\/how-to\/move-a-repo-in\.md:\d+\) — output diverged/);
+    expect(out).toMatch(/how-to\/move-a-repo-in\.md#\S+ \(docs\/how-to\/move-a-repo-in\.md:\d+\) — output diverged/);
     expect(out).toMatch(/ran: {2}atlas query src/);
     expect(out).toMatch(/doc: {2}" {2}stale: falsE"/);
     expect(out).toMatch(/real: " {2}stale: false"/);
@@ -153,7 +153,7 @@ describe('doc-transcript-guard — the gate can be falsified', () => {
     rmSync(join(root, 'docs', 'reference', 'commands', 'mine.md'));
     const { code, out } = run(root);
     expect(code, out).toBe(1);
-    expect(out).toMatch(/STALE DECLARATION — reference\/commands\/mine\.md#\d+ is exempted here/);
+    expect(out).toMatch(/STALE DECLARATION — reference\/commands\/mine\.md#\S+ is exempted here/);
   });
 
   // The anti-regression leg: VERIFIED is the DEFAULT, so an undeclared transcript is RUN, not skipped.
@@ -195,8 +195,12 @@ describe('doc-transcript-guard — every declaration is EARNED', () => {
   it('no FROZEN/UNVERIFIABLE block reproduces byte-exactly against the real fixture', () => {
     const src = readFileSync(GATE, 'utf8');
     // Every SINGLE-QUOTED block key in the gate: the FROZEN map's `'key':` and the UNVERIFIABLE groups'
-    // `'key',`. The header names keys in BACKTICKS, so prose is not swept in.
-    const declared = [...new Set([...src.matchAll(/'([^']+\.md#\d+)'/g)].map((m) => m[1]))];
+    // `'key',`. The header names keys in BACKTICKS, so prose is not swept in. The shape is
+    // `<file>.md#<invocation slug>#<ordinal>` — the middle segment was added when the file-wide ordinal was
+    // replaced, and this pattern is why the change could not land quietly: it takes the WHOLE key, so a
+    // pattern still matching only the old `#<digits>` tail extracts ZERO and this test's own anti-vacuity
+    // guard fires rather than passing over an empty list.
+    const declared = [...new Set([...src.matchAll(/'([^']+\.md#[^']*#\d+)'/g)].map((m) => m[1]))];
     expect(declared.length, 'the declaration list was not extracted — this test would be vacuous').toBeGreaterThan(10);
 
     const dir = mkdtempSync(join(tmpdir(), 'atlas-doctrans-earned-'));
@@ -222,7 +226,7 @@ describe('doc-transcript-guard — every declaration is EARNED', () => {
     } catch (e) {
       out = `${e.stdout ?? ''}${e.stderr ?? ''}`;
     }
-    const failed = new Set([...out.matchAll(/^ {2}✗ (\S+#\d+)/gm)].map((m) => m[1]));
+    const failed = new Set([...out.matchAll(/^ {2}✗ (\S+#\S*#\d+)/gm)].map((m) => m[1]));
     const unearned = declared.filter((k) => !failed.has(k));
     expect(
       unearned,
@@ -231,3 +235,58 @@ describe('doc-transcript-guard — every declaration is EARNED', () => {
     ).toEqual([]);
   }, 180_000);
 });
+
+describe('doc-transcript-guard — an insertion cannot silently re-attach a declaration', () => {
+  // The defect the invocation-scoped key replaced. Under a FILE-WIDE ordinal, inserting one worked example
+  // partway down a page shifted every later block by one, so each exemption below quietly moved to its
+  // neighbour and NOTHING failed — the key still existed and still named a block. These are the teeth.
+
+  /** Insert a fenced `atlas` block just BEFORE the first existing transcript on a page. */
+  const insertBefore = (root, rel, invocation) => {
+    const f = join(root, 'docs', rel);
+    const text = readFileSync(f, 'utf8');
+    const at = text.indexOf('```\n$ atlas');
+    expect(at, 'the page must already carry a transcript to insert before').toBeGreaterThan(-1);
+    const block = '```\n$ ' + invocation + '\nstatus: ok\nthis output is deliberately wrong\n```\n\n';
+    writeFileSync(f, text.slice(0, at) + block + text.slice(at));
+  };
+
+  // NO CONTROL RUN HERE, DELIBERATELY, AND THIS IS THE ONLY REASON. Every `run()` re-executes the WHOLE
+  // corpus against the built binary — a fixture repo per VERIFIED block — so each test in this file is
+  // minutes of CI, not milliseconds. The control this section needs ("the untouched corpus passes") is
+  // already asserted by `doc-transcript-guard — the real corpus` above, over the same fixtures. Repeating it
+  // would buy nothing and cost another full pass. Two runs is the floor for the property below: one for each
+  // insertion shape, and they must not share a root.
+
+  it('a block inserted with a DIFFERENT invocation shifts NOTHING — only the new block is judged', () => {
+    // Under the old keying this shifted every later declaration by one. The failure must name the block that
+    // is actually wrong, and no other.
+    const root = scratchRoot();
+    insertBefore(root, 'reference/commands/doctor.md', 'atlas doctor hotset 1');
+    const { code, out } = run(root);
+    expect(code).not.toBe(0);
+    expect(out).toContain('atlas doctor hotset 1'); // the inserted block, judged on its own bytes
+    expect(out).not.toContain('STALE DECLARATION'); // no other key moved
+  });
+
+  it('a block inserted with the SAME invocation FAILS LOUDLY instead of re-attaching', () => {
+    // The one case the narrower key cannot PREVENT — same slug, so the ordinals within that slug do shift —
+    // and must therefore make impossible to MISS.
+    //
+    // [CORRECTED AFTER RUNNING IT.] This first asserted `STALE DECLARATION`, on the reasoning that the tail
+    // key stops resolving. That is only true when the declarations cover the tail; here the shifted block
+    // ends up UNDECLARED instead, so it is judged as VERIFIED and fails on its bytes. Both are loud, and
+    // which one fires depends on the page — so the assertion is the property that actually holds (it cannot
+    // pass) plus the two named shapes it can take, rather than a guess about which.
+    const root = scratchRoot();
+    const f = join(root, 'docs', 'reference/commands/verify-store.md');
+    const text = readFileSync(f, 'utf8');
+    const at = text.indexOf('```\n$ atlas verify-store');
+    expect(at).toBeGreaterThan(-1);
+    writeFileSync(f, text.slice(0, at) + '```\n$ atlas verify-store\nstatus: ok\nwrong\n```\n\n' + text.slice(at));
+    const { code, out } = run(root);
+    expect(code).not.toBe(0);
+    expect(out).toMatch(/STALE DECLARATION|output diverged/);
+  });
+});
+

@@ -29,6 +29,7 @@ const REPORT = (o: Partial<ReverifyReport>): ReverifyReport => ({
   reProven: 0,
   broken: 0,
   unverifiable: 0,
+  dangling: 0,
   rows: [],
   ...o,
 });
@@ -107,7 +108,7 @@ describe('CLI-11 — WRONG-DIR REFUSAL (task #244): running outside a repo with 
     let calls = 0;
     const reverify = (): ReverifyReport => {
       calls++;
-      return { sealedProven: 0, reProven: 0, broken: 0, unverifiable: 0, rows: [] };
+      return { sealedProven: 0, reProven: 0, broken: 0, unverifiable: 0, dangling: 0, rows: [] };
     };
     const code = await main(['verify-store'], { reverify });
     expect(calls).toBe(0);
@@ -124,7 +125,7 @@ describe('CLI-11 — WRONG-DIR REFUSAL (task #244): running outside a repo with 
     let calls = 0;
     const reverify = (): ReverifyReport => {
       calls++;
-      return { sealedProven: 0, reProven: 0, broken: 0, unverifiable: 0, rows: [] };
+      return { sealedProven: 0, reProven: 0, broken: 0, unverifiable: 0, dangling: 0, rows: [] };
     };
     const code = await main(['verify-store'], { reverify });
     expect(calls).toBe(1);

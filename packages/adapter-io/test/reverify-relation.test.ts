@@ -210,6 +210,7 @@ describe('reverifyStore — relations fold into the same three buckets alongside
       reProven: 1,
       broken: 1,
       unverifiable: 1,
+      dangling: 0, // every pair RESOLVED here — no row was dropped for want of bytes
       rows: [
         { nodeKey: 'r-ok', outcome: 're-proven', reason: expect.stringContaining('PROVEN') },
         { nodeKey: 'r-drift', outcome: 'broken', reason: expect.stringContaining('did NOT re-prove') },

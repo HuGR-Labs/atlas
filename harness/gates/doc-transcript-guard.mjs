@@ -74,15 +74,33 @@ const FILES = {
 };
 
 // ── the declarations ────────────────────────────────────────────────────────────────────────────────────
-// Keyed `<docs-relative file>#<ordinal within that file, 1-based>`. NOT by line number: a line key breaks on
-// any edit ABOVE the block, and an exemption list that breaks constantly gets RE-KEYED rather than
-// re-examined. An ordinal moves only when a transcript is added, removed or reordered — exactly when the
-// exemption deserves a second look. Checked for staleness by leg (4), and for TIGHTNESS by the twin: a
-// declared block that reproduces byte-exactly is one that silently stopped being checked.
+// Keyed `<docs-relative file>#<invocation slug>#<ordinal among blocks with THAT slug, 1-based>`.
+//
+// NOT by line number: a line key breaks on any edit ABOVE the block, and an exemption list that breaks
+// constantly gets RE-KEYED rather than re-examined.
+//
+// AND NOT BY A FILE-WIDE ORDINAL EITHER, which is what this was and why it changed. A bare ordinal is
+// SILENTLY REASSIGNED by an insertion: adding one worked example partway down a page shifts every later
+// block by one, so each declaration below quietly re-attaches to its NEIGHBOUR — a stated reason like "needs
+// a stored grounded fact" lands on a block that needs no such thing, and NOTHING FAILS, because the key
+// still exists and still names *a* block. Measured while adding the `doctor cas` example to
+// `reference/commands/doctor.md`: the new block inherited an exemption belonging to a different one.
+//
+// Scoping the ordinal to the INVOCATION fixes the silence rather than the symptom. Inserting a block with a
+// different command now shifts NOTHING. Inserting one with the SAME command still shifts — but that case
+// cannot pass quietly: the tail key stops resolving, and leg (4) reports it as a STALE DECLARATION. Silence
+// became noise, which is the only property that matters in an exemption ledger.
+//
+// The slug is the invocation reduced to `[A-Za-z0-9._/@-]`, capped — readable enough to review by eye, and
+// free of the quotes and backticks that real `atlas` argv carry. Two distinct commands that slug alike merely
+// share one ordinal slot, which is still far narrower than the file-wide counter this replaced.
+//
+// Checked for staleness by leg (4), and for TIGHTNESS by the twin: a declared block that reproduces
+// byte-exactly is one that silently stopped being checked.
 
 /** Blocks that quote output the product no longer produces, ON PURPOSE. Each states why. */
 const FROZEN = {
-  'adr/ADR-0013-the-pack-has-two-bands-governing-and-advisory.md#1':
+  'adr/ADR-0013-the-pack-has-two-bands-governing-and-advisory.md#atlas-query-packages/kernel#1':
     'ADR-0013 quotes the PRE-#107 output as its own "before" evidence. Regenerating it would delete the ' +
     'record of the change the ADR exists to justify.',
 };
@@ -103,37 +121,37 @@ const each = (reason, ...keys) => Object.fromEntries(keys.map((k) => [k, reason]
  *  every key still listed individually — the LIST is the evidence, so it is never summarised to a count. */
 const UNVERIFIABLE = {
   ...each(NEEDS_FACT,
-    'how-to/emit-a-grounded-fact.md#1', 'how-to/emit-a-grounded-fact.md#2', 'how-to/emit-a-grounded-fact.md#3',
-    'how-to/find-and-fix-drift.md#1', 'how-to/find-and-fix-drift.md#2', 'how-to/find-and-fix-drift.md#3',
-    'reference/commands/doctor.md#1', 'reference/commands/doctor.md#2', 'reference/commands/doctor.md#3',
-    'reference/commands/doctor.md#4', 'reference/commands/emit.md#1', 'reference/commands/emit.md#2',
-    'reference/commands/emit.md#3', 'reference/commands/emit.md#4', 'reference/commands/link.md#1',
-    'reference/commands/link.md#2', 'reference/commands/node.md#1', 'reference/commands/own.md#1',
-    'reference/commands/own.md#2', 'reference/commands/own.md#3', 'reference/commands/own.md#4',
-    'reference/commands/own.md#5', 'reference/commands/own.md#6', 'reference/commands/query.md#1'
+    'how-to/emit-a-grounded-fact.md#ATLAS_RATIFY_TOKEN-lead-atlas-emit-greet-fact.json---at-20ff#1', 'how-to/emit-a-grounded-fact.md#atlas-query-src#1', 'how-to/emit-a-grounded-fact.md#atlas-node-20512b7622b0d8864f20311700f4091b991ea5317797ce615#1',
+    'how-to/find-and-fix-drift.md#atlas-query-src#1', 'how-to/find-and-fix-drift.md#atlas-doctor-why-f9517988f330a775ffc767c072fa01e52f386422204#1', 'how-to/find-and-fix-drift.md#atlas-doctor-reground-f9517988f330a775ffc767c072fa01e52f3864#1',
+    'reference/commands/doctor.md#atlas-doctor-archive#1', 'reference/commands/doctor.md#atlas-doctor-why-f9517988f330a775ffc767c072fa01e52f386422204#1', 'reference/commands/doctor.md#atlas-doctor-reground-f9517988f330a775ffc767c072fa01e52f3864#1',
+    'reference/commands/doctor.md#atlas-doctor-hotset-2000#1', 'reference/commands/emit.md#ATLAS_RATIFY_TOKEN-lead-atlas-emit-greet-fact.json---at-20ff#1', 'reference/commands/emit.md#atlas-emit-greet-fact.json---at-20ff947f42e7a2052326a59399a9#1',
+    'reference/commands/emit.md#atlas-emit-greet-fact.json---at-20ff947f42e7a2052326a59399a9#2', 'reference/commands/emit.md#ATLAS_RATIFY_TOKEN-lead-atlas-emit-bad-fact.json---at-22b3ca#1', 'reference/commands/link.md#ATLAS_RATIFY_TOKEN-lead-atlas-link-bb4094b5aa8ca84d6d5d4e2c1#1',
+    'reference/commands/link.md#atlas-query-src#1', 'reference/commands/node.md#atlas-node-20512b7622b0d8864f20311700f4091b991ea5317797ce615#1', 'reference/commands/own.md#atlas-own-src#1',
+    'reference/commands/own.md#atlas-own-src/greet.ts#1', 'reference/commands/own.md#atlas-own-src#2', 'reference/commands/own.md#atlas-own-packages/adapter-io#1',
+    'reference/commands/own.md#atlas-own-src/typo.ts#1', 'reference/commands/own.md#atlas-own-lib#1', 'reference/commands/query.md#atlas-query-src#1'
   ),
   ...each('an annotated composite of three runs with margin notes; it has no `status:` header and is not one run',
-    'how-to/find-and-fix-drift.md#4'
+    'how-to/find-and-fix-drift.md#ATLAS_RATIFY_TOKEN-lead-atlas-emit-f.json---at-HEAD#1'
   ),
   ...each(FOREIGN_REV,
-    'how-to/find-and-fix-drift.md#5', 'reference/commands/link.md#3', 'reference/commands/link.md#4',
-    'reference/commands/link.md#5', 'reference/commands/link.md#6', 'reference/commands/link.md#7',
-    'reference/commands/link.md#8', 'reference/commands/reconcile.md#1', 'reference/commands/reconcile.md#2'
+    'how-to/find-and-fix-drift.md#atlas-reconcile-20ff947f42e7a2052326a59399a94a1864301b47#1', 'reference/commands/link.md#ATLAS_RATIFY_TOKEN-lead-atlas-link-bb4094b5-f9517988---retra#1', 'reference/commands/link.md#atlas-link-bb4094b5-f9517988#1',
+    'reference/commands/link.md#ATLAS_RATIFY_TOKEN-lead-atlas-link-bb4094b5-bb4094b5#1', 'reference/commands/link.md#ATLAS_RATIFY_TOKEN-lead-atlas-link-bb4094b5-1111111111111111#1', 'reference/commands/link.md#atlas-link-bb4094b5-f9517988---hurry#1',
+    'reference/commands/link.md#ATLAS_RATIFY_TOKEN-lead-atlas-link-bb4094b5-f9517988#1', 'reference/commands/reconcile.md#atlas-reconcile-20ff947f42e7a2052326a59399a94a1864301b47#1', 'reference/commands/reconcile.md#atlas-reconcile-22b3ca01865aaa34fff93f050db9c7bd927b4546#1'
   ),
   ...each(EDITED,
-    'how-to/move-a-repo-in.md#1', 'how-to/move-a-repo-in.md#3', 'reference/commands/init.md#1',
-    'reference/commands/init.md#2', 'reference/commands/init.md#3', 'reference/commands/init.md#4',
-    'reference/commands/query.md#5'
+    'how-to/move-a-repo-in.md#atlas-init-.#1', 'how-to/move-a-repo-in.md#atlas-query-src#2', 'reference/commands/init.md#atlas-init-.#1',
+    'reference/commands/init.md#atlas-init-.#2', 'reference/commands/init.md#atlas-init-src#1', 'reference/commands/init.md#atlas-init-no/such/path#1',
+    'reference/commands/query.md#atlas-query-src#3'
   ),
   ...each('shows a SCIP-indexed repository and a pinned external indexer version',
-    'reference/commands/doctor.md#5', 'reference/commands/doctor.md#6'
+    'reference/commands/doctor.md#atlas-doctor-index#1', 'reference/commands/doctor.md#atlas-doctor-index#2'
   ),
   ...each(NEEDS_STAGED,
-    'reference/commands/mine.md#2', 'reference/commands/mine.md#3', 'reference/commands/mine.md#4',
-    'reference/commands/mine.md#5', 'reference/commands/promote.md#1', 'reference/commands/promote.md#2',
-    'reference/commands/promote.md#3', 'reference/commands/promote.md#4', 'reference/commands/promote.md#5',
-    'reference/commands/promote.md#6', 'reference/commands/promote.md#7', 'reference/commands/promote.md#8',
-    'reference/commands/promote.md#9', 'reference/commands/promote.md#11'
+    'reference/commands/mine.md#ATLAS_MINE_SLOT-advisory-atlas-mine-.#2', 'reference/commands/mine.md#ATLAS_MINE_SLOT-advisory-atlas-mine-.#3', 'reference/commands/mine.md#ATLAS_MODEL_CONFIG-PWD/.atlas/model.json-atlas-mine-.#1',
+    'reference/commands/mine.md#atlas-mine-.#1', 'reference/commands/promote.md#atlas-mine-.#1', 'reference/commands/promote.md#atlas-mine-.#2',
+    'reference/commands/promote.md#ATLAS_ACTOR-seat-orchestrator-atlas-promote#1', 'reference/commands/promote.md#ATLAS_ACTOR-seat-orchestrator-ATLAS_RATIFY_TOKEN-seat-orches#1', 'reference/commands/promote.md#atlas-node-83660b81ecf5f0b371e37448124b1465d1626bc134b7be5ac#1',
+    'reference/commands/promote.md#atlas-query-src#1', 'reference/commands/promote.md#ATLAS_ACTOR-seat-orchestrator-ATLAS_RATIFY_TOKEN-seat-orches#2', 'reference/commands/promote.md#ATLAS_ACTOR-seat-orchestrator-ATLAS_RATIFY_TOKEN-seat-orches#3',
+    'reference/commands/promote.md#ATLAS_ACTOR-seat-orchestrator-ATLAS_RATIFY_TOKEN-seat-orches#4', 'reference/commands/promote.md#ATLAS_ACTOR-seat-orchestrator-ATLAS_RATIFY_TOKEN-seat-orches#6'
   ),
   // #99a — `atlas relations` worked examples are ILLUSTRATIVE: they show fabricated unit keys
   // (`pkg/order.ts::placeOrder`) and abbreviated relation nodeKeys (`rel:abc…`), so no clean checkout
@@ -141,24 +159,24 @@ const UNVERIFIABLE = {
   // (`atlas emit` a `family:relation` fact per edge). The BEHAVIOUR they illustrate is mechanically pinned
   // by `packages/cli/test/relations-cli.test.ts` (real composed store) — this page is the human narration of it.
   ...each('an illustrative worked example over fabricated units + abbreviated relation nodeKeys; the behaviour is pinned by relations-cli.test.ts over a real composed store, not reproducible from a clean checkout',
-    'reference/commands/relations.md#1', 'reference/commands/relations.md#2'
+    'reference/commands/relations.md#atlas-relations-pkg/order.ts-placeOrder-both#1', 'reference/commands/relations.md#atlas-relations-pkg/order.ts-placeOrder-out#1'
   ),
   // #99b — POPULATED `atlas negations` examples show a SEEDED negation + fired abstention a clean checkout lacks (it reproduces to the empty negations.md#3, which IS diffed).
   ...each('an illustrative worked example over a SEEDED negation + fired abstention (a clean checkout stores neither, so it reproduces to the empty form of negations.md#3); the behaviour is pinned by negations-cli.test.ts + negations-mcp.test.ts, not reproducible from a clean checkout',
-    'reference/commands/negations.md#1', 'reference/commands/negations.md#2'
+    'reference/commands/negations.md#atlas-negations-src#1', 'reference/commands/negations.md#atlas-negations-src---abstained#1'
   ),
   // sound-genesis PROVEN family — PROVEN/REFUTED need a witnessed caller edge an un-indexed fixture lacks
   // (it ABSTAINS on every symbol — that IS the diffed verify-fact.md#1); pinned by s32-verify-fact.blackbox.
   ...each('an illustrative worked example needing a witnessed caller edge in the index (a clean checkout has none, so it reproduces to the ABSTAIN form of verify-fact.md#1); the PROVEN/REFUTED behaviour is pinned by s32-verify-fact.blackbox.test.ts over a controlled index.scip, not reproducible from a clean checkout',
-    'reference/commands/verify-fact.md#3', 'reference/commands/verify-fact.md#4'
+    'reference/commands/verify-fact.md#atlas-verify-fact-dependency-scip-.-.-greet---scope-src/app#1', 'reference/commands/verify-fact.md#atlas-verify-fact-negation-scip-.-.-greet---scope-src/app#1'
   ),
   // REVERIFY-GATE — the `broken`/`unverifiable` transcripts need a POPULATED durable store carrying a
   // sealed-proven fact (a clean checkout has none, so it reproduces to the empty form of verify-store.md#1,
   // which IS diffed). Both buckets are mechanically pinned end to end by
   // reverify-gate-compose.test.ts (@atlas/adapter-io, a real composed runtime + real oracle) and
   // s34-reverify-store.blackbox.test.ts (the shipped binary), not reproducible from a clean checkout.
-  ...each('needs a populated durable store carrying a seal:\'proven\' fact (a clean checkout has none, so it reproduces to the empty form of verify-store.md#1); the broken/unverifiable behaviour is pinned by reverify-gate-compose.test.ts + s34-reverify-store.blackbox.test.ts, not reproducible from a clean checkout',
-    'reference/commands/verify-store.md#2', 'reference/commands/verify-store.md#3'
+  ...each('needs a populated durable store carrying a seal:\'proven\' fact (a clean checkout has none, so it reproduces to the empty form of the same page’s zero-fact block); the broken/unverifiable behaviour is pinned by reverify-gate-compose.test.ts + s34-reverify-store.blackbox.test.ts, not reproducible from a clean checkout',
+    'reference/commands/verify-store.md#atlas-verify-store#2', 'reference/commands/verify-store.md#atlas-verify-store#3'
   ),
   // #99 R7 — the `atlas derive-relations` OUTPUT-SHAPE block is an ILLUSTRATIVE template over placeholders
   // (`<N>`/`<E>`/`<A>`/`<contentHash>`), not one run: a real pass needs a SCIP-indexed repo with a witnessed
@@ -166,7 +184,7 @@ const UNVERIFIABLE = {
   // pinned end to end by relation-derive-reachability.test.ts (@atlas/adapter-io, a real composed runtime +
   // real oracle, AR-13) and derive-relations-cli.test.ts (the CLI render), not reproducible from a clean checkout.
   ...each('an illustrative output-shape template over placeholders needing a SCIP-indexed repo + a witnessed cross-unit edge + an authorized actor (a clean checkout has none); the behaviour is pinned by relation-derive-reachability.test.ts + derive-relations-cli.test.ts, not reproducible from a clean checkout',
-    'reference/commands/derive-relations.md#1'
+    'reference/commands/derive-relations.md#status#1'
   ),
   // #234 D4 — the `atlas transitions`/`atlas transition` POPULATED examples show a unit lineage
   // (`src/pay.ts::charge`) with a produced transition across two revs where its content changed. The clean
@@ -175,7 +193,7 @@ const UNVERIFIABLE = {
   // #234 acceptance suite (transition-family.test.ts / cli/test/transitions-cli.test.ts + the blackbox e2e over
   // a real 2-rev fixture), not reproducible from a clean checkout.
   ...each('an illustrative worked example over a produced 2-rev transition (a clean fixture holds no such unit lineage nor two-rev change, so it reproduces to the empty/rejected form); the behaviour is pinned by the #234 acceptance suite + the blackbox e2e over a real 2-rev fixture, not reproducible from a clean checkout',
-    'reference/commands/transitions.md#1', 'reference/commands/transition.md#1'
+    'reference/commands/transitions.md#atlas-transitions-src/pay.ts-charge#1', 'reference/commands/transition.md#atlas-transition-src/pay.ts-charge-HEAD-1-HEAD#1'
   ),
   // #95 D5 — the `atlas test-vacuity`/`atlas test-vacuities` POPULATED examples show a produced proven
   // test-vacuity fact (a named test whose only assertions sit inside `catch`). The clean fixture (README +
@@ -184,7 +202,7 @@ const UNVERIFIABLE = {
   // acceptance anchor (s95-test-vacuity.blackbox.test.ts over a real fixture repo), not reproducible from a
   // clean checkout.
   ...each('an illustrative worked example over a produced proven test-vacuity fact (a clean fixture holds no assertion-only-in-catch test unit, so it reproduces to the empty/abstain form); the behaviour is pinned by the #95 acceptance anchor s95-test-vacuity.blackbox.test.ts over a real fixture repo, not reproducible from a clean checkout',
-    'reference/commands/test-vacuity.md#1', 'reference/commands/test-vacuities.md#1'
+    'reference/commands/test-vacuity.md#atlas-test-vacuity-.#1', 'reference/commands/test-vacuities.md#atlas-test-vacuities-test/sample.test.ts#1'
   ),
   // WP-10.A3.CLI — the `atlas check` dry-run verdict NAMES the first refusing gate and carries that gate's
   // remedy; the gate and remedy vary by candidate, anchor, and revision (over the clean fixture the citation
@@ -192,7 +210,7 @@ const UNVERIFIABLE = {
   // behaviour — composes via the draft planner, dry-runs the gate chain, fails closed, refuses an out-of-vocab
   // slot at the draft surface — is pinned by packages/cli/test/check-cli.test.ts over a real composed runtime.
   ...each('an illustrative dry-run verdict naming the first refusing gate + its remedy (which vary by candidate, anchor, and revision — not byte-stable across fixtures); the behaviour is pinned by check-cli.test.ts over a real composed runtime, not reproducible from a clean checkout',
-    'reference/commands/check.md#1'
+    'reference/commands/check.md#status#1'
   ),
   // WP-11.W8 — `atlas memory-emit` needs a `MemoryEntry` JSON file on disk (like `atlas emit` needs a fact
   // file, NEEDS_FACT above); this gate's fixture writes ONLY `README.md`/`src/{greet,math}.ts` (see `FILES`),
@@ -203,7 +221,7 @@ const UNVERIFIABLE = {
   // `missing.json` usage error) needs no entry file to exist AT ALL — that is the point of the block — so it
   // stays VERIFIED, not listed here.
   ...each('needs a MemoryEntry JSON file this gate\'s fixture does not create (like atlas emit\'s NEEDS_FACT); the behaviour is pinned by memory-emit-cli.test.ts + memory-emit-mcp.test.ts over a real composed runtime with an injected fixture file, not reproducible from a clean checkout',
-    'reference/commands/memory-emit.md#1', 'reference/commands/memory-emit.md#2'
+    'reference/commands/memory-emit.md#ATLAS_ACTOR-dev@example.com-atlas-memory-emit-project-entry.#1', 'reference/commands/memory-emit.md#status#1'
   ),
 };
 
@@ -224,11 +242,18 @@ function markdown(dir, out = []) {
  * a bare `status:` verdict header. Returns `{ key, file, ord, line, body }` — `key` is the stable
  * `file#ordinal` the declarations above use, and `line` is carried for the REPORT only, never for lookup.
  */
+/** The invocation, reduced to a key-safe slug. Deterministic and total: any argv reduces to SOMETHING, and
+ *  an empty reduction falls back to `cmd` rather than to an empty key that would silently pool blocks. */
+function slugOf(invocation) {
+  const s = invocation.replace(/[^A-Za-z0-9._/@-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+  return s.length === 0 ? 'cmd' : s;
+}
+
 function transcripts() {
   const out = [];
   for (const abs of markdown(DOCS)) {
     const file = abs.slice(DOCS.length + 1).split(/[\\/]/).join('/');
-    let ord = 0;
+    const ords = new Map(); // slug -> how many blocks with that slug have been seen in THIS file
     const lines = readFileSync(abs, 'utf8').split('\n');
     let open = null;
     for (let i = 0; i < lines.length; i++) {
@@ -241,8 +266,13 @@ function transcripts() {
       if (m[3].trim() !== '') continue; // an opener for a new block cannot close the current one
       const body = lines.slice(open.line, i).map((l) => (l.startsWith(open.indent) ? l.slice(open.indent.length) : l));
       if (body.some((l) => /^\$ .*\batlas\b/.test(l) || /^status: (ok|error|rejected)$/.test(l))) {
-        ord += 1;
-        out.push({ key: `${file}#${ord}`, file, ord, line: open.line, body });
+        // The invocation IS the key's discriminant. A block with no `$` line is a bare verdict header; those
+        // share the `status` slot, which is exactly as narrow as the information available.
+        const dollar = body.find((l) => /^\$ .*\batlas\b/.test(l));
+        const slug = dollar === undefined ? 'status' : slugOf(dollar.slice(2).trim());
+        const ord = (ords.get(slug) ?? 0) + 1;
+        ords.set(slug, ord);
+        out.push({ key: `${file}#${slug}#${ord}`, file, ord, line: open.line, body });
       }
       open = null;
     }
