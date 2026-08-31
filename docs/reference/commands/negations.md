@@ -93,8 +93,9 @@ abstention *recorded* — through the governed emit door; there is no write path
 
 `negations` is on **both** transports. Over MCP it is the `atlas-negations` tool, served directly from the
 injected read leg (it is **not** in `GOVERNANCE_SURFACE` — it opens no governed surface, so there is no `Tool`
-token and the closed governance surface stays five; production advertises seven: the five governance tools
-plus `atlas-relations` and `atlas-negations`). Its input schema is documented on the tool:
+token and `GOVERNANCE_SURFACE` is untouched by this door; production advertises it alongside the governance
+surface plus `atlas-relations`, `atlas-negations`, and every read/planner door — see the README's command
+table for the current surface). Its input schema is documented on the tool:
 `{ scope: string (required), abstained?: boolean }`. The **verdict** bytes (`data` + `guidance`) are identical
 to the CLI's, because both transports drive the one shared builder.
 

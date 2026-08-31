@@ -107,6 +107,25 @@ export {
 // `anchorsVerdict`/`slotsVerdict`/`draftVerdict` from here; `checkVerdict`/`doctorVerdict` are new). They live
 // here (not @atlas/cli) because the MCP server cannot import @atlas/cli — the ring forbids that layer.
 export { anchorsVerdict, slotsVerdict, draftVerdict, checkVerdict, doctorVerdict } from './author-verdicts.js';
+// WP-11.W8 / CAMPAIGN-11 — the SHARED memory READ-door verdict builders both transports drive (mirrors
+// `author-verdicts.js` above, one file per campaign so a review reads one cluster at a time).
+export { memoryRecallVerdict, memoryHeaderVerdict, memoryAwarenessVerdict, memoryOrientationVerdict } from './memory-verdicts.js';
+// WP-11.W8 / CAMPAIGN-11 — the five memory-cluster factories, now reachable from the composition root
+// (`compose.ts`). Exported so a downstream test (or a future composition root) can build the SAME doors
+// without reaching into adapter-io internals — the same discipline `createDiskStore`/`createGovernedEmit`
+// already follow.
+export { createDurableMemory, memoryLogPath } from './memory-store.js';
+export type { DurableMemory, MemoryRead } from './memory-store.js';
+export { createMemoryEmit } from './memory-emit.js';
+export type { MemoryEmit, MemoryEmitDeps, MemoryVerdict, MemoryAdmitted, MemoryRejected, MemoryRefusal } from './memory-emit.js';
+export { createMemoryRead } from './memory-read.js';
+export type { MemoryReadDoor, MemoryReadDeps, ProjectSlab, RuleRespawnVerdict, SpawnFoldVerdict } from './memory-read.js';
+export { createDurableOrientation, orientationLogPath } from './orientation-store.js';
+export type { DurableOrientation, OrientationRead } from './orientation-store.js';
+export { createAwarenessStore, realAtlasRoot } from './awareness-store.js';
+export type { AwarenessStore } from './awareness-store.js';
+export { makeScannerAdapter, detectAvailableScanner, runScanner, NO_SCANNER_NAME } from './scanner.js';
+export type { ScanVerdict, ScannerBinarySpec } from './scanner.js';
 export { composeRuntime, buildHeuristic, buildGate, buildMineAdmission } from './compose.js';
 export type { ComposedRuntime, MineAdmission, Reground } from './compose.js';
 // WP-10.A1.ADAPTER — the ONE grounding computer (AUTHOR-1): the single fold→build derivation the emit truth-

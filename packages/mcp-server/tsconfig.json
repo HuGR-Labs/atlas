@@ -6,6 +6,7 @@
   "include": ["src", "test"],
   "references": [
     { "path": "../adapter-io" },
-    { "path": "../tools" }
+    { "path": "../tools" },
+    { "path": "../memory" }
   ]
 }

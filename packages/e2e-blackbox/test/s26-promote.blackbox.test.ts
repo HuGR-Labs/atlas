@@ -197,7 +197,7 @@ describe('S26 — atlas promote: the governed route out of staging', () => {
   });
 
   it('7. the command is CLI-only — the MCP surface publishes no promotion tool', () => {
-    // `GOVERNANCE_SURFACE` stays 5 and `WRITE_PATHS` stays `{atlas-emit, atlas-link}`: promotion is an
+    // `GOVERNANCE_SURFACE`/`WRITE_PATHS` are untouched by THIS door: promotion is an
     // ordinary USE of the emit door (ADR-0008), so there is no tool token for it and no MCP client can
     // promote. teeth: breaks-on "a sixth tool was minted for promotion" — `atlas-promote` would appear here.
     const help = runAtlas(promoted.repoPath, ['nosuchcommand']);

@@ -51,11 +51,11 @@ describe('atlas-link — the retraction MODE is part of the ONE published schema
 });
 
 describe('atlas-link — the mode does not move the governance surface (INV-TOOLS-1 / ADR-0003)', () => {
-  it('GOVERNANCE_SURFACE is still five tools and WRITE_PATHS still two doors', () => {
+  it('the retract MODE does not move GOVERNANCE_SURFACE/WRITE_PATHS (WP-11.W8 grew both for atlas-memory-emit, a real new door — not this mode)', () => {
     // The whole reason retraction is a MODE and not a sixth tool. Pinned here as well as in
     // `spec-conformance-guard` so the property is visible to a reader of this package, not only to CI.
-    expect(GOVERNANCE_SURFACE).toEqual(['atlas-init', 'atlas-query', 'atlas-emit', 'atlas-reconcile', 'atlas-link']);
-    expect(WRITE_PATHS).toEqual(['atlas-emit', 'atlas-link']);
+    expect(GOVERNANCE_SURFACE).toEqual(['atlas-init', 'atlas-query', 'atlas-emit', 'atlas-reconcile', 'atlas-link', 'atlas-memory-emit']);
+    expect(WRITE_PATHS).toEqual(['atlas-emit', 'atlas-link', 'atlas-memory-emit']);
     expect(GOVERNANCE_SURFACE).not.toContain('atlas-unlink');
   });
 });

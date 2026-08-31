@@ -173,7 +173,9 @@ describe('PROP-AUTH-2 — `atlas check` writes nothing (dry-run planner)', () =>
   it('PROP-AUTH-2 (set-level) — `check`: leg ∉ WRITE_PATHS ∧ leg ∉ GOVERNANCE_SURFACE', () => {
     expect(authorityOf('check')).toBe('read');
     expect((WRITE_PATHS as readonly string[]).includes(COMMAND_LEG.check)).toBe(false);
-    expect(GOVERNANCE_SURFACE.length).toBe(5);
-    expect((WRITE_PATHS as readonly string[]).length).toBe(2);
+    // WP-11.W8: GOVERNANCE_SURFACE/WRITE_PATHS grew from 5/2 to 6/3 (`atlas-memory-emit`); `check` still
+    // opens neither, which is the property under test here.
+    expect(GOVERNANCE_SURFACE.length).toBe(6);
+    expect((WRITE_PATHS as readonly string[]).length).toBe(3);
   });
 });

@@ -82,11 +82,14 @@ describe('WP-9.1.1-a.WIRE — one shared five-leg WiredHandler assembly', () => 
       }
     });
 
-    it('TEETH — a split (two-handler) assembly flips: no single copy exposes all five legs', () => {
+    it('TEETH — a split (two-handler) assembly flips: no single copy exposes all six legs', () => {
       const { cfg, cleanup } = makeConfig();
       try {
-        // the real shared assembly: one handler, surface == 5 (WP-SAMEAS added the atlas-link leg).
-        expect(surface(assembleHandler(cfg))).toBe(5);
+        // the real shared assembly: one handler, surface == 6 (WP-SAMEAS added atlas-link, WP-11.W8 added
+        // atlas-memory-emit — present as a literal key even with `cfg.memoryEmit` absent, where it fails
+        // closed on ITS OWN domain reason ("no memory write door composed"), never the assembly-gap message
+        // `legWired` keys off).
+        expect(surface(assembleHandler(cfg))).toBe(6);
         // simulate "two separate handlers, one per entrypoint" (the mutant SCN-WIRE-1a names): each copy
         // holds a DISJOINT leg subset — so NEITHER single copy exposes the full five-leg surface.
         const echo = (args: unknown) => args as never;
@@ -102,7 +105,7 @@ describe('WP-9.1.1-a.WIRE — one shared five-leg WiredHandler assembly', () => 
 
   // ── SCN-WIRE-1b-1 — the SOLE assembly point (module-identity), softened at WIRE scope ────────────────
   describe('SCN-WIRE-1b-1 — assembleHandler is the sole shared-module assembly point (softened)', () => {
-    it('every entrypoint imports THIS one factory (module-symbol identity) — one handler, five legs', async () => {
+    it('every entrypoint imports THIS one factory (module-symbol identity) — one handler, six legs', async () => {
       const { cfg, cleanup } = makeConfig();
       try {
         // module-identity: a re-import of the wire module yields the SAME `assembleHandler` reference — the
@@ -112,9 +115,10 @@ describe('WP-9.1.1-a.WIRE — one shared five-leg WiredHandler assembly', () => 
         // is the shared SOURCE, not a shared instance the two-independent-call reality cannot yet produce.
         const reimport = await import('../src/wire.js');
         expect(reimport.assembleHandler).toBe(assembleHandler);
-        // a single call yields ONE handler whose five legs all dispatch through it (WP-SAMEAS: +atlas-link).
+        // a single call yields ONE handler whose six legs all dispatch through it (WP-SAMEAS: +atlas-link,
+        // WP-11.W8: +atlas-memory-emit).
         const handler = assembleHandler(cfg);
-        expect(surface(handler)).toBe(5);
+        expect(surface(handler)).toBe(6);
       } finally {
         cleanup();
       }

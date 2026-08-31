@@ -116,10 +116,10 @@ describe('WP-7.26-c.TOOLS — a node is addressable over three transports agains
       expect(Reflect.get(v, 'put')).toBeUndefined();
       expect(Reflect.get(v, 'write')).toBeUndefined();
     }
-    // no per-node READ transport mutated the store; the write surface is the two GOVERNED write doors
-    // (atlas-emit + atlas-link, WP-SAMEAS) — the read transports add NO write door.
+    // no per-node READ transport mutated the store; the write surface is the three GOVERNED write doors
+    // (atlas-emit + atlas-link + atlas-memory-emit, WP-SAMEAS + WP-11.W8) — the read transports add NO write door.
     expect(JSON.stringify([...medium.entries()])).toBe(before);
-    expect([...WRITE_PATHS].sort()).toEqual(['atlas-emit', 'atlas-link']);
+    expect([...WRITE_PATHS].sort()).toEqual(['atlas-emit', 'atlas-link', 'atlas-memory-emit']);
   });
 
   it('SCN-TOOLS-10d-1: the CLI addresses a node outside the current phase pack — unscoped', () => {

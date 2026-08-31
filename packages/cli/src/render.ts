@@ -304,6 +304,21 @@ function renderData(data: unknown): string {
     return out;
   }
 
+  // memory-emit { admitted, owner?, kind? } — WP-11.W8, the governed MEMORY write door's receipt
+  // (`MemoryEmitOut`). Recognised by a BOOLEAN `admitted` (no other data shape carries that key). Rendered
+  // ONLY on `admitted:true` (`renderAs` only calls `renderData` for an `ok` verdict, and a fail-closed write
+  // is `ok:false` — its `reason:` line already carries the named MEM gate + human reason, mirroring
+  // `EmitOut`/`LinkOut`). `MemoryRecord` carries no CAS `id` of its own (unlike a knowledge `GroundedFact`)
+  // — `owner`/`kind` are its two structural fields, so those are what a receipt has to show.
+  if (typeof d.admitted === 'boolean') {
+    if (!d.admitted) return '';
+    const record = d.record as { owner?: unknown; kind?: unknown } | undefined;
+    let out = 'data:\n';
+    if (typeof record?.owner === 'string') out += `  owner: ${record.owner}\n`;
+    if (typeof record?.kind === 'string') out += `  kind: ${record.kind}\n`;
+    return out;
+  }
+
   // emit { id, nodeKey? } — the CAS id of the persisted fact. [ENTRY-CLI-6 / AUTHOR-14] `nodeKey` — the
   // SAME identity `atlas node <addr>` reads back — used to ride the `EmitOut` receipt completely unrendered;
   // it now gets its OWN trailing line, APPENDED after `id` (never replacing it), and ONLY when present

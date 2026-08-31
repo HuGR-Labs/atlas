@@ -57,6 +57,12 @@ import { buildReadAccess, trackedProvableAdvisory } from './read-access.js';
 import { assembleHandler, bindFreshnessOracle, edgeModelVersion } from './wire.js';
 import type { WireConfig, WireSeams } from './wire.js';
 import type { ComposedRuntime } from './compose-runtime.js';
+import { createDurableMemory } from './memory-store.js';
+import { createMemoryEmit } from './memory-emit.js';
+import { createMemoryRead } from './memory-read.js';
+import { createDurableOrientation } from './orientation-store.js';
+import { createAwarenessStore } from './awareness-store.js';
+import { makeScannerAdapter } from './scanner.js';
 
 // The `mine` ADMISSION SUPPLY (REQ-CLI-4d), split to its own file at the LOC ceiling and RE-EXPORTED here so
 // the composition root's SURFACE is unchanged — see that file's header for why the seam is real, and for the
@@ -323,12 +329,27 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     resolveBySubtreeAt: revIndex.resolveBySubtreeAt,
   };
 
+  // WP-11.W8 / CAMPAIGN-11 — the durable MEMORY doors, over their OWN separate log (`.atlas/memory.jsonl`,
+  // `.atlas/orientation.jsonl` — NOT the knowledge CAS `store` above). D1: the owner is `actor`, the SAME
+  // env/git-resolved identity every other governed write door rides (KNOW-11) — this composition root
+  // resolves it once and threads it here; no door downstream reads it from a fact/payload or accepts one
+  // as a caller-supplied argument (that would reopen the confused-deputy hole D1/D3 closed).
+  const memoryStore = createDurableMemory(repoPath);
+  const orientationStore = createDurableOrientation(repoPath);
+  const awarenessStore = createAwarenessStore(repoPath);
+  // MEM-9b/9c — the real pre-write scanner: binds `gitleaks`/`trufflehog` when one is on PATH, else a
+  // named fail-closed refusal (never a silent pass — `scanner.ts`'s own header, A9).
+  const memoryScanner = makeScannerAdapter();
+  const memoryEmitDoor = createMemoryEmit({ store: memoryStore, actor, scanner: memoryScanner });
+  const memoryReadDoor = createMemoryRead({ store: memoryStore, actor });
+
   const config: WireConfig = {
     repoPath,
     casPath: join(repoPath, CAS_REL),
     scipPath,
     seams,
     actor,
+    memoryEmit: memoryEmitDoor,
     // N2: the STRUCTURAL axes the CLOSED three-mode retrieval surface reads (`edges` drive the dependency blast
     // radius). Only the axes are threaded — the fact-dependent read model is rebuilt PER QUERY from the live
     // durable store inside the query leg (retrieval-model.ts), so `--by dependency|trigger` reflects an
@@ -514,6 +535,16 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     // blanked; for `tracked-staging`, it blanks to `[]`, matching that leg's own refusal).
     // Wave 3 (#95 D5) — `tvLegs.replay` is now LIVE: a committed proven test-vacuity re-proves against HEAD.
     reverify: () => readAccess.reverified ?? reverifyStore(driftPairs, verifyFactLeg, docExists, scopeHasDocs, tvLegs.replay),
+    // WP-11.W8 — the four CAMPAIGN-11 memory READ doors (`READ_SURFACE`, ADR-0005). Each rides the SAME
+    // `memoryReadDoor`/`awarenessStore`/`orientationStore` built above — never a second store, never a
+    // second scan of `.atlas/memory.jsonl`. Bound onto `atlas-query` in `cli/src/map.ts`'s `COMMAND_LEG`
+    // (the SAME "second projection of a READ oracle" convention `doctor`/`node`/`anchors` already use —
+    // `layer-guard.mjs`'s `boundReadDoor` kind (b)), not `Tool`s of their own: the write half
+    // (`atlas-memory-emit`) is the `GOVERNANCE_SURFACE` member; these open no write path.
+    memoryRecall: memoryReadDoor.recall,
+    memoryHeader: () => memoryReadDoor.header(awarenessStore.read(), orientationStore.orientation()),
+    memoryAwareness: () => awarenessStore.read(),
+    memoryOrientation: () => orientationStore.orientation(),
     ...(readRefusal !== undefined ? { readRefusal } : {}),
     ...(readAdvisory !== undefined ? { readAdvisory } : {}),
   };

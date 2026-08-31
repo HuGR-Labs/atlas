@@ -194,6 +194,17 @@ const UNVERIFIABLE = {
   ...each('an illustrative dry-run verdict naming the first refusing gate + its remedy (which vary by candidate, anchor, and revision — not byte-stable across fixtures); the behaviour is pinned by check-cli.test.ts over a real composed runtime, not reproducible from a clean checkout',
     'reference/commands/check.md#1'
   ),
+  // WP-11.W8 — `atlas memory-emit` needs a `MemoryEntry` JSON file on disk (like `atlas emit` needs a fact
+  // file, NEEDS_FACT above); this gate's fixture writes ONLY `README.md`/`src/{greet,math}.ts` (see `FILES`),
+  // never an arbitrary entry file a page's worked example references. The scanner-unavailable refusal and
+  // the illustrative-admit shape are both pinned by `packages/cli/test/memory-emit-cli.test.ts` and
+  // `packages/mcp-server/test/memory-emit-mcp.test.ts` over a real composed runtime with an injected fixture
+  // entry file, not reproducible from a clean checkout with no such file. `memory-emit.md#3` (the
+  // `missing.json` usage error) needs no entry file to exist AT ALL — that is the point of the block — so it
+  // stays VERIFIED, not listed here.
+  ...each('needs a MemoryEntry JSON file this gate\'s fixture does not create (like atlas emit\'s NEEDS_FACT); the behaviour is pinned by memory-emit-cli.test.ts + memory-emit-mcp.test.ts over a real composed runtime with an injected fixture file, not reproducible from a clean checkout',
+    'reference/commands/memory-emit.md#1', 'reference/commands/memory-emit.md#2'
+  ),
 };
 
 // ── enumeration ─────────────────────────────────────────────────────────────────────────────────────────

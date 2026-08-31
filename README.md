@@ -123,8 +123,13 @@ below, so the drift that produced this correction cannot recur silently.
 | `atlas test-vacuities <unit>` | read | the grounded test-vacuity facts on a unit | [reference](./docs/reference/commands/test-vacuities.md) |
 | `atlas verify-fact` | read | PROVE, REFUTE or ABSTAIN on a typed claim — three `$0`-LLM oracles | [reference](./docs/reference/commands/verify-fact.md) |
 | `atlas verify-store` | read | re-prove every `proven` fact in the store against the live index | [reference](./docs/reference/commands/verify-store.md) |
+| `atlas memory-recall [--owner …] [--kind …] [--task-id …] [--pr-id …]` | read | MEM-4b's one explicit-consult path to task/pr/logbook memory | [reference](./docs/reference/commands/memory-recall.md) |
+| `atlas memory-header` | read | the composed actor's running-turn header (awareness + orientation + own ranked project rules) | [reference](./docs/reference/commands/memory-header.md) |
+| `atlas memory-awareness` | read | the SHARED, byte-identical Awareness slab | [reference](./docs/reference/commands/memory-awareness.md) |
+| `atlas memory-orientation` | read | the DERIVED, SHARED, byte-identical Orientation slab | [reference](./docs/reference/commands/memory-orientation.md) |
 | `atlas emit <fact.json> --at <sha>` | write | governed write door — admits a grounded fact, or says which gate refused it | [reference](./docs/reference/commands/emit.md) |
 | `atlas link <a> <b> [--retract]` | write | governed write door — asserts (or withdraws) `a ≡ b`; never a merge | [reference](./docs/reference/commands/link.md) |
+| `atlas memory-emit <entry.json>` | write | governed MEMORY write door — admits a per-seat MemoryEntry through seven MEM gates | [reference](./docs/reference/commands/memory-emit.md) |
 | `atlas promote` | write | carries staged candidates into knowledge THROUGH the emit door; needs a ratifier | [reference](./docs/reference/commands/promote.md) |
 | `atlas derive-relations` | write | projects proven `depends-on` from the index into governed knowledge | [reference](./docs/reference/commands/derive-relations.md) |
 | `atlas transition <unit>` | write | produce a grounded transition for a unit across two revs | [reference](./docs/reference/commands/transition.md) |

@@ -9,8 +9,9 @@
 
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { createHistorySource } from '@atlas/adapter-io';
+import { createHistorySource, memoryRecallVerdict, memoryHeaderVerdict, memoryAwarenessVerdict, memoryOrientationVerdict } from '@atlas/adapter-io';
 import type { ReverifyReport } from '@atlas/adapter-io';
+import type { Awareness, MemoryRecord, Orientation, TurnHeader } from '@atlas/memory';
 import { runMineArms } from './mine.js';
 import { runReverify } from './reverify.js';
 import { renderRefusal } from './render.js';
@@ -114,4 +115,42 @@ export function dispatchVerifyStore(reverify: (() => ReverifyReport) | undefined
     return emit(errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'));
   }
   return emitCli(runReverify(reverify));
+}
+
+// ── WP-11.W8 / CAMPAIGN-11 — the four memory READ_SURFACE doors, pulled out here for the SAME LOC-relief
+// reason `dispatchMine`/`dispatchVerifyStore` were: each is a short before-handler interceptor block, and
+// housing all four beside their two siblings keeps cli.ts's own dispatch table to one line per command.
+
+/** `atlas memory-recall [--owner o] [--kind k] [--task-id t] [--pr-id p]` — MEM-4b's ONE explicit-consult
+ *  path. The query is built from whichever flags are present; an unqualified call (no flag at all) answers
+ *  the empty set (`memoryRecallVerdict`/`recall` are both total — never a throw). */
+export function dispatchMemoryRecall(
+  recall: ((query: unknown) => readonly MemoryRecord[]) | undefined,
+  flags: Readonly<Record<string, string>>,
+): number {
+  if (!recall) return emit(errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'));
+  const query: Record<string, string> = {};
+  if (flags['owner'] !== undefined) query['owner'] = flags['owner'];
+  if (flags['kind'] !== undefined) query['kind'] = flags['kind'];
+  if (flags['task-id'] !== undefined) query['taskId'] = flags['task-id'];
+  if (flags['pr-id'] !== undefined) query['prId'] = flags['pr-id'];
+  return emit(memoryRecallVerdict(recall, query));
+}
+
+/** `atlas memory-header` — MEM-1/4/7's per-seat running-turn header (no input). */
+export function dispatchMemoryHeader(header: (() => TurnHeader) | undefined): number {
+  if (!header) return emit(errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'));
+  return emit(memoryHeaderVerdict(header));
+}
+
+/** `atlas memory-awareness` — the MEM-11/12 SHARED Awareness slab (no input). */
+export function dispatchMemoryAwareness(awareness: (() => Awareness) | undefined): number {
+  if (!awareness) return emit(errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'));
+  return emit(memoryAwarenessVerdict(awareness));
+}
+
+/** `atlas memory-orientation` — the MEM-6 DERIVED, SHARED Orientation slab (no input). */
+export function dispatchMemoryOrientation(orientation: (() => Orientation) | undefined): number {
+  if (!orientation) return emit(errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'));
+  return emit(memoryOrientationVerdict(orientation));
 }

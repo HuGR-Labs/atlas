@@ -2,19 +2,25 @@
 //
 // Stand up a stdio MCP server whose every GOVERNED tool call routes through the one wired handler
 // (@atlas/adapter-io), returning the frozen `Verdict` (@atlas/tools) shape. The advertised surface is
-// `GOVERNANCE_SURFACE` (exactly five, TOOLS-1, pinned) PLUS injected READ legs. Two families of read leg
-// are advertised, each served DIRECTLY from its injected leg and never through `handler.handle` (so each
-// opens NO governed token, no write path, and leaves `GOVERNANCE_SURFACE` byte-for-byte closed at five):
+// `GOVERNANCE_SURFACE` (six members — ADR-0006 Decision 2: DERIVED and BUDGETED, not a fixed count, TOOLS-1)
+// PLUS injected READ legs. Three families of read leg are advertised, each served DIRECTLY from its injected
+// leg and never through `handler.handle` (so each opens NO governed token, no write path):
 //   • the pre-existing pair `atlas-relations` (#99a / ADR-0015 D2) + `atlas-negations` (#99b / ADR-0015 D3),
 //     via `advertisedReadTools(relations, negations)`;
-//   • the authoring bundle `READ_SURFACE` (WP-10.A5.TOOLS/A5.MCP) — the six planner/read doors
-//     `atlas-anchors|slots|draft|check|doctor|node` — via `advertisedAuthoringTools`/`callAuthoringTool`
-//     (server-read-tools.ts), threaded as `readLegs`.
-// With all legs composed production advertises THIRTEEN tools (5 governance + 2 relations/negations + 6
-// authoring). `READ_SURFACE` now HAS its export site (`@atlas/tools`, WP-10.A5.TOOLS) and the layer-guard's
-// `GOVERNANCE_SURFACE ∪ READ_SURFACE` partition (ADR-0006) is covered; `SCN-MCP-1e-2` pins that every
-// READ_SURFACE member is advertised AND routes to a non-write leg. When NO read bundle is injected the
-// advertised surface is byte-for-byte the closed governance surface (SCN-MCP-1 holds).
+//   • the authoring bundle — the pre-existing six planner/read doors `atlas-anchors|slots|draft|check|doctor|
+//     node` (WP-10.A5.TOOLS/A5.MCP) — via `advertisedAuthoringTools`/`callAuthoringTool` (server-read-tools.ts),
+//     threaded as `readLegs`;
+//   • the CAMPAIGN-11 memory bundle — the four memory `READ_SURFACE` doors `atlas-memory-recall|header|
+//     awareness|orientation` (WP-11.W8) — via `advertisedMemoryTools`/`callMemoryTool` (server-memory-tools.ts),
+//     threaded as `memoryLegs`. The write half, `atlas-memory-emit`, is a `GOVERNANCE_SURFACE` member and needs
+//     NO special-case code here — `advertisedTools(handler)` picks it up generically the moment the
+//     composition root wires `WireConfig.memoryEmit`.
+// With all legs composed production advertises SEVENTEEN tools (6 governance + 2 relations/negations + 6
+// authoring + 4 memory reads — well inside ARCH-7's budget of 30). `READ_SURFACE` now carries TEN members
+// (`@atlas/tools`, WP-10.A5.TOOLS + WP-11.W8) and the layer-guard's `GOVERNANCE_SURFACE ∪ READ_SURFACE`
+// partition (ADR-0006) is covered; `SCN-MCP-1e-2` pins that every READ_SURFACE member is advertised AND
+// routes to a non-write leg. When NO read bundle is injected the advertised surface is byte-for-byte the
+// closed governance surface (SCN-MCP-1 holds).
 //
 // PARITY — precisely which one holds. SCHEMA + VERDICT parity HOLDS: `inputSchema`/`description` are read
 // from `handler.schema(tool)` verbatim and every call routes through the ONE wired handler, so identical
@@ -50,6 +56,8 @@ import { faultOf, GOVERNANCE_SURFACE } from '@atlas/tools';
 import type { Tool, Verdict } from '@atlas/tools';
 import type { ReadSurfaceLegs } from './server-read-tools.js';
 import { advertisedAuthoringTools, callAuthoringTool } from './server-read-tools.js';
+import type { MemoryReadSurfaceLegs } from './server-memory-tools.js';
+import { advertisedMemoryTools, callMemoryTool } from './server-memory-tools.js';
 
 /** The stdio MCP server handle (frozen ring shape — `start()` connects the SDK stdio transport). */
 export interface McpServer {
@@ -185,12 +193,14 @@ export function listTools(
   relations?: RelationLeg,
   negations?: NegationLeg,
   readLegs?: ReadSurfaceLegs,
+  memoryLegs?: MemoryReadSurfaceLegs,
 ): ListToolsResult {
   return {
     tools: [
       ...advertisedTools(handler),
       ...advertisedReadTools(relations, negations),
       ...advertisedAuthoringTools(readLegs),
+      ...advertisedMemoryTools(memoryLegs),
     ],
   };
 }
@@ -230,13 +240,19 @@ export function callTool(
   relations?: RelationLeg,
   negations?: NegationLeg,
   readLegs?: ReadSurfaceLegs,
+  memoryLegs?: MemoryReadSurfaceLegs,
 ): CallToolResult {
-  // The full READ_SURFACE (6: anchors, slots, draft, check, doctor, node) is routed DIRECTLY to its SHARED
-  // verdict builder (`@atlas/adapter-io`, the SAME body the CLI drives) — byte-identical `Verdict` on both
-  // transports. NONE reaches a write path (`node` rides the handler's read-only `resolveNode`; the rest ride
-  // read/planner legs that persist nothing). `undefined` ⇒ `name` is not a READ_SURFACE token; fall through.
+  // The six pre-existing READ_SURFACE members (anchors, slots, draft, check, doctor, node) are routed
+  // DIRECTLY to their SHARED verdict builder (`@atlas/adapter-io`, the SAME body the CLI drives) —
+  // byte-identical `Verdict` on both transports. NONE reaches a write path (`node` rides the handler's
+  // read-only `resolveNode`; the rest ride read/planner legs that persist nothing). `undefined` ⇒ `name`
+  // is not one of these six tokens; fall through.
   const readVerdict = callAuthoringTool(handler, readLegs, name, args);
   if (readVerdict !== undefined) return verdictToResult(readVerdict);
+  // The four memory READ_SURFACE members (WP-11.W8) are routed the SAME way, over their own shared verdict
+  // builders (`@atlas/adapter-io` `memory-verdicts.ts`). `undefined` ⇒ fall through.
+  const memoryVerdict = callMemoryTool(memoryLegs, name, args);
+  if (memoryVerdict !== undefined) return verdictToResult(memoryVerdict);
   // `atlas-relations` (#99a) is served DIRECTLY from the injected read leg through the SHARED verdict builder
   // (`relationsVerdict`, @atlas/adapter-io) — the SAME body the CLI drives, so identical input yields a
   // byte-identical `Verdict` on both transports (the SCHEMA + VERDICT parity invariant). It never reaches
@@ -271,27 +287,31 @@ function configureServer(
   relations?: RelationLeg,
   negations?: NegationLeg,
   readLegs?: ReadSurfaceLegs,
+  memoryLegs?: MemoryReadSurfaceLegs,
 ): Server {
   const server = new Server(SERVER_INFO, { capabilities: { tools: {} } });
-  server.setRequestHandler(ListToolsRequestSchema, () => listTools(handler, relations, negations, readLegs));
+  server.setRequestHandler(ListToolsRequestSchema, () => listTools(handler, relations, negations, readLegs, memoryLegs));
   server.setRequestHandler(CallToolRequestSchema, (request) =>
-    callTool(handler, request.params.name, request.params.arguments, relations, negations, readLegs),
+    callTool(handler, request.params.name, request.params.arguments, relations, negations, readLegs, memoryLegs),
   );
   return server;
 }
 
 /** Construct the stdio MCP server over the one wired handler (MCP-1), optionally exposing the `relations`
- *  (#99a) and `negations` (#99b) read tools, plus the full `READ_SURFACE` (6, WP-10.A5.MCP) when the
- *  composition root injects their legs. */
+ *  (#99a) and `negations` (#99b) read tools, the full pre-existing `READ_SURFACE` six (WP-10.A5.MCP), and
+ *  the four CAMPAIGN-11 memory READ_SURFACE tools (WP-11.W8) when the composition root injects their legs.
+ *  `atlas-memory-emit` needs NO parameter here: it is a `GOVERNANCE_SURFACE` member and is advertised
+ *  generically by `advertisedTools(handler)` the moment the composition root wires `WireConfig.memoryEmit`. */
 export function createMcpServer(
   handler: WiredHandler,
   relations?: RelationLeg,
   negations?: NegationLeg,
   readLegs?: ReadSurfaceLegs,
+  memoryLegs?: MemoryReadSurfaceLegs,
 ): McpServer {
   return {
     async start(): Promise<void> {
-      const server = configureServer(handler, relations, negations, readLegs);
+      const server = configureServer(handler, relations, negations, readLegs, memoryLegs);
       const transport = new StdioServerTransport();
       await server.connect(transport);
     },

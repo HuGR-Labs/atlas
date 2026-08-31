@@ -20,6 +20,7 @@ import type { TestVacuityLeg, TestVacuityProducer } from './compose-test-vacuity
 import type { VerifyFactLeg } from './verify-fact-source.js';
 import type { ReverifyReport } from './reverify-store.js';
 import type { DeriveRelationsRun } from './relation-derive-run.js';
+import type { Awareness, MemoryRecord, Orientation, TurnHeader } from '@atlas/memory';
 
 /** The composed runtime: the ONE governed durable `WiredHandler` every entrypoint drives, PLUS the real
  *  read-only `DoctorSource` `atlas doctor` reads over — both built from the SAME store + revIndex so they
@@ -158,6 +159,34 @@ export interface ComposedRuntime {
    * rediscovering the condition — and the leg-level guards stay as the backstop for every other caller.
    */
   readonly readRefusal?: string;
+  /**
+   * The MEM-4b explicit-recall READ leg (`ComposedRuntime.memoryRecall`, WP-11.W8 / CAMPAIGN-11) —
+   * `recall(query)` over the durable memory log (`memory-store.ts`), the seat's ONE path to consultable
+   * `task`/`pr`/`logbook` memory (an unqualified query answers `[]`; explicit, never free). Rides beside the
+   * handler like `own`/`relations`: NOT a `Tool` (the write half, `atlas-memory-emit`, is the
+   * `GOVERNANCE_SURFACE` member), opens no write path — a `READ_SURFACE` member (`atlas-memory-recall`).
+   */
+  readonly memoryRecall: (query: unknown) => readonly MemoryRecord[];
+  /**
+   * The MEM-1/4/7 running-turn header READ leg (`ComposedRuntime.memoryHeader`, WP-11.W8) — a THUNK that
+   * assembles the composed actor's `TurnHeader` fresh each call, over the SAME `awareness`/`orientation`
+   * stores `memoryAwareness`/`memoryOrientation` below read (never a second decision). `READ_SURFACE`
+   * member `atlas-memory-header`; opens no write path.
+   */
+  readonly memoryHeader: () => TurnHeader;
+  /**
+   * The MEM-11/12 SHARED Awareness slab READ leg (`ComposedRuntime.memoryAwareness`, WP-11.W8) — a THUNK
+   * that assembles the slab fresh from the real Atlas root each call (`awareness-store.ts`), byte-identical
+   * across every member reading the same repo state. `READ_SURFACE` member `atlas-memory-awareness`; opens
+   * no write path.
+   */
+  readonly memoryAwareness: () => Awareness;
+  /**
+   * The MEM-6 DERIVED, SHARED Orientation slab READ leg (`ComposedRuntime.memoryOrientation`, WP-11.W8) —
+   * a THUNK over the tracked orientation log (`orientation-store.ts`), byte-identical across every member.
+   * `READ_SURFACE` member `atlas-memory-orientation`; opens no write path.
+   */
+  readonly memoryOrientation: () => Orientation;
   /**
    * The ADVISORY MESSAGE for a `tracked-provable` store (TRAVEL-BY-REPROOF) — present ONLY when the durable
    * store is being served NARROWED (filtered to facts that replay `re-proven`), so a user whose committed

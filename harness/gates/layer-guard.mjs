@@ -311,7 +311,14 @@ function commandLegMap() {
   }
   const block = src.slice(open, end);
   const map = new Map();
-  for (const cm of block.matchAll(/^\s*([a-zA-Z_$][a-zA-Z0-9_$-]*)\s*:\s*'([^']+)'/gm)) map.set(cm[1], cm[2]);
+  // The key is EITHER a bare identifier (`doctor:`) or a QUOTED one (`'test-vacuities':`) — a hyphenated
+  // multi-word command name is not a legal bare JS property key, and `COMMAND_LEG` already carries several
+  // (`test-vacuities`, `verify-fact`, `verify-store`, `derive-relations`) before this optional-quote leg
+  // existed. None of THOSE happened to be a `READ_SURFACE` member, so the blind spot never fired — a
+  // hyphenated command that IS a `READ_SURFACE` member (CAMPAIGN-11's memory read doors, WP-11.W8) is the
+  // first to need kind (b) through a quoted key, and the fix is general: strip an optional matching quote
+  // around the key, never assume one shape.
+  for (const cm of block.matchAll(/^\s*['"]?([a-zA-Z_$][a-zA-Z0-9_$-]*)['"]?\s*:\s*'([^']+)'/gm)) map.set(cm[1], cm[2]);
   return map;
 }
 

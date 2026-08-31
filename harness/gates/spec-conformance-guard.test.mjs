@@ -47,11 +47,23 @@ function w(rel, body) {
 
 /** check (1): the built governance surface. Defaults to the canonical arrays; pass overrides to mutate.
  *  [WP-10.A5.TOOLS] `readSurface` joins `governance`/`writePaths` — the CODE-SURFACE PIN now also checks
- *  `READ_SURFACE` (6 members, ADR-0005) + its two disjointness properties. */
+ *  `READ_SURFACE` (10 members, ADR-0005 + WP-11.W8) + its two disjointness properties. `governance`/
+ *  `writePaths` default to SIX/THREE (WP-11.W8's `atlas-memory-emit`, ADR-0006 Decision 2: derived+budgeted). */
 function surface(
-  governance = ['atlas-init', 'atlas-query', 'atlas-emit', 'atlas-reconcile', 'atlas-link'],
-  writePaths = ['atlas-emit', 'atlas-link'],
-  readSurface = ['atlas-anchors', 'atlas-slots', 'atlas-draft', 'atlas-check', 'atlas-doctor', 'atlas-node'],
+  governance = ['atlas-init', 'atlas-query', 'atlas-emit', 'atlas-reconcile', 'atlas-link', 'atlas-memory-emit'],
+  writePaths = ['atlas-emit', 'atlas-link', 'atlas-memory-emit'],
+  readSurface = [
+    'atlas-anchors',
+    'atlas-slots',
+    'atlas-draft',
+    'atlas-check',
+    'atlas-doctor',
+    'atlas-node',
+    'atlas-memory-recall',
+    'atlas-memory-header',
+    'atlas-memory-awareness',
+    'atlas-memory-orientation',
+  ],
 ) {
   w(
     'packages/tools/dist/src/index.js',

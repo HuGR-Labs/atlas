@@ -18,7 +18,7 @@
 // forces the classification to be DECLARED rather than discovered by the next reviewer.
 //
 // ── DECLARED COUNTS (gate-checked; a drift here FAILS this gate) ────────────────────────────────────────
-//   declared-modules: 49 · dead-value-exports: 162 · type-reachable: 7
+//   declared-modules: 44 · dead-value-exports: 154 · type-reachable: 6
 //   These three are read back from THIS file and asserted against the measured tree at the foot of the run
 //   (see "THE HEADER STATES COUNTS, AND THIS CHECKS THEM"). No count is QUOTED anywhere else in this
 //   header — a quoted integer that nothing checks is exactly what rotted here (task #143); this one cannot.
@@ -149,50 +149,16 @@ const BUILTIN_LEDGER = {
   // 53 → 52 entries, relation-derive.ts absent, dead-value-exports 223 → 220 (its three exports), every other
   // adapter-io row unchanged.
 
-  // ── @atlas/memory — NO LONGER a closed package. `memory-store.ts` (W2), `memory-emit.ts` (W4), ────────
-  //    `awareness-store.ts` (W7a) and `memory-read.ts` (W6, below) all value-import across the package
-  //    boundary now; what remains true is that no module WITHIN `packages/memory` itself is reached except
-  //    through those doors, so its internal modules still make each other look live to a direct-reachability
-  //    analyser and the ledger still under-counts here.
-  // `packages/memory/src/awareness.ts` is DELETED from this ledger, not set to zero: CAMPAIGN-11 W7a's
-  // durable Awareness store (`adapter-io/src/awareness-store.ts`) VALUE-imports `atlasRoot` / `rollup` /
-  // `awarenessBytes` / `makeAwarenessMemo`, so the module moved dead → live — the same `own.ts` /
-  // `relation-derive.ts` transition documented elsewhere in this ledger.
-  // `packages/memory/src/inject.ts` was listed here and is NOT any more: CAMPAIGN-11 W6's durable read
-  // doors (`adapter-io/src/memory-read.ts`, below) VALUE-import `injectFor` (MEM-1 owner-scoping) and
-  // `recall` (MEM-4's one consultable path), so the module moved dead → live — the same `own.ts` /
-  // `relation-derive.ts` / `awareness.ts` transition documented elsewhere in this ledger. Measured with this
-  // gate's own analyser: dead-value-exports 167 → 162 (its 6 exports, minus the 1 this file itself adds).
-  // `types: true` since W4 — `memory-emit.ts` imports its `DurableMemory` type, so the declarations are a
-  // LIVE seam even while the values have no caller. Flagged so nobody deletes it as dead.
-  'packages/adapter-io/src/memory-store.ts': { values: 2, shipped: null, banner: true, types: true },
-  // NEW 2026-08-30 — CAMPAIGN-11 W3, same standing as the memory store above: the durable Orientation log
-  // exists and the slab composition (W7) and transport (W8) that will call it are later work packages.
-  'packages/adapter-io/src/orientation-store.ts': { values: 2, shipped: null, banner: true },
-  // CAMPAIGN-11 W4 deleted several `packages/memory/src/*` entries in one go: the governed write door
-  // composes `memoryKindOf`/`validate` (template.ts), `put` (kinds.ts), `capGate` (rules.ts), the logbook
-  // guard and the scanner seam (portable.ts), so those modules acquired the production callers they had
-  // never had. Deleted rather than re-counted — that is what this ledger's STALE leg is for, and it is the
-  // ledger measuring a campaign landing rather than a bookkeeping chore.
-  // NEW — the door itself, zero-caller until W8 exposes it over the CLI and MCP.
-  'packages/adapter-io/src/memory-emit.ts': { values: 1, shipped: null, banner: true },
-  // `packages/adapter-io/src/scanner.ts` was declared here by W5 and is NOT any more, after ONE line: the
-  // write door imports `NO_SCANNER_NAME` to tell an absent scanner from a hit, which makes the adapter
-  // shipped code. The entry lived for the length of an integration.
-  // `packages/memory/src/orient.ts` was listed here and is NOT any more: CAMPAIGN-11 W3's durable
-  // Orientation log (`adapter-io/src/orientation-store.ts`) calls `orient` and `orientEvent`, so the
-  // reference model became shipped code. Deleted rather than re-counted.
-
-  'packages/adapter-io/src/awareness-store.ts': { values: 2, shipped: null, banner: true },
-  // `packages/memory/src/respawn.ts` was listed here and is NOT any more: CAMPAIGN-11 W2's durable store
-  // (`adapter-io/src/memory-store.ts`) calls `versioned` and `respawnFromRecord`, so the reference model
-  // became shipped code. Deleted rather than re-counted — that is what this ledger's STALE leg is for.
-  // NEW — CAMPAIGN-11 W6, the read doors: `createMemoryRead` composes `injectFor`/`recall` (inject.ts,
-  // deleted above), `foldArchiveFromRecord`/`makeRespawn` (respawn.ts, already live) and the pinned
-  // `DECAY_PER_WAVE`/`NEAR_ZERO_FRECENCY`/`RULES_SLAB_SLOTS` constants (rules.ts, already live) over the
-  // durable store. Zero-caller until W8 exposes it over the CLI/MCP transport, same standing as the write
-  // door above.
-  'packages/adapter-io/src/memory-read.ts': { values: 1, shipped: null, banner: true },
+  // ── @atlas/memory — CAMPAIGN-11 W8 closed the loop: `memory-store.ts`/`memory-emit.ts`/`memory-read.ts`/
+  //    `awareness-store.ts`/`orientation-store.ts` were the LAST five zero-caller entries this cluster held
+  //    (W2/W3/W4/W6/W7a landed them dead-by-declaration, one WP at a time). `compose.ts` now calls all five
+  //    factories (`createDurableMemory`/`createMemoryEmit`/`createMemoryRead`/`createDurableOrientation`/
+  //    `createAwarenessStore`) to build the CLI/MCP memory doors (`atlas-memory-emit` joins
+  //    `GOVERNANCE_SURFACE`; `atlas-memory-recall`/`-header`/`-awareness`/`-orientation` join `READ_SURFACE`),
+  //    so all five moved dead → live in one WP — the SAME `own.ts` / `relation-derive.ts` transition this
+  //    ledger has recorded for every other campaign that reached its transport WP. Deleted rather than
+  //    re-counted, per this ledger's own STALE-entry discipline. `packages/memory` itself is still reached
+  //    only THROUGH these five doors (no module within it gains a NEW direct external caller here).
 
   // ── @atlas/retrieval — NO LONGER CLOSED, and the ledger is how we found out. ──────────────────────────
   //    It was closed for the package's whole life: every cross-package edge into it was an `import type`,

@@ -54,8 +54,19 @@ import type { Tool, Verdict } from '@atlas/tools';
  *  they persist NOTHING (AUTHOR-2). Like `anchors` both bind `atlas-query` — a READ authority oracle — so
  *  `GOVERNANCE_SURFACE` stays 5 and `WRITE_PATHS` is untouched; `authorityOf` DERIVES that from
  *  `WRITE_PATHS`. Both are intercepted before the handler (cli.ts) and driven over the composition root's
- *  frozen `slots`/`draft` legs (WP-10.A2-a.TOOLS). */
-export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'transitions', 'transition', 'test-vacuities', 'test-vacuity', 'verify-fact', 'verify-store', 'derive-relations', 'anchors', 'slots', 'draft', 'check'] as const;
+ *  frozen `slots`/`draft` legs (WP-10.A2-a.TOOLS).
+ *  [EXTENDED — WP-11.W8 / CAMPAIGN-11] `memory-emit` joins as the CLI door of the governed MEMORY write door
+ *  (MEM-1..9). Unlike `promote`/`derive-relations`/`transition`/`test-vacuity` it does NOT fold into an
+ *  EXISTING door: it binds the genuinely NEW `atlas-memory-emit` `Tool` (a separate durable log from the
+ *  knowledge CAS `atlas-emit` writes), so `GOVERNANCE_SURFACE` grows to SIX and `WRITE_PATHS` to three
+ *  (ADR-0006 Decision 2 — derived and budgeted, not a fixed count). It routes through the ONE wired handler
+ *  like `emit`/`link`, marshalled by `marshal.ts`. `memory-recall`/`memory-header`/`memory-awareness`/
+ *  `memory-orientation` join as the CLI doors of the four `READ_SURFACE` memory doors (MEM-4b/1/7/11/12/6) —
+ *  like `anchors`/`relations`/`own` they bind `atlas-query` — a READ authority oracle — so `WRITE_PATHS` is
+ *  untouched by them; `authorityOf` DERIVES that from `WRITE_PATHS`, it is not asserted here. All four are
+ *  intercepted before the handler (cli.ts) and driven over the composition root's `memoryRecall`/
+ *  `memoryHeader`/`memoryAwareness`/`memoryOrientation` legs. */
+export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'transitions', 'transition', 'test-vacuities', 'test-vacuity', 'verify-fact', 'verify-store', 'derive-relations', 'anchors', 'slots', 'draft', 'check', 'memory-emit', 'memory-recall', 'memory-header', 'memory-awareness', 'memory-orientation'] as const;
 export type Command = (typeof COMMANDS)[number];
 
 /** The leg a command routes to — a governance `Tool`, or the genesis entry (data-only; NOT executed here —
@@ -155,6 +166,22 @@ export const COMMAND_LEG: Record<Command, Leg> = {
   //                       leg — folds the governed emit door's WHOLE gate chain over a candidate WITHOUT any
   //                       write (the SAME `runGateChain` fold, so `wouldEmit` agrees with the door BY
   //                       CONSTRUCTION). PERSISTS NOTHING (AUTHOR-2); no write authority.
+  'memory-emit': 'atlas-memory-emit', // WRITE authority oracle (WP-11.W8 governed MEMORY write door, MEM-1..9);
+  //                                     a GENUINELY NEW Tool (not a fold into atlas-emit) — routes through the
+  //                                     ONE wired handler like `emit`/`link`. GOVERNANCE_SURFACE six, WRITE_PATHS three.
+  'memory-recall': 'atlas-query', // READ authority oracle (MEM-4b explicit-recall gate); intercepted before the
+  //                                 handler (cli.ts) and driven over the composition root's `memoryRecall` leg,
+  //                                 which reads the SAME durable memory log the write door appends to. Carries
+  //                                 NO write authority — it opens no governed token, WRITE_PATHS untouched.
+  'memory-header': 'atlas-query', // READ authority oracle (MEM-1/4/7 running-turn header); intercepted before
+  //                                 the handler (cli.ts) and driven over the composition root's `memoryHeader`
+  //                                 leg. Carries NO write authority.
+  'memory-awareness': 'atlas-query', // READ authority oracle (MEM-11/12 SHARED Awareness slab); intercepted
+  //                                    before the handler (cli.ts) and driven over the composition root's
+  //                                    `memoryAwareness` leg. Carries NO write authority.
+  'memory-orientation': 'atlas-query', // READ authority oracle (MEM-6 DERIVED, SHARED Orientation slab);
+  //                                      intercepted before the handler (cli.ts) and driven over the
+  //                                      composition root's `memoryOrientation` leg. Carries NO write authority.
 };
 
 export type Authority = 'read' | 'write';
@@ -183,19 +210,21 @@ export const EXIT: Record<Status, number> = { ok: 0, error: 1, rejected: 2 };
 /**
  * CLI-3b: the ratified status derivation `f` — a PURE function of ONE verdict (no tool tag, no clock). A
  * GOVERNANCE rejection is `rejected` (exit 2): a `data` reporting a non-zero `exitCode` (reconcile semantic
- * flip), `emitted:false` (a fail-closed emit), OR `linked:false` (a fail-closed sameAs link, WP-SAMEAS) —
- * each an `ok:false` verdict carrying its record on `data` (F2/F5). Any OTHER `ok:false` (malformed args,
- * unwired tool) is a usage/wiring `error` (exit 1).
- * Otherwise `ok`. The `exitCode`/`emitted` probes duck-type the two carrier records structurally — only
- * `ReconcileOut` carries `exitCode`, only `EmitOut` carries `emitted` — so the governance-refusal classes are
- * distinguished from a bare error BEFORE the `ok:false` fallback, keeping this a pure function of the verdict.
+ * flip), `emitted:false` (a fail-closed emit), `linked:false` (a fail-closed sameAs link, WP-SAMEAS), OR
+ * `admitted:false` (a fail-closed memory write, WP-11.W8) — each an `ok:false` verdict carrying its record
+ * on `data` (F2/F5). Any OTHER `ok:false` (malformed args, unwired tool) is a usage/wiring `error` (exit 1).
+ * Otherwise `ok`. The `exitCode`/`emitted`/`admitted` probes duck-type the carrier records structurally —
+ * only `ReconcileOut` carries `exitCode`, only `EmitOut` carries `emitted`, only `MemoryEmitOut` carries
+ * `admitted` — so the governance-refusal classes are distinguished from a bare error BEFORE the `ok:false`
+ * fallback, keeping this a pure function of the verdict.
  */
 export function deriveStatus(v: Verdict): Status {
   const data = v.data as
-    | { readonly exitCode?: unknown; readonly emitted?: unknown; readonly linked?: unknown }
+    | { readonly exitCode?: unknown; readonly emitted?: unknown; readonly linked?: unknown; readonly admitted?: unknown }
     | undefined;
   if (data && data.emitted === false) return 'rejected'; // fail-closed emit — a governed refusal (F2/F5)
   if (data && data.linked === false) return 'rejected'; // fail-closed link — a governed refusal (WP-SAMEAS)
+  if (data && data.admitted === false) return 'rejected'; // fail-closed memory write — a governed refusal (WP-11.W8)
   if (data && typeof data.exitCode === 'number' && data.exitCode !== 0) return 'rejected'; // reconcile flip
   if (v.ok === false) return 'error'; // malformed args / unwired tool — a usage/wiring error
   return 'ok';

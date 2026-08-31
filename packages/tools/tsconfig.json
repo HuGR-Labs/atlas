@@ -9,6 +9,7 @@
     { "path": "../kernel" },
     { "path": "../persist" },
     { "path": "../knowledge" },
+    { "path": "../memory" },
     { "path": "../retrieval" }
   ]
 }
