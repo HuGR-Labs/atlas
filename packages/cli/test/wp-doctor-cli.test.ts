@@ -120,11 +120,12 @@ describe('SCN-DOCTOR-2 — doctor carries NO write authority', () => {
 
   it('2b: createDoctor(source) exposes the read legs it always did — and no write method', () => {
     const keys = Object.keys(createDoctor(fakeSource())).sort();
-    expect(keys).toEqual(['archive', 'hotSet', 'reground', 'whyBroken']);
+    // FIVE read legs since ADR-0022 added `casIntegrity` — still no write method, which is the assertion.
+    expect(keys).toEqual(['archive', 'casIntegrity', 'hotSet', 'reground', 'whyBroken']);
     // The CLI surface is WIDER than the `DoctorApi` by exactly one leg: `index` reads the file tree + the
     // SCIP dump, never the store, so it is dispatched in the CLI and adds NO method to the frozen port
-    // above — which is why the assertion on `createDoctor` is unchanged. Still no write subcommand.
-    expect([...DOCTOR_SUBCOMMANDS]).toEqual(['archive', 'why', 'hotset', 'reground', 'index']);
+    // above. `cas` is NOT that kind of leg — it is a `DoctorApi` member, so the port grew with it.
+    expect([...DOCTOR_SUBCOMMANDS]).toEqual(['archive', 'why', 'hotset', 'reground', 'cas', 'index']);
   });
 
   it('TEETH (write-door): NO doctor subcommand ever touches the wired handler (the write door)', async () => {
