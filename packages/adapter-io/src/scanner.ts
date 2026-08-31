@@ -52,16 +52,35 @@ export interface ScannerBinarySpec {
   readonly hitExitCodes: readonly number[];
 }
 
-// Argv is best-effort against each tool public docs (gitleaks: `detect` exits 1 on a finding, 0 clean;
-// trufflehog: `--fail` makes a finding exit 183, 0 clean). NEITHER binary is installed in this repo, so
-// this could not be checked against a live binary here -- that conformance check is FR-12 job, not this
-// WP job. If a real binary disagrees with these codes, every exit falls through to `could-not-run` (see
-// `runScanner` below), which is the fail-closed default, not a silent misread.
+// ── ARGV IS CALIBRATED AGAINST A LIVE BINARY, AND THE FIRST VERSION WAS NOT ───────────────────────────
+// This table used to be written best-effort from the tools' public docs, with the note that neither binary
+// was installed here so it could not be checked -- and with the reassurance that a disagreeing binary would
+// "fall through to `could-not-run`, the fail-closed default, not a silent misread."
+//
+// THAT REASONING HAD A HOLE, and using the door found it. gitleaks was invoked as
+// `detect --no-git --source -`, and `--source -` is not how any gitleaks reads stdin: it resolves `-` as a
+// PATH, fails, and exits **1**. Exit 1 is a code this table DOCUMENTS -- it means "a finding". So the
+// unknown-exit fallback never ran; a wrong-argv failure arrived wearing the one exit code that means
+// "secret detected", and the door refused EVERY memory write on any machine with gitleaks installed. Green
+// unit tests (which inject a fake scanner) and eleven green gates all agreed it was fine.
+//
+// MEASURED on gitleaks 8.30.1, both directions, which is what makes the table below a fact rather than a
+// reading of the docs:
+//   `gitleaks detect --no-git --source -`  < clean input   -> exit 1   (the defect: clean read as a hit)
+//   `gitleaks stdin --exit-code 1`         < clean input   -> exit 0
+//   `gitleaks stdin --exit-code 1`         < an RSA key    -> exit 1
+// The `stdin` SUBCOMMAND is the supported stdin path in 8.x (`detect --pipe` is the deprecated spelling and
+// exits 1 on clean input here too). `scanner-conformance.test.ts` re-measures both directions against the
+// real binary and is SKIP-when-absent but never vacuous -- with no binary it asserts the no-scanner refusal
+// instead, so the file always asserts something.
+//
+// trufflehog remains DOC-DERIVED and unmeasured -- it is not installed on this machine. That is stated here
+// rather than left to be assumed calibrated by association with the line above it.
 const KNOWN_SCANNERS: readonly ScannerBinarySpec[] = [
   {
     name: "gitleaks",
     command: "gitleaks",
-    args: ["detect", "--no-git", "--source", "-", "--report-format", "json", "--exit-code", "1"],
+    args: ["stdin", "--report-format", "json", "--exit-code", "1"],
     cleanExitCodes: [0],
     hitExitCodes: [1],
   },
