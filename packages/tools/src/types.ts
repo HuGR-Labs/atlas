@@ -263,6 +263,38 @@ export interface DoctorOut {
   readonly whyBroken?: DriftItem; // [PINNED] drift-explain — the reviewable DriftItem (atlas-tools:25)
   readonly hotSet?: HotSet; // hot-set size vs budget (advisory)
   readonly plan?: RegroundPlan; // guided re-ground/retire plan — emits via atlas-emit, never direct
+  readonly casIntegrity?: CasIntegrity; // ADR-0022 — the storage-layer audit of the store doctor diagnoses
+}
+
+/**
+ * The CAS integrity receipt (ADR-0022). A content-addressed object's filename IS the hash of its content,
+ * so "are these bytes what they claim to be" is decidable locally, with no index, no model and no network —
+ * and until this leg existed, nothing in the product asked it. The `.gitignore` lets `cas/` and
+ * `projection.json` TRAVEL on the argument that trust moved from the committer to the oracle; this is the
+ * oracle for the byte layer, the one `verify-store` does not cover.
+ *
+ * Every count is DERIVED at read time from the bytes actually on disk plus the sidecars actually
+ * referencing them. Nothing here is read back from a stored manifest — a manifest would be one more thing
+ * that can be wrong, and it would be wrong in exactly the direction that makes this receipt useless.
+ */
+export interface CasIntegrity {
+  /** Value files found under the CAS root. */
+  readonly objects: number;
+  /** Files whose bytes do NOT hash to the address they are filed under — the defect this leg exists for. */
+  readonly corrupt: readonly Hash[];
+  /** Files whose bytes do not parse as a CAS object at all. Distinct from `corrupt`: a truncated write and a
+   *  tampered payload are different incidents, and collapsing them would lose which one happened. */
+  readonly unreadable: readonly Hash[];
+  /** Hashes a sidecar references with no value file on disk — a dangling pointer into the store. */
+  readonly missing: readonly Hash[];
+  /** Value files no sidecar references. REPORTED, never acted on: the CAS is append-only and content-keyed,
+   *  so a superseded object legitimately outlives the sidecar that referenced it. A count, not a verdict. */
+  readonly orphan: number;
+  /** Distinct hashes the sidecars reference — the denominator `missing` is measured against. */
+  readonly referenced: number;
+  /** True iff `corrupt`, `unreadable` and `missing` are ALL empty. Named rather than left to the caller so
+   *  two renderers cannot disagree about what "healthy" means. `orphan` is deliberately NOT a factor. */
+  readonly sound: boolean;
 }
 
 /**

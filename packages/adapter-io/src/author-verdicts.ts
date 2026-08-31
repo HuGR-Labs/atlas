@@ -194,7 +194,7 @@ export function checkVerdict(leg: CheckApi['check'], candidate: unknown, at: unk
 /** The four read/advisory `DoctorApi` legs reachable over MCP. `index` is CLI-only: it reads the FILE TREE +
  *  the SCIP dump through a SEPARATE provider (not the durable-store `DoctorSource`), which the MCP entrypoint
  *  does not thread — so it is not on this surface (reported honestly, not silently dropped). */
-const DOCTOR_SUBS = ['archive', 'why', 'hotset', 'reground'] as const;
+const DOCTOR_SUBS = ['archive', 'why', 'hotset', 'reground', 'cas'] as const;
 type DoctorMcpSub = (typeof DOCTOR_SUBS)[number];
 
 function isDoctorMcpSub(s: string): s is DoctorMcpSub {
@@ -233,6 +233,11 @@ export function doctorVerdict(source: DoctorSource, subRaw: string, arg: string 
       case 'reground':
         if (arg === undefined || arg.length === 0) return doctorError('doctor reground requires a <fact>');
         return { ok: true, data: doctor.reground(arg), guidance: DOCTOR_GUIDANCE };
+      case 'cas':
+        // ADR-0022. Routed HERE, in the SHARED body, and not only at the CLI — the ADR's reason for making
+        // this a `DoctorApi` leg rather than a CLI-side one like `index` is that it must be reachable over
+        // MCP. A leg wired on one transport would make that argument false in the file that carries it.
+        return { ok: true, data: doctor.casIntegrity(), guidance: DOCTOR_GUIDANCE };
     }
   } catch (e) {
     // The refusal's own text, verbatim (the provenance tripwire discriminant) — never re-worded.
