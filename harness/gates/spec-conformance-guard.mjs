@@ -27,14 +27,23 @@ const REPO = process.env.SPEC_CONFORMANCE_GUARD_ROOT ?? join(dirname(fileURLToPa
 const problems = [];
 
 // ── (1) CODE-SURFACE PIN ────────────────────────────────────────────────────────────────────────
-const EXPECTED_SURFACE = ['atlas-init', 'atlas-query', 'atlas-emit', 'atlas-reconcile', 'atlas-link'];
-const EXPECTED_WRITE_PATHS = ['atlas-emit', 'atlas-link'];
+// [EXTENDED — WP-11.W8 / CAMPAIGN-11] `atlas-memory-emit` joins `GOVERNANCE_SURFACE`/`WRITE_PATHS` as a
+// genuinely NEW governed write door — the durable per-seat memory log (`.atlas/memory.jsonl`) is a SEPARATE
+// store from the knowledge CAS `atlas-emit` writes, so ADR-0008's "ordinary use of the existing door"
+// reasoning does not apply here. Growth is licensed by ADR-0006 Decision 2 (GOVERNANCE_SURFACE is DERIVED
+// and BUDGETED — `advertised ≡ invocable ≡ Tool`, bounded at 30 — not a re-fixed count).
+const EXPECTED_SURFACE = ['atlas-init', 'atlas-query', 'atlas-emit', 'atlas-reconcile', 'atlas-link', 'atlas-memory-emit'];
+const EXPECTED_WRITE_PATHS = ['atlas-emit', 'atlas-link', 'atlas-memory-emit'];
 // [WP-10.A5.TOOLS, ADR-0005 / ENTRY-MCP-3] `READ_SURFACE` — the disjoint planner/read-projection set MCP
 // advertises alongside `GOVERNANCE_SURFACE`. Membership transcribed from the ADR's Decision (reconciled
 // 2026-08-24) + A-D2: the four ADR-0004 authoring planners (anchors/slots/draft/check) + the two
 // already-shipped, ALREADY-INVOCABLE read projections (doctor/node). `atlas-diff` is DELIBERATELY EXCLUDED
 // (owner-decided): it is a declared zero-caller reference model, unwired to any transport — ARCH-5
 // (advertised≡invocable) forbids an unwired door in an advertised surface. Re-add only alongside real wiring.
+// [EXTENDED — WP-11.W8 / CAMPAIGN-11] the CAMPAIGN-11 memory read doors join — `atlas-memory-recall`
+// (MEM-4b explicit recall), `atlas-memory-header` (MEM-1/4/7 turn header), `atlas-memory-awareness` and
+// `atlas-memory-orientation` (the two derived, shared slabs) — the read half of the memory doors, mirroring
+// how `atlas-emit`/`atlas-link` pair with the knowledge/sameAs read doors.
 const EXPECTED_READ_SURFACE = [
   'atlas-anchors',
   'atlas-slots',
@@ -42,6 +51,10 @@ const EXPECTED_READ_SURFACE = [
   'atlas-check',
   'atlas-doctor',
   'atlas-node',
+  'atlas-memory-recall',
+  'atlas-memory-header',
+  'atlas-memory-awareness',
+  'atlas-memory-orientation',
 ];
 try {
   const mod = await import(pathToFileURL(join(REPO, 'packages/tools/dist/src/index.js')).href);
@@ -260,4 +273,7 @@ if (problems.length) {
   for (const p of problems) console.error('  ✗ ' + p);
   process.exit(1);
 }
-console.log(`spec-conformance-guard: OK — surface pinned (5 tools / 2 governed doors / 6 read-surface doors, disjoint), ${files.length} files drift-free, whole-file digest pins fresh (${WHOLE_FILE_PINNED.join(', ')}).`);
+// DERIVED from the SAME EXPECTED_* arrays checked above — a hand-transcribed count here would be a second
+// source of truth, and this line said "5 tools / 2 governed doors / 6 read-surface doors" for the length of
+// WP-11.W8 while the arrays it never read already held 6/3/10.
+console.log(`spec-conformance-guard: OK — surface pinned (${EXPECTED_SURFACE.length} tools / ${EXPECTED_WRITE_PATHS.length} governed doors / ${EXPECTED_READ_SURFACE.length} read-surface doors, disjoint), ${files.length} files drift-free, whole-file digest pins fresh (${WHOLE_FILE_PINNED.join(', ')}).`);

@@ -15,15 +15,21 @@ import { createMcpServer } from './server.js';
 // nodes after `initAst()` resolves, so a symbol grounding is groundable and `subsumes` fires over MCP too.
 void (async () => {
   await initAst();
-  const { handler, relations, negations, anchors, slots, draft, check, doctorSource } = composeRuntime(process.cwd());
+  const { handler, relations, negations, anchors, slots, draft, check, doctorSource, memoryRecall, memoryHeader, memoryAwareness, memoryOrientation } = composeRuntime(process.cwd());
   // `relations` (#99a) is the grounded-relation read leg — exposed over MCP as `atlas-relations`, served
   // directly from this leg (it is not a governed `Tool`), so an MCP client reaches the same fold the CLI does.
   // `negations` (#99b) is the grounded-negation + abstention read leg — exposed over MCP as `atlas-negations`
   // the same way, so an MCP client can SEE a fired abstention (the #202 close), never through a governed token.
-  // WP-10.A5.MCP — the full READ_SURFACE (anchors, slots, draft, check, doctor, node) is exposed over MCP the
-  // same way: each rides its SHARED verdict builder (`@atlas/adapter-io`), the SAME body the CLI drives, so an
-  // MCP agent seat has the same authoring surface the CLI has. `node` is served by `handler.resolveNode`; the
-  // other five ride these injected legs. NONE opens a governed token or a write path (GOVERNANCE_SURFACE stays 5).
+  // WP-10.A5.MCP — the pre-existing READ_SURFACE six (anchors, slots, draft, check, doctor, node) is exposed
+  // over MCP the same way: each rides its SHARED verdict builder (`@atlas/adapter-io`), the SAME body the CLI
+  // drives, so an MCP agent seat has the same authoring surface the CLI has. `node` is served by
+  // `handler.resolveNode`; the other five ride these injected legs. NONE opens a governed token or a write path.
   const readLegs = { anchors, slots, draft, check, doctorSource };
-  await createMcpServer(handler, relations, negations, readLegs).start();
+  // WP-11.W8 / CAMPAIGN-11 — the four memory READ_SURFACE doors, exposed the SAME way over
+  // `advertisedMemoryTools`/`callMemoryTool` (server-memory-tools.ts). The write half, `atlas-memory-emit`,
+  // needs NO threading here: it is a `GOVERNANCE_SURFACE` member and is already reachable through `handler`
+  // the moment `composeRuntime` wires `WireConfig.memoryEmit` — the SAME single-handler property `atlas-emit`
+  // and `atlas-link` already have.
+  const memoryLegs = { memoryRecall, memoryHeader, memoryAwareness, memoryOrientation };
+  await createMcpServer(handler, relations, negations, readLegs, memoryLegs).start();
 })();

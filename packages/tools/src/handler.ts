@@ -1,7 +1,8 @@
 // @atlas/tools — src/handler.ts   (WP-7.26-a.TOOLS — TOOLS-1 / TOOLS-2 / TOOLS-4, INV-TOOLS-1 / -2 / -4)
 //
-// THE ONE handler behind EVERY transport — the spine facet. Owns the CLOSED five-tool `GOVERNANCE_SURFACE`
-// (count == 5) + the two governed `WRITE_PATHS` (`atlas-emit` + `atlas-link`, TOOLS-1 / ADR-0003), the
+// THE ONE handler behind EVERY transport — the spine facet. Owns the `GOVERNANCE_SURFACE` (six members —
+// ADR-0006 Decision 2: DERIVED and BUDGETED, not a fixed count) + the three governed `WRITE_PATHS`
+// (`atlas-emit` / `atlas-link` / `atlas-memory-emit`, TOOLS-1 / ADR-0003, extended WP-11.W8), the
 // published per-tool `SCHEMAS` (CLI≡MCP,
 // TOOLS-3), and `handle`/`resolveNode` — PURE + TOTAL, malformed args fail CLOSED, guidance on every path.
 //
@@ -22,30 +23,38 @@ import {
 } from './fault.js';
 import type { Guidance, HandlerApi, Tool, ToolData, Transport, Verdict } from './types.js';
 
-/** The CLOSED governance surface (TOOLS-1) — the order is fixed; membership is the load-bearing fact.
- *  [EXTENDED — WP-SAMEAS] `atlas-link` joins as a governed write tool (owner-authorized 2026-07-21), so the
- *  surface count is now 5: the read/derive trio (init/query/reconcile) + the two write doors (emit/link). */
+/** The governance surface (TOOLS-1) — the order is fixed; membership is the load-bearing fact.
+ *  [EXTENDED — WP-SAMEAS] `atlas-link` joins as a governed write tool (owner-authorized 2026-07-21):
+ *  the read/derive trio (init/query/reconcile) + the two write doors (emit/link), `GOVERNANCE_SURFACE`
+ *  five members.
+ *  [EXTENDED — WP-11.W8 / CAMPAIGN-11] `atlas-memory-emit` joins as a THIRD write door — the governed
+ *  MEMORY write door (MEM-1..9, `@atlas/adapter-io` `memory-emit.ts`/`wire.ts`). It is genuinely NEW
+ *  governed surface (a separate durable log, not a reuse of `atlas-emit`'s door — see the `Tool` union's
+ *  own doc comment, types.ts), so `GOVERNANCE_SURFACE` grows to SIX under ADR-0006's derived-and-budgeted
+ *  amendment (ARCH-6/ARCH-7: `advertised ≡ invocable ≡ Tool`, bounded at 30 — never a re-fixed count). */
 export const GOVERNANCE_SURFACE: readonly Tool[] = [
   'atlas-init',
   'atlas-query',
   'atlas-emit',
   'atlas-reconcile',
   'atlas-link',
+  'atlas-memory-emit',
 ];
 
-/** The write surface (TOOLS-1). [EXTENDED — WP-SAMEAS] TWO write doors now: `atlas-emit` (grounded fact
- *  admission) + `atlas-link` (governed human sameAs assertion). Both are fail-closed governed mutations; the
+/** The write surface (TOOLS-1). [EXTENDED — WP-SAMEAS] `atlas-emit` (grounded fact admission) +
+ *  `atlas-link` (governed human sameAs assertion). [EXTENDED — WP-11.W8] `atlas-memory-emit` (governed
+ *  MEMORY admission, MEM-1..9) joins as a THIRD write door — THREE fail-closed governed mutations now; the
  *  other three governance tools read/derive, and the read projections (diff / doctor / node) carry no write
  *  authority (guarded structurally in `./guard.ts`). */
-export const WRITE_PATHS: readonly Tool[] = ['atlas-emit', 'atlas-link'];
+export const WRITE_PATHS: readonly Tool[] = ['atlas-emit', 'atlas-link', 'atlas-memory-emit'];
 
 /** The token vocabulary for `READ_SURFACE` (WP-10.A5.TOOLS, ADR-0005 / ENTRY-MCP-3) — deliberately its OWN
- *  closed union, NOT a widening of `Tool`. `Tool` names the five `GOVERNANCE_SURFACE` members and stays
- *  exactly that (ADR-0005 §Why this does not weaken TOOLS-1: growing `Tool` to admit a read door would make
- *  `GOVERNANCE_SURFACE`'s own count meaningless — see the ADR's rejected alternative (a)). A `ReadDoor` is
+ *  closed union, NOT a widening of `Tool`. `Tool` names the `GOVERNANCE_SURFACE` members (ADR-0005 §Why
+ *  this does not weaken TOOLS-1: growing `Tool` to admit a read door would make `GOVERNANCE_SURFACE`'s own
+ *  count meaningless — see the ADR's rejected alternative (a)). A `ReadDoor` is
  *  never accepted by `handle(tool, args)`; each is its OWN planner/projection function (`createAnchors` /
- *  `createSlots` / `createDraft` / `createCheck` / `createDoctor` / `HandlerApi.resolveNode`), never routed
- *  through this handler's `Tool` dispatch.
+ *  `createSlots` / `createDraft` / `createCheck` / `createDoctor` / `HandlerApi.resolveNode` /
+ *  the CAMPAIGN-11 memory read doors), never routed through this handler's `Tool` dispatch.
  *
  *  [OWNER-DECIDED 2026-08-24 — `atlas-diff` is NOT a member.] `diff.ts` is a declared ZERO-production-caller
  *  reference model (`reference-model-guard.mjs`'s ledger; its own header states "no `atlas diff` CLI
@@ -57,14 +66,18 @@ export type ReadDoor =
   | 'atlas-draft'
   | 'atlas-check'
   | 'atlas-doctor'
-  | 'atlas-node';
+  | 'atlas-node'
+  | 'atlas-memory-recall'
+  | 'atlas-memory-header'
+  | 'atlas-memory-awareness'
+  | 'atlas-memory-orientation';
 
 /** `READ_SURFACE` (ADR-0005, ENTRY-MCP-3) — the disjoint read/planner surface `GOVERNANCE_SURFACE` unions
  *  with over MCP (A5.MCP wires the advertisement itself; this WP only freezes the constant + its two
  *  disjointness properties + the write-freedom proof — see `harness/gates/spec-conformance-guard.mjs`'s
  *  CODE-SURFACE PIN and `test/wp-10.a5-tools.test.ts`).
  *
- *  Membership — the SIX genuinely invocable read doors (ARCH-5 advertised≡invocable, `layer-guard.mjs`'s
+ *  Membership — the SIX pre-existing invocable read doors (ARCH-5 advertised≡invocable, `layer-guard.mjs`'s
  *  `boundReadDoor` verifies each mechanically against the real binding site):
  *    - the four ADR-0004 authoring PLANNERS (AUTHOR-2: persist nothing, hold no store handle), bound as
  *      fields on `ComposedRuntime` (`@atlas/adapter-io` `compose.ts`) — `atlas-anchors` / `atlas-slots` /
@@ -72,6 +85,16 @@ export type ReadDoor =
  *    - the two already-shipped READ projections (TOOLS-10/12) — `atlas-doctor` / `atlas-node` — which are
  *      NOT their own leg: the CLI intercepts `doctor`/`node` before the handler and reuses the bound
  *      `atlas-query` leg (`cli/src/map.ts` `COMMAND_LEG`), a second projection of that one read door.
+ *
+ *  [EXTENDED — WP-11.W8 / CAMPAIGN-11] FOUR memory read doors join — the CAMPAIGN-11 durable memory READ
+ *  doors (`@atlas/adapter-io` `memory-read.ts`/`awareness-store.ts`/`orientation-store.ts`), exposed the SAME
+ *  way `doctor`/`node` are: intercepted before the handler and bound onto the `atlas-query` leg (`cli/src/
+ *  map.ts` `COMMAND_LEG`, `layer-guard.mjs`'s `boundReadDoor` kind (b)) — `atlas-memory-recall` (MEM-4b's
+ *  explicit-recall gate), `atlas-memory-header` (MEM-1/4/7's per-seat turn header), `atlas-memory-awareness`
+ *  and `atlas-memory-orientation` (the two derived, shared slabs — MEM-6/11/12). NONE persists — the write
+ *  half (`atlas-memory-emit`) is a `GOVERNANCE_SURFACE` member instead, exactly as `atlas-emit`/`atlas-link`
+ *  are the write halves of the knowledge/sameAs read doors.
+ *
  *  Order is fixed; membership is the load-bearing fact (mirrors `GOVERNANCE_SURFACE`'s own convention).
  *  `atlas-diff` is DELIBERATELY EXCLUDED (see the `ReadDoor` note above) — it stays a declared reference
  *  model until it is genuinely wired to a transport, in its own WP. */
@@ -82,6 +105,10 @@ export const READ_SURFACE: readonly ReadDoor[] = [
   'atlas-check',
   'atlas-doctor',
   'atlas-node',
+  'atlas-memory-recall',
+  'atlas-memory-header',
+  'atlas-memory-awareness',
+  'atlas-memory-orientation',
 ];
 
 /** A per-tool leg — the concrete tool computation the handler wraps. It MAY throw on a malformed argument;
@@ -131,14 +158,18 @@ const GUIDANCE: Record<Tool, Guidance> = {
   },
   'atlas-link': {
     next: 'a rejected link failed a governance gate (two distinct known nodes, authorized on both scopes, ratified) or a pair-state gate (not-linked / already-retracted / retracted-pair) — fix and re-run; `retract:true` withdraws an asserted equivalence through the same gates',
-    invariant: 'WP-SAMEAS / KNOW-11 / A-D3: sameAs is a governed symmetric edge — authz on BOTH scopes + a non-empty ratifier over the whole merged class (billy when any member is T0) — never a merge; retraction is a MODE of this door (WRITE_PATHS stays {emit,link}) and is an APPEND, never a delete',
+    invariant: 'WP-SAMEAS / KNOW-11 / A-D3: sameAs is a governed symmetric edge — authz on BOTH scopes + a non-empty ratifier over the whole merged class (billy when any member is T0) — never a merge; retraction is a MODE of this door (WRITE_PATHS: atlas-emit, atlas-link, atlas-memory-emit) and is an APPEND, never a delete',
+  },
+  'atlas-memory-emit': {
+    next: 'a refused write named the gate that declined (undetermined-kind / template-invalid / kind-conflation / unowned / logbook-duplicate / logbook-unauthorized / over-cap / scanner-blocked / scanner-unavailable) — fix and re-emit; nothing is persisted on a refusal',
+    invariant: 'MEM-1..9 / WP-11.W8: atlas-memory-emit is a governed fail-closed write door (WRITE_PATHS: atlas-emit, atlas-link, atlas-memory-emit — GOVERNANCE_SURFACE six members) — one append on admission, nothing on refusal',
   },
 };
 
 /** Fallback guidance for an off-surface tool token — still non-empty (TOOLS-4 totality). */
 const GUIDANCE_OFF_SURFACE: Guidance = {
-  next: 'invoke one of the five governance tools: atlas-init | atlas-query | atlas-emit | atlas-reconcile | atlas-link',
-  invariant: 'TOOLS-1: the governance surface is exactly five tools (two governed write doors: atlas-emit, atlas-link)',
+  next: 'invoke one of the governance tools: atlas-init | atlas-query | atlas-emit | atlas-reconcile | atlas-link | atlas-memory-emit',
+  invariant: 'TOOLS-1: GOVERNANCE_SURFACE is six tools (three governed write doors: atlas-emit, atlas-link, atlas-memory-emit)',
 };
 
 const guidanceFor = (tool: Tool): Guidance => GUIDANCE[tool] ?? GUIDANCE_OFF_SURFACE;
@@ -151,14 +182,17 @@ const reason = (e: unknown): string => (e instanceof Error ? e.message : String(
 const NO_NODE_SOURCE = 'no-node-source';
 const NO_SUCH_NODE = 'no-such-node';
 
-/** A leg return is a FAIL-CLOSED governed write iff it carries `emitted:false` (`EmitOut`) OR `linked:false`
- *  (`LinkOut`, WP-SAMEAS). A fail-closed write is a GOVERNANCE refusal, NOT a success — it MUST surface as a
- *  rejected `Verdict`, legible on BOTH user doors (MCP `isError:true`, CLI exit 2), never a silent `ok:true`
- *  an agent reads as success (F2/F5). Both write doors funnel through this one refusal-visibility guard. */
+/** A leg return is a FAIL-CLOSED governed write iff it carries `emitted:false` (`EmitOut`), `linked:false`
+ *  (`LinkOut`, WP-SAMEAS), OR `admitted:false` (`MemoryEmitOut`, WP-11.W8). A fail-closed write is a
+ *  GOVERNANCE refusal, NOT a success — it MUST surface as a rejected `Verdict`, legible on BOTH user doors
+ *  (MCP `isError:true`, CLI exit 2), never a silent `ok:true` an agent reads as success (F2/F5). All three
+ *  write doors funnel through this one refusal-visibility guard. */
 const isFailClosedWrite = (data: ToolData): boolean =>
   typeof data === 'object' &&
   data !== null &&
-  ((data as { emitted?: unknown }).emitted === false || (data as { linked?: unknown }).linked === false);
+  ((data as { emitted?: unknown }).emitted === false ||
+    (data as { linked?: unknown }).linked === false ||
+    (data as { admitted?: unknown }).admitted === false);
 
 /** THE one published input schema per governance tool (TOOLS-3) — CLI and MCP share it byte-for-byte; the
  *  schema carries NO transport parameter, so the same bytes back every surface (the divergence this seam
@@ -282,6 +316,21 @@ const SCHEMAS: Record<Tool, ToolSchema> = {
       additionalProperties: false,
     },
   },
+  'atlas-memory-emit': {
+    name: 'atlas-memory-emit',
+    description: 'the governed MEMORY write door (one of WRITE_PATHS: atlas-emit, atlas-link, atlas-memory-emit) — admits a per-seat MemoryEntry through seven fail-closed gates (kind derivation, template, partition+owner, logbook discipline, cap, pre-write scan, persist) and appends it to the durable memory log; a refusal at any gate persists nothing (MEM-1..9, WP-11.W8)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        entry: {
+          type: 'object',
+          description: 'the MemoryEntry to admit — a project/task/pr/logbook record (its own derived `kind` selects the required template fields)',
+        },
+      },
+      required: ['entry'],
+      additionalProperties: false,
+    },
+  },
 };
 
 /** Fallback schema for an off-surface tool token — still a well-formed `ToolSchema` (totality).
@@ -293,7 +342,7 @@ const SCHEMAS: Record<Tool, ToolSchema> = {
  *  The envelope demand (`type: 'object'`) is a real thing this fallback does know, and it stays. */
 const SCHEMA_OFF_SURFACE = (tool: Tool): ToolSchema => ({
   name: tool,
-  description: 'not one of the five governance tools (TOOLS-1)',
+  description: 'not one of the GOVERNANCE_SURFACE tools (TOOLS-1)',
   inputSchema: { type: 'object' },
 });
 
@@ -321,12 +370,13 @@ export function createHandler(legs: ToolLegs, nodes?: NodeSource): HandlerApi {
     try {
       const data = leg(args);
       if (isFailClosedWrite(data)) {
-        // F2/F5: a fail-closed write (emit OR link) is a governance REJECTION, not a silent ok. Surface it
-        // uniformly across doors as an `ok:false` verdict carrying the reason. The record rides `data` so the
-        // CLI can still classify it exit-2 (rejected) — distinct from the exit-1 error of a malformed/unwired
-        // call. Fallback reason is write-kind-specific (emit vs link) — our doors always set `rejected`.
-        const d = data as { emitted?: unknown; rejected?: string };
-        const fallback = d.emitted === false ? 'emit failed closed (ungrounded)' : 'link failed closed';
+        // F2/F5: a fail-closed write (emit OR link OR memory-emit) is a governance REJECTION, not a silent
+        // ok. Surface it uniformly across doors as an `ok:false` verdict carrying the reason. The record
+        // rides `data` so the CLI can still classify it exit-2 (rejected) — distinct from the exit-1 error
+        // of a malformed/unwired call. Fallback reason is write-kind-specific — our doors always set `rejected`.
+        const d = data as { emitted?: unknown; linked?: unknown; admitted?: unknown; rejected?: string };
+        const fallback =
+          d.emitted === false ? 'emit failed closed (ungrounded)' : d.linked === false ? 'link failed closed' : 'memory write failed closed';
         return { ok: false, data, rejected: d.rejected ?? fallback, guidance };
       }
       return { ok: true, data, guidance };

@@ -19,13 +19,16 @@ import type { AnchorsOut } from '../src/types.js';
 
 // ── the frozen surface constants, transcribed here as the ORACLE the goldens compare against ────────────
 // (byte-for-byte the values ADR-0003 / ADR-0004 pin; the campaign is READ-ONLY over both).
-const CANONICAL_WRITE_PATHS = ['atlas-emit', 'atlas-link'] as const;
+// [EXTENDED — WP-11.W8] `atlas-memory-emit` joins as a THIRD, genuinely new write door — not touched by
+// THIS campaign (ADR-0004's authoring planners), but the oracle below must track the shipped constant.
+const CANONICAL_WRITE_PATHS = ['atlas-emit', 'atlas-link', 'atlas-memory-emit'] as const;
 const CANONICAL_GOVERNANCE_SURFACE = [
   'atlas-init',
   'atlas-query',
   'atlas-emit',
   'atlas-reconcile',
   'atlas-link',
+  'atlas-memory-emit',
 ] as const;
 
 // The four authoring doors (ADR-0004) — planners, ZERO write authority; NOT governed members.

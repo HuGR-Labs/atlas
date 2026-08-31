@@ -83,6 +83,18 @@ export const ARITY: Record<Command, number> = {
   // `check <anchor> <slot> <claim>` — the SAME three author fields as `draft`; `atlas check` composes the
   // candidate through the draft planner then dry-runs the emit gate chain over it (WP-10.A3.CLI, AUTHOR-11/12).
   check: 3,
+  // `memory-emit <entryJsonPath>` — the MemoryEntry JSON file path is the only positional (WP-11.W8); no
+  // `--at` (memory carries no source@sha anchor requirement).
+  'memory-emit': 1,
+  // `memory-recall [--owner o] [--kind k] [--task-id t] [--pr-id p]` — MEM-4b's explicit-consult path takes
+  // NO positional; the query is built entirely from optional valued flags.
+  'memory-recall': 0,
+  // `memory-header` — the composed actor's running-turn header; no positional (MEM-1/4/7).
+  'memory-header': 0,
+  // `memory-awareness` — the SHARED Awareness slab; no positional (MEM-11/12).
+  'memory-awareness': 0,
+  // `memory-orientation` — the SHARED Orientation slab; no positional (MEM-6).
+  'memory-orientation': 0,
 };
 
 // [ENTRY-CLI-5 clean-up] this used to be a HAND-TRANSCRIBED string literal — a second copy of `COMMANDS`
@@ -97,12 +109,13 @@ function isCommand(s: string): s is Command {
 
 /**
  * Flags that carry a VALUE token, accepting both the joined `--flag=v` and the space `--flag v` forms.
- * Valued today: `--at`/`--by` (emit anchor rev / query axis) and `--scope`/`--world`/`--min` (verify-fact's
- * claim scope, completeness world, and count lower bound). Everything else stays a bare boolean. Any unknown
+ * Valued today: `--at`/`--by` (emit anchor rev / query axis), `--scope`/`--world`/`--min` (verify-fact's
+ * claim scope, completeness world, and count lower bound), and `--owner`/`--kind`/`--task-id`/`--pr-id`
+ * (WP-11.W8 — `memory-recall`'s MEM-4b query selectors). Everything else stays a bare boolean. Any unknown
  * flag simply folds into the bag (a bare `--x` becomes `'true'`) — never a parse error, preserving totality.
  *  EXPORTED — `help.ts` (ENTRY-CLI-5) lists these as the flags help names, rather than a second hand-
  *  transcribed set. */
-export const VALUED_FLAGS = new Set(['at', 'by', 'scope', 'world', 'min']);
+export const VALUED_FLAGS = new Set(['at', 'by', 'scope', 'world', 'min', 'owner', 'kind', 'task-id', 'pr-id']);
 
 /**
  * Fold one `-x`/`--x`/`--x=y`/`--x y` token into the flag bag — a bare flag is `'true'`. For a VALUED flag in

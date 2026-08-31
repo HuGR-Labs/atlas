@@ -119,8 +119,9 @@ describe('AUTHOR-13 — retire persists ONLY through the governed door, every ga
     // Reverted immediately after the measurement; `governed-emit.ts` is untouched by this WP (test-only).
   });
 
-  it('SCN-AUTH-13c-1 — the write-path set is set-equal to {atlas-emit, atlas-link} (byte-unchanged)', () => {
-    expect(new Set(WRITE_PATHS)).toEqual(new Set(['atlas-emit', 'atlas-link']));
-    expect(WRITE_PATHS).toHaveLength(2); // no growth — a retire opened no third member
+  it('SCN-AUTH-13c-1 — the write-path set is set-equal to {atlas-emit, atlas-link, atlas-memory-emit} (a retire opens no member of its own)', () => {
+    // WP-11.W8 grew WRITE_PATHS to three (`atlas-memory-emit`, a genuinely new door unrelated to retire).
+    expect(new Set(WRITE_PATHS)).toEqual(new Set(['atlas-emit', 'atlas-link', 'atlas-memory-emit']));
+    expect(WRITE_PATHS).toHaveLength(3); // a retire opened no member of its own
   });
 });

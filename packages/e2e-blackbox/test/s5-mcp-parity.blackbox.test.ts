@@ -21,28 +21,31 @@ import type { GroundedFact } from '@atlas/knowledge';
 import { ACTOR, RATIFIER, emitFact, invLines, scopedPolicy } from './support.js';
 import { draftFact } from './support.js';
 
-// The CLOSED governance surface (TOOLS-1) — the five GOVERNED write/read doors, each routed through the one
-// wired handler. This stays exactly five; a new governed door is a constitution change.
-const GOVERNANCE_TOOLS = ['atlas-init', 'atlas-query', 'atlas-emit', 'atlas-reconcile', 'atlas-link'];
+// The CLOSED governance surface (TOOLS-1) — the six GOVERNED write/read doors, each routed through the one
+// wired handler (WP-SAMEAS added `atlas-link`; WP-11.W8 added `atlas-memory-emit` — a genuinely new door,
+// not a fold into an existing one). Growth is licensed by ADR-0006 Decision 2 (derived + budgeted, ≤30).
+const GOVERNANCE_TOOLS = ['atlas-init', 'atlas-query', 'atlas-emit', 'atlas-reconcile', 'atlas-link', 'atlas-memory-emit'];
 // The FULL advertised surface the SHIPPED composition root exposes over MCP: the governance surface PLUS the
 // `atlas-relations` (#99a / ADR-0015 D2) and `atlas-negations` (#99b / ADR-0015 D3) READ tools. Neither is a
 // governed `Tool` — each is served directly from its injected leg through the same shared verdict builder the
-// CLI drives, so it opens no governed token and leaves `GOVERNANCE_SURFACE` byte-for-byte closed at five (the
-// honest divergence stated in mcp-server/src/server.ts). Production therefore advertises SEVEN; a build with no
-// read leg falls back to the closed governance surface alone (asserted by the mcp-server unit test).
-// WP-10.A5.MCP added the six READ_SURFACE authoring/read doors (anchors, slots, draft, check, doctor, node),
-// each served DIRECTLY from its injected leg through the SAME shared verdict builder the CLI drives — so like
-// relations/negations they open no governed token and leave `GOVERNANCE_SURFACE` byte-for-byte closed at five.
-// Production therefore advertises THIRTEEN (5 governance + 2 relations/negations + 6 authoring); a build with
-// no read leg falls back to the closed governance surface alone (asserted by the mcp-server unit test).
+// CLI drives, so it opens no governed token and leaves `GOVERNANCE_SURFACE` byte-for-byte closed at its own
+// size (the honest divergence stated in mcp-server/src/server.ts).
+// WP-10.A5.MCP added the six pre-existing READ_SURFACE authoring/read doors (anchors, slots, draft, check,
+// doctor, node); WP-11.W8 added the four CAMPAIGN-11 memory READ_SURFACE doors (recall, header, awareness,
+// orientation) — all served DIRECTLY from an injected leg through the SAME shared verdict builder the CLI
+// drives, so none opens a governed token. Production therefore advertises EIGHTEEN (6 governance + 2
+// relations/negations + 6 authoring + 4 memory reads); a build with no read leg falls back to the closed
+// governance surface alone (asserted by the mcp-server unit test).
 const AUTHORING_TOOLS = ['atlas-anchors', 'atlas-slots', 'atlas-draft', 'atlas-check', 'atlas-doctor', 'atlas-node'];
-const ADVERTISED_TOOLS = [...GOVERNANCE_TOOLS, 'atlas-relations', 'atlas-negations', ...AUTHORING_TOOLS];
+const MEMORY_READ_TOOLS = ['atlas-memory-recall', 'atlas-memory-header', 'atlas-memory-awareness', 'atlas-memory-orientation'];
+const ADVERTISED_TOOLS = [...GOVERNANCE_TOOLS, 'atlas-relations', 'atlas-negations', ...AUTHORING_TOOLS, ...MEMORY_READ_TOOLS];
 const REQUIRED: Record<string, string[] | undefined> = {
   'atlas-init': ['path'],
   'atlas-query': ['scope'],
   'atlas-emit': ['node', 'at'],
   'atlas-reconcile': ['mergeBase'],
   'atlas-link': ['a', 'b'], // WP-SAMEAS — the governed sameAs door's two nodeKeys
+  'atlas-memory-emit': ['entry'], // WP-11.W8 — the governed MEMORY write door's one required field
   'atlas-relations': ['unit'], // #99a — the grounded-relation read tool; unit is the required nodeKey
   'atlas-negations': ['scope'], // #99b — the grounded-negation + abstention read tool; scope is required
   // WP-10.A5.MCP READ_SURFACE — the six authoring/read doors' documented input schemas (server-read-tools.ts).
@@ -52,6 +55,11 @@ const REQUIRED: Record<string, string[] | undefined> = {
   'atlas-check': ['fact', 'at'],
   'atlas-doctor': ['sub'],
   'atlas-node': ['node'],
+  // WP-11.W8 memory READ_SURFACE — none takes a required field (server-memory-tools.ts).
+  'atlas-memory-recall': undefined,
+  'atlas-memory-header': undefined,
+  'atlas-memory-awareness': undefined,
+  'atlas-memory-orientation': undefined,
 };
 
 interface McpText { data?: unknown; rejected?: unknown; guidance?: { next?: string; invariant?: string } }
@@ -82,14 +90,15 @@ afterAll(() => {
 });
 
 describe('S5 — MCP stdio parity with the CLI over the one governed core', () => {
-  it('listTools() advertises the 5 governance tools PLUS the 2 relations/negations + 6 READ_SURFACE authoring tools, each with an object input schema + required args', { timeout: 20000 }, async () => {
+  it('listTools() advertises the 6 governance tools PLUS the 2 relations/negations + 6 authoring + 4 memory READ_SURFACE tools, each with an object input schema + required args', { timeout: 20000 }, async () => {
     const session = await mcpSession(repo.repoPath);
     try {
       const { tools } = await session.client.listTools();
       // The shipped composition root injects the relation (#99a) + negation (#99b) read legs AND the full
-      // READ_SURFACE authoring bundle (WP-10.A5.MCP), so production advertises THIRTEEN: the closed governance
-      // surface + `atlas-relations` + `atlas-negations` + the 6 authoring doors. The governance five are still
-      // all present and unchanged, and none of the 8 read/authoring doors opens a governed token.
+      // READ_SURFACE bundle (WP-10.A5.MCP's six + WP-11.W8's four memory doors), so production advertises
+      // EIGHTEEN: the closed governance surface + `atlas-relations` + `atlas-negations` + the 6 authoring
+      // doors + the 4 memory doors. The governance six are still all present and unchanged, and none of the
+      // 12 read/authoring doors opens a governed token.
       expect(tools.map((t) => t.name)).toEqual(ADVERTISED_TOOLS);
       for (const t of tools) {
         expect(t.inputSchema).toMatchObject({ type: 'object' });

@@ -9,6 +9,7 @@
     { "path": "../tools" },
     { "path": "../genesis" },
     { "path": "../contracts" },
+    { "path": "../memory" },
     { "path": "../persist" }
   ]
 }

@@ -59,14 +59,19 @@ const { createWriteSpyStore, seedSomeBytes } = (await import(WRITE_SPY_STORE_PAT
   seedSomeBytes: (seed: DiskStoreLike) => Hash;
 };
 
-// ── the frozen oracle — byte-for-byte the values ADR-0003/0004/0005 pin; this suite is READ-ONLY over all three ──
-const CANONICAL_WRITE_PATHS = ['atlas-emit', 'atlas-link'] as const;
+// ── the frozen oracle — byte-for-byte the values ADR-0003/0004/0005 pin FOR THIS CAMPAIGN (WP-10.A5,
+//    six-member READ_SURFACE); WP-11.W8 (CAMPAIGN-11) later grew all three constants — `atlas-memory-emit`
+//    into GOVERNANCE_SURFACE/WRITE_PATHS, four memory read doors into READ_SURFACE. This suite's own SCOPE
+//    claim ("READ-ONLY over all three") describes what THIS campaign did, not a promise those constants
+//    never grow again — the disjointness/cardinality PROPERTIES below still hold over the current values. ──
+const CANONICAL_WRITE_PATHS = ['atlas-emit', 'atlas-link', 'atlas-memory-emit'] as const;
 const CANONICAL_GOVERNANCE_SURFACE = [
   'atlas-init',
   'atlas-query',
   'atlas-emit',
   'atlas-reconcile',
   'atlas-link',
+  'atlas-memory-emit',
 ] as const;
 const CANONICAL_READ_SURFACE = [
   'atlas-anchors',
@@ -75,21 +80,25 @@ const CANONICAL_READ_SURFACE = [
   'atlas-check',
   'atlas-doctor',
   'atlas-node',
+  'atlas-memory-recall',
+  'atlas-memory-header',
+  'atlas-memory-awareness',
+  'atlas-memory-orientation',
 ] as const;
 
 describe('WP-10.A5.TOOLS — READ_SURFACE is frozen, disjoint, and correctly sized (PROP-MCP-3)', () => {
-  // SCN-MCP-3b-1 — the two governed constants are BYTE-UNCHANGED by this campaign.
-  it('SCN-MCP-3b-1 — GOVERNANCE_SURFACE and WRITE_PATHS are byte-unchanged', () => {
+  // SCN-MCP-3b-1 — the two governed constants, pinned to their CURRENT shipped values.
+  it('SCN-MCP-3b-1 — GOVERNANCE_SURFACE and WRITE_PATHS match the canonical oracle', () => {
     expect([...GOVERNANCE_SURFACE]).toEqual([...CANONICAL_GOVERNANCE_SURFACE]);
     expect([...WRITE_PATHS]).toEqual([...CANONICAL_WRITE_PATHS]);
   });
 
-  // SCN-MCP-3c-1 — READ_SURFACE membership + cardinality (6), IN ORDER.
-  it('SCN-MCP-3c-1 — READ_SURFACE deep-equals the 6-member ADR-0005 set, in order', () => {
+  // SCN-MCP-3c-1 — READ_SURFACE membership + cardinality (10, ADR-0005 six + WP-11.W8's four), IN ORDER.
+  it('SCN-MCP-3c-1 — READ_SURFACE deep-equals the 10-member set, in order', () => {
     expect([...READ_SURFACE]).toEqual([...CANONICAL_READ_SURFACE]);
-    expect(READ_SURFACE.length).toBe(6);
-    expect(GOVERNANCE_SURFACE.length).toBe(5); // pinned cardinality, unmoved by this campaign
-    expect(WRITE_PATHS.length).toBe(2); // pinned cardinality, unmoved by this campaign
+    expect(READ_SURFACE.length).toBe(10);
+    expect(GOVERNANCE_SURFACE.length).toBe(6);
+    expect(WRITE_PATHS.length).toBe(3);
   });
 
   // SCN-MCP-3d-1 — READ_SURFACE ∩ GOVERNANCE_SURFACE = ∅ and READ_SURFACE ∩ WRITE_PATHS = ∅ (ENTRY-MCP-3).

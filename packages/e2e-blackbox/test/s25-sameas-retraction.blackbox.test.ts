@@ -3,7 +3,7 @@
 // NARRATIVE: a human retracts a `sameAs` equivalence they should never have asserted. Before this, a wrong
 // link was PERMANENT and — because the fold is a union-find — transitively contagious on every read forever
 // (A-D3). Retraction is a MODE of the EXISTING governed door (`atlas link <a> <b> --retract` / MCP
-// `atlas-link {a,b,retract:true}`); the governance surface stays five tools and `WRITE_PATHS` stays two.
+// `atlas-link {a,b,retract:true}`); `GOVERNANCE_SURFACE`/`WRITE_PATHS` are untouched by THIS mode.
 //
 // Driven ONLY through the real doors — the `atlas` CLI subprocess and the real `atlas-mcp` stdio server —
 // because the property that matters here is END-TO-END: the retraction must travel the marshaller, the

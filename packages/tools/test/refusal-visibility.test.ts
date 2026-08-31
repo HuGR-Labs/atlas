@@ -19,20 +19,23 @@ import { describe, expect, it } from 'vitest';
 import { faultOf } from '../src/fault.js';
 import { createHandler, WRITE_PATHS } from '../src/handler.js';
 import type { ToolLeg } from '../src/handler.js';
-import type { EmitOut, LinkOut, Tool, ToolData, Verdict } from '../src/types.js';
+import type { EmitOut, LinkOut, MemoryEmitOut, Tool, ToolData, Verdict } from '../src/types.js';
 
 /** THE DISCRIMINANT — everything before the first `:` (mirrors adapter-io's `reasonOf`, ADR-0007). */
 const reasonOf = (rejected: string | undefined): string => (rejected ?? '').split(':')[0]!;
 
 /** The refusals the REAL doors ship, transcribed as they are minted (`adapter-io/src/governed-emit.ts` /
- *  `governed-link.ts` lead with a discriminant). Only the discriminant is contract; the prose is commentary. */
+ *  `governed-link.ts` / `wire.ts`'s `atlas-memory-emit` leg lead with a discriminant). Only the discriminant
+ *  is contract; the prose is commentary. */
 const UNGROUNDED = 'ungrounded: the citation did not re-derive at source@sha';
 const UNAUTHORIZED = 'unauthorized for target: the actor holds no scope covering both endpoints';
+const SCANNER_UNAVAILABLE = 'scanner-unavailable: no NAMED scanner is configured';
 
 /** Schema-valid arguments per write door, so `handle` reaches the LEG (class (a) is decided up front). */
-const ARGS: Record<'atlas-emit' | 'atlas-link', unknown> = {
+const ARGS: Record<'atlas-emit' | 'atlas-link' | 'atlas-memory-emit', unknown> = {
   'atlas-emit': { node: { claim: 'ACME ARR 2024 = $4.2M' }, at: 'deadbeef' },
   'atlas-link': { a: 'k:one', b: 'k:two' },
+  'atlas-memory-emit': { entry: { rule: 'r', scope: 's', frecency: 1 } },
 };
 
 /** The fail-closed return of each governed door, and the refusal it carries. One row per WRITE_PATH — the
@@ -40,6 +43,7 @@ const ARGS: Record<'atlas-emit' | 'atlas-link', unknown> = {
 const FAIL_CLOSED: readonly (readonly [Tool, ToolData, string])[] = [
   ['atlas-emit', { emitted: false, rejected: UNGROUNDED } satisfies EmitOut, 'ungrounded'],
   ['atlas-link', { linked: false, rejected: UNAUTHORIZED } satisfies LinkOut, 'unauthorized for target'],
+  ['atlas-memory-emit', { admitted: false, refusal: 'scanner-unavailable', rejected: SCANNER_UNAVAILABLE } satisfies MemoryEmitOut, 'scanner-unavailable'],
 ];
 
 /** The SUCCESS return of each governed door — the positive control that separates "refusals are visible"
@@ -47,16 +51,17 @@ const FAIL_CLOSED: readonly (readonly [Tool, ToolData, string])[] = [
 const ADMITTED: readonly (readonly [Tool, ToolData])[] = [
   ['atlas-emit', { emitted: true } satisfies EmitOut],
   ['atlas-link', { linked: true, a: 'k:one', b: 'k:two' } satisfies LinkOut],
+  ['atlas-memory-emit', { admitted: true, record: { owner: 'a', kind: 'project', entry: { rule: 'r', scope: 's', frecency: 1 } } } satisfies MemoryEmitOut],
 ];
 
 const run = (tool: Tool, data: ToolData): Verdict<ToolData> => {
   const leg: ToolLeg = () => data;
-  return createHandler({ [tool]: leg }).handle(tool, ARGS[tool as 'atlas-emit' | 'atlas-link']);
+  return createHandler({ [tool]: leg }).handle(tool, ARGS[tool as 'atlas-emit' | 'atlas-link' | 'atlas-memory-emit']);
 };
 
 describe('F2/F5 — a fail-closed governed write is a REJECTION, never a silent ok', () => {
   it('the table below covers EVERY governed write door (no door drops out of coverage silently)', () => {
-    expect(WRITE_PATHS.length).toBe(2);
+    expect(WRITE_PATHS.length).toBe(3);
     expect([...FAIL_CLOSED.map(([t]) => t)].sort()).toEqual([...WRITE_PATHS].sort());
     expect([...ADMITTED.map(([t]) => t)].sort()).toEqual([...WRITE_PATHS].sort());
   });
@@ -119,5 +124,12 @@ describe('F2/F5 — the fallback reason NAMES THE WRITE KIND when the door set n
 
     expect(v.ok).toBe(false);
     expect(v.rejected).toBe('link failed closed');
+  });
+
+  it('a memory-emit that fails closed with no reason is reported as a MEMORY WRITE failure (WP-11.W8)', () => {
+    const v = run('atlas-memory-emit', { admitted: false } satisfies MemoryEmitOut);
+
+    expect(v.ok).toBe(false);
+    expect(v.rejected).toBe('memory write failed closed');
   });
 });

@@ -14,6 +14,7 @@ import { headSha } from '@atlas/adapter-io';
 import { reportIndexPlan, relationsVerdict, negationsVerdict, transitionsVerdict, testVacuitiesVerdict, verifyFactVerdict } from '@atlas/adapter-io';
 import type { DeriveRelationsRun, IndexPlanReport, NegationLeg, OwnLeg, PromoteOut, RelationLeg, ReverifyReport, TestVacuityLeg, TestVacuityProducer, TransitionLeg, TransitionProducer, VerifyFactLeg, WiredHandler } from '@atlas/adapter-io';
 import type { AnchorsApi, CheckApi, DoctorSource, DraftApi, SlotsApi, Tool } from '@atlas/tools';
+import type { Awareness, MemoryRecord, Orientation, TurnHeader } from '@atlas/memory';
 import { anchorsVerdict } from './anchors.js';
 import { slotsVerdict } from './slots.js';
 import { draftVerdict } from './draft.js';
@@ -31,7 +32,7 @@ import { runTestVacuityCli } from './test-vacuity.js';
 import { parse } from './parse.js';
 import { renderRefusal, renderVerdict } from './render.js';
 import { emit, emitCli, errorVerdict, refusalVerdict, withNote } from './cli-verdict.js';
-import { dispatchMine, dispatchVerifyStore } from './cli-dispatch.js';
+import { dispatchMine, dispatchVerifyStore, dispatchMemoryRecall, dispatchMemoryHeader, dispatchMemoryAwareness, dispatchMemoryOrientation } from './cli-dispatch.js';
 
 /** Optional dependency injection seam (additive): tests inject a FAKE `WiredHandler` + a FAKE read-only
  *  `DoctorSource`; prod assembles both at the composition-root WP. */
@@ -215,6 +216,21 @@ export interface CliDeps {
    *  a rev WITHOUT any write. `atlas check` composes the candidate with `deps.draft` (SAME three-field
    *  discipline, SAME slot vocabulary via `deps.slots`) then dry-runs it. ABSENT ⇒ `atlas check` fails closed. */
   readonly check?: CheckApi['check'];
+
+  /** The composition root's MEM-4b explicit-recall READ leg (`ComposedRuntime.memoryRecall`, WP-11.W8).
+   *  Injected on the SAME seam as `relations`/`anchors`: not a `Tool` (the write half `atlas-memory-emit`
+   *  is the `GOVERNANCE_SURFACE` member), opens no write path. ABSENT ⇒ `atlas memory-recall` fails closed. */
+  readonly memoryRecall?: (query: unknown) => readonly MemoryRecord[];
+  /** The composition root's MEM-1/4/7 running-turn header READ leg (`ComposedRuntime.memoryHeader`,
+   *  WP-11.W8). Injected on the SAME seam as `memoryRecall`. ABSENT ⇒ `atlas memory-header` fails closed. */
+  readonly memoryHeader?: () => TurnHeader;
+  /** The composition root's MEM-11/12 SHARED Awareness slab READ leg (`ComposedRuntime.memoryAwareness`,
+   *  WP-11.W8). Injected on the SAME seam as `memoryRecall`. ABSENT ⇒ `atlas memory-awareness` fails closed. */
+  readonly memoryAwareness?: () => Awareness;
+  /** The composition root's MEM-6 DERIVED, SHARED Orientation slab READ leg (`ComposedRuntime.
+   *  memoryOrientation`, WP-11.W8). Injected on the SAME seam as `memoryRecall`. ABSENT ⇒
+   *  `atlas memory-orientation` fails closed. */
+  readonly memoryOrientation?: () => Orientation;
 }
 
 /**
@@ -513,7 +529,16 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
     return dispatchVerifyStore(deps.reverify);
   }
 
-  // The remaining five governance commands each route to a `Tool` through the one wired handler.
+  // WP-11.W8 / CAMPAIGN-11 — the four memory READ_SURFACE doors. Each is intercepted before the handler
+  // like `relations`/`anchors` (not a `Tool`; opens no write path) and its dispatch body lives in
+  // `cli-dispatch.ts` (godfile relief, the SAME siting `dispatchMine`/`dispatchVerifyStore` use).
+  if (command === 'memory-recall') return dispatchMemoryRecall(deps.memoryRecall, flags);
+  if (command === 'memory-header') return dispatchMemoryHeader(deps.memoryHeader);
+  if (command === 'memory-awareness') return dispatchMemoryAwareness(deps.memoryAwareness);
+  if (command === 'memory-orientation') return dispatchMemoryOrientation(deps.memoryOrientation);
+
+  // The remaining SIX governance commands (init/query/emit/reconcile/link/memory-emit) each route to a
+  // `Tool` through the one wired handler.
   const tool = COMMAND_LEG[command] as Tool;
   // The handler is INJECTED (dependency-inverted). Building the real one needs a fully-composed
   // `WireConfig` — including the adapter-less `seams` (heuristic/gate/classifier/driftFacts/resolveAnchorAt)

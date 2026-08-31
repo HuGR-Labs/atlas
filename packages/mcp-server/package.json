@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@atlas/adapter-io": "*",
+    "@atlas/memory": "*",
     "@atlas/tools": "*",
     "@modelcontextprotocol/sdk": "1.29.0"
   },

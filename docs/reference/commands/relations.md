@@ -72,7 +72,7 @@ arrived by commit rather than through a governed door (exit 2). See [`query`](./
 
 `relations` is on **both** transports. Over MCP it is the `atlas-relations` tool, served directly from the
 injected read leg (it is **not** in `GOVERNANCE_SURFACE` — it opens no governed surface, so there is no
-`Tool` token and the closed governance surface stays five). Its input schema is documented on the tool:
+`Tool` token and `GOVERNANCE_SURFACE` is untouched by this door). Its input schema is documented on the tool:
 `{ unit: string (required), direction?: 'out'|'in'|'both' }`. The **verdict** bytes (`data` + `guidance`) are
 identical to the CLI's, because both transports drive the one shared builder.
 

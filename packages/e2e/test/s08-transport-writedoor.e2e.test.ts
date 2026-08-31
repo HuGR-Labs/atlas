@@ -76,12 +76,12 @@ const grounded = (value: unknown): StoreRow => ({ key: id(value as CasObject), v
 
 describe('S8 · governed write doors, one contract across every transport', () => {
   // ── (1) SURFACE == 5, WRITE == 2 (WP-SAMEAS) ────────────────────────────────────────────────────────
-  it('exposes EXACTLY five governance tools and EXACTLY two governed write paths', () => {
-    expect(GOVERNANCE_SURFACE.length).toBe(5);
-    expect([...GOVERNANCE_SURFACE].sort()).toEqual(['atlas-emit', 'atlas-init', 'atlas-link', 'atlas-query', 'atlas-reconcile']);
-    expect(WRITE_PATHS.length).toBe(2);
-    expect([...WRITE_PATHS].sort()).toEqual(['atlas-emit', 'atlas-link']); // the two governed write doors (WP-SAMEAS)
-    // teeth (breaks-on "an unauthorized governance tool or a third write path appears"): the cardinality is fixed.
+  it('exposes EXACTLY six governance tools and EXACTLY three governed write paths (WP-11.W8: atlas-memory-emit)', () => {
+    expect(GOVERNANCE_SURFACE.length).toBe(6);
+    expect([...GOVERNANCE_SURFACE].sort()).toEqual(['atlas-emit', 'atlas-init', 'atlas-link', 'atlas-memory-emit', 'atlas-query', 'atlas-reconcile']);
+    expect(WRITE_PATHS.length).toBe(3);
+    expect([...WRITE_PATHS].sort()).toEqual(['atlas-emit', 'atlas-link', 'atlas-memory-emit']); // the three governed write doors (WP-SAMEAS + WP-11.W8)
+    // teeth (breaks-on "an unauthorized governance tool or a fourth write path appears"): the cardinality is fixed.
     expect(GOVERNANCE_SURFACE).not.toContain('atlas-delete');
     expect(WRITE_PATHS).not.toContain('atlas-diff'); // a read projection is never a write path
   });

@@ -28,7 +28,11 @@ export type MarshalResult =
  *   link      → `{ a, b, retract }`               (leg: `.a` + `.b` — the two nodeKeys to equate, WP-SAMEAS;
  *                                                   `.retract` selects the A-D3 retraction MODE. This one
  *                                                   REFUSES unknown/odd flags — see `marshalLink`)
- * `doctor` / `mine` / `node` are dispatched BEFORE the handler (cli.ts) and never reach here — the default fails closed.
+ *   memory-emit → `{ entry }`                     (leg: `.entry: MemoryEntry`, WP-11.W8 — the governed
+ *                                                   MEMORY write door; no `--at` — the entry's own DERIVED
+ *                                                   `kind` selects its template, MEM-1..9)
+ * `doctor` / `mine` / `node` / `memory-recall` / `memory-header` / `memory-awareness` / `memory-orientation`
+ * are dispatched BEFORE the handler (cli.ts) and never reach here — the default fails closed.
  */
 export function marshalArgs(
   command: Command,
@@ -61,6 +65,8 @@ export function marshalArgs(
       return marshalEmit(positionals, flags);
     case 'link':
       return marshalLink(positionals, flags);
+    case 'memory-emit':
+      return marshalMemoryEmit(positionals);
     default:
       // doctor/mine are intercepted before routing; a stray command here fails closed rather than routing blind.
       return { ok: false, error: `command '${command}' has no argument marshaller` };
@@ -182,4 +188,31 @@ function marshalEmitNode(node: unknown, at: string): MarshalResult {
     return { ok: true, args: { node: env.fact, at } };
   }
   return { ok: true, args: { node, at } };
+}
+
+/**
+ * `atlas memory-emit <entryJsonPath>` — the WP-11.W8 governed MEMORY write door via CLI: a `MemoryEntry`
+ * lives in a JSON file (positionals[0]). No `--at` — memory carries no source@sha anchor requirement; the
+ * entry's own DERIVED `kind` (`memoryKindOf`) selects the template gate applies (MEM-1..9). TOTAL: a
+ * missing file path, an unreadable file, or malformed JSON fails CLOSED to a structured error — never a
+ * throw, mirroring `marshalEmit`.
+ */
+function marshalMemoryEmit(positionals: readonly string[]): MarshalResult {
+  const entryPath = positionals[0];
+  if (entryPath === undefined) {
+    return { ok: false, error: `memory-emit requires a MemoryEntry JSON file path (positional 1)` };
+  }
+  let raw: string;
+  try {
+    raw = readFileSync(entryPath, 'utf8');
+  } catch {
+    return { ok: false, error: `memory-emit: cannot read entry file '${entryPath}'` };
+  }
+  let entry: unknown;
+  try {
+    entry = JSON.parse(raw);
+  } catch {
+    return { ok: false, error: `memory-emit: entry file '${entryPath}' is not valid JSON` };
+  }
+  return { ok: true, args: { entry } };
 }

@@ -10,6 +10,7 @@
 
 import type { Hash, NodeKey, Pack, StructRef, Territory, ToolSchema } from '@atlas/contracts';
 import type { GroundedFact, PredicateSlot, SameAs, Subsumes } from '@atlas/knowledge';
+import type { MemoryRecord } from '@atlas/memory';
 import type { VersionDelta } from '@atlas/persist';
 import type { OwnPack, OwnUnit, RelationSet } from '@atlas/retrieval';
 
@@ -26,8 +27,18 @@ export type { Hash, Pack, PackInvariant, Territory } from '@atlas/contracts';
  * [WRITE SURFACE — TOOLS-1, extended] the write doors are `atlas-emit` + `atlas-link` (`WRITE_PATHS`); the
  * read/derive tools are `atlas-init` / `atlas-query` / `atlas-reconcile`. `atlas-link` records a symmetric
  * human `sameAs` equivalence under the SAME authz+ratify governance as emit — NON-destructive (never a merge).
+ *
+ * [EXTENDED — WP-11.W8 / CAMPAIGN-11] `atlas-memory-emit` joins as a THIRD governed write door — the ONE
+ * path a `MemoryEntry` reaches the durable per-seat memory log (`@atlas/memory` MEM-1..9), through the SEVEN
+ * fail-closed gates `createMemoryEmit` composes (`packages/adapter-io/src/memory-emit.ts`). It is a NEW
+ * `Tool`, not a reuse of `atlas-emit`'s door: the store it appends to (`.atlas/memory.jsonl`) is a
+ * SEPARATE durable log from the knowledge CAS `atlas-emit` writes, so ADR-0008's "an ordinary use of the
+ * existing emit door" reasoning does not apply — this is genuinely new governed surface. `GOVERNANCE_SURFACE`
+ * grows from five to SIX and `WRITE_PATHS` from two to three (ARCH-6/ARCH-7, ADR-0006 Decision 2: the surface
+ * is DERIVED and BUDGETED — `advertised ≡ invocable ≡ Tool`, bounded at 30 — not a fixed count; six is well
+ * inside that budget).
  */
-export type Tool = 'atlas-init' | 'atlas-query' | 'atlas-emit' | 'atlas-reconcile' | 'atlas-link';
+export type Tool = 'atlas-init' | 'atlas-query' | 'atlas-emit' | 'atlas-reconcile' | 'atlas-link' | 'atlas-memory-emit';
 
 /**
  * The guidance envelope shipped with EVERY result (TOOLS-4). Transcribed EXACTLY from atlas-tools:16 —
@@ -142,6 +153,26 @@ export interface LinkOut {
    *  asserted equivalence — rather than an assertion. Present only on `linked:true` of the retract mode;
    *  ABSENT (not `false`) on an assertion, so every existing consumer of this record is byte-unchanged. */
   readonly retracted?: boolean;
+}
+
+/**
+ * `atlas-memory-emit` result (WP-11.W8) — the governed MEMORY write door's outcome. TOOLS-owned (like
+ * `EmitOut`/`LinkOut`) so the DAG stays one-way: `@atlas/adapter-io`'s `createMemoryEmit`
+ * (`memory-emit.ts`) composes the seven MEM gates and this leg's WIRE wrapper (`wire.ts`) folds its
+ * `MemoryVerdict` (`@atlas/memory`) into this shape — never the reverse import. `admitted:false` is the
+ * ONE fail-closed discriminator every transport keys off (handler `isFailClosedWrite`, CLI exit 2, MCP
+ * `isError`), mirroring `emitted`/`linked`. `refusal` is the NAMED MEM gate that declined (`undetermined-
+ * kind` / `template-invalid` / `kind-conflation` / `unowned` / `logbook-duplicate` / `logbook-unauthorized`
+ * / `over-cap` / `scanner-blocked` / `scanner-unavailable`) — a machine value, distinct from `rejected`'s
+ * human-readable reason string (the SAME split `refusal`/`reason` `MemoryRejected` already carries).
+ * `record` is the persisted `MemoryRecord` on `admitted:true` only. Under `exactOptionalPropertyTypes`,
+ * `rejected`/`refusal`/`record` are present-on-the-relevant-path only.
+ */
+export interface MemoryEmitOut {
+  readonly admitted: boolean;
+  readonly rejected?: string; // structured fail-closed reason (the gate's own `reason`, human-readable)
+  readonly refusal?: string; // the NAMED MEM gate that declined — a machine value (MemoryRefusal, stringified)
+  readonly record?: MemoryRecord; // present on admitted:true only
 }
 
 /**
@@ -381,7 +412,7 @@ export interface QueryEnvelope {
 /** The per-tool result payload carried on a `Verdict.data` — the union of the governance-tool result records
  *  (TOOLS-5/6/7/8 + WP-SAMEAS `LinkOut`), plus the `atlas-query` observability envelope (Seam-3). The handler
  *  is one oracle over all; the concrete leg is fixed by `tool`. */
-export type ToolData = InitOut | QueryOut | EmitOut | ReconcileOut | LinkOut | QueryEnvelope | AnchorsOut;
+export type ToolData = InitOut | QueryOut | EmitOut | ReconcileOut | LinkOut | QueryEnvelope | AnchorsOut | MemoryEmitOut;
 
 /** The transport a call arrived on (TOOLS-3/10). Transcribed from the reference's "one contract, two
  *  transports" (CLI≡MCP) plus the tri-transport node reads (MCP tool | poke | CLI). Behaviour MUST NOT

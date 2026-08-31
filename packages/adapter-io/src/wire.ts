@@ -1,16 +1,26 @@
 // @atlas/adapter-io — src/wire.ts  (WIRE-1: the ONE shared handler assembly)
 //
-// The single composition seam shared by every entrypoint (CLI, MCP): assemble the five governance legs
-// (atlas-init / atlas-query / atlas-emit / atlas-reconcile / atlas-link) over the raw adapters and hand them to the one
-// frozen `createHandler`. Co-located with the adapters it composes (D2: the shared `wire` module lives in
-// @atlas/adapter-io, not a separate package). This module is the SOLE assembly point — every entrypoint
-// imports THIS `assembleHandler`, so CLI and MCP are contract-identical by construction, not by copy
-// (WIRE-1). The five legs are built from the raw adapters; the seams that have NO adapter (the T0
-// heuristic, the truth-gate, the KNOW-5 classifier, the drifted-fact set, and the anchor resolver) are
-// INJECTED via `WireConfig.seams`, so the assembly is testable with fakes/stubs.
+// The single composition seam shared by every entrypoint (CLI, MCP): assemble the governance legs
+// (atlas-init / atlas-query / atlas-emit / atlas-reconcile / atlas-link / atlas-memory-emit) over the raw
+// adapters and hand them to the one frozen `createHandler`. Co-located with the adapters it composes (D2:
+// the shared `wire` module lives in @atlas/adapter-io, not a separate package). This module is the SOLE
+// assembly point — every entrypoint imports THIS `assembleHandler`, so CLI and MCP are contract-identical
+// by construction, not by copy (WIRE-1). The legs are built from the raw adapters; the seams that have NO
+// adapter (the T0 heuristic, the truth-gate, the KNOW-5 classifier, the drifted-fact set, and the anchor
+// resolver) are INJECTED via `WireConfig.seams`, so the assembly is testable with fakes/stubs.
+//
+// [EXTENDED — WP-11.W8 / CAMPAIGN-11] `atlas-memory-emit` is the SIXTH governed leg — the ONE path a
+// `MemoryEntry` reaches the durable per-seat memory log (`@atlas/memory` MEM-1..9), through the door
+// `memory-emit.ts` composes. Its leg is ALWAYS present as a literal key in the `legs` object below (ARCH-3,
+// `layer-guard.mjs`'s `boundLegs` forbids a top-level spread from hiding a leg): when `config.memoryEmit`
+// is absent (a bare WIRE fake assembly with no composition root) the leg THROWS, and the frozen handler's
+// existing catch converts that into a structured rejected `Verdict` (TOOLS-2) — the SAME "not wired at this
+// seam" shape every other leg gets when its composition-root dependency is missing.
 
 import { createHandler, createInit, createQuery, createReconcile } from '@atlas/tools';
-import type { ToolLegs, ToolLeg, NodeSource } from '@atlas/tools';
+import type { ToolLegs, ToolLeg, NodeSource, MemoryEmitOut } from '@atlas/tools';
+import type { MemoryEntry } from '@atlas/memory';
+import type { MemoryEmit } from './memory-emit.js';
 import { build, createResolve, createDepgraph, createSymbolReverse, nodeHashOfPath } from '@atlas/index';
 import type { Axes, FileTree, ScipOutput, SymbolReverseApi } from '@atlas/index';
 // The GROUND-1 per-fact drift oracle — the SAME import the composition root's truth-gate uses (compose.ts).
@@ -208,6 +218,16 @@ export interface WireConfig {
   readonly targetEscapes?: (target: string) => readonly string[];
   /** `buildDynamicReach(rawTree)` — the sibling v2 leg. Same ABSENT behavior as `targetEscapes`. */
   readonly dynamicReach?: (scope: string) => readonly string[];
+
+  /**
+   * The governed MEMORY write door (WP-11.W8, MEM-1..9) — `createMemoryEmit`'s composed seven-gate door
+   * over the durable per-seat memory log (`memory-store.ts`), built by the composition root
+   * (`compose.ts`) over its OWN `actor` (D1: the owner is `actor`, resolved by the composition root — this
+   * assembler never resolves or interprets it) and a real pre-write scanner (`scanner.ts`). ABSENT on a
+   * bare WIRE fake assembly ⇒ the `atlas-memory-emit` leg THROWS, converted by the frozen handler's catch
+   * into a structured rejected `Verdict` (TOOLS-2) — never a silent success over an uncomposed door.
+   */
+  readonly memoryEmit?: MemoryEmit;
 }
 
 /**
@@ -442,6 +462,28 @@ export function assembleHandler(config: WireConfig): WiredHandler {
         (args as { mergeBase: import('@atlas/contracts').Hash }).mergeBase,
         (args as { options?: import('@atlas/tools').ReconcileOptions }).options,
       )) satisfies ToolLeg,
+    // WP-11.W8 — the governed MEMORY write door. A LITERAL top-level key (ARCH-3: a spread here would hide
+    // the leg from `layer-guard.mjs`'s static scan while leaving it fully invocable), always present; the
+    // body throws when `config.memoryEmit` is absent (bare WIRE fake assembly, no composition root), which
+    // the frozen handler's existing catch converts to a structured rejected `Verdict` (TOOLS-2). On a real
+    // composed runtime this folds `@atlas/memory`'s `MemoryVerdict` (from `createMemoryEmit`) into the
+    // `MemoryEmitOut` shape `@atlas/tools` owns — `admitted:false` is the ONE discriminator `isFailClosedWrite`
+    // keys off (mirrors `emitted`/`linked`), `refusal` is the named MEM gate, `rejected` is its human reason.
+    'atlas-memory-emit': ((args) => {
+      if (config.memoryEmit === undefined) {
+        throw new Error('atlas-memory-emit: no memory write door composed at this seam');
+      }
+      const entry = (args as { entry: MemoryEntry }).entry;
+      const verdict = config.memoryEmit.emit(entry);
+      if (verdict.ok) {
+        return { admitted: true, record: verdict.record } satisfies MemoryEmitOut;
+      }
+      return {
+        admitted: false,
+        refusal: verdict.refusal,
+        rejected: `${verdict.refusal}: ${verdict.reason}`,
+      } satisfies MemoryEmitOut;
+    }) satisfies ToolLeg,
   };
 
   // The DAG-pin references NOT wired as handler legs (frozen skeleton edges): the git-forge / history /

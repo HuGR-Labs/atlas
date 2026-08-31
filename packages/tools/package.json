@@ -17,6 +17,7 @@
     "@atlas/persist": "*",
     "@atlas/grounding": "*",
     "@atlas/knowledge": "*",
+    "@atlas/memory": "*",
     "@atlas/retrieval": "*"
   },
   "scripts": {

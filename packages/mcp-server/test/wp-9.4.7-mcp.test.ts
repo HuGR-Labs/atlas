@@ -53,12 +53,13 @@ const REJECT_VERDICT: Verdict<ToolData> = {
 // ── SCN-MCP-1: the advertised surface is EXACTLY the five GOVERNANCE_SURFACE tools ───────────────────────
 
 describe('SCN-MCP-1 — ListTools advertises exactly the closed governance surface (TOOLS-1)', () => {
-  it('advertises the five GOVERNANCE_SURFACE tools by name, no more, no fewer', () => {
-    // TEETH: a mutant in advertisedTools that appends a 6th/off-surface tool, or drops one of the five,
-    // makes this set-equality RED (the closed-surface golden).
+  it('advertises the GOVERNANCE_SURFACE tools by name, no more, no fewer', () => {
+    // TEETH: a mutant in advertisedTools that appends an off-surface tool, or drops a real one,
+    // makes this set-equality RED (the closed-surface golden). Length is DERIVED from the imported
+    // constant, never re-transcribed (WP-11.W8 grew it from five to six — `atlas-memory-emit`).
     const names = advertisedTools(fakeHandler(OK_VERDICT)).map((t) => t.name);
     expect(names).toEqual([...GOVERNANCE_SURFACE]);
-    expect(names).toHaveLength(5); // WP-SAMEAS: the governed atlas-link door is the fifth advertised tool
+    expect(names).toHaveLength(GOVERNANCE_SURFACE.length);
   });
 
   it('surfaces each tool inputSchema + description from handler.schema (byte-identical, TOOLS-3)', () => {

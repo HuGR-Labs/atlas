@@ -27,7 +27,9 @@ import { describe, it, expect } from 'vitest';
 import { GOVERNANCE_SURFACE, READ_SURFACE, WRITE_PATHS } from '@atlas/tools';
 import type { AnchorsOut, CheckOut, DoctorSource, DraftOut, SlotsOut, Tool, ToolData, Verdict } from '@atlas/tools';
 import type { WiredHandler } from '@atlas/adapter-io';
+import type { Awareness, MemoryRecord, Orientation, TurnHeader } from '@atlas/memory';
 import type { NodeKey, ToolSchema } from '@atlas/contracts';
+import type { MemoryReadSurfaceLegs } from '../src/server-memory-tools.js';
 import { advertisedTools, callTool, listTools } from '../src/server.js';
 import type { ReadSurfaceLegs } from '../src/server-read-tools.js';
 
@@ -76,6 +78,15 @@ const fakeReadLegs = (): ReadSurfaceLegs => ({
   } as DoctorSource,
 });
 
+/** WP-11.W8 — the fake CAMPAIGN-11 memory READ_SURFACE legs bundle, the SAME shape `fakeReadLegs` above
+ *  provides for the pre-existing six. Total, structural, no store. */
+const fakeMemoryLegs = (): MemoryReadSurfaceLegs => ({
+  memoryRecall: (): readonly MemoryRecord[] => [],
+  memoryHeader: (): TurnHeader => ({ awareness: {} as Awareness, orientation: {} as Orientation, rules: [] }),
+  memoryAwareness: (): Awareness => ({}) as Awareness,
+  memoryOrientation: (): Orientation => ({}) as Orientation,
+});
+
 /** The read-onto-write DETECTOR — the exact predicate the extended guard asserts is FALSE for every read
  *  member. `WRITE_PATHS` (@atlas/tools, ADR-0003: `atlas-emit`, `atlas-link`) is the ONE closed write union;
  *  a read leg that reached the write-capable `handler.handle` with a write token would land here. */
@@ -92,6 +103,10 @@ const READ_ARGS: Record<string, unknown> = {
   'atlas-check': { fact: {}, at: 'r' },
   'atlas-doctor': { sub: 'archive' },
   'atlas-node': { node: 'x' },
+  'atlas-memory-recall': {},
+  'atlas-memory-header': {},
+  'atlas-memory-awareness': {},
+  'atlas-memory-orientation': {},
 };
 
 describe('SCN-MCP-1e-1 — advertised and invocable are both traced to the ONE source, never computed separately (REQ-MCP-1e)', () => {
@@ -148,10 +163,11 @@ describe('SCN-MCP-1e-2 — every READ_SURFACE member is advertised AND routed to
   //       `reachesWritePath(handler.seen) === false` after the call. A read-onto-write mapping REDs (b).
 
   it('every READ_SURFACE member is advertised when the read bundle is injected', () => {
-    // TEETH: dropping a member from `advertisedAuthoringTools`, or gating it off, leaves it out of this list —
-    // RED. The set is traced to the imported `READ_SURFACE`, never a transcription of the six names.
+    // TEETH: dropping a member from `advertisedAuthoringTools`/`advertisedMemoryTools`, or gating it off,
+    // leaves it out of this list — RED. The set is traced to the imported `READ_SURFACE`, never a
+    // transcription of the ten names (six pre-existing + WP-11.W8's four memory doors).
     const handler = recordingHandler();
-    const advertised = listTools(handler, undefined, undefined, fakeReadLegs()).tools.map((t) => t.name);
+    const advertised = listTools(handler, undefined, undefined, fakeReadLegs(), fakeMemoryLegs()).tools.map((t) => t.name);
     for (const member of READ_SURFACE) expect(advertised).toContain(member);
   });
 
@@ -171,7 +187,8 @@ describe('SCN-MCP-1e-2 — every READ_SURFACE member is advertised AND routed to
     for (const member of READ_SURFACE) {
       const handler = recordingHandler();
       const legs = fakeReadLegs();
-      callTool(handler, member, READ_ARGS[member], undefined, undefined, legs);
+      const memoryLegs = fakeMemoryLegs();
+      callTool(handler, member, READ_ARGS[member], undefined, undefined, legs, memoryLegs);
       // (b1) no write path reached — the core invariant.
       expect(reachesWritePath(handler.seen)).toBe(false);
       // (b2) routed, NOT dropped to a fall-through: a read token never reaches `handler.handle` at all (if it

@@ -50,9 +50,9 @@ afterEach(() => vi.restoreAllMocks());
 // ── REQ-CLI-1 — total command surface ─────────────────────────────────────────────────────────────
 
 describe('SCN-CLI-1a — every command maps to exactly one leg', () => {
-  it('is total (23 keys) and mutually-exclusive over the ratified table', () => {
+  it('is total (28 keys, WP-11.W8) and mutually-exclusive over the ratified table', () => {
     // totality: every command in the finite surface has exactly one leg.
-    expect(COMMANDS).toEqual(['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'transitions', 'transition', 'test-vacuities', 'test-vacuity', 'verify-fact', 'verify-store', 'derive-relations', 'anchors', 'slots', 'draft', 'check']);
+    expect(COMMANDS).toEqual(['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'transitions', 'transition', 'test-vacuities', 'test-vacuity', 'verify-fact', 'verify-store', 'derive-relations', 'anchors', 'slots', 'draft', 'check', 'memory-emit', 'memory-recall', 'memory-header', 'memory-awareness', 'memory-orientation']);
     expect(Object.keys(COMMAND_LEG).sort()).toEqual([...COMMANDS].sort());
     expect(COMMAND_LEG).toEqual({
       init: 'atlas-init',
@@ -93,6 +93,16 @@ describe('SCN-CLI-1a — every command maps to exactly one leg', () => {
       //                       intercepted before the handler, composes a candidate GroundedFact; persists NOTHING
       check: 'atlas-query', // READ authority oracle (WP-10.A3.CLI / ADR-0004 DRY-RUN planner, AUTHOR-11/12) —
       //                       intercepted before the handler, dry-runs the emit gate chain; persists NOTHING
+      'memory-emit': 'atlas-memory-emit', // WRITE authority oracle (WP-11.W8 governed MEMORY write door) —
+      //                                     a GENUINELY NEW Tool, routes through the ONE wired handler
+      'memory-recall': 'atlas-query', // READ authority oracle (MEM-4b explicit-recall gate) — intercepted
+      //                                 before the handler; carries no write authority
+      'memory-header': 'atlas-query', // READ authority oracle (MEM-1/4/7 running-turn header) — intercepted
+      //                                 before the handler; carries no write authority
+      'memory-awareness': 'atlas-query', // READ authority oracle (MEM-11/12 SHARED Awareness slab) —
+      //                                    intercepted before the handler; carries no write authority
+      'memory-orientation': 'atlas-query', // READ authority oracle (MEM-6 DERIVED SHARED Orientation slab) —
+      //                                      intercepted before the handler; carries no write authority
     });
     // teeth: a command bound to zero legs (totality) or two legs (uniqueness) — each key resolves to one string.
     for (const c of COMMANDS) {
@@ -158,13 +168,17 @@ describe('SCN-CLI-2a/2b/2c — command × authority partition', () => {
     }
   });
 
-  it('2b: the write COMMANDS funnel into the TWO governed write doors (asserted vs WRITE_PATHS)', () => {
-    expect([...WRITE_PATHS].sort()).toEqual(['atlas-emit', 'atlas-link']); // the two governed write doors (WP-SAMEAS)
+  it('2b: the write COMMANDS funnel into the THREE governed write doors (asserted vs WRITE_PATHS)', () => {
+    // WP-11.W8: WRITE_PATHS grew from two to three — `atlas-memory-emit` is a GENUINELY NEW governed door
+    // (a separate durable log from the knowledge CAS `atlas-emit`/`atlas-link` write), not a fold into an
+    // existing one, unlike `promote`/`derive-relations`/`transition`/`test-vacuity` below.
+    expect([...WRITE_PATHS].sort()).toEqual(['atlas-emit', 'atlas-link', 'atlas-memory-emit']);
     const writers = COMMANDS.filter((c) => authorityOf(c) === 'write');
-    expect([...writers].sort()).toEqual(['derive-relations', 'emit', 'link', 'promote', 'test-vacuity', 'transition']); // exactly the write commands (transition #234 + test-vacuity #95 publish through the emit door)
+    expect([...writers].sort()).toEqual(['derive-relations', 'emit', 'link', 'memory-emit', 'promote', 'test-vacuity', 'transition']); // exactly the write commands (transition #234 + test-vacuity #95 publish through the emit door)
     expect(COMMAND_LEG.transition).toBe('atlas-emit'); // #234 producer persists through the EXISTING governed emit door (KNOW-11 authz + ARCH-9 anchor)
     expect(COMMAND_LEG.emit).toBe('atlas-emit');
     expect(COMMAND_LEG.link).toBe('atlas-link');
+    expect(COMMAND_LEG['memory-emit']).toBe('atlas-memory-emit'); // WP-11.W8 — a NEW door, not a fold
     expect(COMMAND_LEG.promote).toBe('atlas-emit'); // KNOW-8 promotion publishes through the EXISTING emit door
     expect(COMMAND_LEG['derive-relations']).toBe('atlas-emit'); // #99 R7 projection persists through the EXISTING emit door
     // THE PROPERTY, not the count: the doors the write commands funnel into ARE `WRITE_PATHS`, exactly — no

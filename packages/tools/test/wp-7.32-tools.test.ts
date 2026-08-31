@@ -112,27 +112,28 @@ describe('WP-7.32.TOOLS — a write attempted through the diff projection is ref
     expect(handle.applyInto).toBeUndefined();
     expect(handle.set).toBeUndefined();
     expect(handle.put).toBeUndefined();
-    // writes still funnel through the GOVERNED write doors (atlas-emit + atlas-link, WP-SAMEAS) — atlas-diff
-    // (a read projection) adds none.
-    expect([...WRITE_PATHS].sort()).toEqual(['atlas-emit', 'atlas-link']);
+    // writes still funnel through the GOVERNED write doors (atlas-emit + atlas-link + atlas-memory-emit,
+    // WP-SAMEAS + WP-11.W8) — atlas-diff (a read projection) adds none.
+    expect([...WRITE_PATHS].sort()).toEqual(['atlas-emit', 'atlas-link', 'atlas-memory-emit']);
   });
 });
 
 // ── REQ-TOOLS-16e — atlas-diff is not a write tool (guard) ────────────────────────────────────
 
 describe('WP-7.32.TOOLS — atlas-diff does not grow the governance write surface', () => {
-  it('SCN-TOOLS-16e-1: the governance surface is the five governed tools; atlas-diff carries no write authority', () => {
+  it('SCN-TOOLS-16e-1: the governance surface is the six governed tools; atlas-diff carries no write authority', () => {
     // teeth (breaks-on "atlas-diff is registered on the governance write surface as another write tool"):
-    expect(GOVERNANCE_SURFACE.length).toBe(5); // WP-SAMEAS: atlas-link is the fifth governed tool
+    expect(GOVERNANCE_SURFACE.length).toBe(6); // WP-11.W8: atlas-memory-emit is the sixth governed tool
     expect([...GOVERNANCE_SURFACE].sort()).toEqual([
       'atlas-emit',
       'atlas-init',
       'atlas-link',
+      'atlas-memory-emit',
       'atlas-query',
       'atlas-reconcile',
     ]);
     expect(GOVERNANCE_SURFACE).not.toContain('atlas-diff'); // a read projection, not a governance member
-    expect(WRITE_PATHS.length).toBe(2); // writePaths == 2 (atlas-emit + atlas-link)
+    expect(WRITE_PATHS.length).toBe(3); // writePaths == 3 (atlas-emit + atlas-link + atlas-memory-emit)
     expect(WRITE_PATHS).not.toContain('atlas-diff'); // atlas-diff opens no write door
   });
 });

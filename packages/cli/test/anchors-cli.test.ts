@@ -221,8 +221,10 @@ describe('SCN-AUTH-2a-1 / SCN-AUTH-2d-1 / PROP-AUTH-2 — a planner writes nothi
       const leg = COMMAND_LEG[cmd];
       expect((WRITE_PATHS as readonly string[]).includes(leg)).toBe(false);
       // `anchors` binds `atlas-query` for AUTHORITY only; it opens no governed token, so the surface counts hold
-      expect(GOVERNANCE_SURFACE.length).toBe(5);
-      expect((WRITE_PATHS as readonly string[]).length).toBe(2);
+      // (WP-11.W8: GOVERNANCE_SURFACE/WRITE_PATHS grew from 5/2 to 6/3 — `atlas-memory-emit` — this planner
+      // still opens neither, which is the property under test here).
+      expect(GOVERNANCE_SURFACE.length).toBe(6);
+      expect((WRITE_PATHS as readonly string[]).length).toBe(3);
     }
   });
 });
