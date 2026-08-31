@@ -6,8 +6,11 @@ reading a plan as state — a doc describing work to be done outlived the work, 
 recommended building something that already existed. So every claim below carries the command that
 re-derives it, and nothing here is a value you are asked to trust.
 
-**Baseline:** master `35845ae` (2026-08-31). If `git rev-parse --short HEAD` on master differs, this file
-is behind by that much; treat its measurements as a dated reading and re-run the commands.
+**Baseline:** every measurement below was taken against master `35845ae` (2026-08-31) — the last commit that
+changed the product. This document merged after it and is therefore not itself the baseline, which is why the
+hash does not match `HEAD`: check what lies between them with `git log --oneline 35845ae..HEAD` rather than
+comparing hashes. If that range contains anything other than documentation, this file is stale by exactly
+those commits — treat its figures as a dated reading and re-run the commands in §1.
 
 ---
 
