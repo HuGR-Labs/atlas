@@ -286,7 +286,7 @@ describe('reverifyFact — TAMPER BINDINGS: a true witness dressed with committe
   });
 });
 
-describe('reverifyStore — the whole-store loop, three buckets sum to the denominator', () => {
+describe('reverifyStore — the whole-store loop, the buckets sum to the denominator', () => {
   it('mixed facts fold into exactly the right buckets, unsealed facts never counted', () => {
     const reProvenWitness = { slot: 'dependency' as const, target: GREET, scope: 'src' };
     const brokenWitness = { slot: 'dependency' as const, target: NEVER, scope: 'src' };
@@ -302,6 +302,7 @@ describe('reverifyStore — the whole-store loop, three buckets sum to the denom
       reProven: 1,
       broken: 1,
       unverifiable: 1,
+      dangling: 0,
       rows: [
         { nodeKey: 'nk-a', outcome: 're-proven', reason: expect.stringContaining('PROVEN') },
         { nodeKey: 'nk-b', outcome: 'broken', reason: expect.stringContaining('did NOT re-prove') },
@@ -311,7 +312,7 @@ describe('reverifyStore — the whole-store loop, three buckets sum to the denom
   });
 
   it('an EMPTY store folds to the honest all-zero report, never a throw', () => {
-    expect(reverifyStore([], leg, docExists, scopeHasDocs)).toEqual({ sealedProven: 0, reProven: 0, broken: 0, unverifiable: 0, rows: [] });
+    expect(reverifyStore([], leg, docExists, scopeHasDocs)).toEqual({ sealedProven: 0, reProven: 0, broken: 0, unverifiable: 0, dangling: 0, rows: [] });
   });
 
   it('A5b — a MIXED store (one proven + one justified): the proven fact re-proves as today, the justified fact is SKIPPED, counts stay honest', () => {
@@ -329,6 +330,7 @@ describe('reverifyStore — the whole-store loop, three buckets sum to the denom
       reProven: 1,
       broken: 0,
       unverifiable: 0, // the justified fact must NOT land here (A5c teeth, at the store level)
+      dangling: 0, // and no row was DROPPED for want of bytes — the fourth bucket stays empty here
       rows: [{ nodeKey: 'nk-a', outcome: 're-proven', reason: expect.stringContaining('PROVEN') }],
     });
   });

@@ -35,7 +35,7 @@ import type { Hash } from '@atlas/contracts';
 import type { CurrentNode, GroundedFact } from '@atlas/knowledge';
 import { currentNodes } from '@atlas/knowledge';
 import { REJECTED_UNTRUSTED_STORE } from './read-provenance.js';
-import { reverifyFact } from './reverify-store.js';
+import { danglingRow, reverifyFact } from './reverify-store.js';
 import type { DocExists, ReverifyReport, ScopeHasDocs, TestVacuityReplay } from './reverify-store.js';
 import type { CasPath, DiskStore } from './store.js';
 import { createDiskStore, rehydrateProjection } from './store.js';
@@ -110,9 +110,15 @@ function buildProvable(
     // `undefined`) drops from BOTH `rows`/`reProven*` together, never leaving the two lists silently
     // misaligned the way two separate `.filter()` calls over the same source could.
     const pairs: { readonly node: CurrentNode; readonly fact: GroundedFact }[] = [];
+    // A `seal:'proven'` node whose bytes are GONE is collected, not discarded. This path and
+    // `reverifyStore`'s both used to drop it silently, and on a store with 17 such rows `atlas verify-store`
+    // printed "0 sealed-proven fact(s) — nothing to re-verify (an honest zero, not a skip)". The seal is on
+    // the projection row, so no bytes are needed to know the row should have been counted.
+    const dangling: CurrentNode[] = [];
     for (const node of rawCurrent) {
       const fact = raw.get(node.contentHash as Hash) as GroundedFact | undefined;
       if (fact !== undefined) pairs.push({ node, fact });
+      else if ((node as { readonly seal?: string }).seal === 'proven') dangling.push(node);
     }
     // `replay` threaded so a `seal:'proven'` test-vacuity RE-PROVES against HEAD here (over the ONE shared
     // `testUnitsOf(rawTree, axes)` feed compose built before `buildReadAccess`) instead of falling to
@@ -120,12 +126,16 @@ function buildProvable(
     // (a still-vacuous fact was DROPPED, never served stale-as-fresh); this stops dropping the honest ones.
     const rows = pairs.map((p) => reverifyFact(p.node, p.fact, verifyFactLeg, docExists, scopeHasDocs, replay));
     const sealedProven = rows.filter((r): r is NonNullable<typeof r> => r !== undefined);
+    // The dangling rows are appended to the REPORT only — never to `rows`, whose index must stay aligned with
+    // `pairs` for the re-proven bookkeeping below.
+    const reportRows = [...sealedProven, ...dangling.map(danglingRow)];
     const report: ReverifyReport = {
-      sealedProven: sealedProven.length,
+      sealedProven: reportRows.length,
       reProven: sealedProven.filter((r) => r.outcome === 're-proven').length,
       broken: sealedProven.filter((r) => r.outcome === 'broken').length,
       unverifiable: sealedProven.filter((r) => r.outcome === 'unverifiable').length,
-      rows: sealedProven,
+      dangling: dangling.length,
+      rows: reportRows,
     };
     const reProvenNodeKeys = new Set<string>();
     const reProvenContentHashes = new Set<Hash>();

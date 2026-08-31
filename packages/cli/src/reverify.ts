@@ -37,12 +37,14 @@ const INVARIANT =
  * over (the durable store's own `driftFacts` readback), and the three buckets below always sum to it.
  */
 export function reverifyVerdict(out: ReverifyReport): CliVerdict {
-  const rejected = out.broken > 0 || out.unverifiable > 0;
+  // `dangling` joins the refusal condition: a fact served as proven whose bytes are GONE is not a pass
+  // under any reading, and it is the one fault this gate used to report as an empty, healthy store.
+  const rejected = out.broken > 0 || out.unverifiable > 0 || out.dangling > 0;
   const lines = [
     `status: ${rejected ? 'rejected' : 'ok'}`,
     `next: ${nextLine(out)}`,
     `invariant: ${INVARIANT}`,
-    `verify-store: ${out.sealedProven} sealed-proven fact(s) — ${out.reProven} re-proven, ${out.broken} broken, ${out.unverifiable} unverifiable`,
+    `verify-store: ${out.sealedProven} sealed-proven fact(s) — ${out.reProven} re-proven, ${out.broken} broken, ${out.unverifiable} unverifiable, ${out.dangling} dangling`,
     // Per-row, in the durable store's own readback order. A batch verdict that names no row is unactionable —
     // the exact row a `broken`/`unverifiable` verdict points to, and why, is the whole payoff of this door.
     ...out.rows.map((r) => `  ${r.outcome} ${r.nodeKey}: ${r.reason}`),

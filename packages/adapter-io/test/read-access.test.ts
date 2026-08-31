@@ -180,6 +180,7 @@ describe('buildReadAccess — CASE 2 (tracked-provable): filtered to what RE-PRO
       reProven: 1,
       broken: 1,
       unverifiable: 1,
+      dangling: 0, // every row RESOLVED — nothing was dropped for want of bytes
       rows: expect.any(Array),
     });
     const served = currentNodes(rehydrateProjection(access.store));
@@ -302,6 +303,7 @@ describe('buildReadAccess — CASE 2 (tracked-provable): the #249 test-vacuity r
       reProven: 1, // only the still-holding one
       broken: 2, // changed (abstains) + tampered (non-mined tier, caught before the replay)
       unverifiable: 0, // the whole point of #249: NOT dumped to unverifiable for want of a re-scan leg
+      dangling: 0,
       rows: expect.any(Array),
     });
     const served = currentNodes(rehydrateProjection(access.store));
@@ -325,6 +327,7 @@ describe('buildReadAccess — CASE 2 (tracked-provable): the #249 test-vacuity r
       reProven: 0, // nothing re-proves without the re-scan leg
       broken: 1, // only the tampered tier is broken pre-replay
       unverifiable: 2, // served + changed both fall to "nothing to replay"
+      dangling: 0,
       rows: expect.any(Array),
     });
     expect(currentNodes(rehydrateProjection(access.store)).length).toBe(0); // over-refused — the bug
@@ -365,6 +368,6 @@ describe('buildReadAccess — FAIL-CLOSED: `tracked-provable` degrades to a refu
       scopeHasDocs,
     });
     expect(access.refusal).toBeUndefined();
-    expect(access.reverified).toEqual({ sealedProven: 0, reProven: 0, broken: 0, unverifiable: 0, rows: [] });
+    expect(access.reverified).toEqual({ sealedProven: 0, reProven: 0, broken: 0, unverifiable: 0, dangling: 0, rows: [] });
   });
 });

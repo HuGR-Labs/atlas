@@ -48,7 +48,7 @@ import { createNegationLeg } from './negation-source.js';
 import { createTransitionLeg, createTransitionProducer } from './transition-source.js';
 import { buildTestVacuityFeed, buildTestVacuityLegs } from './compose-test-vacuity.js';
 import { createVerifyFactLeg } from './verify-fact-source.js';
-import { reverifyStore, makeScopeHasDocs, driftPairsOf } from './reverify-store.js';
+import { reverifyStore, makeScopeHasDocs, driftPairsOf, danglingOf } from './reverify-store.js';
 import type { DocExists } from './reverify-store.js';
 import { createDiskStore } from './store.js';
 import { gitStoreProvenance } from './store-provenance.js';
@@ -535,7 +535,12 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     // the WRITE-gated store, byte-identical to the prior behaviour (for `trusted`, that store is not
     // blanked; for `tracked-staging`, it blanks to `[]`, matching that leg's own refusal).
     // Wave 3 (#95 D5) — `tvLegs.replay` is now LIVE: a committed proven test-vacuity re-proves against HEAD.
-    reverify: () => readAccess.reverified ?? reverifyStore(driftPairs, verifyFactLeg, docExists, scopeHasDocs, tvLegs.replay),
+    // `danglingOf` is read HERE and not inside `reverifyStore`, so the pass stays a pure function of what it
+    // was handed. Omitting it is what made `verify-store` answer an "honest zero" over 17 unresolvable
+    // seal:'proven' rows on this very repository.
+    reverify: () =>
+      readAccess.reverified ??
+      reverifyStore(driftPairs, verifyFactLeg, docExists, scopeHasDocs, tvLegs.replay, danglingOf(store)),
     // WP-11.W8 — the four CAMPAIGN-11 memory READ doors (`READ_SURFACE`, ADR-0005). Each rides the SAME
     // `memoryReadDoor`/`awarenessStore`/`orientationStore` built above — never a second store, never a
     // second scan of `.atlas/memory.jsonl`. Bound onto `atlas-query` in `cli/src/map.ts`'s `COMMAND_LEG`

@@ -80,7 +80,7 @@ import type { VerifyFactLeg, VerifyReq } from './verify-fact-source.js';
 export const MINED_TIER = 'T2' as const;
 
 /** The three re-verification outcomes — see the module header. Closed vocabulary. */
-export type ReverifyOutcome = 're-proven' | 'broken' | 'unverifiable';
+export type ReverifyOutcome = 're-proven' | 'broken' | 'unverifiable' | 'dangling';
 
 /** One sealed fact's re-verification row. `reason` carries the oracle's abstain/refute reason for `broken`,
  *  or a fixed diagnostic for `unverifiable` — always present so a reader never has to re-derive WHY. */
@@ -100,6 +100,32 @@ export interface ReverifyReport {
   readonly reProven: number;
   readonly broken: number;
   readonly unverifiable: number;
+  /**
+   * A `seal:'proven'` row whose `contentHash` resolves to NOTHING in the CAS — the fact is on the durable
+   * projection, is served as proven, and its bytes are gone.
+   *
+   * ── THIS BUCKET EXISTS BECAUSE THE PASS USED TO ANSWER ZERO ──────────────────────────────────────────────
+   * `driftPairsOf` dropped unresolvable rows — its own doc said so, "dropping rows whose CAS bytes are
+   * absent" — and the drop was SILENT and UNCOUNTED. Measured on this repository's own store: 17 rows carry
+   * `seal:'proven'` and every one of their objects is missing, and `atlas verify-store` printed
+   *
+   *     verify-store: 0 sealed-proven fact(s) — 0 re-proven, 0 broken, 0 unverifiable
+   *
+   * under guidance reading "an honest zero, not a skip". It was precisely a skip, and the sentence denying
+   * that is what made it dangerous: the gate whose entire job is to catch a proven fact that stopped being
+   * true reported a clean, empty, healthy store — for the one defect it cannot see by looking at facts,
+   * because the facts are what went missing.
+   *
+   * The seal is readable WITHOUT the bytes: it is on the `CurrentNode` in the projection. So there was never
+   * a technical reason to drop these rows, only an unexamined `.filter(Boolean)`.
+   *
+   * It is its OWN bucket rather than folded into `unverifiable` because the three existing buckets are
+   * documented as never merging, and this is a different fault: `unverifiable` means the WITNESS is missing
+   * or incomplete, a claim that was never properly proved. `dangling` means the FACT is missing — the store
+   * is referentially broken, which is a storage incident, not a proof-strength one. `atlas doctor cas`
+   * (ADR-0022) is the leg that audits that layer; this bucket is how the governance gate stops hiding it.
+   */
+  readonly dangling: number;
   readonly rows: readonly ReverifyRow[];
 }
 
@@ -494,9 +520,11 @@ export interface NodeFactPair {
 }
 
 /** The FULL durable-store readback as `NodeFactPair[]` — each projection row paired with the `GroundedFact` its
- *  `contentHash` resolves to, dropping rows whose CAS bytes are absent (`undefined`). ONE store read, ONE map;
- *  the shape both `reverifyStore` (via `driftFacts = pairs.map(p => p.fact)`) and the reconcile drift seams
- *  ride. Extracted from `compose.ts` so the composition root stays under the godfile ceiling. */
+ *  `contentHash` resolves to. Rows whose CAS bytes are absent cannot be paired and are excluded HERE, but they
+ *  are no longer thrown away: {@link danglingOf} recovers them, and `reverifyStore` counts the `seal:'proven'`
+ *  ones. ONE store read, ONE map; the shape both `reverifyStore` (via `driftFacts = pairs.map(p => p.fact)`)
+ *  and the reconcile drift seams ride. Extracted from `compose.ts` so the composition root stays under the
+ *  godfile ceiling. */
 export function driftPairsOf(store: DiskStore): readonly NodeFactPair[] {
   return currentNodes(rehydrateProjection(store))
     .map((node) => {
@@ -507,23 +535,63 @@ export function driftPairsOf(store: DiskStore): readonly NodeFactPair[] {
 }
 
 /**
+ * The projection rows this pass CANNOT pair — `seal:'proven'` and their `contentHash` resolves to nothing.
+ *
+ * A separate read rather than a second return value from `driftPairsOf`, because that function's result feeds
+ * the reconcile drift seams too, and those genuinely want facts alone. The seal lives on the `CurrentNode`,
+ * so this needs no bytes: that is the whole reason the silent drop was never necessary.
+ */
+/** The `dangling` row for one unresolvable node. EXPORTED because there are TWO report-construction paths —
+ *  this module's `reverifyStore` and `read-access.ts`'s committed-store pass — and the whole defect being
+ *  fixed here is the two of them independently deciding what to do with a row they could not resolve. One
+ *  shape, one reason string, minted in one place. */
+export function danglingRow(node: CurrentNode): ReverifyRow {
+  return {
+    nodeKey: node.nodeKey as unknown as string,
+    outcome: 'dangling',
+    reason:
+      `the durable projection serves this fact as seal:'proven', and its contentHash ` +
+      `'${node.contentHash}' resolves to nothing in the CAS — the bytes ARE the fact, so there is nothing ` +
+      `left to re-prove. Run 'atlas doctor cas' for the store-wide audit (ADR-0022).`,
+  };
+}
+
+export function danglingOf(store: DiskStore): readonly CurrentNode[] {
+  return currentNodes(rehydrateProjection(store)).filter(
+    (n) => (n as { readonly seal?: string }).seal === 'proven' && store.get(n.contentHash as Hash) === undefined,
+  );
+}
+
+/**
  * Re-verify EVERY `proven`-sealed fact in `pairs` against `leg` — build the index ONCE (the caller's job,
  * `compose.ts`), loop, count three buckets. Anti-overengineering by construction: no cache, no worker pool, no
  * config. `pairs` is the FULL durable-store readback (`driftFacts`-shaped, now carrying each fact's own
  * `CurrentNode` alongside it) — reading the STORE, never a command's own summary, per the chapter's honesty
  * requirement.
  */
-export function reverifyStore(pairs: readonly NodeFactPair[], leg: VerifyFactLeg, docExists: DocExists, scopeHasDocs: ScopeHasDocs, replay?: TestVacuityReplay): ReverifyReport {
+export function reverifyStore(
+  pairs: readonly NodeFactPair[],
+  leg: VerifyFactLeg,
+  docExists: DocExists,
+  scopeHasDocs: ScopeHasDocs,
+  replay?: TestVacuityReplay,
+  dangling: readonly CurrentNode[] = [],
+): ReverifyReport {
   const rows: ReverifyRow[] = [];
   for (const { node, fact } of pairs) {
     const row = reverifyFact(node, fact, leg, docExists, scopeHasDocs, replay);
     if (row !== undefined) rows.push(row);
   }
+  // The rows that never reached the loop, counted rather than dropped. `dangling` defaults to EMPTY so every
+  // existing caller keeps its exact behaviour — but the production caller passes `danglingOf(store)`, and the
+  // default being empty is the one thing that could quietly re-open the hole, so it is asserted by a test.
+  for (const node of dangling) rows.push(danglingRow(node));
   return {
     sealedProven: rows.length,
     reProven: rows.filter((r) => r.outcome === 're-proven').length,
     broken: rows.filter((r) => r.outcome === 'broken').length,
     unverifiable: rows.filter((r) => r.outcome === 'unverifiable').length,
+    dangling: rows.filter((r) => r.outcome === 'dangling').length,
     rows,
   };
 }

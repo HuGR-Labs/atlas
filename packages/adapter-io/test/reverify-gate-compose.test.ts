@@ -63,7 +63,7 @@ describe('REVERIFY-GATE — composeRuntime(repoPath).reverify() over the REAL du
     const { repoPath, cleanup } = makeIndexedRepo();
     try {
       const report = composeRuntime(repoPath).reverify();
-      expect(report).toEqual({ sealedProven: 0, reProven: 0, broken: 0, unverifiable: 0, rows: [] });
+      expect(report).toEqual({ sealedProven: 0, reProven: 0, broken: 0, unverifiable: 0, dangling: 0, rows: [] });
     } finally {
       cleanup();
     }
