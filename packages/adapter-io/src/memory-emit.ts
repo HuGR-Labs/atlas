@@ -138,6 +138,19 @@ export function createMemoryEmit(deps: MemoryEmitDeps): MemoryEmit {
     }
 
     // 3 — partition + owner. `put` mints the record and is the only thing here that does.
+    //
+    // [MEASURED — `kind-conflation` is UNREACHABLE FROM THIS DOOR, and is deliberately not advertised.]
+    // `partition()` answers `knowledge` only for an entry carrying `kind: 'advisory' | 'predicate'`. That
+    // key is outside all four memory templates, so gate 1 refuses such an entry as `undetermined-kind`
+    // before `put` is ever called, and this branch fires on nothing. Measured against the shipped binary,
+    // both discriminants, in `harness/probes/m1-memory-ring.mjs` (axis M2) — not argued from the source.
+    //
+    // The catch STAYS: `put` really does throw it, and a template change could reopen the path, so removing
+    // the branch would trade a live fail-closed floor for tidiness. What was removed instead is the CLAIM —
+    // `handler.ts`'s `atlas-memory-emit` guidance used to enumerate `kind-conflation` among the outcomes a
+    // user may receive, which was the same shape of defect as `template-invalid` (a refusal advertised to
+    // users that no input could produce). The M2 assertions turn RED the moment it becomes reachable again,
+    // which is what keeps the guidance and the code from drifting back apart.
     let record: MemoryRecord;
     try {
       record = put('memory', entry, deps.actor);
