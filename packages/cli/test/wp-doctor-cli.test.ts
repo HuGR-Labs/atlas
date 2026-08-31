@@ -34,6 +34,7 @@ const fakeSource = (): DoctorSource => ({
   lineage: (scope?: string) => (scope === 'empty' ? [] : [H1, H2]),
   drift: (fact: string) => (fact === 'clean' ? undefined : DRIFT),
   hotSetSize: () => 7,
+  casAudit: () => ({ objects: 0, corrupt: [], unreadable: [], missing: [], orphan: 0, referenced: 0, sound: true }),
   plan: (fact: string) => (fact === 'nofix' ? undefined : { action: 'reground', emit: FAKE_EMIT }),
 });
 

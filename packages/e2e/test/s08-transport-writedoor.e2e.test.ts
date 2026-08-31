@@ -189,6 +189,7 @@ describe('S8 · governed write doors, one contract across every transport', () =
       lineage: () => [],
       drift: () => undefined,
       hotSetSize: () => 0,
+      casAudit: () => ({ objects: 0, corrupt: [], unreadable: [], missing: [], orphan: 0, referenced: 0, sound: true }),
       plan: (fact) => (fact === 'claim:acme-arr-2024' ? { action: 'reground', emit: regroundEmit } : undefined),
     };
     const doctor = createDoctor(source);

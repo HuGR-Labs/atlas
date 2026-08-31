@@ -85,10 +85,10 @@ export const DOCTOR_INPUT_SCHEMA = {
   properties: {
     sub: {
       type: 'string',
-      enum: ['archive', 'why', 'hotset', 'reground'],
+      enum: ['archive', 'why', 'hotset', 'reground', 'cas'],
       description: 'the read/advisory doctor leg (index is CLI-only — it reads the file tree + SCIP dump, not the durable store)',
     },
-    arg: { type: 'string', description: 'the leg argument — a scope (archive), a fact (why/reground) or a numeric budget (hotset)' },
+    arg: { type: 'string', description: 'the leg argument — a scope (archive), a fact (why/reground) or a numeric budget (hotset). `cas` takes none: its subject is the whole store.' },
   },
   required: ['sub'],
   additionalProperties: false,
@@ -136,7 +136,7 @@ export function advertisedAuthoringTools(legs?: ReadSurfaceLegs): SdkTool[] {
     {
       name: DOCTOR_TOOL,
       description:
-        'Read/advisory diagnosis over the durable store — archive lineage, why-broken drift, hot-set budget, reground PROPOSAL (TOOLS-12). Read-only; reground persists nothing (run it through atlas-emit). index is CLI-only.',
+        'Read/advisory diagnosis over the durable store — archive lineage, why-broken drift, hot-set budget, reground PROPOSAL (TOOLS-12), and the CAS integrity audit (ADR-0022: do the bytes still hash to their addresses). Read-only; reground persists nothing (run it through atlas-emit). index is CLI-only.',
       inputSchema: DOCTOR_INPUT_SCHEMA as unknown as SdkTool['inputSchema'],
     },
     {

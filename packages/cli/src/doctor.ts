@@ -21,9 +21,10 @@ import { INDEX_NEXT, renderIndexPlan } from './doctor-index.js';
 import type { CliVerdict } from './render.js';
 import { renderVerdict } from './render.js';
 
-/** The finite doctor sub-command surface — EXACTLY these five read/diagnostic legs, no more (TOOLS-12).
- *  Four read the durable store through the `DoctorApi`; `index` reads the tree + the dump. */
-export const DOCTOR_SUBCOMMANDS = ['archive', 'why', 'hotset', 'reground', 'index'] as const;
+/** The finite doctor sub-command surface — EXACTLY these six read/diagnostic legs, no more (TOOLS-12).
+ *  FIVE read the durable store through the `DoctorApi` (`cas` joined them under ADR-0022); `index` reads the
+ *  tree + the dump and is the ONE leg that is not a `DoctorApi` leg. */
+export const DOCTOR_SUBCOMMANDS = ['archive', 'why', 'hotset', 'reground', 'cas', 'index'] as const;
 export type DoctorSub = (typeof DOCTOR_SUBCOMMANDS)[number];
 
 function isDoctorSub(s: string | undefined): s is DoctorSub {
@@ -56,6 +57,21 @@ function renderPayload(sub: Exclude<DoctorSub, 'index'>, out: DoctorOut): string
         ? `plan: action=${out.plan.action} fact=${out.plan.fact}` +
             ' — PROPOSAL only; persists nothing. Run through atlas-emit to persist.'
         : 'plan: none';
+    case 'cas':
+      // Every bucket is printed, including the empty ones. A renderer that hid zeros would make "no corrupt
+      // objects" and "the audit did not look" the same line, which is the failure mode the receipt exists to
+      // remove; `objects`/`referenced` beside them are what make a zero interpretable.
+      return out.casIntegrity
+        ? `casIntegrity: objects=${out.casIntegrity.objects} referenced=${out.casIntegrity.referenced}` +
+            ` corrupt=${out.casIntegrity.corrupt.length} unreadable=${out.casIntegrity.unreadable.length}` +
+            ` missing=${out.casIntegrity.missing.length} orphan=${out.casIntegrity.orphan}` +
+            ` sound=${out.casIntegrity.sound}` +
+            (out.casIntegrity.sound
+              ? ''
+              : `\n  corrupt: [${out.casIntegrity.corrupt.join(', ')}]` +
+                `\n  unreadable: [${out.casIntegrity.unreadable.join(', ')}]` +
+                `\n  missing: [${out.casIntegrity.missing.join(', ')}]`)
+        : 'casIntegrity: none';
   }
 }
 
@@ -152,6 +168,10 @@ export function runDoctor(
       case 'reground':
         if (arg === undefined) return doctorError('doctor reground requires a <fact>');
         return renderDoctorOut('reground', doctor.reground(arg)); // advisory plan — persists nothing
+      case 'cas':
+        // No argument: the audit's subject is the whole store, and narrowing it to one hash would let a
+        // caller ask only about the object they already trust.
+        return renderDoctorOut('cas', doctor.casIntegrity());
     }
   } catch (e) {
     // The refusal's own text, verbatim — never re-worded, so the discriminant survives to the user door.

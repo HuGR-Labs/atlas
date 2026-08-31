@@ -160,6 +160,7 @@ const readOnlySource = (store: ReturnType<typeof createGovernedStore>, key: stri
   lineage: () => (store.read(key) ? [key as Hash] : []), // read-only browse of the CAS supersede chain
   drift: (fact) => drift(fact),
   hotSetSize: () => (store.read(key) ? 1 : 0),
+  casAudit: () => ({ objects: 0, corrupt: [], unreadable: [], missing: [], orphan: 0, referenced: 0, sound: true }),
   plan: (fact) => ({ action: 'reground', emit: planFact }),
 });
 

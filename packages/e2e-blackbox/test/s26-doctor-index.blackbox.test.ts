@@ -149,6 +149,6 @@ describe('S26 — atlas doctor index: Atlas plans the SCIP index, the operator r
   it('5. the enumerated doctor surface names `index` when a subcommand is unknown', () => {
     const bogus = runAtlas(repo.repoPath, ['doctor', 'not-a-leg']);
     expect(bogus.exitCode).toBe(1);
-    expect(bogus.stdout).toContain('archive|why|hotset|reground|index');
+    expect(bogus.stdout).toContain('archive|why|hotset|reground|cas|index');
   });
 });

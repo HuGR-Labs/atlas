@@ -1,12 +1,12 @@
 # `atlas doctor`
 
 Diagnose the knowledge base: browse the archive, explain why a fact broke, check the hot set against a
-budget, get a proposed repair — and find out whether this repository is SCIP-indexed at all. Read-only and
-advisory — the four knowledge legs are built over a port with no write method, `index` reads the file tree
-and runs nothing, so `doctor` **cannot** persist anything, including its own repair plans.
+budget, get a proposed repair, audit the CAS bytes — and find out whether this repository is SCIP-indexed at
+all. Read-only and advisory — the five knowledge legs are built over a port with no write method, `index`
+reads the file tree and runs nothing, so `doctor` **cannot** persist anything, including its own repair plans.
 
-This page describes the **CLI** command `atlas doctor`. There is **no `atlas-doctor` MCP tool** — see
-*Transport differences*.
+This page describes the **CLI** command `atlas doctor`. There **is** an `atlas-doctor` MCP tool, carrying
+every leg except `index` — see *Transport differences*.
 
 ## Invocation
 
@@ -15,19 +15,42 @@ atlas doctor archive  [scope]
 atlas doctor why      <nodeKey>
 atlas doctor hotset   <budget>
 atlas doctor reground <nodeKey>
+atlas doctor cas
 atlas doctor index
 ```
 
-- Five subcommands (`DOCTOR_SUBCOMMANDS` in `packages/cli/src/doctor.ts`). Anything else is refused.
+- Six subcommands (`DOCTOR_SUBCOMMANDS` in `packages/cli/src/doctor.ts`). Anything else is refused.
 - `archive`'s `[scope]` is optional and filters on the fact's declared `scope` field, not on a path.
 - `why` and `reground` take a **nodeKey** — the identifier `atlas query` prints on its `inv` lines.
 - `hotset` takes a number.
+- `cas` takes nothing — its subject is the whole store. Narrowing it to one hash would let a caller ask
+  only about the object they already trust.
 - `index` takes nothing — it reports on the repository you are standing in.
 - No flags on any subcommand.
 
-The first four read the durable store through the frozen `DoctorApi` (still four read legs, unchanged).
-`index` is not one of them: it reads the git-tracked file tree and the SCIP dump, and needs no store, which
-is why it works on a repository that has never had a fact emitted into it.
+The first five read the durable store through the frozen `DoctorApi` — **five** read legs since ADR-0022
+added `casIntegrity`. `index` is not one of them: it reads the git-tracked file tree and the SCIP dump, and
+needs no store, which is why it works on a repository that has never had a fact emitted into it.
+
+`cas` is the only leg that reads the store's **bytes** rather than its facts. A content-addressed object's
+filename is the hash of its content, so corruption is decidable locally with no index and no network:
+
+| bucket | meaning |
+| --- | --- |
+| `objects` / `referenced` | value files on disk / distinct hashes the projection points at |
+| `corrupt` | the bytes do **not** hash to the address they are filed under |
+| `unreadable` | the bytes do not parse as a CAS object at all (a torn write, not a tampered one) |
+| `missing` | a referenced hash with no value file — a dangling pointer into the store |
+| `orphan` | a value file nothing references. **Counted, never a fault**: the CAS is append-only and
+  content-keyed, so a superseded object outliving its sidecar is ordinary. `orphan` does not feed `sound`. |
+
+`sound` is `corrupt ∪ unreadable ∪ missing` being empty. Exit code stays **0** either way — `doctor` is
+advisory on every leg; `verify-store` is the command whose exit code is a governance signal.
+
+Two stated limits. **Staging is not in the referenced set**: `loadStaging` was deliberately removed (task
+#83, "there is exactly one staging door"), so an object referenced only by staging counts as `orphan`. It
+can never make `sound` false. And **the audit is over addresses, not semantics**: an object whose bytes hash
+correctly but whose content is wrong is `ok` here and always will be — that is `verify-store`'s question.
 
 ## Worked examples
 
@@ -192,9 +215,9 @@ scip: UNREADABLE at .atlas/index.scip — illegal tag: field no 12 wire type 7; 
 ```
 $ atlas doctor bogus
 status: error
-next: unknown doctor subcommand 'bogus': expected one of archive|why|hotset|reground|index
+next: unknown doctor subcommand 'bogus': expected one of archive|why|hotset|reground|cas|index
 invariant: TOOLS-12: read/advisory-only diagnosis, persists nothing, carries no write authority
-reason: unknown doctor subcommand 'bogus': expected one of archive|why|hotset|reground|index
+reason: unknown doctor subcommand 'bogus': expected one of archive|why|hotset|reground|cas|index
 # exit 1
 ```
 
@@ -223,13 +246,48 @@ store at all — `init` is the only exemption. Stated because it is a real edge,
 handler and their source port exposes no mutation; `index` holds neither, and spawns no process either. There
 is no write path to refuse.
 
+### Audit the CAS bytes
+
+Appended AFTER every other example on this page ON PURPOSE: `doc-transcript-guard`'s unverifiable ledger is
+keyed by a block's ORDINAL within its file, so inserting a block anywhere earlier silently re-assigns the
+stated reasons of every block after it. Placing a new example last is the only position that cannot do that.
+
+```
+$ atlas doctor cas
+status: ok
+doctor: cas
+casIntegrity: objects=0 referenced=0 corrupt=0 unreadable=0 missing=0 orphan=0 sound=true
+next: doctor is read-only — run any proposed RegroundPlan through atlas-emit to persist it
+invariant: TOOLS-12: read/advisory-only diagnosis, persists nothing, carries no write authority
+```
+
+A repository with no governed write yet: nothing stored, nothing referenced, and `sound=true` **because
+the two are consistent**, not because the audit skipped. `objects=0` beside `referenced=0` is what makes
+that zero readable; `objects=0` beside a non-zero `referenced` would be seventeen dangling pointers and a
+loud `sound=false`, which is exactly what this repository's own store reported on the first run of this leg.
+
 ## Transport differences
 
-`doctor` is **CLI-only**, `index` included. The MCP server advertises `GOVERNANCE_SURFACE ∪ READ_SURFACE`,
-and `READ_SURFACE` has no export site yet, so the advertised list is the five governance tools. Verified
-against the real stdio server: `tools/list` returns `atlas-init`, `atlas-query`, `atlas-emit`,
-`atlas-reconcile`, `atlas-link` — no `atlas-doctor`. Closing that gap is campaign 10, which is not built;
-`index` deliberately did not open a second front there.
+`atlas-doctor` **is** advertised over MCP. It is a `READ_SURFACE` member (ADR-0006), exposed by
+`advertisedAuthoringTools` (`packages/mcp-server/src/server-read-tools.ts`) and routed through the same
+shared verdict body the CLI drives, so the two transports cannot drift in what a leg answers.
+
+Verified against the real stdio server (`tools/list`, 2026-08-31): **18** tools —
+`atlas-init`, `atlas-query`, `atlas-emit`, `atlas-reconcile`, `atlas-link`, `atlas-memory-emit`,
+`atlas-relations`, `atlas-negations`, `atlas-anchors`, `atlas-slots`, `atlas-draft`, `atlas-check`,
+**`atlas-doctor`**, `atlas-node`, `atlas-memory-recall`, `atlas-memory-header`, `atlas-memory-awareness`,
+`atlas-memory-orientation`.
+
+**One leg is CLI-only: `index`.** The MCP tool's `sub` enum is `archive | why | hotset | reground | cas`.
+`index` is excluded on purpose — it reads the file tree and the SCIP dump rather than the durable store, so
+it answers about the machine the server runs on, not about the store a client is asking after.
+
+**This section was wrong for two campaigns**, and it is worth saying how rather than quietly editing it. It
+claimed `doctor` was CLI-only because "`READ_SURFACE` has no export site yet" and that closing the gap "is
+campaign 10, which is not built". Campaign 10 shipped, exported `READ_SURFACE`, and put `atlas-doctor` on
+MCP; campaign 11 added five more tools. The paragraph even carried a `tools/list` transcript as evidence —
+a real measurement, taken once, that then went stale while reading as freshly verified. A dated transcript
+is evidence of what was true on its date, and nothing else.
 
 ## Related
 
