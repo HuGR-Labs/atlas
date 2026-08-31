@@ -286,14 +286,19 @@ export function createDoctorSource(
    * that to the filename it is filed under, then reconciles the present set against the set the sidecars
    * reference.
    *
-   * ── WHY IT IS TOTAL, AND WHY THAT IS NOT THE USUAL LAZINESS ─────────────────────────────────────────────
-   * Every other leg here funnels through a provenance guard that THROWS, because reporting health for state
-   * you refused to read is worse than reporting nothing. This leg is the exception, deliberately: it is the
-   * one leg whose subject is the storage itself. An absent CAS root, an unreadable directory, a file that
-   * disappears mid-walk — those are the CONDITIONS this leg exists to describe, so turning them into a
-   * throw would make the instrument fail exactly where the fault is. The honest zero (`objects: 0`) is not
-   * ambiguous the way a zero hot-set was, because `referenced` is reported beside it: zero objects against a
-   * non-zero referenced count is a loud, visible `missing` list, not a quiet clean bill of health.
+   * ── PROVENANCE FIRST, THEN TOTAL — the split, and why it is drawn HERE ─────────────────────────────────
+   * The first cut of this leg skipped the provenance guard, on the argument that an audit of the STORAGE
+   * must not fail where the fault is. `doctor-provenance-total.test.ts` refuted it, and the refutation was
+   * right: this leg reads `loadProjection()` for the referenced set, so on a store the read doors REFUSE it
+   * would report the objects it walked against `referenced: 0` — which renders as "724 orphans, sound=true",
+   * a clean bill of health for state we have declined to serve. That is the exact defect this module's
+   * `nodes()` header describes, reached by a different door. So the guard runs first, and the leg refuses
+   * whole rather than serving an uninterpretable receipt.
+   *
+   * TOTALITY IS KEPT WHERE IT WAS ACTUALLY EARNED: filesystem conditions. An absent CAS root, an unlistable
+   * shard, a file that disappears mid-walk — those ARE the conditions this leg exists to describe, and they
+   * yield an honest receipt rather than a throw. The honest zero is readable because `referenced` sits
+   * beside it: zero objects against a non-zero referenced count is a loud `missing` list.
    *
    * ── WHAT `sound` MEANS, AND WHAT IT DOES NOT ────────────────────────────────────────────────────────────
    * `corrupt ∪ unreadable ∪ missing` empty. `orphan` is EXCLUDED on purpose: the CAS is append-only and
@@ -303,6 +308,7 @@ export function createDoctorSource(
     const empty: CasIntegrity = {
       objects: 0, corrupt: [], unreadable: [], missing: [], orphan: 0, referenced: 0, sound: true,
     };
+    refuseUntrustedRead(trusted); // the SAME guard every other leg funnels through — see the header above
     if (casPath === undefined) return empty;
 
     // The bytes actually on disk, at `<cas>/<xx>/<h>`. A shard that cannot be listed contributes nothing

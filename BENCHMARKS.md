@@ -13,11 +13,18 @@ proving and admitting (`admit-harness` / `verify-fact` / `verify-count`, Genesis
 emit doors and re-proof (`packages/adapter-io`), and the dependency projection
 (`derive-relations`, `packages/cli`).
 
+**A second, separate scope — §7, the memory ring.** It is NOT part of the Genesis pipeline and is
+not aggregated with §§1–6 into any combined figure. It is on this page because it is measured the same
+way — planted violations, controls that fail the axis, mutations against the shipped binary — and
+because keeping it in a private probe would leave the project's only other measured subsystem
+undisclosed. Read the two scopes separately; there is no headline that spans them.
+
 **Not measured here:** retrieval quality, the versioned store and its travel-by-reproof, the
 governance ring, the MCP and CLI transports *as surfaces* (two CLI commands — `derive-relations` in §2
 and `test-vacuity` in §6 — are used as measurement instruments; their ergonomics, parity and transport
-behaviour are not what is scored), and the authoring planners. Those are Atlas the system;
-this page is about the trustworthiness of what Genesis puts into it. Do not read these numbers as
+behaviour are not what is scored). §7 drives its own CLI door end to end, but scores the gates behind it,
+never the surface. Also not measured: the authoring planners. Those are Atlas the system;
+§§1–6 are about the trustworthiness of what Genesis puts into it. Do not read these numbers as
 a score for Atlas as a product.
 
 ## The two seals
@@ -168,6 +175,64 @@ Artifact: [`xrepo-zod-shape-census.json`](harness/probes/adjudicate/xrepo-zod-sh
 
 ---
 
+## 7 — The memory ring (M-axis): the gates, on the shipped binary
+
+**A different subsystem from §§1–6**, measured on its own. `$0` — no model in the loop.
+Instrument: [`harness/probes/m1-memory-ring.mjs`](harness/probes/m1-memory-ring.mjs). It runs
+`packages/cli/dist/src/bin.js` as a child process in a throwaway git repo — real store, real disk, real
+`gitleaks` on `PATH` — and reads only what a user reads: the exit code and the rendered verdict.
+
+**Why not the unit suites.** `packages/*/test` proves each memory piece against injected fakes, which is
+how the pre-write scanner shipped refusing *every* write (#290): every `memory-emit` test injected a fake
+scanner, so the one argv the product actually runs was executed by nothing. Re-running those suites would
+have reproduced the blind spot at greater cost.
+
+| axis | what it decides | result | its control |
+| --- | --- | --- | --- |
+| M1 | a memory written by one process is read back by another | 3/3 | recall *before* any write answers empty |
+| M2 | the 7-gate write chain, per named refusal | 14/14 | **a clean record is ADMITTED** |
+| M3 | MEM-1 owner scoping (no cross-seat leak) | 3/3 | the two seats hold **different** counts |
+| M4 | MEM-4 consultable-not-injected | 4/4 | the header counter tracks writes at all |
+| M5 | type discipline at the JSON boundary | 7/7 | the same shape, correctly typed, is admitted |
+
+**8/8 planted violations refused BY NAME**, each at exit 2. The oracle is not "it refused" — a door that
+answered `undetermined-kind` to everything would refuse 100% of them and be wrong on seven.
+
+**The controls are load-bearing, not decoration.** Without M2's, the axis is satisfied by a door that
+refuses every write — which is the #290 defect scoring perfectly on its own benchmark. Without M3's
+asymmetric counts, "no leak" is unfalsifiable, because 1 vs 1 leaks invisibly.
+
+### Mutations, against the shipped `dist`
+
+| mutation | outcome |
+| --- | --- |
+| MEM-1 owner scoping removed | **killed** — M3 3/3 → 0/3 |
+| MEM-9 scanner gate removed | **killed** — M2 `scanner-blocked` red |
+| MEM-5 type loop removed | **killed** — M2 `template-invalid` red |
+| MEM-4 kind filter removed | **survives this surface**, killed at the door level |
+
+The last row is reported in both directions rather than dropped once a killer was found. The only CLI door
+onto the ranked slab renders `injected` alone, and the leak lands in `evicted`; `projectSlab()` exposes it,
+so the mutant dies against `packages/adapter-io/test/memory-read-kind-filter.test.ts`. An oracle's reach is
+a property of the surface it runs through.
+
+### Two defects the mutation pass found in the probe itself
+
+Recorded because they are the reason to trust the rest of the numbers, not despite it. Neither would have
+survived a mutation pass; neither was going to be caught by reading the code.
+
+1. **A broken oracle.** The gate-name check tested the whole of stdout — and every refusal's `next:` line
+   *enumerates* all nine gate names as guidance. It reported `named=true` on writes that **exited 0**.
+2. **A vacuous assertion.** M4 asserted a task id was absent from the header's stdout. It passed under a
+   mutation that injected every kind, because the header renders a *count* and never entry text.
+
+### What this axis does NOT measure
+
+Retrieval quality, ranking usefulness, the MCP transport (CLI only), the Awareness/Orientation slab
+*content* (their doors are exercised for liveness, not for correctness of what they derive), and anything
+about how well the memory serves a real session. It scores whether the declared gates hold on the shipped
+binary — nothing about whether the memory is any good.
+
 ## Honest limits
 
 Stated as limits, not footnotes. In order of how much they matter:
@@ -182,7 +247,13 @@ Stated as limits, not footnotes. In order of how much they matter:
 5. **Negation recall is build-state sensitive** (8× swing dist-absent vs. dist-form). The
    trap and the exact recipe are documented in the A4 artifact; both states are reported.
 6. **A3 is measured on 10 sites on one model.** Full-repo cost is extrapolation.
-7. **No shared public benchmark with adjacent tools.** Memory-retrieval suites (LOCOMO,
+7. **§7 has no external comparator and no cross-repo leg.** Every M-axis figure is measured on
+   throwaway repositories this project creates; nothing corroborates it against another
+   memory implementation, and unlike §2 there is no deterministic third-party tool to be a superset of.
+8. **§7's M2 covers 8 of the 9 declared refusals.** `kind-conflation` is structurally unreachable from
+   that door — gate 1 refuses the only entries that could reach it — so it is asserted UNREACHABLE
+   rather than planted. That is recorded as a property, not scored as a pass.
+9. **No shared public benchmark with adjacent tools.** Memory-retrieval suites (LOCOMO,
    LongMemEval) measure conversational-memory QA — a different axis; scores are not
    comparable in either direction. The only measured external comparison here is the
    deterministic madge superset (§2). A common code-KG precision benchmark does not exist

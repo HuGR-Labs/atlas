@@ -57,7 +57,10 @@ function committedStoreRepo(): string {
  * totality assertion goes red, and someone has to decide which half it is in. What it no longer does is
  * force a leg to name a refusal it did not receive.
  */
-const STORE_LEGS = ['archive', 'why', 'hotset', 'reground'] as const;
+// `cas` reads `loadProjection()` for its referenced set, so it IS store-reading: on a refused store it
+// would otherwise report the objects it walked against `referenced: 0`, which renders as a large orphan
+// count and `sound=true` — a clean bill of health for state the read doors declined to serve.
+const STORE_LEGS = ['archive', 'why', 'hotset', 'reground', 'cas'] as const;
 const NO_STORE_LEGS = ['index'] as const; // reads the file tree + the SCIP dump; holds no store port
 
 describe('runDoctor stays TOTAL over a refusing DoctorSource', () => {

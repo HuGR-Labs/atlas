@@ -147,3 +147,25 @@ describe('totality — this is the leg you run WHEN things are broken', () => {
     expect(r.sound).toBe(false);
   });
 });
+
+describe('provenance comes FIRST — the totality is about the filesystem, not about trust', () => {
+  it('a REFUSED store makes the leg throw, rather than reporting the walk it could still do', () => {
+    // The first cut skipped this guard, arguing an audit of the STORAGE must not fail where the fault is.
+    // The refutation: this leg reads `loadProjection()` for `referenced`, so on a refused store it would
+    // report the objects it walked against `referenced: 0` — rendering as a large orphan count and
+    // `sound=true`, a clean bill of health for state the read doors declined to serve. The CLI converts the
+    // throw into the same structured non-zero outcome every other doctor refusal renders
+    // (`packages/cli/test/doctor-provenance-total.test.ts`).
+    const a = put({ v: 'alpha' });
+    project([a]);
+    const refusing = createDoctorSource(createDiskStore(cas), noIndex, () => false, cas);
+    expect(() => refusing.casAudit()).toThrow(/untrusted-store/);
+  });
+
+  it('and the CONTROL: the same store, trusted, audits clean', () => {
+    const a = put({ v: 'alpha' });
+    project([a]);
+    expect(audit()).toMatchObject({ objects: 1, referenced: 1, sound: true });
+  });
+});
+

@@ -213,7 +213,7 @@ the numbers on this page most likely to rot.
   new surface), so no tool token exists for them.
 - **This bullet used to rot, and predicted it in writing.** Campaign 10 exported `READ_SURFACE`, moving
   `doctor`, `node`, `anchors`, `slots`, `draft` and `check` onto MCP; campaign 11 then added the memory door
-  set — one governance write door and four read doors — and five commands to go with them. After each move
+  set and the commands to go with them. After each move
   the numbers here were wrong, and after the second they were wrong by five commands and five tools while
   the paragraph itself carried the sentence *"No gate holds this bullet… it is the paragraph on this page
   most exposed to the next surface change."* Correct, and useless: naming an unguarded claim does not guard
