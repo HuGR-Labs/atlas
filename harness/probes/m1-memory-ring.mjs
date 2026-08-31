@@ -23,10 +23,13 @@
 // bytes and the probe re-run against each; the dist was restored and re-verified after every one.
 //   1. MEM-1 owner scoping removed (`injectFor(store, seat)` → `store`)      KILLED — M3 3/3 → 0/3
 //   2. MEM-9 scanner gate removed (`if (scanner.scan(record))` → `if(false)`) KILLED — M2 scanner-blocked red
-//   3. MEM-4 kind filter removed (`filter(kind==='project')` → `filter(true)`) SURVIVED — see the STATED
-//      LIMIT in axisM4: the frecency floor masks that filter, so nothing observable at the CLI moves. The
-//      surviving mutant is reported as a finding rather than patched over with a stronger-sounding
-//      assertion, because the assertion that would kill it does not exist on this surface.
+//   3. MEM-5 type loop removed (`if (matchesFieldType(...))` → `if(false)`)   KILLED — M2 template-invalid red
+//   4. MEM-4 kind filter removed (`filter(kind==='project')` → `filter(true)`) SURVIVES HERE, killed at the
+//      DOOR level. Reported honestly in both directions rather than dropped once a killer was found: this
+//      probe's surface cannot see it, because the only CLI door onto the ranked slab is `memory-header`,
+//      which renders `injected` alone, and the leak lands in `evicted`. The mutant dies against
+//      `packages/adapter-io/test/memory-read-kind-filter.test.ts`, which reads `projectSlab()` — the surface
+//      on which the invariant is decidable. An oracle's reach is a property of the surface it runs through.
 //
 // $0 — no model is in the loop. Deterministic: same repo, same binary, same verdicts.
 // Usage: node harness/probes/m1-memory-ring.mjs [--keep]
@@ -64,6 +67,14 @@ function emitEntry(cwd, obj, actor, env = {}) {
 }
 
 function hash(s) { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) | 0; return h; }
+
+/** Emit RAW bytes. `JSON.stringify` renders Infinity/NaN as `null`, so a plant that must reach the door as a
+ *  non-finite NUMBER cannot be built through `emitEntry`; `1e999` parses to Infinity on the far side. */
+function emitRaw(cwd, json, actor, env = {}) {
+  const p = join(cwd, `raw-${Math.abs(hash(json + actor))}.json`);
+  writeFileSync(p, json);
+  return atlas(cwd, ['memory-emit', p], { ATLAS_ACTOR: actor, ...env });
+}
 
 /** A fresh git repo with an initialised Atlas. Each axis gets its own — cross-axis state would make the
  *  cap gate's count depend on what an earlier axis happened to write. */
@@ -140,6 +151,13 @@ function axisM2() {
   const cases = [
     // gate 1 — no template matches these keys at all.
     { gate: 'undetermined-kind', actor: seat, entry: { notAnyTemplate: true } },
+    // gate 2 — MEM-5: keys are exactly the project template's and every required field is present, so
+    // derivation NAMES `project`; `frecency` is a string, so validation refuses. This plant is what makes
+    // gate 2's domain non-empty — see the reachability note below.
+    { gate: 'template-invalid', actor: seat, entry: { rule: 'r', scope: 'harness', frecency: '999' } },
+    // gate 3b — MEM-1: an EMPTY actor is a reachable value (`ATLAS_ACTOR ?? gitUserEmail ?? ''`), and an
+    // unowned record is one `injectFor` hands to every caller whose actor is also empty.
+    { gate: 'unowned', actor: '', entry: PROJECT('a rule written with no resolvable owner') },
     // gate 4a — MEM-8: only `orch` may append the logbook.
     { gate: 'logbook-unauthorized', actor: seat, entry: LOGBOOK('PR-1') },
     // gate 5 — MEM-3: one rule far over the 500-token member cap.
@@ -159,23 +177,41 @@ function axisM2() {
     record('M2', `planted ${c.gate}`, pass, `exit=${r.code} fired=${fired}`);
   }
 
-  // gate 2 — `template-invalid` is DECLARED but UNREACHABLE, and this is a proof, not a guess.
+  // ── WHY GATE 2 IS PLANTED ABOVE AND WAS NOT, AND THE CONTROLS THAT KEEP IT HONEST ───────────────────
   //
-  // `validate(kind, entry)` fails on exactly two conditions: a required key is `undefined`, or a key falls
-  // outside the template. `memoryKindOf` selects a kind only from candidates for which NEITHER holds. So
-  // any entry that would fail gate 2 has already failed gate 1 with `undetermined-kind`, and gate 2 fires
-  // on nothing. It is redundant defence-in-depth, which is fine — what is NOT fine is that the door's own
-  // guidance advertises `template-invalid` to users as an outcome they may receive.
+  // Until the MEM-5 type check shipped, this probe recorded `template-invalid` as a DECLARED-BUT-UNREACHABLE
+  // refusal, and the argument was mechanical: `validate` failed on exactly two conditions — a required key
+  // `undefined`, or a key outside the template — and `memoryKindOf` selects a kind only from candidates for
+  // which NEITHER holds. So every entry that could fail gate 2 had already failed gate 1, while the door's
+  // own guidance went on advertising the name to users. Types are the first condition validation decides
+  // that derivation does not, which is what gives gate 2 a non-empty domain. The plant above is the proof
+  // AT THE BINARY; `packages/memory/test/mem-5-field-types.test.ts` is the proof at the unit level.
   //
-  // The probe does not take the argument's word for it: it plants BOTH of validate's failure modes and
-  // records which gate actually fired. This is the [[reference-model-vs-shipped-path]] rule — a guard can be
-  // fully tested and still guard nothing; reachability is a separate measurement from correctness.
+  // The DISCRIMINATION CONTROLS below keep the new plant from taking credit for reach it does not have: the
+  // two shapes that used to be planted here must STILL refuse as `undetermined-kind`. If either ever
+  // reported `template-invalid`, the two gates would have been conflated and the number above would be a
+  // lie in the other direction.
   for (const [what, entry] of [
     ['a key outside the template', { taskId: 'T-1', attempted: [], failedWith: [], stoppedAt: 's', lesson: 'l', freeFormProse: 'x' }],
     ['a missing required key', { taskId: 'T-2', attempted: [], failedWith: [], stoppedAt: 's' }],
   ]) {
     const r = emitEntry(dir, entry, seat);
-    FINDINGS.push(`M2  template-invalid UNREACHABLE — planting ${what} fired '${firedGate(r.out)}' (exit ${r.code})`);
+    const fired = firedGate(r.out);
+    record('M2', `DISCRIMINATION: ${what} still refuses at gate 1, not gate 2`,
+      r.code === 2 && fired === 'undetermined-kind', `fired=${fired}`);
+  }
+
+  // `kind-conflation` — the SAME masking, still open, measured rather than argued. `partition()` answers
+  // `knowledge` only for an entry carrying `kind: 'advisory' | 'predicate'`; that key is outside every
+  // memory template, so gate 1 refuses it first and gate 3's conflation branch fires on nothing FROM THIS
+  // DOOR. The catch stays as a fail-closed floor — `put` really can throw it, and a future template change
+  // could reopen the path — but the outcome is no longer ADVERTISED to users, and this assertion is what
+  // will turn red if it ever becomes reachable again, forcing the guidance back in step.
+  for (const disc of ['advisory', 'predicate']) {
+    const r = emitEntry(dir, { kind: disc, rule: 'r', scope: 'harness', frecency: 1 }, seat);
+    const fired = firedGate(r.out);
+    record('M2', `kind-conflation stays UNREACHABLE from this door (kind:'${disc}')`,
+      r.code === 2 && fired === 'undetermined-kind', `fired=${fired}`);
   }
 
   // gate 4b — MEM-8 duplicate: only reachable AFTER an authorised logbook entry exists, so it is sequenced.
@@ -197,7 +233,7 @@ function axisM2() {
     `exit=${noPath.code} fired=${firedNP}`);
 
   if (!KEEP) rmSync(dir, { recursive: true, force: true });
-  return { named, total: cases.length + 2, admits };
+  return { named, total: cases.length + 2, admits }; // + logbook-duplicate + scanner-unavailable
 }
 
 function LOGBOOK(prId) {
@@ -266,10 +302,13 @@ function axisM4() {
   // logbook) can carry a `frecency` — adding one puts a key outside its template and the write is refused at
   // gate 1. So MEM-4 is enforced twice over at this door, and the CLI surface exposes no discriminator that
   // can tell the two mechanisms apart. What this line proves is the INVARIANT a user depends on; what it
-  // does not prove is that the kind filter is load-bearing. That distinction is the finding below.
-  FINDINGS.push('M4  the `kind === project` filter in memory-read.ts is NOT observably load-bearing — ' +
-    'deleting it in dist left every M4 assertion green; the frecency floor masks it (no consultable kind ' +
-    'can carry a frecency, so none can ever rank). Redundant defence, but nothing would catch its removal.');
+  // does NOT prove is that the kind filter is load-bearing.
+  //
+  // [RESOLVED — elsewhere, and that is the point.] The filter IS load-bearing; the leak lands in the ranked
+  // slab's `evicted` bucket, which `memory-header` never renders. `projectSlab()` does expose it, so the
+  // mutant dies against `packages/adapter-io/test/memory-read-kind-filter.test.ts`. Recorded here rather
+  // than deleted, because the useful fact is not "the filter is fine" — it is that this probe's surface
+  // could not decide it, and which surface could.
 
   const rec = atlas(dir, ['memory-recall', '--kind', 'task'], { ATLAS_ACTOR: seat });
   const found = /1 matching record\(s\)/.test(rec.out);
@@ -278,35 +317,55 @@ function axisM4() {
   if (!KEEP) rmSync(dir, { recursive: true, force: true });
 }
 
-// ── M5 — TYPE DISCIPLINE AT THE JSON BOUNDARY (a MEASUREMENT, reported as a FINDING) ────────────────────
-// `atlas memory-emit <file.json>` reads arbitrary user JSON. TypeScript's `MemoryEntry` is a compile-time
-// claim with nothing enforcing it at that door, and MEM-5's validator — by its own header — gates PRESENCE
-// and KEY-MEMBERSHIP, never TYPE. So this axis asserts nothing about what SHOULD happen; it records what
-// DOES, so the gap is a number in a report instead of a surprise in the durable log.
+// ── M5 — TYPE DISCIPLINE AT THE JSON BOUNDARY (was the finding; is now the REGRESSION assertion) ────────
+//
+// WHAT THIS AXIS WAS. `atlas memory-emit <file.json>` reads arbitrary user JSON, and `MemoryEntry` was a
+// compile-time claim with nothing enforcing it at that door: MEM-5 gated PRESENCE and KEY-MEMBERSHIP and,
+// by its own header, never TYPE. So this axis asserted nothing and reported what it measured — that
+// `frecency: "999"` was ADMITTED, reached disk, and RANKED in the turn header, because `'999' * 0.5 ** age`
+// coerces; `"not-a-number"` and `null` decayed to NaN and 0 and vanished under the eviction floor instead.
+// Three admitted writes, one of them competing for a real slab slot.
+//
+// WHAT IT IS NOW. The type check shipped, so the same three plants are refusals, and a finding turns into
+// an assertion. The rewrite is not cosmetic: the OLD closing line ("the header injects 0 of them") would
+// still read green today and would now be VACUOUS — zero writes survive the door, so of course zero rank.
+// An assertion whose subject the previous gate already removed measures nothing. The oracle below is
+// therefore the ADMITTED count, checked against a positive control in the same repo, so the axis can tell
+// "refused at the door" apart from "the instrument stopped looking".
 function axisM5() {
   const dir = freshRepo('m5');
   const seat = 'seat:charlie';
+
+  // POSITIVE CONTROL first: a well-typed record with the SAME field set must still be admitted and must
+  // still rank. Without it, every refusal below is satisfied by a door that has stopped accepting writes.
+  const ok = emitEntry(dir, PROJECT('a well-typed rule with a numeric frecency', 4), seat);
+  record('M5', 'CONTROL: the same shape, correctly typed, is ADMITTED', ok.code === 0, `exit=${ok.code}`);
+
   const probes = [
-    { name: 'frecency is a string', entry: { rule: 'string frecency', scope: 's', frecency: 'not-a-number' } },
-    { name: 'frecency is null', entry: { rule: 'null frecency', scope: 's', frecency: null } },
-    { name: 'frecency is a NUMERIC string', entry: { rule: 'ranked by a string', scope: 's', frecency: '999' } },
+    { name: 'frecency is a non-numeric string (decayed to NaN)', entry: { rule: 'string frecency', scope: 's', frecency: 'not-a-number' } },
+    { name: 'frecency is null (decayed to 0)', entry: { rule: 'null frecency', scope: 's', frecency: null } },
+    { name: 'frecency is a NUMERIC string (the one that COERCED and RANKED)', entry: { rule: 'ranked by a string', scope: 's', frecency: '999' } },
+    { name: 'frecency is NaN (typeof number, survives a naive check)', entry: { rule: 'nan frecency', scope: 's', frecency: null }, raw: '{"rule":"nan frecency","scope":"s","frecency":1e999}' },
   ];
-  for (const p of probes) {
-    const r = emitEntry(dir, p.entry, seat);
-    FINDINGS.push(`M5  ${p.name}: emit exit=${r.code} (${r.code === 0 ? 'ADMITTED — reached disk' : 'refused'})`);
+  for (const pr of probes) {
+    const r = pr.raw === undefined ? emitEntry(dir, pr.entry, seat) : emitRaw(dir, pr.raw, seat);
+    const fired = firedGate(r.out);
+    record('M5', `REGRESSION: ${pr.name} — refused as template-invalid`,
+      r.code === 2 && fired === 'template-invalid', `exit=${r.code} fired=${fired}`);
   }
-  // The consequence, measured rather than assumed. `'999' * 0.5 ** age` COERCES in JS, so a string-typed
-  // frecency does not merely sit inert on disk — it competes for a slab slot. `'not-a-number'` and `null`
-  // decay to NaN / 0, both of which fail the `>= NEAR_ZERO_FRECENCY` floor, so those two ARE inert.
+
+  // The consequence the findings used to report, now as the assertion: exactly ONE record is on this seat's
+  // ranked slab — the control. A regression that reopened the coercion path would read 2 or more here, and
+  // the count is a number the render actually emits (the vacuity trap the M4 axis already paid for once).
   const hdr = atlas(dir, ['memory-header'], { ATLAS_ACTOR: seat });
   const m = /(\d+) project rule\(s\) injected/.exec(hdr.out);
-  FINDINGS.push(`M5  after 3 untyped writes, the turn header injects ${m ? m[1] : '?'} of them ` +
-    `(NaN and 0 fail the eviction floor; a numeric STRING coerces through the decay math and ranks)`);
+  const injected = m ? Number(m[1]) : -1;
+  record('M5', 'exactly the ONE well-typed rule ranks; no untyped write reaches the slab', injected === 1,
+    `injected=${injected}`);
 
-  // The availability question, which is the one that would make this urgent: does one untyped record brick
-  // the read doors for everyone afterwards? Measured — it does not.
+  // The availability question, kept: does a refused write leave the read doors usable? Measured — yes.
   const recall = atlas(dir, ['memory-recall', '--owner', seat]);
-  record('M5', 'the read doors SURVIVE untyped records (no bricking)', hdr.code === 0 && recall.code === 0,
+  record('M5', 'the read doors stay live after four refusals (no bricking)', hdr.code === 0 && recall.code === 0,
     `header=${hdr.code} recall=${recall.code}`);
 
   if (!KEEP) rmSync(dir, { recursive: true, force: true });

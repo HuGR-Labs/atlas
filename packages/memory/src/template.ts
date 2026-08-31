@@ -134,12 +134,154 @@ export function memoryKindOf(entry: MemoryEntry): MemoryKind {
 
 // ── MEM-5: the fail-closed validator ─────────────────────────────────────────────────────────────────────
 
+// ── MEM-5: the per-field TYPE skeleton (the third check — see `validate`'s header) ───────────────────────
+
 /**
- * MEM-5 — validate a write against its per-type template: REJECT fail-closed on (a) any missing required
- * field, or (b) any key OUTSIDE the fixed template (the logbook's out-of-section free-form prose). Pure +
- * total — an untemplated write is inspected defensively behind `Record<string, unknown>`; nothing throws.
+ * The shapes this validator can decide. Each maps to one predicate in `matchesFieldType`; there is no
+ * `any` member and no escape hatch, so adding a template field forces a decision about its type.
+ *   - `string` / `finite-number` — a primitive. `finite-number` excludes `NaN` and `±Infinity` on purpose:
+ *     `frecency` is a RANKING KEY, and the read door multiplies it (`stored * DECAY^age`,
+ *     `adapter-io/src/memory-read.ts`), where a non-finite value propagates silently instead of failing.
+ *   - `string[]` — an array whose every element is a string (an empty array satisfies it).
+ *   - `ref` / `ref[]` — the `Ref = StructRef | string` union of types.ts, checked STRUCTURALLY (below).
+ *   - `object[]` — an array of non-null objects. See the STATED BOUND on `knowledgeDelta`.
+ */
+type FieldType = 'string' | 'finite-number' | 'string[]' | 'ref' | 'ref[]' | 'object[]';
+
+/** The frozen `kind`s of a `StructRef` (@atlas/contracts `struct.ts`), transcribed — not widened. */
+const STRUCT_REF_KINDS: ReadonlySet<string> = new Set([
+  'symbol',
+  'block',
+  'file',
+  'repo',
+  'project',
+  'directory',
+]);
+
+/**
+ * `Ref = StructRef | string` (types.ts). A bare pointer string satisfies it; so does a StructRef-shaped
+ * object — `kind` from the frozen set, `qualifiedPath` a string, `subtreeHash` a string (the hash is a
+ * branded string at the contracts layer; this validator checks the carrier, never re-derives the brand).
+ * Anything else — a number, `null`, an array, an object missing a leg — is NOT a `Ref`.
+ */
+function isRef(v: unknown): boolean {
+  if (typeof v === 'string') return true;
+  if (v === null || typeof v !== 'object' || Array.isArray(v)) return false;
+  const r = v as Record<string, unknown>;
+  return (
+    typeof r['kind'] === 'string' &&
+    STRUCT_REF_KINDS.has(r['kind']) &&
+    typeof r['qualifiedPath'] === 'string' &&
+    typeof r['subtreeHash'] === 'string'
+  );
+}
+
+/** The one predicate per `FieldType`. Total over any input — nothing here throws on a hostile value. */
+function matchesFieldType(t: FieldType, v: unknown): boolean {
+  switch (t) {
+    case 'string':
+      return typeof v === 'string';
+    case 'finite-number':
+      return typeof v === 'number' && Number.isFinite(v);
+    case 'string[]':
+      return Array.isArray(v) && v.every((e) => typeof e === 'string');
+    case 'ref':
+      return isRef(v);
+    case 'ref[]':
+      return Array.isArray(v) && v.every((e) => isRef(e));
+    case 'object[]':
+      return Array.isArray(v) && v.every((e) => e !== null && typeof e === 'object' && !Array.isArray(e));
+  }
+}
+
+/**
+ * The declared type of EVERY key in every template — required and optional alike, transcribed field by
+ * field from the four frozen interfaces in types.ts. Keyed by kind, so the type checked is the one the
+ * DERIVED kind selected, never one the payload asked for (the same ARCH-9 discipline `memoryKindOf` states).
+ *
+ * [STATED BOUND — `knowledgeDelta` is checked as `object[]`, not as `GroundedFact[]`.] `PrMemoryEntry`
+ * types that field as `readonly GroundedFact[]`, a @atlas/knowledge structure with its own admission door
+ * (`atlas-emit`) and its own ratifier. Re-deriving that judgement here would put a SECOND, weaker copy of
+ * the knowledge contract inside the memory template — the thing this repository calls a second oracle. So
+ * this gate decides exactly what it can decide from the template alone (the field is an array of objects,
+ * never a string or a number), and says so, rather than implying a depth of checking it does not perform.
+ * The same bound applies to `links: readonly Ref[]`, which IS fully decidable and therefore IS decided.
+ */
+const FIELD_TYPES: Record<MemoryKind, Readonly<Record<string, FieldType>>> = {
+  project: { rule: 'string', scope: 'string', grounding: 'ref', frecency: 'finite-number' },
+  task: {
+    taskId: 'string',
+    attempted: 'string[]',
+    failedWith: 'string[]',
+    stoppedAt: 'string',
+    lesson: 'string',
+    ref: 'ref',
+  },
+  pr: {
+    prId: 'string',
+    decisions: 'string[]',
+    reviewOutcomes: 'string[]',
+    knowledgeDelta: 'object[]',
+    ref: 'ref',
+  },
+  logbook: {
+    prId: 'string',
+    at: 'string',
+    territories: 'string[]',
+    shipped: 'string',
+    decisions: 'string',
+    tradeoffs: 'string',
+    risks: 'string',
+    openThreads: 'string',
+    links: 'ref[]',
+  },
+};
+
+/**
+ * Every template key carries a declared type, and every declared type names a real template key. Checked
+ * HERE rather than trusted, because the two tables are maintained by hand and a key added to `REQUIRED`
+ * without a `FIELD_TYPES` row would silently go UNTYPED — a hole with exactly the shape of the one this
+ * table exists to close. A drift makes the module fail to load, so it cannot ship half-applied.
+ */
+for (const kind of KINDS) {
+  const declared = new Set(Object.keys(FIELD_TYPES[kind]));
+  for (const key of templateKeys(kind)) {
+    if (!declared.has(key)) throw new Error(`template.ts: '${kind}.${key}' has no declared FIELD_TYPES row`);
+  }
+  for (const key of declared) {
+    if (!templateKeys(kind).has(key)) throw new Error(`template.ts: FIELD_TYPES '${kind}.${key}' is not a template key`);
+  }
+}
+
+/**
+ * MEM-5 — validate a write against its per-type template. REJECT fail-closed on (a) any missing required
+ * field, (b) any key OUTSIDE the fixed template (the logbook's out-of-section free-form prose), or (c) any
+ * present key whose VALUE does not match the type its template declares. Pure + total — an untemplated
+ * write is inspected defensively behind `Record<string, unknown>`; nothing throws.
+ *
+ * ── WHY (c) EXISTS, AND WHY ITS ABSENCE WAS NOT COSMETIC (measured, PR #293's M-axis) ─────────────────────
+ * Before this, `validate` decided PRESENCE and KEY-MEMBERSHIP and nothing else. TypeScript did not cover
+ * the gap: the one production caller of this gate is `adapter-io/src/memory-emit.ts`, whose CLI leg parses
+ * ARBITRARY USER JSON and asserts it into `MemoryEntry` — a compile-time claim over a runtime value nobody
+ * checked. The measured consequence, run against the shipped binary rather than a fixture: an entry with
+ * `frecency: "999"` was ADMITTED, reached disk, and — because `stored * DECAY_PER_WAVE ** age` COERCES a
+ * numeric string — was RANKED in the per-seat turn header alongside real rules. A non-numeric string in the
+ * same field yields `NaN`, which compares false against the eviction floor and disappears without a word.
+ *
+ * ── AND WHY IT MAKES `template-invalid` REACHABLE AT ALL ─────────────────────────────────────────────────
+ * `memoryKindOf` filters candidate templates by EXACTLY conditions (a) and (b). So while those were also
+ * the whole of `validate`, every entry that could fail this gate had already failed derivation one gate
+ * earlier: `template-invalid` was a DECLARED refusal that no input could reach, while the write door went
+ * on advertising the name to users in its own guidance. Type checking is the first condition `validate`
+ * decides that derivation does not, which is what gives gate 2 a non-empty domain. That property is
+ * asserted end-to-end, not assumed — see the reachability test in `packages/memory/test`.
  */
 export function validate(kind: MemoryKind, entry: MemoryEntry): TemplateVerdict {
+  // `Object.keys(null)` throws, and this gate is documented as total; the same explicit non-object guard
+  // `memoryKindOf` carries is what makes that sentence true when `validate` is called directly.
+  if (entry === null || typeof entry !== 'object') {
+    return { valid: false, reasons: ['not an object: a template cannot be filled by a non-object value'] };
+  }
   const rec = entry as unknown as Record<string, unknown>;
   const reasons: string[] = [];
 
@@ -149,6 +291,17 @@ export function validate(kind: MemoryKind, entry: MemoryEntry): TemplateVerdict 
   const allowed = templateKeys(kind);
   for (const key of Object.keys(rec)) {
     if (!allowed.has(key)) reasons.push(`out-of-section prose: ${key}`);
+  }
+  // (c) — types, over the keys that are BOTH present and in-template. An out-of-template key was already
+  // reported above and has no declared type; a missing required key was too, and re-reporting it as a type
+  // failure would name one defect twice.
+  const types = FIELD_TYPES[kind];
+  for (const key of Object.keys(rec)) {
+    const declared = types[key];
+    if (declared === undefined || rec[key] === undefined) continue;
+    if (!matchesFieldType(declared, rec[key])) {
+      reasons.push(`wrong type: ${key} must be ${declared}`);
+    }
   }
   return { valid: reasons.length === 0, reasons };
 }
