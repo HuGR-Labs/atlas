@@ -821,3 +821,567 @@ gen: conformance
 - **No [NEEDS RECONCILIATION]:** every SCN stayed grounded in a frozen REQ normative-clause + its S2 down-model
   oracle; no golden required deciding new behaviour, and no REQ lacked a writable golden (0 atom-gate bounces).
 - → next_state **C** (roadmap).
+
+## CAMPAIGN-11 — the MEMORY RING
+
+> Generated from the method-tag, as S3 requires. Every SCN names the SHIPPED test that witnesses it —
+> these are not to-be-written goldens, they are the acceptance already green on `master`.
+
+### SCN-MEMRING-1a-1 — append-only and content-keyed, one record per line   (happy)
+source: REQ-MEMRING-1a
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-1 is exercised
+Then append-only and content-keyed, one record per line
+teeth: breaks-on "the reader's content-key check is the mock; removing it folds a hand-edited line in as a record"
+witness: packages/adapter-io/test/memory-store.test.ts
+gen: conformance
+
+### SCN-MEMRING-1b-1 — a record appended in one process is readable byte-identical in a later process   (happy)
+source: REQ-MEMRING-1b
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-1 is exercised
+Then a record appended in one process is readable byte-identical in a later process
+teeth: breaks-on "the reader's content-key check is the mock; removing it folds a hand-edited line in as a record"
+witness: packages/adapter-io/test/memory-store.test.ts
+gen: conformance
+
+### SCN-MEMRING-1c-1 — NEVER rewrite, truncate or reorder an existing line   (happy)
+source: REQ-MEMRING-1c
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-1 is exercised
+Then NEVER rewrite, truncate or reorder an existing line
+teeth: breaks-on "the reader's content-key check is the mock; removing it folds a hand-edited line in as a record"
+witness: packages/adapter-io/test/memory-store.test.ts
+gen: conformance
+
+### SCN-MEMRING-1d-1 — a line whose id is not its own content hash is refused on read AND counted   (happy)
+source: REQ-MEMRING-1d
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-1 is exercised
+Then a line whose id is not its own content hash is refused on read AND counted
+teeth: breaks-on "the reader's content-key check is the mock; removing it folds a hand-edited line in as a record"
+witness: packages/adapter-io/test/memory-store.test.ts
+gen: conformance
+
+### SCN-MEMRING-1e-1 — a torn or hand-edited line is folded in as a record   (guard)
+source: REQ-MEMRING-1e
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-1 is exercised
+Then a torn or hand-edited line is folded in as a record
+teeth: breaks-on "the reader's content-key check is the mock; removing it folds a hand-edited line in as a record"
+witness: packages/adapter-io/test/memory-store.test.ts
+gen: conformance
+
+### SCN-MEMRING-1f-1 — an unreadable log is reported as an empty store   (guard)
+source: REQ-MEMRING-1f
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-1 is exercised
+Then an unreadable log is reported as an empty store
+teeth: breaks-on "the reader's content-key check is the mock; removing it folds a hand-edited line in as a record"
+witness: packages/adapter-io/test/memory-store.test.ts
+gen: conformance
+
+### SCN-MEMRING-2a-1 — two processes appending concurrently both land   (happy)
+source: REQ-MEMRING-2a
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-2 is exercised
+Then two processes appending concurrently both land
+teeth: breaks-on "the O_APPEND write is the mock; replacing it with a read-modify-write drops the count from 40 to 3"
+witness: packages/adapter-io/test/memory-store.test.ts
+gen: conformance
+
+### SCN-MEMRING-2b-1 — the fold contains every record either writer wrote   (happy)
+source: REQ-MEMRING-2b
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-2 is exercised
+Then the fold contains every record either writer wrote
+teeth: breaks-on "the O_APPEND write is the mock; replacing it with a read-modify-write drops the count from 40 to 3"
+witness: packages/adapter-io/test/memory-store.test.ts
+gen: conformance
+
+### SCN-MEMRING-2c-1 — a concurrent append silently overwrites another writer's record   (guard)
+source: REQ-MEMRING-2c
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-2 is exercised
+Then a concurrent append silently overwrites another writer's record
+teeth: breaks-on "the O_APPEND write is the mock; replacing it with a read-modify-write drops the count from 40 to 3"
+witness: packages/adapter-io/test/memory-store.test.ts
+gen: conformance
+
+### SCN-MEMRING-3a-1 — admitted to git (the log travels)   (happy)
+source: REQ-MEMRING-3a
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-3 is exercised
+Then admitted to git (the log travels)
+teeth: breaks-on "the JSONL one-record-per-line form is the mock; a multi-line record makes the same merge splice"
+witness: packages/adapter-io/test/memory-store.test.ts
+gen: conformance
+
+### SCN-MEMRING-3b-1 — survives a plain text merge with 0 records lost and 0 spliced   (happy)
+source: REQ-MEMRING-3b
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-3 is exercised
+Then survives a plain text merge with 0 records lost and 0 spliced
+teeth: breaks-on "the JSONL one-record-per-line form is the mock; a multi-line record makes the same merge splice"
+witness: packages/adapter-io/test/memory-store.test.ts
+gen: conformance
+
+### SCN-MEMRING-3c-1 — a duplicated line dedups by content id on the fold   (happy)
+source: REQ-MEMRING-3c
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-3 is exercised
+Then a duplicated line dedups by content id on the fold
+teeth: breaks-on "the JSONL one-record-per-line form is the mock; a multi-line record makes the same merge splice"
+witness: packages/adapter-io/test/memory-store.test.ts
+gen: conformance
+
+### SCN-MEMRING-3d-1 — a branch merge loses a record   (guard)
+source: REQ-MEMRING-3d
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-3 is exercised
+Then a branch merge loses a record
+teeth: breaks-on "the JSONL one-record-per-line form is the mock; a multi-line record makes the same merge splice"
+witness: packages/adapter-io/test/memory-store.test.ts
+gen: conformance
+
+### SCN-MEMRING-3e-1 — a merge splices two records into one   (guard)
+source: REQ-MEMRING-3e
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-3 is exercised
+Then a merge splices two records into one
+teeth: breaks-on "the JSONL one-record-per-line form is the mock; a multi-line record makes the same merge splice"
+witness: packages/adapter-io/test/memory-store.test.ts
+gen: conformance
+
+### SCN-MEMRING-4a-1 — the gates run in the stated ORDER   (happy)
+source: REQ-MEMRING-4a
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-4 is exercised
+Then the gates run in the stated ORDER
+teeth: breaks-on "the ordered composition is the mock; reordering derivation after validation judges a payload by a template it chose"
+witness: packages/adapter-io/test/memory-emit.test.ts
+gen: exhaustive
+
+### SCN-MEMRING-4b-1 — each refusal is a structured verdict NAMING the gate   (happy)
+source: REQ-MEMRING-4b
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-4 is exercised
+Then each refusal is a structured verdict NAMING the gate
+teeth: breaks-on "the ordered composition is the mock; reordering derivation after validation judges a payload by a template it chose"
+witness: packages/adapter-io/test/memory-emit.test.ts
+gen: exhaustive
+
+### SCN-MEMRING-4c-1 — the door authors no policy of its own   (happy)
+source: REQ-MEMRING-4c
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-4 is exercised
+Then the door authors no policy of its own
+teeth: breaks-on "the ordered composition is the mock; reordering derivation after validation judges a payload by a template it chose"
+witness: packages/adapter-io/test/memory-emit.test.ts
+gen: exhaustive
+
+### SCN-MEMRING-4d-1 — a record reaches disk having skipped a gate   (guard)
+source: REQ-MEMRING-4d
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-4 is exercised
+Then a record reaches disk having skipped a gate
+teeth: breaks-on "the ordered composition is the mock; reordering derivation after validation judges a payload by a template it chose"
+witness: packages/adapter-io/test/memory-emit.test.ts
+gen: exhaustive
+
+### SCN-MEMRING-4e-1 — a refusal escapes as a thrown exception a caller can swallow   (guard)
+source: REQ-MEMRING-4e
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-4 is exercised
+Then a refusal escapes as a thrown exception a caller can swallow
+teeth: breaks-on "the ordered composition is the mock; reordering derivation after validation judges a payload by a template it chose"
+witness: packages/adapter-io/test/memory-emit.test.ts
+gen: exhaustive
+
+### SCN-MEMRING-5a-1 — the template is selected from the entry's SHAPE   (happy)
+source: REQ-MEMRING-5a
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-5 is exercised
+Then the template is selected from the entry's SHAPE
+teeth: breaks-on "the multi-match refusal is the mock; a first-match-wins fold files an ambiguous entry silently"
+witness: packages/memory/test/mem-kind-derivation.test.ts
+gen: conformance
+
+### SCN-MEMRING-5b-1 — no caller-supplied argument selects it   (happy)
+source: REQ-MEMRING-5b
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-5 is exercised
+Then no caller-supplied argument selects it
+teeth: breaks-on "the multi-match refusal is the mock; a first-match-wins fold files an ambiguous entry silently"
+witness: packages/memory/test/mem-kind-derivation.test.ts
+gen: conformance
+
+### SCN-MEMRING-5c-1 — no-match and multi-match are BOTH refused, never guessed   (happy)
+source: REQ-MEMRING-5c
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-5 is exercised
+Then no-match and multi-match are BOTH refused, never guessed
+teeth: breaks-on "the multi-match refusal is the mock; a first-match-wins fold files an ambiguous entry silently"
+witness: packages/memory/test/mem-kind-derivation.test.ts
+gen: conformance
+
+### SCN-MEMRING-5d-1 — a caller files a payload under a template that judges it more leniently   (guard)
+source: REQ-MEMRING-5d
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-5 is exercised
+Then a caller files a payload under a template that judges it more leniently
+teeth: breaks-on "the multi-match refusal is the mock; a first-match-wins fold files an ambiguous entry silently"
+witness: packages/memory/test/mem-kind-derivation.test.ts
+gen: conformance
+
+### SCN-MEMRING-5e-1 — an ambiguous shape is filed under the first matching template   (guard)
+source: REQ-MEMRING-5e
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-5 is exercised
+Then an ambiguous shape is filed under the first matching template
+teeth: breaks-on "the multi-match refusal is the mock; a first-match-wins fold files an ambiguous entry silently"
+witness: packages/memory/test/mem-kind-derivation.test.ts
+gen: conformance
+
+### SCN-MEMRING-6a-1 — owner = the composition root's resolved actor   (happy)
+source: REQ-MEMRING-6a
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-6 is exercised
+Then owner = the composition root's resolved actor
+teeth: breaks-on "the empty-owner refusal is the mock; removing it mints a record every empty-actor caller is injected"
+witness: packages/memory/test/mem-kind-derivation.test.ts
+gen: conformance
+
+### SCN-MEMRING-6b-1 — no transport flag sets it   (happy)
+source: REQ-MEMRING-6b
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-6 is exercised
+Then no transport flag sets it
+teeth: breaks-on "the empty-owner refusal is the mock; removing it mints a record every empty-actor caller is injected"
+witness: packages/memory/test/mem-kind-derivation.test.ts
+gen: conformance
+
+### SCN-MEMRING-6c-1 — an empty owner is refused fail-closed   (happy)
+source: REQ-MEMRING-6c
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-6 is exercised
+Then an empty owner is refused fail-closed
+teeth: breaks-on "the empty-owner refusal is the mock; removing it mints a record every empty-actor caller is injected"
+witness: packages/memory/test/mem-kind-derivation.test.ts
+gen: conformance
+
+### SCN-MEMRING-6d-1 — a caller sets the owner of a record they write   (guard)
+source: REQ-MEMRING-6d
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-6 is exercised
+Then a caller sets the owner of a record they write
+teeth: breaks-on "the empty-owner refusal is the mock; removing it mints a record every empty-actor caller is injected"
+witness: packages/memory/test/mem-kind-derivation.test.ts
+gen: conformance
+
+### SCN-MEMRING-6e-1 — an unowned record is written and then injected to every empty-actor caller   (guard)
+source: REQ-MEMRING-6e
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-6 is exercised
+Then an unowned record is written and then injected to every empty-actor caller
+teeth: breaks-on "the empty-owner refusal is the mock; removing it mints a record every empty-actor caller is injected"
+witness: packages/memory/test/mem-kind-derivation.test.ts
+gen: conformance
+
+### SCN-MEMRING-7a-1 — binds a NAMED binary actually present on PATH   (happy)
+source: REQ-MEMRING-7a
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-7 is exercised
+Then binds a NAMED binary actually present on PATH
+teeth: breaks-on "the argv is the mock; the shipped `detect --source -` exits 1 on clean input and turns the clean-scan leg red"
+witness: packages/adapter-io/test/scanner-conformance.test.ts
+gen: conformance
+
+### SCN-MEMRING-7b-1 — no scanner available means the write is REFUSED   (happy)
+source: REQ-MEMRING-7b
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-7 is exercised
+Then no scanner available means the write is REFUSED
+teeth: breaks-on "the argv is the mock; the shipped `detect --source -` exits 1 on clean input and turns the clean-scan leg red"
+witness: packages/adapter-io/test/scanner-conformance.test.ts
+gen: conformance
+
+### SCN-MEMRING-7c-1 — never redacted-and-continued   (happy)
+source: REQ-MEMRING-7c
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-7 is exercised
+Then never redacted-and-continued
+teeth: breaks-on "the argv is the mock; the shipped `detect --source -` exits 1 on clean input and turns the clean-scan leg red"
+witness: packages/adapter-io/test/scanner-conformance.test.ts
+gen: conformance
+
+### SCN-MEMRING-7d-1 — a write lands with no scanner having run   (guard)
+source: REQ-MEMRING-7d
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-7 is exercised
+Then a write lands with no scanner having run
+teeth: breaks-on "the argv is the mock; the shipped `detect --source -` exits 1 on clean input and turns the clean-scan leg red"
+witness: packages/adapter-io/test/scanner-conformance.test.ts
+gen: conformance
+
+### SCN-MEMRING-7e-1 — a clean record is refused because the invocation is wrong   (guard)
+source: REQ-MEMRING-7e
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-7 is exercised
+Then a clean record is refused because the invocation is wrong
+teeth: breaks-on "the argv is the mock; the shipped `detect --source -` exits 1 on clean input and turns the clean-scan leg red"
+witness: packages/adapter-io/test/scanner-conformance.test.ts
+gen: conformance
+
+### SCN-MEMRING-7f-1 — a secret-carrying record is admitted because the invocation always exits clean   (guard)
+source: REQ-MEMRING-7f
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-7 is exercised
+Then a secret-carrying record is admitted because the invocation always exits clean
+teeth: breaks-on "the argv is the mock; the shipped `detect --source -` exits 1 on clean input and turns the clean-scan leg red"
+witness: packages/adapter-io/test/scanner-conformance.test.ts
+gen: conformance
+
+### SCN-MEMRING-8a-1 — only the calling actor's own records — zero cross-seat   (happy)
+source: REQ-MEMRING-8a
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-8 is exercised
+Then only the calling actor's own records — zero cross-seat
+teeth: breaks-on "the `injectFor` owner filter is the mock; removing it leaks the other seat into the header"
+witness: packages/adapter-io/test/memory-read.test.ts
+gen: conformance
+
+### SCN-MEMRING-8b-1 — task, pr and logbook NEVER ride the header   (happy)
+source: REQ-MEMRING-8b
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-8 is exercised
+Then task, pr and logbook NEVER ride the header
+teeth: breaks-on "the `injectFor` owner filter is the mock; removing it leaks the other seat into the header"
+witness: packages/adapter-io/test/memory-read.test.ts
+gen: conformance
+
+### SCN-MEMRING-8c-1 — they return ONLY via an explicit recall   (happy)
+source: REQ-MEMRING-8c
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-8 is exercised
+Then they return ONLY via an explicit recall
+teeth: breaks-on "the `injectFor` owner filter is the mock; removing it leaks the other seat into the header"
+witness: packages/adapter-io/test/memory-read.test.ts
+gen: conformance
+
+### SCN-MEMRING-8d-1 — another seat's record appears in a header   (guard)
+source: REQ-MEMRING-8d
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-8 is exercised
+Then another seat's record appears in a header
+teeth: breaks-on "the `injectFor` owner filter is the mock; removing it leaks the other seat into the header"
+witness: packages/adapter-io/test/memory-read.test.ts
+gen: conformance
+
+### SCN-MEMRING-8e-1 — a consultable kind auto-injects on a running turn   (guard)
+source: REQ-MEMRING-8e
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-8 is exercised
+Then a consultable kind auto-injects on a running turn
+teeth: breaks-on "the `injectFor` owner filter is the mock; removing it leaks the other seat into the header"
+witness: packages/adapter-io/test/memory-read.test.ts
+gen: conformance
+
+### SCN-MEMRING-8f-1 — an unqualified read returns a general dump   (guard)
+source: REQ-MEMRING-8f
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-8 is exercised
+Then an unqualified read returns a general dump
+teeth: breaks-on "the `injectFor` owner filter is the mock; removing it leaks the other seat into the header"
+witness: packages/adapter-io/test/memory-read.test.ts
+gen: conformance
+
+### SCN-MEMRING-9a-1 — the injected set is the top-N by effective frecency, descending   (happy)
+source: REQ-MEMRING-9a
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-9 is exercised
+Then the injected set is the top-N by effective frecency, descending
+teeth: breaks-on "the decay term is the mock; returning the stored value unchanged turns the frecency legs red"
+witness: packages/adapter-io/test/memory-read.test.ts
+gen: conformance
+
+### SCN-MEMRING-9b-1 — a decayed entry is evicted even when slots are free   (happy)
+source: REQ-MEMRING-9b
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-9 is exercised
+Then a decayed entry is evicted even when slots are free
+teeth: breaks-on "the decay term is the mock; returning the stored value unchanged turns the frecency legs red"
+witness: packages/adapter-io/test/memory-read.test.ts
+gen: conformance
+
+### SCN-MEMRING-9c-1 — an evicted entry remains re-spawnable — nothing dies   (happy)
+source: REQ-MEMRING-9c
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-9 is exercised
+Then an evicted entry remains re-spawnable — nothing dies
+teeth: breaks-on "the decay term is the mock; returning the stored value unchanged turns the frecency legs red"
+witness: packages/adapter-io/test/memory-read.test.ts
+gen: conformance
+
+### SCN-MEMRING-9d-1 — decay advances with the LOG's own head, never wall-clock   (happy)
+source: REQ-MEMRING-9d
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-9 is exercised
+Then decay advances with the LOG's own head, never wall-clock
+teeth: breaks-on "the decay term is the mock; returning the stored value unchanged turns the frecency legs red"
+witness: packages/adapter-io/test/memory-read.test.ts
+gen: conformance
+
+### SCN-MEMRING-9e-1 — a system-clock jump changes the injected set with no new log entries   (guard)
+source: REQ-MEMRING-9e
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-9 is exercised
+Then a system-clock jump changes the injected set with no new log entries
+teeth: breaks-on "the decay term is the mock; returning the stored value unchanged turns the frecency legs red"
+witness: packages/adapter-io/test/memory-read.test.ts
+gen: conformance
+
+### SCN-MEMRING-9f-1 — an evicted rule is unrecoverable   (guard)
+source: REQ-MEMRING-9f
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-9 is exercised
+Then an evicted rule is unrecoverable
+teeth: breaks-on "the decay term is the mock; returning the stored value unchanged turns the frecency legs red"
+witness: packages/adapter-io/test/memory-read.test.ts
+gen: conformance
+
+### SCN-MEMRING-9g-1 — a low-frecency entry is injected because slots happened to be free   (guard)
+source: REQ-MEMRING-9g
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-9 is exercised
+Then a low-frecency entry is injected because slots happened to be free
+teeth: breaks-on "the decay term is the mock; returning the stored value unchanged turns the frecency legs red"
+witness: packages/adapter-io/test/memory-read.test.ts
+gen: conformance
+
+### SCN-MEMRING-10a-1 — assembled from real sources   (happy)
+source: REQ-MEMRING-10a
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-10 is exercised
+Then assembled from real sources
+teeth: breaks-on "the sentinel is the mock; substituting a generic card makes an absent facet indistinguishable from a seeded one"
+witness: packages/adapter-io/test/awareness-store.test.ts
+gen: conformance
+
+### SCN-MEMRING-10b-1 — an absent source renders the labeled UN-SEEDED sentinel   (happy)
+source: REQ-MEMRING-10b
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-10 is exercised
+Then an absent source renders the labeled UN-SEEDED sentinel
+teeth: breaks-on "the sentinel is the mock; substituting a generic card makes an absent facet indistinguishable from a seeded one"
+witness: packages/adapter-io/test/awareness-store.test.ts
+gen: conformance
+
+### SCN-MEMRING-10c-1 — never filled with invented text   (happy)
+source: REQ-MEMRING-10c
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-10 is exercised
+Then never filled with invented text
+teeth: breaks-on "the sentinel is the mock; substituting a generic card makes an absent facet indistinguishable from a seeded one"
+witness: packages/adapter-io/test/awareness-store.test.ts
+gen: conformance
+
+### SCN-MEMRING-10d-1 — an absent facet is rendered as plausible prose   (guard)
+source: REQ-MEMRING-10d
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-10 is exercised
+Then an absent facet is rendered as plausible prose
+teeth: breaks-on "the sentinel is the mock; substituting a generic card makes an absent facet indistinguishable from a seeded one"
+witness: packages/adapter-io/test/awareness-store.test.ts
+gen: conformance
+
+### SCN-MEMRING-10e-1 — a slab is served without its grounding   (guard)
+source: REQ-MEMRING-10e
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-10 is exercised
+Then a slab is served without its grounding
+teeth: breaks-on "the sentinel is the mock; substituting a generic card makes an absent facet indistinguishable from a seeded one"
+witness: packages/adapter-io/test/awareness-store.test.ts
+gen: conformance
+
+### SCN-MEMRING-11a-1 — an identical call yields a byte-identical Verdict on both transports   (happy)
+source: REQ-MEMRING-11a
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-11 is exercised
+Then an identical call yields a byte-identical Verdict on both transports
+teeth: breaks-on "the shared handler is the mock; a second, separately-composed door diverges under the same call"
+witness: packages/mcp-server/test/memory-emit-mcp.test.ts
+gen: conformance
+
+### SCN-MEMRING-11b-1 — a refusal carries the same named reason on both   (happy)
+source: REQ-MEMRING-11b
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-11 is exercised
+Then a refusal carries the same named reason on both
+teeth: breaks-on "the shared handler is the mock; a second, separately-composed door diverges under the same call"
+witness: packages/mcp-server/test/memory-emit-mcp.test.ts
+gen: conformance
+
+### SCN-MEMRING-11c-1 — the two transports disagree on an admission   (guard)
+source: REQ-MEMRING-11c
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-11 is exercised
+Then the two transports disagree on an admission
+teeth: breaks-on "the shared handler is the mock; a second, separately-composed door diverges under the same call"
+witness: packages/mcp-server/test/memory-emit-mcp.test.ts
+gen: conformance
+
+### SCN-MEMRING-11d-1 — a refusal reads differently over MCP than on the CLI   (guard)
+source: REQ-MEMRING-11d
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-11 is exercised
+Then a refusal reads differently over MCP than on the CLI
+teeth: breaks-on "the shared handler is the mock; a second, separately-composed door diverges under the same call"
+witness: packages/mcp-server/test/memory-emit-mcp.test.ts
+gen: conformance
+
+### SCN-MEMRING-12a-1 — every shipped memory command has a reference page   (happy)
+source: REQ-MEMRING-12a
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-12 is exercised
+Then every shipped memory command has a reference page
+teeth: breaks-on "the guard's README leg is the mock; removing it lets the table drift, which is exactly how it reached ten rows against twenty-three commands"
+witness: harness/gates/command-doc-guard.mjs
+gen: exhaustive
+
+### SCN-MEMRING-12b-1 — every shipped memory command has a README table row   (happy)
+source: REQ-MEMRING-12b
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-12 is exercised
+Then every shipped memory command has a README table row
+teeth: breaks-on "the guard's README leg is the mock; removing it lets the table drift, which is exactly how it reached ten rows against twenty-three commands"
+witness: harness/gates/command-doc-guard.mjs
+gen: exhaustive
+
+### SCN-MEMRING-12c-1 — neither names a command that does not ship   (happy)
+source: REQ-MEMRING-12c
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-12 is exercised
+Then neither names a command that does not ship
+teeth: breaks-on "the guard's README leg is the mock; removing it lets the table drift, which is exactly how it reached ten rows against twenty-three commands"
+witness: harness/gates/command-doc-guard.mjs
+gen: exhaustive
+
+### SCN-MEMRING-12d-1 — a shipped command is absent from the README table   (guard)
+source: REQ-MEMRING-12d
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-12 is exercised
+Then a shipped command is absent from the README table
+teeth: breaks-on "the guard's README leg is the mock; removing it lets the table drift, which is exactly how it reached ten rows against twenty-three commands"
+witness: harness/gates/command-doc-guard.mjs
+gen: exhaustive
+
+### SCN-MEMRING-12e-1 — the README table advertises a command that does not run   (guard)
+source: REQ-MEMRING-12e
+Given the shipped memory ring over a real durable store
+When the door for INV-MEMRING-12 is exercised
+Then the README table advertises a command that does not run
+teeth: breaks-on "the guard's README leg is the mock; removing it lets the table drift, which is exactly how it reached ten rows against twenty-three commands"
+witness: harness/gates/command-doc-guard.mjs
+gen: exhaustive
+

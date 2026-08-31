@@ -194,3 +194,90 @@ formal core through the frozen `StoreApi`/`routeWrite` seams; it does not re-mod
 - anti-rot: every `reference-model` tag names its mock/fixture (15/15); the `PBT` tag (ADAPTER-7) names its
   property generator + equality oracle; the 3 `exhaustive` tags name their enumerated oracle.
 - → next_state **S3** (goldens).
+
+## CAMPAIGN-11 — the MEMORY RING
+
+### INV-MEMRING-1
+method-tag: reference-model
+fspec: —
+up-property: "the log is an append-only content-keyed ledger: every line self-verifies by its own hash, so a line the door did not write is detectable rather than served"
+down-model: "the shipped `createDurableMemory` over a real temp repo is the oracle; a fresh instance re-reads what a prior instance appended, and planted torn / tampered / unreadable inputs are counted rather than folded"
+anti-rot: the reader's content-key check is the mock; removing it folds a hand-edited line in as a record
+
+### INV-MEMRING-2
+method-tag: reference-model
+fspec: —
+up-property: "an append-only log has no lost update to lose: the seek-to-end and the write are one atomic step, so no snapshot is read in between"
+down-model: "eight REAL subprocesses each appending five records; the fold must hold forty. A read-modify-write mutation of the same door measures three durable of forty"
+anti-rot: the O_APPEND write is the mock; replacing it with a read-modify-write drops the count from 40 to 3
+
+### INV-MEMRING-3
+method-tag: reference-model
+fspec: —
+up-property: "whole-line JSONL makes a git text merge safe by construction: lines union or duplicate and can never be spliced, and a duplicate is deduped by content id (KERNEL-12b)"
+down-model: "two divergent branch logs are line-merged exactly as git would and folded; every record survives and the shared one appears once"
+anti-rot: the JSONL one-record-per-line form is the mock; a multi-line record makes the same merge splice
+
+### INV-MEMRING-4
+method-tag: exhaustive
+fspec: —
+up-property: "the refusal vocabulary is a CLOSED union, so the door's whole failure surface is finite and can be enumerated rather than sampled"
+down-model: "each gate is driven to its refusal in turn over a real composed door; the verdict's named refusal is asserted against the closed union"
+anti-rot: the ordered composition is the mock; reordering derivation after validation judges a payload by a template it chose
+
+### INV-MEMRING-5
+method-tag: reference-model
+fspec: —
+up-property: "ARCH-9 one layer down: `kind` selects `REQUIRED[kind]`, and `REQUIRED[kind]` IS the gate, so a caller choosing it is the confused deputy"
+down-model: "the four canonical shapes each derive their own kind; a tie is an ERROR rather than a first-match win, and the mutual exclusion the derivation rests on is asserted directly"
+anti-rot: the multi-match refusal is the mock; a first-match-wins fold files an ambiguous entry silently
+
+### INV-MEMRING-6
+method-tag: reference-model
+fspec: —
+up-property: "`actor` resolves to the empty string when neither source is present, so an empty owner is a REACHABLE value and an unowned record is a scoping key that matches by accident"
+down-model: "the shipped `put` over a real composed root; an empty owner is refused, and the CLI/MCP surfaces are enumerated for an owner flag"
+anti-rot: the empty-owner refusal is the mock; removing it mints a record every empty-actor caller is injected
+
+### INV-MEMRING-7
+method-tag: reference-model
+fspec: —
+up-property: "a fail-closed default only protects against exits that were NOT enumerated; enumerating a code assigns it a meaning, so the invocation itself must be measured against the live binary in BOTH directions"
+down-model: "the real binary is the oracle: a clean record must scan clean and a private-key record must be flagged, measured rather than read off the tool's docs"
+anti-rot: the argv is the mock; the shipped `detect --source -` exits 1 on clean input and turns the clean-scan leg red
+
+### INV-MEMRING-8
+method-tag: reference-model
+fspec: —
+up-property: "MEM-1 scoping is a predicate over a SHARED store, not access control — it bounds what a turn is served, and says so"
+down-model: "a two-seat durable store is the oracle; each seat's header is asserted to hold only its own, and the consultable kinds are asserted absent structurally AND by content"
+anti-rot: the `injectFor` owner filter is the mock; removing it leaks the other seat into the header
+
+### INV-MEMRING-9
+method-tag: reference-model
+fspec: —
+up-property: "a 'wave' is a property of the LEDGER, so a rule nobody re-affirms ages identically whether the process sleeps a second or a decade"
+down-model: "a real durable log is the oracle; a huge system-clock jump with no new entries must not move the set, and appending entries must"
+anti-rot: the decay term is the mock; returning the stored value unchanged turns the frecency legs red
+
+### INV-MEMRING-10
+method-tag: reference-model
+fspec: —
+up-property: "an absent source has exactly one honest rendering, and it is labeled — the alternative is a slab that reads true and is not"
+down-model: "the real repo root is the oracle: a seeded facet carries its grounding, and every absent one carries the sentinel"
+anti-rot: the sentinel is the mock; substituting a generic card makes an absent facet indistinguishable from a seeded one
+
+### INV-MEMRING-11
+method-tag: reference-model
+fspec: —
+up-property: "one wired handler behind both transports makes parity structural rather than copied — the property ARCH-5 already asserts for the knowledge doors, now asserted for a WRITE door for the first time"
+down-model: "the shared handler is the oracle; the same call is driven through both surfaces and the verdicts compared"
+anti-rot: the shared handler is the mock; a second, separately-composed door diverges under the same call
+
+### INV-MEMRING-12
+method-tag: exhaustive
+fspec: —
+up-property: "the surface is finite and enumerable, so correspondence is checked exhaustively rather than sampled"
+down-model: "`COMMANDS` is the oracle; the reference tree and the README region are compared against it in both directions"
+anti-rot: the guard's README leg is the mock; removing it lets the table drift, which is exactly how it reached ten rows against twenty-three commands
+

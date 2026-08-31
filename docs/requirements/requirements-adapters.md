@@ -419,3 +419,319 @@ normative-clause: "the server MUST NOT crash or drop the fail-closed verdict (TO
 - None new at S1. The register specifies every invariant fully; no design silence or contradiction surfaced
   during the lift. The S0 phase-deferred impl-DEFINEs (D4 disk-CAS layout · D5 the LLM · D6 the forge host) and
   the stale `MECHANISMS` code constant carry forward unchanged — none blocks a requirement.
+
+## CAMPAIGN-11 — the MEMORY RING (brownfield lift)
+
+> Each REQ recovers exactly one frozen clause of `reference/atlas-adapters.md` §Memory adapters into one
+> testable EARS sentence; each `unwanted[]` clause becomes its own `If-then` guard REQ. No behaviour invented.
+
+### REQ-MEMRING-1a — append-only and content-keyed, one record per line
+source: INV-MEMRING-1 @ reference/atlas-adapters.md#adapt-mem-1
+The memory ring shall append-only and content-keyed, one record per line.
+normative-clause: "append-only and content-keyed, one record per line"
+
+### REQ-MEMRING-1b — a record appended in one process is readable byte-identical in a later process
+source: INV-MEMRING-1 @ reference/atlas-adapters.md#adapt-mem-1
+The memory ring shall a record appended in one process is readable byte-identical in a later process.
+normative-clause: "a record appended in one process is readable byte-identical in a later process"
+
+### REQ-MEMRING-1c — NEVER rewrite, truncate or reorder an existing line
+source: INV-MEMRING-1 @ reference/atlas-adapters.md#adapt-mem-1
+The memory ring shall NEVER rewrite, truncate or reorder an existing line.
+normative-clause: "NEVER rewrite, truncate or reorder an existing line"
+
+### REQ-MEMRING-1d — a line whose id is not its own content hash is refused on read AND counted
+source: INV-MEMRING-1 @ reference/atlas-adapters.md#adapt-mem-1
+The memory ring shall a line whose id is not its own content hash is refused on read AND counted.
+normative-clause: "a line whose id is not its own content hash is refused on read AND counted"
+
+### REQ-MEMRING-1e — a torn or hand-edited line is folded in as a record
+source: INV-MEMRING-1 @ reference/atlas-adapters.md#adapt-mem-1
+If a torn or hand-edited line is folded in as a record, then the memory ring shall refuse rather than proceed.
+normative-clause: "a torn or hand-edited line is folded in as a record"
+
+### REQ-MEMRING-1f — an unreadable log is reported as an empty store
+source: INV-MEMRING-1 @ reference/atlas-adapters.md#adapt-mem-1
+If an unreadable log is reported as an empty store, then the memory ring shall refuse rather than proceed.
+normative-clause: "an unreadable log is reported as an empty store"
+
+### REQ-MEMRING-2a — two processes appending concurrently both land
+source: INV-MEMRING-2 @ reference/atlas-adapters.md#adapt-mem-2
+The memory ring shall two processes appending concurrently both land.
+normative-clause: "two processes appending concurrently both land"
+
+### REQ-MEMRING-2b — the fold contains every record either writer wrote
+source: INV-MEMRING-2 @ reference/atlas-adapters.md#adapt-mem-2
+The memory ring shall the fold contains every record either writer wrote.
+normative-clause: "the fold contains every record either writer wrote"
+
+### REQ-MEMRING-2c — a concurrent append silently overwrites another writer's record
+source: INV-MEMRING-2 @ reference/atlas-adapters.md#adapt-mem-2
+If a concurrent append silently overwrites another writer's record, then the memory ring shall refuse rather than proceed.
+normative-clause: "a concurrent append silently overwrites another writer's record"
+
+### REQ-MEMRING-3a — admitted to git (the log travels)
+source: INV-MEMRING-3 @ reference/atlas-adapters.md#adapt-mem-3
+The memory ring shall admitted to git (the log travels).
+normative-clause: "admitted to git (the log travels)"
+
+### REQ-MEMRING-3b — survives a plain text merge with 0 records lost and 0 spliced
+source: INV-MEMRING-3 @ reference/atlas-adapters.md#adapt-mem-3
+The memory ring shall survives a plain text merge with 0 records lost and 0 spliced.
+normative-clause: "survives a plain text merge with 0 records lost and 0 spliced"
+
+### REQ-MEMRING-3c — a duplicated line dedups by content id on the fold
+source: INV-MEMRING-3 @ reference/atlas-adapters.md#adapt-mem-3
+The memory ring shall a duplicated line dedups by content id on the fold.
+normative-clause: "a duplicated line dedups by content id on the fold"
+
+### REQ-MEMRING-3d — a branch merge loses a record
+source: INV-MEMRING-3 @ reference/atlas-adapters.md#adapt-mem-3
+If a branch merge loses a record, then the memory ring shall refuse rather than proceed.
+normative-clause: "a branch merge loses a record"
+
+### REQ-MEMRING-3e — a merge splices two records into one
+source: INV-MEMRING-3 @ reference/atlas-adapters.md#adapt-mem-3
+If a merge splices two records into one, then the memory ring shall refuse rather than proceed.
+normative-clause: "a merge splices two records into one"
+
+### REQ-MEMRING-4a — the gates run in the stated ORDER
+source: INV-MEMRING-4 @ reference/atlas-adapters.md#adapt-mem-4
+The memory ring shall the gates run in the stated ORDER.
+normative-clause: "the gates run in the stated ORDER"
+
+### REQ-MEMRING-4b — each refusal is a structured verdict NAMING the gate
+source: INV-MEMRING-4 @ reference/atlas-adapters.md#adapt-mem-4
+The memory ring shall each refusal is a structured verdict NAMING the gate.
+normative-clause: "each refusal is a structured verdict NAMING the gate"
+
+### REQ-MEMRING-4c — the door authors no policy of its own
+source: INV-MEMRING-4 @ reference/atlas-adapters.md#adapt-mem-4
+The memory ring shall the door authors no policy of its own.
+normative-clause: "the door authors no policy of its own"
+
+### REQ-MEMRING-4d — a record reaches disk having skipped a gate
+source: INV-MEMRING-4 @ reference/atlas-adapters.md#adapt-mem-4
+If a record reaches disk having skipped a gate, then the memory ring shall refuse rather than proceed.
+normative-clause: "a record reaches disk having skipped a gate"
+
+### REQ-MEMRING-4e — a refusal escapes as a thrown exception a caller can swallow
+source: INV-MEMRING-4 @ reference/atlas-adapters.md#adapt-mem-4
+If a refusal escapes as a thrown exception a caller can swallow, then the memory ring shall refuse rather than proceed.
+normative-clause: "a refusal escapes as a thrown exception a caller can swallow"
+
+### REQ-MEMRING-5a — the template is selected from the entry's SHAPE
+source: INV-MEMRING-5 @ reference/atlas-adapters.md#adapt-mem-5
+The memory ring shall the template is selected from the entry's SHAPE.
+normative-clause: "the template is selected from the entry's SHAPE"
+
+### REQ-MEMRING-5b — no caller-supplied argument selects it
+source: INV-MEMRING-5 @ reference/atlas-adapters.md#adapt-mem-5
+The memory ring shall no caller-supplied argument selects it.
+normative-clause: "no caller-supplied argument selects it"
+
+### REQ-MEMRING-5c — no-match and multi-match are BOTH refused, never guessed
+source: INV-MEMRING-5 @ reference/atlas-adapters.md#adapt-mem-5
+The memory ring shall no-match and multi-match are BOTH refused, never guessed.
+normative-clause: "no-match and multi-match are BOTH refused, never guessed"
+
+### REQ-MEMRING-5d — a caller files a payload under a template that judges it more leniently
+source: INV-MEMRING-5 @ reference/atlas-adapters.md#adapt-mem-5
+If a caller files a payload under a template that judges it more leniently, then the memory ring shall refuse rather than proceed.
+normative-clause: "a caller files a payload under a template that judges it more leniently"
+
+### REQ-MEMRING-5e — an ambiguous shape is filed under the first matching template
+source: INV-MEMRING-5 @ reference/atlas-adapters.md#adapt-mem-5
+If an ambiguous shape is filed under the first matching template, then the memory ring shall refuse rather than proceed.
+normative-clause: "an ambiguous shape is filed under the first matching template"
+
+### REQ-MEMRING-6a — owner = the composition root's resolved actor
+source: INV-MEMRING-6 @ reference/atlas-adapters.md#adapt-mem-6
+The memory ring shall owner = the composition root's resolved actor.
+normative-clause: "owner = the composition root's resolved actor"
+
+### REQ-MEMRING-6b — no transport flag sets it
+source: INV-MEMRING-6 @ reference/atlas-adapters.md#adapt-mem-6
+The memory ring shall no transport flag sets it.
+normative-clause: "no transport flag sets it"
+
+### REQ-MEMRING-6c — an empty owner is refused fail-closed
+source: INV-MEMRING-6 @ reference/atlas-adapters.md#adapt-mem-6
+The memory ring shall an empty owner is refused fail-closed.
+normative-clause: "an empty owner is refused fail-closed"
+
+### REQ-MEMRING-6d — a caller sets the owner of a record they write
+source: INV-MEMRING-6 @ reference/atlas-adapters.md#adapt-mem-6
+If a caller sets the owner of a record they write, then the memory ring shall refuse rather than proceed.
+normative-clause: "a caller sets the owner of a record they write"
+
+### REQ-MEMRING-6e — an unowned record is written and then injected to every empty-actor caller
+source: INV-MEMRING-6 @ reference/atlas-adapters.md#adapt-mem-6
+If an unowned record is written and then injected to every empty-actor caller, then the memory ring shall refuse rather than proceed.
+normative-clause: "an unowned record is written and then injected to every empty-actor caller"
+
+### REQ-MEMRING-7a — binds a NAMED binary actually present on PATH
+source: INV-MEMRING-7 @ reference/atlas-adapters.md#adapt-mem-7
+The memory ring shall binds a NAMED binary actually present on PATH.
+normative-clause: "binds a NAMED binary actually present on PATH"
+
+### REQ-MEMRING-7b — no scanner available means the write is REFUSED
+source: INV-MEMRING-7 @ reference/atlas-adapters.md#adapt-mem-7
+The memory ring shall no scanner available means the write is REFUSED.
+normative-clause: "no scanner available means the write is REFUSED"
+
+### REQ-MEMRING-7c — never redacted-and-continued
+source: INV-MEMRING-7 @ reference/atlas-adapters.md#adapt-mem-7
+The memory ring shall never redacted-and-continued.
+normative-clause: "never redacted-and-continued"
+
+### REQ-MEMRING-7d — a write lands with no scanner having run
+source: INV-MEMRING-7 @ reference/atlas-adapters.md#adapt-mem-7
+If a write lands with no scanner having run, then the memory ring shall refuse rather than proceed.
+normative-clause: "a write lands with no scanner having run"
+
+### REQ-MEMRING-7e — a clean record is refused because the invocation is wrong
+source: INV-MEMRING-7 @ reference/atlas-adapters.md#adapt-mem-7
+If a clean record is refused because the invocation is wrong, then the memory ring shall refuse rather than proceed.
+normative-clause: "a clean record is refused because the invocation is wrong"
+
+### REQ-MEMRING-7f — a secret-carrying record is admitted because the invocation always exits clean
+source: INV-MEMRING-7 @ reference/atlas-adapters.md#adapt-mem-7
+If a secret-carrying record is admitted because the invocation always exits clean, then the memory ring shall refuse rather than proceed.
+normative-clause: "a secret-carrying record is admitted because the invocation always exits clean"
+
+### REQ-MEMRING-8a — only the calling actor's own records — zero cross-seat
+source: INV-MEMRING-8 @ reference/atlas-adapters.md#adapt-mem-8
+The memory ring shall only the calling actor's own records — zero cross-seat.
+normative-clause: "only the calling actor's own records — zero cross-seat"
+
+### REQ-MEMRING-8b — task, pr and logbook NEVER ride the header
+source: INV-MEMRING-8 @ reference/atlas-adapters.md#adapt-mem-8
+The memory ring shall task, pr and logbook NEVER ride the header.
+normative-clause: "task, pr and logbook NEVER ride the header"
+
+### REQ-MEMRING-8c — they return ONLY via an explicit recall
+source: INV-MEMRING-8 @ reference/atlas-adapters.md#adapt-mem-8
+The memory ring shall they return ONLY via an explicit recall.
+normative-clause: "they return ONLY via an explicit recall"
+
+### REQ-MEMRING-8d — another seat's record appears in a header
+source: INV-MEMRING-8 @ reference/atlas-adapters.md#adapt-mem-8
+If another seat's record appears in a header, then the memory ring shall refuse rather than proceed.
+normative-clause: "another seat's record appears in a header"
+
+### REQ-MEMRING-8e — a consultable kind auto-injects on a running turn
+source: INV-MEMRING-8 @ reference/atlas-adapters.md#adapt-mem-8
+If a consultable kind auto-injects on a running turn, then the memory ring shall refuse rather than proceed.
+normative-clause: "a consultable kind auto-injects on a running turn"
+
+### REQ-MEMRING-8f — an unqualified read returns a general dump
+source: INV-MEMRING-8 @ reference/atlas-adapters.md#adapt-mem-8
+If an unqualified read returns a general dump, then the memory ring shall refuse rather than proceed.
+normative-clause: "an unqualified read returns a general dump"
+
+### REQ-MEMRING-9a — the injected set is the top-N by effective frecency, descending
+source: INV-MEMRING-9 @ reference/atlas-adapters.md#adapt-mem-9
+The memory ring shall the injected set is the top-N by effective frecency, descending.
+normative-clause: "the injected set is the top-N by effective frecency, descending"
+
+### REQ-MEMRING-9b — a decayed entry is evicted even when slots are free
+source: INV-MEMRING-9 @ reference/atlas-adapters.md#adapt-mem-9
+The memory ring shall a decayed entry is evicted even when slots are free.
+normative-clause: "a decayed entry is evicted even when slots are free"
+
+### REQ-MEMRING-9c — an evicted entry remains re-spawnable — nothing dies
+source: INV-MEMRING-9 @ reference/atlas-adapters.md#adapt-mem-9
+The memory ring shall an evicted entry remains re-spawnable — nothing dies.
+normative-clause: "an evicted entry remains re-spawnable — nothing dies"
+
+### REQ-MEMRING-9d — decay advances with the LOG's own head, never wall-clock
+source: INV-MEMRING-9 @ reference/atlas-adapters.md#adapt-mem-9
+The memory ring shall decay advances with the LOG's own head, never wall-clock.
+normative-clause: "decay advances with the LOG's own head, never wall-clock"
+
+### REQ-MEMRING-9e — a system-clock jump changes the injected set with no new log entries
+source: INV-MEMRING-9 @ reference/atlas-adapters.md#adapt-mem-9
+If a system-clock jump changes the injected set with no new log entries, then the memory ring shall refuse rather than proceed.
+normative-clause: "a system-clock jump changes the injected set with no new log entries"
+
+### REQ-MEMRING-9f — an evicted rule is unrecoverable
+source: INV-MEMRING-9 @ reference/atlas-adapters.md#adapt-mem-9
+If an evicted rule is unrecoverable, then the memory ring shall refuse rather than proceed.
+normative-clause: "an evicted rule is unrecoverable"
+
+### REQ-MEMRING-9g — a low-frecency entry is injected because slots happened to be free
+source: INV-MEMRING-9 @ reference/atlas-adapters.md#adapt-mem-9
+If a low-frecency entry is injected because slots happened to be free, then the memory ring shall refuse rather than proceed.
+normative-clause: "a low-frecency entry is injected because slots happened to be free"
+
+### REQ-MEMRING-10a — assembled from real sources
+source: INV-MEMRING-10 @ reference/atlas-adapters.md#adapt-mem-10
+The memory ring shall assembled from real sources.
+normative-clause: "assembled from real sources"
+
+### REQ-MEMRING-10b — an absent source renders the labeled UN-SEEDED sentinel
+source: INV-MEMRING-10 @ reference/atlas-adapters.md#adapt-mem-10
+The memory ring shall an absent source renders the labeled UN-SEEDED sentinel.
+normative-clause: "an absent source renders the labeled UN-SEEDED sentinel"
+
+### REQ-MEMRING-10c — never filled with invented text
+source: INV-MEMRING-10 @ reference/atlas-adapters.md#adapt-mem-10
+The memory ring shall never filled with invented text.
+normative-clause: "never filled with invented text"
+
+### REQ-MEMRING-10d — an absent facet is rendered as plausible prose
+source: INV-MEMRING-10 @ reference/atlas-adapters.md#adapt-mem-10
+If an absent facet is rendered as plausible prose, then the memory ring shall refuse rather than proceed.
+normative-clause: "an absent facet is rendered as plausible prose"
+
+### REQ-MEMRING-10e — a slab is served without its grounding
+source: INV-MEMRING-10 @ reference/atlas-adapters.md#adapt-mem-10
+If a slab is served without its grounding, then the memory ring shall refuse rather than proceed.
+normative-clause: "a slab is served without its grounding"
+
+### REQ-MEMRING-11a — an identical call yields a byte-identical Verdict on both transports
+source: INV-MEMRING-11 @ reference/atlas-adapters.md#adapt-mem-11
+The memory ring shall an identical call yields a byte-identical Verdict on both transports.
+normative-clause: "an identical call yields a byte-identical Verdict on both transports"
+
+### REQ-MEMRING-11b — a refusal carries the same named reason on both
+source: INV-MEMRING-11 @ reference/atlas-adapters.md#adapt-mem-11
+The memory ring shall a refusal carries the same named reason on both.
+normative-clause: "a refusal carries the same named reason on both"
+
+### REQ-MEMRING-11c — the two transports disagree on an admission
+source: INV-MEMRING-11 @ reference/atlas-adapters.md#adapt-mem-11
+If the two transports disagree on an admission, then the memory ring shall refuse rather than proceed.
+normative-clause: "the two transports disagree on an admission"
+
+### REQ-MEMRING-11d — a refusal reads differently over MCP than on the CLI
+source: INV-MEMRING-11 @ reference/atlas-adapters.md#adapt-mem-11
+If a refusal reads differently over MCP than on the CLI, then the memory ring shall refuse rather than proceed.
+normative-clause: "a refusal reads differently over MCP than on the CLI"
+
+### REQ-MEMRING-12a — every shipped memory command has a reference page
+source: INV-MEMRING-12 @ reference/atlas-adapters.md#adapt-mem-12
+The memory ring shall every shipped memory command has a reference page.
+normative-clause: "every shipped memory command has a reference page"
+
+### REQ-MEMRING-12b — every shipped memory command has a README table row
+source: INV-MEMRING-12 @ reference/atlas-adapters.md#adapt-mem-12
+The memory ring shall every shipped memory command has a README table row.
+normative-clause: "every shipped memory command has a README table row"
+
+### REQ-MEMRING-12c — neither names a command that does not ship
+source: INV-MEMRING-12 @ reference/atlas-adapters.md#adapt-mem-12
+The memory ring shall neither names a command that does not ship.
+normative-clause: "neither names a command that does not ship"
+
+### REQ-MEMRING-12d — a shipped command is absent from the README table
+source: INV-MEMRING-12 @ reference/atlas-adapters.md#adapt-mem-12
+If a shipped command is absent from the README table, then the memory ring shall refuse rather than proceed.
+normative-clause: "a shipped command is absent from the README table"
+
+### REQ-MEMRING-12e — the README table advertises a command that does not run
+source: INV-MEMRING-12 @ reference/atlas-adapters.md#adapt-mem-12
+If the README table advertises a command that does not run, then the memory ring shall refuse rather than proceed.
+normative-clause: "the README table advertises a command that does not run"
+
