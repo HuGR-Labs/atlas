@@ -396,7 +396,8 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
   // read at all" (`true` for `trusted`/`tracked-provable`, `false` for `tracked-staging`/fail-closed) —
   // `readAccess.store` itself already carries the FILTER for `tracked-provable`, so the boolean only needs
   // to gate the flat-refusal case, exactly as `doctor-source.ts`'s `refuseUntrustedRead` expects.
-  const doctorSource = createDoctorSource(readAccess.store, revIndex, () => readAccess.refusal === undefined);
+  const doctorSource = createDoctorSource(readAccess.store, revIndex, () => readAccess.refusal === undefined,
+    join(repoPath, CAS_REL)); // ADR-0022: the CAS root, from the ONE place that already knows it
 
   // The provenance verdict, resolved ONCE by `buildReadAccess` above and handed to the entrypoint.
   // Conditional spread keeps it ABSENT (not `undefined`) on a healthy repo — `exactOptionalPropertyTypes`,

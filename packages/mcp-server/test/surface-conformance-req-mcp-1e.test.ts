@@ -74,6 +74,7 @@ const fakeReadLegs = (): ReadSurfaceLegs => ({
     lineage: () => [],
     drift: () => undefined,
     hotSetSize: () => 0,
+    casAudit: () => ({ objects: 0, corrupt: [], unreadable: [], missing: [], orphan: 0, referenced: 0, sound: true }),
     plan: () => undefined,
   } as DoctorSource,
 });

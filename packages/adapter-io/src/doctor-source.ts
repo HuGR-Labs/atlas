@@ -45,10 +45,13 @@
 
 import type { Freshness, Hash, StructRef } from '@atlas/contracts';
 import type { GroundingEntry } from '@atlas/grounding';
-import { asHash } from '@atlas/kernel';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { asHash, id } from '@atlas/kernel';
+import type { CasObject } from '@atlas/kernel';
 import { currentNodes } from '@atlas/knowledge';
 import type { GroundedFact } from '@atlas/knowledge';
-import type { DoctorSource, DriftItem } from '@atlas/tools';
+import type { CasIntegrity, DoctorSource, DriftItem } from '@atlas/tools';
 import type { RevIndex } from './rev-index.js';
 import { rehydrateProjection } from './store.js';
 import type { DiskStore } from './store.js';
@@ -187,7 +190,12 @@ export function retireTemplate(fact: GroundedFact): GroundedFact {
  * `store.get(contentHash)` returns the WHOLE fact governed-emit `put`), so `drift`/`plan` operate on the
  * recorded grounding, never a re-derived guess.
  */
-export function createDoctorSource(store: DiskStore, revIndex: RevIndex, trusted?: SidecarTrust): DoctorSource {
+export function createDoctorSource(
+  store: DiskStore,
+  revIndex: RevIndex,
+  trusted?: SidecarTrust,
+  casPath?: string,
+): DoctorSource {
   /** The current nodes of the rehydrated durable projection (exactly one per nodeKey).
    *
    *  PROVENANCE FIRST, and this is the ONE place in this module that is not total. Every doctor leg funnels
@@ -273,5 +281,100 @@ export function createDoctorSource(store: DiskStore, revIndex: RevIndex, trusted
     return { action: 'reground', emit: regroundTemplate(grounded, resolved) };
   };
 
-  return { hotSetSize, lineage, drift, plan };
+  /**
+   * ADR-0022 — the CAS integrity audit. Re-derives every object's address from its own bytes and compares
+   * that to the filename it is filed under, then reconciles the present set against the set the sidecars
+   * reference.
+   *
+   * ── WHY IT IS TOTAL, AND WHY THAT IS NOT THE USUAL LAZINESS ─────────────────────────────────────────────
+   * Every other leg here funnels through a provenance guard that THROWS, because reporting health for state
+   * you refused to read is worse than reporting nothing. This leg is the exception, deliberately: it is the
+   * one leg whose subject is the storage itself. An absent CAS root, an unreadable directory, a file that
+   * disappears mid-walk — those are the CONDITIONS this leg exists to describe, so turning them into a
+   * throw would make the instrument fail exactly where the fault is. The honest zero (`objects: 0`) is not
+   * ambiguous the way a zero hot-set was, because `referenced` is reported beside it: zero objects against a
+   * non-zero referenced count is a loud, visible `missing` list, not a quiet clean bill of health.
+   *
+   * ── WHAT `sound` MEANS, AND WHAT IT DOES NOT ────────────────────────────────────────────────────────────
+   * `corrupt ∪ unreadable ∪ missing` empty. `orphan` is EXCLUDED on purpose: the CAS is append-only and
+   * content-keyed, so an object outliving the sidecar that referenced it is ordinary, not a defect.
+   */
+  const casAudit = (): CasIntegrity => {
+    const empty: CasIntegrity = {
+      objects: 0, corrupt: [], unreadable: [], missing: [], orphan: 0, referenced: 0, sound: true,
+    };
+    if (casPath === undefined) return empty;
+
+    // The bytes actually on disk, at `<cas>/<xx>/<h>`. A shard that cannot be listed contributes nothing
+    // rather than aborting the walk — a single unreadable directory must not blind the audit to the rest.
+    const present = new Set<string>();
+    const corrupt: string[] = [];
+    const unreadable: string[] = [];
+    let shards: string[];
+    try {
+      shards = readdirSync(casPath, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
+    } catch {
+      shards = [];
+    }
+    for (const shard of shards) {
+      let files: string[];
+      try {
+        files = readdirSync(join(casPath, shard), { withFileTypes: true }).filter((e) => e.isFile()).map((e) => e.name);
+      } catch {
+        continue;
+      }
+      for (const name of files) {
+        present.add(name);
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(readFileSync(join(casPath, shard, name), 'utf8'));
+        } catch {
+          unreadable.push(name);
+          continue;
+        }
+        // THE CHECK. `id()` is the same sealed canonicalize-then-hash seam `store.put` addressed the object
+        // with, so a mismatch means the bytes changed after they were filed — the one thing a content-
+        // addressed store promises cannot happen silently. `id` can throw on a value it cannot canonicalize;
+        // that is `unreadable`, not `corrupt`, because nothing was proven about the address either way.
+        let addr: string;
+        try {
+          addr = id(parsed as CasObject);
+        } catch {
+          unreadable.push(name);
+          continue;
+        }
+        if (addr !== name) corrupt.push(name);
+      }
+    }
+
+    // What the PROJECTION points at, read through the store's own trusted loader — so this leg cannot see
+    // a projection the read doors would have refused.
+    //
+    // [STATED LIMIT — STAGING IS NOT IN THE REFERENCED SET, AND THAT IS NOT AN OVERSIGHT.] `loadStaging` was
+    // DELETED on purpose (task #83: "THERE IS EXACTLY ONE STAGING DOOR, AND THAT IS DELIBERATE"), so there
+    // is no read path to the staged candidate set that does not reopen a door someone closed with a reason.
+    // The consequence is precise and one-directional: an object referenced ONLY by staging counts as
+    // `orphan`. It can never make `sound` false — `orphan` is excluded from `sound` — so the limit costs a
+    // count's precision and cannot manufacture a fault. Stated here rather than left for a reader to
+    // discover from a surprising number.
+    const referenced = new Set<string>(store.loadProjection()?.cas ?? []);
+
+    const missing = [...referenced].filter((h) => !present.has(h)).sort();
+    let orphan = 0;
+    for (const h of present) if (!referenced.has(h)) orphan += 1;
+
+    corrupt.sort();
+    unreadable.sort();
+    return {
+      objects: present.size,
+      corrupt: corrupt as readonly string[] as readonly Hash[],
+      unreadable: unreadable as readonly string[] as readonly Hash[],
+      missing: missing as readonly string[] as readonly Hash[],
+      orphan,
+      referenced: referenced.size,
+      sound: corrupt.length === 0 && unreadable.length === 0 && missing.length === 0,
+    };
+  };
+
+  return { hotSetSize, lineage, drift, plan, casAudit };
 }

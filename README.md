@@ -198,17 +198,31 @@ the numbers on this page most likely to rot.
 - **Holds: schema and verdict parity.** The MCP server does not hand-author anything — it reads
   `handler.schema(tool)` verbatim, and both transports route the same call through the one wired handler,
   so an identical input yields a byte-identical `Verdict` on the CLI and over MCP (TOOLS-3).
-- **Does NOT hold: surface parity.** The CLI exposes **23** commands; MCP advertises
-  `GOVERNANCE_SURFACE ∪ READ_SURFACE` (ADR-0006) — **11** tools (5 governance + 6 read), both arrays in
-  `packages/tools/src/handler.ts`. Campaign 10 exported `READ_SURFACE`, which moved `doctor`, `node`,
-  `anchors`, `slots`, `draft` and `check` onto MCP; the earlier version of this bullet said `READ_SURFACE`
-  was unexported and that MCP advertised five tools, and both stopped being true when that campaign closed.
-  **The remaining 12 commands are CLI-only and unreachable over MCP**: `mine`, `promote`, `own`,
-  `relations`, `negations`, `transitions`, `transition`, `test-vacuities`, `test-vacuity`, `verify-fact`,
-  `verify-store`, `derive-relations`. The writers among them publish through `atlas-emit` (ADR-0008 — an
-  ordinary use of the existing door, not new surface), so no tool token exists for them. **No gate holds
-  this bullet**, unlike the command table above it; it is prose, and it is the paragraph on this page most
-  exposed to the next surface change.
+- **Does NOT hold: surface parity.**
+  <!-- transport-parity:begin -->
+  The CLI exposes **28** commands; MCP advertises **18** tools (6 governance + 10 read + 2 parallel-path).
+  The first two groups are `GOVERNANCE_SURFACE ∪ READ_SURFACE` (ADR-0006), both arrays in
+  `packages/tools/src/handler.ts`. The third is `atlas-relations` (#99a) and `atlas-negations` (#99b),
+  advertised through a documented path that deliberately leaves both surface constants untouched — so
+  "MCP advertises the union" was never the whole truth, and this bullet asserted it for two campaigns.
+  **The remaining 10 commands are CLI-only and unreachable over MCP**: `mine`, `promote`, `own`,
+  `transitions`, `transition`, `test-vacuities`, `test-vacuity`, `verify-fact`,
+  `verify-store`, `derive-relations`.
+  <!-- transport-parity:end -->
+  The writers among them publish through `atlas-emit` (ADR-0008 — an ordinary use of the existing door, not
+  new surface), so no tool token exists for them.
+- **This bullet used to rot, and predicted it in writing.** Campaign 10 exported `READ_SURFACE`, moving
+  `doctor`, `node`, `anchors`, `slots`, `draft` and `check` onto MCP; campaign 11 then added the memory door
+  set — one governance write door and four read doors — and five commands to go with them. After each move
+  the numbers here were wrong, and after the second they were wrong by five commands and five tools while
+  the paragraph itself carried the sentence *"No gate holds this bullet… it is the paragraph on this page
+  most exposed to the next surface change."* Correct, and useless: naming an unguarded claim does not guard
+  it. `command-doc-guard` now reads the delimited region above and checks all five numbers and the CLI-only
+  list against source, so the next surface change breaks the build instead of the prose. Its first version
+  got this wrong in an instructive way: it derived the advertised set from the two surface arrays, agreed
+  with the bullet, and would have certified `relations` and `negations` as unreachable — which running the
+  real stdio server disproved in one call (`tools/list` returns eighteen names, not sixteen). The arrays are
+  the model; the server is the path. The gate now reads both.
 
 ## Build order
 

@@ -187,6 +187,7 @@ describe('WP-10.A5.TOOLS — every READ_SURFACE member carries ZERO write author
       lineage: () => ['cas:1' as Hash],
       drift: () => undefined,
       hotSetSize: () => 3,
+      casAudit: () => ({ objects: 0, corrupt: [], unreadable: [], missing: [], orphan: 0, referenced: 0, sound: true }),
       plan: () => undefined,
     });
     doctor.archive('core');
