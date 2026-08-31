@@ -215,3 +215,106 @@ the phase can't start without the ruling:
   to a ring-scoped composition clause (new CLI-4); relabelled the MECHANISMS drift as a stale code constant.
 - **STATUS: S0 freeze-READY, pending owner (DEFINE seat) sign-off.** On sign-off → tag `freeze/adapters-v0`;
   S1 (EARS) may begin.
+
+## CAMPAIGN-11 — the MEMORY RING (brownfield lift, 2026-08-30)
+
+> Family **MEMRING**, disjoint from the package's own `MEM-1..13` — those are `@atlas/memory`'s
+> invariants; these are the RING's. Every row lifts one clause of `reference/atlas-adapters.md`
+> §Memory adapters verbatim.
+
+### INV-MEMRING-1
+behavioural: true
+anchor: reference/atlas-adapters.md#adapt-mem-1
+text: "the memory ring MUST: append-only and content-keyed, one record per line; a record appended in one process is readable byte-identical in a later process; NEVER rewrite, truncate or reorder an existing line; a line whose id is not its own content hash is refused on read AND counted. It MUST NOT permit: a torn or hand-edited line is folded in as a record; an unreadable log is reported as an empty store."
+clauses: [ "append-only and content-keyed, one record per line", "a record appended in one process is readable byte-identical in a later process", "NEVER rewrite, truncate or reorder an existing line", "a line whose id is not its own content hash is refused on read AND counted" ]
+unwanted: [ "a torn or hand-edited line is folded in as a record", "an unreadable log is reported as an empty store" ]
+method-tag: reference-model
+
+### INV-MEMRING-2
+behavioural: true
+anchor: reference/atlas-adapters.md#adapt-mem-2
+text: "the memory ring MUST: two processes appending concurrently both land; the fold contains every record either writer wrote. It MUST NOT permit: a concurrent append silently overwrites another writer's record."
+clauses: [ "two processes appending concurrently both land", "the fold contains every record either writer wrote" ]
+unwanted: [ "a concurrent append silently overwrites another writer's record" ]
+method-tag: reference-model
+
+### INV-MEMRING-3
+behavioural: true
+anchor: reference/atlas-adapters.md#adapt-mem-3
+text: "the memory ring MUST: admitted to git (the log travels); survives a plain text merge with 0 records lost and 0 spliced; a duplicated line dedups by content id on the fold. It MUST NOT permit: a branch merge loses a record; a merge splices two records into one."
+clauses: [ "admitted to git (the log travels)", "survives a plain text merge with 0 records lost and 0 spliced", "a duplicated line dedups by content id on the fold" ]
+unwanted: [ "a branch merge loses a record", "a merge splices two records into one" ]
+method-tag: reference-model
+
+### INV-MEMRING-4
+behavioural: true
+anchor: reference/atlas-adapters.md#adapt-mem-4
+text: "the memory ring MUST: the gates run in the stated ORDER; each refusal is a structured verdict NAMING the gate; the door authors no policy of its own. It MUST NOT permit: a record reaches disk having skipped a gate; a refusal escapes as a thrown exception a caller can swallow."
+clauses: [ "the gates run in the stated ORDER", "each refusal is a structured verdict NAMING the gate", "the door authors no policy of its own" ]
+unwanted: [ "a record reaches disk having skipped a gate", "a refusal escapes as a thrown exception a caller can swallow" ]
+method-tag: exhaustive
+
+### INV-MEMRING-5
+behavioural: true
+anchor: reference/atlas-adapters.md#adapt-mem-5
+text: "the memory ring MUST: the template is selected from the entry's SHAPE; no caller-supplied argument selects it; no-match and multi-match are BOTH refused, never guessed. It MUST NOT permit: a caller files a payload under a template that judges it more leniently; an ambiguous shape is filed under the first matching template."
+clauses: [ "the template is selected from the entry's SHAPE", "no caller-supplied argument selects it", "no-match and multi-match are BOTH refused, never guessed" ]
+unwanted: [ "a caller files a payload under a template that judges it more leniently", "an ambiguous shape is filed under the first matching template" ]
+method-tag: reference-model
+
+### INV-MEMRING-6
+behavioural: true
+anchor: reference/atlas-adapters.md#adapt-mem-6
+text: "the memory ring MUST: owner = the composition root's resolved actor; no transport flag sets it; an empty owner is refused fail-closed. It MUST NOT permit: a caller sets the owner of a record they write; an unowned record is written and then injected to every empty-actor caller."
+clauses: [ "owner = the composition root's resolved actor", "no transport flag sets it", "an empty owner is refused fail-closed" ]
+unwanted: [ "a caller sets the owner of a record they write", "an unowned record is written and then injected to every empty-actor caller" ]
+method-tag: reference-model
+
+### INV-MEMRING-7
+behavioural: true
+anchor: reference/atlas-adapters.md#adapt-mem-7
+text: "the memory ring MUST: binds a NAMED binary actually present on PATH; no scanner available means the write is REFUSED; never redacted-and-continued. It MUST NOT permit: a write lands with no scanner having run; a clean record is refused because the invocation is wrong; a secret-carrying record is admitted because the invocation always exits clean."
+clauses: [ "binds a NAMED binary actually present on PATH", "no scanner available means the write is REFUSED", "never redacted-and-continued" ]
+unwanted: [ "a write lands with no scanner having run", "a clean record is refused because the invocation is wrong", "a secret-carrying record is admitted because the invocation always exits clean" ]
+method-tag: reference-model
+
+### INV-MEMRING-8
+behavioural: true
+anchor: reference/atlas-adapters.md#adapt-mem-8
+text: "the memory ring MUST: only the calling actor's own records — zero cross-seat; task, pr and logbook NEVER ride the header; they return ONLY via an explicit recall. It MUST NOT permit: another seat's record appears in a header; a consultable kind auto-injects on a running turn; an unqualified read returns a general dump."
+clauses: [ "only the calling actor's own records — zero cross-seat", "task, pr and logbook NEVER ride the header", "they return ONLY via an explicit recall" ]
+unwanted: [ "another seat's record appears in a header", "a consultable kind auto-injects on a running turn", "an unqualified read returns a general dump" ]
+method-tag: reference-model
+
+### INV-MEMRING-9
+behavioural: true
+anchor: reference/atlas-adapters.md#adapt-mem-9
+text: "the memory ring MUST: the injected set is the top-N by effective frecency, descending; a decayed entry is evicted even when slots are free; an evicted entry remains re-spawnable — nothing dies; decay advances with the LOG's own head, never wall-clock. It MUST NOT permit: a system-clock jump changes the injected set with no new log entries; an evicted rule is unrecoverable; a low-frecency entry is injected because slots happened to be free."
+clauses: [ "the injected set is the top-N by effective frecency, descending", "a decayed entry is evicted even when slots are free", "an evicted entry remains re-spawnable — nothing dies", "decay advances with the LOG's own head, never wall-clock" ]
+unwanted: [ "a system-clock jump changes the injected set with no new log entries", "an evicted rule is unrecoverable", "a low-frecency entry is injected because slots happened to be free" ]
+method-tag: reference-model
+
+### INV-MEMRING-10
+behavioural: true
+anchor: reference/atlas-adapters.md#adapt-mem-10
+text: "the memory ring MUST: assembled from real sources; an absent source renders the labeled UN-SEEDED sentinel; never filled with invented text. It MUST NOT permit: an absent facet is rendered as plausible prose; a slab is served without its grounding."
+clauses: [ "assembled from real sources", "an absent source renders the labeled UN-SEEDED sentinel", "never filled with invented text" ]
+unwanted: [ "an absent facet is rendered as plausible prose", "a slab is served without its grounding" ]
+method-tag: reference-model
+
+### INV-MEMRING-11
+behavioural: true
+anchor: reference/atlas-adapters.md#adapt-mem-11
+text: "the memory ring MUST: an identical call yields a byte-identical Verdict on both transports; a refusal carries the same named reason on both. It MUST NOT permit: the two transports disagree on an admission; a refusal reads differently over MCP than on the CLI."
+clauses: [ "an identical call yields a byte-identical Verdict on both transports", "a refusal carries the same named reason on both" ]
+unwanted: [ "the two transports disagree on an admission", "a refusal reads differently over MCP than on the CLI" ]
+method-tag: reference-model
+
+### INV-MEMRING-12
+behavioural: true
+anchor: reference/atlas-adapters.md#adapt-mem-12
+text: "the memory ring MUST: every shipped memory command has a reference page; every shipped memory command has a README table row; neither names a command that does not ship. It MUST NOT permit: a shipped command is absent from the README table; the README table advertises a command that does not run."
+clauses: [ "every shipped memory command has a reference page", "every shipped memory command has a README table row", "neither names a command that does not ship" ]
+unwanted: [ "a shipped command is absent from the README table", "the README table advertises a command that does not run" ]
+method-tag: exhaustive
+
