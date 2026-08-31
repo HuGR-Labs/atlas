@@ -4,6 +4,10 @@ The map. Docs follow **[CONVENTIONS.md](./CONVENTIONS.md)** — Diátaxis × doc
 grounded (the docs dogfood the Atlas: reference is pinned to `source@sha` and drift-checked).
 
 ## Start here
+- **[SESSION-STATE.md](./SESSION-STATE.md)** — *if you are a session picking this repository up cold, read
+  this first.* Where the work stands, how to re-derive every figure on it, what is decided and what is
+  merely believed, and the open decisions that are the owner's to take. Dated: check its baseline commit
+  against `master` before trusting its measurements.
 - **[../README.md](../README.md)** — what the Atlas is + the build order.
 - **[method/README.md](./method/README.md)** — the decomposition method that produced this spec.
 - **[CONVENTIONS.md](./CONVENTIONS.md)** — how we document (this contract).
