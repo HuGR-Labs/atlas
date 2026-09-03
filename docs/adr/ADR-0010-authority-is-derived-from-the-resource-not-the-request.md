@@ -2,9 +2,11 @@
 
 - **Status:** Accepted (owner-ruled 2026-09-03). The two impose legs were Proposed (2026-08-01); the
   CREATE-leg CREATE question and the ratifier-token question are now owner-decided (§"Owner ruling"), which
-  resolves the OPEN DEFINE that previously made the ADR a proposal. **Implementation** of items 1 and 3
-  (wire the `DOOR_RATIFY_CTX` derivation; derive `scope` from `primaryAnchor`) is still open and is
-  ARCH-D3b's implementation scope.
+  resolves the OPEN DEFINE that previously made the ADR a proposal. **Implementation** of item 1 (wire the
+  `DOOR_RATIFY_CTX` derivation) plus the USE-OR-SEAL growth path (owner ruling) is ARCH-D3b's remaining
+  scope. Item 3 (`scope`↔`primaryAnchor`) is **CLOSED in code** — shipped by WP-10.A3 (#251): the authz
+  gate runs `scopeOwnsAnchor` backed by `authz.anchors` and refuses an anchor not owned by the declared
+  scope.
 - **Spec author:** seat `RATIFY-AUTHORITY`, grounded against `572d391` (branch
   `governance-class-is-a-node-property`).
 - **Implements:** `ARCH-9` and `ARCH-10` (`docs/reference/atlas-architecture.md` §3.2), tracked as
@@ -136,11 +138,13 @@ self-named ratifier is enough to put a SERVED invariant into a pack.
    records; ARCH-9 explicitly forbids answering it with "a constant that pins the gate open".
    *[OWNER DECIDED 2026-09-03 — see ruling item 2: CREATE is T2-by-construction; growth is by USE-OR-SEAL,
    neither mandatory.]*
-3. **`scope` ↔ `primaryAnchor` binding.** Authz gates on the declared `scope`; the read projection scopes on
-   the derived `primaryAnchor`; nothing binds them. Binding them needs a scope↔anchor mapping in
-   `adapter-io/policy.ts` and a decision about which scope owns which anchor prefix. NOT addressed here —
-   the reducer's relocation gate only stops a CARRIED node from MOVING; it does not make the initial
-   declaration earned. *[OWNER: implement — same derivation rule as item 1.]*
+3. **`scope` ↔ `primaryAnchor` binding — CLOSED in code (WP-10.A3, #251).** The write door's authz gate
+   binds the declared `scope` to the derived `primaryAnchor`: `evalAuthzGate` (governed-emit-gates.ts) runs
+   `actorInScope` then `scopeOwnsAnchor` (policy.ts, backed by `authz.anchors`) and refuses
+   `REJECTED_UNAUTHORIZED_ANCHOR` when the scope does not own the fact's real anchor. A fact anchored in
+   `src/payments` declared under `scope:'public'` is refused. The open-item wording below predates that
+   shipment; the code closed it. *[This ADR item is historical — see the architecture §3.4 for the current
+   statement.]*
 4. **Whether the ratifier token becomes verifiable.** Doing so needs a verifier and a key-distribution story
    this product does not have. Until then, §3.3's posture stands and the prose must keep saying so.
    *[OWNER DECIDED 2026-09-03 — see ruling item 3: the seal token is ONE of two growth evidences, not a
@@ -179,11 +183,13 @@ Three commitments follow, each now owner-ratified:
    Making it verifiable is still not warranted under the local posture; the `service-gate-guard` tripwire
    (ARCH-12) re-opens the question the moment a remote/multi-tenant transport is attempted.
 
-**What this means for items 1 and 3 (now implementation scope of ARCH-D3b):**
+**What this means for items 1 and 3 (implementation scope of ARCH-D3b):**
 - Item 1 = wire the `DOOR_RATIFY_CTX` derivation: `lowRisk` from the KNOW-17 hits-threshold verdict,
   `contested` from the KNOW-18b store-veto, on the emit door. The foundations exist (`hits.ts`, the
   KNOW-18 design); this connects the door to them.
-- Item 3 = derive `scope` from `primaryAnchor` so authz cannot be claimed by declaration.
+- Item 3 = **CLOSED in code** (WP-10.A3, #251): `evalAuthzGate` runs `scopeOwnsAnchor` backed by
+  `authz.anchors`, so authz cannot be claimed by declaration — a fact anchored in `src/payments` under
+  `scope:'public'` is refused. No further implementation.
 5. **The architecture doc's decision table** still shows ARCH-D3b as OPEN (correct) but its ARCH-9 row
    predates this ADR. Updating `docs/reference/atlas-architecture.md` is deliberately NOT done here: three
    other seats are live on this base and that file is not this seat's to edit.
