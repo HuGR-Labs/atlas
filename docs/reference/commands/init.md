@@ -20,7 +20,9 @@ atlas init <path>
 
 ## Worked example
 
-A fresh git repo with `README.md` and `src/{greet,math}.ts`:
+A fresh git repo with `README.md` and `src/{greet,math}.ts`, a **built structural index**, and a
+`.atlas/policy.json` that declares a T0 keyword matching the `src` territory (the heuristic in
+`packages/adapter-io/src/compose.ts`) and authorizes `dev@example.com` over `src`:
 
 ```
 $ atlas init .
@@ -28,11 +30,21 @@ status: ok
 next: review the T2/advisory move-in skeleton, then promote territories via atlas-emit
 invariant: TOOLS-5: $0-LLM structural move-in, no auto-promotion above T2
 data:
+  territory: .atlas
   territory: README.md
   territory: src
+  t0Candidate: src
 gitignore: created /tmp/demo/.gitignore denying .atlas/* (Atlas's durable store is DATA, never source)
 # exit 0
 ```
+
+The `data:` block is the whole `InitOut` record rendered (render.ts init leg): the `territory:` lines, then
+`blastRadius:` and `t0Candidate:` groups — each printed only when its set is non-empty. Here the `src`
+territory hits the declared T0 keyword, so it renders `t0Candidate: src`. The flag promotes nothing: the
+territory still moves in at T2 (TOOLS-5).
+
+> The transcript above is ILLUSTRATIVE — it shows the populated output for a repo whose structural index
+> is built. On a repo with no index the territory set is empty and no `data:` block renders at all.
 
 Run it a second time and the ignore line changes — the rule is installed once, and `init` says so rather
 than rewriting it:
@@ -44,14 +56,14 @@ next: review the T2/advisory move-in skeleton, then promote territories via atla
 invariant: TOOLS-5: $0-LLM structural move-in, no auto-promotion above T2
 data:
   territory: .atlas
-  territory: .gitignore
   territory: README.md
   territory: src
+  t0Candidate: src
 gitignore: .atlas/* already denied in /tmp/demo/.gitignore — nothing to do
 # exit 0
 ```
 
-(The second run lists `.gitignore` because the first run created it.)
+(The second run is byte-identical apart from the `gitignore:` line — the walk reports the same territories.)
 
 The path selects what is walked. Same repository, same moment, three paths:
 
@@ -60,11 +72,14 @@ $ atlas init src
 data:
   territory: src/greet.ts
   territory: src/math.ts
+  t0Candidate: src/greet.ts
+  t0Candidate: src/math.ts
 # exit 0
 
 $ atlas init src/greet.ts
 data:
   territory: src/greet.ts
+  t0Candidate: src/greet.ts
 # exit 0
 
 $ atlas init README.md
@@ -74,10 +89,12 @@ data:
 ```
 
 (Real runs, trimmed to the `data:` block and the exit code; the `status:`/`next:`/`invariant:`/`gitignore:`
-lines are identical to the first transcript. The absolute path is shortened to `/tmp/demo`.)
+lines are identical to the first transcript. The absolute path is shortened to `/tmp/demo`. `README.md`
+contains no keyword match and no reverse-dependency closure, so it renders only its `territory:` line.)
 
-A directory reports what is under it; a file reports itself. A file is never decomposed into the sub-file
-AST units the index folds beneath it — a territory is a file or a directory.
+A directory reports what is under it — flagging, per file, the keyword match — and a file reports itself. A
+file is never decomposed into the sub-file AST units the index folds beneath it: a territory is a file or a
+directory.
 
 Every territory moves in at **T2/advisory** with zero invariants. `init` promotes nothing — promotion is a
 separate governed write through [`emit`](./emit.md).
@@ -116,9 +133,13 @@ separate governed write through [`emit`](./emit.md).
 
 ## Things worth knowing before you rely on it
 
-- **The blast radius is computed and not rendered.** `<path>` selects both the territory list (shown) and
-  the reverse-dependency blast radius (not shown by the CLI). Over MCP the whole `InitOut` comes back, so
-  `blastRadius` is readable there.
+- **The CLI renders the whole `InitOut` record.** `packages/cli/src/render.ts` prints the `territory:`
+  lines, then a `blastRadius:` group and a `t0Candidate:` group — each group only when its set is non-empty
+  (a measured absence, never a header for an empty set). The `t0Candidate:` line in the worked example is
+  real: the fixture's `policy.json` declares the `src` keyword. `blastRadius:` appears when the
+  reverse-dependency closure of the walked path is non-empty — a source unit other units import from, once
+  the index records the dependency edges and the dependent facts exist; it is empty in the fixture above.
+  Over MCP the whole `InitOut` comes back as JSON either way, so nothing the CLI omits is lost to an agent.
 - **The `.gitignore` write is CLI-only.** It happens at the CLI entrypoint, not behind the `atlas-init`
   tool, so an MCP `atlas-init` call moves in *without* installing the ignore rule. It is also attempted on
   the refusal path above, so a refused `init` can still print a `gitignore:` line.

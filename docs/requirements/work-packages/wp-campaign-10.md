@@ -578,7 +578,9 @@ title: A help door derived from the command map, and a render that drops nothing
 intent: >
   There is no help in the product today, and `atlas init` shows one of its three fields. Derive help from the
   parser's own command map and the composition root's env reads, and make every leg render its whole record.
-  (Non-authoritative handle.)
+  (Non-authoritative handle.) — **STATUS 2026-09-03: SHIPPED.** `atlas help` exists (top-level, derived from
+  the command map, exit 0); `atlas init` renders all three of its fields (`territory`, `blastRadius`,
+  `t0Candidate`). Closed by `help-cli.test.ts` + SCN-CLI-6b-1.
 source_reqs:                                   # ptr+digest
   - source: ../requirements-authoring.md#REQ-CLI-5a   # ptr+digest
   - source: ../requirements-authoring.md#REQ-CLI-5b   # ptr+digest

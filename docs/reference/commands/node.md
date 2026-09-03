@@ -4,7 +4,8 @@ Read one fact back whole, by its content address. `query` gives you a bounded pa
 `node` is the drill-down that shows a single fact's identity, tier, kind and claim. Read-only — it opens no
 write path.
 
-This page describes the **CLI** command `atlas node`. There is **no `atlas-node` MCP tool**.
+This page describes the **CLI** command `atlas node`. The MCP tool is **`atlas-node`**, a
+`READ_SURFACE` member advertised over MCP — see *Transport differences*.
 
 ## Invocation
 
@@ -84,14 +85,22 @@ the tripwire normally lives — so the refusal is applied on this leg explicitly
 came back whole with `ok:true` while every write door was denying. See [`query`](./query.md) for the text.
 
 **Writing.** `node` resolves through a read-only port with no store-mutating method. Writes funnel through
-[`emit`](./emit.md) and [`link`](./link.md); there is no third door.
+[`emit`](./emit.md), [`link`](./link.md), and `memory-emit` (WP-11.W8) — these three governed
+`WRITE_PATHS` doors (`packages/tools/src/handler.ts`).
 
 ## Transport differences
 
-`node` is **CLI-only**. Verified against the real MCP stdio server: `tools/list` returns `atlas-init`,
-`atlas-query`, `atlas-emit`, `atlas-reconcile`, `atlas-link` — no `atlas-node`. The guidance line above
-mentions "MCP | poke | CLI" because the underlying `resolveNode` oracle is transport-agnostic; the *tool*
-that would expose it over MCP is `READ_SURFACE`, which has no export site yet (campaign 10, not built).
+`atlas-node` **is** advertised over MCP. It is a `READ_SURFACE` member (10 members,
+`packages/tools/src/handler.ts`) exposed by `advertisedAuthoringTools` (`packages/mcp-server/src/server-read-tools.ts`)
+and routed through the same `resolveNode` oracle the CLI uses — so the two transports cannot drift
+in what a node answers. The guidance line above mentions "MCP | poke | CLI" for exactly that reason: the
+`resolveNode` oracle is transport-agnostic, and MCP and the CLI are two of the three transports over it.
+
+Verified against the real stdio server (`tools/list`, 2026-08-31): **18** tools — `atlas-init`,
+`atlas-query`, `atlas-emit`, `atlas-reconcile`, `atlas-link`, `atlas-memory-emit`, `atlas-relations`,
+`atlas-negations`, `atlas-anchors`, `atlas-slots`, `atlas-draft`, `atlas-check`, `atlas-doctor`,
+`atlas-node`, `atlas-memory-recall`, `atlas-memory-header`, `atlas-memory-awareness`,
+`atlas-memory-orientation`.
 
 ## Related
 

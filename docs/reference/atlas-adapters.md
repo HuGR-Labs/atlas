@@ -152,8 +152,8 @@ WiredHandler = ReturnType<createHandler>                       // the ONE 5-leg 
   exit code from the verdict (`0` ok, non-zero on rejected/error), carrying the tool's `guidance` (TOOLS-4).
 - **MCP-1 The server exposes the derived tool surface (amended ADR-0006).** The MCP stdio server MUST publish
   exactly the members of the closed `Tool` union — `GOVERNANCE_SURFACE ∪ READ_SURFACE`, of which
-  `GOVERNANCE_SURFACE` is the five governed tools (`atlas-init`, `atlas-query`, `atlas-emit`,
-  `atlas-reconcile`, `atlas-link` — ADR-0003) — each with its input schema, and MUST route every call through
+  `GOVERNANCE_SURFACE` is the six governed tools (`atlas-init`, `atlas-query`, `atlas-emit`,
+  `atlas-reconcile`, `atlas-link`, `atlas-memory-emit` — ADR-0003, amended by ADR-0006) — each with its input schema, and MUST route every call through
   the shared `WiredHandler` (WIRE-1) — so an MCP call and the equivalent CLI call return contract-identical
   verdicts (TOOLS-3, by construction). The advertised set and the invocable set MUST both be DERIVED from
   that one union and MUST be equal; neither may be assembled independently (ARCH-5). No tool outside the

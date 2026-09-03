@@ -4,8 +4,8 @@
 
 ## Purpose
 
-The five tools are the Atlas's whole read/write surface (four since inception + `atlas-link`, the governed
-sameAs write door added by WP-SAMEAS, ADR-0003). Each is **pure + total** (a malformed arg fails
+The six tools are the Atlas's whole read/write surface (four since inception + `atlas-link`, and `atlas-memory-emit`,
+the governed sameAs write door added by WP-SAMEAS and the governed memory write door added by WP-11.W8 — ADR-0003.) Each is **pure + total** (a malformed arg fails
 closed to an honest empty verdict, never a throw) and each ships its own `next + invariant` guidance. Every
 tool is callable **identically over the CLI and over MCP**, with a published input schema — one contract,
 two transports.
@@ -13,14 +13,14 @@ two transports.
 ## Data model
 
 ```
-Tool        = 'atlas-init' | 'atlas-query' | 'atlas-emit' | 'atlas-reconcile' | 'atlas-link'
+Tool        = 'atlas-init' | 'atlas-query' | 'atlas-emit' | 'atlas-reconcile' | 'atlas-link' | 'atlas-memory-emit'
 Guidance    = { next: string, invariant: string }     // shipped with every result
 Verdict     = { ok: boolean, data?, rejected?: string, guidance: Guidance }
 
 InitOut      = { territories: Territory[], blastRadius, t0Candidates: string[] }
 QueryOut     = Pack   // TWO BANDS (ADR-0013): governing ≤2K tier≥T1 + separately capped T2 advisory, stale-flagged (§6.1)
 QueryEnvelope= { pack: Pack, subsumes: Subsumes[], sameAs: SameAs[] }  // Verdict.data for atlas-query (derived, read-only)
-EmitOut      = { emitted: boolean, id?, rejected?: string }
+EmitOut      = { emitted: boolean, id?, nodeKey?, rejected?: string }
 LinkOut      = { linked: boolean, a?, b?, rejected?: string }  // atlas-link (WP-SAMEAS); linked:false = fail-closed refusal
 ReconcileOut = { drift: DriftItem[], mechanical: string[], semantic: string[],
                  regroundedCount, reauthorCount, exitCode }   // exit 2 ONLY on semantic drift (TOOLS-8)

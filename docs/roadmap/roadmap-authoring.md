@@ -48,7 +48,7 @@ split: Path (the alternate lifecycle paths) from EPIC-A2
 
 ### EPIC-A3 — know before I write
 goal-trace: "a refusal that teaches nothing costs the author a full round trip → a dry-run that provably agrees with the governed door, and refusals that name their gate and their remedy → the confirmation step of the job map"
-vertical: adapter-io (the emit door's gate chain exposed as composable, side-effect-free gates) → tools (the check leg · GateName · CheckOut) → cli (`atlas check`) — demoable: `atlas check fact.json --at <rev>` reports exactly which gate would refuse and what to change, and the raw `TypeError` the 2026-07-25 dogfood produced is replaced by a named gate + remedy
+vertical: adapter-io (the emit door's gate chain exposed as composable, side-effect-free gates) → tools (the check leg · GateName · CheckOut) → cli (`atlas check`) — demoable: `atlas check <anchor> <slot> <claim>` reports exactly which gate would refuse and what to change, and the raw `TypeError` the 2026-07-25 dogfood produced is replaced by a named gate + remedy
 reqs: [ REQ-AUTH-11a, REQ-AUTH-11b, REQ-AUTH-11c, REQ-AUTH-12a, REQ-AUTH-12b, REQ-AUTH-12c, REQ-AUTH-12d ]
 campaign: CAMPAIGN-10.2
 
@@ -73,18 +73,21 @@ epics: [ EPIC-A1, EPIC-A2-a, EPIC-A2-b ]
 prerequisites: [ ADR-0004 ratified ]
 horizon: **Now**
 increment: a human can author and emit a grounded fact using only product doors, on the CLI.
+**STATUS 2026-09-03: SHIPPED.** `atlas anchors`/`slots`/`draft`/`emit` all live and green.
 
 ### CAMPAIGN-10.2 — authoring becomes legible
 epics: [ EPIC-A3, EPIC-A4 ]
 prerequisites: [ CAMPAIGN-10.1 ]
 horizon: **Next**
 increment: the author knows *before* writing what will happen, addresses what they wrote, and can discover the surface without reading source.
+**STATUS 2026-09-03: SHIPPED.** `atlas check` runs the real emit-door gate chain; `atlas help` exists; every leg renders its whole record.
 
 ### CAMPAIGN-10.3 — authoring becomes transport-symmetric
 epics: [ EPIC-A5 ]
 prerequisites: [ CAMPAIGN-10.1, CAMPAIGN-10.2, ADR-0005 ratified ]
 horizon: **Later**
 increment: an agent seat has the identical surface, proven by byte-parity; the test-helper crutch is deleted.
+**STATUS 2026-09-03: SHIPPED in code** — an agent authors+emits over MCP alone (`s-mcp-authoring`), 18-tool advertisement pinned. **ADR-0005 is still PROPOSED** (its "exactly five" language is superseded by ADR-0006 Decision 2); the roadmap prerequisite is met on paper only. Owner ratification decision pending.
 
 **DAG check.** `10.1 → 10.2 → 10.3`, plus `EPIC-A1 → EPIC-A2-a → EPIC-A2-b` and `EPIC-A2-a → EPIC-A3`
 (check composes the gates a draft must satisfy). No cycles. A prerequisite never ships after its
