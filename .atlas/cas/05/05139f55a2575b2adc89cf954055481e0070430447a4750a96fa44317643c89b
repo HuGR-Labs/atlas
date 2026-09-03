@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"Within this barrel, './types.js' is the only module re-exported through the type-only form `export type *`; every other listed module is re-exported at runtime with plain `export *`, so the shared data model reaches consumers solely as erased types and adds nothing to the package's runtime surface.\"}\n```"

@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"Re-emitting a byte-identical relation through the same door still reports `emitted: true` on the duplicate call, so the returned flag cannot be used by callers to distinguish a fresh durable write from a deduplicated no-op.\"}\n```"

@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"In reverifyRelation's pre-replay tamper checks, only endpointA is scope-bound to the witness (unitScopeOf(endpointA) must equal w.sourceScope); endpointB merely has to be a non-empty string whose file half names a document in the live index, with no scope relationship to the witness enforced before the oracle replay.\"}\n```"

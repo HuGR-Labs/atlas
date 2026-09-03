@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"In score(), a TRUE-labeled row whose outcome is admitted:false with anchorFailed:true is skipped from both the numerator and the denominator of recallTrue (via groundable = o.admitted || !o.anchorFailed), so anchoring failures can never lower an arm's reported recall rather than counting against it.\"}\n```"

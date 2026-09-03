@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"The main test's assertions go no further than out.read being true, out.candidates being 1, and rows[0].rejected (coalesced to '') lacking the substring 'scope-empty' — nothing asserts the staged negation was actually admitted or promoted, so the suite stays green even if promote rejects the row for any other reason.\"}\n```"

@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"`resolve` never reads its `seat` or `need` arguments — the returned `Resolution` (including `startedTier` and `direction`) is a pure function of `harness.canPropagateMcp` alone, so every pull need on a given harness resolves identically regardless of scope or seat.\"}\n```"

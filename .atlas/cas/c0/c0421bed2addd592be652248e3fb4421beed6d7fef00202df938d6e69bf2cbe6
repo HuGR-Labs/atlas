@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"All four `provenance(...)` assertions in this suite expect `role:`-prefixed values produced through the helper's `via === 'own'` arm, so its alternate `` `query:${pack.territory}` `` branch is never matched by any expectation in the file.\"}\n```"

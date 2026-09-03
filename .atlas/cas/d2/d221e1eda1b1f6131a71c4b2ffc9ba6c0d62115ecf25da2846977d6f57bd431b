@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"In the Awareness slab assembled by seedAwareness (and thus SeedApi.seed), the mission facet is unconditionally the UN-SEEDED sentinel — the unratified stub produced by missionStub/SeedApi.mission is never incorporated into it, so obtaining the stub requires a separate mission() call.\"}\n```"

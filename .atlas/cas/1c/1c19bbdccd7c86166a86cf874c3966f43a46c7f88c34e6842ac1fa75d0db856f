@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"The drift-eligibility registry is a fresh in-memory Set captured in each createCasIndex closure rather than anything derived from or persisted in the injected store, so two CasIndex instances built over the same StoreApi track eligibility independently, and recreating the index discards all prior registrations.\"}\n```"

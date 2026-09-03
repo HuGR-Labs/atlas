@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"When a cross-module obligation could plausibly belong to either of the two modules involved, ownership ties are broken deterministically by lexicographic module-id order — the obligation gets exactly one upstream owner and is never smeared into both work packages, with genuine residual ambiguity escalated to techlead judgment instead.\"}\n```"

@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"importCas's fail-closed guard is scoped to content-address-shaped keys: an envelope entry filed under a non-hash-shaped key such as asHash('abcd') imports verbatim despite the key/body mismatch, whereas an edited body kept under its genuine id-derived key throws with a message matching /not addressed by its content/\"}\n```"

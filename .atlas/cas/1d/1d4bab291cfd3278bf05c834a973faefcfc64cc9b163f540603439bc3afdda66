@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"Although the shared AdmitDeps stub in this file wires typeOracle.expressible to always return false, the relation proposals still come back admitted in both the runExtract-driven leg and the direct-admit leg, so the exercised relation admission path demonstrably does not gate on type expressibility.\"}\n```"

@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"Each call of the assembled `upsert` port returns the entire cumulative grounded-fact set held in a closure-scoped Map — folded with every settled staging commit across the whole pass — not just the facts from the incoming batch being upserted.\"}\n```"

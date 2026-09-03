@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"In createGovernedEmit, the authorization and ratification gates are evaluated inside the callback handed to deps.store.commitProjection — alongside the incumbent lookup — while the shape and truth gates each run exactly once before that closure is ever entered.\"}\n```"

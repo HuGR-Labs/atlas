@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"In buildOwnSources, the relate accessor returns a RelationSet whose enclosing, governing, and dependencies fields are unconditionally empty arrays, and whose dependents entries always carry the literal constants distance: 0 and ppr: 0 alongside a dependents_meta.maxHops of -1.\"}\n```"

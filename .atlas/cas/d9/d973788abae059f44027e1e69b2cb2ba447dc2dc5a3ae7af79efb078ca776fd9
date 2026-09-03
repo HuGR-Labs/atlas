@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"Containment is tested at any ancestry depth — the guard `segP.length < segQ.length` accepts any positive difference in `::`-segment count rather than exactly one level, and the all-ordered-pairs loop applies it uniformly, so a multi-hop chain produces an edge for every ancestor–descendant pair, not merely adjacent parent–child ones.\"}\n```"

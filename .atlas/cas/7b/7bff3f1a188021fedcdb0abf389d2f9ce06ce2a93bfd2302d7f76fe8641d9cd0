@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"Every promotion in this suite runs through a hardcoded gate stub — promoteWith wires gateHolds to unconditionally return 'HOLDS' and takes no gate parameter — so the tests vary authz scope, witness closure, and holes, but never exercise a gate veto.\"}\n```"

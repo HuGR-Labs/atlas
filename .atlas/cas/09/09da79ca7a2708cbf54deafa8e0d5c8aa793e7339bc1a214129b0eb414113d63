@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"Every call to `put` throws — even on a matched partition — since after the MEM-2 conflation gate the function body unconditionally throws an 'OWNER-DEFINE-parked' error rather than writing or returning a MemoryRecord, so its declared MemoryRecord return type is unreachable.\"}\n```"

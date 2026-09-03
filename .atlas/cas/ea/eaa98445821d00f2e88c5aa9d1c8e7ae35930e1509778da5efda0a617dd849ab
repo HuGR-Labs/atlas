@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"Beyond the required FreshPackSource, createPhaseHook accepts a second options-style argument through which internal operations can be overridden with test doubles — exercised here by installing a throwing `pull` spy that the boundary transition completes without ever invoking.\"}\n```"

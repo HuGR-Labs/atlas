@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"The module-private SEMANTIC_SLOTS array mirrors the SemanticSlot union by hand: its `readonly SemanticSlot[]` annotation guarantees each element is a legal slot but nothing enforces exhaustiveness, so widening the SemanticSlot type compiles cleanly while isSemanticSlot silently fails closed on the new slot until the array is updated too.\"}\n```"

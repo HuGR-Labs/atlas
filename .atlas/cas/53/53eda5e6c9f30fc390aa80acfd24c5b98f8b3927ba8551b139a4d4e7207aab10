@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"createUnitDeps memoizes on object identity: the test asserts createUnitDeps(scip).toBe(createUnitDeps(scip)) for the same ScipOutput object while a different object yields a distinct instance, so callers cannot obtain a fresh API view by re-calling with a scip they have since mutated.\"}\n```"

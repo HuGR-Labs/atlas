@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"The render side's verdict is split into a runtime export (`renderVerdict`) plus a companion type-only export (`CliVerdict`), whereas the promote side ships its verdict (`promoteVerdict`) as a runtime value with no companion type exported anywhere in this barrel.\"}\n```"

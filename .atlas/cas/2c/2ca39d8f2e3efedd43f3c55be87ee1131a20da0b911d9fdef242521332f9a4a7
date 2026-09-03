@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"unlinkSameAs performs no deletion: it appends the peer to each endpoint's separate sorted sameAsRetracted list while leaving every existing sameAs entry intact, so the assertion and its retraction coexist on the node rather than the edge disappearing.\"}\n```"

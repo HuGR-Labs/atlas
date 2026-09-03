@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"Inside lineMerge, deduplication keys strictly on the raw parsed event's stored `id` property (first occurrence wins) and never invokes `eventId` to check that the id actually matches the content, so two events sharing an id silently keep only the earlier copy instead of surfacing a conflict.\"}\n```"

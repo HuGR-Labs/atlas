@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"The root `.atlas/` store is governed deny-by-default: the blanket `.atlas/*` pattern (which ignores children, not the directory itself) is followed by exactly three trailing negations re-admitting `projection.json`, `cas/`, and `policy.json`, so any other sidecar added there stays ignored until explicitly negated.\"}\n```"

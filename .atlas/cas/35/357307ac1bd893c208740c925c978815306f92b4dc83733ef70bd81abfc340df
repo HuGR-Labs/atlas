@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"In createUnitSiblingReader, the cap is enforced on the BFS working set while the anchored target still occupies a slot in it — the target is seeded, counted toward cap when it has content, and only deleted from the result after the loop ends — so the returned related-unit list holds at most cap−1 entries (7 at the default cap of 8).\"}\n```"

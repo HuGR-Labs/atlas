@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"Inside `clone`, store-homed placements are accumulated into a `Map` keyed by each value's content hash (`id(p.value)`), so two placements carrying identical content silently coalesce into a single store entry — the later one overwriting the earlier — rather than duplicating or raising an error.\"}\n```"
