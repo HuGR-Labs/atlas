@@ -19,9 +19,9 @@
 ### INV-TOOLS-1
 method-tag: reference-model
 fspec: —
-up-property: "governed-write-door totality: the governance surface is exactly 5 tools (`atlas-init/query/emit/reconcile/link`), every write flows through a governed door (`WRITE_PATHS = {atlas-emit, atlas-link}`, each KNOW-11 authz + ratifier + fail-closed-visible refusal), and a back-channel write is refused (0 ungoverned write path); per-node read projections carry 0 write authority (ADR-0003)"
-down-model: "the reference tools layer exposes exactly two governed write entries (`atlas-emit` grounded-fact write, `atlas-link` sameAs write) over an append-only store (`tools/ref/store.ts`); a unit test enumerates the 5-tool surface, asserts `WRITE_PATHS == {atlas-emit, atlas-link}`, and asserts every read-projection handle returns a Verdict with no store-mutating method"
-anti-rot: `tools/ref/store.ts` (the governed-write-door reference store) is imported as the mock in the tools-surface unit tests; a code path that opens an ungoverned write door outside `{atlas-emit, atlas-link}` fails the `WRITE_PATHS` assertion. *(Security-exploitability of the door — a shell-armed seat red-teaming the permission model — is FR-12/billy, not this functional property; see Refuse-to-model.)*
+up-property: "governed-write-door totality: the governance surface is the DERIVED + BUDGETED six (`atlas-init/query/emit/reconcile/link/memory-emit`, ADR-0006 Decision 2), every write flows through a governed door (`WRITE_PATHS = {atlas-emit, atlas-link, atlas-memory-emit}`, each KNOW-11 authz + ratifier + fail-closed-visible refusal), and a back-channel write is refused (0 ungoverned write path); per-node read projections carry 0 write authority (ADR-0003)"
+down-model: "the reference tools layer exposes exactly three governed write entries (`atlas-emit` grounded-fact write, `atlas-link` sameAs write, `atlas-memory-emit` memory write) over an append-only store (`tools/ref/store.ts`); a unit test enumerates the 6-tool surface, asserts `WRITE_PATHS == {atlas-emit, atlas-link, atlas-memory-emit}`, and asserts every read-projection handle returns a Verdict with no store-mutating method"
+anti-rot: `tools/ref/store.ts` (the governed-write-door reference store) is imported as the mock in the tools-surface unit tests; a code path that opens an ungoverned write door outside `{atlas-emit, atlas-link, atlas-memory-emit}` fails the `WRITE_PATHS` assertion. *(Security-exploitability of the door — a shell-armed seat red-teaming the permission model — is FR-12/billy, not this functional property; see Refuse-to-model.)*
 
 ### INV-TOOLS-2
 method-tag: reference-model
@@ -104,7 +104,7 @@ anti-rot: shares `tools/ref/ladder.ts` — the harness-aware resolver is the moc
 ### INV-TOOLS-12
 method-tag: reference-model
 fspec: —
-up-property: "read/advisory-only doctor: `atlas doctor` is read/advisory only — it persists nothing (0 direct store mutations); any write it proposes is a plan that funnels through `atlas-emit`; it carries no write authority and is not a governance tool (surface stays 5)"
+up-property: "read/advisory-only doctor: `atlas doctor` is read/advisory only — it persists nothing (0 direct store mutations); any write it proposes is a plan that funnels through `atlas-emit`; it carries no write authority and is not a governance tool (the governance surface is the derived six, ADR-0006 Decision 2)"
 down-model: "the reference `doctor(cmd)` returns `DoctorOut` (archive/why-broken/hot-set/plan) with no store-mutating method; a test asserts every doctor sub-command leaves the store byte-identical, and that `reground` returns a `RegroundPlan` that only mutates when run through `emit`"
 anti-rot: `tools/ref/doctor.ts` (the no-write-authority projection) is the mock; a doctor code path that mutates the store directly diverges from it and fails the store-unchanged assertion. *(This is the explicit refusal made positive: a read-only projection opens NO write path — verified here as a reference-model property, NOT a formal one.)*
 

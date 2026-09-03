@@ -1,6 +1,6 @@
 # Properties — Block AUTHORING (CAMPAIGN-10) · S3-sibling ∀-laws (rendered, not invented)
 
-> **state:** S3-sibling · **source (frozen):** [`method-tags-authoring.md`](./method-tags-authoring.md) `@sha256:ca246032` — the `up-property` law of each behavioural INV ·
+> **state:** S3-sibling · **source (frozen):** [`method-tags-authoring.md`](./method-tags-authoring.md) `@sha256:73e5e97a` — the `up-property` law of each behavioural INV ·
 > **owner:** lead; the governance arm (PROP-AUTH-2, PROP-MCP-3) requires a billy review before freeze ·
 > **purpose:** render every frozen `up-property` into a runnable `∀`-quantified property — the oracle-free, beyond-the-witness leg. **Invents no law.**
 >
@@ -14,7 +14,7 @@
 
 ### PROP-AUTH-1 — single-seam agreement
 inv:         INV-AUTH-1
-source:      ./method-tags-authoring.md#INV-AUTH-1 @sha256:ca246032
+source:      ./method-tags-authoring.md#INV-AUTH-1 @sha256:73e5e97a
 law:         ∀ rev R, anchor a reachable at R. plannerHash(a, R) ≡ gateHash(a, R) ∧ (∀ caller c performing zero set-up. plannerHash_c(a, R) ≡ plannerHash(a, R))   — over every language, and every anchor kind ∈ {file, dir, symbol}
 arbitrary:   arb over the built unit set of a multi-language fixture × {warm process, cold process}; a mutator that may substitute a second fold, a memoized digest table, or a caller-side warm-up requirement
 covers_reqs: [ REQ-AUTH-1a, REQ-AUTH-1b, REQ-AUTH-1c, REQ-AUTH-1d, REQ-AUTH-1e ]
@@ -23,7 +23,7 @@ teeth:       breaks-on "a planner whose fold is file-level-only from a cold call
 
 ### PROP-AUTH-2 — planner write-freedom (set-level)
 inv:         INV-AUTH-2
-source:      ./method-tags-authoring.md#INV-AUTH-2 @sha256:ca246032
+source:      ./method-tags-authoring.md#INV-AUTH-2 @sha256:73e5e97a
 law:         ∀ door d ∈ AUTHORING_SURFACE, ∀ args x ∈ {valid ∪ malformed ∪ empty}. bytesWritten(d, x) == 0 (CAS ∧ projection ∧ cache) ∧ d ∉ WRITE_PATHS ∧ d ∉ GOVERNANCE_SURFACE   (ADR-0004)
 arbitrary:   arb over the authoring door set × an arbitrary argument space; a mutator that may add a disk memo, a staging file, or a registration of a planner in either governed constant
 covers_reqs: [ REQ-AUTH-2a, REQ-AUTH-2b, REQ-AUTH-2c, REQ-AUTH-2d, REQ-AUTH-2e ]
@@ -32,7 +32,7 @@ teeth:       breaks-on "a planner that writes an index memo to `.atlas/cache` �
 
 ### PROP-AUTH-8 — draft→emit round-trip acceptance
 inv:         INV-AUTH-8
-source:      ./method-tags-authoring.md#INV-AUTH-8 @sha256:ca246032
+source:      ./method-tags-authoring.md#INV-AUTH-8 @sha256:73e5e97a
 law:         ∀ rev R, anchor a reachable at R, slot s ∈ PredicateSlot, claim c ≠ ∅. emit(draft(a, s, c, R), R) on an unchanged repo == ACCEPTED   — `rejections == 0`
 arbitrary:   arb over the fixture's REAL unit set (file · dir · symbol · grammar-less file) × the full 13-member slot union × arb claim strings (unicode, very long, punctuation-heavy, near-empty); repo held byte-identical between draft and emit
 covers_reqs: [ REQ-AUTH-8a, REQ-AUTH-8b ]
@@ -41,7 +41,7 @@ teeth:       breaks-on "a drafter correct for file anchors and wrong for the fol
 
 ### PROP-AUTH-11 — dry-run fidelity (check ≡ door)
 inv:         INV-AUTH-11
-source:      ./method-tags-authoring.md#INV-AUTH-11 @sha256:ca246032
+source:      ./method-tags-authoring.md#INV-AUTH-11 @sha256:73e5e97a
 law:         ∀ fact f, rev r, actor α, token τ. check(f,r,α,τ).wouldEmit ≡ emit(f,r,α,τ).emitted ∧ firstRefusingGate_check(f,r,α,τ) ≡ firstRefusingGate_door(f,r,α,τ)
 arbitrary:   arb over (fact × rev × actor × token) biased to STRADDLE each gate boundary — including inputs that fail TWO or more gates simultaneously (the only shape that can reveal an order divergence); emit runs against a scratch store that is discarded
 covers_reqs: [ REQ-AUTH-11a, REQ-AUTH-11b, REQ-AUTH-11c ]
@@ -50,7 +50,7 @@ teeth:       breaks-on "a `check` that evaluates authz before truth — EVERY si
 
 ### PROP-AUTH-12 — refusal legibility
 inv:         INV-AUTH-12
-source:      ./method-tags-authoring.md#INV-AUTH-12 @sha256:ca246032
+source:      ./method-tags-authoring.md#INV-AUTH-12 @sha256:73e5e97a
 law:         ∀ input i ∈ malformed ∪ adversarial. refusal(i).gate ∈ GateName ∧ refusal(i).remedy ≠ ∅ ∧ ¬runtimeErrorShaped(refusal(i).reason)   where `runtimeErrorShaped` matches a type-error, a stack frame, an undefined-property read, or a bare `undefined`
 arbitrary:   arb over the payload space — wrong types at every position, missing fields, `null`/`undefined` at every position, oversized values, deeply nested values, prototype-polluting keys, and the EXACT payload observed in the 2026-07-25 dogfood
 covers_reqs: [ REQ-AUTH-12a, REQ-AUTH-12b, REQ-AUTH-12c, REQ-AUTH-12d ]
@@ -59,16 +59,16 @@ teeth:       breaks-on "a validator that structures the shapes it anticipates an
 
 ### PROP-MCP-3 — advertised-surface totality (set-level)
 inv:         INV-MCP-3
-source:      ./method-tags-authoring.md#INV-MCP-3 @sha256:ca246032
-law:         ∀ layer L. advertised(L) ≡ GOVERNANCE_SURFACE ∪ READ_SURFACE ∧ READ_SURFACE ∩ GOVERNANCE_SURFACE ≡ ∅ ∧ READ_SURFACE ∩ WRITE_PATHS ≡ ∅ ∧ |GOVERNANCE_SURFACE| == 5 ∧ |WRITE_PATHS| == 2 ∧ (∀ t ∈ READ_SURFACE. bytesWritten(t) == 0)   (ADR-0005; ADR-0003 unamended)
-arbitrary:   arb over layer wirings — the 5 governance tools + an arbitrary read-surface membership; a mutator that may register a planner in a governed constant, delegate a read leg to a write leg, or omit a member from the advertisement
+source:      ./method-tags-authoring.md#INV-MCP-3 @sha256:73e5e97a
+law:         ∀ layer L. advertised(L) ≡ GOVERNANCE_SURFACE ∪ READ_SURFACE ∧ READ_SURFACE ∩ GOVERNANCE_SURFACE ≡ ∅ ∧ READ_SURFACE ∩ WRITE_PATHS ≡ ∅ ∧ |GOVERNANCE_SURFACE| == 6 ∧ |WRITE_PATHS| == 3 ∧ (∀ t ∈ READ_SURFACE. bytesWritten(t) == 0)   (ADR-0005; ADR-0006 Decision 2 superseded the fixed count)
+arbitrary:   arb over layer wirings — the 6 governance tools + an arbitrary read-surface membership; a mutator that may register a planner in a governed constant, delegate a read leg to a write leg, or omit a member from the advertisement
 covers_reqs: [ REQ-MCP-3a, REQ-MCP-3b, REQ-MCP-3c, REQ-MCP-3d, REQ-MCP-3e, REQ-MCP-3f, REQ-MCP-3g ]
 witness:     [ SCN-MCP-3a-1, SCN-MCP-3b-1, SCN-MCP-3c-1, SCN-MCP-3d-1, SCN-MCP-3e-1, SCN-MCP-3f-1, SCN-MCP-3g-1 ]
 teeth:       breaks-on "a read door added to `READ_SURFACE` that internally delegates to the emit leg for convenience — the union, both disjointness predicates, and both cardinalities ALL still hold; only the `bytesWritten == 0` conjunct catches the routing"
 
 ### PROP-MCP-4 — cross-transport equivalence, extended to the authoring doors
 inv:         INV-MCP-4
-source:      ./method-tags-authoring.md#INV-MCP-4 @sha256:ca246032
+source:      ./method-tags-authoring.md#INV-MCP-4 @sha256:73e5e97a
 law:         ∀ door d ∈ AUTHORING_SURFACE, ∀ input x. serialize(cli(d,x)) ≡ serialize(mcp(d,x))   — byte-identical, valid ∨ malformed x, 0 divergence in coercion, defaulting, error shape, or field set
 arbitrary:   arb over inputs per door — valid under the published schema ∪ malformed — INCLUDING partially-populated results (an empty optional array, an absent optional string), which is the only shape a re-serialization divergence shows up in
 covers_reqs: [ REQ-MCP-4a, REQ-MCP-4b, REQ-MCP-4c ]

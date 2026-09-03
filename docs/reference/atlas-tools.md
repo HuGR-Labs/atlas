@@ -30,17 +30,19 @@ DoctorOut    = { archive?, whyBroken?, hotSet?: { size, budget, over: boolean },
 
 ## Invariants
 
-- **TOOLS-1 Governed write doors (amended WP-SAMEAS, ADR-0003).** The **governance** surface is exactly
-  `atlas-init`, `atlas-query`, `atlas-emit`, `atlas-reconcile`, `atlas-link` (five). Writes MUST flow ONLY
-  through a **governed write door** — one enforcing owner-scoped authorization (KNOW-11) AND a ratifier, and
-  whose refusal is fail-closed-**visible** on both transports (never a silent ok — TOOLS-14/F2/F5). The closed
-  write set (`WRITE_PATHS`) is two: `atlas-emit` (grounded-fact write) and `atlas-link` (sameAs-equivalence
-  write). No back-channel write may bypass a governed door; this MUST be enforced **structurally** by the
-  store, not by tool convention alone (TOOLS-15) — a shell-armed seat cannot inject a row a governed door did
-  not admit. The read/derive tools (`-init`/`-query`/`-reconcile`) and per-node read projections (RETR-5 /
-  TOOLS-10, `diff`/`doctor`/`node`) carry NO write authority. *(This amends the former "single write door /
-  exactly four" wording; the property preserved is "every write is governed + fail-closed-visible," not the
-  count — see ADR-0003.)*
+- **TOOLS-1 Governed write doors (amended WP-SAMEAS, ADR-0003; surface count superseded by ADR-0006
+  Decision 2).** The **governance** surface is the DERIVED + BUDGETED `GOVERNANCE_SURFACE` — today six:
+  `atlas-init`, `atlas-query`, `atlas-emit`, `atlas-reconcile`, `atlas-link`, `atlas-memory-emit`
+  (ADR-0006 Decision 2 replaced the fixed "exactly five" with a derived-and-budgeted property, ARCH-5/6/7).
+  Writes MUST flow ONLY through a **governed write door** — one enforcing owner-scoped authorization
+  (KNOW-11) AND a ratifier, and whose refusal is fail-closed-**visible** on both transports (never a silent
+  ok — TOOLS-14/F2/F5). The closed write set (`WRITE_PATHS`) is three: `atlas-emit` (grounded-fact write),
+  `atlas-link` (sameAs-equivalence write), `atlas-memory-emit` (memory write). No back-channel write may bypass
+  a governed door; this MUST be enforced **structurally** by the store, not by tool convention alone
+  (TOOLS-15) — a shell-armed seat cannot inject a row a governed door did not admit. The read/derive tools
+  (`-init`/`-query`/`-reconcile`) and per-node read projections (RETR-5 / TOOLS-10, `diff`/`doctor`/`node`)
+  carry NO write authority. *(This amends the former "single write door / exactly four" wording; the property
+  preserved is "every write is governed + fail-closed-visible," not the count — see ADR-0003 and ADR-0006.)*
 - **TOOLS-2 Pure + total.** Every tool MUST be pure and total: a malformed argument fails closed to a
   structured empty/rejected verdict; none throws (acceptance §8.12).
 - **TOOLS-3 CLI + MCP parity.** Every tool MUST be callable identically over the CLI and over MCP, against
@@ -86,7 +88,7 @@ DoctorOut    = { archive?, whyBroken?, hotSet?: { size, budget, over: boolean },
 - **TOOLS-9 Absorb-driven write.** The `atlas-emit` write path at wave-close MUST be driven by
   `ResultCard.absorb`, not a separate authoring ritual; a sealing wave MUST feed the Atlas or emit a
   grounded why-not (A-10).
-- **TOOLS-10 Every node is tri-transport, one contract.** Beyond the five governance tools, **every Atlas
+- **TOOLS-10 Every node is tri-transport, one contract.** Beyond the six governed tools, **every Atlas
   node** MUST be addressable by its **content address** over three transports against one handler: an
   **MCP tool** (model-callable), a **proactive injection** (the poke), and a **CLI command**
   (human/script-callable, composable in a shell like `curl`). The three MUST NOT diverge in contract; the
@@ -98,8 +100,9 @@ DoctorOut    = { archive?, whyBroken?, hotSet?: { size, budget, over: boolean },
   **read/advisory only** — archive inspection, drift-explain / `why-broken <fact>`, hot-set size report
   against a budget, and a **guided re-ground / retire** flow. It MUST NOT persist: any write it proposes
   MUST funnel through `atlas-emit` (the guided flow emits a plan a human/agent then runs, never a direct
-  store mutation). It is **not** a governance tool at all (the surface stays exactly five — `atlas-init`,
-  `atlas-query`, `atlas-emit`, `atlas-reconcile`, `atlas-link`) — it is a diagnostic view of the same store,
+  store mutation). It is **not** a governance tool at all (the governance surface is the derived six —
+  `atlas-init`, `atlas-query`, `atlas-emit`, `atlas-reconcile`, `atlas-link`, `atlas-memory-emit`; ADR-0006
+  Decision 2) — it is a diagnostic view of the same store,
   carrying no write authority, like the per-node read projections (TOOLS-10).
 - **TOOLS-13 Mechanical drift auto-re-grounds, no human, no block.** `atlas-reconcile --accept-reground`
   MUST, in **one pass**, auto-re-ground every `mechanical` `DriftItem` (anchor moved but the claim still
@@ -146,8 +149,9 @@ DoctorOut    = { archive?, whyBroken?, hotSet?: { size, budget, over: boolean },
   PERSIST-14 version-delta ({added, edited, superseded, decayed}, each with provenance) as a **read-only
   projection** — CLI≡MCP (0 divergence, one published schema) and **0 write path** (read/subscribe only;
   writes still funnel through `atlas-emit`). It is a read projection like the per-node `node` handler
-  (TOOLS-10) and `atlas doctor` (TOOLS-12), **NOT** a write tool: the governed **write** surface is the two
-  governed doors `atlas-emit` + `atlas-link` (TOOLS-1/15, ADR-0003) and `atlas-diff` carries no write authority.
+  (TOOLS-10) and `atlas doctor` (TOOLS-12), **NOT** a write tool: the governed **write** surface is the three
+  governed doors `atlas-emit` + `atlas-link` + `atlas-memory-emit` (TOOLS-1/15, ADR-0003; ADR-0006
+  Decision 2 superseded the count) and `atlas-diff` carries no write authority.
 
 ## Surface / API
 
@@ -225,8 +229,8 @@ reach the store, down a native-first ladder where the **CLI is the floor, not th
 ## Acceptance
 
 1. **TOOLS-1/3** — Each tool resolves identically over CLI and MCP against one published schema; the write
-   surface is exactly the two governed doors (`atlas-emit` + `atlas-link`), each authz+ratifier+fail-closed;
-   no back-channel write path exists.
+   surface is exactly the three governed doors (`atlas-emit` + `atlas-link` + `atlas-memory-emit`),
+   each authz+ratifier+fail-closed; no back-channel write path exists.
 2. **TOOLS-2** — Malformed input to every tool returns a structured empty/rejection; none throws (§8.12).
 3. **TOOLS-4** — Every result carries non-empty `next + invariant` guidance.
 4. **TOOLS-5** — `atlas-init` on any tree ⇒ zero invariants, all territories `T2/advisory`; a T0-keyword
@@ -260,5 +264,6 @@ reach the store, down a native-first ladder where the **CLI is the floor, not th
 14. **TOOLS-12** — `atlas doctor why-broken <fact>` explains the drifted anchor and its class;
     `hot-set --budget n` flags over-budget; `reground <fact>` returns a plan and **persists nothing** — the
     store changes only when that plan is run through a governed door (`atlas-emit`); a write attempted
-    directly via `doctor` is rejected. TOOLS-1's governance surface is the five tools; its write surface is
-    the two governed doors `atlas-emit` + `atlas-link` (ADR-0003).
+    directly via `doctor` is rejected. TOOLS-1's governance surface is the derived six (ADR-0006
+    Decision 2); its write surface is the three governed doors `atlas-emit` + `atlas-link` +
+    `atlas-memory-emit`.

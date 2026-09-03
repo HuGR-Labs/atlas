@@ -154,8 +154,8 @@ teeth: breaks-on "a render that returns early after the first recognised field s
 ### INV-MCP-3
 method-tag: exhaustive
 fspec: —
-up-property: "advertised-surface totality: advertised == GOVERNANCE_SURFACE ∪ READ_SURFACE ∧ READ_SURFACE ∩ GOVERNANCE_SURFACE == ∅ ∧ READ_SURFACE ∩ WRITE_PATHS == ∅ ∧ |GOVERNANCE_SURFACE| == 5 ∧ |WRITE_PATHS| == 2 ∧ ∀ t ∈ READ_SURFACE. bytesWritten(t) == 0"
-down-model: "all three sets are FINITE and closed — enumerate them; assert the union, the two disjointness predicates, and the two cardinalities by deep-equal against the frozen expectations; then invoke every READ_SURFACE member under the write-spy store"
+up-property: "advertised-surface totality: advertised == GOVERNANCE_SURFACE ∪ READ_SURFACE ∧ READ_SURFACE ∩ GOVERNANCE_SURFACE == ∅ ∧ READ_SURFACE ∩ WRITE_PATHS == ∅ ∧ |GOVERNANCE_SURFACE| == 6 ∧ |WRITE_PATHS| == 3 ∧ ∀ t ∈ READ_SURFACE. bytesWritten(t) == 0  (ADR-0005; ADR-0006 Decision 2 superseded the fixed count)"
+down-model: "all three sets are FINITE and closed — enumerate them; assert the union, the two disjointness predicates, and the two cardinalities (==6 / ==3) by deep-equal against the frozen expectations; then invoke every READ_SURFACE member under the write-spy store"
 anti-rot: the three frozen constants are the mock, pinned by the spec-conformance guard's CODE-SURFACE PIN — which gains the two disjointness checks in the same change.
 teeth: breaks-on "a read door added to READ_SURFACE that internally delegates to the emit leg for convenience — the cardinality and disjointness assertions all pass; only the write-spy arm catches the routing"
 

@@ -1,14 +1,17 @@
 # Requirements — Block TLS (tools/delivery) · S1 lift-and-tag
 
-### REQ-TOOLS-1a — governance surface is exactly five tools
-source: INV-TOOLS-1 @ reference/atlas-tools.md#tools-1 (amended WP-SAMEAS, ADR-0003)
-The tools layer shall expose exactly `atlas-init`, `atlas-query`, `atlas-emit`, `atlas-reconcile`, and `atlas-link` as its governance surface.
-normative-clause: "The **governance** surface MUST be exactly `atlas-init`, `atlas-query`, `atlas-emit`, `atlas-reconcile`, `atlas-link`"
+### REQ-TOOLS-1a — governance surface is the derived six tools
+source: INV-TOOLS-1 @ reference/atlas-tools.md#tools-1 (amended WP-SAMEAS, ADR-0003; counts superseded by ADR-0006 Decision 2)
+The tools layer shall expose the DERIVED + BUDGETED `GOVERNANCE_SURFACE` — today six: `atlas-init`, `atlas-query`, `atlas-emit`, `atlas-reconcile`, `atlas-link`, `atlas-memory-emit` — as its governance surface.
+normative-clause: "The **governance** surface is the DERIVED + BUDGETED `GOVERNANCE_SURFACE` — today six:
+  `atlas-init`, `atlas-query`, `atlas-emit`, `atlas-reconcile`, `atlas-link`, `atlas-memory-emit`
+  (ADR-0006 Decision 2 replaced the fixed \"exactly five\" with a derived-and-budgeted property, ARCH-5/6/7)"
 
 ### REQ-TOOLS-1b — every write flows through a governed door
-source: INV-TOOLS-1 @ reference/atlas-tools.md#tools-1 (amended WP-SAMEAS, ADR-0003)
-The tools layer shall route every write through a governed door — `atlas-emit` (grounded-fact write) or `atlas-link` (sameAs write) — each enforcing owner-scoped authorization (KNOW-11) plus a ratifier and a fail-closed-visible refusal; no back-channel write may bypass a governed door.
-normative-clause: "every write flows through a **governed write door** (`WRITE_PATHS` = `atlas-emit`, `atlas-link`); the count was the accidental part of the former 'single write door', the governance property is the law"
+source: INV-TOOLS-1 @ reference/atlas-tools.md#tools-1 (amended WP-SAMEAS, ADR-0003; counts superseded by ADR-0006 Decision 2)
+The tools layer shall route every write through a governed door — `atlas-emit` (grounded-fact write), `atlas-link` (sameAs write) or `atlas-memory-emit` (memory write) — each enforcing owner-scoped authorization (KNOW-11) plus a ratifier and a fail-closed-visible refusal; no back-channel write may bypass a governed door.
+normative-clause: "The closed write set (`WRITE_PATHS`) is three: `atlas-emit` (grounded-fact write),
+  `atlas-link` (sameAs-equivalence write), `atlas-memory-emit` (memory write)"
 
 ### REQ-TOOLS-1c — reject back-channel writes
 source: INV-TOOLS-1 @ reference/atlas-tools.md#tools-1
@@ -287,9 +290,11 @@ If `atlas doctor` proposes a write, then it shall funnel that write through `atl
 normative-clause: "It MUST NOT persist: any write it proposes MUST funnel through `atlas-emit`"
 
 ### REQ-TOOLS-12c — doctor carries no write authority
-source: INV-TOOLS-12 @ reference/atlas-tools.md#tools-12
-The `atlas doctor` surface shall remain a no-write-authority diagnostic view rather than a governance tool.
-normative-clause: "It is **not** a governance tool (the surface stays exactly five — `atlas-init`, `atlas-query`, `atlas-emit`, `atlas-reconcile`, `atlas-link`) — it is a diagnostic view of the same store, carrying no write authority"
+source: INV-TOOLS-12 @ reference/atlas-tools.md#tools-12 (count superseded by ADR-0006 Decision 2)
+The `atlas doctor` surface shall remain a no-write-authority diagnostic view rather than a governance tool; it is not one of the derived six `GOVERNANCE_SURFACE` members (ADR-0006 Decision 2).
+normative-clause: "It is **not** a governance tool at all (the governance surface is the derived six —
+  `atlas-init`, `atlas-query`, `atlas-emit`, `atlas-reconcile`, `atlas-link`, `atlas-memory-emit`; ADR-0006
+  Decision 2) — it is a diagnostic view of the same store, carrying no write authority"
 
 ### REQ-TOOLS-13a — auto-re-ground mechanical drift in one pass
 source: INV-TOOLS-13 @ reference/atlas-tools.md#tools-13
@@ -362,6 +367,6 @@ If `atlas-diff` is reached over any transport, then the tools layer shall keep i
 normative-clause: "0 write path"
 
 ### REQ-TOOLS-16e — atlas-diff is not a write tool
-source: INV-TOOLS-16 @ reference/atlas-tools.md#tools-16 (write surface amended WP-SAMEAS, ADR-0003)
-If `atlas-diff` would grow the write surface, then the tools layer shall not admit it as a write tool, keeping the governed write surface at exactly the two governed doors (`atlas-emit`, `atlas-link`).
-normative-clause: "the governed WRITE surface is exactly the two governed doors `atlas-emit` + `atlas-link` (`atlas-diff` is a read projection like `node` TOOLS-10 / `doctor` TOOLS-12, NOT a write tool)"
+source: INV-TOOLS-16 @ reference/atlas-tools.md#tools-16 (write surface amended WP-SAMEAS, ADR-0003; superseded by ADR-0006 Decision 2)
+If `atlas-diff` would grow the write surface, then the tools layer shall not admit it as a write tool, keeping the governed write surface at exactly the three governed doors (`atlas-emit`, `atlas-link`, `atlas-memory-emit`).
+normative-clause: "the governed **write** surface is the three governed doors `atlas-emit` + `atlas-link` + `atlas-memory-emit`"
