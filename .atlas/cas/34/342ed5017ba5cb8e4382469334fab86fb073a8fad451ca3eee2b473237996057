@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"Despite the suite labeling it '(pure)', marshalArgs itself performs disk I/O for emit: invoked directly with a path positional, it reads and JSON.parses that file and returns the parsed object as the `node` arg (failing closed with a structured non-ok result for unreadable files or malformed JSON), never passing the path string through.\"}\n```"

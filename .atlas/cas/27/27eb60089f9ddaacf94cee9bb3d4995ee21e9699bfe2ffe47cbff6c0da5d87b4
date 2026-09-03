@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"The build and typecheck scripts are byte-for-byte identical, both running `tsc -b`, so typechecking here is performed by the same incremental project-build invocation rather than a separate check command.\"}\n```"

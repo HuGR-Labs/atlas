@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"In the reverify report, `sealedProven` is a denominator-style total that counts every sealed fact examined (asserted as 3 here), not a success count — the same pass also asserts one `broken` and one `unverifiable` outcome among those same three rows.\"}\n```"

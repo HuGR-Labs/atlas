@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"The canonical rendering template includes `epic:` and `seam-freezes:` field lines that appear nowhere in the field-set table (nor in the locally-authored `value` or `exec` enumerations), so a validator built strictly from the documented field-set would flag the canonical card as containing undeclared fields.\"}\n```"

@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"The entire startup runs as a floating promise — the async IIFE is discarded with `void` and contains no try/catch or .catch — so a failure in initAst, composeRuntime(process.cwd()), or the server start surfaces only as an unhandled promise rejection, with no logged error or cleanup path in this entrypoint.\"}\n```"

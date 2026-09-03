@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"The binding is deliberately lossy: it keeps only a verdict strictly equal to the literal 'FRESH' and collapses every other oracle verdict — whatever non-FRESH states exist — into the single output 'DRIFTED', so any finer distinction the oracle reports can never be recovered from the returned freshness.\"}\n```"

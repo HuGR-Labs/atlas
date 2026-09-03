@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"Despite being an E2E test-harness package, this manifest defines no script to actually run the tests — its scripts contain only `build` and `typecheck`, and both simply run `tsc -b` to compile.\"}\n```"

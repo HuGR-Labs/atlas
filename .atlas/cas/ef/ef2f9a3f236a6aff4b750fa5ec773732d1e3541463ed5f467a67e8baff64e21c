@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"bindFreshnessOracle branches on the fact's kind: any fact whose kind is not 'negation' is returned driftDetect's verdict verbatim, while a negation is reported FRESH only when both driftDetect returned FRESH and its edgeModel string equals the injected currentEdgeModel — otherwise DRIFTED.\"}\n```"

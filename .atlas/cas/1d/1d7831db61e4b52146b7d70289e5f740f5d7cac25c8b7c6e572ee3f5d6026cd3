@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"The branded Hash values minted here are produced solely by wrapping the output of bytesToHex(blake3(bytes)) in asHash, so their runtime value is the bare hex text of the digest with no prefix, envelope, or other metadata added anywhere in this file.\"}\n```"

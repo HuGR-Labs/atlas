@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"The required `<repo>` positional argument is parsed but entirely ignored — `atlas mine` always mines the current working directory regardless of the path given, so it must be run from the repository root (passing `.`) rather than pointed at a target path.\"}\n```"

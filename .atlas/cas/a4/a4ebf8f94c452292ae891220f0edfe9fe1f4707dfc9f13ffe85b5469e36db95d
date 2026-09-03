@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"setupNegBench mutates process-wide state as a side effect — it assigns process.env.ATLAS_RATIFY_TOKEN = 'billy' (matching the ratifyToken passed to the emit door) — and nowhere in this module is that environment variable restored or cleared.\"}\n```"

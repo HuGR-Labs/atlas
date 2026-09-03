@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"Although composedGate receives the SkeletonSource, repoPath, and rev up front, none of that work happens at construction: the skeleton fetch and the read of <repoPath>/.atlas/index.scip are both deferred into a resolver that runs only on the first emit call, whose result is then memoized for all subsequent emits.\"}\n```"

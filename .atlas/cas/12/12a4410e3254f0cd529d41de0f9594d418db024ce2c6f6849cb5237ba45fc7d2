@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"This suite pins reconcile's determinism at the byte level: two back-to-back runs of `atlas reconcile <genesis>` are asserted with expect(b.stdout).toBe(a.stdout) plus equal exit codes, so any nondeterministic content in reconcile's output (e.g., timestamps) would fail this test.\"}\n```"

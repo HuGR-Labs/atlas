@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"Master's branch protection intentionally ships with required_approving_review_count at 0 and require_code_owner_reviews at false — an earlier value of 1 deadlocked every open PR because the sole atlas-admins member authors all the PRs — so 'fixing' these fields before a second human joins the team blocks all merges instead of adding safety.\"}\n```"

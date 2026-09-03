@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"The CLI's TypeScript program explicitly includes both `src` and `test`, so test code is checked as part of the same build configuration as production source rather than being kept outside this package's compilation.\"}\n```"

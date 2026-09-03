@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"The scrub oracle in SCN-PERSIST-10a-e-1 pins scrub's output byte-exactly to '... token=[REDACTED] in call log line 42 ...', meaning secrets are replaced with the literal sentinel '[REDACTED]' via surgical substring substitution that preserves every adjacent non-secret byte.\"}\n```"

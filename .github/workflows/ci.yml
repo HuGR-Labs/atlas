@@ -4,15 +4,11 @@ name: ci
 on: [push, pull_request]
 jobs:
   gate:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, macOS, X64]
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0  # ears-coamend-guard diffs REQ blocks against merge-base(origin/master); needs full history
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
       - run: npm ci
       - run: npm run godfile-guard  # ≤400-LOC ceiling per source file (harness/gates)
       - run: npm run typecheck       # tsc -b — strict, downward-only layers (also builds dist/)

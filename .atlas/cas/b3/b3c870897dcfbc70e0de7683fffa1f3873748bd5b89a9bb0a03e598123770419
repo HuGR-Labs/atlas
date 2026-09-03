@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"Within this module the concrete command client enforces only `budget.timeoutMs`; the `costCap` field of `LlmBudget` is declared but is never read by any code path here.\"}\n```"

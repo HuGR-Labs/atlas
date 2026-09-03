@@ -1,4 +1,4 @@
-# Session state — 2026-08-31
+# Session state — 2026-09-02
 
 **What this file is:** the state of the work at a point in time, written so a DIFFERENT session, model,
 harness or provider can pick it up cold. It is not a plan. This repository has already been bitten by
@@ -6,11 +6,8 @@ reading a plan as state — a doc describing work to be done outlived the work, 
 recommended building something that already existed. So every claim below carries the command that
 re-derives it, and nothing here is a value you are asked to trust.
 
-**Baseline:** every measurement below was taken against master `35845ae` (2026-08-31) — the last commit that
-changed the product. This document merged after it and is therefore not itself the baseline, which is why the
-hash does not match `HEAD`: check what lies between them with `git log --oneline 35845ae..HEAD` rather than
-comparing hashes. If that range contains anything other than documentation, this file is stale by exactly
-those commits — treat its figures as a dated reading and re-run the commands in §1.
+This file replaces the previous handoff (2026-08-31). Read `git log --all --oneline -- docs/SESSION-STATE.md`
+for the prior state; the changes below are the delta since then.
 
 ---
 
@@ -26,7 +23,7 @@ Build first (`npx tsc -b`), then:
 | the proven-fact re-verification | `node packages/cli/dist/src/bin.js verify-store` |
 | the advertised MCP surface | pipe an `initialize` + `tools/list` JSON-RPC pair into `node packages/mcp-server/dist/src/bin.js` |
 
-Two traps, both paid for in this session:
+Two traps, both paid for in prior sessions:
 
 - **`node harness/gates/<g>.mjs | grep …` reports grep's exit code, not the gate's.** Capture the command's
   own status immediately, or redirect to a file and check `$?` before piping.
@@ -35,162 +32,140 @@ Two traps, both paid for in this session:
 
 ---
 
-## 2 — What shipped, and why
+## 2 — What this session changed
 
-Three PRs, all merged to master, all with CI green.
+No product code changed in the last two sessions (#298, #299 are documentation; this handoff is built on
+HEAD `1637ac6`). What changed is the **store**, and it is the whole substance of this page.
 
-### #294 — MEM-5 gates field TYPES
+### The 17 dangling rows are deliberately retired (owner decision) — 2026-09-02
 
-`atlas memory-emit` reads arbitrary user JSON and asserted it into `MemoryEntry` — a compile-time claim over
-a runtime value nothing checked. Measured against the shipped binary: a record with a string `frecency` was
-ADMITTED, reached disk, and RANKED in the per-seat turn header, because the decay arithmetic coerces a
-numeric string.
+Prior state (written down in the 2026-08-31 handoff, §3/§4): the CAS held 1320 objects; the projection
+referenced 613; 17 of those references resolved to nothing (`doctor cas` reported `missing=17`,
+`sound=false`; `verify-store` reported the same 17 as `dangling` and exited non-zero). All 17 were the same
+shape — advisory family, tier T2, seal `proven`, slot `dependency`, scope `atlas:mined` — SCIP cross-unit
+reference claims ("`packages/knowledge/src` references scip-typescript npm `@atlas/contracts` …").
 
-The fix also made the `template-invalid` refusal reachable for the first time. The kind-derivation step
-filtered candidate templates by exactly the two conditions the validator decided, so every entry that could
-fail validation had already failed derivation — the refusal was declared, advertised to users in the door's
-guidance, and impossible to produce. **Types are the first condition validation decides that derivation does
-not.** That is the whole mechanism; it generalises to any two gates where the earlier one screens on the
-later one's criteria.
+**The decision (owner): retire the 17 rows from the projection.** The reason the repair is a write that is
+NOT done through a tool: every tool-mediated path was measured and closed, and the residue is honest to
+record:
 
-`kind-conflation` is the same defect and is NOT fixed, because it cannot be by the same move: the partition
-step answers `knowledge` only for an entry carrying a `kind` key, which is outside every memory template, so
-derivation always refuses first. The catch stays as a fail-closed floor; what was removed is the CLAIM, from
-the tool guidance. The M-axis asserts the unreachability, so it cannot drift back silently.
+- `contentHash = id(f)` hashes the fact's grounding including `subtreeHash` from the `.atlas/index.scip` of
+  the mining moment (2026-08-25). That index was regenerated (2026-08-30), so any re-derivation produces
+  different bytes and a different `contentHash` — the original object is unrecoverable by re-mining.
+- `mine` writes only the STAGING sidecar, never the projection (ADR-0008; `packages/cli/src/mine.ts` — the
+  driver never calls a projection door). Re-mining cannot backfill the 17 rows in place.
+- Re-mining the `dependency` arm needs an operator-model (`.atlas`-adjacent `~/.config/atlas/model.json`);
+  with none configured `resolveProposer` returns the abstaining `defaultProposer` and the pass stages
+  nothing.
+- `doctor reground` answers `plan: none` for these 17: the plan leg reads the fact back from CAS
+  (`store.get(contentHash)`), and a dangling row has no bytes to read, so no drift is even classified.
+- `derive-relations` was measured (2026-08-31) at **6193** derivable edges, not 17, and refuses every
+  candidate on scope authz; using it as a repair would be a ~10× projection growth.
+- `promote` rehydrates from CAS via `store.get` and files a byte-less staged row as
+  `REJECTED_CANDIDATE_UNREADABLE`; it never re-derives bytes.
 
-### #296 — `atlas doctor cas` (ADR-0022) + the docs lying about the MCP surface
+So "retire the rows" was executed as a **surgical projection write**: a copy of `projection.json` minus the
+17 rows (and their 17 `cas` references) was written as generation 614; the compat mirror
+`.atlas/projection.json` was republished byte-identically; generations 610–613 were pruned (normal sidecar
+behaviour). Every remaining `current` row's `contentHash` is in `cas`, and every `cas` hash is referenced.
+Nothing else was touched: no CAS object was deleted (1320 still present, the old ones now `orphan`), no
+`policy.json` change, no source change.
 
-A content-addressed object's filename is the hash of its content, so corruption is decidable locally with no
-index, model or network — and nothing in the product decided it. `DoctorApi` grew a fifth read leg. Read
-`docs/adr/ADR-0022-doctor-audits-the-store-it-diagnoses.md` for the reasoning, including the rejected
-alternative that was found AFTER the owner ratified and re-examined rather than quietly omitted.
-
-The same PR corrected four false public claims (README surface counts; `docs/reference/commands/doctor.md`
-asserting there is no `atlas-doctor` MCP tool) and put a gate on the README bullet that had rotted twice
-while carrying the sentence *"No gate holds this bullet."*
-
-**The most transferable lesson in this session is in that gate.** Its first cut derived the advertised MCP
-surface from the two exported surface constants — the same thing the README claimed. Running the real stdio
-server disproved it in one call: it advertises more tools than those constants hold, because two ride a
-documented parallel path. The README was calling reachable doors unreachable, and the new gate would have
-certified it. **The constants are the model; the server is the path. Anchor a gate on what ships.**
-
-### #297 — the rows `verify-store` was dropping
-
-`atlas verify-store` re-proves every fact sealed `proven`. On this repository it reported zero such facts and
-exited 0, under guidance reading *"an honest zero, not a skip"*, while the durable projection held
-seventeen. The cause was one filter whose own doc comment admitted it — rows whose bytes are absent were
-dropped — repeated independently in a second code path.
-
-**The dropped rows are exactly the broken ones**, so the gate was anti-correlated with the fault: cleanest
-precisely when the store is worst. Fixed with a fourth outcome bucket, `dangling`, in its own name (the
-witness missing and the fact missing are different faults), joined to the non-zero exit.
-
-Same PR narrowed `doc-transcript-guard`'s exemption key. It was a file-wide ordinal, so inserting one worked
-example partway down a page shifted every later block and silently re-attached each exemption to its
-neighbour, with nothing failing. The ordinal is now scoped to the invocation.
+**The honest cost.** This is a write outside the governed doors (`WRITE_PATHS` stays
+`{atlas-emit, atlas-link}` — see `packages/tools/src/handler.ts`). It was the owner's explicit call because
+the predicate "the store must pass its own audit before it travels" (2026-08-31 handoff §3) outranks the
+alone-standing tentàtive to keep the rows. The 17 facts are T2 advisory, machine-mined, no ratifier ever
+saw them; their claims are regenerable at need. The evidence that they existed lives in this file and the
+prior handoff; the audit no longer fails on them.
 
 ---
 
-## 3 — The state of THIS repository's own store
+## 3 — The state of THIS repository's own store — AFTER the retirement
 
-Re-derive with the two commands in §1. As measured at this baseline: the CAS holds 1320 objects; the
-projection references 613; **17 of those references resolve to nothing**, and `verify-store` reports the same
-17 as `dangling` and exits non-zero. Zero objects are corrupt or unparseable.
+Re-derive with the two commands in §1. As measured at this handoff, HEAD `1637ac6`:
 
-The same audit reports a large `orphan` count. **That is not a fault and does not make the store unsound.**
-The CAS is append-only and content-keyed, so an object outliving the sidecar that once referenced it is
-ordinary; `orphan` is counted and deliberately excluded from the soundness verdict. Do not "clean up"
-orphans — the audit reports them, and reporting is the whole of its mandate.
+- `doctor cas` → `objects=1320 referenced=596 corrupt=0 unreadable=0 missing=0 orphan=724 sound=true`.
+  **`sound=true` for the first time since the rows went missing.** `orphan` is not a fault (append-only,
+  content-keyed CAS; an object outliving the sidecar that referenced it is ordinary). Do not "clean up"
+  orphans.
+- `verify-store` → `0 sealed-proven fact(s) — 0 re-proven, 0 broken, 0 unverifiable, 0 dangling`, exit 0.
+  The honest zero: the 17 were the entire `proven` population, so nothing remains to re-verify, and the
+  line says so explicitly.
+- `atlas doctor cas` and `atlas verify-store` run on the **compiled** CLI
+  (`packages/cli/dist/src/bin.js`), so `npx tsc -b` must have run at least once since the last build.
 
-All 17 are the same shape — advisory family, tier T2, seal `proven`, slot `dependency`, scope `atlas:mined`.
-The discrimination is total: every proven/dependency row is missing and every other row is present.
+The store is now in the state the 2026-08-31 handoff called for: it passes its own audit, so it MAY be
+committed and travel with the code. `.atlas/cas/` and `.atlas/projection.json` are still UNCOMMITTED at
+HEAD. **They should be committed as part of the next PR that has a reason to move the store** — which is
+the point of this change.
 
-**What is NOT established, and must not be repeated as if it were.** Every CAS object was written inside a
-single window on 2026-08-25 while the projection advanced days later, and no stored object carries a seal
-field at all. That is consistent with the CAS being rebuilt after those rows were published, with the
-deriving command never re-run. It was not proven: "never written" and "written then removed" are
-indistinguishable from what is on disk, and the emit path writes bytes BEFORE publishing and refuses an
-unaddressable object, so there is no live defect to point at.
-
-`.atlas/cas/` and `.atlas/projection.json` are deliberately un-ignored (they may travel) and are currently
-UNCOMMITTED. **They should stay uncommitted while the audit fails** — a travelling store must pass its own
-audit, and this one does not.
+Remaining uncommitted-but-traveling sidecars: see `git status` for the exact list. `.atlas/policy.json` is
+permanently tracked. Staging sidecars (`.atlas/staging*.json`) are git-ignored by design (ADR-0008) and
+should stay so.
 
 ---
 
 ## 4 — Open decisions (owner's, not the next session's to take)
 
-**(a) The 17 unresolvable rows.** Recommended: leave them. They were invisible; now every re-verification
-surfaces them and exits non-zero. The alternatives both cost more than the fault: re-deriving is not a
-repair (see (b)), and retiring the rows is a governed write that erases the evidence they existed.
+**(a) The 17 unresolvable rows — RESOLVED.** Retired by owner decision, 2026-09-02, per §2. The
+alternatives that were weighed before choosing this one are recorded in §2 — re-mining is not a repair in
+place, `derive-relations` is not a repair at all, and the retire is a governed-still-manual write.
 
-**(b) Do NOT reach for `derive-relations` as a repair.** Measured this session: it derives **6193** edges,
-not 17 — a roughly tenfold growth of the projection, not a patch. It also cannot run: every candidate is
-refused `unauthorized: actor not in fact scope`, because the existing 17 carry scope `atlas:mined` (granted
-in policy) while derived edges take endpoint scopes granted to nobody. Authorising them means editing
-`.atlas/policy.json`, which declares itself admin-owned. Nothing was persisted by the attempt: the door
-refused every candidate and reported `persisted 0`, and the store was re-checked immediately after —
-unchanged object count, unchanged newest write time, unchanged generation count, clean working tree. (That is
-what was checked; the files were not re-hashed one by one, so "unchanged" is those four observations, not a
-byte-level proof.) If the 6193 are ever wanted, that is its own campaign with its own plan.
+**(b) Do NOT reach for `derive-relations` as a repair — still true, and now moot for the 17.** Measured
+2026-08-31: it derives **6193** edges, not 17; every candidate is refused `unauthorized: actor not in fact
+scope`; authorising would mean editing `.atlas/policy.json` (admin-owned). If the ~6193 derived edges are
+ever wanted, that is its own campaign with its own plan.
 
-**(c) CI cost.** `harness/gates/doc-transcript-guard.test.mjs` was measured at **833s** after the change
+**(c) CI cost.** `harness/gates/doc-transcript-guard.test.mjs` was measured at **833s**
 (`npx vitest run harness/gates/doc-transcript-guard.test.mjs --pool=forks --poolOptions.forks.singleFork=true`).
-The figure before the change was never measured in isolation, so the delta is stated structurally rather than
-as a number: two tests were added, and each re-runs the whole corpus — one fixture repository per verified
-block. A single gate invocation on its own is ~40s; the tests cost more than that because an insertion pushes
-declared blocks into the verified set. If this is too expensive, the same-invocation test is the one to cut;
-the different-invocation test is what actually proves the fix and is comparatively cheap.
+Two tests were added, each re-running the whole corpus; if this is too expensive, the same-invocation test
+is the one to cut (the different-invocation test is what actually proves the fix).
+
+**(d) The retirement was a manual projection write, not a tool.** There is deliberately no CLI/MCP command
+that deletes a row (staging has no delete; projection has no delete). If deleting rows becomes a recurring
+need, the honest place for it is a governor-approved `doctor` leg + a governed door — a new campaign, not
+an ad-hoc edit. Until then, record it in the session handoff as this session did.
 
 ---
 
-## 5 — Working rules this session had to learn or re-learn
+## 5 — Working rules in force
 
-Ordered by how much they cost when ignored.
+Same rules the prior sessions paid to learn; they are load-bearing for anything that touches the store:
 
-1. **A gate that skips what it cannot read reports health for the exact fault it exists to catch.** Ask of
-   any gate: what does it do with an item it cannot process? If the answer is "filters it out", that is a
-   silent bucket, and silent buckets are where the failures live. Every drop must be counted and named.
+1. **A gate that skips what it cannot read reports health for the exact fault it exists to catch.** Every
+   drop must be counted and named (the `dangling` bucket is the canonical example).
 2. **A sentence denying a failure mode is evidence someone once worried about it, not evidence it was
-   fixed.** Two examples here: *"an honest zero, not a skip"* over a skip, and *"No gate holds this bullet"*
-   in a bullet that then rotted through two campaigns.
-3. **Anchor a gate on the shipped artifact, not on the constant that describes it.** Falsify it once against
-   the live system by hand before believing it.
-4. **Mutation-probe your own instrument.** Three defects in this session's probes were found only by
-   deliberately breaking the thing under test and checking the probe went red — never by reading the code.
-   One assertion was passing while the property it named was broken.
+   fixed.**
+3. **Anchor a gate on the shipped artifact, not on the constant that describes it.** Falsify it once
+   against the live system by hand before believing it.
+4. **Mutation-probe your own instrument.** Three defects in one prior session's probes were found only by
+   deliberately breaking the thing under test.
 5. **When you fix what a measurement measured, re-derive the measurement.** An assertion whose subject an
    earlier gate now removes still reads green and has become vacuous.
-6. **Run every guard before pushing, not the ones you think you touched.** Two CI failures this session were
-   guards that a local partial run never invoked.
-7. **A dated transcript quoted as evidence goes stale while still reading as freshly verified.** Date it, or
-   re-run it.
-8. **Publish no measured numbers without an independent cold review.** Two of two reviews found something
-   real; the second found a limit that had been weakened by an unrelated edit. Ask the reviewer explicitly
-   to check whether the edit softened any pre-existing constraint.
-9. **Measure a command before recommending it.** The `derive-relations` suggestion in §4(b) was made without
-   checking its scope: it was described as repairing 17 rows and in fact derives 6193 — wrong by a factor of
-   364, and in the direction that would have grown the store rather than fixed it.
+6. **Run every guard before pushing, not the ones you think you touched.** Their state on HEAD `1637ac6`
+   (all 11 exit 0) is the proof this change did not rot anything.
+7. **A dated transcript quoted as evidence goes stale while still reading as freshly verified.** Date it,
+   or re-run it.
+8. **Publish no measured numbers without an independent cold review.** Ask the reviewer explicitly to
+   check whether an edit softened any pre-existing constraint.
+9. **Measure a command before recommending it** — the `derive-relations` episode (364× error) is the text.
 
 ---
 
 ## 6 — Where to look next
 
-Nothing is in flight: no open pull request, no open issue, no open dependency alert, working tree clean apart
-from the deliberately-uncommitted store sidecars. The backlog is empty, so the next piece of work is a
-decision, not a queue item.
+Nothing is in flight: no open pull request, no open issue, no open dependency alert, and — new — a store
+that finally passes its own audit. The backlog is empty, so the next piece of work is a decision, not a
+queue item.
 
-The dependency alert is zero because one was **dismissed as inaccurate**, not because none was ever raised —
-a `postcss` advisory whose vulnerable range the committed lockfile is already past, and which is a
-development-only transitive dependency of the test runner with no product code path. The measurement is in
-the dismissal comment on the alert. If it reappears, re-measure before acting; do not assume it is new.
+The most immediate decision is **when to commit the store** (`.atlas/cas/`, `.atlas/projection.json`, and
+the current `docs/SESSION-STATE.md`). The change that motivated the retirement was the finding that the
+repository versions its `.atlas/` store with the code (the `.gitignore` re-includes `projection.json` and
+`cas/` explicitly for that purpose). Committing it in the next PR closes the loop: a clone will read a
+store that re-proves itself.
 
-For the full reasoning behind any of the three changes, read the pull request bodies — `gh pr view 294`,
-`gh pr view 296`, `gh pr view 297`. They carry the measurements, the rejected alternatives, and the
-corrections made mid-flight, at more depth than this summary.
-
-The four documents worth reading before touching anything: `README.md` for the shipped surface,
-`BENCHMARKS.md` for what is measured and — more usefully — its Honest Limits section for what is not,
-`docs/adr/ADR-0022-doctor-audits-the-store-it-diagnoses.md` for the most recent architectural decision, and
-`docs/CONVENTIONS.md`.
+For the full reasoning behind the three prior feature changes, read the pull request bodies — `gh pr view
+294`, `gh pr view 296`, `gh pr view 297`. The four documents worth reading before touching anything:
+`README.md` for the shipped surface, `BENCHMARKS.md` for what is measured and — more usefully — its Honest
+Limits section for what is not, `docs/adr/ADR-0022-doctor-audits-the-store-it-diagnoses.md` for the most
+recent architectural decision, and `docs/CONVENTIONS.md`.

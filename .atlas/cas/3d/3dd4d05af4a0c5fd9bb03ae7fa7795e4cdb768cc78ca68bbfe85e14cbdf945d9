@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"In the out-of-scope scenario, the test requires that a `src`-scoped query over facts anchored solely under `api` returns not only `subsumes: []` but an entirely empty `pack.invariants`, meaning the scope filter excludes out-of-scope facts from the returned pack itself rather than only suppressing their derived coverage edges.\"}\n```"

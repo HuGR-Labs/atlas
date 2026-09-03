@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"A successful retried emit onto the same node key merges claim sets rather than replacing them: the legacy CONTROL test pins the single surviving row's claims as exactly the union of the seeded incumbent's claim and the retried write's claim (both strings, and only those two, via a sorted toEqual).\"}\n```"

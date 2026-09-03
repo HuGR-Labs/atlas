@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"Although INTERVIEW_CAP is imported from src/align.js, the cap is pinned by the hard-coded literal in expect(batch.cap).toBe(20), so the imported constant is never actually referenced anywhere in this test file.\"}\n```"

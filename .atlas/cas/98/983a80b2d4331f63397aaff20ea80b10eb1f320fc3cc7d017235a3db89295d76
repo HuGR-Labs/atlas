@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"The composition card WP-2.6-b.INDEX disagrees with itself about its target file: its interface_contract pins index/ref/index.ts, while its action and guardrails mandate implementing/editing packages/index/src/index.ts — unlike the sibling cards, whose contract pointers and action targets name the same index/ref/* files.\"}\n```"

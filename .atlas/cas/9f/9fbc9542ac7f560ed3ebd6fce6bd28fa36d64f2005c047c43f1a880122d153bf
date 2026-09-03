@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"Despite the anchor being structural rather than line-based, running a code formatter over the cited function still drifts the fact, because the subtree hash is taken over the unit's raw NFC-normalized source slice with no whitespace-erasing normalization.\"}\n```"

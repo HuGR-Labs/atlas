@@ -1,0 +1,1 @@
+"```atlas-fact\n{\"claim\": \"This suite's simulated gate passes any incoming candidate status other than 'HOLDS' straight through unmodified (so 'BROKEN'/'NA' bypass the grounding and freshness checks entirely), and degrades a 'HOLDS' candidate to exactly 'NA' — never 'BROKEN' — when either check fails.\"}\n```"
