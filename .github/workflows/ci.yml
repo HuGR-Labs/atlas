@@ -1,12 +1,30 @@
 # Product build gate. Gate implementations live in harness/ (Orchestra-bound).
 # Runs on push + pull_request. The bar Orchestra enforces on seats is enforced here.
+#
+# SECURITY — why the gate runs the way it does. This job executes UNTRUSTED code on a
+# SELF-HOSTED runner (the owner's machine): `npm ci` installs arbitrary dependencies
+# and the suite runs arbitrary scripts. The repository is public, so a fork's
+# pull_request is exactly the remote-code-execution vector GitHub warns self-hosted
+# runners must never accept. Therefore:
+#   · the `gate` job runs ONLY on trusted context — pushes, and pull_requests whose
+#     head branch lives inside this repository (head.repo.full_name == this repo).
+#   · a pull_request from a FORK triggers the `fork-guard` job instead, which checks
+#     out nothing and executes nothing from the PR — only our own echo script. The
+#     merge then blocks on the missing `gate` check until a maintainer syncs the
+#     change onto an in-repo branch, where the gate runs on the trusted runner.
+#   · `permissions: contents: read` keeps the workflow token write-free; combined
+#     with the actions allowlist in repository settings, no third-party action can be
+#     introduced by a PR.
 name: ci
 on: [push, pull_request]
+permissions:
+  contents: read
 jobs:
   gate:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, macOS, X64]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0  # ears-coamend-guard diffs REQ blocks against merge-base(origin/master); needs full history
       - run: npm ci
@@ -24,3 +42,12 @@ jobs:
       - run: npm run doc-transcript-guard  # every documented command transcript is re-run against the built binary, or named as unverifiable
       - run: npm run service-gate-guard  # THE TRIPWIRE: no non-stdio transport while the service gates are shut (ARCH-12)
       - run: npm test                # vitest run — own-suite + held-out GATE + totality fences
+  # Runs for a pull_request FROM A FORK. NO checkout, NO npm, NO repo code — the job
+  # body is our own echo only, so starting it on the self-hosted runner is safe. Its
+  # purpose is a visible, honest refusal instead of a silently-missing check.
+  fork-guard:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: [self-hosted, macOS, X64]
+    steps:
+      - run: |
+          echo "::warning::This pull_request comes from a FORK. The gate never runs on fork branches — a self-hosted runner must not execute a fork's code. Have a maintainer sync this change onto a branch inside the repository; the gate will run there."
