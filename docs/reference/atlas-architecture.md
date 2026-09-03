@@ -132,10 +132,12 @@ one:
 > dynamic projection (§2.3), and the gate MUST fail so the decision is taken deliberately rather than drifted
 > into.
 
-**Current advertised surface: 5.** That is what exists and what the gate measures. **Projected after
-CAMPAIGN-10: 12** (5 governance + the 4 planners of ADR-0004, which are Proposed and unbuilt, + the 3
-already-built read doors of ADR-0005). Both numbers sit inside the budget, which is why the amendment is
-safe — and the budget is what makes the *next* addition an explicit decision instead of a slide.
+**Current advertised surface: 6 governance + 10 read = 16 `Tool` members, but the server advertises 18
+tools** (the six governance doors + two relations/negations + the six authoring/read doors + the four
+memory-read doors — `packages/mcp-server/src/server.ts`). **CAMPAIGN-10 shipped**: the ADR-0004 planners
+are built (`anchors`/`slots`/`draft`/`check`), the ADR-0005 read doors are wired (`doctor`/`node`), and the
+CAMPAIGN-11 memory ring added the four memory reads + `atlas-memory-emit`. The numbers sit inside the
+surface budget.
 *(An earlier revision stated the current surface as 12. It was 5, and the gate said so on the same day —
 a document whose stated bar is that numbers are cited rather than invented had exactly one invented number.)*
 

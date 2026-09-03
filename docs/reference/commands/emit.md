@@ -4,8 +4,10 @@ The governed write door for a grounded fact. You hand it a fact as a JSON file a
 must re-derive at; it runs the truth gate, the authorization gate and the ratification gate, and either
 persists the fact or tells you which gate said no.
 
-This page describes the **CLI** command `atlas emit`. The MCP tool is `atlas-emit`. It is one of the two
-governed write paths (`WRITE_PATHS` in `packages/tools/src/handler.ts`); the other is [`link`](./link.md).
+This page describes the **CLI** command `atlas emit`. The MCP tool is `atlas-emit`. It is one of the three
+governed write paths (`WRITE_PATHS` in `packages/tools/src/handler.ts`); the others are [`link`](./link.md)
+and `memory-emit` (`packages/tools/src/handler.ts` — `WRITE_PATHS: ['atlas-emit', 'atlas-link',
+'atlas-memory-emit']`).
 
 ## Invocation
 
@@ -67,12 +69,19 @@ next: a rejected write did not re-derive at source@sha — fix the citation and 
 invariant: TOOLS-1/7: atlas-emit is a governed fail-closed write door (WRITE_PATHS: atlas-emit, atlas-link — ADR-0003)
 data:
   id: 20512b7622b0d8864f20311700f4091b991ea5317797ce6158371d06adca0b06
+  nodeKey: f9517988f330a775ffc767c072fa01e52f38642220442916ca6b9b8c20bef532
 # exit 0
 ```
 
-`data.id` is the **content address** of the persisted fact. That is the address [`node`](./node.md) takes.
-The `id` inside the fact file is the **nodeKey**, which is what [`query`](./query.md) prints and what
-[`link`](./link.md) takes. They are different values and neither resolves in the other's place.
+The CLI prints **both handles** on a successful emit (`EmitOut` carries both; `packages/cli/src/render.ts`
+renders them in this fixed order — `id`, then `nodeKey`).
+
+- `data.id` is the **content address** (CAS hash) of the persisted fact — the address
+  [`node`](./node.md) takes, and what resolves to the fact's own `node:` line.
+- `data.nodeKey` is the **nodeKey** — the same value as the `id` field inside the fact file, and what
+  [`link`](./link.md), [`query`](./query.md) and [`doctor`](./doctor.md) take.
+
+They are different values and neither resolves in the other's place.
 
 Note the `next:` line still reads "a rejected write…" on a successful emit — the guidance is a constant per
 tool, not a description of the outcome. Read `status:`, not `next:`.
@@ -145,17 +154,20 @@ reason: emit: cannot read fact file 'missing.json'
 # exit 1
 ```
 
-## The honest gap: getting the `subtreeHash`
+## Getting the `subtreeHash`
 
 `emit` re-derives the citation against the built structural index, so the `subtreeHash` in your fact file
-must be the one that index computes for that path. **No shipped command prints it.** There is no
-`atlas anchors`, and [`mine`](./mine.md) does not fill the gap either (it abstains until the repository is
-SCIP-indexed). Today the only ways to obtain the value are to compute it the way the index does — which is
-what the black-box suite's authoring helper (`packages/e2e-blackbox/test/author.ts`) does — or to take it
-from a [`doctor reground`](./doctor.md) plan for a fact that already exists.
+must be the one that index computes for that path. **`atlas anchors <path>` prints it** — the read-only
+discovery planner (ADR-0004 / AUTHOR-3, [`anchors`](./anchors.md)) lists every groundable unit under `path`
+with its **current** `subtreeHash`, the `rev` the set was computed at, and every declared language hole.
+`atlas anchors src` over a two-file repo lists `unit file src/greet.ts [<subtreeHash>]`,
+`unit symbol src/greet.ts::function_declaration:0:greet [<subtreeHash>]`, and so on — see `anchors.md` for
+the block shape.
 
-This is the campaign-10 authoring surface, which is decomposed but not built. It is stated here rather than
-worked around: a manual that showed a hand-typed hash would be showing you a write that gets refused.
+[`mine`](./mine.md) still does not fill the gap (it abstains until the repository is SCIP-indexed), but the
+anchor hash is no longer unobtainable: the campaign-10 authoring surface this page used to mark "decomposed
+but not built" is shipped, and the product-door path to a hash is `atlas anchors <path>` → `atlas draft` →
+`atlas emit`.
 
 ## Related
 
