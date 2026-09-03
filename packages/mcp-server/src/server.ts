@@ -15,7 +15,7 @@
 //     threaded as `memoryLegs`. The write half, `atlas-memory-emit`, is a `GOVERNANCE_SURFACE` member and needs
 //     NO special-case code here — `advertisedTools(handler)` picks it up generically the moment the
 //     composition root wires `WireConfig.memoryEmit`.
-// With all legs composed production advertises SEVENTEEN tools (6 governance + 2 relations/negations + 6
+// With all legs composed production advertises EIGHTEEN tools (6 governance + 2 relations/negations + 6
 // authoring + 4 memory reads — well inside ARCH-7's budget of 30). `READ_SURFACE` now carries TEN members
 // (`@atlas/tools`, WP-10.A5.TOOLS + WP-11.W8) and the layer-guard's `GOVERNANCE_SURFACE ∪ READ_SURFACE`
 // partition (ADR-0006) is covered; `SCN-MCP-1e-2` pins that every READ_SURFACE member is advertised AND
@@ -26,8 +26,10 @@
 // from `handler.schema(tool)` verbatim and every call routes through the ONE wired handler, so identical
 // input yields a byte-identical `Verdict` on CLI and MCP (TOOLS-3). SURFACE parity does NOT hold: the CLI
 // command surface (`@atlas/cli` `COMMANDS` — the oracle; a count transcribed here would be a second one, and
-// this line carried a stale "NINE" for exactly that reason) includes `doctor`, `mine`, `node`, `promote` and
-// `own`, none of which are in `GOVERNANCE_SURFACE`, so all five are CLI-only and unreachable over MCP.
+// this line carried a stale "NINE" for exactly that reason) includes `mine`, `promote` and `own`, none of
+// which are in `GOVERNANCE_SURFACE` OR `READ_SURFACE`, so those three are CLI-only and unreachable over MCP.
+// `doctor` and `node` ARE reachable over MCP today — they ride the READ surface as the `atlas-doctor` /
+// `atlas-node` projections (server-read-tools.ts), NOT CLI-only.
 // `promote` is the one worth stating explicitly, because it WRITES: the KNOW-8 curator door publishes through
 // `atlas-emit` (ADR-0008 — an ordinary use of the existing door, not new surface), so no tool token exists
 // for it and an MCP client cannot promote staged candidates. `own` is the newest, and it READS: the RETR-12
@@ -71,8 +73,11 @@ type _Verdict = Verdict;
 const SERVER_INFO = { name: '@atlas/mcp-server', version: '0.0.0' } as const;
 
 /**
- * The advertised tool list (ListTools) — EXACTLY the `GOVERNANCE_SURFACE` tools, no more, no less (TOOLS-1;
- * WP-SAMEAS extended the surface to five with the governed `atlas-link` write door). The MCP tool `name` is
+ * The advertised tool list (ListTools) — the `GOVERNANCE_SURFACE` slice: the six governance tools (TOOLS-1,
+ * ADR-0006 Decision 2: DERIVED and BUDGETED, not a fixed count), mapped verbatim from `handler.schema`. The
+ * full ListTools surface is those SIX UNIONED with the disjoint read surface (relations/negations + the
+ * READ_SURFACE authoring/memory doors — see `listTools` below); this function maps only the governance slice.
+ * The MCP tool `name` is
  * the `Tool` string; `description` + `inputSchema` are read from
  * `handler.schema(tool)` (the handler owns the published schema — CLI ≡ MCP in SCHEMA and VERDICT bytes,
  * TOOLS-3; NOT in exposed surface — see the file header for the three CLI-only commands). The
@@ -92,7 +97,7 @@ export function advertisedTools(handler: WiredHandler): SdkTool[] {
 
 /**
  * The `atlas relations` MCP tool (#99a). It is a READ tool served DIRECTLY from an injected `RelationLeg`,
- * NOT through `GOVERNANCE_SURFACE` — so `GOVERNANCE_SURFACE` stays 5 and the closed-surface pin is untouched.
+ * NOT through `GOVERNANCE_SURFACE` — so `GOVERNANCE_SURFACE` stays its six and the closed-surface pin is untouched.
  * This is the honest mirror of the CLI, where `relations` (like `node`/`own`) is intercepted BEFORE the
  * handler: it opens no governed surface and has no `Tool` token, so `handler.schema` cannot own its schema.
  * The schema is therefore DOCUMENTED here and advertised verbatim — the one place it lives.
@@ -128,7 +133,7 @@ export const RELATIONS_INPUT_SCHEMA = {
 
 /**
  * The `atlas negations` MCP tool (#99b). Like `atlas-relations` it is a READ tool served DIRECTLY from an
- * injected leg, NOT through `GOVERNANCE_SURFACE` — so `GOVERNANCE_SURFACE` stays 5 and the closed-surface pin
+ * injected leg, NOT through `GOVERNANCE_SURFACE` — so `GOVERNANCE_SURFACE` stays its six and the closed-surface pin
  * is untouched. It mirrors the CLI, where `negations` is intercepted BEFORE the handler: it opens no governed
  * surface and has no `Tool` token, so its schema is DOCUMENTED here and advertised verbatim.
  */
@@ -184,10 +189,11 @@ export function advertisedReadTools(relations?: RelationLeg, negations?: Negatio
   return tools;
 }
 
-/** The ListTools response — the closed governance surface (TOOLS-1), PLUS the `relations`/`negations` read
- *  tools when their legs are injected, PLUS the full `READ_SURFACE` (6: anchors, slots, draft, check, doctor,
- *  node) when the authoring bundle is injected (WP-10.A5.MCP). With no leg the response is byte-for-byte the
- *  closed governance surface. */
+/** The ListTools response — the closed governance surface (TOOLS-1, six), PLUS the `relations`/`negations`
+ *  read tools when their legs are injected, PLUS the six authoring `READ_SURFACE` doors (anchors, slots,
+ *  draft, check, doctor, node) when the authoring bundle is injected (WP-10.A5.MCP), PLUS the four memory
+ *  `READ_SURFACE` doors when the memory bundle is injected (WP-11.W8). With no leg the response is
+ *  byte-for-byte the closed governance surface. */
 export function listTools(
   handler: WiredHandler,
   relations?: RelationLeg,
