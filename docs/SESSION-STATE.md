@@ -8,7 +8,7 @@ re-derives it, and nothing here is a value you are asked to trust.
 
 This file replaces the previous handoffs (2026-08-31, and its own 2026-09-02 rewrite). Read
 `git log --all --oneline -- docs/SESSION-STATE.md` for the prior state; the changes below are the delta
-since then.
+since then. The session continued past the §2.5 checkpoint; §2.6 records the work it did.
 
 ---
 
@@ -30,6 +30,16 @@ Two traps, both paid for in prior sessions:
   own status immediately, or redirect to a file and check `$?` before piping.
 - **Never run the whole test suite concurrently.** It has frozen this machine. One package at a time:
   `npx vitest run packages/<name> --pool=forks --poolOptions.forks.singleFork=true`.
+
+### Operating notes from THIS session (paid for again)
+
+- **A self-hosted runner has EIGHT sibling runners on the same machine** (atlas, skill-001, githugr,
+  wallet×3, corelink). CI can stall to ~45min when they contend for the disk/CPU; the disk itself filled
+  (100%) mid-session. Before debugging a stalled run, `df -h /` and count the Runner.Listener processes.
+- **`~/actions-runner/bin` and `externals` are SYMLINKS to `bin.2.337.0`/`externals.2.337.0`.** Deleting the
+  versioned dirs to free disk breaks `svc.sh` (`TEMPLATE_PATH` missing) and silently strands the runner.
+  Delete the backup-suffixed dirs (`.2.336.0`) first; `svc.sh stop` kills the listener and `./run.sh` restarts it.
+- **Do not `rm -rf` anything under `~/actions-runner` without reading what the symlinks point to.**
 
 ---
 
@@ -123,6 +133,67 @@ Settings-level, applied via the REST API (live, do not revert without the owner)
 
 ---
 
+## 2.6 — What changed later on 2026-09-03 — surface hygiene, lucy-1, the owner ruling
+
+Three further PRs merged to master after §2.5 was written.
+
+### #303 / #304 — the surface docs and code comments caught up with the shipped 18 tools
+
+- `#303 chore/code-comment-hygiene` — stale comments in `packages/mcp-server/src/server.ts` /
+  `server-read-tools.ts` corrected: 18 tools (not 17), six governance (not five), `doctor`/`node` ARE
+  reachable over MCP (were claimed CLI-only). Comments only; the mutation-probe showed the guards read
+  constants, not comments, so this job was value that no gate catches.
+- `#304 docs/surface-truth-hygiene` — the docs layer corrected to the shipped constants (six
+  governance / three write paths / ten read / 18 advertised): `emit.md` (both handles), `init.md`
+  (full `InitOut` render, transcripts marked illustrative), `node.md`, the atlas-* reference pages,
+  `wp-campaign-10.md`, `roadmap-authoring.md` (CAMPAIGN-10.1/2/3 marked SHIPPED). One deliberate
+  boundary: the RATIFIED `ENTRY-MCP-3` invariant text stayed "exactly five/two" — that was lucy-1,
+  handled next.
+
+### #305 — lucy-1 resolved: the ratified layer now names the derived six/three (req layer fan-out)
+
+The requirement layer still asserted "exactly five governance / exactly two write doors" while the
+product shipped **six / three / ten-read / 18-advertised**. ADR-0006 Decision 2 (owner-ratified) had
+superseded the count with the DERIVED + BUDGETED surface property and CAMPAIGN-11 added
+`atlas-memory-emit`, but the fan-out into the ratified rows never ran. #305 performed the governed
+co-amendment: `INV-TOOLS-1/12/16` + `INV-MCP-3` restated to the derived surface; `REQ-TOOLS-1a/1b/12c/16e`
++ `REQ-MCP-3d/3g` re-lifted verbatim (live quotes again, ledger shrank by four); goldens/method-tags/
+properties fanned out (teeth bumped to seventh-tool/fourth-door — the conformance tests already pinned
+6/3 since WP-11.W8, the docs were behind their own witness); register rows updated; ADR-0005's count
+superseded with a dated note; A-D3/A-D4 got `[COUNT SUPERSEDED]` tombstones. All 11 gates green.
+**In-flight CI also paid a tax: the disk on the runner filled (ENOSPC), producing two false-red gate
+runs on the same PR; the rerun passed in 8m.** See the operating notes in §1.
+
+### #306 — hygiene: recut ledger closed, doc-transcript CI cost re-measured
+
+`docs/design/campaign-10-recut.md` nine rows still `OPEN` that are shipped (lucy-1/2, bobby-1/2,
+billy-1, A5-stale-4, dogfood-5, F4/F5/no-help) each given its closing evidence; `arch-#8` stays OPEN,
+pointed at ARCH-D3b/D4. And the doc-transcript CI cost was re-measured on the healthy runner:
+**241s, not the 833s recorded on 2026-08-31** — the "cut the same-invocation test" advice is retracted.
+
+### #307 — the AUTHORITY ruling (owner, 2026-09-03): CREATE is T2-by-construction, growth by USE-OR-SEAL
+
+The owner ratified the two questions that kept ADR-0010 a proposal. Product framing, verbatim:
+*"who approves is the ORCHESTRATOR, approving only with evidence, clear protocol; both [use-and-success
+and human seal] coexist; neither is mandatory; human-in-the-loop kills the purpose, this serves LLMs not
+humans."* Three commitments (ADR-0010 §"Owner ruling"; atlas-architecture §3.4):
+
+1. **CREATE is T2-by-construction** — a new node is born advisory; the one-way join at
+   `fastpath.ts:143` already made self-declaring higher cost more than it buys, and the ruling makes T2
+   the written rule, not a consequence.
+2. **Growth is USE-OR-SEAL, neither mandatory** — a node leaves advisory by ONE of two earned evidences:
+   **USE** (served in a recorded, completed decision; the `hits` ledger
+   `packages/knowledge/src/lifecycle/hits.ts` is the foundation) or **SEAL** (human ratify token).
+   Neither is required; a node earning neither stays advisory and decays (KNOW-17).
+3. **The ratify token is ONE evidence, not a gate; verification stays advisory** under the local
+   posture; `service-gate-guard` re-opens it the moment a remote/multi-tenant transport is attempted.
+
+ADR-0010 moves Proposed → Accepted. Items 1 and 3 of its old ratification list (wire `DOOR_RATIFY_CTX`
+derivation; derive `scope` from `primaryAnchor`) become the implementation scope of **ARCH-D3b**, now
+authorized to build. **Docs-only — no code behavior yet.**
+
+---
+
 ## 3 — The state of THIS repository's own store — AFTER the retirement
 
 Re-derive with the two commands in §1. As measured at this handoff, HEAD `bd9aaca`:
@@ -198,23 +269,30 @@ Same rules the prior sessions paid to learn; they are load-bearing for anything 
 
 ## 6 — Where to look next
 
-Nothing is in flight: no open pull request, no open issue, no open dependency alert. The store finally
-passes its own audit and is committed; the CI is green and self-hosted-secure. The backlog is empty, so
-the next piece of work is a decision, not a queue item.
+Nothing is in flight: no open pull request, no open issue, no open dependency alert. The store passes its
+own audit and is committed; CI is green and self-hosted-secure.
 
-Two standing threads a future session may pick up, both owner-level decisions:
+The next piece of work is **no longer a decision — it is ARCH-D3b, IMPLEMENTATION AUTHORIZED.** The
+2026-09-03 owner ruling (§2.6/#307) resolved the two questions keeping ADR-0010 a proposal; the
+implementation scope is exactly what atlas-architecture §3.4 pins:
 
-- **The billing lock.** The GitHub account billing is locked, which is why CI runs on the owner's
-  machine. Clearing it restores hosted runners; the security posture (#301) stays regardless, and the
-  `runs-on` switch could go back to `ubuntu-latest` at that point if the owner wants to stop paying
-  laptop-cycles.
-- **The fork-PR contribution flow.** #301 means a fork's PR can never pass `gate` by itself; the change
-  must be synced onto an in-repo branch first. This is a deliberate trade of collaboration-friction for
-  machine safety. If one-person/one-branch collaboration is ever wanted again, the honest alternative is
-  hosted runners without the billing lock, not weakening #301.
+1. **Wire the `DOOR_RATIFY_CTX` derivation** — replace the `{ contested: false, lowRisk: true }` constant
+   in `packages/adapter-io/src/governed-emit-route.ts:24` with the real verdicts: `lowRisk` from the
+   KNOW-17 hits-threshold (the foundations exist in `packages/knowledge/src/lifecycle/hits.ts`), `contested`
+   from the KNOW-18b store-veto.
+2. **Derive `scope` from `primaryAnchor`** — authz must not be claimable by declaration; a
+   scope↔anchor mapping in `adapter-io/policy.ts`.
+3. **Growth by USE-OR-SEAL** — the hits ledger feeds class growth (T2 → T1/T0 by accumulated evidence or
+   by human seal); no mandatory human gate.
+
+Two standing threads remain owner-level, unchanged from the prior handoff:
+- **The billing lock** — why CI runs on the owner's machine; clearing it restores hosted runners.
+- **The fork-PR contribution flow** — #301 means forks never reach the gate until synced in-repo.
 
 For the full reasoning behind the recent changes, read the pull request bodies — `gh pr view 294`,
-`gh pr view 296`, `gh pr view 297`, `gh pr view 300`, `gh pr view 301`. The four documents worth reading
-before touching anything: `README.md` for the shipped surface, `BENCHMARKS.md` for what is measured and —
-more usefully — its Honest Limits section for what is not, `docs/adr/ADR-0022-doctor-audits-the-store-it-diagnoses.md`
-for the most recent architectural decision, and `docs/CONVENTIONS.md`.
+`gh pr view 296`, `gh pr view 297`, `gh pr view 300`, `gh pr view 301`, `gh pr view 305`, `gh pr view 307`.
+The four documents worth reading before touching anything: `README.md` for the shipped surface,
+`BENCHMARKS.md` for what is measured and — more usefully — its Honest Limits section for what is not,
+`docs/adr/ADR-0022-doctor-audits-the-store-it-diagnoses.md` for the most recent architectural decision,
+and `docs/CONVENTIONS.md`. For ARCH-D3b specifically, start at `docs/adr/ADR-0010` §"Owner ruling" and
+`docs/reference/atlas-architecture.md` §3.4.
