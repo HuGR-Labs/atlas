@@ -1,13 +1,14 @@
 // @atlas/mcp-server — src/server-read-tools.ts  (WP-10.A5.MCP — the READ_SURFACE tools over the stdio transport)
 //
-// Bring the full `READ_SURFACE` (ADR-0005: `anchors`, `slots`, `draft`, `check`, `doctor`, `node` — SIX) onto
-// the stdio MCP transport, ADVERTISED and ROUTED, so an MCP agent seat has the same authoring surface the CLI
+// Bring the six authoring `READ_SURFACE` doors (ADR-0005: `anchors`, `slots`, `draft`, `check`, `doctor`,
+// `node` — the pre-existing six; the four memory doors live in server-memory-tools.ts) onto the stdio MCP
+// transport, ADVERTISED and ROUTED, so an MCP agent seat has the same authoring surface the CLI
 // has. Each tool follows the shipped `atlas-relations` template (server.ts): a per-tool name const, a
 // HAND-WRITTEN `*_INPUT_SCHEMA` (the read tools have NO `Tool` token, so `handler.schema` cannot own their
 // schema — the schema is DOCUMENTED here, the one place it lives), advertised when its leg is composed, and
 // routed in `callTool` DIRECTLY to the SHARED verdict builder (`@atlas/adapter-io`) both transports drive — so
 // identical input yields a byte-identical `Verdict` on CLI and MCP. NONE opens a governed token or a write
-// path: `GOVERNANCE_SURFACE` stays byte-for-byte closed at five, `WRITE_PATHS` untouched.
+// path: `GOVERNANCE_SURFACE` stays byte-for-byte closed at six, `WRITE_PATHS` untouched.
 //
 // The advertise≡invocable enforcement for this surface is the EXTENDED conformance test
 // (`test/surface-conformance-req-mcp-1e.test.ts`): every `READ_SURFACE` member must be BOTH advertised AND
