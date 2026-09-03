@@ -324,8 +324,8 @@
     "why": "Carrier 2 of this anchor is reached by NO live REQ quote (WP-GOV-4, issue #208). req-clause-guard takes its verdict at the FIRST carrier, so an ## Acceptance restatement can never be reached by a quote and was held by nothing — inverting the INDEX-16 restatement left all nine gates at exit 0. Records what is IN THE TREE at master 0a4c99d, not an owner ratification. Amending this text requires updating this digest IN THE SAME COMMIT and naming the ratifier."
   },
   "docs/reference/atlas-tools.md#tools-12@carrier2": {
-    "digest": "9c2cbcedf824d8fb0835396847dbede7",
-    "why": "Carrier 2 of this anchor is reached by NO live REQ quote (WP-GOV-4, issue #208). req-clause-guard takes its verdict at the FIRST carrier, so an ## Acceptance restatement can never be reached by a quote and was held by nothing — inverting the INDEX-16 restatement left all nine gates at exit 0. Records what is IN THE TREE at master 0a4c99d, not an owner ratification. Amending this text requires updating this digest IN THE SAME COMMIT and naming the ratifier."
+    "digest": "0fc079a1d8fab5772dccb454135a7d58",
+    "why": "Carrier 2 of this anchor is reached by NO live REQ quote (WP-GOV-4, issue #208). req-clause-guard takes its verdict at the FIRST carrier, so an ## Acceptance restatement can never be reached by a quote and was held by nothing — inverting the INDEX-16 restatement left all nine gates at exit 0. Records what is IN THE TREE at master 0a4c99d, not an owner ratification. Amending this text requires updating this digest IN THE SAME COMMIT and naming the ratifier. RE-PINNED 2026-09-03 (req/lucy-1-derived-surface): carrier text amended to the derived six/three surface (ADR-0006 Decision 2); ratified by the owner in the same commit."
   },
   "docs/reference/atlas-tools.md#tools-14@carrier2": {
     "digest": "f00b20e257d0464f7c25ea7ad8b7ad19",
@@ -335,13 +335,9 @@
     "digest": "088b9375be6a5261ed344305471235ee",
     "why": "Carrier 2 of this anchor is reached by NO live REQ quote (WP-GOV-4, issue #208). req-clause-guard takes its verdict at the FIRST carrier, so an ## Acceptance restatement can never be reached by a quote and was held by nothing — inverting the INDEX-16 restatement left all nine gates at exit 0. Records what is IN THE TREE at master 0a4c99d, not an owner ratification. Amending this text requires updating this digest IN THE SAME COMMIT and naming the ratifier."
   },
-  "docs/reference/atlas-tools.md#tools-1@carrier1": {
-    "digest": "4b2a7ebaa9f48e9921e8f414b75d6366",
-    "why": "Pinned by WP-GOV-1 (issue #199): every REQ citing this anchor is a ledgered waiver, so no live quote holds it. Re-keyed to carrier 1 by WP-GOV-4 (issue #208), which moved the pinned unit from the invariant to the CARRIER; this anchor is carried more than once. Records what is IN THE TREE at master 0a4c99d, not an owner ratification — only the owner can give that. Re-pin only together with a ratified amendment, and name the ratifier here when you do."
-  },
   "docs/reference/atlas-tools.md#tools-1@carrier2": {
-    "digest": "6231c8b5ebd62b7a6ba5f740e7b27a64",
-    "why": "Pinned by WP-GOV-1 (issue #199): every REQ citing this anchor is a ledgered waiver, so no live quote holds it. Re-keyed to carrier 2 by WP-GOV-4 (issue #208), which moved the pinned unit from the invariant to the CARRIER; this anchor is carried more than once. Records what is IN THE TREE at master 0a4c99d, not an owner ratification — only the owner can give that. Re-pin only together with a ratified amendment, and name the ratifier here when you do."
+    "digest": "f0709288d8082dafa8a05a60f3e8dc8a",
+    "why": "Pinned by WP-GOV-1 (issue #199): every REQ citing this anchor is a ledgered waiver, so no live quote holds it. Re-keyed to carrier 2 by WP-GOV-4 (issue #208), which moved the pinned unit from the invariant to the CARRIER; this anchor is carried more than once. Records what is IN THE TREE at master 0a4c99d, not an owner ratification — only the owner can give that. Re-pin only together with a ratified amendment, and name the ratifier here when you do. RE-PINNED 2026-09-03 (req/lucy-1-derived-surface): carrier text amended to the derived six/three surface (ADR-0006 Decision 2); ratified by the owner in the same commit."
   },
   "docs/reference/atlas-tools.md#tools-2@carrier2": {
     "digest": "61c70c9f3cda2b1532381efdfe73bdbc",

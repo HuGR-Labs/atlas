@@ -166,7 +166,7 @@ packages/
   knowledge       write-decision (create/update/supersede) · lifecycle · tier-routed ratification · check-engine
   retrieval       bounded packs · OwnPack · poke · injection budget
   memory          Knowledge≠Memory boundary · Awareness/Orientation/Rules slabs
-  tools           the governed tool surface (5 governance + 6 read doors · 2 of them write) · schemas · spawn ladder
+  tools           the governed tool surface (6 governance + 10 read doors · 3 of them write) · schemas · spawn ladder
   genesis         the one-time $0-LLM seeder · budgeted LLM proposal · mechanical admission
   ── RING (campaign 9 — the productization surface; the core stays pure and does no I/O itself)
   adapter-io      the composition root: filesystem · SCIP · git · LLM · durable store, wired into ONE handler

@@ -351,10 +351,10 @@ source: INV-MCP-3 @ reference/atlas-authoring.md#entry-mcp-3
 Every `READ_SURFACE` member shall carry zero write authority.
 normative-clause: "every member of which carries **zero** write authority"
 
-### REQ-MCP-3d — the governed counts are unchanged
-source: INV-MCP-3 @ reference/atlas-authoring.md#entry-mcp-3
-`GOVERNANCE_SURFACE` shall remain exactly five and `WRITE_PATHS` exactly two.
-normative-clause: "`GOVERNANCE_SURFACE` MUST remain exactly five and `WRITE_PATHS` exactly two"
+### REQ-MCP-3d — the governed counts are derived, not fixed
+source: INV-MCP-3 @ reference/atlas-authoring.md#entry-mcp-3 (amended ADR-0006 Decision 2)
+`GOVERNANCE_SURFACE` is the DERIVED + BUDGETED surface of ADR-0006 Decision 2 — today six (`atlas-init`, `atlas-query`, `atlas-emit`, `atlas-reconcile`, `atlas-link`, `atlas-memory-emit`) — and `WRITE_PATHS` is its derived write subset (today three: `atlas-emit`, `atlas-link`, `atlas-memory-emit`).
+normative-clause: "`GOVERNANCE_SURFACE` is the DERIVED + BUDGETED surface of ADR-0006 Decision 2"
 
 ### REQ-MCP-3e — no read-to-write routing
 source: INV-MCP-3 @ reference/atlas-authoring.md#entry-mcp-3 (unwanted)
@@ -367,9 +367,9 @@ If a tool is a member of either set, then it shall appear in the advertised list
 normative-clause: "MUST advertise `GOVERNANCE_SURFACE ∪ READ_SURFACE`"
 
 ### REQ-MCP-3g — publishing a read door grows no governed set
-source: INV-MCP-3 @ reference/atlas-authoring.md#entry-mcp-3 (unwanted)
-If a read door is published, then `GOVERNANCE_SURFACE` and `WRITE_PATHS` shall be unchanged.
-normative-clause: "`GOVERNANCE_SURFACE` MUST remain exactly five and `WRITE_PATHS` exactly two"
+source: INV-MCP-3 @ reference/atlas-authoring.md#entry-mcp-3 (amended ADR-0006 Decision 2)
+If a read door is published, then `GOVERNANCE_SURFACE` and `WRITE_PATHS` shall be unchanged, because both are the DERIVED + BUDGETED surface of ADR-0006 Decision 2 rather than a fixed count.
+normative-clause: "`GOVERNANCE_SURFACE` is the DERIVED + BUDGETED surface of ADR-0006 Decision 2"
 
 ### REQ-MCP-4a — byte-identical verdicts
 source: INV-MCP-4 @ reference/atlas-authoring.md#entry-mcp-4

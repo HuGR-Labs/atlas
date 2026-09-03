@@ -463,10 +463,10 @@ When every `READ_SURFACE` member is invoked over MCP
 Then the spy records zero calls.
 teeth: breaks-on a read door that delegates to the emit leg "for convenience" — cardinality and disjointness all still pass.
 
-### SCN-MCP-3d-1 — the governed counts are unchanged
+### SCN-MCP-3d-1 — the governed counts are derived, not fixed
 source: REQ-MCP-3d · gen: exhaustive
 When the two frozen constants are measured
-Then `|GOVERNANCE_SURFACE| == 5` and `|WRITE_PATHS| == 2`.
+Then `|GOVERNANCE_SURFACE| == 6` (derived + budgeted, ADR-0006 Decision 2) and `|WRITE_PATHS| == 3`.
 
 ### SCN-MCP-3e-1 — no read-to-write routing
 source: REQ-MCP-3e · gen: exhaustive (guard)
@@ -484,7 +484,7 @@ Then every member is found.
 source: REQ-MCP-3g · gen: exhaustive (guard)
 Given the advertised union including the four new planners and the three pre-existing read doors
 When the two frozen constants are re-measured
-Then they are unchanged at 5 and 2.
+Then they are unchanged at the derived six and three (ADR-0006 Decision 2).
 
 ### SCN-MCP-4a-1 — byte-identical verdicts
 source: REQ-MCP-4a · gen: PBT (witness of PROP-MCP-4)

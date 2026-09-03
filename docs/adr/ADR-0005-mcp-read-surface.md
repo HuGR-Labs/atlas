@@ -6,6 +6,11 @@
 - **Spec author:** lead, grounded against `packages/mcp-server/src/server.ts` @ `3496d6f`.
 - **Introduces:** `INV-MCP-3`, `INV-MCP-4` (reference/atlas-authoring.md#entry-mcp-3, #entry-mcp-4).
 - **Does NOT amend:** INV-TOOLS-1 / ADR-0003. `GOVERNANCE_SURFACE` stays 5; `WRITE_PATHS` stays 2.
+  **[SUPERSEDED COUNT 2026-09-03, ADR-0006 Decision 2]** This ADR's "stays 5 / stays 2" counts were written
+  at the five-leg/AD-0003 moment; ADR-0006 Decision 2 (owner-ratified) replaced the fixed counts with the
+  DERIVED + BUDGETED surface property, and CAMPAIGN-11 (WP-11.W8) added the governed `atlas-memory-emit`
+  door. The property this ADR protects — `READ_SURFACE` carries zero write authority, grows neither
+  governed set — is unchanged; the specific numbers below are the then-current reading, now six and three.
 - **[RECONCILED 2026-08-24, owner-decided, WP-10.A5.TOOLS]** This ADR's original text (below) claimed
   `atlas-diff` was "wired, tested, and reachable from the CLI" alongside `doctor`/`node`. **That claim is
   FALSE against the shipped tree** — `packages/tools/src/diff.ts` is a declared reference model with ZERO

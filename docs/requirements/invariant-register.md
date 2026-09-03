@@ -311,7 +311,7 @@ anchor: `reference/atlas-tools.md#tools-N`. *(pure-reach/robustness invariants g
 
 | INV | FR/need | independence | testable + number | flag | ADR | verdict |
 |---|---|---|---|---|---|---|
-| TOOLS-1 five-tool surface, governed write-doors | FR-10 | COUPLED-with TOOLS-15 (seam #4) | exactly 5 gov tools; WRITE_PATHS={emit,link} each governed; 0 back-channel write; CLI=MCP | behavioural | ADR-T1 structural-door; ADR-0003 | **RATIFIED** |
+| TOOLS-1 derived six-tool surface, governed write-doors | FR-10 | COUPLED-with TOOLS-15 (seam #4) | DERIVED + BUDGETED surface (ADR-0006 Decision 2) = 6 gov tools; WRITE_PATHS={emit,link,memory-emit} each governed; 0 back-channel write; CLI=MCP | behavioural | ADR-T1 structural-door; ADR-0003; ADR-0006 Dec-2 | **RATIFIED** |
 | TOOLS-2 pure + total | FR-13 | on-diag | malformed arg ⇒ 0 throws | behavioural | — | **RATIFIED** |
 | TOOLS-3 CLI+MCP parity | FR-13 | on-diag | one schema, 0 divergence | behavioural | ADR-T3 | **RATIFIED** |
 | TOOLS-4 guidance shipped | FR-13 | on-diag | 100% results carry next+invariant | behavioural | — | **RATIFIED** |
@@ -323,13 +323,13 @@ anchor: `reference/atlas-tools.md#tools-N`. *(pure-reach/robustness invariants g
 | TOOLS-10 node tri-transport, one contract | FR-3 | on-diag (read-only projection) | node byte-identical over MCP/poke/CLI; 0 write path | behavioural | ADR-T10 | **RATIFIED** |
 | TOOLS-11 subagent reach ladder | FR-13 | decoupled-after TOOLS-10 | Read-only seat gets pack (push) + query; 0 forced-to-CLI | behavioural | ADR-T11 | **RATIFIED** |
 | TOOLS-11a native pull SDK-pinned, honest ladder | FR-13 | COUPLED-with TOOLS-11 | SDK resolves native; .claude/agents ⇒ unavailable, 0 silent fall-through | behavioural | ADR-T11a | **RATIFIED** |
-| TOOLS-12 doctor read-only advisory | FR-10 | decoupled-after TOOLS-1 | why-broken/hot-set/reground plan; persists 0; surface stays 5 | behavioural | via ADR-T1 | **RATIFIED** |
+| TOOLS-12 doctor read-only advisory | FR-10 | decoupled-after TOOLS-1 | why-broken/hot-set/reground plan; persists 0; surface stays the derived six | behavioural | via ADR-T1; ADR-0006 Dec-2 | **RATIFIED** |
 | TOOLS-13 mechanical drift auto-re-grounds | FR-6 | COUPLED-with TOOLS-8 | --accept-reground ⇒ regroundedCount==|mechanical|, 0 human/block | behavioural | via ADR-T8 | **RATIFIED** |
 | TOOLS-14 pre-phase discovery hook | FR-4 | decoupled-after M-Retrieval | every phase boundary ⇒ fresh pack pushed, 0 seat-side pull | behavioural | via ADR-T11 | **RATIFIED** |
 | TOOLS-15 single-write-door structural | FR-10 | COUPLED-with TOOLS-1 (seam #4) | direct write ⇒ can't land or fails integrity; only rows admitted through the `atlas-emit` write door resolve (the store-row medium is emit-only; `atlas-link` writes sameAs edges to the projection sidecar, not this medium) | behavioural | via ADR-T1; ADR-0003 | **RATIFIED** |
-| TOOLS-16 atlas-diff read-only version projection | FR-10 | decoupled-after TOOLS-1 (read-only projection; consumes PERSIST-14 delta) | atlas-diff surfaces the PERSIST-14 delta read-only; CLI=MCP 0 divergence; 0 write path; governance write surface stays the two governed doors {emit,link} (not a write door, like node TOOLS-10 / doctor TOOLS-12) | behavioural | via ADR-T1; ADR-0003 (read projection; write surface={emit,link}) | **RATIFIED** |
+| TOOLS-16 atlas-diff read-only version projection | FR-10 | decoupled-after TOOLS-1 (read-only projection; consumes PERSIST-14 delta) | atlas-diff surfaces the PERSIST-14 delta read-only; CLI=MCP 0 divergence; 0 write path; governance write surface stays the derived three governed doors {emit,link,memory-emit} (not a write door, like node TOOLS-10 / doctor TOOLS-12) | behavioural | via ADR-T1; ADR-0003 (read projection; write surface={emit,link}); ADR-0006 Dec-2 | **RATIFIED** |
 
-**TLS: 17/17 RATIFIED** (TOOLS-2/3/4/11/11a re-homed to FR-13 delivery-ergonomics after the D0 extension; TOOLS-16 added as the `atlas-diff` read-only version projection — a read projection consistent with TOOLS-1/15, NOT a write tool). INV-TOOLS-1 amended by ADR-0003 (WP-SAMEAS): governance surface = 5 tools; write surface = 2 governed doors `{atlas-emit, atlas-link}` — a **property** invariant (every write through a governed door), not a count.
+**TLS: 17/17 RATIFIED** (TOOLS-2/3/4/11/11a re-homed to FR-13 delivery-ergonomics after the D0 extension; TOOLS-16 added as the `atlas-diff` read-only version projection — a read projection consistent with TOOLS-1/15, NOT a write tool). INV-TOOLS-1 amended by ADR-0003 (WP-SAMEAS) and by ADR-0006 Decision 2: governance surface = the DERIVED + BUDGETED six tools; write surface = 3 governed doors `{atlas-emit, atlas-link, atlas-memory-emit}` — a **property** invariant (every write through a governed door), not a count.
 
 ## Block GEN — genesis (16) · M-Lifecycle (DP-8) · **FR-9 COUPLED-with FR-7** (11 FR-9, 5 FR-2) · standard
 
