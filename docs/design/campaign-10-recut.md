@@ -114,20 +114,20 @@ the WP cards, and `authoring.md §5`. First-pass verdicts against `master @ e3ba
 | arch-#9 | check conflicted with ARCH-10 wording | **RESOLVED** — shipped as test (ADR-0007) |
 | arch-#10 | check already satisfied by target code | **RESOLVED / moot** |
 | A5-stale-1/2/3 | two singular-write-door strings, unscanned repo root, missing anti-drift pattern | **RESOLVED (standalone)** |
-| lucy-1 | INV-MCP-1 "exactly five" contradicts the 12-tool union | **OPEN (design)** — superseded on paper (ADR-0006), correction #5 wires it into the plan |
-| lucy-2 | register completeness table checked only the non-conflicting invariant | **OPEN** — folded into correction #5 |
-| bobby-1 | seam ownership inverts ARCH-2; 2 of 5 freezes unbuildable | **OPEN** — correction #1/#2 |
-| bobby-2 | no WP names `wire.ts`; four doors built and never bound | **OPEN** — correction #3 |
-| billy-1 | `callTool` has no membership check (advertised ≠ invocable) | **OPEN (structural)** — correction #6 |
-| arch-#8 | acceptance satisfiable with no code change | **OPEN** — belongs to the deferred AUTHORITY model (ARCH-9/11/12, out of scope) |
-| A5-stale-4 | `server.ts:63` "no more, no less" comment stale vs union | **OPEN** — correction #5/#6 sweep |
-| dogfood-5 (AUTH-12) | emit surfaces raw `TypeError`, no legible refusal | **OPEN** — shape gate, A3.ADAPTER |
-| F4 (AUTH-14) | emit returns `contentHash`, read doors take `NodeKey` — loop unclosed | **OPEN** — EPIC-A4 |
-| F5 (CLI-6) | `render.ts:99-104` drops 2 of 3 `InitOut` fields | **OPEN** — A4.CLI |
-| no-help (CLI-5) | `atlas help` does not exist | **OPEN** — A4.CLI |
+| lucy-1 | INV-MCP-1 "exactly five" contradicts the 12-tool union | **RESOLVED 2026-09-03** — the ratified requirement layer was fanned out to the derived six/three surface (ADR-0006 Decision 2) in `req/lucy-1-derived-surface` (#305); register row TOOLS-1 updated; the invariant layer now names the shipped constants |
+| lucy-2 | register completeness table checked only the non-conflicting invariant | **RESOLVED 2026-09-03** — folded into correction #5 and closed with it: #305 fan-out touched the register's testable/number column for TOOLS-1/12/16 to the derived six/three, proving the column is live (a change to it moves the gate) |
+| bobby-1 | seam ownership inverts ARCH-2; 2 of 5 freezes unbuildable | **RESOLVED** — the `GroundingComputer`/`GateChain` ports are declared in `packages/tools/src/anchors.ts` / `governed-emit-gates.ts` and implemented in `@atlas/adapter-io`; ownership correction #1/#2 landed with CAMPAIGN-10 |
+| bobby-2 | no WP names `wire.ts`; four doors built and never bound | **RESOLVED** — `packages/adapter-io/src/compose.ts` binds the seam; `assembleHandler` (wire.ts) is the leg assembly, referenced by both `compose.ts:57` and each door's WP |
+| billy-1 | `callTool` has no membership check (advertised ≠ invocable) | **RESOLVED (structural)** — `surface-conformance-req-mcp-1e.test.ts` proves advertised ≡ invocable from the ONE surface source and that `callTool` carries no independent membership list |
+| A5-stale-4 | `server.ts:63` "no more, no less" comment stale vs union | **RESOLVED** — `chore/code-comment-hygiene` (#303) corrected the `server.ts` comments to the union (six governance ∪ ten read); no stale count remains |
+| dogfood-5 (AUTH-12) | emit surfaces raw `TypeError`, no legible refusal | **RESOLVED** — `governed-emit-shape-gate.test.ts` turns the 2026-07-25 dogfood's raw `Cannot read properties of undefined` into a structured gate refusal; `atlas check` returns a named gate + remedy |
+| F4 (AUTH-14) | emit returns `contentHash`, read doors take `NodeKey` — loop unclosed | **RESOLVED** — EPIC-A4: `atlas emit` prints BOTH `data.id` (contentHash → `atlas node` resolves) AND `data.nodeKey` (→ `link`); loop closed (`EmitOut` carries both, `governed-emit.ts:327`) |
+| F5 (CLI-6) | `render.ts:99-104` drops 2 of 3 `InitOut` fields | **RESOLVED** — A4.CLI: `render.ts` init leg renders all three (territories + blastRadius + t0Candidates), pinned by SCN-CLI-6b-1 |
+| no-help (CLI-5) | `atlas help` does not exist | **RESOLVED** — A4.CLI: top-level `atlas help` derived from the command map, exit 0, pinned by `help-cli.test.ts` |
 
-~6 already resolved; the rest are OPEN and each is now owned by a specific correction or WP above. `arch-#8`
-alone is out of scope — it belongs to the deferred AUTHORITY model (below).
+~13 now RESOLVED (each with its evidence above, dated where the closure is recent). The ledger's one
+remaining OPEN row is `arch-#8`, which is out of scope — it belongs to the deferred AUTHORITY model
+(below), tracked as ARCH-D3b/D4.
 
 ## Ratification gates — what the BUILD needs from the owner (DEFINE seat)
 

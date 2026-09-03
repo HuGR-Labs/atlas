@@ -157,10 +157,13 @@ place, `derive-relations` is not a repair at all, and the retire is a governed-s
 scope`; authorising would mean editing `.atlas/policy.json` (admin-owned). If the ~6193 derived edges are
 ever wanted, that is its own campaign with its own plan.
 
-**(c) CI cost.** `harness/gates/doc-transcript-guard.test.mjs` was measured at **833s**
-(`npx vitest run harness/gates/doc-transcript-guard.test.mjs --pool=forks --poolOptions.forks.singleFork=true`).
-Two tests were added, each re-running the whole corpus; if this is too expensive, the same-invocation test
-is the one to cut (the different-invocation test is what actually proves the fix).
+**(c) CI cost.** `harness/gates/doc-transcript-guard.test.mjs` was measured at **833s** in the 2026-08-31
+session. **Re-measured 2026-09-03 on the self-hosted runner: 241s (~4min), 13/13 green.** The earlier figure
+was taken on a machine whose per-test corpus runs were slower; it also predates the runner being restored
+to a healthy symlinked install. Two consequences: the §2026-08-31 suggestion to "cut the same-invocation
+test" should NOT be followed — the two insertion tests are the teeth that prove the re-attach fix, they now
+cost ~2min combined, and the whole file sits inside an 8-minute gate comfortably. If CI time ever
+regresses to ~14min, re-measure before cutting anything.
 
 **(d) The retirement was a manual projection write, not a tool.** There is deliberately no CLI/MCP command
 that deletes a row (staging has no delete; projection has no delete). If deleting rows becomes a recurring
