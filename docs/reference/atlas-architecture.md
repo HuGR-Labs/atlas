@@ -2,7 +2,8 @@
 
 > owner: orchestrator · status: **partially ratified.** The tool-exposure amendment (§2) was
 > **owner-ratified 2026-07-25**; the AUTHORITY model (§3) was **ratified 2026-08-30** by the orchestrator
-> under delegated authority — see §3.4, which also records the ARCH-D3b ruling. §1 still awaits the DEFINE seat.
+> under delegated authority — see §3.4, which also records the ARCH-D3b ruling and the **2026-09-03 owner
+> ruling** on the growth path (USE-OR-SEAL, no mandatory human gate). §1 still awaits the DEFINE seat.
 >
 > **Why this document exists.** Three independent cold reviews of CAMPAIGN-10 found the same disease by three
 > different routes: the layer hierarchy **was written down and never enforced** (`ARCHITECTURE.md` §graph, plus
@@ -308,6 +309,28 @@ is ARCH-12's revisit condition.
 written to be: wire two verdicts that already exist, and derive `scope` from `primaryAnchor`. It is not a
 new governance mechanism.
 
+**Owner ruling 2026-09-03 — the growth path and the ratifier question (resolves ARCH-D3b).** The owner
+decided, in product terms: *"who approves is the ORCHESTRATOR, approving only with evidence, clear
+protocol; both [use-and-success and human seal] coexist; neither is mandatory; human-in-the-loop kills the
+purpose, this serves LLMs not humans."* Three commitments follow (full text in ADR-0010 §"Owner ruling"):
+
+1. **T2-by-construction on CREATE** — a new node is born advisory; the one-way join already makes a
+   self-declared higher class cost more than it buys, and this makes T2 the written rule, not a
+   consequence.
+2. **Growth is USE-OR-SEAL, neither mandatory.** A node leaves the advisory class by ONE of two earned
+   evidences, either sufficient, neither required: **USE** (served in a decision whose completion was
+   recorded — the `hits` ledger is the foundation) or **SEAL** (a human ratify token recording a deliberate
+   endorsement). A node earning neither stays advisory and decays (KNOW-17). No human gate is required on
+   the growth path.
+3. **The ratify token is ONE evidence, not a gate; verification stays advisory.** §3.3's anti-accident
+   posture stands; the `service-gate-guard` tripwire (ARCH-12) re-opens verification the moment a
+   remote/multi-tenant transport is attempted.
+
+**What the ruling does to the residual.** Slot squatting is no longer a terminal state: an advisory fact
+that *occupies* a `(anchor, slot)` can now GROW by use or seal, so "raise the occupant" is no longer the
+only exit — it becomes one of the two earned paths. The residual's re-judge condition (ARCH-12, transport
+remote) is unchanged.
+
 ---
 
 ## 4. Acceptance (falsifiable checks — S3 lifts goldens from these)
@@ -347,7 +370,7 @@ new governance mechanism.
 | **ARCH-D1** | Ports declared inward, adapters outward; `tools` never depends on `adapter-io` | **proposed** — ADR-0006 §hierarchy |
 | **ARCH-D2** | INV-MCP-1's "exactly five tools" is superseded by the derived-surface property + a measured budget | **OWNER-RATIFIED 2026-07-25** — ADR-0006 |
 | **ARCH-D3a** (UPDATE leg) | On a write that lands on an EXISTING node, `tier` and `scope` stop being author-supplied gate selectors: the required class and the authorized scope are read off the incumbent's own stored fact | **CLOSED 2026-07-25 — ADR-0007.** `governed-emit.ts` §2.25 refuses `governance-downgrade` / `unauthorized for target` (which, per the F1 amendment to ADR-0007, is ALSO the refusal for an incumbent whose stored fact is unreadable — a distinct reason there was a CAS-health oracle) / `governance-relocation`; pinned by `SCN-GE-I1`/`I2`/`I5`/`I15` |
-| **ARCH-D3b** (CREATE leg) | The same for a write that mints a node, where there is no incumbent to derive from | **DECIDED 2026-08-30 (§3.4), IMPLEMENTATION OPEN.** The `tier` conjunct is closed by the one-way join at `packages/knowledge/src/ratify/fastpath.ts:143` — a declared class can only make the gate harder, so a self-declared `T0` buys full ratification and a self-declared `T2` buys no authority. The hole is re-scoped to two named items: the constant `DOOR_RATIFY_CTX = { contested: false, lowRisk: true }` (`packages/adapter-io/src/governed-emit-route.ts:24`), which is the pinned-open constant ARCH-9 forbids by name, and `scope`, which must derive from `primaryAnchor`. Gate 0 still checks only well-formedness. Residual slot-squatting is stated in §3.4 |
+| **ARCH-D3b** (CREATE leg) | The same for a write that mints a node, where there is no incumbent to derive from | **OWNER-DECIDED 2026-08-30 §3.4 + 2026-09-03 §3.4 ruling, IMPLEMENTATION OPEN.** The `tier` conjunct is closed by the one-way join at `packages/knowledge/src/ratify/fastpath.ts:143` and by the 2026-09-03 T2-by-construction ruling — a new node is born advisory; growth is by USE-OR-SEAL, neither mandatory (by-construction T2, growth by evidence). Implementation re-scoped to two named items: the constant `DOOR_RATIFY_CTX = { contested: false, lowRisk: true }` (`packages/adapter-io/src/governed-emit-route.ts:24`), which is the pinned-open constant ARCH-9 forbids by name and whose derivation sources exist upstream (`hits.ts`, KNOW-18 design), and `scope`, which must derive from `primaryAnchor`. Gate 0 still checks only well-formedness |
 | **ARCH-D4** | Planner legs take an unforgeable read-only port (ocap), replacing the write-spy as the guarantee | **proposed** — supersedes ADR-0004's "property of the type" claim, which is currently overstated |
 
 ## Sources
