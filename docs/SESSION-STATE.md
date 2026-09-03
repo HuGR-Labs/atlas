@@ -1,4 +1,4 @@
-# Session state — 2026-09-02
+# Session state — 2026-09-03
 
 **What this file is:** the state of the work at a point in time, written so a DIFFERENT session, model,
 harness or provider can pick it up cold. It is not a plan. This repository has already been bitten by
@@ -6,8 +6,9 @@ reading a plan as state — a doc describing work to be done outlived the work, 
 recommended building something that already existed. So every claim below carries the command that
 re-derives it, and nothing here is a value you are asked to trust.
 
-This file replaces the previous handoff (2026-08-31). Read `git log --all --oneline -- docs/SESSION-STATE.md`
-for the prior state; the changes below are the delta since then.
+This file replaces the previous handoffs (2026-08-31, and its own 2026-09-02 rewrite). Read
+`git log --all --oneline -- docs/SESSION-STATE.md` for the prior state; the changes below are the delta
+since then.
 
 ---
 
@@ -80,10 +81,51 @@ prior handoff; the audit no longer fails on them.
 
 ---
 
+## 2.5 — What changed after the 2026-09-02 handoff — the CI/security leg (2026-09-03)
+
+Three pull requests merged to master after the section above was written.
+
+### #300 — the store actually commits and travels green
+
+The `docs/SESSION-STATE.md` rewrite and the store sidecars (`.atlas/cas/`, `.atlas/projection.json`)
+went to master together as PR #300. The store now travels with the code, as §1 of `.gitignore`
+intends (`projection` and `cas` are deliberately un-ignored). Re-derive: `doctor cas` →
+`objects=1320 referenced=596 corrupt=0 unreadable=0 missing=0 orphan=724 sound=true`;
+`verify-store` → `0 sealed-proven … 0 dangling`, exit 0. The mirror-only travel case was verified
+(move `projection.614.json` aside, re-run both commands — green).
+
+### Billing lock forced a self-hosted runner
+
+The GitHub-hosted runner pool stopped starting jobs while the account billing is locked
+("The job was not started because your account is locked due to a billing issue."). The gate now
+runs on a machine-local self-hosted runner (`MacBook-Pro-de-Gustavo`, labels `self-hosted/macOS/X64`,
+installed under `~/actions-runner`, run as a launch-agent via `./svc.sh install/start`). This is a
+permanent operating fact of this repository until the billing lock is cleared, recorded so a future
+session does not waste a CI cycle wondering why the job landed on somebody's laptop.
+
+### #301 — forked pull requests never reach the runner (the RCE gate)
+
+The gate executes **untrusted code** (`npm ci` + the whole suite) on the self-hosted runner — the
+owner's machine — and this repository is **public**. A fork's pull_request is exactly the
+remote-code-execution vector GitHub warns self-hosted runners must never accept. `.github/workflows/ci.yml`
+now splits the surface:
+
+- `gate` runs only for **pushes** and pull_requests whose head lives **inside this repository**
+  (`head.repo.full_name == github.repository`). Forks never reach it.
+- A fork PR triggers `fork-guard` instead: no checkout, no npm, no repo code — only a static
+  `echo::warning`. The merge blocks on the missing `gate` check until a maintainer syncs the fork's
+  change onto an in-repo branch.
+- `permissions: contents: read` on the whole workflow; the workflow token is write-free.
+- `actions/checkout` pinned to a full SHA (`11d5960a…`) instead of the `@v4` mutable tag.
+
+Settings-level, applied via the REST API (live, do not revert without the owner):
+`allowed_actions = selected` (allowlist = exactly `actions/checkout@11d5960a…`), `sha_pinning_required = true`.
+
+---
+
 ## 3 — The state of THIS repository's own store — AFTER the retirement
 
-Re-derive with the two commands in §1. As measured at this handoff, HEAD `1637ac6`:
-
+Re-derive with the two commands in §1. As measured at this handoff, HEAD `bd9aaca`:
 - `doctor cas` → `objects=1320 referenced=596 corrupt=0 unreadable=0 missing=0 orphan=724 sound=true`.
   **`sound=true` for the first time since the rows went missing.** `orphan` is not a fault (append-only,
   content-keyed CAS; an object outliving the sidecar that referenced it is ordinary). Do not "clean up"
@@ -94,10 +136,9 @@ Re-derive with the two commands in §1. As measured at this handoff, HEAD `1637a
 - `atlas doctor cas` and `atlas verify-store` run on the **compiled** CLI
   (`packages/cli/dist/src/bin.js`), so `npx tsc -b` must have run at least once since the last build.
 
-The store is now in the state the 2026-08-31 handoff called for: it passes its own audit, so it MAY be
-committed and travel with the code. `.atlas/cas/` and `.atlas/projection.json` are still UNCOMMITTED at
-HEAD. **They should be committed as part of the next PR that has a reason to move the store** — which is
-the point of this change.
+The store is now in the state the 2026-08-31 handoff called for: it passes its own audit, and it is
+COMMITTED (PR #300) — it travels with the code. `.atlas/cas/` and `.atlas/projection.json` are tracked
+on master; a fresh clone reads a store that re-proves itself.
 
 Remaining uncommitted-but-traveling sidecars: see `git status` for the exact list. `.atlas/policy.json` is
 permanently tracked. Staging sidecars (`.atlas/staging*.json`) are git-ignored by design (ADR-0008) and
@@ -154,18 +195,23 @@ Same rules the prior sessions paid to learn; they are load-bearing for anything 
 
 ## 6 — Where to look next
 
-Nothing is in flight: no open pull request, no open issue, no open dependency alert, and — new — a store
-that finally passes its own audit. The backlog is empty, so the next piece of work is a decision, not a
-queue item.
+Nothing is in flight: no open pull request, no open issue, no open dependency alert. The store finally
+passes its own audit and is committed; the CI is green and self-hosted-secure. The backlog is empty, so
+the next piece of work is a decision, not a queue item.
 
-The most immediate decision is **when to commit the store** (`.atlas/cas/`, `.atlas/projection.json`, and
-the current `docs/SESSION-STATE.md`). The change that motivated the retirement was the finding that the
-repository versions its `.atlas/` store with the code (the `.gitignore` re-includes `projection.json` and
-`cas/` explicitly for that purpose). Committing it in the next PR closes the loop: a clone will read a
-store that re-proves itself.
+Two standing threads a future session may pick up, both owner-level decisions:
 
-For the full reasoning behind the three prior feature changes, read the pull request bodies — `gh pr view
-294`, `gh pr view 296`, `gh pr view 297`. The four documents worth reading before touching anything:
-`README.md` for the shipped surface, `BENCHMARKS.md` for what is measured and — more usefully — its Honest
-Limits section for what is not, `docs/adr/ADR-0022-doctor-audits-the-store-it-diagnoses.md` for the most
-recent architectural decision, and `docs/CONVENTIONS.md`.
+- **The billing lock.** The GitHub account billing is locked, which is why CI runs on the owner's
+  machine. Clearing it restores hosted runners; the security posture (#301) stays regardless, and the
+  `runs-on` switch could go back to `ubuntu-latest` at that point if the owner wants to stop paying
+  laptop-cycles.
+- **The fork-PR contribution flow.** #301 means a fork's PR can never pass `gate` by itself; the change
+  must be synced onto an in-repo branch first. This is a deliberate trade of collaboration-friction for
+  machine safety. If one-person/one-branch collaboration is ever wanted again, the honest alternative is
+  hosted runners without the billing lock, not weakening #301.
+
+For the full reasoning behind the recent changes, read the pull request bodies — `gh pr view 294`,
+`gh pr view 296`, `gh pr view 297`, `gh pr view 300`, `gh pr view 301`. The four documents worth reading
+before touching anything: `README.md` for the shipped surface, `BENCHMARKS.md` for what is measured and —
+more usefully — its Honest Limits section for what is not, `docs/adr/ADR-0022-doctor-audits-the-store-it-diagnoses.md`
+for the most recent architectural decision, and `docs/CONVENTIONS.md`.
