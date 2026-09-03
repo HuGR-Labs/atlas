@@ -69,13 +69,19 @@ state N's output as an axiom of N+1. The loop runs **once per WP**; WPs run in t
 `*` REFACTOR is **predicate-gated** — it runs only if a refactor predicate fires (duplication, LOC within
 10% of the 400 cap, cyclomatic threshold). Otherwise the machine skips BIND→RED→GREEN→GATE→SEAL.
 
-## The four vital axioms (every state contract carries them)
+## The five vital axioms (every state contract carries them)
 
 Inherited from the decomposition method, re-cast for execution:
 1. **completeness-criteria** (set-level) — what "this state is done for this WP" means as a checkable set.
 2. **invariants** (per-item, mechanical) — the Self-Check bullets; a reconciler will compute them.
 3. **quality-standard** (judgment) — what the cold-review proves that the mechanical half cannot.
 4. **DoD** — GATE green ∧ COLD-REVIEW APPROVE → freeze. No waiver without an explicit human line (rigor compact).
+5. **success-criteria** (product) — the CHECKABLE POSITIVE OUTCOME the WP exists to produce, stated in the
+   product's own terms, independent of the mechanical gates. `exit_predicate`/DoD say "the machine did not
+   fail"; **success says "something a user of the product can now do that they could not before"** — a
+   behaviour a real invocation demonstrates, named in an acceptance golden OR a transcript, never overlap
+   with the DoD's own conjuncts. A WP whose gates are all green but whose success-criteria no user can
+   exhibit is a false-green: the seal must name the success, and re-derive it.
 
 ## The states (one prompt each — `method/prompts/exec/<STATE>.md`)
 
