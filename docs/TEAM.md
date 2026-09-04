@@ -35,7 +35,7 @@ on Orchestra itself.
 
 | Persona (placeholder name — owner to confirm) | Phase | Discipline | Kit (placeholder) |
 |---|---|---|---|
-| **the Product Definer** — e.g. `walt` | 1 DEFINE | Working-backwards (PR/FAQ from the customer), product design, and the precise **spec** (acceptance criteria + the four axioms) that the whole build is verified against. Owns *what & why*. | `NORTHSTAR` |
+| **the Product Definer** — e.g. `walt` | 1 DEFINE | Working-backwards (PR/FAQ from the customer), product design, and the precise **spec** (acceptance criteria + the five axioms) that the whole build is verified against. Owns *what & why*. | `NORTHSTAR` |
 | **the Architect** — e.g. `archie` | 2 DESIGN | The technical **architecture**: layers, contracts, seams, the build order. Produces the ratified design the Conductor decomposes. Distinct from `bobby`, who *verifies* architecture — the Architect *creates* it. | `KEYSTONE` |
 
 > Open for the owner: is DEFINE one persona (product + spec together) or two (a product persona and a

@@ -105,10 +105,11 @@ prerequisites: [ ]
 horizon: Now
 ```
 
-## Self-Check (the 4 vital axioms; the mechanical vs judgment halves kept distinct)
+## Self-Check (the 5 vital axioms; the mechanical vs judgment halves kept distinct)
 - [ ] **completeness** (mechanical): the epic set **partitions** the frozen REQs (0 orphan, 0 double); every split is **lossless** (`union(children).reqs == parent.reqs`); the campaign graph is a **DAG** (no cycles)?
 - [ ] **invariants** (mechanical, GATE-checkable): every epic has the `goal-trace` field, touches **≥1 module** (a count), and every split **cites a SPIDR pattern** (a field)?
 - [ ] **quality standard** (judgment, cold-review): every epic is genuinely **vertical** (a capability, not a layer — carpaccio) and **INVEST**-right-sized; every campaign is an independently-demoable increment ordered by dependency-defensible horizon?
+- [ ] **success-criteria** (product, GATE-checkable): every campaign's increment names the POSITIVE user-facing outcome ("a human/agent can now do X that they could not before") — a real exhibited behaviour, not just absence of failure; an epic/ campaign whose stated increment nobody can demonstrate is a false-green?
 - [ ] **DoD**: reconciler partition + lossless-union + acyclicity check clean ∧ cold-review APPROVE → the roadmap freezes.
 
 ## Abstain / Failure
