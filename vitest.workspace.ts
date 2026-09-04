@@ -37,8 +37,9 @@ export default defineWorkspace([
       // Real subprocess spawn dominates wall-clock here, not test purity — see file banner. 30s was
       // sized against the measured red (10s cap tripped under sustained synthetic CPU load; this
       // suite's individual subtests ran 5-20s under the SAME load once given headroom) and re-verified
-      // green under the identical load as part of this fix.
-      testTimeout: 30000,
+      // green under the identical load as part of this fix. Re-sized to 60s 2026-09-03 after
+      // SCN-MCP-4b-1 (8 subprocess pairs, adversarial claims) measured 37s even on a quiet box.
+      testTimeout: 60000,
     },
   },
 ]);
