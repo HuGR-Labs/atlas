@@ -194,6 +194,44 @@ authorized to build. **Docs-only — no code behavior yet.**
 
 ---
 
+## 2.7 — ARCH-D3b built to item 1: the fast-path verdicts are derived, the gate-pinning constant is dead
+
+After #307, the ARCH-D3b implementation scope was measured, specified and built:
+
+- **#309 docs/arch-d3b** — recorded that item 3 (scope↔primaryAnchor) was ALREADY CLOSED in code
+  (WP-10.A3 #251: `evalAuthzGate` runs `scopeOwnsAnchor` backed by `authz.anchors`). The architecture's
+  §3.4 and decision table now say so; ARCH-D3b re-scoped to items 1 + 2.
+- **#311 test(blackbox)** — CI fix: the `e2e-blackbox` vitest project timeout raised 30s→60s. SCN-MCP-4b-1
+  (8 subprocess pairs, adversarial claims) measured 37s even on a quiet box; under the machine's 16
+  self-hosted runners the 30s cap failed repeatably, taking unrelated docs PRs down. This is what made the
+  CI flicker all day; the fix stabilised it.
+- **#310 docs(protocol)** — the SUCCESS-CRITERIA fifth vital axiom added (EXECUTION-PROTOCOL.md + TEAM.md +
+  method/prompts/C.md): a WP's gates being green is not enough; its `success_criteria` names the
+  user-observable outcome, and a green-with-no-exhibition is a false-green the seal must name + re-derive.
+- **#312 req(d3b-a)** — S1+S2+S3 for item 1: INV-AUTH-15 (the fast-path verdicts are DERIVED, never a
+  hardcoded constant), REQ-AUTH-15a/b/c, SCN-AUTH-15a/b/c, method-tag, and the wp-d3b-a-wire-verdicts
+  card carrying the success_criteria. Counts fanned out 18→19 INVs, 73→76 REQs.
+- **#313 feat(d3b-a)** — the IMPLEMENTATION: `DOOR_RATIFY_CTX = { contested: false, lowRisk: true }` module
+  constant REMOVED. `ratifyCtxFor(derivedTier, verdicts, origin)` now requires `FastPathVerdicts` (no
+  default, compile-enforced); `deriveFastPathVerdicts(truthCleared, contended)` is the one shared
+  derivation — `lowRisk` from the cleared truth gate (groundedness on the no-truth-gate doors), `contested`
+  from caller-observed contention/veto. All four doors (emit/negation/transition/test-vacuity) + the check
+  leg thread it; check≡emit parity preserved (same function). The draft INCUMBENT port keeps its frozen
+  1-arg signature (preview, never a commit). Behavior preserved: the common grounded∧T2∧advisory
+  auto-accept still auto-accepts — as the OBSERVED outcome of real verdicts, not a hardcoded true.
+  Mutation-probed: planting the old constant turns `wp-d3b-a-wire-verdicts.test.ts` red; restore → green.
+
+**Known honest limit.** `contested` is `false` on every path today because no veto/contention mechanism
+exists yet (the commit-retry already re-runs the gates on a collision, so no auto-accept survives a real
+race, but the verdicts are not yet threaded from that). Documented as future extension in the code.
+
+**Infra paid for this session.** The machine was hosting SIXTEEN self-hosted runners (atlas + wallet×3 +
+corelink×5 + clw/hugit/mcp/githugr/lightr/skill). Nine were stopped as redundant (wallet-2/3, gh-runners
+2-5, githugr, lightr, mcp); CPU is freed and CI is stable ~9.5min. The `python -c exec(eval(...))`
+high-CPU processes seen were legitimate pytest xdist workers of the skill-001 runner, not malware.
+
+---
+
 ## 3 — The state of THIS repository's own store — AFTER the retirement
 
 Re-derive with the two commands in §1. As measured at this handoff, HEAD `bd9aaca`:
@@ -272,25 +310,29 @@ Same rules the prior sessions paid to learn; they are load-bearing for anything 
 Nothing is in flight: no open pull request, no open issue, no open dependency alert. The store passes its
 own audit and is committed; CI is green and self-hosted-secure.
 
-The next piece of work is **no longer a decision — it is ARCH-D3b, IMPLEMENTATION AUTHORIZED.** The
-2026-09-03 owner ruling (§2.6/#307) resolved the two questions keeping ADR-0010 a proposal; the
-implementation scope is exactly what atlas-architecture §3.4 pins:
+The next piece of work is **ARCH-D3b item 2 — Growth by USE-OR-SEAL** (the sustained comma owned after the
+owner ruling #307). Items 1 and 3-by-measure of the old ARCH-D3b scope are now CLOSED:
 
-1. **Wire the `DOOR_RATIFY_CTX` derivation** — replace the `{ contested: false, lowRisk: true }` constant
-   in `packages/adapter-io/src/governed-emit-route.ts:24` with the real verdicts: `lowRisk` from the
-   KNOW-17 hits-threshold (the foundations exist in `packages/knowledge/src/lifecycle/hits.ts`), `contested`
-   from the KNOW-18b store-veto.
-2. **Derive `scope` from `primaryAnchor`** — authz must not be claimable by declaration; a
-   scope↔anchor mapping in `adapter-io/policy.ts`.
-3. **Growth by USE-OR-SEAL** — the hits ledger feeds class growth (T2 → T1/T0 by accumulated evidence or
-   by human seal); no mandatory human gate.
+- **item 1 (wire the fast-path verdicts)** — CLOSED: #312 (spec) + #313 (impl). The `DOOR_RATIFY_CTX`
+  constant is dead; `deriveFastPathVerdicts` derives `lowRisk`/`contested` from observed state.
+- **item 3 (derive scope from primaryAnchor)** — CLOSED in code since WP-10.A3 (#251); recorded in #309.
+
+The remaining build: **USE-OR-SEAL** — the hits ledger feeds class growth (T2 → T1/T0 by accumulated
+evidence or by human seal), no mandatory human gate. The owner ruling (see §2.6/#307) fixed the design:
+**a plain per-node usage COUNTER, no invented threshold/calibration** — at a fixed named constant
+(`USE_THRESHOLD`, one place in code) the node rises implicitly; the HUMAN seal is an alternative
+sufficient evidence, never a precondition. The `hits` ledger (`packages/knowledge/src/lifecycle/hits.ts`,
+in-memory, bound via `bindHits`) is the candidate foundation; it is NOT yet wired into the read/produce
+path (no production writer exists — see `own-source.ts` header). Following the same S1→S3→WP→impl method
+as item 1.
 
 Two standing threads remain owner-level, unchanged from the prior handoff:
 - **The billing lock** — why CI runs on the owner's machine; clearing it restores hosted runners.
 - **The fork-PR contribution flow** — #301 means forks never reach the gate until synced in-repo.
 
 For the full reasoning behind the recent changes, read the pull request bodies — `gh pr view 294`,
-`gh pr view 296`, `gh pr view 297`, `gh pr view 300`, `gh pr view 301`, `gh pr view 305`, `gh pr view 307`.
+`gh pr view 296`, `gh pr view 297`, `gh pr view 300`, `gh pr view 301`, `gh pr view 305`, `gh pr view 307`,
+`gh pr view 309`, `gh pr view 311`, `gh pr view 312`, `gh pr view 313`.
 The four documents worth reading before touching anything: `README.md` for the shipped surface,
 `BENCHMARKS.md` for what is measured and — more usefully — its Honest Limits section for what is not,
 `docs/adr/ADR-0022-doctor-audits-the-store-it-diagnoses.md` for the most recent architectural decision,
