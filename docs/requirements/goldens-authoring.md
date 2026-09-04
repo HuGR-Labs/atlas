@@ -505,13 +505,39 @@ Given a mutant MCP transport that coerces a missing field to `null`
 When the parity property runs
 Then it fails.
 
+### SCN-AUTH-15a-1 — the fast-path verdicts are derived, not a constant
+source: REQ-AUTH-15a · gen: conformance
+Given the `routeWrite` decision for a grounded T2 advisory candidate whose truth-gate result is HOLDS
+When the `RatifyContext` supplied by the door is inspected
+Then `lowRisk` is `true` BECAUSE the truth gate was cleared, and `contested` is `false` BECAUSE no
+  contention was observed — each derived from the observed state, never from a module-level constant.
+teeth: breaks-on a `RatifyContext` built from a hardcoded `{ contested: false, lowRisk: true }` literal at
+  module scope — a mutant that pins the gate open passes shape/truth/authz but is caught by this byte-level
+  derivation check.
+
+### SCN-AUTH-15b-1 — a contended write is contested, so no auto-accept
+source: REQ-AUTH-15b · gen: conformance (guard)
+Given a T2 advisory grounded candidate whose commit attempt collides with a concurrent advance
+When the write door computes the ratification context for the retry
+Then `contested` is `true`, and `route` answers `full-ratify` (no auto-accept on a contested write).
+teeth: breaks-on a door that never surfaces the retry's contention — it keeps `lowRisk:true, contested:false`
+  across a collision and auto-accepts a write that should be re-checked by the retry loop.
+
+### SCN-AUTH-15c-1 — lowRisk requires a cleared truth gate and the advisory class
+source: REQ-AUTH-15c · gen: conformance (guard)
+Given a candidate that did NOT clear the truth gate (UNGROUNDED) or that is not `T2` advisory (a predicate)
+When the door computes the fast-path context
+Then `lowRisk` is `false`, even though the candidate may be `T2`.
+teeth: breaks-on a door that marks `lowRisk:true` for any T2 advisory regardless of the truth verdict — the
+  candidate then routes auto-accept without ever clearing the gate.
+
 ---
 
 ## Completeness (S3 predicates)
 
 | predicate | verdict |
 |---|---|
-| every REQ has ≥1 SCN | ✅ 73/73 (1:1 — each S1 guard REQ carries its own guard SCN) |
+| every REQ has ≥1 SCN | ✅ 76/76 (1:1 — each S1 guard REQ carries its own guard SCN) |
 | every unwanted-behaviour clause has its guard SCN | ✅ 27/27 |
 | every SCN keys off its REQ and uses concrete values | ✅ — all values come from the `fix-author` fixture, the named actors/tokens, or the frozen constants |
 | cases generated wherever a generator exists | ✅ — `gen:` is declared per SCN; **0 residue** |

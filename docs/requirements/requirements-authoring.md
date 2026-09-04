@@ -7,7 +7,7 @@
 > EARS sentence — one `SHALL`, one pattern. `normative-clause:` quotes the load-bearing clause verbatim
 > from `reference/atlas-authoring.md`. Each `unwanted[]` clause becomes its own `If-then` guard REQ.
 >
-> **73 REQs over 18 INVs.** Gate status: GATE — pending · COLD-REVIEW — **pending**.
+> **76 REQs over 19 INVs.** Gate status: GATE — pending · COLD-REVIEW — **pending**.
 
 ---
 
@@ -386,20 +386,35 @@ source: INV-MCP-4 @ reference/atlas-authoring.md#entry-mcp-4 (unwanted)
 If one transport coerces, defaults, or reshapes a result, then the parity check shall fail.
 normative-clause: "MUST NOT diverge in coercion, defaulting, error shape, or field set"
 
+### REQ-AUTH-15a — the fast-path verdicts are derived, never a hardcoded constant
+source: INV-AUTH-15 @ reference/atlas-authoring.md#entry-auth-15
+The write door shall supply the `contested` and `lowRisk` fast-path verdicts as values derived from store/door state, not as a module-level constant.
+normative-clause: "The write door MUST supply the two KNOW-18/ARCH-9 fast-path verdicts — `contested` and `lowRisk` — as values DERIVED from store/door state, never as a module-level constant that pins the gate open"
+
+### REQ-AUTH-15b — contested derives from observed contention
+source: INV-AUTH-15 @ reference/atlas-authoring.md#entry-auth-15
+If a write collides or contends with a concurrent change during the commit attempt, then the door shall present the candidate as contested.
+normative-clause: "`contested` MUST be derived from actual store contention observed during the write attempt (the commit-retry detects it)"
+
+### REQ-AUTH-15c — lowRisk derives from the truth gate and the advisory class
+source: INV-AUTH-15 @ reference/atlas-authoring.md#entry-auth-15 (unwanted)
+If a candidate has not cleared the door's truth gate, or is not `T2`/advisory, then the door shall not present it as low-risk.
+normative-clause: "`lowRisk` MUST be derived from the candidate having cleared the door's own TRUTH gate (a real prior verdict) and being on the advisory `T2` class. A candidate that did not clear the truth gate, or that is not `T2`/advisory, MUST NOT be presented as low-risk"
+
 ---
 
 ## Completeness (S1 predicates)
 
 | predicate | verdict |
 |---|---|
-| every behavioural INV has ≥1 REQ | ✅ 18/18 |
+| every behavioural INV has ≥1 REQ | ✅ 19/19 |
 | every `unwanted[]` clause has its `If-then` guard REQ | ✅ 27/27 |
-| zero orphan REQ (every REQ cites an extant INV) | ✅ 73/73 |
+| zero orphan REQ (every REQ cites an extant INV) | ✅ 76/76 |
 | every REQ has exactly one `SHALL` and matches one EARS pattern | ⚠️ mechanical — **GATE pending** |
 | every REQ quotes its clause without paraphrase | ⚠️ judgment — **COLD-REVIEW pending** |
 
-**Counts (recomputed mechanically, not asserted):** **73 REQs = 46 clause-projections + 27
-unwanted-behaviour guards**, over **18 INVs** — matching the register exactly (46 `clauses[]` entries, 27
+**Counts (recomputed mechanically, not asserted):** **76 REQs = 49 clause-projections + 27
+unwanted-behaviour guards**, over **19 INVs** — matching the register exactly (49 `clauses[]` entries, 27
 `unwanted[]` entries). By block: **AUTH 57 · CLI 6 · MCP 10**.
 
 **DoD: NOT MET** — GATE pending, COLD-REVIEW pending.
