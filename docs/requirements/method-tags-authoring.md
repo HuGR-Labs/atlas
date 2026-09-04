@@ -1,12 +1,12 @@
 # Method-tags — Block AUTHORING (CAMPAIGN-10) · S2 formal-decision
 
 > **state:** S2 · **protocol:** [`formal-decision`](../method/prompts/S2.md) ·
-> **axiom:** S1 frozen (`requirements-authoring.md`; 73 REQs, every behavioural INV has ≥1 REQ) ·
+> **axiom:** S1 frozen (`requirements-authoring.md`; 76 REQs, every behavioural INV has ≥1 REQ) ·
 > **owner:** lead; method-decision cold-review **pending** (bobby / BLUEPRINT).
 >
 > One tag per **behavioural** INV by the 3-conjunct rule. **This surface carries ZERO `formal` tags.** The
 > one `formal` cluster in the whole Atlas is the kernel merge (`FSPEC-merge`, KERNEL-9/10/11), already
-> discharged one layer down and consumed here only through frozen seams. All 18 INVs are `behavioural`, so
+> discharged one layer down and consumed here only through frozen seams. All 19 INVs are `behavioural`, so
 > none carries `n/a`.
 >
 > **Why no `formal` here (the 3-conjunct test, written not asserted).** A `formal` tag needs all three of
@@ -135,6 +135,14 @@ down-model: "the per-node read door is the oracle: emit a fact, take ONLY the re
 anti-rot: the read door is the mock; a receipt carrying only an address the read door rejects fails resolution.
 teeth: breaks-on "a receipt that carries the nodeKey but drops the CAS id, breaking the drift/doctor read-back that consumes the CAS address — the read-door arm passes; the assertion is that the receipt covers BOTH consumers"
 
+### INV-AUTH-15
+method-tag: exhaustive
+fspec: —
+up-property: "fast-path verdict derivability: the write door supplies `contested` and `lowRisk` DERIVED from observed state (commit-retry contention; the cleared truth gate + the advisory T2 class), never from a module-level constant; a contended write is `full-ratify`, an ungrounded or predicate T2 is never `lowRisk`"
+down-model: "the frozen states are the oracle: a mutation that replaces the door's ratification context with a hardcoded `{ contested: false, lowRisk: true }` constant must change the routed decision OR be caught by the byte-level derivation assertion; a contended commit must route `full-ratify`"
+anti-rot: the `route` API is the mock, driven with contexts built from real derived state (truth verdict + contention flag) vs the constant; a door that reinstates the constant diverges.
+teeth: breaks-on "a door that hardcodes `{ contested: false, lowRisk: true }` at module scope — the shape/truth/authz gates all pass, only the derivation assertion catches it"
+
 ### INV-CLI-5
 method-tag: exhaustive
 fspec: —
@@ -173,7 +181,7 @@ teeth: breaks-on "an MCP-side JSON round-trip that drops an `undefined`-valued o
 
 | predicate | verdict |
 |---|---|
-| every INV carries exactly one `method-tag` | ✅ 18/18 |
+| every INV carries exactly one `method-tag` | ✅ 19/19 |
 | no untagged INV | ✅ |
 | every `formal` tag justified by all three conjuncts | ✅ vacuous — **0** `formal` tags; the refusal is argued above, not asserted |
 | any `FSPEC` maps to its cluster's INVs | ✅ vacuous — no `FSPEC` authored here; `FSPEC-merge` is consumed through frozen seams and is unchanged |

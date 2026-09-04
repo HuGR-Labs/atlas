@@ -149,6 +149,16 @@ CheckOut    = { wouldEmit: boolean, gates: { gate: GateName, pass: boolean, reas
   door in this document MUST produce a byte-identical `Verdict` over the CLI and over MCP. The two
   transports MUST NOT diverge in coercion, defaulting, error shape, or field set. *(cites FR-A5; extends
   the existing TOOLS-3 CLI≡MCP property to the new doors)*
+- <a id="entry-auth-15"></a>**ENTRY-AUTH-15 The fast-path verdicts are DERIVED, never hardcoded.** The
+  write door MUST supply the two KNOW-18/ARCH-9 fast-path verdicts — `contested` and `lowRisk` — as values
+  DERIVED from store/door state, never as a module-level constant that pins the gate open (which ARCH-9
+  forbids by name). `contested` MUST be derived from actual store contention observed during the write
+  attempt (the commit-retry detects it); `lowRisk` MUST be derived from the candidate having cleared the
+  door's own TRUTH gate (a real prior verdict) and being on the advisory `T2` class. A candidate that did
+  not clear the truth gate, or that is not `T2`/advisory, MUST NOT be presented as low-risk. The common
+  T2-advisory-grounded auto-accept is preserved, but it is now the OBSERVED outcome of two real verdicts,
+  not a hardcoded default. *(cites ARCH-9; ADR-0010 ruling 2026-09-03: no invented threshold; the verdicts
+  derive from observed state, never a calibrated constant)*
 
 ## Acceptance (this surface's falsifiable checks — S3 lifts goldens from these)
 
