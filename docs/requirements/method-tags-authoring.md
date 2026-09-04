@@ -1,12 +1,12 @@
 # Method-tags — Block AUTHORING (CAMPAIGN-10) · S2 formal-decision
 
 > **state:** S2 · **protocol:** [`formal-decision`](../method/prompts/S2.md) ·
-> **axiom:** S1 frozen (`requirements-authoring.md`; 76 REQs, every behavioural INV has ≥1 REQ) ·
+> **axiom:** S1 frozen (`requirements-authoring.md`; 80 REQs, every behavioural INV has ≥1 REQ) ·
 > **owner:** lead; method-decision cold-review **pending** (bobby / BLUEPRINT).
 >
 > One tag per **behavioural** INV by the 3-conjunct rule. **This surface carries ZERO `formal` tags.** The
 > one `formal` cluster in the whole Atlas is the kernel merge (`FSPEC-merge`, KERNEL-9/10/11), already
-> discharged one layer down and consumed here only through frozen seams. All 19 INVs are `behavioural`, so
+> discharged one layer down and consumed here only through frozen seams. All 20 INVs are `behavioural`, so
 > none carries `n/a`.
 >
 > **Why no `formal` here (the 3-conjunct test, written not asserted).** A `formal` tag needs all three of
@@ -143,6 +143,14 @@ down-model: "the frozen states are the oracle: a mutation that replaces the door
 anti-rot: the `route` API is the mock, driven with contexts built from real derived state (truth verdict + contention flag) vs the constant; a door that reinstates the constant diverges.
 teeth: breaks-on "a door that hardcodes `{ contested: false, lowRisk: true }` at module scope — the shape/truth/authz gates all pass, only the derivation assertion catches it"
 
+### INV-AUTH-16
+method-tag: exhaustive
+fspec: —
+up-property: "use-or-seal growth totality: an advisory node rises by ONE of two sufficient evidences — USE (a per-node served-counter reaching the fixed `USE_THRESHOLD` plain integer) or SEAL (a human ratify token endorsement) — and NEVER by default; a node earning neither stays advisory and decays (KNOW-17)"
+down-model: "the fixed `USE_THRESHOLD` constant and the seal path are the oracle: enumerate the two rise triggers; assert that reaching the threshold rises automatically (no human), that a seal rises independently (no forced threshold), and that a node with neither stays advisory across the decay pass"
+anti-rot: the counter + seal are the mock; a rise gated on anything other than the plain integer or the seal diverges.
+teeth: breaks-on "a default rise (a node climbing at zero counter), or a rise that requires BOTH threshold and seal — either violates 'neither mandatory' and the fixed-threshold design"
+
 ### INV-CLI-5
 method-tag: exhaustive
 fspec: —
@@ -181,7 +189,7 @@ teeth: breaks-on "an MCP-side JSON round-trip that drops an `undefined`-valued o
 
 | predicate | verdict |
 |---|---|
-| every INV carries exactly one `method-tag` | ✅ 19/19 |
+| every INV carries exactly one `method-tag` | ✅ 20/20 |
 | no untagged INV | ✅ |
 | every `formal` tag justified by all three conjuncts | ✅ vacuous — **0** `formal` tags; the refusal is argued above, not asserted |
 | any `FSPEC` maps to its cluster's INVs | ✅ vacuous — no `FSPEC` authored here; `FSPEC-merge` is consumed through frozen seams and is unchanged |
