@@ -27,7 +27,7 @@
 
 import type { Hash, NodeKey, Tier } from '@atlas/contracts';
 import type { CasObject } from '@atlas/kernel';
-import { upsert, route, stage, ratify, isTier, isScope, testVacuityKey } from '@atlas/knowledge';
+import { upsert, route, stage, ratify, isTier, isScope, testVacuityKey, isGrounded } from '@atlas/knowledge';
 import type { Candidate, CurrentNode, TestVacuityNode, RatifyToken, WriteRequest } from '@atlas/knowledge';
 import type { EmitOut } from '@atlas/tools';
 import type { GovernedEmitDeps } from './governed-emit.js';
@@ -35,6 +35,7 @@ import { addressOf, commitRefusalOf } from './governed-emit-address.js';
 import { actorInScope, scopeOwnsAnchor } from './policy.js';
 import { incumbentDecision } from './governed-emit-incumbent.js';
 import { ratifyCtxFor } from './governed-emit-route.js';
+import { deriveFastPathVerdicts } from './governed-emit-gates.js';
 import {
   REJECTED_CONTENDED, REJECTED_UNREADABLE_STORE, REJECTED_UNAUTHORIZED, REJECTED_UNAUTHORIZED_ANCHOR, REJECTED_UNGROUNDED, REJECTED_UNRATIFIED,
 } from './governed-emit-reasons.js';
@@ -129,7 +130,9 @@ export function emitTestVacuity(deps: GovernedEmitDeps, raw: TestVacuityNode, at
       }
       // 2.5 RATIFY — advisory-class routing (no `check`). A promoted test-vacuity faces the ratifier (the KNOW-18
       //     fast path is removed for `promoted`), so the producer's authorized `ratifyToken` authorizes the commit.
-      if (route(candidateView, ratifyCtxFor(derivedTier, deps.origin)) === 'full-ratify') {
+      //     ARCH-D3b (INV-AUTH-15): DEVIVED verdicts — `lowRisk` from groundedness, `contested` from a
+      //     conflicting incumbent (KNOW-18b).
+      if (route(candidateView, ratifyCtxFor(derivedTier, deriveFastPathVerdicts(isGrounded(node.grounding), false), deps.origin)) === 'full-ratify') {
         const token: RatifyToken = { by: deps.ratifyToken ?? '' };
         if (!ratify(stage(candidateView), token).committed) return { out: { emitted: false, rejected: REJECTED_UNRATIFIED } };
       }

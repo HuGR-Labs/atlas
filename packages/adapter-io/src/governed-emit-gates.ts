@@ -48,6 +48,7 @@ import { actorInScope, scopeOwnsAnchor } from './policy.js';
 import type { AtlasPolicy } from './policy.js';
 import { incumbentDecision } from './governed-emit-incumbent.js';
 import { ratifyCtxFor } from './governed-emit-route.js';
+import type { FastPathVerdicts } from './governed-emit-route.js';
 import type { DiskStore } from './store.js';
 import {
   REJECTED_MALFORMED_TIER, REJECTED_MALFORMED_SCOPE, REJECTED_MALFORMED_FAMILY, REJECTED_MALFORMED_RELATION,
@@ -222,11 +223,27 @@ export interface RatifyInput {
   readonly derivedTier: Tier | undefined;
   readonly origin: WriteOrigin | undefined;
   readonly ratifyToken: string | undefined;
+  /** ARCH-D3b (INV-AUTH-15) — the door-derived fast-path verdicts. `lowRisk` = the candidate cleared the
+   *  TRUTH gate (derived from `truth.pass` above); `contested` = a CONFLICTING NODE exists (KNOW-18b) —
+   *  the incumbent at the target `(anchor, slot)` carries DIFFERENT bytes than this write (read off the
+   *  projection snapshot, the same seam `runGateChain` and the door both use, so check≡emit parity holds).
+   *  REQUIRED — never defaulted; ARCH-9 forbids a constant that pins the gate open. */
+  readonly verdicts: FastPathVerdicts;
 }
 
-/** Evaluate the RATIFY bucket — the KNOW-8/KNOW-18 tier-ratification gate. Unchanged. */
+/** Derive `FastPathVerdicts` (declared in `governed-emit-route.ts`) from state the door ALREADY observes.
+ *  `truthCleared` is the result of `evalTruthGate` (`truth.pass`) on the doors that have one, else
+ *  groundedness; `contestedFlag` is supplied by the caller from its own observation of a conflicting
+ *  incumbent / observed collision. Shared by the governed door and the store-less `check`, so the two
+ *  cannot diverge on these verdicts. */
+export function deriveFastPathVerdicts(truthCleared: boolean, contestedFlag: boolean): FastPathVerdicts {
+  return { lowRisk: truthCleared, contested: contestedFlag };
+}
+
+/** Evaluate the RATIFY bucket — the KNOW-8/KNOW-18 tier-ratification gate. The fast-path verdicts are
+ *  DERIVED (INV-AUTH-15), never a module constant. */
 export function evalRatifyGate(input: RatifyInput): GateResult {
-  if (route(input.candidateView, ratifyCtxFor(input.derivedTier, input.origin)) === 'full-ratify') {
+  if (route(input.candidateView, ratifyCtxFor(input.derivedTier, input.verdicts, input.origin)) === 'full-ratify') {
     const token: RatifyToken = { by: input.ratifyToken ?? '' };
     if (!ratify(stage(input.candidateView), token).committed) {
       return { gate: 'ratify', pass: false, reason: REJECTED_UNRATIFIED, remedy: REMEDY_RATIFY };
@@ -295,6 +312,10 @@ export function runGateChain(raw: GroundedFact, at: Hash, deps: GateChainDeps): 
 
   const ratifyResult = evalRatifyGate({
     candidateView, derivedTier: authz.derivedTier, origin: deps.origin, ratifyToken: deps.ratifyToken,
+    // ARCH-D3b (INV-AUTH-15): DEVIVED verdicts — lowRisk from the cleared truth gate; the store-less
+    // `check` never observes a commit collision, so `contested` is `false` here (dry-run: nothing committed
+    // to conflict with). The governed door derives it from the real incumbent bytes.
+    verdicts: deriveFastPathVerdicts(truth.pass, false),
   });
   gates.push(ratifyResult);
   return ratifyResult.pass

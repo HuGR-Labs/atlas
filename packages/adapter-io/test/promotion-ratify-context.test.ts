@@ -13,29 +13,25 @@ import { minedFact } from './harness/promote-fixtures.js';
 
 const staged = (): Candidate => minedFact({ anchor: 'src/pay.ts::charge', claimNorm: 'a mined claim' }) as unknown as Candidate;
 
-describe('ARCH-9/KNOW-8 — `ratifyCtxFor` carries the origin without forging store state', () => {
+describe('ARCH-9/KNOW-8 — `ratifyCtxFor` carries the verdicts + origin without forging store state', () => {
+  const AUTO = { lowRisk: true, contested: false };
   it('the AUTHORED context is byte-identical to what it always was (no origin key at all)', () => {
-    // Back-compat, asserted on the WHOLE object: `wire.ts` passes no origin, so an emit through the handler
-    // must build exactly the pre-existing `{contested:false, lowRisk:true}` — not that plus a defaulted key.
-    expect(ratifyCtxFor(undefined)).toEqual({ contested: false, lowRisk: true });
-    expect('origin' in ratifyCtxFor(undefined)).toBe(false);
-    expect(ratifyCtxFor('T0')).toEqual({ contested: false, lowRisk: true, derivedTier: 'T0' });
+    // Back-compat: with the derived verdicts supplied (a clean T2 advisory that cleared the truth gate),
+    // the context is exactly the pre-existing `{contested:false, lowRisk:true}` — no origin key, no default.
+    expect(ratifyCtxFor(undefined, AUTO)).toEqual({ contested: false, lowRisk: true });
+    expect('origin' in ratifyCtxFor(undefined, AUTO)).toBe(false);
+    expect(ratifyCtxFor('T0', AUTO)).toEqual({ contested: false, lowRisk: true, derivedTier: 'T0' });
   });
 
   it('the PROMOTED context adds ONE true field and changes nothing else', () => {
     // teeth: breaks-on "route the promotion by forging `contested:true`" and on "…by forging `lowRisk:false`".
-    // Both would make `route` answer `full-ratify` and both would pass a test that only checked the route —
-    // which is why the assertion is on the CONTEXT, by equality, and not on the routing outcome alone.
-    expect(ratifyCtxFor(undefined, 'promoted')).toEqual({ contested: false, lowRisk: true, origin: 'promoted' });
-    expect(ratifyCtxFor('T2', 'promoted')).toEqual({ contested: false, lowRisk: true, derivedTier: 'T2', origin: 'promoted' });
+    expect(ratifyCtxFor(undefined, AUTO, 'promoted')).toEqual({ contested: false, lowRisk: true, origin: 'promoted' });
+    expect(ratifyCtxFor('T2', AUTO, 'promoted')).toEqual({ contested: false, lowRisk: true, derivedTier: 'T2', origin: 'promoted' });
   });
 
   it('and that context really does take a mined candidate to FULL RATIFICATION', () => {
-    // The two halves joined: the context the DOOR builds, handed to the frozen `route` the DOOR calls.
-    // teeth: breaks-on "the default context is used" — pass `ratifyCtxFor(derivedTier)` at the emit door's
-    // gate 2.5 and this reads `auto-accept`, i.e. no ratifier is consulted for a promotion.
-    expect(route(staged(), ratifyCtxFor(undefined))).toBe('auto-accept'); // the trap, measured
-    expect(route(staged(), ratifyCtxFor(undefined, 'promoted'))).toBe('full-ratify'); // the fix
-    expect(route(staged(), ratifyCtxFor(undefined, 'authored'))).toBe('auto-accept'); // explicit ≡ absent
+    expect(route(staged(), ratifyCtxFor(undefined, AUTO))).toBe('auto-accept'); // clean derived → auto
+    expect(route(staged(), ratifyCtxFor(undefined, AUTO, 'promoted'))).toBe('full-ratify'); // promoted → ratify
+    expect(route(staged(), ratifyCtxFor(undefined, { lowRisk: false, contested: false }))).toBe('full-ratify'); // ungrounded → ratify
   });
 });

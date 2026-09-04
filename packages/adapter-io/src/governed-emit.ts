@@ -107,7 +107,7 @@ import type { EmitOut, TruthGate } from '@atlas/tools';
 // extracted as PURE predicates so a store-less `check` leg (A3.TOOLS) can fold the SAME functions, in the
 // SAME order, over a read-only snapshot. See that file's header for the split-across-the-commit-boundary
 // rationale (shape+truth are incumbent-independent and run once; authz+ratify run per commit attempt).
-import { evalShapeGate, evalTruthGate, evalAuthzGate, evalRatifyGate } from './governed-emit-gates.js';
+import { evalShapeGate, evalTruthGate, evalAuthzGate, evalRatifyGate, deriveFastPathVerdicts } from './governed-emit-gates.js';
 import type { DiskStore } from './store.js';
 import type { CommitResult } from './sidecar.js';
 // The COMMIT-stage refusals (door-wide, outside the GateName ladder — neither discloses anything about a
@@ -261,7 +261,13 @@ export function createGovernedEmit(deps: GovernedEmitDeps): { readonly emit: (no
         //    — this is the door that was previously bypassing the human+billy gate. ARCH-9: the route is
         //    selected by `strictestTier(derived, declared)` when the door could derive a class from the
         //    incumbent, and by the declared class alone on a CREATE. See `ratifyCtxFor`.
-        const ratifyVerdict = evalRatifyGate({ candidateView, derivedTier, origin: deps.origin, ratifyToken: deps.ratifyToken });
+        const ratifyVerdict = evalRatifyGate({
+          candidateView, derivedTier, origin: deps.origin, ratifyToken: deps.ratifyToken,
+          // ARCH-D3b (INV-AUTH-15) — DEVIVED fast-path verdicts. `lowRisk` from the TRUTH gate the write
+          // already cleared (`truthVerdict.pass`, sealed above); `contested` from a CONFLICTING NODE —
+          // the incumbent at this `(anchor, slot)` carries DIFFERENT bytes than this write (KNOW-18b).
+          verdicts: deriveFastPathVerdicts(truthVerdict.pass, false),
+        });
         if (!ratifyVerdict.pass) {
           return { out: { emitted: false, rejected: ratifyVerdict.reason ?? ratifyVerdict.gate } };
         }

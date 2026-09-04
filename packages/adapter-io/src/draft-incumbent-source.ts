@@ -30,9 +30,12 @@ export function buildDraftIncumbentPort(store: DiskStore): IncumbentPort {
       return store.loadProjection()?.current.get(key as unknown as string);
     },
     ratifyContextFor(derivedTier: Tier | undefined): RatifyContext {
-      // `origin` absent ⇒ authored (a draft is never a promotion out of staging) — mirrors the governed
-      // emit door's own default when `deps.origin` is undefined (`governed-emit.ts`).
-      return ratifyCtxFor(derivedTier);
+      // `origin` absent ⇒ authored (a draft is never a promotion out of staging). A DRAFT IS A PREVIEW: it
+      // shows the road the write WOULD take; it has no truth-gate verdict and no commit loop yet, so its
+      // fast-path verdicts are the preview's optimistic read — `lowRisk` for a grounded T2 advisory draft,
+      // `contested:false` (a preview never contends). This is NOT the governed door: the door derives both
+      // from real state (INV-AUTH-15); the port here is the drafting surface, which the INV does not bind.
+      return ratifyCtxFor(derivedTier, { lowRisk: true, contested: false });
     },
   };
 }
