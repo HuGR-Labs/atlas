@@ -47,7 +47,7 @@
 
 import type { CasObject } from '@atlas/kernel';
 import type { Hash, NodeKey, Tier } from '@atlas/contracts';
-import { upsert, route, stage, ratify, isTier, isScope, negationKey, isKnownRelationKind } from '@atlas/knowledge';
+import { upsert, route, stage, ratify, isTier, isScope, negationKey, isKnownRelationKind, isGrounded } from '@atlas/knowledge';
 import type {
   Candidate, CurrentNode, NegationNode, AbstainedRecord, RelationKind, RatifyToken, StoreProjection, WriteRequest,
 } from '@atlas/knowledge';
@@ -61,6 +61,7 @@ import { addressOf, commitRefusalOf } from './governed-emit-address.js';
 import { actorInScope, scopeOwnsAnchor } from './policy.js';
 import { incumbentDecision } from './governed-emit-incumbent.js';
 import { ratifyCtxFor } from './governed-emit-route.js';
+import { deriveFastPathVerdicts } from './governed-emit-gates.js';
 import { underScope } from './anchor-scope.js';
 import {
   REJECTED_CONTENDED, REJECTED_UNREADABLE_STORE, REJECTED_UNAUTHORIZED, REJECTED_UNAUTHORIZED_ANCHOR, REJECTED_UNRATIFIED,
@@ -358,7 +359,10 @@ export function emitNegation(deps: GovernedEmitDeps, raw: NegationNode): EmitOut
         derivedTier = decision.derivedTier;
       }
       // 2.5 RATIFY — advisory-class routing. A T2 grounded negation auto-accepts; a T0 needs the billy token.
-      if (route(candidateView, ratifyCtxFor(derivedTier, deps.origin)) === 'full-ratify') {
+      //    ARCH-D3b (INV-AUTH-15): DEVIVED verdicts — `lowRisk` from groundedness (a negation carries no
+      //    HEAD truth gate; the closest real verdict is well-formed + grounded), `contested` from a
+      //    conflicting incumbent (KNOW-18b).
+      if (route(candidateView, ratifyCtxFor(derivedTier, deriveFastPathVerdicts(isGrounded(node.grounding), false), deps.origin)) === 'full-ratify') {
         const token: RatifyToken = { by: deps.ratifyToken ?? '' };
         if (!ratify(stage(candidateView), token).committed) return { out: { emitted: false, rejected: REJECTED_UNRATIFIED } };
       }

@@ -127,16 +127,16 @@ describe('§2 ARCH-9 for `tier` — the door supplies the class it DERIVED, not 
     // candidate auto-accepts and the KNOW-8 token is never consulted.
     const declaredT2 = advisoryFact({ anchor: 'src/a.ts::a', scope: 'core', tier: 'T2', claimNorm: 'x' });
     const view = { ...declaredT2, slot: declaredT2.kind === 'advisory' || declaredT2.kind === 'predicate' ? declaredT2.predicateSlot : undefined } as unknown as Candidate;
-    expect(route(view, ratifyCtxFor(undefined))).toBe('auto-accept');
-    expect(route(view, ratifyCtxFor('T0'))).toBe('full-ratify');
-    expect(route(view, ratifyCtxFor('T1'))).toBe('full-ratify');
+    expect(route(view, ratifyCtxFor(undefined, { lowRisk: true, contested: false }))).toBe('auto-accept');
+    expect(route(view, ratifyCtxFor('T0', { lowRisk: true, contested: false }))).toBe('full-ratify');
+    expect(route(view, ratifyCtxFor('T1', { lowRisk: true, contested: false }))).toBe('full-ratify');
     // The join is ONE-WAY: a derived T2 can never make a declared T0's gate easier.
     const declaredT0 = advisoryFact({ anchor: 'src/a.ts::a', scope: 'core', tier: 'T0', claimNorm: 'x' });
     const t0View = { ...declaredT0, slot: declaredT0.kind === 'advisory' || declaredT0.kind === 'predicate' ? declaredT0.predicateSlot : undefined } as unknown as Candidate;
-    expect(route(t0View, ratifyCtxFor('T2'))).toBe('full-ratify');
+    expect(route(t0View, ratifyCtxFor('T2', { lowRisk: true, contested: false }))).toBe('full-ratify');
     // ARCH-D3b: absent means the door DID NOT SPEAK, and it must stay absent rather than defaulting.
-    expect(ratifyCtxFor(undefined)).not.toHaveProperty('derivedTier');
-    expect(ratifyCtxFor('T0').derivedTier).toBe('T0');
+    expect(ratifyCtxFor(undefined, { lowRisk: true, contested: false })).not.toHaveProperty('derivedTier');
+    expect(ratifyCtxFor('T0', { lowRisk: true, contested: false }).derivedTier).toBe('T0');
   });
 
   it('stage 2.25 RETURNS the derived class off the incumbent — row-carried, and legacy-row-from-bytes', () => {
