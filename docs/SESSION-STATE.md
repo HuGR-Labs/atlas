@@ -258,6 +258,40 @@ stopped) — **corelink was the one that came back**: a foreign runner's scale-o
 machine's CI; check `ps aux | sort -k3 -r` and `pgrep -f Runner.Listener` before debugging a stalled or
 flaky run as a code problem.
 
+## 2.9 — USE-OR-SEAL implementation started (2026-09-05, session 3)
+
+`#317` merged (docs/session-state, commit `7bd1cc4`). Master delivery CI `33944286415`
+(in_progress at save time) runs the full suite by the #316 cost model — a push to master always
+runs the suite; the merge is the delivery moment.
+
+ARCH-D3b item 2 — USE-OR-SEAL — went from SPECIFIED to **impl in flight**:
+
+- Branch **`feat/use-or-seal-impl`** cut from master `7bd1cc4` (NOT yet pushed).
+- Core design, settled:
+  - `packages/knowledge/src/lifecycle/hits.ts` gains: **`USE_THRESHOLD`** named constant (plain
+    positive integer, one tunable place — NOT the parametric `door2Threshold`, which is a DIFFERENT
+    knob), a **`seal(nodeId)`** method (human ratify-token endorsement, independent of the counter),
+    and a **`servedClass(nodeId): 'advisory' | 'governing'`** decision `= (hits ≥ USE_THRESHOLD) ∨
+    sealed`; otherwise advisory (never a default rise). `decay` stays KNOW-17.
+  - SCNs to hit: `SCN-AUTH-16a-1/16b-1/16c-1/16d-1` (goldens-authoring.md:534-560), method-tag
+    **exhaustive** (method-tags-authoring.md:146-152). Tests in the established hits.know17 pattern,
+    plus a heldout `-2` leg (different nodes / `queue/` territory), plus the exit_predicate MUTATION:
+    removing the `logHit` in the serve path turns the growth SCNs red.
+  - Wire: the serve path is `createProjectionQueryIndex` `cover()` (`projection-query-index.ts:83`)
+    → `factToInvariant` assigns `tier` from `fact.tier`; a grown node must be served at the RAISED
+    class (`bands.ts:41-48`: GOVERNING = `≥T1`, ADVISORY = `T2`; `retrieval/src/pack.ts` admits
+    T0/T1 only). The cover loop calls `logHit` per advisory node served — the counter MOVES on a real
+    query.
+  - Ref-model guard: `harness/gates/reference-model-guard.mjs:234` pins `hits.ts` `values: 1` —
+    adding exports bumps it; the ledger entry must be updated in the same change.
+- **Honest scoping decision (owner asked to avoid over-engineering):** the acceptance SCNs + the
+  card's `success_criteria` are all IN-PROCESS (serve 8× → raised on the next pack, same bind). NO
+  new durable sidecar. The `hits` ledger stays in-memory per process; persistence across restarts
+  was NOT required by any acceptance/golden and would have meant a third sidecar family + rehydrate
+  — rejected as invented scope. The card's "no production writer" deficit is closed by wiring the
+  serve path (cover) to call `logHit`. `own-source.ts:330` `hits: 0` stays honest until the growth
+  decision actually surfaces in `own` (it reads the ledger, which now has a writer).
+
 ---
 
 ## 3 — The state of THIS repository's own store — AFTER the retirement
@@ -354,13 +388,17 @@ foundation; it is NOT yet wired into the read/produce path (no production writer
 `own-source.ts` header). The `wp-d3b-b-use-or-seal` card names the `success_criteria` and the wire-in
 shape; follow the same S-watch → WP → impl method as item 1.
 
+**CURRENT IN-FLIGHT (2026-09-05 session 3):** the impl is STARTED on branch
+`feat/use-or-seal-impl` (core in `hits.ts` + serve-path wire in `projection-query-index.ts` +
+SCN-a/b/c/d tests + ref-model ledger bump — full design in §2.9; no code pushed yet).
+
 Two standing threads remain owner-level, unchanged from the prior handoff:
 - **The billing lock** — why CI runs on the owner's machine; clearing it restores hosted runners.
 - **The fork-PR contribution flow** — #301 means forks never reach the gate until synced in-repo.
 
 For the full reasoning behind the recent changes, read the pull request bodies — `gh pr view 294`,
 `gh pr view 296`, `gh pr view 297`, `gh pr view 300`, `gh pr view 301`, `gh pr view 305`, `gh pr view 307`,
-`gh pr view 309`, `gh pr view 311`, `gh pr view 312`, `gh pr view 313`, `gh pr view 315`, `gh pr view 316`.
+`gh pr view 309`, `gh pr view 311`, `gh pr view 312`, `gh pr view 313`, `gh pr view 315`, `gh pr view 316`, `gh pr view 317`.
 The four documents worth reading before touching anything: `README.md` for the shipped surface,
 `BENCHMARKS.md` for what is measured and — more usefully — its Honest Limits section for what is not,
 `docs/adr/ADR-0022-doctor-audits-the-store-it-diagnoses.md` for the most recent architectural decision,
