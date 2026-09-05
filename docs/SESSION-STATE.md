@@ -320,9 +320,16 @@ CI runs green. The impl landed as one commit
   /retrieval/tools/index/memory/cli/mcp green; the scanner.wp-11.w5 failure under load is the KNOWN
   §2.7/§2.8 loaded-machine artifact — green isolated); harness gates green (wiring, layer,
   spec-conformance, godfile, id-integrity, reference-model).
-- **Deliberately NOT done**: composing `hits` into `compose.ts` — honest placeholders
-  unacceptable; the WP acceptance is in-process. `own-source.ts:330` stays `hits: 0` until the
-  decision surfaces there.
+- **NOW COMPOSED (2026-09-05, later in session 3)**: `compose.ts` binds the ONE served-use ledger via
+  `bindHits` and injects it through `WireConfig.hits`, so `atlas query`'s serve path WRITES the counter
+  in production — the "no production writer" deficit the wp card named is CLOSED. Deps are honuns,
+  none fabricated: `servedSet` = `currentNodes(rehydrateProjection(readStore))` (the serve path's own
+  snapshot), `archive` = re-assert the fact bytes into the CAS (KN-12, content-addressed, idempotent),
+  `calibrate` = pass-through `observed→observed` (the OPEN-DEFINE door-2 `f(hits)`, no invented regime
+  — ADR-0012). hits.ts now HAS a production caller ⇒ it LEAVES the reference-model ledger (entry
+  deleted, declared-modules 44→43, dead-value-exports 155→153, type-reachable 6→5). `own-source.ts:330`
+  stays `hits: 0` — that field is the SEPARATE RETR-8 frecency ledger, which genuinely still has no
+  writer; it is not the USE-OR-SEAL counter.
 
 ---
 
@@ -415,20 +422,17 @@ own audit and is committed; CI is green and self-hosted-secure.
   type-only delivery seam. Full detail in §2.9b.
 - **item 3 (derive scope from primaryAnchor)** — CLOSED in code since WP-10.A3 (#251); recorded in #309.
 
-**The state left HONESTLY OPEN by item 2** — NOT a defect, a documented seam awaiting a consumer:
-- The `hits` ledger (`hits.ts`) still has ZERO production callers — no composition root binds it, so
-  `ref-model-guard` still lists it (`values: 2`, `shipped: null`). The cardinal has NO test saying
-  `own-source.ts`'s `hits: 0` rank field is wrong: the impl proves the serve path CAN write and the
-  class CAN rise, in-process, via the SCN tests and the exit_predicate mutation (stripping `logHit`
-  turns 3 growth SCNs red).
-- **The next step a real product wants** (why no composition root binds `hits` today): the serve-side
-  bound needs HONEST `archive`/`calibrate` deps, and those exist only when a KNOW-17 decay consumer
-  (GEN-16 `bindSeedGate` or RETR's per-kind frecency) is wired in production. The day one lands:
-  1. compose.ts builds `bindHits({ servedSet, archive, calibrate })` with REAL deps and passes
-     `config.hits`;
-  2. delete the `hits.ts` entry from `reference-model-guard.mjs` (it becomes shipped);
-  3. re-visit `own-source.ts:330`'s `hits: 0` (the composer's `(tier, hits, ppr, nodeKey)` rank then
-     stops degenerating).
+**The state left HONESTLY OPEN by item 2** — now CLOSED (2026-09-05, later in session 3):
+- ~~The `hits` ledger has ZERO production callers~~ — **composed**: `compose.ts` binds it and injects
+  `config.hits`; hits.ts LEFT the reference-model ledger (entry deleted). The serve path writes the
+  counter on a real `atlas query`; the class can rise in-process, proven by the SCN tests and the
+  exit_predicate mutation.
+- **The one remaining honest seam**: `own-source.ts:330`'s `hits: 0` is the SEPARATE RETR-8 frecency
+  ledger (`@atlas/retrieval` ledger.ts), which genuinely still has no production writer. It is NOT the
+  USE-OR-SEAL counter — the two are different ledgers, and the composer's `(tier, hits, ppr, nodeKey)`
+  rank still degenerates to `(tier, nodeKey)` for frecency until RETR-8 gets a writer. A real KNOW-17
+  decay consumer (GEN-16 `bindSeedGate`) is still unwired — when it lands, it consumes the SAME bound
+  compose now builds.
 
 Two standing threads remain owner-level, unchanged from the prior handoff:
 - **The billing lock** — why CI runs on the owner's machine; clearing it restores hosted runners.
