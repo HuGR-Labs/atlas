@@ -292,6 +292,37 @@ ARCH-D3b item 2 — USE-OR-SEAL — went from SPECIFIED to **impl in flight**:
   serve path (cover) to call `logHit`. `own-source.ts:330` `hits: 0` stays honest until the growth
   decision actually surfaces in `own` (it reads the ledger, which now has a writer).
 
+## 2.9b — USE-OR-SEAL implementation DELIVERED (2026-09-05, session 3, later)
+
+**PR #319** (`feat/use-or-seal-impl` → master): the §2.9 plan landed as one commit
+`feat(d3b-b): USE-OR-SEAL impl…`. What the merge delivers:
+
+- **Core** `hits.ts`: `USE_THRESHOLD = 8` (plain const, one tunable place — distinct from the
+  still-parametric door-2 `threshold`); `seal(nodeId)` (endorsement ≠ ledger event — `window`
+  untouched); `servedClass(nodeId)` = governing iff sealed ∨ hits ≥ threshold.
+- **Serve path** `projection-query-index.cover()`: optional `hits?: BoundHits`. ABSENT ⇒
+  byte-identical pre-WP behaviour (all bare-WIRE tests unchanged). PRESENT ⇒ each ADVISORY node
+  delivered logs one hit (SCN-16a); the served class is decided BEFORE the serve's own `logHit`,
+  so the serve reaching `USE_THRESHOLD` rises the node on the NEXT pack (success-criteria); a
+  grown/sealed node is served at the RAISED class (tier `T1`, governing band).
+- **Wire seam** `WireConfig.hits?: BoundHits` — TYPE-ONLY (`import type`), no composition root
+  binds it yet. hits.ts therefore KEEPS zero production callers; ref-model ledger updated
+  `values: 1 → 2` (the new `USE_THRESHOLD` export) + header count 154→155. Do NOT compose a
+  bound with fabricated `archive`/`calibrate` deps — decay/door-2 aren't exercised by the serve
+  seam, so a composed no-op would be a placeholder. The seam is the delivery point the day a real
+  GEN/RETR consumer exists (delete the ref-model entry then).
+- **Tests**: `knowledge/test/hits.auth16(-heldout).test.ts` (SCN-16a-d-1 + held-out `-2`,
+  exhaustive two-trigger enumeration); `adapter-io/test/projection-query-index.use-or-seal.test.ts`
+  (serve-path 16a/16b/16c/16d + exit_predicate MUTATION — stripping the `logHit` call kills 3
+  growth teeth, verified by mutation run).
+- **Verified**: `npx tsc -b` clean; package suites green (knowledge 401, adapter-io 1130, genesis
+  /retrieval/tools/index/memory/cli/mcp green; the scanner.wp-11.w5 failure under load is the KNOWN
+  §2.7/§2.8 loaded-machine artifact — green isolated); harness gates green (wiring, layer,
+  spec-conformance, godfile, id-integrity, reference-model).
+- **Deliberately NOT done**: composing `hits` into `compose.ts` — honest placeholders
+  unacceptable; the WP acceptance is in-process. `own-source.ts:330` stays `hits: 0` until the
+  decision surfaces there.
+
 ---
 
 ## 3 — The state of THIS repository's own store — AFTER the retirement
