@@ -292,9 +292,10 @@ ARCH-D3b item 2 — USE-OR-SEAL — went from SPECIFIED to **impl in flight**:
   serve path (cover) to call `logHit`. `own-source.ts:330` `hits: 0` stays honest until the growth
   decision actually surfaces in `own` (it reads the ledger, which now has a writer).
 
-## 2.9b — USE-OR-SEAL implementation DELIVERED (2026-09-05, session 3, later)
+## 2.9b — USE-OR-SEAL implementation DELIVERED AND MERGED (2026-09-05, session 3, later)
 
-**PR #319** (`feat/use-or-seal-impl` → master): the §2.9 plan landed as one commit
+**PRs #318 + #319 MERGED** into master (`096c852` docs handoff → `b8ee518` impl), both master delivery
+CI runs green. The impl landed as one commit
 `feat(d3b-b): USE-OR-SEAL impl…`. What the merge delivers:
 
 - **Core** `hits.ts`: `USE_THRESHOLD = 8` (plain const, one tunable place — distinct from the
@@ -319,9 +320,16 @@ ARCH-D3b item 2 — USE-OR-SEAL — went from SPECIFIED to **impl in flight**:
   /retrieval/tools/index/memory/cli/mcp green; the scanner.wp-11.w5 failure under load is the KNOWN
   §2.7/§2.8 loaded-machine artifact — green isolated); harness gates green (wiring, layer,
   spec-conformance, godfile, id-integrity, reference-model).
-- **Deliberately NOT done**: composing `hits` into `compose.ts` — honest placeholders
-  unacceptable; the WP acceptance is in-process. `own-source.ts:330` stays `hits: 0` until the
-  decision surfaces there.
+- **NOW COMPOSED (2026-09-05, later in session 3)**: `compose.ts` binds the ONE served-use ledger via
+  `bindHits` and injects it through `WireConfig.hits`, so `atlas query`'s serve path WRITES the counter
+  in production — the "no production writer" deficit the wp card named is CLOSED. Deps are honuns,
+  none fabricated: `servedSet` = `currentNodes(rehydrateProjection(readStore))` (the serve path's own
+  snapshot), `archive` = re-assert the fact bytes into the CAS (KN-12, content-addressed, idempotent),
+  `calibrate` = pass-through `observed→observed` (the OPEN-DEFINE door-2 `f(hits)`, no invented regime
+  — ADR-0012). hits.ts now HAS a production caller ⇒ it LEAVES the reference-model ledger (entry
+  deleted, declared-modules 44→43, dead-value-exports 155→153, type-reachable 6→5). `own-source.ts:330`
+  stays `hits: 0` — that field is the SEPARATE RETR-8 frecency ledger, which genuinely still has no
+  writer; it is not the USE-OR-SEAL counter.
 
 ---
 
@@ -403,29 +411,36 @@ Same rules the prior sessions paid to learn; they are load-bearing for anything 
 Nothing is in flight: no open pull request, no open issue, no open dependency alert. The store passes its
 own audit and is committed; CI is green and self-hosted-secure.
 
-The next piece of work is **ARCH-D3b item 2 — Growth by USE-OR-SEAL** (the sustained comma owned after the
-owner ruling #307). Items 1 and 3-by-measure of the old ARCH-D3b scope are now CLOSED:
+**ARCH-D3b is now fully CLOSED** (item 2 delivered 2026-09-05):
 
 - **item 1 (wire the fast-path verdicts)** — CLOSED: #312 (spec) + #313 (impl). The `DOOR_RATIFY_CTX`
   constant is dead; `deriveFastPathVerdicts` derives `lowRisk`/`contested` from observed state.
-- **item 2 (USE-OR-SEAL)** — **SPECIFIED, not built**: #315 delivered S1+S2+S3 (ENTRY-AUTH-16 + 4 REQs +
-  4 SCNs + the `wp-d3b-b-use-or-seal` card). The impl is the remaining work.
+- **item 2 (USE-OR-SEAL)** — **CLOSED**: #315 (spec: ENTRY-AUTH-16 + 4 REQs + 4 SCNs + the
+  `wp-d3b-b-use-or-seal` card), #319 (impl). `USE_THRESHOLD`/`seal`/`servedClass` in `hits.ts`; the
+  serve path (`projection-query-index.cover()`, `hits?` seam) writes the counter per served advisory
+  node and serves a grown/sealed node at the RAISED class; `WireConfig.hits?: BoundHits` is the
+  type-only delivery seam. Full detail in §2.9b.
 - **item 3 (derive scope from primaryAnchor)** — CLOSED in code since WP-10.A3 (#251); recorded in #309.
 
-The remaining build: **the USE-OR-SEAL IMPLEMENTATION** (ARCH-D3b item 2) — carry the hits ledger into
-the read/produce path per the now-frozen spec. The `hits` ledger
-(`packages/knowledge/src/lifecycle/hits.ts`, in-memory, bound via `bindHits`) is the candidate
-foundation; it is NOT yet wired into the read/produce path (no production writer exists — see
-`own-source.ts` header). The `wp-d3b-b-use-or-seal` card names the `success_criteria` and the wire-in
-shape; follow the same S-watch → WP → impl method as item 1.
-
-**CURRENT IN-FLIGHT (2026-09-05 session 3):** the impl is STARTED on branch
-`feat/use-or-seal-impl` (core in `hits.ts` + serve-path wire in `projection-query-index.ts` +
-SCN-a/b/c/d tests + ref-model ledger bump — full design in §2.9; no code pushed yet).
+**The state left HONESTLY OPEN by item 2** — now CLOSED (2026-09-05, later in session 3):
+- ~~The `hits` ledger has ZERO production callers~~ — **composed**: `compose.ts` binds it and injects
+  `config.hits`; hits.ts LEFT the reference-model ledger (entry deleted). The serve path writes the
+  counter on a real `atlas query`; the class can rise in-process, proven by the SCN tests and the
+  exit_predicate mutation.
+- **The one remaining honest seam**: `own-source.ts:330`'s `hits: 0` is the SEPARATE RETR-8 frecency
+  ledger (`@atlas/retrieval` ledger.ts), which genuinely still has no production writer. It is NOT the
+  USE-OR-SEAL counter — the two are different ledgers, and the composer's `(tier, hits, ppr, nodeKey)`
+  rank still degenerates to `(tier, nodeKey)` for frecency until RETR-8 gets a writer. A real KNOW-17
+  decay consumer (GEN-16 `bindSeedGate`) is still unwired — when it lands, it consumes the SAME bound
+  compose now builds.
 
 Two standing threads remain owner-level, unchanged from the prior handoff:
 - **The billing lock** — why CI runs on the owner's machine; clearing it restores hosted runners.
 - **The fork-PR contribution flow** — #301 means forks never reach the gate until synced in-repo.
+- **The self-hosted runner's load flakes** (§2.7/§2.8) still bite: `s-mcp-4-draft-parity`,
+  `s26-surface-lies`, `scanner.wp-11.w5`, and `memory-store.test.ts:A4` (REAL subprocess spawn) all
+  time out or flake when a foreign build (`opencode-tasks` rust/tsgo) starves the machine. They pass
+  on a quiet box; a rerun is the standard recovery, not a code fix.
 
 For the full reasoning behind the recent changes, read the pull request bodies — `gh pr view 294`,
 `gh pr view 296`, `gh pr view 297`, `gh pr view 300`, `gh pr view 301`, `gh pr view 305`, `gh pr view 307`,
