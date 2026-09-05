@@ -1,4 +1,4 @@
-// @atlas/adapter-io — src/projection-query-index.ts  (WIRE-LOOP Seam-1: emit→query projection readback)
+// ── WIRE-LOOP Seam-1: emit→query projection readback ────────────────────────────────────────────────
 //
 // The composition DECORATOR that closes the emit→query loop (GAP-C). The pure `@atlas/index` index-adapter
 // resolves a scope to its covering territory SKELETON (territory + axisHash) but hardcodes `invariants: []`
@@ -7,6 +7,16 @@
 // skeleton and folds in the projection readback: for every current node whose grounding anchor is UNDER the
 // covering scope, it reads the whole fact back from CAS (`store.get(contentHash)` — "the CAS bytes ARE the
 // fact") and maps it to a `PackInvariant`. Pure + total: no clock/nonce/paths, no throw beyond `cover`'s.
+//
+// ── USE-OR-SEAL (ARCH-D3b item 2, WP-D3B-B.USE-OR-SEAL / INV-AUTH-16) ────────────────────────────────
+// THIS is the serve path the goldens say writes the counter (wp card: "the served/pack path actually writes
+// the counter"). When a bound `hits` ledger is injected (`createProjectionQueryIndex(…, hits)`), every
+// ADVISORY node served in the pack accrues a logged hit (`logHit`); a node whose USE-OR-SEAL decision
+// (`servedClass`, hits.ts) is `'governing'` is SERVED at the RAISED class — the governing tier it now holds
+// — while a node that earned neither stays at its advisory tier. The counted serve is the ONE that moved the
+// counter PAST the last decision, so the class a node is served at is decided BEFORE this serve's `logHit`
+// (SCN-16a "served-in-a-pack increments"; success-criteria "it is served at the raised class on the next
+// pack"). ABSENT `hits` (a bare WIRE assembly) ⇒ byte-identical prior behaviour: no counter, no raise.
 //
 // The wrapped index-adapter is NOT modified — its purity/spy invariant is preserved; this readback is a
 // strictly additive composition layer over it.
@@ -32,8 +42,10 @@
 
 import type { Hash, PackInvariant } from '@atlas/contracts';
 import type { QueryIndex } from '@atlas/tools';
+import { isAdvisory } from '@atlas/tools';
 import { currentNodes } from '@atlas/knowledge';
-import type { GroundedFact } from '@atlas/knowledge';
+import type { BoundHits, GroundedFact } from '@atlas/knowledge';
+import { asNodeKey } from '@atlas/kernel';
 import { underScope } from './anchor-scope.js';
 import { rowBehindHead } from './freshness-watermark.js';
 import { factToInvariant, resolveFreshness } from './pack-shape.js';
@@ -85,6 +97,7 @@ export function createProjectionQueryIndex(
   store: DiskStore,
   headSha?: () => string | undefined,
   freshness?: FreshnessOracle,
+  hits?: BoundHits,
 ): QueryIndex {
   return {
     cover(scope: string) {
@@ -100,7 +113,20 @@ export function createProjectionQueryIndex(
         const fact = store.get(node.contentHash as Hash) as GroundedFact | undefined;
         if (fact === undefined) continue; // the CAS bytes ARE the fact; a miss ⇒ skip (never a throw)
         // The ONE shared shaping (shared with retrieval-model.ts), now carrying this row's OWN verdict.
-        invariants.push(factToInvariant(node, fact, resolveFreshness(freshness, fact)));
+        let inv = factToInvariant(node, fact, resolveFreshness(freshness, fact));
+        // USE-OR-SEAL (INV-AUTH-16): this is the serve path that WRITES the USE ledger. An ADVISORY node
+        // delivered in this pack accrues one hit (REQ-AUTH-16a — SCN-16a "served-in-a-pack increments").
+        // The class it is SERVED at is decided FIRST, from the ledger state BEFORE this serve's own `logHit`
+        // — the serve that moves the counter to `USE_THRESHOLD` rises the node for the NEXT pack, exactly as
+        // the card's success-criteria spells it ("it is served at the raised class on the next pack").
+        // A risen (or human-sealed) node is served at the RAISED class (the next governance band above
+        // ADVISORY); a node earning neither stays at its advisory tier and decays by non-use (REQ-AUTH-16d).
+        if (hits !== undefined && isAdvisory(inv)) {
+          const served = hits.servedClass(asNodeKey(node.nodeKey));
+          hits.logHit(asNodeKey(node.nodeKey)); // SCN-16a: served-in-a-pack increments the usage counter.
+          if (served === 'governing') inv = { ...inv, tier: 'T1' }; // raised: the next class above advisory
+        }
+        invariants.push(inv);
         if (fact.freshness === 'DRIFTED') stale = true; // any drifted backing grounding ⇒ re-ground signal
         // N11 per-ROW: this row's own stamp (falling back to the projection watermark for an unstamped row)
         // against live HEAD. Placed beside the DRIFTED leg deliberately — both answer "must this PACK be

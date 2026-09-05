@@ -26,7 +26,7 @@ import type { Axes, FileTree, ScipOutput, SymbolReverseApi } from '@atlas/index'
 // The GROUND-1 per-fact drift oracle — the SAME import the composition root's truth-gate uses (compose.ts).
 import { driftDetect } from '@atlas/grounding';
 import { currentNodes, deriveSameAs, deriveSubsumes } from '@atlas/knowledge';
-import type { GroundedFact } from '@atlas/knowledge';
+import type { BoundHits, GroundedFact } from '@atlas/knowledge';
 import type { Freshness, Hash } from '@atlas/contracts';
 import type { FreshnessOracle } from './pack-shape.js';
 import { retrievalPack } from './retrieval-model.js';
@@ -173,6 +173,15 @@ export interface WireConfig {
    *  call at each read leg, which could not tell case 2 apart from case 3 (both read `trusted() === false`).
    *  ABSENT on a bare WIRE fake assembly ⇒ never consulted ⇒ unchanged behaviour. */
   readonly readRefusal?: string;
+
+  /** WP-D3B-B.USE-OR-SEAL (ARCH-D3b item 2) — the serveside KNOW-17 usage ledger, INJECTED by the
+   *  composition root (NOT built here — its `servedSet`/`archive`/`calibrate` deps are the root's, via
+   *  `bindHits`). When PRESENT the projection query-index serve path accrues a hit per advisory node it
+   *  delivers and serves a grown node at the RAISED class (INV-AUTH-16); ABSENT (the bare WIRE fake
+   *  assembly, and every wire-only test) ⇒ byte-identical prior behaviour — no counter, no class rise.
+   *  See `projection-query-index.ts`'s USE-OR-SEAL section for the mutation this seam guards (removing
+   *  the `logHit` in the serve path turns the growth SCNs red). */
+  readonly hits?: BoundHits;
 
   // ── DEDUP-COMPOSITION (#241) — OPTIONAL PRECOMPUTED ARTIFACTS ──────────────────────────────────────────
   // `composeRuntime` (compose.ts) builds `rawTree`/`fileTree`/`scipOutput`/`indexerName`/`axes`/
@@ -375,7 +384,7 @@ export function assembleHandler(config: WireConfig): WiredHandler {
   // to its covering territory skeleton (from @atlas/index) FOLDED with the emitted facts under it (from CAS).
   // TRAVEL-BY-REPROOF: rides `readStore`, not `store` — for a `tracked-provable` repo this is the raw,
   // re-proof-filtered store (`read-access.ts`); for everything else it IS `store` (see `readStore` above).
-  const queryIndex = createProjectionQueryIndex(index, readStore, currentHead, freshnessOracle);
+  const queryIndex = createProjectionQueryIndex(index, readStore, currentHead, freshnessOracle, config.hits);
 
   const legs: ToolLegs = {
     'atlas-init': ((args) =>
