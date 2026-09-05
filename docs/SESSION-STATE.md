@@ -292,9 +292,10 @@ ARCH-D3b item 2 — USE-OR-SEAL — went from SPECIFIED to **impl in flight**:
   serve path (cover) to call `logHit`. `own-source.ts:330` `hits: 0` stays honest until the growth
   decision actually surfaces in `own` (it reads the ledger, which now has a writer).
 
-## 2.9b — USE-OR-SEAL implementation DELIVERED (2026-09-05, session 3, later)
+## 2.9b — USE-OR-SEAL implementation DELIVERED AND MERGED (2026-09-05, session 3, later)
 
-**PR #319** (`feat/use-or-seal-impl` → master): the §2.9 plan landed as one commit
+**PRs #318 + #319 MERGED** into master (`096c852` docs handoff → `b8ee518` impl), both master delivery
+CI runs green. The impl landed as one commit
 `feat(d3b-b): USE-OR-SEAL impl…`. What the merge delivers:
 
 - **Core** `hits.ts`: `USE_THRESHOLD = 8` (plain const, one tunable place — distinct from the
@@ -403,29 +404,39 @@ Same rules the prior sessions paid to learn; they are load-bearing for anything 
 Nothing is in flight: no open pull request, no open issue, no open dependency alert. The store passes its
 own audit and is committed; CI is green and self-hosted-secure.
 
-The next piece of work is **ARCH-D3b item 2 — Growth by USE-OR-SEAL** (the sustained comma owned after the
-owner ruling #307). Items 1 and 3-by-measure of the old ARCH-D3b scope are now CLOSED:
+**ARCH-D3b is now fully CLOSED** (item 2 delivered 2026-09-05):
 
 - **item 1 (wire the fast-path verdicts)** — CLOSED: #312 (spec) + #313 (impl). The `DOOR_RATIFY_CTX`
   constant is dead; `deriveFastPathVerdicts` derives `lowRisk`/`contested` from observed state.
-- **item 2 (USE-OR-SEAL)** — **SPECIFIED, not built**: #315 delivered S1+S2+S3 (ENTRY-AUTH-16 + 4 REQs +
-  4 SCNs + the `wp-d3b-b-use-or-seal` card). The impl is the remaining work.
+- **item 2 (USE-OR-SEAL)** — **CLOSED**: #315 (spec: ENTRY-AUTH-16 + 4 REQs + 4 SCNs + the
+  `wp-d3b-b-use-or-seal` card), #319 (impl). `USE_THRESHOLD`/`seal`/`servedClass` in `hits.ts`; the
+  serve path (`projection-query-index.cover()`, `hits?` seam) writes the counter per served advisory
+  node and serves a grown/sealed node at the RAISED class; `WireConfig.hits?: BoundHits` is the
+  type-only delivery seam. Full detail in §2.9b.
 - **item 3 (derive scope from primaryAnchor)** — CLOSED in code since WP-10.A3 (#251); recorded in #309.
 
-The remaining build: **the USE-OR-SEAL IMPLEMENTATION** (ARCH-D3b item 2) — carry the hits ledger into
-the read/produce path per the now-frozen spec. The `hits` ledger
-(`packages/knowledge/src/lifecycle/hits.ts`, in-memory, bound via `bindHits`) is the candidate
-foundation; it is NOT yet wired into the read/produce path (no production writer exists — see
-`own-source.ts` header). The `wp-d3b-b-use-or-seal` card names the `success_criteria` and the wire-in
-shape; follow the same S-watch → WP → impl method as item 1.
-
-**CURRENT IN-FLIGHT (2026-09-05 session 3):** the impl is STARTED on branch
-`feat/use-or-seal-impl` (core in `hits.ts` + serve-path wire in `projection-query-index.ts` +
-SCN-a/b/c/d tests + ref-model ledger bump — full design in §2.9; no code pushed yet).
+**The state left HONESTLY OPEN by item 2** — NOT a defect, a documented seam awaiting a consumer:
+- The `hits` ledger (`hits.ts`) still has ZERO production callers — no composition root binds it, so
+  `ref-model-guard` still lists it (`values: 2`, `shipped: null`). The cardinal has NO test saying
+  `own-source.ts`'s `hits: 0` rank field is wrong: the impl proves the serve path CAN write and the
+  class CAN rise, in-process, via the SCN tests and the exit_predicate mutation (stripping `logHit`
+  turns 3 growth SCNs red).
+- **The next step a real product wants** (why no composition root binds `hits` today): the serve-side
+  bound needs HONEST `archive`/`calibrate` deps, and those exist only when a KNOW-17 decay consumer
+  (GEN-16 `bindSeedGate` or RETR's per-kind frecency) is wired in production. The day one lands:
+  1. compose.ts builds `bindHits({ servedSet, archive, calibrate })` with REAL deps and passes
+     `config.hits`;
+  2. delete the `hits.ts` entry from `reference-model-guard.mjs` (it becomes shipped);
+  3. re-visit `own-source.ts:330`'s `hits: 0` (the composer's `(tier, hits, ppr, nodeKey)` rank then
+     stops degenerating).
 
 Two standing threads remain owner-level, unchanged from the prior handoff:
 - **The billing lock** — why CI runs on the owner's machine; clearing it restores hosted runners.
 - **The fork-PR contribution flow** — #301 means forks never reach the gate until synced in-repo.
+- **The self-hosted runner's load flakes** (§2.7/§2.8) still bite: `s-mcp-4-draft-parity`,
+  `s26-surface-lies`, `scanner.wp-11.w5`, and `memory-store.test.ts:A4` (REAL subprocess spawn) all
+  time out or flake when a foreign build (`opencode-tasks` rust/tsgo) starves the machine. They pass
+  on a quiet box; a rerun is the standard recovery, not a code fix.
 
 For the full reasoning behind the recent changes, read the pull request bodies — `gh pr view 294`,
 `gh pr view 296`, `gh pr view 297`, `gh pr view 300`, `gh pr view 301`, `gh pr view 305`, `gh pr view 307`,
