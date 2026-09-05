@@ -1,4 +1,4 @@
-# Session state — 2026-09-03
+# Session state — 2026-09-05
 
 **What this file is:** the state of the work at a point in time, written so a DIFFERENT session, model,
 harness or provider can pick it up cold. It is not a plan. This repository has already been bitten by
@@ -6,9 +6,9 @@ reading a plan as state — a doc describing work to be done outlived the work, 
 recommended building something that already existed. So every claim below carries the command that
 re-derives it, and nothing here is a value you are asked to trust.
 
-This file replaces the previous handoffs (2026-08-31, and its own 2026-09-02 rewrite). Read
-`git log --all --oneline -- docs/SESSION-STATE.md` for the prior state; the changes below are the delta
-since then. The session continued past the §2.5 checkpoint; §2.6 records the work it did.
+This file replaces the previous handoffs (2026-08-31, its own 2026-09-02 rewrite, and the 2026-09-03
+version). Read `git log --all --oneline -- docs/SESSION-STATE.md` for the prior state; the changes below
+are the delta since then. §2.8 records the work of this session.
 
 ---
 
@@ -230,6 +230,34 @@ corelink×5 + clw/hugit/mcp/githugr/lightr/skill). Nine were stopped as redundan
 2-5, githugr, lightr, mcp); CPU is freed and CI is stable ~9.5min. The `python -c exec(eval(...))`
 high-CPU processes seen were legitimate pytest xdist workers of the skill-001 runner, not malware.
 
+## 2.8 — CI per-delivery cost + USE-OR-SEAL specified (2026-09-05)
+
+Two merges this session, both on master `1d9fd5a`:
+
+- **#316 ci(delivery-cost)** — `.github/workflows/ci.yml`: the **product suite runs only when the diff
+  touches code**, not on docs-only PRs. A `paths` filter gates `npm test` (product suite) so pure-docs
+  PRs ride the doc gates alone (adr-citation, req-clause, ears-coamend, doc-transcript, service-gate) —
+  measured **10m35s vs ~1h+** on a docs-only PR (#315). Also folds in `test(e2e-blackbox)`: the s10
+  path-traversal perf assertion gets host headroom 10s→30s (a 37s-measuring assertion was flaking under
+  the machine's shared runners — the same family as #311).
+- **#315 req(d3b-b)** — **S1+S2+S3 for ARCH-D3b item 2 (USE-OR-SEAL)**, docs-only: INV **ENTRY-AUTH-16**
+  + 4 REQs + 4 SCNs + the `wp-d3b-b-use-or-seal` work-package card carrying its `success_criteria`.
+  Counts fanned out: 19→20 INVs, 76→80 REQs (re-derive with `docs/requirements/*` + the recount commands
+  in §1). The spec pins the owner ruling (#307): plain per-node usage COUNTER at named constant
+  `USE_THRESHOLD`, human seal as alternative-sufficient, never a precondition.
+
+**Loaded-machine flake root-caused.** The step before merge, the same commit's gate failed three tests
+that all pass in isolation: `scanner.wp-11.w5` (2×: `expected 'could-not-run' to be 'hit'` + ENOENT on
+the fake-scanner `stdin-capture` tmpdir) and e2e `SCN-MCP-4b-1` (`Test timed out in 30000ms`). Cause was
+**not the diff** (CI-only, zero product code): sibling self-hosted runners (this time *corelink-server's*
+CI, ~4 python workers at ~90% CPU each, ~330% aggregate) saturated the machine at the 01:35 run; the
+scanner tests spawn real `/bin/sh` mid-test and the spawns blew their 30s test timeout. Honest markers
+that it was load, not code: the failing tests run green in isolation on a cool box, and the identical
+commit re-ran green 30m later once corelink finished. Lesson already half-paid in §2.7 (nine runners
+stopped) — **corelink was the one that came back**: a foreign runner's scale-out still starves this
+machine's CI; check `ps aux | sort -k3 -r` and `pgrep -f Runner.Listener` before debugging a stalled or
+flaky run as a code problem.
+
 ---
 
 ## 3 — The state of THIS repository's own store — AFTER the retirement
@@ -315,16 +343,16 @@ owner ruling #307). Items 1 and 3-by-measure of the old ARCH-D3b scope are now C
 
 - **item 1 (wire the fast-path verdicts)** — CLOSED: #312 (spec) + #313 (impl). The `DOOR_RATIFY_CTX`
   constant is dead; `deriveFastPathVerdicts` derives `lowRisk`/`contested` from observed state.
+- **item 2 (USE-OR-SEAL)** — **SPECIFIED, not built**: #315 delivered S1+S2+S3 (ENTRY-AUTH-16 + 4 REQs +
+  4 SCNs + the `wp-d3b-b-use-or-seal` card). The impl is the remaining work.
 - **item 3 (derive scope from primaryAnchor)** — CLOSED in code since WP-10.A3 (#251); recorded in #309.
 
-The remaining build: **USE-OR-SEAL** — the hits ledger feeds class growth (T2 → T1/T0 by accumulated
-evidence or by human seal), no mandatory human gate. The owner ruling (see §2.6/#307) fixed the design:
-**a plain per-node usage COUNTER, no invented threshold/calibration** — at a fixed named constant
-(`USE_THRESHOLD`, one place in code) the node rises implicitly; the HUMAN seal is an alternative
-sufficient evidence, never a precondition. The `hits` ledger (`packages/knowledge/src/lifecycle/hits.ts`,
-in-memory, bound via `bindHits`) is the candidate foundation; it is NOT yet wired into the read/produce
-path (no production writer exists — see `own-source.ts` header). Following the same S1→S3→WP→impl method
-as item 1.
+The remaining build: **the USE-OR-SEAL IMPLEMENTATION** (ARCH-D3b item 2) — carry the hits ledger into
+the read/produce path per the now-frozen spec. The `hits` ledger
+(`packages/knowledge/src/lifecycle/hits.ts`, in-memory, bound via `bindHits`) is the candidate
+foundation; it is NOT yet wired into the read/produce path (no production writer exists — see
+`own-source.ts` header). The `wp-d3b-b-use-or-seal` card names the `success_criteria` and the wire-in
+shape; follow the same S-watch → WP → impl method as item 1.
 
 Two standing threads remain owner-level, unchanged from the prior handoff:
 - **The billing lock** — why CI runs on the owner's machine; clearing it restores hosted runners.
@@ -332,7 +360,7 @@ Two standing threads remain owner-level, unchanged from the prior handoff:
 
 For the full reasoning behind the recent changes, read the pull request bodies — `gh pr view 294`,
 `gh pr view 296`, `gh pr view 297`, `gh pr view 300`, `gh pr view 301`, `gh pr view 305`, `gh pr view 307`,
-`gh pr view 309`, `gh pr view 311`, `gh pr view 312`, `gh pr view 313`.
+`gh pr view 309`, `gh pr view 311`, `gh pr view 312`, `gh pr view 313`, `gh pr view 315`, `gh pr view 316`.
 The four documents worth reading before touching anything: `README.md` for the shipped surface,
 `BENCHMARKS.md` for what is measured and — more usefully — its Honest Limits section for what is not,
 `docs/adr/ADR-0022-doctor-audits-the-store-it-diagnoses.md` for the most recent architectural decision,
