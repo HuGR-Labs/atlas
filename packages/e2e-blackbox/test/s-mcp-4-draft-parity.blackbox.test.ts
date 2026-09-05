@@ -111,7 +111,7 @@ describe('PROP-MCP-4 — draft door: serialize(cli(draft, x)) ≡ serialize(mcp(
       const { bytes: mcp } = await mcpDraftBytes(repo, 'src/app.ts', 'rationale', claim);
       expect(mcp).toBe(cli);
     }
-  }, 30_000);
+  }, 60_000); // matches the e2e-blackbox project budget (60s, §2.8/#311): 8 subprocess pairs measured 37s quiet.
 
   it('SCN-MCP-4c-1 (partially-populated — the divergence-teeth): absent optional string + empty optional array agree', async () => {
     // A T2 advisory draft on CREATE routes `auto-accept`, so `DraftOut.requires` is ABSENT (dropped, not null),
