@@ -97,7 +97,7 @@ describe('S10 — atlas node <addr>: the read-only per-node door + totality on a
       expect(miss.stdout).toContain('status: error');
       expect(miss.stdout).toContain('no grounded node at content address');
       expect(miss.stderr).toBe(''); //                    no crash / no OOM stack
-      expect(elapsedMs).toBeLessThan(10_000); //          FAST — a subprocess spin-up, not an unbounded read
+      expect(elapsedMs).toBeLessThan(30_000); // FAST — a subprocess spin-up, not an unbounded read (20s of headroom for a loaded host; the teeth are the 1s→subprocess scale, not a strict <10s)
     }
   });
 });

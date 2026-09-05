@@ -1,22 +1,31 @@
 # Product build gate. Gate implementations live in harness/ (Orchestra-bound).
-# Runs on push + pull_request. The bar Orchestra enforces on seats is enforced here.
+# Runs on push (master) + pull_request. The bar Orchestra enforces on seats is enforced here.
 #
 # SECURITY — why the gate runs the way it does. This job executes UNTRUSTED code on a
 # SELF-HOSTED runner (the owner's machine): `npm ci` installs arbitrary dependencies
 # and the suite runs arbitrary scripts. The repository is public, so a fork's
 # pull_request is exactly the remote-code-execution vector GitHub warns self-hosted
 # runners must never accept. Therefore:
-#   · the `gate` job runs ONLY on trusted context — pushes, and pull_requests whose
-#     head branch lives inside this repository (head.repo.full_name == this repo).
+#   · the `gate` job runs ONLY on trusted context — pushes to master, and
+#     pull_requests whose head branch lives inside this repository
+#     (head.repo.full_name == this repo).
 #   · a pull_request from a FORK triggers the `fork-guard` job instead, which checks
-#     out nothing and executes nothing from the PR — only our own echo script. The
-#     merge then blocks on the missing `gate` check until a maintainer syncs the
-#     change onto an in-repo branch, where the gate runs on the trusted runner.
+#     out nothing and executes nothing from the PR — only our own echo script.
 #   · `permissions: contents: read` keeps the workflow token write-free; combined
 #     with the actions allowlist in repository settings, no third-party action can be
 #     introduced by a PR.
+#
+# COST MODEL (owner-decision 2026-09-03): CI runs per DELIVERY, not per PR × 2. The
+# full gate (guards + the whole product suite) runs ONCE on a push to master — the
+# merge is the delivery moment, and the merge never happens without it. On a PR, the
+# gate runs the guards ALWAYS; the 9000-test product suite runs only when the diff
+# touches CODE (packages/ or harness/), never for a docs-only PR. A push to a
+# feature branch with an open PR fires ONCE (via pull_request), so nothing runs 2×.
 name: ci
-on: [push, pull_request]
+on:
+  push:
+    branches: [master]
+  pull_request:
 permissions:
   contents: read
 jobs:
@@ -41,7 +50,24 @@ jobs:
       - run: npm run ears-coamend-guard  # a changed normative-clause must co-amend its EARS phrase in the same commit (#198)
       - run: npm run doc-transcript-guard  # every documented command transcript is re-run against the built binary, or named as unverifiable
       - run: npm run service-gate-guard  # THE TRIPWIRE: no non-stdio transport while the service gates are shut (ARCH-12)
-      - run: npm test                # vitest run — own-suite + held-out GATE + totality fences
+      # Does this delivery touch CODE? On master (a push) ALWAYS run the suite — the
+      # merge is the delivery. On a PR, run it only when the diff reaches packages/ or
+      # harness/; a docs-only PR gets the guards above (which catch doc/REQ rot) and
+      # skips the 9000-test product suite, because docs cannot break product behavior.
+      - id: diff
+        if: github.event_name == 'pull_request'
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+          CHANGED=$(git diff --name-only "$BASE" "$HEAD")
+          if echo "$CHANGED" | grep -qE '^(packages/|harness/|\.github/)'; then
+            echo "touches_code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "touches_code=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: npm test (product suite)
+        if: github.event_name != 'pull_request' || steps.diff.outputs.touches_code == 'true'
+        run: npm test                # vitest run — own-suite + held-out GATE + totality fences
   # Runs for a pull_request FROM A FORK. NO checkout, NO npm, NO repo code — the job
   # body is our own echo only, so starting it on the self-hosted runner is safe. Its
   # purpose is a visible, honest refusal instead of a silently-missing check.
