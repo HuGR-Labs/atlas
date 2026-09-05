@@ -7,7 +7,7 @@
 > EARS sentence — one `SHALL`, one pattern. `normative-clause:` quotes the load-bearing clause verbatim
 > from `reference/atlas-authoring.md`. Each `unwanted[]` clause becomes its own `If-then` guard REQ.
 >
-> **76 REQs over 19 INVs.** Gate status: GATE — pending · COLD-REVIEW — **pending**.
+> **80 REQs over 20 INVs.** Gate status: GATE — pending · COLD-REVIEW — **pending**.
 
 ---
 
@@ -401,20 +401,40 @@ source: INV-AUTH-15 @ reference/atlas-authoring.md#entry-auth-15 (unwanted)
 If a candidate has not cleared the door's truth gate, or is not `T2`/advisory, then the door shall not present it as low-risk.
 normative-clause: "`lowRisk` MUST be derived from the candidate having cleared the door's own TRUTH gate (a real prior verdict) and being on the advisory `T2` class. A candidate that did not clear the truth gate, or that is not `T2`/advisory, MUST NOT be presented as low-risk"
 
+### REQ-AUTH-16a — served-in-a-pack increments the usage counter
+source: INV-AUTH-16 @ reference/atlas-authoring.md#entry-auth-16
+When a node in the advisory class is served in a pack, the knowledge module shall increment a per-node usage counter.
+normative-clause: "each time the node is SERVED in a pack (delivered to a reader/orchestrator), a per-node usage counter increments"
+
+### REQ-AUTH-16b — the fixed threshold
+source: INV-AUTH-16 @ reference/atlas-authoring.md#entry-auth-16
+When a node's usage counter reaches the fixed named constant, the knowledge module shall rise it to the next class implicitly.
+normative-clause: "and when the counter reaches a FIXED named constant (`USE_THRESHOLD`, one tunable place in the code — never a calibrated function of anything), the node rises to the next class implicitly, auto-accepted by the growth path with no human and no further gate"
+
+### REQ-AUTH-16c — the human seal is an alternative, sufficient evidence
+source: INV-AUTH-16 @ reference/atlas-authoring.md#entry-auth-16
+A human ratify token that records a deliberate endorsement shall also be sufficient to rise a node's class, independent of the usage counter.
+normative-clause: "a human ratify token records a deliberate endorsement; that is also sufficient, independent of the counter"
+
+### REQ-AUTH-16d — neither growth evidence is mandatory
+source: INV-AUTH-16 @ reference/atlas-authoring.md#entry-auth-16 (unwanted)
+If a node earns neither a reached threshold nor a human seal, then it shall stay advisory and decay by non-use rather than rising.
+normative-clause: "A node that earns neither stays advisory and decays by non-use (KNOW-17), and there is NO required human gate on the growth path — the human seal is a plus, never a precondition"
+
 ---
 
 ## Completeness (S1 predicates)
 
 | predicate | verdict |
 |---|---|
-| every behavioural INV has ≥1 REQ | ✅ 19/19 |
+| every behavioural INV has ≥1 REQ | ✅ 20/20 |
 | every `unwanted[]` clause has its `If-then` guard REQ | ✅ 27/27 |
-| zero orphan REQ (every REQ cites an extant INV) | ✅ 76/76 |
+| zero orphan REQ (every REQ cites an extant INV) | ✅ 80/80 |
 | every REQ has exactly one `SHALL` and matches one EARS pattern | ⚠️ mechanical — **GATE pending** |
 | every REQ quotes its clause without paraphrase | ⚠️ judgment — **COLD-REVIEW pending** |
 
-**Counts (recomputed mechanically, not asserted):** **76 REQs = 49 clause-projections + 27
-unwanted-behaviour guards**, over **19 INVs** — matching the register exactly (49 `clauses[]` entries, 27
+**Counts (recomputed mechanically, not asserted):** **80 REQs = 53 clause-projections + 27
+unwanted-behaviour guards**, over **20 INVs** — matching the register exactly (53 `clauses[]` entries, 27
 `unwanted[]` entries). By block: **AUTH 57 · CLI 6 · MCP 10**.
 
 **DoD: NOT MET** — GATE pending, COLD-REVIEW pending.

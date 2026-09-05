@@ -531,13 +531,41 @@ Then `lowRisk` is `false`, even though the candidate may be `T2`.
 teeth: breaks-on a door that marks `lowRisk:true` for any T2 advisory regardless of the truth verdict — the
   candidate then routes auto-accept without ever clearing the gate.
 
+### SCN-AUTH-16a-1 — served-in-a-pack increments the usage counter
+source: REQ-AUTH-16a · gen: conformance
+Given an advisory node served inside a pack to a reader
+When the pack is delivered
+Then the node's per-node usage counter increments by one.
+teeth: breaks-on a served fact whose counter does NOT move — the growth path would starve at zero for every node.
+
+### SCN-AUTH-16b-1 — the fixed threshold rises a node implicitly
+source: REQ-AUTH-16b · gen: conformance
+Given an advisory node whose usage counter is one below the fixed `USE_THRESHOLD`
+When it is served once more
+Then the counter reaches the threshold and the node rises to the next class automatically — no human, no further gate.
+teeth: breaks-on a rise gated on anything other than the plain integer (a calibrated function, a human, a per-context threshold).
+
+### SCN-AUTH-16c-1 — the human seal is an alternative, sufficient evidence
+source: REQ-AUTH-16c · gen: conformance
+Given an advisory node with a usage counter still below `USE_THRESHOLD`
+When a human ratify token records a deliberate endorsement for it
+Then the node rises, independent of the counter.
+teeth: breaks-on a rise that requires BOTH the seal and the threshold — the seal must be sufficient alone (the owner's "neither mandatory").
+
+### SCN-AUTH-16d-1 — neither growth evidence is mandatory
+source: REQ-AUTH-16d · gen: conformance (guard)
+Given an advisory node that is never served enough to reach `USE_THRESHOLD` and receives no seal
+When the decay pass runs
+Then the node stays advisory and decays by non-use rather than rising.
+teeth: breaks-on a node rising at zero counter or by default — a node that earned nothing must stay advisory.
+
 ---
 
 ## Completeness (S3 predicates)
 
 | predicate | verdict |
 |---|---|
-| every REQ has ≥1 SCN | ✅ 76/76 (1:1 — each S1 guard REQ carries its own guard SCN) |
+| every REQ has ≥1 SCN | ✅ 80/80 (1:1 — each S1 guard REQ carries its own guard SCN) |
 | every unwanted-behaviour clause has its guard SCN | ✅ 27/27 |
 | every SCN keys off its REQ and uses concrete values | ✅ — all values come from the `fix-author` fixture, the named actors/tokens, or the frozen constants |
 | cases generated wherever a generator exists | ✅ — `gen:` is declared per SCN; **0 residue** |

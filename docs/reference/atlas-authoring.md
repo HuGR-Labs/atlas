@@ -155,10 +155,21 @@ CheckOut    = { wouldEmit: boolean, gates: { gate: GateName, pass: boolean, reas
   forbids by name). `contested` MUST be derived from actual store contention observed during the write
   attempt (the commit-retry detects it); `lowRisk` MUST be derived from the candidate having cleared the
   door's own TRUTH gate (a real prior verdict) and being on the advisory `T2` class. A candidate that did
-  not clear the truth gate, or that is not `T2`/advisory, MUST NOT be presented as low-risk. The common
-  T2-advisory-grounded auto-accept is preserved, but it is now the OBSERVED outcome of two real verdicts,
-  not a hardcoded default. *(cites ARCH-9; ADR-0010 ruling 2026-09-03: no invented threshold; the verdicts
-  derive from observed state, never a calibrated constant)*
+not clear the truth gate, or that is not `T2`/advisory, MUST NOT be presented as low-risk. The common
+   T2-advisory-grounded auto-accept is preserved, but it is now the OBSERVED outcome of two real verdicts,
+   not a hardcoded default. *(cites ARCH-9; ADR-0010 ruling 2026-09-03: no invented threshold; the verdicts
+   derive from observed state, never a calibrated constant)*
+- <a id="entry-auth-16"></a>**ENTRY-AUTH-16 Growth is by USE-OR-SEAL, neither mandatory.** A node in the
+   advisory class grows by ONE of two earned evidences, either sufficient, neither required. The USE
+   evidence: each time the node is SERVED in a pack (delivered to a reader/orchestrator), a per-node usage
+   counter increments, and when the counter reaches a FIXED named constant (`USE_THRESHOLD`, one tunable
+   place in the code — never a calibrated function of anything), the node rises to the next class
+   implicitly, auto-accepted by the growth path with no human and no further gate — the threshold is
+   deliberately a plain integer, and a node that is never served just stays advisory. The SEAL evidence: a
+   human ratify token records a deliberate endorsement; that is also sufficient, independent of the counter.
+   A node that earns neither stays advisory and decays by non-use (KNOW-17), and there is NO required human
+   gate on the growth path — the human seal is a plus, never a precondition. *(cites ADR-0010 owner ruling
+   2026-09-03: use-or-seal, neither mandatory, no human-in-the-loop, plain counter)*
 
 ## Acceptance (this surface's falsifiable checks — S3 lifts goldens from these)
 
