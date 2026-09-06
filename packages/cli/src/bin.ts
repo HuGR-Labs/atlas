@@ -14,7 +14,7 @@ import { main } from './cli.js';
 // yet still index `::` sub-file symbol nodes, so a symbol grounding is groundable and `subsumes` fires.
 void (async () => {
   await initAst();
-  const { handler, doctorSource, promote, own, relations, negations, transitions, transition, testVacuities, testVacuity, verifyFact, reverify, deriveRelations, anchors, slots, draft, check, memoryRecall, memoryHeader, memoryAwareness, memoryOrientation, readRefusal, readAdvisory } = composeRuntime(process.cwd());
+  const { handler, doctorSource, promote, own, relations, negations, transitions, transition, testVacuities, testVacuity, verifyFact, reverify, deriveRelations, anchors, slots, draft, check, memoryRecall, memoryHeader, memoryAwareness, memoryOrientation, budget, territories, readRefusal, readAdvisory } = composeRuntime(process.cwd());
   // The provenance refusal rides the same injected-deps seam as the handler (conditional spread keeps it
   // ABSENT on a healthy repo — exactOptionalPropertyTypes), so prod and tests share ONE surface. `promote`
   // (the KNOW-8 governed promotion leg) rides that same seam: it is not a `Tool`, so it cannot arrive through
@@ -88,6 +88,11 @@ void (async () => {
     memoryHeader,
     memoryAwareness,
     memoryOrientation,
+    // WP-3-RETR — the RETR-8 budget + RETR-13 MISS-oracle READ doors ride the SAME injected-deps seam as
+    // `memory-*`. Threading them here is what makes `atlas budget`/`atlas territories` REACHED shipped
+    // paths rather than ledgered reference models (`retrieval/ledger.ts` + `offatlas.ts`).
+    budget,
+    territories,
     ...(readRefusal !== undefined ? { readRefusal } : {}),
     // TRAVEL-BY-REPROOF — the ADVISORY MESSAGE for a `tracked-provable` store, rides the same conditional-
     // spread discipline as `readRefusal` (ABSENT, not `undefined`, on a healthy repo — exactOptionalPropertyTypes).

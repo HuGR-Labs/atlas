@@ -95,6 +95,10 @@ export const ARITY: Record<Command, number> = {
   'memory-awareness': 0,
   // `memory-orientation` — the SHARED Orientation slab; no positional (MEM-6).
   'memory-orientation': 0,
+  // `budget` — the RETR-8 per-kind calibration ledger; no positional (WP-3-RETR).
+  budget: 0,
+  // `territories` — the RETR-13 per-territory off-atlas MISS-oracle; no positional (WP-3-RETR).
+  territories: 0,
 };
 
 // [ENTRY-CLI-5 clean-up] this used to be a HAND-TRANSCRIBED string literal — a second copy of `COMMANDS`
