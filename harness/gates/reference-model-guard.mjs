@@ -18,7 +18,7 @@
 // forces the classification to be DECLARED rather than discovered by the next reviewer.
 //
 // ── DECLARED COUNTS (gate-checked; a drift here FAILS this gate) ────────────────────────────────────────
-//   declared-modules: 44 · dead-value-exports: 155 · type-reachable: 6
+//   declared-modules: 43 · dead-value-exports: 153 · type-reachable: 5
 //   These three are read back from THIS file and asserted against the measured tree at the foot of the run
 //   (see "THE HEADER STATES COUNTS, AND THIS CHECKS THEM"). No count is QUOTED anywhere else in this
 //   header — a quoted integer that nothing checks is exactly what rotted here (task #143); this one cannot.
@@ -231,12 +231,9 @@ const BUILTIN_LEDGER = {
   'packages/knowledge/src/lifecycle/emit.ts': { values: 1, shipped: 'packages/adapter-io/src/governed-emit.ts', banner: false },
   'packages/knowledge/src/lifecycle/evaluator.ts': { values: 4, shipped: null, banner: false },
   'packages/knowledge/src/lifecycle/freshness.ts': { values: 1, shipped: null, banner: false },
-  'packages/knowledge/src/lifecycle/hits.ts': { values: 2, types: true, shipped: null, banner: false },
-  //   values 1 -> 2 (ARCH-D3b item 2): `USE_THRESHOLD` (WP-D3B-B, INV-AUTH-16) joined `bindHits`. The serve
-  //   path (`adapter-io/src/projection-query-index.ts`) writes the ledger only through the INJECTED bound —
-  //   no composition root passes one yet, so the module still has ZERO production callers; `servedClass`/
-  //   `seal` are members of the returned bound, not module exports. Delete the entry the day a composition
-  //   root binds it.
+  //   hits.ts is GONE from this ledger (values 2 entry deleted) — `compose.ts` now binds it (the ONE
+  //   served-use ledger, WP-D3B-B.USE-OR-SEAL), so `bindHits` HAS a production caller and the module is
+  //   SHIPPED, not a reference model. See the §2.9b forward: the entry was deleted the day the root bound it.
   'packages/knowledge/src/lifecycle/produce.ts': { values: 1, shipped: null, banner: false },
   'packages/knowledge/src/lifecycle/status.ts': { values: 1, shipped: null, banner: false },
   'packages/knowledge/src/ratify/init.ts': { values: 2, shipped: 'packages/tools/src/init.ts', banner: false },
