@@ -21,6 +21,7 @@ import type { VerifyFactLeg } from './verify-fact-source.js';
 import type { ReverifyReport } from './reverify-store.js';
 import type { DeriveRelationsRun } from './relation-derive-run.js';
 import type { Awareness, MemoryRecord, Orientation, TurnHeader } from '@atlas/memory';
+import type { BudgetLeg, TerritoriesLeg } from './calibration-ledger.js';
 
 /** The composed runtime: the ONE governed durable `WiredHandler` every entrypoint drives, PLUS the real
  *  read-only `DoctorSource` `atlas doctor` reads over — both built from the SAME store + revIndex so they
@@ -187,6 +188,22 @@ export interface ComposedRuntime {
    * `READ_SURFACE` member `atlas-memory-orientation`; opens no write path.
    */
   readonly memoryOrientation: () => Orientation;
+  /**
+   * The RETR-8 budget leg (`atlas budget`, WP-3-RETR) — the per-kind hits/hitRate calibration ledger
+   * (`ledgerFrom`) over the served-injection record set. The set is the HONEST ZERO today (`own-source.ts`
+   * `hits: 0` — no production writer records served injections), so every kind renders at its ratified
+   * BASE_CAP floor; the writer is the next work-package. Rides beside the handler like `own`/`relations`:
+   * not a `Tool` (`GOVERNANCE_SURFACE` stays 5), opens no write path — a READ door.
+   */
+  readonly budget: BudgetLeg;
+  /**
+   * The RETR-13 MISS-oracle leg (`atlas territories`, WP-3-RETR) — the per-territory off-atlas rate
+   * (`offAtlasFrom`) over the served-turn record set (honest zero: no served-turn log exists) + the
+   * registered territories (the admin-declared `authz.scopes` keys). Never throws; rate 0 on no history.
+   * The OPEN-DEFINE θ is bound in ONE place (`OFF_ATLAS_THRESHOLD`, calibration-ledger.ts) and the CLI
+   * renders a calibration prompt for every territory that crosses it. A READ door; no write path.
+   */
+  readonly territories: TerritoriesLeg;
   /**
    * The ADVISORY MESSAGE for a `tracked-provable` store (TRAVEL-BY-REPROOF) — present ONLY when the durable
    * store is being served NARROWED (filtered to facts that replay `re-proven`), so a user whose committed
