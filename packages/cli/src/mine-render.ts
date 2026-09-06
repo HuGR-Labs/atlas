@@ -10,6 +10,7 @@
 import type { GenesisReport, SiteOutcome } from '@atlas/genesis';
 import { reconcile } from '@atlas/genesis';
 import type { CommitRefusal } from '@atlas/adapter-io';
+import type { Awareness } from '@atlas/memory';
 import { STAGING_REFUSAL_TEXT as REFUSAL_TEXT } from './mine-staging.js';
 import type { CliVerdict } from './render.js';
 
@@ -30,6 +31,9 @@ import type { CliVerdict } from './render.js';
  */
 export interface MinePass {
   readonly report: GenesisReport;
+  /** GEN-9 — the pass's assembled Awareness (the output of seed.ts, mined/assembled by the run itself).
+   *  Present on every pass so a caller can read what was (and was not) seeded — never fabricated. */
+  readonly seed: Awareness;
   readonly refusal?: CommitRefusal;
   readonly modelWired: boolean;
   readonly promptDigest?: string;

@@ -66,13 +66,19 @@ describe('the mine render publishes a PER-SITE ledger, not a count', () => {
     // The absent-tolerant read (`builtAt`/`sameAs`/`derivedAt` precedent). A report written before the
     // ledger existed has no `coverage`; rendering it must not silently print a closed site set.
     const old: GenesisReport = { seeded: [], ratified: [], open: [], llmCalls: 0, budgetSpent: 0 };
+
+/** A five-facet all-UN-SEEDED Awareness — the honest seed of any run that ratified nothing (GEN-9c). */
+const emptyAwareness = () => {
+  const facet = (name: string) => ({ content: `UN-SEEDED: ${name}`, grounding: [], state: 'UN-SEEDED' as const });
+  return { mission: facet('mission'), constitution: facet('constitution'), terrain: facet('terrain'), ontology: facet('ontology'), taste: facet('taste') };
+};
     const lines = coverageLines(old);
     expect(lines).toHaveLength(1); //                     the verdict, and no fabricated rows
     expect(lines[0]).toContain('UNEVALUABLE');
     expect(lines[0]).not.toContain('CLOSES');
 
     // and it still folds to a normal verdict — the old shape does not crash the renderer.
-    const v = foldVerdict({ report: old, modelWired: false, seedsDropped: 0 });
+    const v = foldVerdict({ report: old, seed: emptyAwareness(), modelWired: false, seedsDropped: 0 });
     expect(v.exitCode).toBe(0);
     expect(v.stdout).toContain('coverage: coverage UNEVALUABLE');
   });
