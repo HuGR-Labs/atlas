@@ -99,6 +99,14 @@ export const ARITY: Record<Command, number> = {
   budget: 0,
   // `territories` — the RETR-13 per-territory off-atlas MISS-oracle; no positional (WP-3-RETR).
   territories: 0,
+  // `export <outDir>` — the output DIRECTORY the OKF bundle file is written into (`<outDir>/atlas-okf.json`);
+  // the store dumped is ALWAYS the composed `process.cwd()` (the SAME repo every other command reads), so a
+  // path argument cannot let the exported store diverge from the live one (EPIC-1-b PERSIST-9). Arity is 1.
+  export: 1,
+  // `import <bundle> <targetDir>` — the bundle FILE path + the FRESH EMPTY store target directory to replay
+  // into (EPIC-1-b PERSIST-9). A target that already hosts a store is REFUSED by the leg, not merged with.
+  // Exactly TWO positionals.
+  import: 2,
 };
 
 // [ENTRY-CLI-5 clean-up] this used to be a HAND-TRANSCRIBED string literal — a second copy of `COMMANDS`

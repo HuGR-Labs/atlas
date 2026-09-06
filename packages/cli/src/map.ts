@@ -66,7 +66,7 @@ import type { Tool, Verdict } from '@atlas/tools';
  *  untouched by them; `authorityOf` DERIVES that from `WRITE_PATHS`, it is not asserted here. All four are
  *  intercepted before the handler (cli.ts) and driven over the composition root's `memoryRecall`/
  *  `memoryHeader`/`memoryAwareness`/`memoryOrientation` legs. */
-export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'transitions', 'transition', 'test-vacuities', 'test-vacuity', 'verify-fact', 'verify-store', 'derive-relations', 'anchors', 'slots', 'draft', 'check', 'memory-emit', 'memory-recall', 'memory-header', 'memory-awareness', 'memory-orientation', 'budget', 'territories'] as const;
+export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'transitions', 'transition', 'test-vacuities', 'test-vacuity', 'verify-fact', 'verify-store', 'derive-relations', 'anchors', 'slots', 'draft', 'check', 'memory-emit', 'memory-recall', 'memory-header', 'memory-awareness', 'memory-orientation', 'budget', 'territories', 'export', 'import'] as const;
 export type Command = (typeof COMMANDS)[number];
 
 /** The leg a command routes to — a governance `Tool`, or the genesis entry (data-only; NOT executed here —
@@ -188,6 +188,16 @@ export const COMMAND_LEG: Record<Command, Leg> = {
   territories: 'atlas-query', // READ authority oracle (WP-3-RETR RETR-13 per-territory off-atlas MISS-oracle);
   //                             intercepted before the handler (cli.ts) and driven over the composition
   //                             root's `territories` leg. Carries NO write authority.
+  export: 'atlas-query', // READ authority oracle (EPIC-1-b PERSIST-9 full-store OKF dump); intercepted before the
+  //                       handler (cli.ts) and driven over the STORE-INSTANCE legs in okf-cli.ts — reads the WHOLE
+  //                       durable CAS of cwd and writes a bundle FILE (no store write path). Carries NO governed
+  //                       fact-write token; `authorityOf` DERIVES read from `WRITE_PATHS` — but the page says the
+  //                       honest sentence (`atlas export` writes a bundle file, never a store).
+  import: 'atlas-query', // READ authority oracle (EPIC-1-b PERSIST-9 OKF replay); intercepted before the handler
+  //                       (cli.ts) and driven over the STORE-INSTANCE legs in okf-cli.ts — replays CAS bytes into
+  //                       a FRESH EMPTY target ONLY and NEVER writes the guarded projection, so it carries NO
+  //                       governed fact-write token and cannot be a back-channel write path (ADR-0003). Classified
+  //                       read by `authorityOf` (WRITE_PATHS), with the page stating the honest write it does.
 };
 
 export type Authority = 'read' | 'write';

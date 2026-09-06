@@ -18,7 +18,7 @@
 // forces the classification to be DECLARED rather than discovered by the next reviewer.
 //
 // ── DECLARED COUNTS (gate-checked; a drift here FAILS this gate) ────────────────────────────────────────
-//   declared-modules: 40 · dead-value-exports: 143 · type-reachable: 5
+//   declared-modules: 39 · dead-value-exports: 139 · type-reachable: 5
 //   These three are read back from THIS file and asserted against the measured tree at the foot of the run
 //   (see "THE HEADER STATES COUNTS, AND THIS CHECKS THEM"). No count is QUOTED anywhere else in this
 //   header — a quoted integer that nothing checks is exactly what rotted here (task #143); this one cannot.
@@ -191,7 +191,9 @@ const BUILTIN_LEDGER = {
   'packages/persist/src/provenance.ts': { values: 2, shipped: null, banner: false },
   'packages/persist/src/reconstruct.ts': { values: 11, shipped: null, banner: false },
   'packages/persist/src/reinvoke.ts': { values: 2, shipped: null, banner: false },
-  'packages/persist/src/source.ts': { values: 4, shipped: null, banner: false },
+  //   source.ts is GONE from this ledger (EPIC-1-b / WP-1.1-b.PERSIST: `cli/src/okf-cli.ts` now value-imports
+  //   exportStore/importStore for `atlas export` / `atlas import`, so it moved dead → live — this gate's
+  //   STALE direction, exactly as own.ts/seed.ts did before it).
   'packages/persist/src/transcript-store.ts': { values: 4, shipped: null, banner: false },
 
   // ── @atlas/genesis — PARTLY wired: `packages/cli/src/mine.ts` value-imports makeRunController / ───────

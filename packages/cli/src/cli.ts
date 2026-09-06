@@ -9,8 +9,6 @@
 // extraction) — this file was at the godfile-guard's 600 LOC ceiling before the `slots`/`draft` dispatch.
 
 import type { Hash } from '@atlas/contracts';
-import { asHash } from '@atlas/kernel';
-import { headSha } from '@atlas/adapter-io';
 import { reportIndexPlan, relationsVerdict, negationsVerdict, transitionsVerdict, testVacuitiesVerdict, verifyFactVerdict } from '@atlas/adapter-io';
 import type { DeriveRelationsRun, IndexPlanReport, NegationLeg, OwnLeg, PromoteOut, RelationLeg, ReverifyReport, TestVacuityLeg, TestVacuityProducer, TransitionLeg, TransitionProducer, VerifyFactLeg, WiredHandler, BudgetReport, TerritoriesLeg } from '@atlas/adapter-io';
 import type { AnchorsApi, CheckApi, DoctorSource, DraftApi, SlotsApi, Tool } from '@atlas/tools';
@@ -25,14 +23,13 @@ import { renderHelp } from './help.js';
 import { COMMAND_LEG } from './map.js';
 import { marshalArgs } from './marshal.js';
 import { runOwn } from './own.js';
-import { runPromote } from './promote.js';
-import { runDeriveRelationsCli } from './derive-relations.js';
 import { runTransitionCli } from './transition.js';
 import { runTestVacuityCli } from './test-vacuity.js';
 import { parse } from './parse.js';
 import { renderRefusal, renderVerdict } from './render.js';
+import type { CliVerdict } from './render.js';
 import { emit, emitCli, errorVerdict, refusalVerdict, withNote } from './cli-verdict.js';
-import { dispatchMine, dispatchVerifyStore, dispatchMemoryRecall, dispatchMemoryHeader, dispatchMemoryAwareness, dispatchMemoryOrientation, dispatchBudget, dispatchTerritories } from './cli-dispatch.js';
+import { dispatchMine, dispatchVerifyStore, dispatchMemoryRecall, dispatchMemoryHeader, dispatchMemoryAwareness, dispatchMemoryOrientation, dispatchBudget, dispatchTerritories, dispatchExport, dispatchImport, dispatchPromote, dispatchDeriveRelations } from './cli-dispatch.js';
 
 /** Optional dependency injection seam (additive): tests inject a FAKE `WiredHandler` + a FAKE read-only
  *  `DoctorSource`; prod assembles both at the composition-root WP. */
@@ -239,6 +236,15 @@ export interface CliDeps {
    *  per-territory off-atlas rate over the served-turn record set (honest zero) + the registered
    *  territories. ABSENT ⇒ `atlas territories` fails closed. */
   readonly territories?: TerritoriesLeg;
+  /**
+   * The STORE-INSTANCE `atlas export <outDir>` / `atlas import <bundle> <targetDir>` legs (EPIC-1-b
+   * PERSIST-9) — dump the WHOLE durable CAS of cwd to `<outDir>/atlas-okf.json`, and replay an OKF bundle
+   * 1:1 INTO A FRESH EMPTY STORE TARGET ONLY (a target already hosting a store is refused, exit 1). Never
+   * touch the live `.atlas/` nor write the guarded projection sidecar (ADR-0003 — an import cannot become a
+   * back-channel FACT write). DEFAULTED, exactly like `indexPlan`; the seam lets a test inject a fake verdict.
+   */
+  readonly okfExport?: (outDir: string) => CliVerdict;
+  readonly okfImport?: (bundlePath: string, targetDir: string) => CliVerdict;
 }
 
 /**
@@ -291,40 +297,15 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
   }
 
   if (command === 'promote') {
-    // CLI-7: `atlas promote` drives the composition root's governed PROMOTION leg ONE pass over the repo at
-    // cwd — read the explorer's staging sidecar, present every staged candidate to the governed emit door,
-    // fold the per-row outcomes into ONE verdict. Like `mine`, it does not route through `deps.handler`
-    // (there is no `Tool` token: it opens no new governed surface, ADR-0008) but its rendered `CliVerdict`
-    // reaches the console over the SAME emit/exit path as every other command (uniform bytes).
-    //
-    // It is a WRITE command, so it fails closed on an uncomposed runtime exactly as the routed ones do.
-    if (!deps.promote) {
-      return emit(
-        errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'),
-      );
-    }
-    // The anchor rev: the repo's LIVE HEAD, read through the shared no-shell git seam. `headSha` is total
-    // (no git / no commit ⇒ `undefined`), and the composed truth-gate ignores this value today — it
-    // re-derives freshness against the built `Axes`, not against a sha (compose.ts `buildGate`). It is still
-    // the true HEAD rather than a placeholder, so a gate that later starts reading it gets a fact.
-    return emitCli(runPromote(deps.promote, asHash(headSha(process.cwd()) ?? '')));
+    // CLI-7: `atlas promote` drives the composed governed PROMOTION leg ONE pass (ADR-0008 — no new governed
+    // surface; the rendered `CliVerdict` reaches the console over the SAME emit/exit path as every command).
+    return dispatchPromote(deps.promote);
   }
 
   if (command === 'derive-relations') {
-    // #99 WP-R7: `atlas derive-relations` drives the composition root's SOUND-RELATION projection ONE pass over
-    // the repo at cwd — enumerate the index's resolved cross-unit references, prove + seal each `depends-on` edge
-    // through the sound oracle, and PERSIST every proven relation through the governed emit door. Like `promote`
-    // it does not route through `deps.handler` (there is no `Tool` token: it opens no new governed surface,
-    // ADR-0008 — it publishes through the existing emit door) but its rendered `CliVerdict` reaches the console
-    // over the SAME emit/exit path as every other command (uniform bytes).
-    //
-    // It is a WRITE command, so it fails closed on an uncomposed runtime exactly as `promote` does.
-    if (!deps.deriveRelations) {
-      return emit(
-        errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'),
-      );
-    }
-    return emitCli(runDeriveRelationsCli(deps.deriveRelations));
+    // #99 WP-R7: `atlas derive-relations` drives the SOUND-RELATION projection ONE pass (ADR-0008 — publishes
+    // through the existing emit door; fails closed on an uncomposed runtime exactly as `promote`).
+    return dispatchDeriveRelations(deps.deriveRelations);
   }
 
   if (command === 'own') {
@@ -545,10 +526,14 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
   if (command === 'memory-awareness') return dispatchMemoryAwareness(deps.memoryAwareness);
   if (command === 'memory-orientation') return dispatchMemoryOrientation(deps.memoryOrientation);
 
-  // WP-3-RETR — the RETR-8 budget + RETR-13 MISS-oracle READ doors. Intercepted before the handler (not a
+// WP-3-RETR — the RETR-8 budget + RETR-13 MISS-oracle READ doors. Intercepted before the handler (not a
   // `Tool`; opens no write path — the same siting `memory-*`/`relations` use). ABSENT deps fail closed.
   if (command === 'budget') return dispatchBudget(deps.budget);
   if (command === 'territories') return dispatchTerritories(deps.territories);
+  // EPIC-1-b — the two OKF STORE-INSTANCE doors (`atlas export` / `atlas import`): not `Tool`s, headless over
+  // `process.cwd()` — export dumps the whole CAS; import replays INTO A FRESH EMPTY target only (ADR-0003).
+  if (command === 'export') return dispatchExport(deps.okfExport, positionals[0] ?? '');
+  if (command === 'import') return dispatchImport(deps.okfImport, positionals[0] ?? '', positionals[1] ?? '');
 
   // The remaining SIX governance commands (init/query/emit/reconcile/link/memory-emit) each route to a
   // `Tool` through the one wired handler.

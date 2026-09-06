@@ -15,6 +15,8 @@ export type { IndexPlanReport, PlannedLang, ScipState } from './indexer-report.j
 export { foldAstUnits, foldAstUnitsWithPriors, initAst, astWarmed } from './ast.js';
 export { createDiskStore, rehydrateProjection } from './store.js';
 export type { CasPath, DiskStore } from './store.js';
+// EPIC-1-b — the disk side of the OKF store-instance door (`atlas export`/`atlas import`, cli/src/okf-cli.ts).
+export { CAS_REL, readCas, writeCasObjects, okfBundlePath, targetHasStore, sameCas } from './okf-store.js';
 // The durable-sidecar seam the two governed doors commit through. Exported because `DiskStore.commitProjection`
 // is part of the store's public shape: a consumer (the `mine` driver is the next one — see `commitStaging`)
 // cannot write a `decide` callback without naming these. The commit PROTOCOL itself stays module-internal.
