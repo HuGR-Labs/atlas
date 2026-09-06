@@ -129,6 +129,8 @@ below, so the drift that produced this correction cannot recur silently.
 | `atlas memory-orientation` | read | the DERIVED, SHARED, byte-identical Orientation slab | [reference](./docs/reference/commands/memory-orientation.md) |
 | `atlas budget` | read | the RETR-8 per-kind hits/hitRate calibration ledger (honest zero until the served-injection writer exists) | [reference](./docs/reference/commands/budget.md) |
 | `atlas territories` | read | the RETR-13 per-territory off-atlas MISS-oracle (a crossing raises a calibration prompt) | [reference](./docs/reference/commands/territories.md) |
+| `atlas export <outDir>` | read | dump the WHOLE durable store to one self-contained OKF bundle file | [reference](./docs/reference/commands/export.md) |
+| `atlas import <bundle> <dir>` | read | replay an OKF bundle 1:1 into a FRESH EMPTY store target — CAS bytes only, never the governed projection | [reference](./docs/reference/commands/import.md) |
 | `atlas emit <fact.json> --at <sha>` | write | governed write door — admits a grounded fact, or says which gate refused it | [reference](./docs/reference/commands/emit.md) |
 | `atlas link <a> <b> [--retract]` | write | governed write door — asserts (or withdraws) `a ≡ b`; never a merge | [reference](./docs/reference/commands/link.md) |
 | `atlas memory-emit <entry.json>` | write | governed MEMORY write door — admits a per-seat MemoryEntry through seven MEM gates | [reference](./docs/reference/commands/memory-emit.md) |
@@ -172,7 +174,7 @@ packages/
   genesis         the one-time $0-LLM seeder · budgeted LLM proposal · mechanical admission
   ── RING (campaign 9 — the productization surface; the core stays pure and does no I/O itself)
   adapter-io      the composition root: filesystem · SCIP · git · LLM · durable store, wired into ONE handler
-  cli             the `atlas` CLI — 23 commands through a total argv parser (never throws); see the table above
+  cli             the `atlas` CLI — 30 commands through a total argv parser (never throws); see the table above
   mcp-server      a stdio MCP server over that same handler, mapping every Verdict (incl. refusals) to MCP
   ── SUITES
   e2e             story-driven in-process suite over the wired runtime
@@ -202,14 +204,14 @@ the numbers on this page most likely to rot.
   so an identical input yields a byte-identical `Verdict` on the CLI and over MCP (TOOLS-3).
 - **Does NOT hold: surface parity.**
   <!-- transport-parity:begin -->
-  The CLI exposes **30** commands; MCP advertises **18** tools (6 governance + 10 read + 2 parallel-path).
+  The CLI exposes **32** commands; MCP advertises **18** tools (6 governance + 10 read + 2 parallel-path).
   The first two groups are `GOVERNANCE_SURFACE ∪ READ_SURFACE` (ADR-0006), both arrays in
   `packages/tools/src/handler.ts`. The third is `atlas-relations` (#99a) and `atlas-negations` (#99b),
   advertised through a documented path that deliberately leaves both surface constants untouched — so
   "MCP advertises the union" was never the whole truth, and this bullet asserted it for two campaigns.
-  **The remaining 12 commands are CLI-only and unreachable over MCP**: `mine`, `promote`, `own`,
+  **The remaining 14 commands are CLI-only and unreachable over MCP**: `mine`, `promote`, `own`,
   `transitions`, `transition`, `test-vacuities`, `test-vacuity`, `verify-fact`,
-  `verify-store`, `derive-relations`, `budget`, `territories`.
+  `verify-store`, `derive-relations`, `budget`, `territories`, `export`, `import`.
   <!-- transport-parity:end -->
   The writers among them publish through `atlas-emit` (ADR-0008 — an ordinary use of the existing door, not
   new surface), so no tool token exists for them.

@@ -9,13 +9,22 @@
 
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { createHistorySource, memoryRecallVerdict, memoryHeaderVerdict, memoryAwarenessVerdict, memoryOrientationVerdict, budgetVerdict, territoriesVerdict } from '@atlas/adapter-io';
+import { CAS_REL, createHistorySource, memoryRecallVerdict, memoryHeaderVerdict, memoryAwarenessVerdict, memoryOrientationVerdict, budgetVerdict, territoriesVerdict } from '@atlas/adapter-io';
 import type { ReverifyReport, BudgetReport, TerritoriesLeg } from '@atlas/adapter-io';
 import type { Awareness, MemoryRecord, Orientation, TurnHeader } from '@atlas/memory';
+import { runOkfExport, runOkfImport } from './okf-cli.js';
+import { runPromote } from './promote.js';
+import { runDeriveRelationsCli } from './derive-relations.js';
+import { asHash } from '@atlas/kernel';
+import { headSha } from '@atlas/adapter-io';
+import type { Hash } from '@atlas/contracts';
+import type { PromoteOut } from '@atlas/adapter-io';
+import type { DeriveRelationsRun } from '@atlas/adapter-io';
 import { runMineArms } from './mine.js';
 import { runReverify } from './reverify.js';
 import { renderRefusal } from './render.js';
 import { emit, emitCli, errorVerdict, refusalVerdict } from './cli-verdict.js';
+import type { CliVerdict } from './render.js';
 
 /**
  * CLI-4 / SOUND-DEFAULT-MINE: `mine` drives the FROZEN genesis run-controller (`runMineArms`) over the repo
@@ -165,4 +174,48 @@ export function dispatchBudget(budget: (() => BudgetReport) | undefined): number
 export function dispatchTerritories(territories: TerritoriesLeg | undefined): number {
   if (!territories) return emit(errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'));
   return emit(territoriesVerdict(territories));
+}
+
+// ── EPIC-1-b — the two OKF STORE-INSTANCE doors (`atlas export` / `atlas import`), pulled out here for the
+// SAME godfile-relief reason everything else in this file is: each is a short before-handler interceptor
+// block, and the PRODUCTION body (the /okf-cli.ts runner) is DEFAULTED rather than deferred — a store-
+// instance operation needs NO composed runtime, exactly as `mine` drives its own driver and `doctor`'s
+// `index` leg reads the tree directly. The injected seam exists so a test can hand the dispatch a FAKE
+// verdict without a store on disk, not so the wiring can be postponed.
+//
+// THE DEFAULT-DOES-IT frame is deliberate: `export`/`import` are STORE-INSTANCE operations, not read doors
+// over the composed projection, so the entrypoint provenance refusal (`readRefusal`, a COMMITTED store)
+// still applies to them at the entrypoint like every other command — and their bodies never consult the
+// composed runtime.
+
+/** `atlas export <outDir>` — dump the WHOLE durable CAS of cwd's store as `<outDir>/atlas-okf.json`. */
+export function dispatchExport(okfExport: ((outDir: string) => CliVerdict) | undefined, outDir: string): number {
+  const run = okfExport ?? ((out: string) => runOkfExport(join(process.cwd(), CAS_REL), out));
+  return emitCli(run(outDir));
+}
+
+/** `atlas import <bundle> <targetDir>` — replay the OKF bundle 1:1 into a FRESH EMPTY store target only. */
+export function dispatchImport(
+  okfImport: ((bundlePath: string, targetDir: string) => CliVerdict) | undefined,
+  bundlePath: string,
+  targetDir: string,
+): number {
+  const run = okfImport ?? runOkfImport;
+  return emitCli(run(bundlePath, targetDir));
+}
+
+/** `atlas promote` — the composed governed PROMOTION leg, ONE pass over the repo at cwd (CLI-7 / ADR-0008).
+ *  A WRITE command: fails closed on an uncomposed runtime like the routed ones; the anchor rev is LIVE HEAD
+ *  through the total `headSha` seam (a gate that later reads it gets a fact, never a placeholder). */
+export function dispatchPromote(promote: ((at: Hash) => PromoteOut) | undefined): number {
+  if (!promote) return emit(errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'));
+  return emitCli(runPromote(promote, asHash(headSha(process.cwd()) ?? '')));
+}
+
+/** `atlas derive-relations` — the composed SOUND-RELATION projection ONE pass over the repo (WP-R7 / ADR-0008).
+ *  A WRITE command: publishes every proven relation through the existing governed emit door; fails closed on an
+ *  uncomposed runtime exactly as `promote` does. */
+export function dispatchDeriveRelations(deriveRelations: (() => DeriveRelationsRun) | undefined): number {
+  if (!deriveRelations) return emit(errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'));
+  return emitCli(runDeriveRelationsCli(deriveRelations));
 }

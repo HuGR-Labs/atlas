@@ -50,9 +50,9 @@ afterEach(() => vi.restoreAllMocks());
 // ── REQ-CLI-1 — total command surface ─────────────────────────────────────────────────────────────
 
 describe('SCN-CLI-1a — every command maps to exactly one leg', () => {
-  it('is total (30 keys, WP-11.W8 ∪ WP-3-RETR) and mutually-exclusive over the ratified table', () => {
+it('is total (32 keys, WP-11.W8 ∪ WP-3-RETR ∪ EPIC-1-b) and mutually-exclusive over the ratified table', () => {
     // totality: every command in the finite surface has exactly one leg.
-    expect(COMMANDS).toEqual(['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'transitions', 'transition', 'test-vacuities', 'test-vacuity', 'verify-fact', 'verify-store', 'derive-relations', 'anchors', 'slots', 'draft', 'check', 'memory-emit', 'memory-recall', 'memory-header', 'memory-awareness', 'memory-orientation', 'budget', 'territories']);
+    expect(COMMANDS).toEqual(['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'transitions', 'transition', 'test-vacuities', 'test-vacuity', 'verify-fact', 'verify-store', 'derive-relations', 'anchors', 'slots', 'draft', 'check', 'memory-emit', 'memory-recall', 'memory-header', 'memory-awareness', 'memory-orientation', 'budget', 'territories', 'export', 'import']);
     expect(Object.keys(COMMAND_LEG).sort()).toEqual([...COMMANDS].sort());
     expect(COMMAND_LEG).toEqual({
       init: 'atlas-init',
@@ -107,6 +107,12 @@ describe('SCN-CLI-1a — every command maps to exactly one leg', () => {
       //                        ledger) — intercepted before the handler; carries no write authority
       territories: 'atlas-query', // READ authority oracle (WP-3-RETR RETR-13 per-territory off-atlas
       //                             MISS-oracle) — intercepted before the handler; carries no write authority
+      export: 'atlas-query', // READ authority oracle (EPIC-1-b PERSIST-9 store-instance dump) — intercepted
+      //                       before the handler, dumps the WHOLE store CAS to a bundle file; no governed
+      //                       fact-write token, carries no write authority
+      import: 'atlas-query', // READ authority oracle (EPIC-1-b PERSIST-9 store-instance replay) — intercepted
+      //                       before the handler, replays CAS bytes into a FRESH EMPTY target ONLY (the
+      //                       guarded projection is NEVER written); no governed fact-write token
     });
     // teeth: a command bound to zero legs (totality) or two legs (uniqueness) — each key resolves to one string.
     for (const c of COMMANDS) {
