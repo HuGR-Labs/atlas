@@ -50,9 +50,9 @@ afterEach(() => vi.restoreAllMocks());
 // ── REQ-CLI-1 — total command surface ─────────────────────────────────────────────────────────────
 
 describe('SCN-CLI-1a — every command maps to exactly one leg', () => {
-  it('is total (28 keys, WP-11.W8) and mutually-exclusive over the ratified table', () => {
+  it('is total (30 keys, WP-11.W8 ∪ WP-3-RETR) and mutually-exclusive over the ratified table', () => {
     // totality: every command in the finite surface has exactly one leg.
-    expect(COMMANDS).toEqual(['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'transitions', 'transition', 'test-vacuities', 'test-vacuity', 'verify-fact', 'verify-store', 'derive-relations', 'anchors', 'slots', 'draft', 'check', 'memory-emit', 'memory-recall', 'memory-header', 'memory-awareness', 'memory-orientation']);
+    expect(COMMANDS).toEqual(['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'transitions', 'transition', 'test-vacuities', 'test-vacuity', 'verify-fact', 'verify-store', 'derive-relations', 'anchors', 'slots', 'draft', 'check', 'memory-emit', 'memory-recall', 'memory-header', 'memory-awareness', 'memory-orientation', 'budget', 'territories']);
     expect(Object.keys(COMMAND_LEG).sort()).toEqual([...COMMANDS].sort());
     expect(COMMAND_LEG).toEqual({
       init: 'atlas-init',
@@ -103,6 +103,10 @@ describe('SCN-CLI-1a — every command maps to exactly one leg', () => {
       //                                    intercepted before the handler; carries no write authority
       'memory-orientation': 'atlas-query', // READ authority oracle (MEM-6 DERIVED SHARED Orientation slab) —
       //                                      intercepted before the handler; carries no write authority
+      budget: 'atlas-query', // READ authority oracle (WP-3-RETR RETR-8 per-kind hits/hitRate calibration
+      //                        ledger) — intercepted before the handler; carries no write authority
+      territories: 'atlas-query', // READ authority oracle (WP-3-RETR RETR-13 per-territory off-atlas
+      //                             MISS-oracle) — intercepted before the handler; carries no write authority
     });
     // teeth: a command bound to zero legs (totality) or two legs (uniqueness) — each key resolves to one string.
     for (const c of COMMANDS) {

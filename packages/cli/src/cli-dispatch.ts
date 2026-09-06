@@ -9,8 +9,8 @@
 
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { createHistorySource, memoryRecallVerdict, memoryHeaderVerdict, memoryAwarenessVerdict, memoryOrientationVerdict } from '@atlas/adapter-io';
-import type { ReverifyReport } from '@atlas/adapter-io';
+import { createHistorySource, memoryRecallVerdict, memoryHeaderVerdict, memoryAwarenessVerdict, memoryOrientationVerdict, budgetVerdict, territoriesVerdict } from '@atlas/adapter-io';
+import type { ReverifyReport, BudgetReport, TerritoriesLeg } from '@atlas/adapter-io';
 import type { Awareness, MemoryRecord, Orientation, TurnHeader } from '@atlas/memory';
 import { runMineArms } from './mine.js';
 import { runReverify } from './reverify.js';
@@ -153,4 +153,16 @@ export function dispatchMemoryAwareness(awareness: (() => Awareness) | undefined
 export function dispatchMemoryOrientation(orientation: (() => Orientation) | undefined): number {
   if (!orientation) return emit(errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'));
   return emit(memoryOrientationVerdict(orientation));
+}
+
+/** `atlas budget` — WP-3-RETR, the RETR-8 per-kind hits/hitRate calibration ledger (no input). */
+export function dispatchBudget(budget: (() => BudgetReport) | undefined): number {
+  if (!budget) return emit(errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'));
+  return emit(budgetVerdict(budget));
+}
+
+/** `atlas territories` — WP-3-RETR, the RETR-13 per-territory off-atlas MISS-oracle (no input). */
+export function dispatchTerritories(territories: TerritoriesLeg | undefined): number {
+  if (!territories) return emit(errorVerdict('atlas runtime is not composed yet — the WireConfig seams need the composition-root WP'));
+  return emit(territoriesVerdict(territories));
 }

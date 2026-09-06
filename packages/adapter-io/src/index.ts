@@ -226,3 +226,10 @@ export type { SidecarTrust } from './store-provenance.js';
 // WP name says "admin-locked"; the file is NOT locked by any live mechanism (see policy.ts) — the loader is.
 export { loadPolicy, defaultPolicy, actorInScope } from './policy.js';
 export type { AtlasPolicy, T0HeuristicPolicy, AuthzPolicy } from './policy.js';
+
+// WP-3-RETR — the RETR-8/13 calibration READ legs (`atlas budget` / `atlas territories`). The frozen
+// @atlas/retrieval ledger/offatlas surfaces become RUNNING code here; feeds are the honest zero today.
+export { budgetLeg, territoriesLeg, OFF_ATLAS_THRESHOLD } from './calibration-ledger.js';
+export type { BudgetLeg, BudgetReport, TerritoriesLeg } from './calibration-ledger.js';
+export { budgetVerdict, territoriesVerdict } from './calibration-verdicts.js';
+export type { TerritoriesData, TerritoryRow } from './calibration-verdicts.js';

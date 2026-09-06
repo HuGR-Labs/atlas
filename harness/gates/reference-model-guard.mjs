@@ -18,7 +18,7 @@
 // forces the classification to be DECLARED rather than discovered by the next reviewer.
 //
 // ── DECLARED COUNTS (gate-checked; a drift here FAILS this gate) ────────────────────────────────────────
-//   declared-modules: 43 · dead-value-exports: 153 · type-reachable: 5
+//   declared-modules: 41 · dead-value-exports: 148 · type-reachable: 5
 //   These three are read back from THIS file and asserted against the measured tree at the foot of the run
 //   (see "THE HEADER STATES COUNTS, AND THIS CHECKS THEM"). No count is QUOTED anywhere else in this
 //   header — a quoted integer that nothing checks is exactly what rotted here (task #143); this one cannot.
@@ -168,11 +168,9 @@ const BUILTIN_LEDGER = {
   //    exactly the direction it exists to catch, and the only reason the transition is on the record.
   //    The REST of the package is still closed; `retrieval-model.ts` is still the pack assembler.
   'packages/retrieval/src/drop.ts': { values: 9, shipped: null, banner: false },
-  'packages/retrieval/src/ledger.ts': { values: 4, shipped: null, banner: false },
-  'packages/retrieval/src/offatlas.ts': { values: 1, shipped: null, banner: false },
-  // own.ts is DELETED from this ledger, not set to zero: it has production callers and is no longer a
-  // reference model. Measured with this gate's own analyser — 54 → 53 entries, own.ts absent, every other
-  // retrieval row unchanged (drop 9, ledger 4, offatlas 1, pack 5, poke 5, relate 6).
+  // ledger.ts + offatlas.ts DELETED from this ledger (WP-3-RETR): `adapter-io/src/calibration-ledger.ts` now
+  // VALUE-imports `ledgerFrom`/`offAtlasFrom` (the `atlas budget`/`atlas territories` legs), so both moved
+  // dead → live — the SAME direction this gate exists to catch. 53 → 51 entries.
   'packages/retrieval/src/pack.ts': { values: 5, types: true, shipped: 'packages/adapter-io/src/retrieval-model.ts', banner: false },
   'packages/retrieval/src/poke.ts': { values: 5, shipped: null, banner: false },
   'packages/retrieval/src/relate.ts': { values: 6, shipped: null, banner: false },

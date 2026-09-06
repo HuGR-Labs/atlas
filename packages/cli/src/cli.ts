@@ -12,7 +12,7 @@ import type { Hash } from '@atlas/contracts';
 import { asHash } from '@atlas/kernel';
 import { headSha } from '@atlas/adapter-io';
 import { reportIndexPlan, relationsVerdict, negationsVerdict, transitionsVerdict, testVacuitiesVerdict, verifyFactVerdict } from '@atlas/adapter-io';
-import type { DeriveRelationsRun, IndexPlanReport, NegationLeg, OwnLeg, PromoteOut, RelationLeg, ReverifyReport, TestVacuityLeg, TestVacuityProducer, TransitionLeg, TransitionProducer, VerifyFactLeg, WiredHandler } from '@atlas/adapter-io';
+import type { DeriveRelationsRun, IndexPlanReport, NegationLeg, OwnLeg, PromoteOut, RelationLeg, ReverifyReport, TestVacuityLeg, TestVacuityProducer, TransitionLeg, TransitionProducer, VerifyFactLeg, WiredHandler, BudgetReport, TerritoriesLeg } from '@atlas/adapter-io';
 import type { AnchorsApi, CheckApi, DoctorSource, DraftApi, SlotsApi, Tool } from '@atlas/tools';
 import type { Awareness, MemoryRecord, Orientation, TurnHeader } from '@atlas/memory';
 import { anchorsVerdict } from './anchors.js';
@@ -32,7 +32,7 @@ import { runTestVacuityCli } from './test-vacuity.js';
 import { parse } from './parse.js';
 import { renderRefusal, renderVerdict } from './render.js';
 import { emit, emitCli, errorVerdict, refusalVerdict, withNote } from './cli-verdict.js';
-import { dispatchMine, dispatchVerifyStore, dispatchMemoryRecall, dispatchMemoryHeader, dispatchMemoryAwareness, dispatchMemoryOrientation } from './cli-dispatch.js';
+import { dispatchMine, dispatchVerifyStore, dispatchMemoryRecall, dispatchMemoryHeader, dispatchMemoryAwareness, dispatchMemoryOrientation, dispatchBudget, dispatchTerritories } from './cli-dispatch.js';
 
 /** Optional dependency injection seam (additive): tests inject a FAKE `WiredHandler` + a FAKE read-only
  *  `DoctorSource`; prod assembles both at the composition-root WP. */
@@ -231,6 +231,14 @@ export interface CliDeps {
    *  memoryOrientation`, WP-11.W8). Injected on the SAME seam as `memoryRecall`. ABSENT ⇒
    *  `atlas memory-orientation` fails closed. */
   readonly memoryOrientation?: () => Orientation;
+  /** The composition root's RETR-8 budget READ leg (`ComposedRuntime.budget`, WP-3-RETR). The per-kind
+   *  hits/hitRate calibration ledger over the served-injection record set (honest zero today — no
+   *  production writer). ABSENT ⇒ `atlas budget` fails closed. */
+  readonly budget?: () => BudgetReport;
+  /** The composition root's RETR-13 MISS-oracle READ leg (`ComposedRuntime.territories`, WP-3-RETR). The
+   *  per-territory off-atlas rate over the served-turn record set (honest zero) + the registered
+   *  territories. ABSENT ⇒ `atlas territories` fails closed. */
+  readonly territories?: TerritoriesLeg;
 }
 
 /**
@@ -536,6 +544,11 @@ export async function main(argv: string[], deps: CliDeps = {}): Promise<number> 
   if (command === 'memory-header') return dispatchMemoryHeader(deps.memoryHeader);
   if (command === 'memory-awareness') return dispatchMemoryAwareness(deps.memoryAwareness);
   if (command === 'memory-orientation') return dispatchMemoryOrientation(deps.memoryOrientation);
+
+  // WP-3-RETR — the RETR-8 budget + RETR-13 MISS-oracle READ doors. Intercepted before the handler (not a
+  // `Tool`; opens no write path — the same siting `memory-*`/`relations` use). ABSENT deps fail closed.
+  if (command === 'budget') return dispatchBudget(deps.budget);
+  if (command === 'territories') return dispatchTerritories(deps.territories);
 
   // The remaining SIX governance commands (init/query/emit/reconcile/link/memory-emit) each route to a
   // `Tool` through the one wired handler.

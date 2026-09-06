@@ -66,7 +66,7 @@ import type { Tool, Verdict } from '@atlas/tools';
  *  untouched by them; `authorityOf` DERIVES that from `WRITE_PATHS`, it is not asserted here. All four are
  *  intercepted before the handler (cli.ts) and driven over the composition root's `memoryRecall`/
  *  `memoryHeader`/`memoryAwareness`/`memoryOrientation` legs. */
-export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'transitions', 'transition', 'test-vacuities', 'test-vacuity', 'verify-fact', 'verify-store', 'derive-relations', 'anchors', 'slots', 'draft', 'check', 'memory-emit', 'memory-recall', 'memory-header', 'memory-awareness', 'memory-orientation'] as const;
+export const COMMANDS = ['init', 'query', 'emit', 'reconcile', 'doctor', 'mine', 'node', 'link', 'promote', 'own', 'relations', 'negations', 'transitions', 'transition', 'test-vacuities', 'test-vacuity', 'verify-fact', 'verify-store', 'derive-relations', 'anchors', 'slots', 'draft', 'check', 'memory-emit', 'memory-recall', 'memory-header', 'memory-awareness', 'memory-orientation', 'budget', 'territories'] as const;
 export type Command = (typeof COMMANDS)[number];
 
 /** The leg a command routes to — a governance `Tool`, or the genesis entry (data-only; NOT executed here —
@@ -182,6 +182,12 @@ export const COMMAND_LEG: Record<Command, Leg> = {
   'memory-orientation': 'atlas-query', // READ authority oracle (MEM-6 DERIVED, SHARED Orientation slab);
   //                                      intercepted before the handler (cli.ts) and driven over the
   //                                      composition root's `memoryOrientation` leg. Carries NO write authority.
+  budget: 'atlas-query', // READ authority oracle (WP-3-RETR RETR-8 per-kind hits/hitRate calibration
+  //                        ledger); intercepted before the handler (cli.ts) and driven over the composition
+  //                        root's `budget` leg. Carries NO write authority.
+  territories: 'atlas-query', // READ authority oracle (WP-3-RETR RETR-13 per-territory off-atlas MISS-oracle);
+  //                             intercepted before the handler (cli.ts) and driven over the composition
+  //                             root's `territories` leg. Carries NO write authority.
 };
 
 export type Authority = 'read' | 'write';

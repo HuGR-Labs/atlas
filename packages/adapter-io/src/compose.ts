@@ -43,6 +43,7 @@ import { buildTargetEscapes } from './escape/target-escapes.js';
 import { buildDynamicReach } from './escape/dynamic-reach.js';
 import { createGovernedPromote } from './governed-promote.js';
 import { createOwnLeg } from './own-source.js';
+import { budgetLeg, territoriesLeg } from './calibration-ledger.js';
 import { createRelationLeg } from './relation-source.js';
 import { runDeriveRelations } from './relation-derive-run.js';
 import type { DeriveRelationsRun } from './relation-derive-run.js';
@@ -582,6 +583,11 @@ export function composeRuntime(repoPath: string): ComposedRuntime {
     memoryHeader: () => memoryReadDoor.header(awarenessStore.read(), orientationStore.orientation()),
     memoryAwareness: () => awarenessStore.read(),
     memoryOrientation: () => orientationStore.orientation(),
+    // WP-3-RETR — the RETR-8 budget + RETR-13 MISS-oracle READ legs (`atlas budget` / `atlas territories`).
+    // Both ride the honest zero: no production writer records served injections per kind (own-source.ts
+    // `hits: 0`) or served off-atlas turns, and neither feed is fabricated — see calibration-ledger.ts.
+    budget: budgetLeg(),
+    territories: territoriesLeg(policy),
     ...(readRefusal !== undefined ? { readRefusal } : {}),
     ...(readAdvisory !== undefined ? { readAdvisory } : {}),
   };
