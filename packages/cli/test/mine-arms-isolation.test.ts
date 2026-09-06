@@ -16,6 +16,13 @@ const spyPass = (): { run: (repo: string, deps?: Partial<MineDeps>) => MinePass;
   const slots: (string | undefined)[] = [];
   const empty: MinePass = {
     report: { seeded: [], ratified: [], open: [], llmCalls: 0, budgetSpent: 0 },
+    seed: {
+      mission: { content: 'UN-SEEDED: mission', grounding: [], state: 'UN-SEEDED' },
+      constitution: { content: 'UN-SEEDED: constitution', grounding: [], state: 'UN-SEEDED' },
+      terrain: { content: 'UN-SEEDED: terrain', grounding: [], state: 'UN-SEEDED' },
+      ontology: { content: 'UN-SEEDED: ontology', grounding: [], state: 'UN-SEEDED' },
+      taste: { content: 'UN-SEEDED: taste', grounding: [], state: 'UN-SEEDED' },
+    },
     modelWired: false,
     seedsDropped: 0,
   };

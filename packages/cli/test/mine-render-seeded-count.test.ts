@@ -32,6 +32,12 @@ import type { MinePass } from '../src/mine-render.js';
 
 const site = (n: number): StructRef => ({ kind: 'file', qualifiedPath: `src/f${n}.ts`, subtreeHash: asSubtreeHash(`f${n}`) });
 
+/** A five-facet all-UN-SEEDED Awareness — the honest seed of any run that ratified nothing (GEN-9c). */
+const emptyAwareness = () => {
+  const facet = (name: string) => ({ content: `UN-SEEDED: ${name} — source absent, no self-model line fabricated`, grounding: [], state: 'UN-SEEDED' as const });
+  return { mission: facet('mission'), constitution: facet('constitution'), terrain: facet('terrain'), ontology: facet('ontology'), taste: facet('taste') };
+};
+
 /** THE MEASURED SHAPE: a pass whose write-dedup minted nothing NEW (`seeded: []`) but whose ledger records
  *  every one of N sites as `'seeded'` with a real fact id — i.e. every site WAS admitted, the store already
  *  durably holds N rows, and this pass's own write was an idempotent no-op over an already-staged repo. */
@@ -84,7 +90,7 @@ describe('#237 — the single-arm mine summary reads the coverage LEDGER, agreei
   });
 
   it('foldVerdict\'s printed header matches the ledger, not the write-dedup\'s empty set (REVERT ⇒ RED)', () => {
-    const pass: MinePass = { report: alreadyStagedReport(5), modelWired: true, seedsDropped: 0 };
+    const pass: MinePass = { report: alreadyStagedReport(5), seed: emptyAwareness(), modelWired: true, seedsDropped: 0 };
     const v = foldVerdict(pass);
     // THE MEASURED DEFECT, pinned as a NEGATIVE assertion: a revert to `r.seeded.length` alone reproduces
     // exactly this pair of lines against `alreadyStagedReport`.

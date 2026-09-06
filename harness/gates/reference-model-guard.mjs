@@ -18,7 +18,7 @@
 // forces the classification to be DECLARED rather than discovered by the next reviewer.
 //
 // ── DECLARED COUNTS (gate-checked; a drift here FAILS this gate) ────────────────────────────────────────
-//   declared-modules: 41 · dead-value-exports: 148 · type-reachable: 5
+//   declared-modules: 40 · dead-value-exports: 143 · type-reachable: 5
 //   These three are read back from THIS file and asserted against the measured tree at the foot of the run
 //   (see "THE HEADER STATES COUNTS, AND THIS CHECKS THEM"). No count is QUOTED anywhere else in this
 //   header — a quoted integer that nothing checks is exactly what rotted here (task #143); this one cannot.
@@ -195,11 +195,13 @@ const BUILTIN_LEDGER = {
   'packages/persist/src/transcript-store.ts': { values: 4, shipped: null, banner: false },
 
   // ── @atlas/genesis — PARTLY wired: `packages/cli/src/mine.ts` value-imports makeRunController / ───────
-  //    createScan / createMine / runExtract / admit. The modules below are the un-wired remainder.
+  //    createScan / createMine / runExtract / admit / makeSeed. `seed.ts` is GONE from this ledger (its 5
+  //    values entry deleted) — the mine driver now invokes `makeSeed(...).seed(...)` as the worked Awareness
+  //    assembly at the end of every pass (WP-8.29.GEN / GEN-9), so the module is SHIPPED, not a reference model.
+  //    The un-wired remainder below is the genuine residue.
   'packages/genesis/src/align.ts': { values: 7, shipped: null, banner: false },
   'packages/genesis/src/cost-policy.ts': { values: 13, shipped: null, banner: false },
   'packages/genesis/src/loops.ts': { values: 8, shipped: null, banner: false },
-  'packages/genesis/src/seed.ts': { values: 5, shipped: null, banner: false },
   'packages/genesis/src/usefulness.ts': { values: 2, shipped: null, banner: false },
   // ── the PROVEN fact-verifier family (dependency + count + negation) is NO LONGER HERE: it moved dead → live.
   //    `packages/adapter-io/src/verify-fact-source.ts` (`createVerifyFactLeg`) value-imports all three oracles

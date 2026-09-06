@@ -27,7 +27,7 @@
 // It is also the ONLY staging door there is — the unconditional `persistStaging` this file used to call was
 // last-writer-wins by definition, and was deleted in task #83 once a probe showed nothing called it.
 
-import { makeRunController, createScan, createMine, runExtract } from '@atlas/genesis';
+import { makeRunController, createScan, createMine, runExtract, makeSeed } from '@atlas/genesis';
 import type {
   ControllerDeps,
   Plan,
@@ -41,7 +41,13 @@ import type {
   EmitGate,
   HistorySource,
   SkeletonSource,
+  Skeleton,
+  Ratified,
+  SeedDeps,
 } from '@atlas/genesis';
+import { existsSync, readFileSync } from 'node:fs';
+import { asSubtreeHash, id } from '@atlas/kernel';
+import type { Awareness } from '@atlas/memory';
 import { createDiskStore, headSha, createSkeletonSource, gitSidecarTrust } from '@atlas/adapter-io';
 import { resolveProposer, resolveMineBudget, NO_MODEL_IDENTITY } from './mine-proposer.js';
 import type { MineSlot } from './mine-proposer.js';
@@ -102,6 +108,10 @@ export interface MineDeps {
    *  `process.env`. Omitted ⇒ byte-identical to today (`resolveMineSlot(env)` picks the arm). Ignored when a
    *  `proposer` is injected — an injected proposer bypasses `resolveProposer` entirely (see `withDefaults`). */
   readonly slot?: MineSlot;
+  /** [GEN-9] The post-pass Awareness seed assembly — a PRODUCTION caller of `genesis/seed.ts`'s `makeSeed`
+   *  (`assembleAwareness` below). Injectable so a suite can pin/break the wire (§MUTATION); omitted ⇒ the
+   *  real assembly over this repo's ratified/definite set (`assembleAwareness`). */
+  readonly seedAwareness?: (ratified: readonly Ratified[], skeleton: Skeleton) => Awareness;
   /** [#210] Override the model identity `resolveProposer` would have derived — the seam an injected-proposer
    *  TEST uses to assert a specific identity lands on the report, since an injected `proposer` bypasses
    *  `resolveProposer` entirely (see `withDefaults`) and so carries no identity of its own. Production never
@@ -189,6 +199,45 @@ function defaultHistory(): HistorySource {
   };
 }
 
+/**
+ * GEN-9 — the post-pass Awareness seed, wired to run in PRODUCTION (WP-8.29.GEN: "a ref-model becomes
+ * SHIPPED when a production caller invokes its code"). Assembled from the run's OWN ratified/definite set
+ * (`report.ratified`) via `seed.ts` `makeSeed(...).seed(...)` — the RATIFIED set, never a staged candidate
+ * and never a synthesized line. A source-less facet (here: `constitution` on a candidate-only run, whose
+ * `ratified` is structurally `[]`) renders the labeled `UN-SEEDED` sentinel — never fabricated (GEN-9c).
+ *
+ * The two injected index seams (`locateConventions` / `rootAnchor`) are BUILT over this repo, mirroring the
+ * awareness-store's own real-file reads (`CONVENTIONS.md@sha`, repo-root sha). They ignore the `Skeleton`
+ * (seed.ts treats it opaquely, consuming it ONLY through these deps), so the mine path — which never re-
+ * holds a concrete `Skeleton` after the controller drives its own plan — passes a placeholder. It is not an
+ * invented source: both deps derive from real bytes on disk.
+ *
+ * [ADR-0008] This assembles from `report.ratified` + the filesystem ONLY. It NEVER reads the knowledge
+ * projection — `mine` structurally cannot (the projection doors are trapped), so seeding cannot become a
+ * back-door into governed knowledge.
+ */
+function assembleAwareness(repoPath: string, ratified: readonly Ratified[]): Awareness {
+  let sha = '';
+  try {
+    sha = headSha(repoPath) ?? '';
+  } catch {
+    sha = '';
+  }
+  const deps: SeedDeps = {
+    locateConventions: () => {
+      const path = join(repoPath, 'CONVENTIONS.md');
+      if (!existsSync(path)) return undefined; // absent ⇒ the `taste` facet renders UN-SEEDED (GEN-9c)
+      const text = readFileSync(path, 'utf8');
+      return {
+        path: 'CONVENTIONS.md',
+        anchor: { kind: 'file', qualifiedPath: 'CONVENTIONS.md', subtreeHash: asSubtreeHash(id(text)) },
+      };
+    },
+    rootAnchor: () => ({ kind: 'repo', qualifiedPath: '@root', subtreeHash: asSubtreeHash(sha) }),
+  };
+  return makeSeed(deps).seed({} as unknown as Skeleton, ratified);
+}
+
 /** The filled seams PLUS the two facts about the S2 resolution that the seams themselves cannot answer —
  *  see `ResolvedProposer` (mine-proposer.ts) for why `modelWired` cannot be recovered from `deps`. */
 interface ResolvedDeps {
@@ -248,6 +297,7 @@ function withDefaults(repoPath: string, deps?: Partial<MineDeps>): ResolvedDeps 
     ...(budget !== undefined ? { budget } : {}),
     ...(deps?.scope !== undefined ? { scope: deps.scope } : {}),
     ...(deps?.env !== undefined ? { env: deps.env } : {}),
+    ...(deps?.seedAwareness !== undefined ? { seedAwareness: deps.seedAwareness } : {}),
   };
   // WIRED is read off the RESOLUTION, never off `deps`: the resolved proposer is installed on the RIGHT of a
   // `??` above, so `deps?.proposer !== undefined` is ALWAYS FALSE on the CLI path — which is how a run with
@@ -390,8 +440,13 @@ export function driveMinePass(repoPath: string, deps?: Partial<MineDeps>): MineP
     const ports = buildControllerDeps(repoPath, d, (r) => void (refusal = r), watch, pool, resolved.modelIdentity);
     const report = makeRunController(ports).genesis(repoPath, d.rev, d.budget, d.scope);
     if (fault !== undefined) throw fault; // a misconfigured model is not a mining outcome
+    // GEN-9 — seed the Awareness sources AFTER the genesis run, from the run's OWN ratified/definite set.
+    // On a candidate-only mine pass that set is structurally `[]`, so `constitution` renders UN-SEEDED
+    // (never fabricated) while `taste` (CONVENTIONS.md@sha) and the unratified `mission` stub are seeded.
+    const seed = (d.seedAwareness ?? ((ratified) => assembleAwareness(repoPath, ratified)))(report.ratified, {} as unknown as Skeleton);
     return {
       report,
+      seed,
       modelWired: resolved.modelWired,
       seedsDropped,
       ...(refusal !== undefined ? { refusal } : {}),
