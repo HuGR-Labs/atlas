@@ -45,13 +45,14 @@ export interface Commit {
   readonly note: Readonly<Record<string, string>>;
 }
 
-/** Build a fresh commit whose note keys on the commit's own SHA (not yet orphaned). */
+/** Build a fresh commit whose note keys on the commit's own SHA (not yet orphaned). Snapshot payloads so the
+ * placement model cannot change through caller-owned records. */
 export function commit(
   sha: string,
   trailer: Readonly<Record<string, string>>,
   note: Readonly<Record<string, string>> = {},
 ): Commit {
-  return { sha, trailer, noteKey: sha, note };
+  return { sha, trailer: { ...trailer }, noteKey: sha, note: { ...note } };
 }
 
 /** REQ-PERSIST-13-d: the note is orphaned once it no longer keys on the commit's current SHA (a rewrite

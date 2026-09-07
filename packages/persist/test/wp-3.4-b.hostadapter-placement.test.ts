@@ -98,8 +98,10 @@ describe('PERSIST-13 — trailers canonical, notes a mutable overlay (visible go
     const model = makePlacement(new Set([dHash]));
     expect(model.home(dHash)).toBe('trailer'); // clone-required ⇒ trailer
     expect(place(true)).toBe('trailer');
-    const c = commit('SHA1', { D: 'value-of-D' });
-    expect(readAfterBareClone(c, 'D', /* refspecConfigured */ false)).toEqual({ from: 'trailer', value: 'value-of-D' });
+    const trailer = { D: 'value-of-D' };
+    const c = commit('SHA1', trailer);
+    trailer.D = 'mutated-after-commit';
+    expect(readAfterBareClone(c, 'D', false)).toEqual({ from: 'trailer', value: 'value-of-D' });
     // teeth (breaks-on "D is stored only in a git note — a bare clone with no refspec has no D"):
     const noteOnly = commit('SHA1', {}, { D: 'value-of-D' });
     expect(readAfterBareClone(noteOnly, 'D', false)).toBeNull();
