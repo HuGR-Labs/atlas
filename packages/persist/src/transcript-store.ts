@@ -84,6 +84,9 @@ export function createTranscriptStore(): TranscriptStore {
       return h;
     },
     fetch(ref: TranscriptRef): Transcript {
+      if (ref.store !== STORE_KIND) {
+        throw new Error(`transcript pointer uses unsupported store ${String(ref.store)}`);
+      }
       const body = objects.get(ref.sha);
       if (body === undefined) {
         throw new Error(`transcript large-object not found for pointer ${String(ref.sha)}`);
