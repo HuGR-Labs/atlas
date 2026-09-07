@@ -60,6 +60,10 @@ export function replay(events: Iterable<Event>): EventLog {
   return out;
 }
 
+// Keep event-log replay available to direct reconstruction consumers without colliding with the frozen
+// package-level re-invoke surface, where `replay` means Checkpoint replay.
+export { replay as replayEvents };
+
 /** The portable-source reconstruction: export the set through the sealed OKF seam, import into a FRESH
  *  empty store, replay from empty, and fold — `fold(replay(export(S)))`. Byte-identical to `fold(S)`
  *  because the OKF round-trip is 1:1 and the fold is snapshot-free (REQ-PERSIST-2-a). */
