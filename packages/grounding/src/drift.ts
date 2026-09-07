@@ -7,7 +7,7 @@
 //     (Owner-DEFINE pin: `Axes`). FRESH iff `isGrounded` AND every anchor's recorded `subtreeHash` still
 //     RESOLVES to the same structural unit in `src` (GROUND-1: the oracle is `subtreeHash`, never
 //     `displayLines`/line-ranges). An ungrounded grounding is DRIFTED (GROUND-2); an unresolvable citation
-//     is DRIFTED, fail-closed, NEVER a throw (GROUND-3); a real change to the cited unit's normalized
+//     is DRIFTED, fail-closed, NEVER a throw (GROUND-3); a real change to the cited unit's bytes
 //     subtree is DRIFTED (GROUND-5). Both pure + total. Transcribed against the frozen oracles
 //     `./types.ts` (`DriftApi.driftDetect` + `GroundApi.isGrounded`).
 //
