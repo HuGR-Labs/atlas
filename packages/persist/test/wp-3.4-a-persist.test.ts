@@ -61,6 +61,9 @@ describe('PERSIST-3 — trailer + note (de)serializer (visible goldens)', () => 
     expect(prov.deserialize('{not-json')).toBeNull();
     // a structurally-empty object (no trailer) is also an honest null, never a partial dossier.
     expect(prov.deserialize('{}')).toBeNull();
+    // malformed trailer payloads are also absent, never partial provenance records.
+    expect(prov.deserialize('{"trailer":[]}')).toBeNull();
+    expect(prov.deserialize('{"trailer":{"WP":"WP-7"}}')).toBeNull();
   });
 });
 
