@@ -22,7 +22,7 @@
 > | **ARCH-4** | self-referential (it *is* the requirement to gate) |
 > | **ARCH-8** (growth path) | **prose** — no gate; triggered by ARCH-7 failing |
 > | **ARCH-10** | **IMPLEMENTED and mutation-tested** — the incumbent guard, `packages/adapter-io/src/governed-emit.ts` §2.25, ratified by `ADR-0007`. Its checker is a **test**, not `layer-guard.mjs`: `SCN-GE-I1`/`I2`/`I5` in `packages/adapter-io/test/governed-emit-incumbent.test.ts` (deleting the guard block turns all three red). |
-> | **ARCH-9, ARCH-11, ARCH-12** (the rest of the AUTHORITY model) | **ratified as rules (§3.4), NOT YET IMPLEMENTED as behaviour.** ARCH-9 is partly closed: the UPDATE leg is shipped (ARCH-10) and, on the CREATE leg, the `tier` conjunct is closed by the one-way lattice join at `packages/knowledge/src/ratify/fastpath.ts:143` — a declared class can only make the gate HARDER. What remains open on CREATE is narrower and is now named: the two hardcoded fast-path conjuncts (`packages/adapter-io/src/governed-emit-route.ts:24`) and the author-supplied `scope`. See §3.4. Tracked as ARCH-D3b/D4. |
+> | **ARCH-9, ARCH-11, ARCH-12** (the rest of the AUTHORITY model) | **ratified as rules (§3.4), with ARCH-9's current implementation delivered in part.** The UPDATE leg is shipped (ARCH-10); on CREATE, the `tier` conjunct is closed by the one-way lattice join, `scope`↔`primaryAnchor` is closed by #251, and derived fast-path verdicts are wired by #313. `contested` remains false because no veto source exists. ARCH-11/12 remain specified rather than fully implemented. |
 >
 > **The bar.** Each of the three models below is grounded in named prior art and, where the state of the art
 > gives a *measured* threshold, the measurement is cited rather than a number being invented.
@@ -290,11 +290,10 @@ The question was posed as though `tier` were the open field. Read against the co
 
 **What is actually open on CREATE**, and this is the ruling that re-scopes the work:
 
-1. **The two hardcoded conjuncts.** `DOOR_RATIFY_CTX = { contested: false, lowRisk: true }`
-   (`packages/adapter-io/src/governed-emit-route.ts:24`) is exactly what ARCH-9's own text forbids by
-   name — *"a constant that pins the gate open does not satisfy this clause."* The derivation sources
-   already exist upstream and are simply not wired: `lowRisk` is the KNOW-17 door-2 threshold verdict,
-   `contested` is the KNOW-18b store veto. **This, not `tier`, is the live hole.**
+1. **The two fast-path verdicts — CLOSED by #313.** The old `DOOR_RATIFY_CTX` constant was exactly what
+   ARCH-9's text forbade by name. `deriveFastPathVerdicts` now supplies `lowRisk` and `contested` to the
+   route. `contested` is false on every current path because no veto/contention source exists; this is an
+   honest extension point, not a hardcoded gate-opening constant.
 2. **`scope` — CLOSED by the shipped authz chain.** The write door's authz gate already binds the
    declared `scope` to the derived `primaryAnchor`: `evalAuthzGate` (governed-emit-gates.ts) runs
    `actorInScope` THEN `scopeOwnsAnchor` (policy.ts, backed by `authz.anchors`) and refuses
@@ -311,8 +310,8 @@ is ARCH-12's revisit condition.
 
 **Consequence for the plan.** The ARCH-9-on-CREATE work item is smaller and more concrete than it was
 written to be: wire two verdicts that already exist (one of the two — the `scope`↔`primaryAnchor` binding —
-is already SHIPPED in the authz gate, #251); what remains is the `DOOR_RATIFY_CTX` verdict wiring plus the
-owner-ruled USE-OR-SEAL growth path. It is not a new governance mechanism.
+is already SHIPPED in the authz gate, #251); the derived verdict wiring shipped in #313, and the in-process
+USE-OR-SEAL serving path shipped in #319/#321. Durable promotion/completion semantics are not claimed here.
 
 **Owner ruling 2026-09-03 — the growth path and the ratifier question (resolves ARCH-D3b).** The owner
 decided, in product terms: *"who approves is the ORCHESTRATOR, approving only with evidence, clear
@@ -323,10 +322,11 @@ purpose, this serves LLMs not humans."* Three commitments follow (full text in A
    self-declared higher class cost more than it buys, and this makes T2 the written rule, not a
    consequence.
 2. **Growth is USE-OR-SEAL, neither mandatory.** A node leaves the advisory class by ONE of two earned
-   evidences, either sufficient, neither required: **USE** (served in a decision whose completion was
-   recorded — the `hits` ledger is the foundation) or **SEAL** (a human ratify token recording a deliberate
-   endorsement). A node earning neither stays advisory and decays (KNOW-17). No human gate is required on
-   the growth path.
+  evidences, either sufficient, neither required: **USE** (served in a decision whose completion was
+  recorded — the `hits` ledger is the foundation) or **SEAL** (a human ratify token recording a deliberate
+  endorsement). A node earning neither stays advisory and decays (KNOW-17). No human gate is required on
+  the growth path. The current implementation records in-process served hits and raises the returned class
+  on the next pack; durable promotion and a completion signal remain unimplemented.
 3. **The ratify token is ONE evidence, not a gate; verification stays advisory.** §3.3's anti-accident
    posture stands; the `service-gate-guard` tripwire (ARCH-12) re-opens verification the moment a
    remote/multi-tenant transport is attempted.
@@ -375,7 +375,7 @@ remote) is unchanged.
 | **ARCH-D1** | Ports declared inward, adapters outward; `tools` never depends on `adapter-io` | **proposed** — ADR-0006 §hierarchy |
 | **ARCH-D2** | INV-MCP-1's "exactly five tools" is superseded by the derived-surface property + a measured budget | **OWNER-RATIFIED 2026-07-25** — ADR-0006 |
 | **ARCH-D3a** (UPDATE leg) | On a write that lands on an EXISTING node, `tier` and `scope` stop being author-supplied gate selectors: the required class and the authorized scope are read off the incumbent's own stored fact | **CLOSED 2026-07-25 — ADR-0007.** `governed-emit.ts` §2.25 refuses `governance-downgrade` / `unauthorized for target` (which, per the F1 amendment to ADR-0007, is ALSO the refusal for an incumbent whose stored fact is unreadable — a distinct reason there was a CAS-health oracle) / `governance-relocation`; pinned by `SCN-GE-I1`/`I2`/`I5`/`I15` |
-| **ARCH-D3b** (CREATE leg) | The same for a write that mints a node, where there is no incumbent to derive from | **OWNER-DECIDED 2026-08-30 §3.4 + 2026-09-03 §3.4 ruling, IMPLEMENTATION MOSTLY OPEN.** The `tier` conjunct is closed by the one-way join at `packages/knowledge/src/ratify/fastpath.ts:143` and by the 2026-09-03 T2-by-construction ruling. The `scope`↔`primaryAnchor` half is **CLOSED — already shipped** (`evalAuthzGate` runs `scopeOwnsAnchor`, WP-10.A3 #251). What remains: the constant `DOOR_RATIFY_CTX = { contested: false, lowRisk: true }` (`packages/adapter-io/src/governed-emit-route.ts:24`), which is the pinned-open constant ARCH-9 forbids by name and whose derivation sources exist upstream (`hits.ts`, KNOW-18 design), plus the USE-OR-SEAL growth path (owner ruling 2026-09-03). Gate 0 still checks only well-formedness |
+| **ARCH-D3b** (CREATE leg) | The same for a write that mints a node, where there is no incumbent to derive from | **OWNER-DECIDED 2026-08-30 §3.4 + 2026-09-03 §3.4 ruling; current implementation delivered in part.** The `tier` conjunct is closed by the one-way join at `packages/knowledge/src/ratify/fastpath.ts:143` and by the 2026-09-03 T2-by-construction ruling. The `scope`↔`primaryAnchor` half is **CLOSED — shipped** (`evalAuthzGate` runs `scopeOwnsAnchor`, WP-10.A3 #251). Derived fast-path verdicts are **CLOSED — shipped by #313**; the old `DOOR_RATIFY_CTX` constant is gone. The in-process USE-OR-SEAL serving path is **CLOSED — #319/#321**; `contested` has no current veto source, and durable promotion/completion semantics remain open. |
 | **ARCH-D4** | Planner legs take an unforgeable read-only port (ocap), replacing the write-spy as the guarantee | **proposed** — supersedes ADR-0004's "property of the type" claim, which is currently overstated |
 
 ## Sources

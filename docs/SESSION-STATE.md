@@ -426,10 +426,10 @@ Same rules the prior sessions paid to learn; they are load-bearing for anything 
 
 ## 6 — Where to look next
 
-Nothing is in flight: no open pull request, no open issue, no open dependency alert. The store passes its
-own audit and is committed; CI is green and self-hosted-secure. Campaign 3+6+8's first implementation wave
-is merged; the remaining reference-model rows are the next decomposition input, not proof that every module
-should be wired blindly.
+No implementation PR is in flight; the recovery/documentation PR #326 is the only open pull request. No open
+issue or dependency alert. The store passes its own audit and is committed; CI is green and self-hosted-secure.
+Campaign 3+6+8's first implementation wave is merged; the remaining reference-model rows are the next
+decomposition input, not proof that every module should be wired blindly.
 
 **ARCH-D3b is now fully CLOSED** (item 2 delivered 2026-09-05):
 
@@ -447,10 +447,10 @@ should be wired blindly.
   `config.hits`; hits.ts LEFT the reference-model ledger (entry deleted). The serve path writes the
   counter on a real `atlas query`; the class can rise in-process, proven by the SCN tests and the
   exit_predicate mutation.
-- **RETR-8 writer is now composed** by #323: the frecency ledger's `budget` leg is reachable through
-  `atlas budget`; `own-source.ts:330` still carries the per-node `hits: 0` input shape, but the ledger is no
-  longer an unreachable reference-model-only subsystem. `atlas territories` similarly closes the RETR-13
-  MISS-oracle transport leg.
+- **RETR-8 read leg is now composed** by #323: the frecency ledger's `budget` projection is reachable through
+  `atlas budget`. Its production feed writer is still open; `own-source.ts:330` continues to carry the
+  per-node `hits: 0` input shape. `atlas territories` exposes the RETR-13 MISS-oracle projection, but no
+  served-turn writer is claimed here.
 - **Remaining `shipped:null` rows need separate contracts**: RETR `drop.ts`, `poke.ts`, `relate.ts`; PERSIST
   `attach.ts`, `diff.ts`, `merge.ts`, `metering.ts`, `placement.ts`, `provenance.ts`, `reconstruct.ts`,
   `reinvoke.ts`, `transcript-store.ts`; GEN `align.ts`, `cost-policy.ts`, `loops.ts`, `usefulness.ts`; plus
