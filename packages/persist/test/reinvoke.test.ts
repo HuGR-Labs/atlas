@@ -14,6 +14,7 @@ import type { Checkpoint, TranscriptRef } from '../src/types.js';
 import type { ReinvokeApi } from '../src/reinvoke.js';
 import { redispatch, replay } from '../src/reinvoke.js';
 import * as reinvoke from '../src/reinvoke.js';
+import * as persist from '../src/index.js';
 
 /** A bare clone to another machine = an independent deep copy of the git-tracked record (no shared refs). */
 const cloned = <T>(x: T): T => JSON.parse(JSON.stringify(x)) as T;
@@ -89,6 +90,13 @@ describe('PERSIST-7 — ephemeral agent re-invokable off a Checkpoint (visible g
 });
 
 describe('PERSIST-10b — replay-not-resume, idempotent redispatch, Checkpoint substrate (visible goldens)', () => {
+  it('package barrel routes replay to Checkpoint replay, not event-log replay', () => {
+    const cp: Checkpoint = { seatBrief: 'barrel seat', llmOutputs: ['recorded'], toolIO: ['tool result'] };
+
+    expect(persist.replay(cp)).toEqual(replay(cp));
+    expect(persist.replayEvents).toBeTypeOf('function');
+  });
+
   it('SCN-PERSIST-10b-a-1: no deterministic-resume API exists on the surface', () => {
     const RESUME = /resume|continuefrom|resumeat|continue_from|resume_at/i;
     const surface = Object.keys(reinvoke);
