@@ -69,6 +69,14 @@ describe('PERSIST-10 — lossless content-addressed large-object transcript (vis
     expect(store.fetch(gitPtr)).toEqual(T);
   });
 
+  it('CAS fetch rejects a pointer addressed to another large-object backend', () => {
+    const store = createTranscriptStore();
+    const h = store.put(enc.encode('backend identity is part of pointer'));
+
+    expect(() => store.fetch({ sha: h, store: 'lfs' })).toThrow(/unsupported store lfs/);
+    expect(() => store.fetch({ sha: h, store: 'partial-clone' })).toThrow(/unsupported store partial-clone/);
+  });
+
   it('SCN-PERSIST-10-d-1: any size mitigation is lossless and reversible', () => {
     const T = enc.encode('a transcript a future size-mitigation transform may touch — 0..255 lossless\n');
 
