@@ -1,10 +1,10 @@
 # ADR-0010 — a gate-selecting field is derived from the resource, never chosen by the request
 
 - **Status:** Accepted (owner-ruled 2026-09-03). The two impose legs were Proposed (2026-08-01); the
-  CREATE-leg CREATE question and the ratifier-token question are now owner-decided (§"Owner ruling"), which
-  resolves the OPEN DEFINE that previously made the ADR a proposal. **Implementation** of item 1 (wire the
-  `DOOR_RATIFY_CTX` derivation) plus the USE-OR-SEAL growth path (owner ruling) is ARCH-D3b's remaining
-  scope. Item 3 (`scope`↔`primaryAnchor`) is **CLOSED in code** — shipped by WP-10.A3 (#251): the authz
+   CREATE-leg CREATE question and the ratifier-token question are now owner-decided (§"Owner ruling"), which
+   resolves the OPEN DEFINE that previously made the ADR a proposal. **Implementation** of item 1 (wire the
+   derived fast-path verdicts) shipped in #313; the in-process USE-OR-SEAL serving path shipped in #319/#321.
+   Item 3 (`scope`↔`primaryAnchor`) is **CLOSED in code** — shipped by WP-10.A3 (#251): the authz
   gate runs `scopeOwnsAnchor` backed by `authz.anchors` and refuses an anchor not owned by the declared
   scope.
 - **Spec author:** seat `RATIFY-AUTHORITY`, grounded against `572d391` (branch
@@ -125,14 +125,14 @@ self-named ratifier is enough to put a SERVED invariant into a pack.
 
 ## What the owner still has to ratify
 
-> **OWNER-RATIFIED 2026-09-03** — items 2 and 4 below are DECIDED by the owner; items 1 and 3 become the
-> implementation scope of ARCH-D3b (CREATE leg). The ruling is recorded in full in §"Owner ruling" below.
+> **OWNER-RATIFIED 2026-09-03** — items 2 and 4 below are DECIDED by the owner; items 1 and 3 were the
+> implementation scope of ARCH-D3b (CREATE leg) and are now closed as recorded below. The ruling is recorded
+> in full in §"Owner ruling" below.
 
-1. **The door must actually supply `derivedTier`.** `governed-emit.ts` passes a constant
-   `DOOR_RATIFY_CTX = { contested: false, lowRisk: true }`. Until it passes the incumbent's own class on an
-   UPDATE, `route` still gates on the declared class and **ARCH-9 is a seam here, not a closure.** One line,
-   in a file this seat does not own. *[OWNER: implement — the derivation sources exist upstream; see item 1
-   of the ruling.]*
+1. **The door must actually supply derived fast-path verdicts.** **CLOSED by #313.**
+   `deriveFastPathVerdicts` now supplies the verdicts to the route; the old `DOOR_RATIFY_CTX` constant is gone.
+   `contested` remains false on every current path because no veto/contention source exists yet; that is a
+   recorded extension, not a pinned-open gate.
 2. **ARCH-D3b — the CREATE leg.** On a write that mints a node there is no incumbent to derive from. What
    un-choosable value names a NEW node's class? This is the OPEN DEFINE the architecture doc already
    records; ARCH-9 explicitly forbids answering it with "a constant that pins the gate open".
@@ -171,9 +171,14 @@ Three commitments follow, each now owner-ratified:
    WRITTEN rule, not a consequence.
 2. **Growth is by USE-OR-SEAL, neither mandatory.** A node leaves the advisory class by ONE of two earned
    evidences, either sufficient, neither required:
-   - **USE** — the node was served in a decision and the completion was recorded (the knowledge hits ledger,
-     `packages/knowledge/src/lifecycle/hits.ts`, is the existing foundation); accumulated, verifiable usage
-     IS the ratifier.
+    - **USE** — a per-node usage COUNTER (in `packages/knowledge/src/lifecycle/hits.ts`) increments each time
+      the node is served in a completed decision. When it reaches a FIXED constant (`USE_THRESHOLD`, one
+      named constant in the code — no calibration, no context-dependent rule), the node rises implicitly,
+      auto-accepted by the growth path with no human and no further gate. The threshold is deliberately a
+      plain integer, tunable in one place. `[OWNER 2026-09-03: keep it a counter, no invented regime — 8 is
+      illustrative; the value is a named constant the owner can change.]` The current implementation records
+      an in-process served hit on composed query and returns the raised class on the next pack; it has no
+      completion signal or durable promotion event yet.
    - **SEAL** — a human ratify token records a deliberate endorsement; a named, evidence-carrying seal is
      also sufficient.
    A node that earns neither stays advisory and decays by non-use (KNOW-17). There is NO required human
@@ -184,9 +189,8 @@ Three commitments follow, each now owner-ratified:
    (ARCH-12) re-opens the question the moment a remote/multi-tenant transport is attempted.
 
 **What this means for items 1 and 3 (implementation scope of ARCH-D3b):**
-- Item 1 = wire the `DOOR_RATIFY_CTX` derivation: `lowRisk` from the KNOW-17 hits-threshold verdict,
-  `contested` from the KNOW-18b store-veto, on the emit door. The foundations exist (`hits.ts`, the
-  KNOW-18 design); this connects the door to them.
+- Item 1 = **CLOSED by #313**: the emit door consumes `deriveFastPathVerdicts`; no hardcoded
+  `DOOR_RATIFY_CTX` remains. The current `contested:false` outcome is an honest absence of a veto source.
 - Item 3 = **CLOSED in code** (WP-10.A3, #251): `evalAuthzGate` runs `scopeOwnsAnchor` backed by
   `authz.anchors`, so authz cannot be claimed by declaration — a fact anchored in `src/payments` under
   `scope:'public'` is refused. No further implementation.

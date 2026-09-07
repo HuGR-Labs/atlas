@@ -174,23 +174,23 @@ packages/
   genesis         the one-time $0-LLM seeder · budgeted LLM proposal · mechanical admission
   ── RING (campaign 9 — the productization surface; the core stays pure and does no I/O itself)
   adapter-io      the composition root: filesystem · SCIP · git · LLM · durable store, wired into ONE handler
-  cli             the `atlas` CLI — 30 commands through a total argv parser (never throws); see the table above
+  cli             the `atlas` CLI — 32 commands through a total argv parser (never throws); see the table above
   mcp-server      a stdio MCP server over that same handler, mapping every Verdict (incl. refusals) to MCP
   ── SUITES
   e2e             story-driven in-process suite over the wired runtime
   e2e-blackbox    the same stories as a stranger: subprocess CLI + real MCP stdio
 docs/           design-first artifacts (the decomposition, dogfooding the Atlas doc conventions):
   method/         the governed decomposition method (S0→S1→S2→S3→C→S4)
-  requirements/   637 EARS requirements · method-tags · 1006 goldens · 129 work-package cards
-                  (107 across the 10 campaigns + 22 remediation cards)
-  roadmap/        10 dependency-ordered campaigns; 76 DISTINCT epic ids across the three roadmap files
+  requirements/   706 EARS requirements · method-tags · 1075 goldens · 137 work-package cards
+                   (113 across the 11 campaigns + 24 remediation cards)
+  roadmap/        11 dependency-ordered campaigns; 76 DISTINCT epic ids across the three roadmap files
                   (ids are reused between roadmaps, so a heading count would overcount — see the note below)
   reference/      12 `atlas-*.md` contracts: one per core module (9 — `contracts` has none), plus
                   atlas-adapters (the ring), atlas-architecture, and atlas-authoring (campaign 10, now built)
   adr/ · design/ · spec/ · explanation/ · how-to/ · governance/
 ```
 
-`npm run id-integrity` recomputes and prints the corpus counts (`637 REQ, 1006 SCN, … 129 WP`);
+`npm run id-integrity` recomputes and prints the corpus counts (`706 REQ, 1075 SCN, … 137 WP`);
 `npm run layer-guard` prints the package count and the live tool-surface cardinality;
 `npm run command-doc-guard` prints the command count three ways and fails if they disagree. The work-package
 split is `grep -c '^### WP-' docs/requirements/work-packages/*.md`, and the distinct epic count is
