@@ -1,4 +1,4 @@
-# Session state — 2026-09-05
+# Session state — 2026-09-06
 
 **What this file is:** the state of the work at a point in time, written so a DIFFERENT session, model,
 harness or provider can pick it up cold. It is not a plan. This repository has already been bitten by
@@ -45,8 +45,26 @@ Two traps, both paid for in prior sessions:
 
 ## 2 — What this session changed
 
-No product code changed in the last two sessions (#298, #299 are documentation; this handoff is built on
-HEAD `1637ac6`). What changed is the **store**, and it is the whole substance of this page.
+The earlier handoff covered the store and CI/security work. This session then delivered the Campaign 3+6+8
+fanout on top of that baseline: RETR (#323), GEN seed (#325), and PERSIST export/import (#324).
+
+### 2.10 — Campaign 3+6+8 fanout delivered (2026-09-06)
+
+All three implementation PRs merged into `master`; each master delivery gate passed:
+
+- **#323 — RETR-8/RETR-13**: `atlas budget` exposes the per-kind budget/hit-rate ledger; `atlas territories`
+  exposes the MISS-oracle territory ledger. Empty inputs remain honest zero results. The CLI totality golden
+  was updated from 28 to 30 ratified command keys.
+- **#325 — GEN-9**: `genesis/seed.ts` is wired into `mine` as the shipped Awareness assembly. The seed reads
+  ratified report plus filesystem state and does not write governed projection state. `align.ts` was not wired:
+  no production consumer exists yet, and a fabricated consumer would violate the seam contract.
+- **#324 — PERSIST-1/9**: `atlas export <outDir>` and `atlas import <bundle> <targetDir>` are wired through
+  store-instance doors. Import rejects a non-empty target and never writes governed projection state. The
+  obsolete `persist/src/source.ts` reference-model row was removed; CLI dispatch was split to keep `cli.ts`
+  below the godfile limit.
+
+Final master: `61e4b45`. Master delivery run `34067482130` passed. The feature gate for #324 passed on rerun
+(`34062657526`) after one loaded-runner cancellation. No implementation PR from this wave remains open.
 
 ### The 17 dangling rows are deliberately retired (owner decision) — 2026-09-02
 
@@ -335,7 +353,7 @@ CI runs green. The impl landed as one commit
 
 ## 3 — The state of THIS repository's own store — AFTER the retirement
 
-Re-derive with the two commands in §1. As measured at this handoff, HEAD `bd9aaca`:
+Re-derive with the two commands in §1. Store state is unchanged by Campaign 3+6+8. Current HEAD is `61e4b45`:
 - `doctor cas` → `objects=1320 referenced=596 corrupt=0 unreadable=0 missing=0 orphan=724 sound=true`.
   **`sound=true` for the first time since the rows went missing.** `orphan` is not a fault (append-only,
   content-keyed CAS; an object outliving the sidecar that referenced it is ordinary). Do not "clean up"
@@ -409,7 +427,9 @@ Same rules the prior sessions paid to learn; they are load-bearing for anything 
 ## 6 — Where to look next
 
 Nothing is in flight: no open pull request, no open issue, no open dependency alert. The store passes its
-own audit and is committed; CI is green and self-hosted-secure.
+own audit and is committed; CI is green and self-hosted-secure. Campaign 3+6+8's first implementation wave
+is merged; the remaining reference-model rows are the next decomposition input, not proof that every module
+should be wired blindly.
 
 **ARCH-D3b is now fully CLOSED** (item 2 delivered 2026-09-05):
 
@@ -427,12 +447,15 @@ own audit and is committed; CI is green and self-hosted-secure.
   `config.hits`; hits.ts LEFT the reference-model ledger (entry deleted). The serve path writes the
   counter on a real `atlas query`; the class can rise in-process, proven by the SCN tests and the
   exit_predicate mutation.
-- **The one remaining honest seam**: `own-source.ts:330`'s `hits: 0` is the SEPARATE RETR-8 frecency
-  ledger (`@atlas/retrieval` ledger.ts), which genuinely still has no production writer. It is NOT the
-  USE-OR-SEAL counter — the two are different ledgers, and the composer's `(tier, hits, ppr, nodeKey)`
-  rank still degenerates to `(tier, nodeKey)` for frecency until RETR-8 gets a writer. A real KNOW-17
-  decay consumer (GEN-16 `bindSeedGate`) is still unwired — when it lands, it consumes the SAME bound
-  compose now builds.
+- **RETR-8 writer is now composed** by #323: the frecency ledger's `budget` leg is reachable through
+  `atlas budget`; `own-source.ts:330` still carries the per-node `hits: 0` input shape, but the ledger is no
+  longer an unreachable reference-model-only subsystem. `atlas territories` similarly closes the RETR-13
+  MISS-oracle transport leg.
+- **Remaining `shipped:null` rows need separate contracts**: RETR `drop.ts`, `poke.ts`, `relate.ts`; PERSIST
+  `attach.ts`, `diff.ts`, `merge.ts`, `metering.ts`, `placement.ts`, `provenance.ts`, `reconstruct.ts`,
+  `reinvoke.ts`, `transcript-store.ts`; GEN `align.ts`, `cost-policy.ts`, `loops.ts`, `usefulness.ts`; plus
+  the independent grounding/index/knowledge rows listed by `reference-model-guard.mjs`. The bannered
+  `tools/{diff,push}.ts` and `adapter-io/poke-file.ts` remain explicit no-transport seams.
 
 Two standing threads remain owner-level, unchanged from the prior handoff:
 - **The billing lock** — why CI runs on the owner's machine; clearing it restores hosted runners.

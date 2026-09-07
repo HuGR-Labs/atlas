@@ -171,9 +171,12 @@ Three commitments follow, each now owner-ratified:
    WRITTEN rule, not a consequence.
 2. **Growth is by USE-OR-SEAL, neither mandatory.** A node leaves the advisory class by ONE of two earned
    evidences, either sufficient, neither required:
-   - **USE** — the node was served in a decision and the completion was recorded (the knowledge hits ledger,
-     `packages/knowledge/src/lifecycle/hits.ts`, is the existing foundation); accumulated, verifiable usage
-     IS the ratifier.
+   - **USE** — a per-node usage COUNTER (in `packages/knowledge/src/lifecycle/hits.ts`) increments each time
+     the node is served in a completed decision. When it reaches a FIXED constant (`USE_THRESHOLD`, one
+     named constant in the code — no calibration, no context-dependent rule), the node rises implicitly,
+     auto-accepted by the growth path with no human and no further gate. The threshold is deliberately a
+     plain integer, tunable in one place. `[OWNER 2026-09-03: keep it a counter, no invented regime — 8 is
+     illustrative; the value is a named constant the owner can change.]`
    - **SEAL** — a human ratify token records a deliberate endorsement; a named, evidence-carrying seal is
      also sufficient.
    A node that earns neither stays advisory and decays by non-use (KNOW-17). There is NO required human
