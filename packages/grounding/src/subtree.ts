@@ -1,7 +1,7 @@
 // @atlas/grounding — src/subtree.ts   (WP-4.10-a.GROUND · GROUND-1 / GROUND-5 / GROUND-10)
 //
-// The NORMALIZED-AST drift oracle. `subtreeHash(unit)` is the BLAKE3 over the unit's normalized AST
-// subtree — reached ONLY through the @atlas/kernel `Encoder` seam (GROUND-10 / KERNEL-2), never a
+// The structural drift oracle. `subtreeHash(unit)` is the BLAKE3 over the unit's kernel canonical
+// preimage — reached ONLY through the @atlas/kernel `Encoder` seam (GROUND-10 / KERNEL-2), never a
 // locally-inlined hash call, so a blake3↔stub digest swap flows through every anchor (the seam-
 // substitution property, SCN-GROUND-10a/10b). An edit that does NOT TOUCH the cited unit (an import or
 // license header added above it, an unrelated rename elsewhere) leaves this byte-invariant; a real change
