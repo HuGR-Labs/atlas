@@ -13,6 +13,19 @@ export interface ProvenanceApi {
   deserialize(serialized: string): Dossier | null;
 }
 
+/** Reject parsed payloads that carry a partial or non-object trailer. */
+function isTrailer(value: unknown): value is Dossier['trailer'] {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const trailer = value as Record<string, unknown>;
+  return (
+    typeof trailer.WP === 'string' &&
+    typeof trailer.Model === 'string' &&
+    typeof trailer.Gates === 'string' &&
+    typeof trailer.Verdict === 'string' &&
+    typeof trailer.TranscriptSha === 'string'
+  );
+}
+
 /**
  * Serialize a dossier to its committed text form (the trailer block + note overlay). The whole `Dossier`
  * is emitted verbatim, so every required provenance field (all five trailer fields, plus any metering /
@@ -38,7 +51,7 @@ export function deserialize(serialized: string): Dossier | null {
   }
   if (typeof parsed !== 'object' || parsed === null) return null;
   const d = parsed as Partial<Dossier>;
-  if (typeof d.trailer !== 'object' || d.trailer === null) return null;
+  if (!isTrailer(d.trailer)) return null;
   return d as Dossier;
 }
 
